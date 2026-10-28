@@ -4,9 +4,9 @@ use crate::picker_runtime_status::{
     PickerRecordsSnapshot, PickerRuntimeCoverage, PickerRuntimeStatus,
 };
 use collaboration_client::protocol::{
-    ChannelDescription, CodexGeneration, EndpointAvailability, EndpointInventory, EndpointRef,
-    NativeSessionListParams, NativeSessionObservation, NativeSessionScope, NativeSessionSource,
-    NativeSessionView, ProviderSessionListParams,
+    ChannelDescription, CodexGeneration, EndpointRef, NativeSessionListParams,
+    NativeSessionObservation, NativeSessionScope, NativeSessionSource, NativeSessionView,
+    ProviderSessionListParams,
 };
 use collaboration_client::{ClientError, CollaborationClient};
 use std::{
@@ -16,45 +16,45 @@ use std::{
 
 const MAX_RUNTIME_ROWS: usize = 4096;
 
+#[path = "native_inventory_pager.rs"]
+pub(super) mod native_inventory_pager;
+use native_inventory_pager::NativeInventoryPager;
+
+#[path = "native_inventory_binding.rs"]
+mod native_inventory_binding;
+use native_inventory_binding::{
+    NativeBindingRejection, NativeEndpointSelector, NativeInventoryContext, bind_native_inventory,
+};
+
 pub(super) async fn load_runtime_records(
     client: &mut CollaborationClient,
     metadata: &[SessionPickerRecord],
     include_empty_sessions: bool,
 ) -> Result<(EndpointRef, Vec<SessionPickerRecord>), ClientError> {
-    let (endpoint, generation) = selected_generation(client.list_endpoints().await?)?;
+    let (endpoint, generation) = selected_generation(client).await?;
     let known: BTreeMap<_, _> = metadata
         .iter()
         .map(|row| (row.session_id.as_str(), row))
         .collect();
     let mut rows = Vec::new();
-    let mut cursor = None;
-    let mut seen_cursors = BTreeSet::new();
-    let mut seen_ids = BTreeSet::new();
-    loop {
-        let page = client
-            .list_sessions(NativeSessionListParams {
-                endpoint: endpoint.clone(),
-                view: NativeSessionView::Loaded,
-                scope: collaboration_client::protocol::NativeSessionScope::Any,
-                source: collaboration_client::protocol::NativeSessionSource::All,
-                include_empty_sessions,
-                query: None,
-                page_size: 100,
-                cursor,
-            })
-            .await?;
-        if page.generation.as_ref() != Some(&generation) {
-            return Err(ClientError::Protocol(
-                "runtime inventory generation changed",
-            ));
-        }
+    let mut pager = NativeInventoryPager::new(
+        NativeSessionListParams {
+            endpoint: endpoint.clone(),
+            view: NativeSessionView::Loaded,
+            scope: collaboration_client::protocol::NativeSessionScope::Any,
+            source: collaboration_client::protocol::NativeSessionSource::All,
+            include_empty_sessions,
+            query: None,
+            page_size: 100,
+            cursor: None,
+        },
+        Some(generation.clone()),
+    )?;
+    while let Some(page) = pager.next_page(client).await? {
         for summary in page.sessions {
-            let target = summary.target.clone();
+            let observed = SessionPickerRecord::from_native_summary(&summary);
             let id = String::from(summary.target.session_id.clone());
-            if !seen_ids.insert(id.clone()) || rows.len() >= MAX_RUNTIME_ROWS {
-                return Err(ClientError::Protocol("runtime inventory exceeded bounds"));
-            }
-            let NativeSessionObservation::Runtime { status, .. } = summary.observation else {
+            let NativeSessionObservation::Runtime { .. } = summary.observation else {
                 return Err(ClientError::Protocol("expected runtime observation"));
             };
             let mut row = if let Some(row) = known.get(id.as_str()) {
@@ -71,24 +71,19 @@ pub(super) async fn load_runtime_records(
                     &inspected.thread,
                 )
             };
-            row.identity = SessionPickerIdentity::HostedCodex(target);
-            row.runtime_status = PickerRuntimeStatus::from_native(&status);
+            row.identity = observed.identity;
+            if row.model.is_none() {
+                row.model = observed.model;
+            }
+            if row.reasoning_effort.is_none() {
+                row.reasoning_effort = observed.reasoning_effort;
+            }
+            row.provenance = super::SessionRowProvenance::ObservedHosted;
+            row.runtime_status = observed.runtime_status;
             rows.push(row);
         }
-        match page.next_cursor {
-            Some(next) if seen_cursors.insert(next.clone()) && seen_cursors.len() <= 64 => {
-                cursor = Some(next)
-            }
-            Some(_) => {
-                return Err(ClientError::Protocol(
-                    "runtime inventory cursor did not converge",
-                ));
-            }
-            None => break,
-        }
     }
-    let (current_endpoint, current_generation) =
-        selected_generation(client.list_endpoints().await?)?;
+    let (current_endpoint, current_generation) = selected_generation(client).await?;
     if current_endpoint != endpoint || current_generation != generation {
         return Err(ClientError::Protocol(
             "runtime inventory generation changed",
@@ -97,97 +92,52 @@ pub(super) async fn load_runtime_records(
     Ok((endpoint, rows))
 }
 
+#[path = "provider_picker_inventory.rs"]
+mod provider_picker_inventory;
+
+#[cfg(test)]
 async fn load_provider_records(
     client: &mut CollaborationClient,
-) -> Result<(Option<EndpointRef>, Vec<SessionPickerRecord>), ClientError> {
-    let inventory = client.list_endpoints().await?;
-    let native_endpoint = inventory
-        .endpoints
-        .iter()
-        .find(|entry| {
-            entry
-                .channels
-                .iter()
-                .any(|channel| matches!(channel, ChannelDescription::NativeCodex { .. }))
-        })
-        .map(|entry| entry.endpoint.clone());
-    let providers = inventory
-        .endpoints
-        .into_iter()
-        .filter(|entry| {
-            entry
-                .channels
-                .iter()
-                .any(|channel| matches!(channel, ChannelDescription::ExternalProvider { .. }))
-        })
-        .collect::<Vec<_>>();
-    let mut rows = Vec::new();
-    for provider in providers {
-        let mut cursor = None;
-        let mut seen_cursors = BTreeSet::new();
-        loop {
-            let page = client
-                .list_provider_sessions(ProviderSessionListParams {
-                    endpoint: provider.endpoint.clone(),
-                    view: NativeSessionView::Stored,
-                    scope: NativeSessionScope::Any,
-                    source: NativeSessionSource::All,
-                    query: None,
-                    page_size: 100,
-                    cursor,
-                })
-                .await?;
-            for summary in page.sessions {
-                if rows.len() >= MAX_RUNTIME_ROWS {
-                    return Err(ClientError::Protocol(
-                        "provider picker inventory exceeded bounds",
-                    ));
-                }
-                let label = String::from(provider.label.clone());
-                rows.push(SessionPickerRecord::from_provider_summary(&summary, &label));
-            }
-            match page.next_cursor {
-                Some(next) if seen_cursors.insert(next.clone()) && seen_cursors.len() <= 64 => {
-                    cursor = Some(next)
-                }
-                Some(_) => {
-                    return Err(ClientError::Protocol(
-                        "provider picker cursor did not converge",
-                    ));
-                }
-                None => break,
-            }
-        }
-    }
-    Ok((native_endpoint, rows))
+) -> Result<provider_picker_inventory::ProviderPickerRecords, ClientError> {
+    provider_picker_inventory::read_provider_records(
+        client,
+        tokio::time::Instant::now() + std::time::Duration::from_secs(5),
+    )
+    .await
 }
 
-fn selected_generation(
-    inventory: EndpointInventory,
+async fn selected_generation(
+    client: &mut CollaborationClient,
 ) -> Result<(EndpointRef, CodexGeneration), ClientError> {
-    let endpoint = inventory
-        .endpoints
-        .into_iter()
-        .find(|entry| String::from(entry.endpoint.endpoint_id.clone()) == "codex-local")
-        .ok_or(ClientError::Protocol("runtime endpoint unavailable"))?;
-    if !matches!(
-        endpoint.availability,
-        EndpointAvailability::Available { .. }
-    ) {
-        return Err(ClientError::Protocol("runtime endpoint unavailable"));
-    }
-    let generation = endpoint
-        .channels
-        .into_iter()
-        .find_map(|channel| match channel {
-            ChannelDescription::NativeCodex { generation, .. } => generation,
-            _ => None,
-        })
-        .ok_or(ClientError::Protocol("runtime generation unavailable"))?;
-    if generation.service_epoch != inventory.service_epoch {
-        return Err(ClientError::Protocol("runtime inventory epoch mismatch"));
-    }
-    Ok((endpoint.endpoint, generation))
+    let inventory = client.list_endpoints().await?;
+    let endpoint = EndpointRef {
+        service_id: client.identity().service_id.clone(),
+        endpoint_id: "codex-local"
+            .to_owned()
+            .try_into()
+            .map_err(|_| ClientError::InvalidRequest("invalid default endpoint"))?,
+    };
+    let binding = bind_native_inventory(
+        &inventory,
+        client.identity(),
+        &client.identity().service_id,
+        NativeEndpointSelector::Exact(endpoint),
+        NativeSessionView::Loaded,
+    )
+    .map_err(|reason| match reason {
+        NativeBindingRejection::EndpointUnavailable
+        | NativeBindingRejection::RuntimeUnavailable => {
+            ClientError::Transport(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "native runtime unavailable",
+            ))
+        }
+        _ => ClientError::Protocol("invalid native inventory binding"),
+    })?;
+    let NativeInventoryContext::Runtime(generation) = binding.context else {
+        return Err(ClientError::Protocol("runtime generation unavailable"));
+    };
+    Ok((binding.endpoint, generation))
 }
 
 fn runtime_record(
@@ -273,20 +223,26 @@ impl PickerRuntimeInventory {
         directory: Option<&Path>,
         stored: Vec<SessionPickerRecord>,
         include_empty_sessions: bool,
-    ) -> PickerRecordsSnapshot {
+    ) -> Result<PickerRecordsSnapshot, crate::presentation::session_picker::SourceInventoryRejection>
+    {
         if directory.is_none() {
             self.remembered.retain(|row| !row.identity.is_provider());
         }
         let (provider_result, native_result) = if let Some(directory) = directory {
             let metadata = stored.clone();
             let providers = async {
-                let mut client = CollaborationClient::connect(
-                    directory,
-                    "sessions-picker-providers",
-                    env!("CARGO_PKG_VERSION"),
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut client = tokio::time::timeout_at(
+                    deadline,
+                    CollaborationClient::connect(
+                        directory,
+                        "sessions-picker-providers",
+                        env!("CARGO_PKG_VERSION"),
+                    ),
                 )
-                .await?;
-                load_provider_records(&mut client).await
+                .await
+                .map_err(|_| ClientError::Timeout)??;
+                provider_picker_inventory::read_provider_records(&mut client, deadline).await
             };
             let native = async {
                 let mut client = CollaborationClient::connect(
@@ -299,14 +255,20 @@ impl PickerRuntimeInventory {
                 load_runtime_records(&mut client, &metadata, include_empty_sessions).await
             };
             let deadline = std::time::Duration::from_secs(5);
-            let (providers, native) = tokio::join!(
-                tokio::time::timeout(deadline, providers),
-                tokio::time::timeout(deadline, native)
-            );
-            (
-                providers.ok().and_then(Result::ok),
-                native.ok().and_then(Result::ok),
-            )
+            let (providers, native) =
+                tokio::join!(providers, tokio::time::timeout(deadline, native));
+            let native = native.unwrap_or(Err(ClientError::Timeout));
+            for result in [providers.as_ref().map(|_| ()), native.as_ref().map(|_| ())] {
+                if let Err(error) = result
+                    && matches!(
+                        super::source_inventory_failure::InventoryReadFailure::from_client(error),
+                        super::source_inventory_failure::InventoryReadFailure::Invalid { .. }
+                    )
+                {
+                    return Err(crate::presentation::session_picker::SourceInventoryRejection::InvalidInventory);
+                }
+            }
+            (providers.ok(), native.ok())
         } else {
             (None, None)
         };
@@ -316,8 +278,12 @@ impl PickerRuntimeInventory {
             .or_else(|| {
                 provider_result
                     .as_ref()
-                    .and_then(|(endpoint, _)| endpoint.as_ref())
+                    .and_then(|(endpoint, _, _)| endpoint.as_ref())
             });
+        let native_live_coverage = provider_result
+            .as_ref()
+            .map(|(_, _, coverage)| coverage.clone())
+            .unwrap_or_default();
         let provider_inventory_available = provider_result.is_some();
         let mut combined: BTreeMap<SessionPickerIdentity, SessionPickerRecord> = self
             .remembered
@@ -354,7 +320,7 @@ impl PickerRuntimeInventory {
                     self.remembered.push(row);
                 }
             }
-            if let Some((_, providers)) = provider_result {
+            if let Some((_, providers, _)) = provider_result {
                 combined.retain(|identity, _| !identity.is_provider());
                 for row in providers {
                     combined.insert(row.identity.clone(), row.clone());
@@ -369,10 +335,11 @@ impl PickerRuntimeInventory {
                 }
             }
         }
-        PickerRecordsSnapshot {
+        Ok(PickerRecordsSnapshot {
+            native_live_coverage,
             records: combined.into_values().collect(),
             runtime_coverage,
-        }
+        })
     }
 }
 

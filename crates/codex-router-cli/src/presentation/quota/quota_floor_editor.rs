@@ -1,3 +1,4 @@
+use codex_router_tui::{DialogAction, UiHeading, UiHeadingLevel};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -6,7 +7,6 @@ use std::sync::Mutex;
 use codex_router_core::ids::AccountId;
 use iocraft::prelude::*;
 
-use super::quota_browse_rendering::detail_line;
 use super::quota_status_view_model::QuotaStatusViewModel;
 use super::quota_status_view_model::QuotaStatusViewModelLoader;
 
@@ -263,73 +263,57 @@ pub(super) fn render_weekly_floor_editor(
     editor: &WeeklyFloorEditorState,
     width: usize,
     height: usize,
-    mut editor_state: State<Option<WeeklyFloorEditorState>>,
+    state: State<Option<WeeklyFloorEditorState>>,
 ) -> AnyElement<'static> {
-    let detail_width = width.saturating_sub(4).max(24);
+    let content = render_weekly_floor_editor_content(editor, width.saturating_sub(4), state, 0);
+    element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),height:u32::try_from(height).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {
+        UiHeading(content:"Weekly floor".to_owned(),level:UiHeadingLevel::Section)
+        codex_router_tui::FormField(label:"Account".to_owned(),label_width:10u16) {Text(content:editor.account_label.clone(),color:Color::White)}
+        #(content)
+    }}.into_any()
+}
+
+pub(super) fn render_weekly_floor_editor_content(
+    editor: &WeeklyFloorEditorState,
+    width: usize,
+    mut state: State<Option<WeeklyFloorEditorState>>,
+    section_gap: u16,
+) -> AnyElement<'static> {
     let status = match editor.phase {
         WeeklyFloorEditorPhase::Editing => None,
-        WeeklyFloorEditorPhase::Saving => Some(("saving…", Color::Yellow)),
+        WeeklyFloorEditorPhase::Saving => Some(("saving…", Color::Grey)),
         WeeklyFloorEditorPhase::SaveFailed(error) => Some((error.display_message(), Color::Red)),
-        WeeklyFloorEditorPhase::SavedRefreshFailed => {
-            Some(("saved; refresh failed", Color::Yellow))
-        }
+        WeeklyFloorEditorPhase::SavedRefreshFailed => Some((
+            "saved; refresh failed",
+            codex_router_tui::UiTextRole::Warning.color(),
+        )),
     };
-    let current_floor = if editor.current_percent == 0 {
+    let current = if editor.current_percent == 0 {
         "disabled (0%)".to_owned()
     } else {
         format!("{}%", editor.current_percent)
     };
-    let decrease_editor_state = editor_state;
-    let increase_editor_state = editor_state;
-
+    let decrease_target = editor.account_id.clone();
+    let increase_target = editor.account_id.clone();
+    let context_margin = if status.is_some() { 0 } else { section_gap };
     element! {
-        View(
-            width: width as u32,
-            height: height as u32,
-            flex_direction: FlexDirection::Column,
-            border_style: BorderStyle::Single,
-            border_color: Color::DarkGrey,
-            overflow: Overflow::Hidden,
-            padding_left: 1,
-            padding_right: 1,
-        ) {
-            View(width: detail_width as u32, flex_direction: FlexDirection::Column) {
-                Text(content: "Weekly floor", color: Color::Cyan, weight: Weight::Bold)
-                #(detail_line("account", &editor.account_label, detail_width, Color::White))
-                #(detail_line("current", &current_floor, detail_width, Color::White))
-                View(height: 1) {}
-                View(width: detail_width as u32, align_items: AlignItems::Center) {
-                    View(width: 10) {
-                        Text(content: "floor", color: Color::Grey, wrap: TextWrap::NoWrap)
-                    }
-                    Button(
-                        handler: move |_| {
-                            let mut next = decrease_editor_state.read().clone();
-                            step_weekly_floor_editor(&mut next, WeeklyFloorStep::Decrease);
-                            editor_state.set(next);
-                        },
-                        has_focus: false,
-                    ) {
-                        Text(content: "◀", color: Color::Cyan, weight: Weight::Bold)
-                    }
-                    View(width: 7, justify_content: JustifyContent::Center) {
-                        Text(content: format!("{}%", editor.draft_percent), color: Color::White, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-                    }
-                    Button(
-                        handler: move |_| {
-                            let mut next = increase_editor_state.read().clone();
-                            step_weekly_floor_editor(&mut next, WeeklyFloorStep::Increase);
-                            editor_state.set(next);
-                        },
-                        has_focus: false,
-                    ) {
-                        Text(content: "▶", color: Color::Cyan, weight: Weight::Bold)
-                    }
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:section_gap,margin_top:context_margin) {
+            #(status.map(|(message,color)|element!(Text(content:message,color))))
+            codex_router_tui::FormField(label:"Current".to_owned(),label_width:10u16) {Text(content:current,color:Color::White)}
+            codex_router_tui::FormField(label:"Floor".to_owned(),label_width:10u16,has_focus:true) {
+                View(column_gap:2,align_items:AlignItems::Center) {
+                    DialogAction(label:"◀",handler:move |_| {
+                        let mut next=state.read().clone();
+                        if next.as_ref().is_some_and(|editor|editor.account_id==decrease_target) {step_weekly_floor_editor(&mut next,WeeklyFloorStep::Decrease);state.set(next);}
+                    })
+                    Text(content:format!("{}%",editor.draft_percent),color:Color::Yellow,weight:Weight::Bold)
+                    DialogAction(label:"▶",handler:move |_| {
+                        let mut next=state.read().clone();
+                        if next.as_ref().is_some_and(|editor|editor.account_id==increase_target) {step_weekly_floor_editor(&mut next,WeeklyFloorStep::Increase);state.set(next);}
+                    })
                 }
-                Text(content: "0% disables protection · maximum 15%", color: Color::Grey)
-                #(status.map(|(message, color)| element! { Text(content: message, color) }.into_any()))
             }
+            Text(content:"0% disables protection · maximum 15%",color:Color::Grey)
         }
-    }
-    .into_any()
+    }.into_any()
 }

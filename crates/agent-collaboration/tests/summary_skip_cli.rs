@@ -5,7 +5,7 @@ use agent_automation::{
 };
 use automation_storage::{AutomationStore, RunDispatchIntent, ScheduleCreate};
 use collaboration_client::protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 
@@ -129,14 +129,11 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         })
         .await?;
     let store = Arc::new(tokio::sync::Mutex::new(store));
-    let identity = ServiceIdentity::new(service_id, service_id)
+    let identity = ApplicationFixture::new(service_id, service_id)
         .map_err(std::io::Error::other)?
         .with_automation_store(Arc::clone(&store));
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await?;
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())?;
     let operation = OperationId::generate();
     let output = tokio::time::timeout(
         Duration::from_secs(10),

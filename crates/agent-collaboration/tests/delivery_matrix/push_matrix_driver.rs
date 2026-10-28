@@ -1,19 +1,21 @@
 //! CLI producers and recipient observations for the isolated push matrix.
+use super::owned_resources::OwnedMatrixResources;
 use super::{OBSERVATION_TIMEOUT, ProofContext, ProofResult};
-use automation_storage::AutomationStore;
+use codex_router_test_support::owned_cli_process::run_cli_output;
 use collaboration_client::{
     ConversationClient, ConversationCreateActor, ConversationCreateInput,
     protocol::{
         ConversationCreateOutcome, DestinationPreparation, EndpointRef, ExecutionDestination,
         InstructionCreateParams, OperationId, PushRecordListParams, PushRecordShowParams,
         RouterAccess, RunListRequest, ScheduleCreateRequest, ScheduleDefinition,
-        ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest,
+        ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest, WakeupId,
     },
 };
 use collaboration_protocol::{
-    MachineLabel, PushId, PushLineInput, PushRecord, PushRecordNotice, PushRecordShowResult,
-    RouterLink, RouterOriginRef, render_push_line,
+    MachineLabel, PushLineInput, PushRecord, PushRecordNotice, PushRecordShowResult, RouterLink,
+    RouterOriginRef, render_push_line,
 };
+use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use tokio::process::Command;
@@ -167,6 +169,10 @@ pub(super) async fn assert_message_reply_without_reference_is_rejected(
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) async fn cli_show(
     proof: &ProofContext,
     caller: &SessionRef,
@@ -208,9 +214,13 @@ pub(super) async fn run_cli(
     if let Some(caller) = caller {
         set_caller_identity(&mut command, caller)?;
     }
-    Ok(tokio::time::timeout(OBSERVATION_TIMEOUT, command.kill_on_drop(true).output()).await??)
+    run_cli_output(command, OBSERVATION_TIMEOUT).await
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) fn successful_cli_result(
     output: std::process::Output,
     operation: &str,
@@ -275,12 +285,15 @@ pub(super) async fn dm_notice_and_show(
             reference: notice.link,
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(show) = show else {
+        return Err("native proof expected a stored local push".into());
+    };
     if show.record.target != *recipient || show.record.push_id.as_str() != push_id {
         return Err("router/show returned a different DM record".into());
     }
     let expected = expected_push_line(&show, &machine_label(proof)?)?;
     assert_eq!(notice.line, expected);
-    Ok((show, expected))
+    Ok((*show, expected))
 }
 
 pub(super) fn machine_label(proof: &ProofContext) -> ProofResult<MachineLabel> {
@@ -369,46 +382,17 @@ pub(super) async fn wait_for_codex_input(
     }
 }
 
-pub(super) fn record_push_input_correlation(
-    proof: &mut ProofContext,
-    producer: &str,
-    push_id: &PushId,
-    user_message: &Value,
-) -> ProofResult<bool> {
-    let observed_id = user_message.get("id").and_then(Value::as_str);
-    match observed_id {
-        Some(observed_id) => {
-            if observed_id != push_id.as_str() {
-                return Err(format!(
-                    "{producer} native userMessage id {observed_id} did not match PushId {}",
-                    push_id.as_str()
-                )
-                .into());
-            }
-            proof.record(
-                "pushInputCorrelation",
-                json!({"producer":producer,"pushId":push_id,"observedUserMessageId":observed_id,"status":"asserted"}),
-            )?;
-            Ok(true)
-        }
-        None => {
-            proof.record(
-                "pushInputCorrelationGap",
-                json!({"producer":producer,"pushId":push_id,"status":"threadReadHasNoUserMessageId"}),
-            )?;
-            Ok(false)
-        }
-    }
-}
-
 pub(super) async fn cli_wake_send(
     proof: &ProofContext,
     sender: &SessionRef,
     target: &SessionRef,
     body: &str,
+    resources: &mut OwnedMatrixResources,
 ) -> ProofResult<Value> {
     let sender_json = serde_json::to_string(sender)?;
     let target_json = serde_json::to_string(target)?;
+    let operation_id = OperationId::generate();
+    let operation_text = String::from(operation_id.clone());
     let mut command = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
     command
         .args([
@@ -424,14 +408,15 @@ pub(super) async fn cli_wake_send(
             "1s",
             "--wait-until-first-fire",
             "--operation-id",
-            &uuid::Uuid::now_v7().to_string(),
+            &operation_text,
         ])
         .arg("--service-directory")
         .arg(&proof.service_directory)
         .arg("--json");
-    let output =
-        tokio::time::timeout(OBSERVATION_TIMEOUT, command.kill_on_drop(true).output()).await??;
+    resources.record_wake_submission(operation_id.clone())?;
+    let output = run_cli_output(command, OBSERVATION_TIMEOUT).await?;
     let response: Value = serde_json::from_slice(&output.stdout)?;
+    retain_created_wake(resources, &operation_id, &response)?;
     if !output.status.success()
         || response.pointer("/result/record/firstFire/kind") != Some(&json!("wakeFired"))
     {
@@ -440,22 +425,55 @@ pub(super) async fn cli_wake_send(
     Ok(response)
 }
 
+fn retain_created_wake(
+    resources: &mut OwnedMatrixResources,
+    operation_id: &OperationId,
+    response: &Value,
+) -> ProofResult<()> {
+    let mut returned_id: Option<WakeupId> = None;
+    for path in [
+        "/result/record/definition/wakeupId",
+        "/wakeupId",
+        "/created/definition/wakeupId",
+    ] {
+        if let Some(value) = response.pointer(path) {
+            let observed: WakeupId = serde_json::from_value(value.clone())?;
+            if returned_id.as_ref().is_some_and(|known| known != &observed) {
+                // Conflicting identities remain submission-only; no guessed cleanup target.
+                return Err("wake receipt returned conflicting resource identities".into());
+            }
+            returned_id = Some(observed);
+        }
+    }
+    if let Some(wakeup_id) = returned_id {
+        resources.record_wake_receipt(operation_id, wakeup_id)?;
+    }
+    Ok(())
+}
+
 pub(super) async fn create_existing_session_schedule(
     proof: &mut ProofContext,
     target: &SessionRef,
     body: &str,
+    resources: &mut OwnedMatrixResources,
 ) -> ProofResult<agent_automation::ScheduleId> {
+    let instruction_operation = OperationId::generate();
+    resources.record_instruction_submission(instruction_operation.clone())?;
     let instruction = proof
         .client
         .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
+            operation_id: instruction_operation.clone(),
             text: body.to_owned().try_into()?,
         })
         .await?;
+    resources
+        .record_instruction_receipt(&instruction_operation, instruction.instruction_id.clone())?;
+    let schedule_operation = OperationId::generate();
+    resources.record_schedule_submission(schedule_operation.clone())?;
     let schedule = proof
         .client
         .create_schedule(ScheduleCreateRequest {
-            operation_id: OperationId::generate(),
+            operation_id: schedule_operation.clone(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRequest::After {
@@ -469,6 +487,7 @@ pub(super) async fn create_existing_session_schedule(
             },
         })
         .await?;
+    resources.record_schedule_receipt(&schedule_operation, schedule.schedule_id.clone())?;
     proof
         .client
         .prepare_schedule(SchedulePrepareRequest {
@@ -495,7 +514,7 @@ pub(super) async fn create_existing_session_schedule(
 
 pub(super) async fn wait_for_schedule_push(
     proof: &mut ProofContext,
-    automation: &mut AutomationStore,
+    interactions: &InteractionStore,
     schedule_id: agent_automation::ScheduleId,
     timeout: Duration,
 ) -> ProofResult<(RouterOriginRef, PushRecord)> {
@@ -516,7 +535,7 @@ pub(super) async fn wait_for_schedule_push(
                 schedule_id: schedule_id.clone(),
                 run_id: run.run_id.clone(),
             };
-            if let Some(record) = automation
+            if let Some(record) = interactions
                 .get_push_record_by_origin_reference(&origin)
                 .await?
             {
@@ -529,6 +548,10 @@ pub(super) async fn wait_for_schedule_push(
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) async fn wait_for_acp_input(
     receipt_path: &Path,
     target: &SessionRef,
@@ -570,8 +593,4 @@ pub(super) async fn wait_for_acp_input(
 
 pub(super) fn matrix_marker(producer: &str) -> String {
     format!("PUSH_DELIVERY_MATRIX_{producer}_{}", uuid::Uuid::now_v7())
-}
-
-pub(super) fn user_text_contains_marker(text: &str, marker: &str) -> bool {
-    text.contains(marker)
 }

@@ -173,6 +173,10 @@ impl RecordingRefreshClient {
 }
 
 impl CredentialRefreshClient for RecordingRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &AccountId,

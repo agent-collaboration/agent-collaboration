@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT r.assignment_id AS \"id!: String\", r.holder AS \"holder!: String\", a.canonical_identity AS \"identity?: String\", r.ended AS \"ended?: String\" FROM role_assignments r LEFT JOIN actors a ON a.actor_id=r.holder WHERE r.project_subject=? AND r.role='lead' ORDER BY r.assignment_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "holder!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ended?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "45a34efc961fbec6f2dc2dbca5fe56b4902c37c9ef866275979a7037dc442332"
+}

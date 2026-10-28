@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT mark_id AS \"id!: String\" FROM read_marks WHERE mark_id>? ORDER BY mark_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "35712b293af4706dacefd30242bc4b694ceb85266300be5e48449226c1ed4a55"
+}

@@ -9,16 +9,18 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.100" }
 uuid.workspace = true
 chrono.workspace = true
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.47" }
-sqlx = { workspace = true, features = ["macros", "migrate"] }
+sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+message-board = { path = "../message-board", version = "0.1.58" }
 
 [dev-dependencies]
-message-board = { path = "../message-board", version = "0.1.58" }
+tempfile = "3.27.0"

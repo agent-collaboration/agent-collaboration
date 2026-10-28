@@ -1,0 +1,114 @@
+{
+  "at": "2026-10-20T07:47:34.133698+00:00",
+  "complete": true,
+  "sourcesUnchanged": true,
+  "sourceBindingMeaning": "Current15 owned inputs match final strict gates/focused run; retained11-target test phases use explicit test-only checked-UTF8-slice equivalence for one helper, all other14 byte-identical. Original whole-command remains timed out.",
+  "sourceHashes": {
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "74f0f17d0eac1e30f4f8de603c0f8a583c5554f726c46b4a3f35ec6e44333259",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+    "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+    "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "2408271e4362d42495ce439bbabe1733460a49ce2f414b9e858c69474b0d90f8",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "761adc7bd52b46a461c431daf7b23d2e8d32b056c95944f304ae519af507a593",
+    "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+    "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+    "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+    "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+    "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+    "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+    "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+    "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7"
+  },
+  "testScope": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-current-test-scope.json",
+    "sha256": "9477ded2aa55057d2980e578807e0feac48cc06797e2898ae8b64a2923e40baa"
+  },
+  "testCounts": {
+    "passed": 565,
+    "failed": 0,
+    "ignored": 7
+  },
+  "requiredTargets": 11,
+  "testOnlyLintEquivalence": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-lint-only-source-equivalence.json",
+    "sha256": "08f7c7f42e7e7dc5a69f1f3fdbd97f2987beb8b0efb5ca564e63a4cc26ce420a"
+  },
+  "focusedCurrentGate": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-poses-help-after-lint.json",
+    "sha256": "3ffa62e9c542087c803518620f8dff0c3969667460004442825fcd61a8f05e21"
+  },
+  "commandGates": [
+    {
+      "kind": "allTargetCliClippy",
+      "record": {
+        "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-strict-clippy-second.json",
+        "sha256": "4ae955e868047316dd849224ddaaa0e139c944387f06463fa3daa93e6620d806"
+      },
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 8.484326791018248,
+      "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-strict-clippy-second.log",
+      "logSha256": "b2fda4030a65b1234ba055f06472606db48e075719ff23a26bacb62e2841c582"
+    },
+    {
+      "kind": "format",
+      "record": {
+        "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-format.json",
+        "sha256": "0fea3adefaf5b0cd833b3058b817889861e62e379d7f3bfe32c3d83c06c2cf3c"
+      },
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 4.557710667140782,
+      "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-format.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "kind": "fileSize",
+      "record": {
+        "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-file-size.json",
+        "sha256": "0ff6ffc27102a4fa4f3a91c0bbabd7af8fe504356a12ca19a6e58642ecc8c7ac"
+      },
+      "command": [
+        "python3",
+        "scripts/tooling/check-rust-file-size.py"
+      ],
+      "exit": 0,
+      "seconds": 0.34957066737115383,
+      "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-file-size.log",
+      "logSha256": "7d26e3e1236dbb74c162b43037601f1c940eb269c807af238a15e53eb0887e10"
+    }
+  ],
+  "goldenReview": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-golden-review.json",
+    "sha256": "ab5c7d53939f28a8fa6e232dab82c44fa23bf175819b2e587425262ab7639729"
+  },
+  "timeoutCleanup": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-timeout-cleanup.json",
+    "sha256": "6ec1d2cd8c13a7a394c2bbac723a12d4a9f289b9201092fa7600f38e24f78bf6"
+  },
+  "limits": [
+    "No single whole-package command exit0 is fabricated; required current test phases565/0/7 are composed per Root38",
+    "These are typed-projection/rendering and real-component input tests, not original screenshot/physical-device/public provider acceptance",
+    "Fresh default artifacts, all9 default gates and source-bound ALL6 original observations remain required"
+  ]
+}

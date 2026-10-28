@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO task_link_events(event_id, actor_id, request_id, epoch, position, router_time, time_basis, change_kind, from_task, link_kind, to_task) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "9c52d759392c5a0dc5d596a6bf41ff9308bc6de19358cc56e95c7971ea1a6d0f"
+}

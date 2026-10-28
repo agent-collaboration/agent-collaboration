@@ -1,11 +1,22 @@
 use collaboration_client::{ClientError, MessageSendRequest, PublicMessageContent};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{CodexGeneration, EndpointDescription, SessionRef};
-use collaboration_service::{
-    BoardAvailability, CodexAppServerDeliveryRoute, MachineIdentity, NativeControlBackend,
-    NativeGenerationGate, ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::BoardAvailability;
+
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
+
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -14,6 +25,15 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio_tungstenite::tungstenite::Message;
+#[path = "test_support/interaction_database_cleanup.rs"]
+mod interaction_database_cleanup;
+#[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -99,7 +119,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("routes: {error}")),
     )
     .unwrap_or_else(|error| panic!("routes file: {error}"));
-    let broker = collaboration_service::ServiceInteractionBroker::load(
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
         service_id
             .to_owned()
             .try_into()
@@ -123,7 +143,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             .await
             .unwrap_or_else(|error| panic!("automation store: {error}")),
     ));
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .unwrap_or_else(|error| panic!("identity: {error}"))
         .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description.clone()])
@@ -137,7 +157,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             .unwrap_or_else(|error| panic!("service id: {error}")),
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery_router = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
@@ -153,10 +173,10 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: broker.interaction_store(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(SystemSubscriptionClock),
         });
     subscription_delivery
@@ -166,12 +186,24 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     broker
         .install_session_delivery(Arc::clone(&delivery))
         .unwrap_or_else(|error| panic!("broker delivery: {error}"));
+    let interactions = broker.interaction_store();
     let identity = identity
         .with_session_delivery(delivery)
-        .with_subscription_delivery_service(subscription_delivery.clone(), presence)
+        .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
         .with_approval_broker(broker);
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(SystemSubscriptionClock),
+        },
+    )
+    .unwrap();
     let served = served_api::ServedApi::start(identity.clone())
-        .await
         .unwrap_or_else(|error| panic!("serve: {error}"));
     // The native Thread schema requires both timestamps as unix seconds.
     let thread_updated_at = chrono::Utc::now().timestamp() - 45;
@@ -436,6 +468,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     ));
     let message = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {
@@ -446,6 +479,9 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         })
         .await
         .unwrap();
+    let collaboration_protocol::MessageSendResult::Local(message) = message else {
+        panic!("local native input returned remote sender custody");
+    };
     assert!(
         matches!(
             message.receipt.client,
@@ -468,6 +504,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     );
     let queued = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {
@@ -478,6 +515,9 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         })
         .await
         .unwrap();
+    let collaboration_protocol::MessageSendResult::Local(queued) = queued else {
+        panic!("native QueueAccepted was replaced by remote sender custody");
+    };
     assert!(
         matches!(queued.receipt.client, Some(collaboration_protocol::DeliveryClientReceipt::CodexAppServer(collaboration_protocol::NativeSendReceipt { acceptance: collaboration_protocol::NativeSendAcceptance::QueueAccepted { submission_id }, .. })) if String::from(submission_id.clone()) == "queued-item")
     );
@@ -580,7 +620,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .publish(description)
         .unwrap_or_else(|error| panic!("schema withdrawal: {error}"));
     let served = served_api::ServedApi::start(identity)
-        .await
         .unwrap_or_else(|error| panic!("second serve: {error}"));
     let client = served
         .client("withdrawn-schema-proof")
@@ -592,6 +631,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .stop()
         .await
         .unwrap_or_else(|error| panic!("second serve: {error}"));
+    native_mail.close().await.unwrap();
     Arc::try_unwrap(automation_store)
         .unwrap_or_else(|_| panic!("service retained automation store"))
         .into_inner()
@@ -602,6 +642,11 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(backend_path).unwrap_or_else(|error| panic!("socket cleanup: {error}"));
     std::fs::remove_file(routes_path).unwrap_or_else(|error| panic!("routes cleanup: {error}"));
+    interaction_database_cleanup::remove_closed_interaction_database(
+        &root.join("interaction.sqlite"),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("interaction database cleanup: {error}"));
     std::fs::remove_dir(root).unwrap_or_else(|error| panic!("directory cleanup: {error}"));
     // Assert.
     assert_eq!(inspection.target, target);
@@ -706,15 +751,14 @@ async fn inspect_control_response_preserves_native_fake_rejection_message() {
         endpoint: target.endpoint.clone(),
         gate,
     };
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .unwrap_or_else(|error| panic!("identity: {error}"))
         .with_endpoints(vec![endpoint])
         .unwrap_or_else(|error| panic!("endpoints: {error}"))
         .with_native_backend(native_backend)
         .unwrap_or_else(|error| panic!("native backend: {error}"));
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .unwrap_or_else(|error| panic!("serve: {error}"));
+    let served =
+        served_api::ServedApi::start(identity).unwrap_or_else(|error| panic!("serve: {error}"));
     let native_task = tokio::spawn(async move {
         let (stream, _) = backend_listener.accept().await.expect("native accept");
         let mut socket = tokio_tungstenite::accept_async(stream)

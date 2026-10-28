@@ -1,11 +1,12 @@
 use agent_automation::{FirstFire, WakeRecord};
-use automation_storage::{PushRecordDraft, StorageError};
+use automation_storage::StorageError;
+use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     MessageContent, PushHeaderFacts, PushId, PushKind, PushOrigin, RouterOriginRef, SavedMessage,
 };
 
 pub(super) fn build_test_wake_push_draft(
-    wake: &WakeRecord<SavedMessage>,
+    wake: &WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {

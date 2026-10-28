@@ -1,5 +1,15 @@
 use super::affinity_admission::assessment_account_is_credit_backed;
-use super::*;
+use super::{
+    AccountDecisionSelector, AccountHold, AccountId, BurnDownAccountAssessment,
+    BurnDownAccountInput, BurnDownRouteBandAssessmentInput, BurnDownRouteBandAssessmentResult,
+    HashMap, HttpProxyError, HttpProxyRequest, Mutex, Provider, ProviderRouteBand,
+    QuotaAwareAccountSelector, QuotaAwareAccountSelectorError, QuotaAwareAccountState,
+    QuotaEvidenceFreshness, QuotaEvidenceReason, QuotaWindowFact, QuotaWindowStatus,
+    RESPONSES_HTTP, RouteBand, RouterAffinityHashSecret, RoutingExclusion, SelectedAccountDecision,
+    SelectedPool, SelectionOutcome, SnapshotFreshness, TokenGeneration, V1_SHORT_WINDOW_SECONDS,
+    V1_WEEKLY_WINDOW_SECONDS, WeightedDeficitSelector, assess_route_band, current_unix_seconds,
+    telemetry_hash,
+};
 
 impl QuotaAwareAccountState {
     /// Creates account state for selector input.
@@ -295,6 +305,20 @@ pub(super) fn filter_selector_accounts_for_provider(
         .into_iter()
         .filter(|account| account.provider() == provider)
         .collect()
+}
+
+pub(super) fn require_configured_openai_accounts(
+    route_provider: Provider,
+    mut configured_providers: impl Iterator<Item = Provider>,
+) -> Result<(), HttpProxyError> {
+    if route_provider == Provider::Openai
+        && !configured_providers.any(|provider| provider == Provider::Openai)
+    {
+        return Err(HttpProxyError::Selection {
+            reason: QuotaAwareAccountSelectorError::NoConfiguredOpenaiAccounts,
+        });
+    }
+    Ok(())
 }
 
 fn account_input_from_quota_state(

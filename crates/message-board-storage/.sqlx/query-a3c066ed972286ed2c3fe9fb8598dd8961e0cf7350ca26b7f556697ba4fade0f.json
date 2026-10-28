@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT MAX(last_feed_position) AS \"feed?: i64\",MAX(max_handoff_seq) AS \"handoff?: i64\",MAX(max_expansion_seq) AS \"expansion?: i64\",MAX(settled_through) AS \"frontier?: i64\" FROM capture_feed_marks WHERE epoch<? OR (epoch=? AND captured_position<=?)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "handoff?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expansion?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "frontier?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a3c066ed972286ed2c3fe9fb8598dd8961e0cf7350ca26b7f556697ba4fade0f"
+}

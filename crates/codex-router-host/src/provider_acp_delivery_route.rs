@@ -1,4 +1,9 @@
 //! ACP provider message delivery, evidence, and reconciliation.
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::UnsentCause;
+mod native_result;
 mod provider_active_turn_cancel;
 mod provider_content_commands;
 mod provider_delivery_request;
@@ -24,15 +29,20 @@ use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     RouteEffectEvidence, SubmissionEffect,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::NOT_LOADED_REASON;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RouteClaim;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, MessageDelivery, OperationId, ProviderIdentity,
+    CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryRejection,
+    DeliveryRejectionReason, MessageDelivery, OperationId, ProviderIdentity,
     ProviderOperationEffect, SessionReachability, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryContractError, DeliveryPrecondition, EndpointDirectory,
-    LoadPolicy, NOT_LOADED_REASON, ProviderConversationBackend, ProviderOperationStore, RouteClaim,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex as StdMutex},
@@ -117,45 +127,6 @@ impl ProviderAcpDeliveryRoute {
         self.claim.serves(target)
     }
 
-    fn receipt(outcome: DeliveryOutcome, operation_id: Option<OperationId>) -> DeliveryReceipt {
-        DeliveryReceipt {
-            outcome,
-            reachability: Some(SessionReachability::ProviderAcp),
-            client: operation_id
-                .map(|operation_id| DeliveryClientReceipt::ProviderAcp { operation_id }),
-        }
-    }
-
-    fn rejected(reason: DeliveryRejectionReason, detail: &str) -> DeliveryReceipt {
-        let next_action = match reason {
-            DeliveryRejectionReason::Busy | DeliveryRejectionReason::EndpointUnavailable => {
-                DeliveryNextAction::RetryLater
-            }
-            DeliveryRejectionReason::LiveElsewhere => DeliveryNextAction::InspectTarget,
-            _ => DeliveryNextAction::CorrectRequest,
-        };
-        Self::receipt(
-            DeliveryOutcome::Rejected(DeliveryRejection {
-                reason,
-                next_action,
-                client_code: None,
-                detail: Some(detail.to_owned()),
-                claims: None,
-            }),
-            None,
-        )
-    }
-
-    fn not_submitted(reason: impl Into<String>, retryable: bool) -> DeliveryReceipt {
-        Self::receipt(
-            DeliveryOutcome::NotSubmitted {
-                reason: reason.into(),
-                retryable,
-            },
-            None,
-        )
-    }
-
     fn effect(
         request: &ProviderDeliveryRequest,
         binding: &collaboration_protocol::ProviderBindingIdentity,
@@ -180,7 +151,7 @@ impl ProviderAcpDeliveryRoute {
         &'a self,
         request: ProviderDeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
+    ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         let input_id = request.input_id()?;
         if !self.serves(&request.target) {
             return Ok(Self::rejected(
@@ -192,6 +163,7 @@ impl ProviderAcpDeliveryRoute {
             return Ok(Self::not_submitted(
                 "provider runtime is unavailable",
                 false,
+                UnsentCause::Refused(NativeRefusalCode::RuntimeMissing),
             ));
         };
         if let DeliveryPrecondition::EndpointGeneration { expected } = &request.precondition
@@ -205,14 +177,23 @@ impl ProviderAcpDeliveryRoute {
         let session_lock = self.session_lock(&request.target)?;
         let _session_guard = session_lock.lock().await;
         let claim = self.claim.claim(&request.target).await;
-        match claim {
+        let claim_cause = claim.unsent_cause();
+        match claim.into_claim() {
             RouteClaim::Holds => {}
             RouteClaim::CanLoad => {}
             RouteClaim::Unavailable { reason, retryable } => {
-                return Ok(Self::not_submitted(reason.reason, retryable));
+                return Ok(Self::not_submitted(
+                    reason.reason,
+                    retryable,
+                    claim_cause.ok_or(DeliveryContractError::InvalidEvidence)?,
+                ));
             }
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
-                return Ok(Self::not_submitted("session is live elsewhere", true));
+                return Ok(Self::not_submitted(
+                    "session is live elsewhere",
+                    true,
+                    claim_cause.ok_or(DeliveryContractError::InvalidEvidence)?,
+                ));
             }
             RouteClaim::NotMine => {
                 return Ok(Self::rejected(
@@ -224,7 +205,13 @@ impl ProviderAcpDeliveryRoute {
         let operation_id = OperationId::try_from(request.attempt.as_str().to_owned())
             .map_err(|_| DeliveryContractError::InvalidEvidence)?;
         let Some(runtime) = self.supervisor.runtime_for(&request.target.endpoint) else {
-            return Ok(Self::not_submitted("provider runtime is unavailable", true));
+            return Ok(Self::not_submitted(
+                "provider runtime is unavailable",
+                true,
+                UnsentCause::Holdable {
+                    otherwise: NativeRefusalCode::RuntimeMissing,
+                },
+            ));
         };
         let provider_session_id = String::from(request.target.session_id.clone());
         if runtime.settings_unresolved(&provider_session_id).await {
@@ -249,6 +236,9 @@ impl ProviderAcpDeliveryRoute {
                 return Ok(Self::not_submitted(
                     "provider activity is unavailable",
                     true,
+                    UnsentCause::Holdable {
+                        otherwise: NativeRefusalCode::ActivityUnavailable,
+                    },
                 ));
             }
         };
@@ -256,7 +246,13 @@ impl ProviderAcpDeliveryRoute {
             && request.load_policy == LoadPolicy::LoadedOnly
             && activity == ProviderSessionActivity::NotLoaded
         {
-            return Ok(Self::not_submitted(NOT_LOADED_REASON, true));
+            return Ok(Self::not_submitted(
+                NOT_LOADED_REASON,
+                true,
+                UnsentCause::Holdable {
+                    otherwise: NativeRefusalCode::ThreadNotLoaded,
+                },
+            ));
         }
         if request.mode == MessageDelivery::Queue
             || (!capabilities.supports_steering
@@ -281,12 +277,30 @@ impl ProviderAcpDeliveryRoute {
             ProviderSessionLoadOutcome::Ready | ProviderSessionLoadOutcome::AlreadyLoaded => {}
             ProviderSessionLoadOutcome::NotLoaded => {
                 return self
-                    .finish_known_none(&request, sink, &mut effect, NOT_LOADED_REASON, true)
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        NOT_LOADED_REASON,
+                        true,
+                        UnsentCause::Holdable {
+                            otherwise: NativeRefusalCode::ThreadNotLoaded,
+                        },
+                    )
                     .await;
             }
             ProviderSessionLoadOutcome::UnsupportedLoad => {
                 return self
-                    .finish_known_none(&request, sink, &mut effect, "unsupported: load", false)
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        "unsupported: load",
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::Rejection(
+                            DeliveryRejectionReason::UnsupportedCapability,
+                        )),
+                    )
                     .await;
             }
             ProviderSessionLoadOutcome::MissingRecord => {
@@ -297,6 +311,7 @@ impl ProviderAcpDeliveryRoute {
                         &mut effect,
                         "provider session record is missing",
                         false,
+                        UnsentCause::RecipientUnknown,
                     )
                     .await;
             }
@@ -308,12 +323,26 @@ impl ProviderAcpDeliveryRoute {
                         &mut effect,
                         "session became live elsewhere",
                         true,
+                        UnsentCause::Holdable {
+                            otherwise: NativeRefusalCode::Rejection(
+                                DeliveryRejectionReason::LiveElsewhere,
+                            ),
+                        },
                     )
                     .await;
             }
             ProviderSessionLoadOutcome::Unavailable { reason } => {
                 return self
-                    .finish_known_none(&request, sink, &mut effect, reason, true)
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        reason,
+                        true,
+                        UnsentCause::Holdable {
+                            otherwise: NativeRefusalCode::NativeUnavailable,
+                        },
+                    )
                     .await;
             }
             ProviderSessionLoadOutcome::Rejected { reason } => {
@@ -349,40 +378,57 @@ impl ProviderAcpDeliveryRoute {
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {
-                        return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
+                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
                     }
-                    return Ok(Self::receipt(DeliveryOutcome::Steered, Some(running)));
+                    return Ok(Self::observed(
+                        NativeObservedOutcome::Steered,
+                        Some(running),
+                    ));
                 }
                 Ok(ProviderSteeringOutcome::Injected {
                     running_operation_id: None,
                 }) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {
-                        return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
+                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
                     }
-                    return Ok(Self::receipt(DeliveryOutcome::Steered, None));
+                    return Ok(Self::observed(NativeObservedOutcome::Steered, None));
                 }
                 Ok(ProviderSteeringOutcome::StartedNewTurn) => {
                     update_submission(&mut effect, SubmissionEffect::Accepted);
                     if sink.record(effect).await.is_err() {
-                        return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
+                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
                     }
                     tracing::info!(
                         session_id = %String::from(request.target.session_id.clone()),
                         "agent started a new turn from a steer"
                     );
-                    return Ok(Self::receipt(DeliveryOutcome::Started, None));
+                    return Ok(Self::observed(NativeObservedOutcome::Started, None));
                 }
                 Ok(ProviderSteeringOutcome::Failed) => {
                     return self
-                        .finish_known_none(&request, sink, &mut effect, "steerFailed", false)
+                        .finish_known_none(
+                            &request,
+                            sink,
+                            &mut effect,
+                            "steerFailed",
+                            false,
+                            UnsentCause::Refused(NativeRefusalCode::SteerFailed),
+                        )
                         .await;
                 }
                 Ok(ProviderSteeringOutcome::PromptRequired)
                     if request.mode == MessageDelivery::Steer =>
                 {
                     return self
-                        .finish_known_none(&request, sink, &mut effect, "no running turn", false)
+                        .finish_known_none(
+                            &request,
+                            sink,
+                            &mut effect,
+                            "no running turn",
+                            false,
+                            UnsentCause::Refused(NativeRefusalCode::NoActiveTurn),
+                        )
                         .await;
                 }
                 Ok(ProviderSteeringOutcome::PromptRequired) => {}
@@ -405,6 +451,7 @@ impl ProviderAcpDeliveryRoute {
                         &mut effect,
                         "provider session record is missing",
                         false,
+                        UnsentCause::RecipientUnknown,
                     )
                     .await;
             }
@@ -432,9 +479,12 @@ impl ProviderAcpDeliveryRoute {
             Ok(ProviderPromptDispatch::Submitted) => {
                 update_submission(&mut effect, SubmissionEffect::Accepted);
                 if sink.record(effect).await.is_err() {
-                    return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
+                    return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
                 }
-                Ok(Self::receipt(DeliveryOutcome::Started, Some(operation_id)))
+                Ok(Self::observed(
+                    NativeObservedOutcome::Started,
+                    Some(operation_id),
+                ))
             }
             Ok(ProviderPromptDispatch::NotSubmitted) => {
                 self.finish_known_none(
@@ -443,6 +493,9 @@ impl ProviderAcpDeliveryRoute {
                     &mut effect,
                     "provider prompt was not sent",
                     true,
+                    UnsentCause::Holdable {
+                        otherwise: NativeRefusalCode::ProviderNotSubmitted,
+                    },
                 )
                 .await
             }
@@ -456,70 +509,14 @@ impl ProviderAcpDeliveryRoute {
                     &mut effect,
                     String::from(failure.message),
                     true,
+                    UnsentCause::Holdable {
+                        otherwise: NativeRefusalCode::ProviderNotSubmitted,
+                    },
                 )
                 .await
             }
             Err(_) => self.finish_unknown(sink, &mut effect).await,
         }
-    }
-
-    async fn finish_known_none(
-        &self,
-        _request: &ProviderDeliveryRequest,
-        sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
-        reason: impl Into<String>,
-        retryable: bool,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
-        update_submission(effect, SubmissionEffect::NotDispatched);
-        if sink.record(effect.clone()).await.is_err() {
-            return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
-        }
-        Ok(Self::not_submitted(reason, retryable))
-    }
-
-    async fn finish_rejected(
-        &self,
-        sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
-        provider_reason: ProviderSessionLoadRejection,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
-        update_submission(effect, SubmissionEffect::NotDispatched);
-        if sink.record(effect.clone()).await.is_err() {
-            return Ok(Self::receipt(DeliveryOutcome::Unknown, None));
-        }
-        let client_code = Some(provider_reason.code());
-        let detail = Some(provider_reason.safe_detail());
-        let (reason, next_action) = match provider_reason {
-            ProviderSessionLoadRejection::SessionNotFound { .. } => (
-                DeliveryRejectionReason::ProviderSessionNotFound,
-                DeliveryNextAction::CorrectRequest,
-            ),
-            ProviderSessionLoadRejection::ProviderRejected { .. } => (
-                DeliveryRejectionReason::ProviderRejected,
-                DeliveryNextAction::InspectTarget,
-            ),
-        };
-        Ok(Self::receipt(
-            DeliveryOutcome::Rejected(DeliveryRejection {
-                reason,
-                next_action,
-                client_code,
-                detail,
-                claims: None,
-            }),
-            None,
-        ))
-    }
-
-    async fn finish_unknown(
-        &self,
-        sink: &dyn AttemptEvidenceSink,
-        effect: &mut RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
-        update_submission(effect, SubmissionEffect::Unknown);
-        let _result = sink.record(effect.clone()).await;
-        Ok(Self::receipt(DeliveryOutcome::Unknown, None))
     }
 }
 

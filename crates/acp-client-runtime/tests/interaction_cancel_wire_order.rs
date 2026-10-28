@@ -1,7 +1,5 @@
 //! ACP interaction replies must enter the wire before a Turn cancellation.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{
@@ -12,44 +10,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, QuestionRequest, QuestionResponse, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const INTERACTION_FIXTURE: &str = r#"
-import json,sys
-kind,receipt=sys.argv[1:]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'interaction-order-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-if kind in ('question','plan'):
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-        'update':{'sessionUpdate':'tool_call','toolCallId':'interaction-tool',
-                  'title':'Interaction','kind':'other','status':'pending'}}})
-if kind=='form':
-    method='elicitation/create'
-    params={'mode':'form','sessionId':'fixture-session','message':'Confirm',
-        'requestedSchema':{'type':'object','properties':{'answer':{'type':'string'}}}}
-elif kind=='question':
-    method='cursor/ask_question'
-    params={'toolCallId':'interaction-tool','title':'Choose',
-        'questions':[{'id':'choice','prompt':'Proceed?',
-        'options':[{'id':'yes','label':'Yes'}]}]}
-else:
-    method='cursor/create_plan'
-    params={'toolCallId':'interaction-tool','name':'Plan','overview':'Overview',
-        'plan':'# Plan','todos':[{'id':'one','content':'Step','status':'pending'}]}
-send({'jsonrpc':'2.0','id':'interaction','method':method,'params':params})
-first=read()
-second=read()
-with open(receipt,'w') as output: json.dump([first,second],output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
+const INTERACTION_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/interaction-cancel-order-agent.ts"
+);
 
 struct HeldInteractionPort {
     started: Arc<tokio::sync::Notify>,
@@ -128,16 +92,18 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire-order.json");
     let started = Arc::new(tokio::sync::Notify::new());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 INTERACTION_FIXTURE.to_owned(),
                 kind.to_owned(),
                 receipt.to_string_lossy().into_owned(),

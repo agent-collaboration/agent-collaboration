@@ -8,7 +8,8 @@ fn profile_render_includes_codex_custom_provider_contract() {
     assert!(!rendered.contains("[profiles.codex-router]\n"));
     assert!(rendered.contains("model_provider = \"codex-router\"\n"));
     assert!(rendered.contains("[model_providers.codex-router]\n"));
-    assert!(rendered.contains("name = \"codex-router\"\n"));
+    assert!(rendered.contains("name = \"OpenAI\"\n"));
+    assert!(rendered.contains("enable_request_compression = false\n"));
     assert!(rendered.contains("base_url = \"http://127.0.0.1:8787/v1\"\n"));
     assert!(rendered.contains("wire_api = \"responses\"\n"));
     assert!(rendered.contains("requires_openai_auth = true\n"));
@@ -72,7 +73,12 @@ fn profile_print_command_renders_profile_without_writing() {
             .stdout
             .contains("model_provider = \"codex-router\"\n")
     );
-    assert!(output.stdout.contains("name = \"codex-router\"\n"));
+    assert!(output.stdout.contains("name = \"OpenAI\"\n"));
+    assert!(
+        output
+            .stdout
+            .contains("enable_request_compression = false\n")
+    );
     assert!(
         output
             .stdout
@@ -102,6 +108,28 @@ fn profile_print_emits_router_custom_provider_without_home_mutation() {
     );
 
     assert_router_profile_contract(&output.stdout, 9876);
+    assert!(!codex_home.join("codex-router.config.toml").exists());
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn profile_print_uses_default_production_port_without_writing() {
+    let test_root = TestRoot::new("profile-print-default-port");
+    must_ok(fs::create_dir(test_root.path()));
+    let codex_home = test_root.path().join("codex-home");
+
+    let output = run_cli(
+        [
+            "codex-router",
+            "profile",
+            "print",
+            "--codex-home",
+            path_to_str(&codex_home),
+        ],
+        CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
+    );
+
+    assert_router_profile_contract(&output.stdout, 19741);
     assert!(!codex_home.join("codex-router.config.toml").exists());
     assert!(output.stderr.is_empty());
 }
@@ -365,7 +393,7 @@ fn profile_write_command_with_approval_writes_only_temp_codex_home() {
     );
     assert_eq!(
         must_ok(fs::read_to_string(&target_path)),
-        CodexRouterProfile::new(8787).render()
+        CodexRouterProfile::new(19741).render()
     );
     assert!(output.stderr.is_empty());
 }

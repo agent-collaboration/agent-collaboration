@@ -9,6 +9,7 @@ async fn host_without_provider_faces_does_not_require_owner_lookup()
     let root = tempfile::tempdir()?;
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.path().to_owned(),
         codex_home: root.path().to_owned(),
         backend_socket: root.path().join("backend.sock"),
@@ -35,6 +36,7 @@ async fn host_serves_the_stateless_collaboration_api_at_the_manifest_url() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.path().to_owned(),
         codex_home: root.path().to_owned(),
         backend_socket: root.path().join("backend.sock"),
@@ -106,6 +108,7 @@ async fn post_bind_manifest_failure_releases_mcp_port() {
     drop(reservation);
 
     let result = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.path().to_owned(),
         codex_home: root.path().to_owned(),
         backend_socket: root.path().join("backend.sock"),
@@ -132,6 +135,7 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .create(&root)
         .unwrap_or_else(|e| panic!("directory: {e}"));
     let inputs = || CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("backend.sock"),
@@ -406,6 +410,8 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|e| panic!("database cleanup: {e}"));
     std::fs::remove_file(root.join("service-identity.json"))
         .unwrap_or_else(|e| panic!("identity cleanup: {e}"));
+    std::fs::remove_file(root.join("installation-peer.json"))
+        .unwrap_or_else(|e| panic!("installation peer cleanup: {e}"));
     std::fs::remove_file(schema_path).unwrap_or_else(|error| panic!("schema cleanup: {error}"));
     std::fs::remove_file(root.join("backend.sock"))
         .unwrap_or_else(|error| panic!("backend cleanup: {error}"));
@@ -414,8 +420,18 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|error| panic!("export cleanup: {error}"));
     std::fs::remove_dir(export_directory)
         .unwrap_or_else(|error| panic!("export directory cleanup: {error}"));
-    std::fs::remove_file(root.join("project-board.sqlite"))
-        .unwrap_or_else(|error| panic!("board database cleanup: {error}"));
+    for filename in [
+        "fleet-cache.sqlite",
+        "fleet-outbox.sqlite",
+        "interaction.sqlite",
+    ] {
+        std::fs::remove_file(root.join(filename))
+            .unwrap_or_else(|error| panic!("{filename} cleanup: {error}"));
+        let wal = root.join(format!("{filename}-wal"));
+        if wal.exists() {
+            std::fs::remove_file(wal).unwrap_or_else(|error| panic!("native WAL cleanup: {error}"));
+        }
+    }
     std::fs::remove_file(root.join("automation.sqlite"))
         .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(root.join("provider-operations.sqlite"))
@@ -431,6 +447,7 @@ async fn occupied_mcp_port_is_a_visible_startup_failure_without_fallback() {
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").expect("occupied listener");
     let mcp_bind = occupied.local_addr().expect("occupied address");
     let result = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.path().to_owned(),
         codex_home: root.path().to_owned(),
         backend_socket: root.path().join("backend.sock"),

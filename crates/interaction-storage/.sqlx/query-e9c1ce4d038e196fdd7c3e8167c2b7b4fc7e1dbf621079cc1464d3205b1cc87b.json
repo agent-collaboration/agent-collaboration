@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "retention!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "delivery_state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "settled_at",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e9c1ce4d038e196fdd7c3e8167c2b7b4fc7e1dbf621079cc1464d3205b1cc87b"
+}

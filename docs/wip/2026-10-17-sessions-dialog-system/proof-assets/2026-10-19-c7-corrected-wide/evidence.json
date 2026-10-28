@@ -1,0 +1,621 @@
+{
+  "at": "2026-10-19T20:46:23.108512+00:00",
+  "kind": "Root original-image inspection of C7 corrected-wide frozen target",
+  "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+  "source_digest": "be81f1fc9215ecb3be15f3cb4fbb0b2f88020ffb0fe0a059edbb46a3364ed98c",
+  "source_digest_encoding": "as recorded by capture manifest; not a current working-tree equality claim",
+  "plan_sha256": "05f40d0bdbfe7faa6354c93ced9642fc1c3a090ba611b6fcc9887bc31c878668",
+  "artifacts": {
+    "capture_driver": {
+      "sha256": "da674e8992b9036bf900c4e0ee346286e7e05c5728bc2a783a777d361ebc2ca1"
+    },
+    "harness_binary": {
+      "sha256": "515a941367fab6cd252d0e9a6dae06e59a3e4d4b7f22a047b76f4504cd33d343"
+    },
+    "component_binary": {
+      "sha256": "409af754f5a1bd5958dc46fb6137d028f164646e21ad0ea355d76cac8a7dac7f"
+    },
+    "image_verifier": {
+      "sha256": "693d5294b303b1c914ef00c0d3021ea45d7d9e9794683d6218472b2885060adc"
+    }
+  },
+  "target": "actual compiled Quota iocraft component, synthetic in-memory data and effect ports",
+  "driver_exit": 101,
+  "wrapper_exit": 1,
+  "timed_out": false,
+  "automatic_positive_passes_before_failure": 27,
+  "automatic_failed_checkpoint": "component-quota-confirm-yes",
+  "runtime_negatives": "all eight unexecuted",
+  "effects": {
+    "external_requests": 0,
+    "persisted_writes": 0
+  },
+  "review": {
+    "root_opened_originals": 31,
+    "observed": [
+      "named pool/data summaries",
+      "one captured account identity retained through scrolling",
+      "concise task fields and notices",
+      "one No/Yes group",
+      "field/query/no-match association and grey disabled Select",
+      "full outer bottom edge in all 31 originals"
+    ],
+    "open_visual_concern": "Confirmed P2 by Root and separate UX Verifier: Credits fact groups lack visible separation in credits-identity, credits-balance and refresh-result. Source spacer presence does not establish actual spacing; cause remains under product investigation.",
+    "not_claimed": [
+      "successful automatic run",
+      "final UX acceptance",
+      "other widths",
+      "same-session resize or pending states",
+      "Sessions",
+      "public provider or two-machine outcomes",
+      "actual iPhone",
+      "browser rendering"
+    ],
+    "separate_ux_review": "31/31 personally opened and hashes checked; hierarchy partial, six other original clarity findings visually supported at wide only; no interaction/device acceptance."
+  },
+  "limits": [
+    "not acceptance",
+    "narrow grids/phone/resize/pending/Sessions/public/provider/device observation open",
+    "failed run remains failed after any offline oracle correction"
+  ],
+  "images": [
+    {
+      "order": 1,
+      "checkpoint": "component-quota-browse",
+      "sha256": "6b009920c68d23d9377e521573864bc5eee0d5ac5ba6fcf54aa27b2cf4bd5139",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota status",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-browse.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 2,
+      "checkpoint": "component-quota-next-account",
+      "sha256": "5be3119ea750647c7658c51703ae737732524afcd5d543c1412fa4b30fcc9dcf",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota status",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-next-account.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 3,
+      "checkpoint": "component-quota-restored-account",
+      "sha256": "6b009920c68d23d9377e521573864bc5eee0d5ac5ba6fcf54aa27b2cf4bd5139",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota status",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-restored-account.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 4,
+      "checkpoint": "component-quota-details-top",
+      "sha256": "084b71c9542c9191dec6a4850f74bdd99624faa12fb51090a9630a55aa5f5e55",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-details-top.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 5,
+      "checkpoint": "component-quota-details-bottom",
+      "sha256": "834259f6bddc6a814f0d7be4ef898c0c99406d6beb3fcfc8d7f49871dd534839",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-details-bottom.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 6,
+      "checkpoint": "component-quota-help-top",
+      "sha256": "0848304b8bd1a52a5360375c0d0d6d68704b684d96a490cbae04736e60b9523b",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-help-top.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 7,
+      "checkpoint": "component-quota-help-bottom",
+      "sha256": "4f53a1a54e346954ec4026a32c4d608c78b0790e8a43cb7da8d7ccb96fa945bb",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-help-bottom.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 8,
+      "checkpoint": "component-quota-floor-original",
+      "sha256": "d14340d943fcfa51a48e9d0a89ea36003445e0e873d0b1951e0e0781b0f3e886",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Weekly floor",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-floor-original.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 9,
+      "checkpoint": "component-quota-floor-draft",
+      "sha256": "3176dd4d49ac6fc9331a77658200620693cda30b3964042b45b42e94cf3d6d80",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Weekly floor",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-floor-draft.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 10,
+      "checkpoint": "component-quota-floor-cancelled",
+      "sha256": "d14340d943fcfa51a48e9d0a89ea36003445e0e873d0b1951e0e0781b0f3e886",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Weekly floor",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-floor-cancelled.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 11,
+      "checkpoint": "component-quota-floor-saved",
+      "sha256": "1145f9cbe6fce238fe7c0065e9ef418b8b65b0c889117f35eeb3d86426319e8d",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Weekly floor",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-floor-saved.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 12,
+      "checkpoint": "component-quota-options-identity",
+      "sha256": "97e7a467e238a1f3b19f4e1871afb5f05182587298ed5c1581675125f8377156",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Resets",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-options-identity.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 13,
+      "checkpoint": "component-quota-reset-inventory",
+      "sha256": "856200e55b6908a16901595f6acd8614f0f3328d3f26230b99e119b3f6cc1f73",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Resets",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-reset-inventory.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 14,
+      "checkpoint": "component-quota-reset-last-page",
+      "sha256": "e8de755bd57774268e339357d77259a4ab3285261612e9c595ca5f2f7e057339",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Resets",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-reset-last-page.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 15,
+      "checkpoint": "component-quota-credits-identity",
+      "sha256": "54bb73f0b1c28930fb49cd520dcf247e4341280f2d3d4a19bf7cd7bef203ccfb",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Credits",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-credits-identity.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 16,
+      "checkpoint": "component-quota-credits-balance",
+      "sha256": "0c57030db93631797422c63dcb337d906d9f16e741cfa460c5e58fb0724983f6",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Credits",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-credits-balance.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 17,
+      "checkpoint": "component-quota-policy-original",
+      "sha256": "2721f5d677c877a94193fb8bc143ef214f1b23ca38fe4d1b4d32158b3e7597f9",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-original.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 18,
+      "checkpoint": "component-quota-policy-choice",
+      "sha256": "60a3b218cba2003773e3a0f19e86050e6c4561616163933aea1445cb95faa844",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-choice.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 19,
+      "checkpoint": "component-quota-policy-no-match",
+      "sha256": "61b47c93c2251bd6ddf5221cc8d199488a5bcc01b5288bf687781a80a6b57e01",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-no-match.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 20,
+      "checkpoint": "component-quota-policy-choice-returned",
+      "sha256": "2721f5d677c877a94193fb8bc143ef214f1b23ca38fe4d1b4d32158b3e7597f9",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-choice-returned.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 21,
+      "checkpoint": "component-quota-policy-draft",
+      "sha256": "ff34637b7b9b0cf4a9d4c4779b1ef6861b2f5b44e2dc4e28bafc18ec35efa50a",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-draft.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 22,
+      "checkpoint": "component-quota-policy-cancelled",
+      "sha256": "2721f5d677c877a94193fb8bc143ef214f1b23ca38fe4d1b4d32158b3e7597f9",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-cancelled.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 23,
+      "checkpoint": "component-quota-policy-saved",
+      "sha256": "ff34637b7b9b0cf4a9d4c4779b1ef6861b2f5b44e2dc4e28bafc18ec35efa50a",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Credit usage",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-policy-saved.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 24,
+      "checkpoint": "component-quota-refresh-result",
+      "sha256": "0be9497dd910f61922a7f67d325dc70237b0b2fe8724a7c20023009b8570bb63",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Credits",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-refresh-result.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 25,
+      "checkpoint": "component-quota-reset-review",
+      "sha256": "856200e55b6908a16901595f6acd8614f0f3328d3f26230b99e119b3f6cc1f73",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Resets",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-reset-review.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 26,
+      "checkpoint": "component-quota-confirm-no",
+      "sha256": "1737db5088100e4cc425f9bd556b07fa35db1de3d6c7c4d9be93cba5c8b0f9d8",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Confirm reset",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-confirm-no.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 27,
+      "checkpoint": "component-quota-confirm-no-returned",
+      "sha256": "220571bd7e429a04d4f4713e1562b0f26ac19f15513cffaba88b7763adf75f65",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Account options \u00b7 Resets",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-confirm-no-returned.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 28,
+      "checkpoint": "component-quota-confirm-yes",
+      "sha256": "5927f60852b0b7ebe02cb695d1d9aca92d23bf914a684aa33d41a9bb97611d20",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Confirm reset",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-confirm-yes.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 29,
+      "checkpoint": "component-quota-reset-result",
+      "sha256": "604628f3e6ba406a6b059b6f5cc1d823c47c63d5ea413378a380641c214c3dd3",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Reset result",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-reset-result.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 30,
+      "checkpoint": "component-quota-reset-result-bottom",
+      "sha256": "604628f3e6ba406a6b059b6f5cc1d823c47c63d5ea413378a380641c214c3dd3",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Reset result",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-reset-result-bottom.png",
+      "root_personally_viewed_original": true
+    },
+    {
+      "order": 31,
+      "checkpoint": "component-quota-returned",
+      "sha256": "6b009920c68d23d9377e521573864bc5eee0d5ac5ba6fcf54aa27b2cf4bd5139",
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "screen": "Quota",
+      "dialog": "Quota status",
+      "journey": "normal compiled component fixture, ordered browse/edit/credit/reset tour",
+      "file": "component-quota-returned.png",
+      "root_personally_viewed_original": true
+    }
+  ]
+}

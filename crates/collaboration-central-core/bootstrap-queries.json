@@ -1,0 +1,124 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_bootstrap.rs",
+  "metadata": "bootstrap-query-metadata.json",
+  "queries": [
+    {
+      "name": "initialize_migration_history",
+      "sql": "core_migrations/0000_migration_history.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_migration_history",
+      "sql": "sql/read_migration_history.sql",
+      "row": "StoredMigrationHistory",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_migration_history",
+      "sql": "sql/insert_migration_history.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_migration_failures",
+      "sql": "core_migrations/0009_migration_failures.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "record_migration_failure",
+      "sql": "sql/record_migration_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_migration_failures",
+      "sql": "sql/read_migration_failures.sql",
+      "row": "StoredMigrationFailure",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "probe_migration_bookkeeping",
+      "sql": "sql/probe_migration_bookkeeping.sql",
+      "row": "StoredMigrationTable",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "clear_migration_failure",
+      "sql": "sql/clear_migration_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

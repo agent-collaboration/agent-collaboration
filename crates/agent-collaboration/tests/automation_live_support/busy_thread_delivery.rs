@@ -261,6 +261,7 @@ async fn send_agent_probe(input: MessageProbeInput<'_>) -> Result<DeliveryReceip
         CollaborationClient::connect(&input.proof.service_directory, "busy-proof", "1").await?;
     client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: input.target.clone(),
             generation_guard: Some(input.proof.generation.clone()),
             message: MessageContent::Agent {
@@ -274,6 +275,12 @@ async fn send_agent_probe(input: MessageProbeInput<'_>) -> Result<DeliveryReceip
             mode: input.delivery,
         })
         .await
+        .and_then(|result| match result {
+            collaboration_client::protocol::MessageSendResult::Local(push) => Ok(push.receipt),
+            collaboration_client::protocol::MessageSendResult::Queued { .. } => Err(
+                ClientError::Protocol("local native probe returned remote custody"),
+            ),
+        })
 }
 
 fn require_rejection(result: Result<DeliveryReceipt, ClientError>, kind: &str) -> ProofResult<()> {

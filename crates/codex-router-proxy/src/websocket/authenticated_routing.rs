@@ -1,5 +1,17 @@
 use super::provider_signals::selection_close_reason_from_http_error;
-use super::*;
+use super::{
+    AccountDecisionSelector, AccountId, AsyncAccountDecisionSelector,
+    AsyncAuthenticatedWebSocketRouter, AsyncProviderCredentialResolver, AuditEvent,
+    AuditEventFields, AuditFileSink, AuditOutcome, AuditRouteKind, AuthenticatedWebSocketRouter,
+    Header, HttpAffinitySecretProvider, HttpProxyError, HttpProxyRequest, LocalAuthAuditResult,
+    Method, ProviderCredentialResolver, ProxyLocalAuthGate, QuotaAwareAccountSelectorError,
+    RESPONSES_WEBSOCKET, RequestId, ResponseCommitState, RouterAffinityHashSecret,
+    StderrAuditFailureReporter, TransportKind, WebSocketAffinityOwnerContext, WebSocketCloseReason,
+    WebSocketFirstFrameDecision, WebSocketFrame, WebSocketHandshakeRequest,
+    WebSocketProtocolRouter, allowed_audit_event, append_audit_event_with_reporter,
+    extract_presented_local_token_from_request, local_auth_rejection_audit_event,
+    redacted_account_hash,
+};
 
 const WEBSOCKET_REQUEST_LOCAL_CREDENTIAL_ATTEMPT_LIMIT: usize = 16;
 fn credential_failure_or_websocket_selection_close_reason(
@@ -280,6 +292,21 @@ where
         handshake: WebSocketHandshakeRequest,
         first_frame: WebSocketFrame,
     ) -> Result<WebSocketFirstFrameDecision, WebSocketCloseReason> {
+        let mut attempted_accounts = Vec::new();
+        self.route_first_frame_with_attempted_accounts(
+            handshake,
+            first_frame,
+            &mut attempted_accounts,
+        )
+        .await
+    }
+
+    pub(super) async fn route_first_frame_with_attempted_accounts(
+        &self,
+        handshake: WebSocketHandshakeRequest,
+        first_frame: WebSocketFrame,
+        attempted_accounts: &mut Vec<AccountId>,
+    ) -> Result<WebSocketFirstFrameDecision, WebSocketCloseReason> {
         let presented_token = match extract_presented_local_token_from_request(
             handshake.header_value("x-codex-router-token"),
             handshake.header_value("authorization"),
@@ -321,14 +348,19 @@ where
             selection_request =
                 selection_request.with_header(Header::new("session-id", session_id));
         }
+        for account_id in attempted_accounts.iter() {
+            selection_request = selection_request.with_excluded_account(account_id.clone());
+        }
         let affinity_secret = self.load_affinity_secret().map_err(|_reason| {
             self.emit_audit_event(websocket_selection_rejection_audit_event());
             WebSocketCloseReason::Selection {
                 reason: QuotaAwareAccountSelectorError::SecretUnavailable,
             }
         })?;
-        let mut attempted_accounts = Vec::new();
         loop {
+            if attempted_accounts.len() >= WEBSOCKET_REQUEST_LOCAL_CREDENTIAL_ATTEMPT_LIMIT {
+                return Err(WebSocketCloseReason::ProviderCredential);
+            }
             let selected = match self
                 .selector
                 .select_upstream_account(
@@ -343,7 +375,7 @@ where
                     self.emit_audit_event(websocket_selection_rejection_audit_event());
                     return Err(credential_failure_or_websocket_selection_close_reason(
                         error,
-                        &attempted_accounts,
+                        attempted_accounts,
                     ));
                 }
             };
@@ -353,6 +385,7 @@ where
             {
                 return Err(WebSocketCloseReason::ProviderCredential);
             }
+            attempted_accounts.push(selected.account_id().clone());
             let account_hash = redacted_account_hash(selected.account_id());
             let resolved = match self
                 .credential_resolver
@@ -365,7 +398,7 @@ where
                         account_hash.clone(),
                     ));
                     if selected.selection_reason() == "previous_response_affinity"
-                        || attempted_accounts.len() + 1
+                        || attempted_accounts.len()
                             >= WEBSOCKET_REQUEST_LOCAL_CREDENTIAL_ATTEMPT_LIMIT
                     {
                         return Err(WebSocketCloseReason::ProviderCredential);
@@ -374,7 +407,6 @@ where
                         { account.hash = account_hash.as_str() },
                         "codex_router.async_websocket_credential_attempt_failed_retrying_next_account"
                     );
-                    attempted_accounts.push(selected.account_id().clone());
                     selection_request =
                         selection_request.with_excluded_account(selected.account_id().clone());
                     continue;

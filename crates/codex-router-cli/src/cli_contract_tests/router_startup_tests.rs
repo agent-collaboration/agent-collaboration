@@ -1,4 +1,5 @@
 use super::*;
+use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
 
 #[test]
 fn serve_provisions_local_token_and_keeps_codex_optional() {
@@ -204,7 +205,7 @@ fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
             let result = run_serve_command_with_upkeep_start(
                 &mut stdout,
                 command,
-                credential_store,
+                credential_store.into(),
                 credential_upkeep_worker::start_background_credential_upkeep_worker,
             );
             (result, stdout)
@@ -282,14 +283,29 @@ fn serve_command_defaults_to_home_router_paths_and_provider_upstream() {
     let router_root = default_router_root_for_test();
     assert_eq!(command.state_db, router_root.join("state.sqlite"));
     assert_eq!(command.secret_root, router_root.join("secrets"));
+    assert_eq!(command.port, 19741);
     assert_eq!(
         command.upstream_base_url,
         codex_router_auth::live_quota::DEFAULT_CHATGPT_BACKEND_BASE_URL
     );
+
+    let explicit_command = match CliCommand::parse([
+        OsString::from("serve"),
+        OsString::from("--port"),
+        OsString::from("9876"),
+    ]) {
+        Ok(CliCommand::Serve(command)) => command,
+        Ok(other) => panic!("serve command should parse, got {other:?}"),
+        Err(error) => panic!("serve command should parse: {error}"),
+    };
+    assert_eq!(explicit_command.port, 9876);
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn serve_command_dispatches_websocket_upgrade_through_runtime() {
     let test_root = TestRoot::new("serve-command-websocket");
     must_ok(fs::create_dir(test_root.path()));
@@ -441,6 +457,10 @@ struct LoopbackUpkeepOAuthClient {
 }
 
 impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,
@@ -450,7 +470,7 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
         let response = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()
-            .expect("fixture OAuth client")
+            .unwrap_or_else(|_| panic!("fixture OAuth client"))
             .post(&self.token_endpoint)
             .header("content-type", "application/json")
             .body(
@@ -458,23 +478,26 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token.expose_secret(),
                 }))
-                .expect("fixture OAuth request"),
+                .unwrap_or_else(|_| panic!("fixture OAuth request")),
             )
             .send()
-            .expect("fixture OAuth response");
+            .unwrap_or_else(|_| panic!("fixture OAuth response"));
         assert!(response.status().is_success());
-        let payload: serde_json::Value =
-            serde_json::from_str(&response.text().expect("fixture OAuth body"))
-                .expect("fixture OAuth payload");
+        let payload: serde_json::Value = serde_json::from_str(
+            &response
+                .text()
+                .unwrap_or_else(|_| panic!("fixture OAuth body")),
+        )
+        .unwrap_or_else(|_| panic!("fixture OAuth payload"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             payload["access_token"]
                 .as_str()
-                .expect("access token")
+                .unwrap_or_else(|| panic!("access token"))
                 .to_owned(),
             Some(
                 payload["refresh_token"]
                     .as_str()
-                    .expect("refresh token")
+                    .unwrap_or_else(|| panic!("refresh token"))
                     .to_owned(),
             ),
         )
@@ -625,7 +648,7 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
         let result = run_serve_command_with_upkeep_start(
             &mut stdout,
             command,
-            credential_store,
+            credential_store.into(),
             move |state_path, credential_store| {
                 let clock = Arc::clone(&worker_clock);
                 let worker = start_background_credential_upkeep_worker_with_client_and_clock(

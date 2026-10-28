@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeEffectEvidence {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_differences: Vec<crate::PermissionDifference>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub target: Option<SessionRef>,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -24,7 +26,7 @@ pub struct NativeEffectEvidence {
     pub submission: SubmissionEffect,
     pub cessation: CessationEvidence,
 }
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreparationEffect {
     NotRequested,
@@ -33,7 +35,7 @@ pub enum PreparationEffect {
     Rejected,
     Unknown,
 }
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SubmissionEffect {
     NotDispatched,

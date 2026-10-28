@@ -1,3 +1,4 @@
+mod uncertainty_admission_tests;
 use super::*;
 use crate::ExternalProviderLaunch;
 use collaboration_protocol::{
@@ -88,79 +89,27 @@ impl Write for CapturedProviderTraceBuffer {
 }
 
 fn create_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'race-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec!["create".to_owned()],
+    )
 }
 
 fn pending_prompt_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'dispatch-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec!["pending".to_owned()],
+    )
 }
 
 fn ordered_prompt_fixture(socket_path: &std::path::Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'fifo-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-for expected in ('first','second'):
- request=json.loads(sys.stdin.readline())
- assert request['method']=='session/prompt'
- text=request['params']['prompt'][0]['text']
- assert text.startswith(f'✉️ sender · "{{expected}}" · router://')
- machine_and_push_id=text.split('router://',1)[1]
- machine_id,separator,push_id=machine_and_push_id.partition('/push/')
- assert separator and machine_id and push_id
- with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-  event.connect({:?})
-  event.sendall(text.encode())
- print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        socket_path.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec![
+            "ordered".to_owned(),
+            socket_path.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 fn endpoint() -> EndpointRef {
@@ -212,7 +161,7 @@ impl crate::LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(
         &'a self,
         _target: &'a SessionRef,
-    ) -> collaboration_service::DeliveryFuture<'a, crate::LiveSessionOwnership> {
+    ) -> collaboration_contracts::DeliveryFuture<'a, crate::LiveSessionOwnership> {
         Box::pin(async { Ok(crate::LiveSessionOwnership::NotLive) })
     }
 }
@@ -314,7 +263,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         .await
         .expect("operation store opens");
     let store = Arc::new(Mutex::new(store));
-    let hub = Arc::new(collaboration_service::ProviderSessionEventHub::new(
+    let hub = Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
         Arc::clone(&store),
     ));
     let hub_endpoint: message_board::SessionEndpointRef =
@@ -322,6 +271,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
             .expect("hub endpoint");
     let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
         ordered_prompt_fixture(&socket_path),
+        acp_client_runtime::ProviderModelPicker::Standard,
         "fixture",
         "http://127.0.0.1:1/mcp",
         Arc::clone(&hub),
@@ -388,7 +338,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         permit.send(
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
                 request: contents,
-                load_policy: collaboration_service::LoadPolicy::MayLoad,
+                load_policy: collaboration_contracts::LoadPolicy::MayLoad,
             },
         );
     }
@@ -409,7 +359,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let hub_target: message_board::SessionRef =
         serde_json::from_value(serde_json::to_value(target).expect("target JSON"))
             .expect("hub target");
-    let attached = collaboration_service::SessionEventHub::attach(hub.as_ref(), hub_target)
+    let attached = collaboration_contracts::SessionEventHub::attach(hub.as_ref(), hub_target)
         .await
         .expect("hub history");
     let started = attached
@@ -502,7 +452,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     queue.reserve(&target).expect("queue capacity").send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
     );
 
@@ -599,7 +549,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     permit.send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
     );
     backend
@@ -958,3 +908,7 @@ fn coded_provider_error_trace_reference_matches_safe_host_failure() {
 
 #[path = "failure_projection_tests.rs"]
 mod failure_projection_tests;
+
+#[cfg(debug_assertions)]
+#[path = "provider_error_category_tests.rs"]
+mod provider_error_category_tests;

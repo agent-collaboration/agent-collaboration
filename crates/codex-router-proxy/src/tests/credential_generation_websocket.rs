@@ -6,7 +6,10 @@ const SHORT_WINDOW_SECONDS: u64 = 18_000;
 const WEEKLY_WINDOW_SECONDS: u64 = 604_800;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_generation_renewal() {
     let temp_dir = ProxyTestTempDir::new("ordinary_websocket_credential_renewal");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -123,7 +126,7 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
         secret_path,
     )
     .with_quota_clock(FIXED_QUOTA_TIME, 300);
-    let runtime = LoopbackRouterRuntime::start(config, secrets.clone())
+    let runtime = LoopbackRouterRuntime::start(config, secrets.clone().into())
         .unwrap_or_else(|error| panic!("assembled ordinary runtime should start: {error}"));
     let router_address = runtime.local_addr();
     let runtime_thread = thread::spawn(move || runtime.serve_protocol_connections(1));

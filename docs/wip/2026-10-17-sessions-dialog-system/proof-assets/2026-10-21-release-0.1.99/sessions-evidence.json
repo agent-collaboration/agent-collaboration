@@ -1,0 +1,45 @@
+{
+  "sourceCommit": "8bd2f0b6277b725940496f2c5876b67394d5c504",
+  "version": "0.1.99",
+  "surface": "Sessions",
+  "rendererSha256": "786b9a30681b82f354bdd4473a7211f7202c9853445fe9f7f6626f36ed5c724a",
+  "driverSha256": "d15cd683e7bda0771b5dea46625260dd9dfd7f9e67e36fdf8aa003409c00f33d",
+  "images": [
+    {
+      "scene": "sessions-browse",
+      "file": "sessions-browse.jpg",
+      "sha256": "33120aa63831f9d2e5d38791d590f43f4759a11de4edeaed349c7cf538d28989",
+      "bytes": 28377,
+      "viewport": "120x36",
+      "kind": "original CUA JPEG of compiled terminal UI",
+      "personallyInspectedByVerifier": true
+    },
+    {
+      "scene": "sessions-details",
+      "file": "sessions-details.jpg",
+      "sha256": "132ee2ec4e7249613c91565f9f3e27887f6a0c501e8dafcac4d1db5d8a2111cd",
+      "bytes": 30218,
+      "viewport": "120x36",
+      "kind": "original CUA JPEG of compiled terminal UI",
+      "personallyInspectedByVerifier": true
+    }
+  ],
+  "result": "Two real scenes inspected; planned four-scene aggregate failed because only two were saved. No aggregate pass.",
+  "lifecycle": {
+    "childExit": 0,
+    "providerRequests": 0,
+    "stateAndSecretsUnchanged": true,
+    "ownedCleanupComplete": true
+  },
+  "limits": [
+    "Synthetic fixture inventory through real compiled rendering and input.",
+    "Original full-browser JPEGs are scaled; no crop, conversion or reconstruction.",
+    "New/search were not captured; browser-input limitations retained.",
+    "No live provider, remote, resize or clipboard-delivery proof."
+  ],
+  "independentUx": {
+    "browse": "Readable Session/Status/Upd/New columns, selected/unselected row text share the reserved left gutter. Client/directory metadata stays below each title. Cyan surface title, ordinary white content, yellow selected row and grey Help are consistent. New/Details/Help form one visible action group; no persistent footer. Long list titles clip within their column, with full captured details available for the inspected row.",
+    "details": "Actual CodexAlpha context and shortID agree with full labelled Title/SessionID/path. Conversation sits below the captured facts; Close/Copy session ID/Copy path/Fork/Resume form a single near-content group. Resume alone is yellow/focused, Help subdued; no duplicated title/action prose or visible overlapping rows in this scene.",
+    "judgment": "No confirmed visible blocker in these two inspected scenes for the reduced oneMac release screen check; acceptability/delivery remainsRoot. Four-scene outer capture remainsFAILED/partial."
+  }
+}

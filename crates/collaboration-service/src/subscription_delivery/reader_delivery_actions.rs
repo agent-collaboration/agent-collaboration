@@ -1,22 +1,15 @@
 //! Subscription lifecycle, policy decisions, and durable board settlement.
-use super::*;
+use super::super::subscription_windows::WindowWrite;
+use super::{
+    BoardError, Duration, EndReason, HashMap, Identity, PushRecord, ReaderDeliveryOwner,
+    ReaderScanScope, RootSubscriptionFacts, SubscriptionBatch, SubscriptionBatchSettlement,
+    SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, TargetPresence, ThreadId,
+    ThreadSubscriptionRecord, target_session,
+};
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 #[path = "reader_held_push_settlement.rs"]
 mod reader_held_push_settlement;
-use reader_held_push_settlement::HeldPushCleanup;
-
-/// Each selected batch keeps ownership until its durable disposition is written.
-enum SubscriptionBatchWrite {
-    Settle(SubscriptionDeliveryOutcome),
-    Hold {
-        now: chrono::DateTime<chrono::Utc>,
-        outcome: SubscriptionDeliveryOutcome,
-    },
-    Retry {
-        now: chrono::DateTime<chrono::Utc>,
-        retry_at: chrono::DateTime<chrono::Utc>,
-        outcome: SubscriptionDeliveryOutcome,
-    },
-}
 
 impl ReaderDeliveryOwner {
     pub(super) async fn expiry_notices(&mut self, records: &[ThreadSubscriptionRecord]) {
@@ -24,14 +17,21 @@ impl ReaderDeliveryOwner {
             return;
         };
         let mut ended_reason = None;
-        for prior in &self.prior_records {
+        for prior in &self.prior_records.records {
+            let project = &prior.project;
+            let prior = &prior.record;
             if records.iter().any(|record| record.scope() == prior.scope()) {
                 continue;
             }
             let expired = store
                 .lock()
                 .await
-                .get_thread_subscription_record(&self.reader, prior.scope())
+                .subscription_record_in_project(
+                    &self.reader,
+                    prior.scope(),
+                    project,
+                    self.clock.now(),
+                )
                 .await;
             let Ok(Some(expired)) = expired else {
                 continue;
@@ -63,149 +63,42 @@ impl ReaderDeliveryOwner {
             }
         }
         if let Some(end_reason) = ended_reason {
-            self.queue_held_push_cleanup(
-                HeldPushCleanup::Ended,
-                format!("subscription ended: {}", end_reason.as_str()),
-            );
+            self.pending_ended_push_cleanup =
+                Some(format!("subscription ended: {}", end_reason.as_str()));
             self.try_pending_held_push_cleanup().await;
         }
     }
 
-    pub(super) async fn complete_drains(&self, records: &[ThreadSubscriptionRecord]) -> bool {
-        let Ok(store) = self.board_store() else {
-            return false;
-        };
-        for record in records
-            .iter()
-            .filter(|record| record.state() == SubscriptionState::Draining)
-        {
-            let SubscriptionScope::Thread { root_message_id } = record.scope() else {
-                continue;
-            };
-            if store
-                .lock()
-                .await
-                .complete_thread_subscription_drain(&self.reader, root_message_id, self.clock.now())
-                .await
-                .is_ok()
-            {
-                return true;
-            }
-        }
+    pub(super) fn complete_drains(&self, records: &[ThreadSubscriptionRecord]) -> bool {
+        // Drain state is derived from membership and remaining local windows.
+        let _ = records;
         false
     }
 
     pub(super) async fn deliver_due(
         &mut self,
-        due: &[MessageId],
-        facts: &HashMap<MessageId, RootSubscriptionFacts>,
+        due: &[ThreadId],
+        facts: &HashMap<ThreadId, RootSubscriptionFacts>,
     ) -> Result<bool, BoardError> {
-        let roots = due
-            .iter()
-            .filter(|root| {
-                facts.get(*root).is_some_and(|facts| {
-                    facts.mode == SubscriptionMode::Deliver
-                        && (facts.held_since.is_none()
-                            || self.checked_presence.get(*root).is_none_or(|checked| {
-                                self.clock.monotonic_now().duration_since(*checked)
-                                    >= PRESENCE_INTERVAL
-                            }))
-                })
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        if roots.is_empty() {
-            return Ok(false);
-        }
-        let target = target_session(&self.reader)?;
-        let presence = self
-            .presence
-            .presence(&target)
-            .await
-            .unwrap_or_else(|error| TargetPresence::Unreachable {
-                reason: error.to_string(),
-            });
-        let mut dropped = Vec::new();
-        let mut held = Vec::new();
-        let mut delivered = Vec::new();
-        let mut load_policy = LoadPolicy::LoadedOnly;
-        for root in roots {
-            self.checked_presence
-                .insert(root.clone(), self.clock.monotonic_now());
-            let Some(facts) = facts.get(&root) else {
-                continue;
-            };
-            match (&presence, facts.when_idle) {
-                (TargetPresence::Running, _) => delivered.push(root),
-                (_, WhenIdle::Drop) => dropped.push(root),
-                (TargetPresence::Wakeable, WhenIdle::Wake) => {
-                    load_policy = LoadPolicy::MayLoad;
-                    delivered.push(root);
-                }
-                _ => held.push(root),
-            }
-        }
-        if !dropped.is_empty() {
-            self.board_store()?
-                .lock()
-                .await
-                .drop_subscription_roots(&self.reader, &dropped, self.clock.now())
-                .await?;
-        }
-        if !held.is_empty() {
-            let (_, settlement) = self.select(&held, usize::MAX).await?;
-            self.hold(
-                &settlement,
-                if held.iter().any(|root| {
-                    facts
-                        .get(root)
-                        .is_some_and(|facts| facts.when_idle == WhenIdle::Wake)
-                }) {
-                    "wake unavailable; holding"
-                } else {
-                    "target is not running"
-                },
-            )
-            .await?;
-        }
-        if !delivered.is_empty() {
-            let (batch, settlement) = self.select(&delivered, usize::MAX).await?;
-            if batch.roots.is_empty() {
-                return Ok(true);
-            }
-            let prepared = match self.push.activity(&target, &batch, load_policy).await {
-                Ok(prepared) => prepared,
-                Err(error) => {
-                    self.release(&settlement).await;
-                    return Err(error);
-                }
-            };
-            let receipt = match self.push.deliver(&target, prepared).await {
-                Ok(receipt) => receipt,
-                Err(error) => {
-                    self.release(&settlement).await;
-                    return Err(error);
-                }
-            };
-            self.handle_receipt(&settlement, &receipt, facts).await?;
-        }
-        Ok(true)
+        self.allocate_due_follow(due, facts).await
     }
 
     pub(super) async fn select(
         &self,
-        roots: &[MessageId],
+        roots: &[ThreadId],
         maximum_root_notice_bytes: usize,
     ) -> Result<(SubscriptionBatch, SubscriptionBatchSettlement), BoardError> {
         let selected = self
             .board_store()?
             .lock()
             .await
-            .select_subscription_notice(
+            .select_project_subscription_notice(
                 &self.reader,
                 roots,
                 self.clock.now(),
                 maximum_root_notice_bytes,
+                &self.pass_projects,
+                &self.pass_preventions,
             )
             .await?;
         #[cfg(test)]
@@ -213,160 +106,44 @@ impl ReaderDeliveryOwner {
         Ok(selected)
     }
 
-    pub(super) async fn handle_receipt(
-        &mut self,
-        settlement: &SubscriptionBatchSettlement,
-        delivered: &super::super::subscription_push::SubscriptionPushReceipt,
-        facts: &HashMap<MessageId, RootSubscriptionFacts>,
-    ) -> Result<(), BoardError> {
-        let evidence = delivered.evidence.clone();
-        let result = match &delivered.receipt.outcome {
-            DeliveryOutcome::Started
-            | DeliveryOutcome::Steered
-            | DeliveryOutcome::StartedOrSteered
-            | DeliveryOutcome::Queued
-            | DeliveryOutcome::PeerMessageWritten => {
-                self.settle(settlement, SubscriptionDeliveryOutcome::Accepted)
-                    .await
-            }
-            DeliveryOutcome::Unknown => {
-                self.settle(
-                    settlement,
-                    SubscriptionDeliveryOutcome::Unknown { evidence },
-                )
-                .await
-            }
-            DeliveryOutcome::NotSubmitted {
-                retryable: true,
-                reason,
-            } => self.hold(settlement, reason).await,
-            outcome => {
-                let attempts = settlement
-                    .roots
-                    .iter()
-                    .filter_map(|root| facts.get(&root.root_message_id))
-                    .map(|facts| facts.retry_attempts)
-                    .max()
-                    .unwrap_or(0);
-                let delay = chrono::Duration::from_std(delivery_retry_delay(attempts))
-                    .map_err(|_| BoardError::board_unavailable())?;
-                let now = self.clock.now();
-                let retry_at = now
-                    .checked_add_signed(delay)
-                    .ok_or_else(BoardError::board_unavailable)?;
-                let outcome = match outcome {
-                    DeliveryOutcome::NotSubmitted { reason, retryable } => {
-                        SubscriptionDeliveryOutcome::NotSubmitted {
-                            reason: reason.clone(),
-                            retryable: *retryable,
-                        }
-                    }
-                    _ => SubscriptionDeliveryOutcome::Rejected { evidence },
-                };
-                self.complete_batch_write(
-                    settlement,
-                    SubscriptionBatchWrite::Retry {
-                        now,
-                        retry_at,
-                        outcome,
-                    },
-                )
-                .await?;
-                #[cfg(test)]
-                self.observe(OwnerObservation::RetryScheduled);
-                Ok(())
-            }
-        };
-        result?;
-        let link = collaboration_protocol::RouterLink::new(
-            collaboration_protocol::MachineId::from(self.push.machine.service_id().clone()),
-            delivered.push_id.clone(),
-        );
-        self.queue_held_push_cleanup(
-            HeldPushCleanup::Superseded(delivered.push_id.clone()),
-            format!("superseded by {link}"),
-        );
-        self.try_pending_held_push_cleanup().await;
-        Ok(())
-    }
-
     pub(super) async fn settle(
-        &self,
+        &mut self,
         settlement: &SubscriptionBatchSettlement,
         outcome: SubscriptionDeliveryOutcome,
     ) -> Result<(), BoardError> {
-        self.complete_batch_write(settlement, SubscriptionBatchWrite::Settle(outcome))
-            .await?;
+        self.complete_batch_write(settlement, outcome).await?;
         #[cfg(test)]
         self.observe(OwnerObservation::Settled);
         Ok(())
     }
 
-    pub(super) async fn hold(
-        &self,
-        settlement: &SubscriptionBatchSettlement,
-        reason: &str,
-    ) -> Result<(), BoardError> {
-        self.complete_batch_write(
-            settlement,
-            SubscriptionBatchWrite::Hold {
-                now: self.clock.now(),
-                outcome: SubscriptionDeliveryOutcome::NotSubmitted {
-                    reason: reason.to_owned(),
-                    retryable: true,
-                },
-            },
-        )
-        .await?;
-        #[cfg(test)]
-        self.observe(OwnerObservation::Held);
-        Ok(())
-    }
-
     async fn complete_batch_write(
-        &self,
+        &mut self,
         settlement: &SubscriptionBatchSettlement,
-        write: SubscriptionBatchWrite,
+        outcome: SubscriptionDeliveryOutcome,
     ) -> Result<(), BoardError> {
         let mut delay = Duration::from_secs(1);
         loop {
             let result = {
                 let mut store = self.board_store()?.lock().await;
-                match &write {
-                    SubscriptionBatchWrite::Settle(outcome) => {
-                        store
-                            .settle_subscription_batch(&self.reader, settlement, outcome.clone())
-                            .await
-                    }
-                    SubscriptionBatchWrite::Hold { now, outcome } => {
-                        store
-                            .mark_subscription_batch_held(
-                                &self.reader,
-                                settlement,
-                                *now,
-                                outcome.clone(),
-                            )
-                            .await
-                    }
-                    SubscriptionBatchWrite::Retry {
-                        now,
-                        retry_at,
-                        outcome,
-                    } => {
-                        store
-                            .mark_subscription_batch_retry(
-                                &self.reader,
-                                settlement,
-                                *now,
-                                *retry_at,
-                                outcome.clone(),
-                            )
-                            .await
-                    }
-                }
+                let operation = WindowWrite::Settle(outcome.clone());
+                store
+                    .write_project_batch(
+                        &self.reader,
+                        settlement,
+                        operation,
+                        &self.pass_projects,
+                        &self.pass_preventions,
+                    )
+                    .await
             };
             match result {
-                Ok(()) => return Ok(()),
+                Ok(()) => {
+                    self.request_scan(ReaderScanScope::Projects(
+                        self.pass_projects.iter().cloned().collect(),
+                    ));
+                    return Ok(());
+                }
                 Err(error) => {
                     tracing::warn!(%error, "selected subscription batch write failed; retaining selection for retry")
                 }
@@ -396,7 +173,13 @@ impl ReaderDeliveryOwner {
         if let Err(error) = store
             .lock()
             .await
-            .release_subscription_batch(&self.reader, settlement)
+            .write_project_batch(
+                &self.reader,
+                settlement,
+                WindowWrite::Release,
+                &self.pass_projects,
+                &self.pass_preventions,
+            )
             .await
         {
             tracing::warn!(%error, "unhanded subscription selection could not be released");

@@ -10,10 +10,13 @@ workspace = true
 
 [features]
 # The API served the way a Host serves it, for other crates' tests.
-test-support = []
+test-support = ["collaboration-service/test-support"]
 
 [dependencies]
-axum.workspace = true
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+axum = { workspace = true, features = ["http1", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.30" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30" }
@@ -30,6 +33,16 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }
+durable-steps.workspace = true
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
+fleet-sync-writer.workspace = true
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
+board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
+fleet-sync-protocol.workspace = true
+runtime-primitives.workspace = true
+uuid.workspace = true
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.30" }
 automation-storage = { path = "../automation-storage", version = "0.1.16" }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.30" }
@@ -41,6 +54,7 @@ message-board-storage = { path = "../message-board-storage", version = "0.1.20" 
 reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "transport-streamable-http-client-unix-socket"] }
 tempfile = "3.27.0"
+tokio = { workspace = true, features = ["test-util"] }
 tokio-tungstenite.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

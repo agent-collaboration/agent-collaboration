@@ -1,3 +1,4 @@
+use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
     CodexGeneration, ConversationBindingIdentity, EndpointId, EndpointRef, GenerationNumber,
     NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
@@ -6,10 +7,11 @@ use collaboration_protocol::{
     ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
     ProviderRuntimeIdentity, ProviderTransport, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    CodexConversationOperationRecorder, ConversationOperationRecorder, ProviderOperationAdmission,
-    ProviderOperationAdmissionResult, ProviderOperationStore, ProviderOperationStoreError,
-};
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationAdmissionResult;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderOperationStoreError;
 use sqlx::{Connection, Row, SqliteConnection};
 use std::{collections::HashSet, path::PathBuf};
 
@@ -23,7 +25,10 @@ fn open_future_is_send_for_host_composition() {
     assert_send(ProviderOperationStore::open(&path));
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This compile-time Send proof must type-check without executing real store mutations."
+)]
 fn store_operation_futures_are_send<'a>(
     store: &'a mut ProviderOperationStore,
     operation_id: &'a OperationId,
@@ -155,7 +160,7 @@ fn admission(id: &str, admitted_at_ms: i64) -> TestResult<ProviderOperationAdmis
 
 fn admitted_record(
     result: ProviderOperationAdmissionResult,
-) -> TestResult<collaboration_service::ProviderOperationRecord> {
+) -> TestResult<collaboration_runtime::ProviderOperationRecord> {
     match result {
         ProviderOperationAdmissionResult::Admitted(record) => Ok(record),
         ProviderOperationAdmissionResult::Existing(_) => {
@@ -424,29 +429,85 @@ async fn terminal_record_with_effect(
 }
 
 #[tokio::test]
-async fn uncertainty_matches_stable_endpoint_provider_scope_across_binding_restart() -> TestResult {
-    let database = TestDatabase::new("stable-uncertainty")?;
+async fn previous_generation_uncertainty_does_not_block_target() -> TestResult {
+    uncertainty_generation_scope(false).await
+}
+
+#[tokio::test]
+async fn previous_generation_targetless_uncertainty_does_not_block() -> TestResult {
+    uncertainty_generation_scope(true).await
+}
+
+async fn uncertainty_generation_scope(targetless: bool) -> TestResult {
+    let database = TestDatabase::new("generation-uncertainty")?;
     let mut store = ProviderOperationStore::open(&database.path).await?;
     let record = admitted_record(
         store
-            .admit(admission("018f1f62-6571-7ef0-8f0c-001122334488", 1)?)
+            .admit(admission("01900000-0000-7000-8000-000000000001", 1)?)
             .await?,
     )?;
     store
         .mark_may_have_dispatched(&record.operation_id, 2)
         .await?;
-    store
-        .record_target(&record.operation_id, &target()?, 3)
-        .await?;
-    let mut restarted = binding()?;
-    restarted.binding_id = ProviderBindingId::try_from("claude-bridge-restarted".to_owned())?;
-    restarted.generation.generation = GenerationNumber::try_from(99)?;
-    ensure!(
+    if !targetless {
         store
-            .has_blocking_uncertainty(&restarted, Some(&target()?))
-            .await?
+            .record_target(&record.operation_id, &target()?, 3)
+            .await?;
+    }
+    store
+        .record_terminal(
+            &record.operation_id,
+            ProviderOperationEffect::Unknown,
+            ProviderReconciliationState::NotReconcilable,
+            None,
+            4,
+        )
+        .await?;
+    let before = store
+        .inspect(&record.operation_id)
+        .await?
+        .ok_or("missing unknown operation")?;
+    store.close().await?;
+    let mut store = ProviderOperationStore::open(&database.path).await?;
+    ensure_eq!(
+        store
+            .blocking_uncertain_operation_ids(&binding()?, Some(&target()?))
+            .await?,
+        vec![record.operation_id.clone()]
     );
-    ensure!(!store.has_blocking_uncertainty(&restarted, None).await?);
+    ensure_eq!(
+        store
+            .blocking_uncertain_operation_ids(&binding()?, None)
+            .await?,
+        if targetless {
+            vec![record.operation_id.clone()]
+        } else {
+            vec![]
+        }
+    );
+    for epoch_changed in [false, true] {
+        let mut restarted = binding()?;
+        if epoch_changed {
+            restarted.generation.service_epoch =
+                UuidIdentity::try_from("00000000-0000-4000-8000-000000000099".to_owned())?;
+        } else {
+            restarted.generation.generation = GenerationNumber::try_from(99)?;
+        }
+        ensure!(
+            store
+                .blocking_uncertain_operation_ids(&restarted, Some(&target()?))
+                .await?
+                .is_empty()
+        );
+        ensure!(
+            store
+                .blocking_uncertain_operation_ids(&restarted, None)
+                .await?
+                .is_empty()
+        );
+    }
+    ensure_eq!(store.inspect(&record.operation_id).await?, Some(before));
+    store.close().await?;
     Ok(())
 }
 
@@ -605,7 +666,7 @@ async fn legacy_binding_migration_preserves_existing_operation_and_rejects_inval
     let mut connection =
         SqliteConnection::connect(&format!("sqlite:{}", database.path.display())).await?;
     sqlx::raw_sql(include_str!(
-        "../migrations/202609240001_conversation_binding_identity.sql"
+        "../../collaboration-runtime/migrations/202609240001_conversation_binding_identity.sql"
     ))
     .execute(&mut connection)
     .await?;

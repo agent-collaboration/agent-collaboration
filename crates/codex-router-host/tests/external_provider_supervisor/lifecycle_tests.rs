@@ -330,7 +330,7 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
         Some("allow-exact-once")
     );
     let pending_history = broker.list_interactions().await;
-    let Some(collaboration_service::InteractionHistoryRecord::Approval {
+    let Some(collaboration_runtime::InteractionHistoryRecord::Approval {
         requester: recorded_requester,
         approver: recorded_approver,
         ..
@@ -357,7 +357,7 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
         .decide_typed_interaction(
             &pending.request_id,
             &serde_json::from_value(json!({"kind":"session","session":approver.clone()}))?,
-            collaboration_service::TypedInteractionDecision::SelectApproval {
+            collaboration_runtime::TypedInteractionDecision::SelectApproval {
                 option_id: "allow-exact-once".into(),
                 acknowledge_persistent: false,
                 note: None,
@@ -366,7 +366,7 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
         .await
         .map_err(|error| format!("approval decision failed: {error}"))?;
     ensure!(matches!(decision,
-        collaboration_service::TypedInteractionDecisionOutcome::ApprovalSelected { option_id }
+        collaboration_runtime::TypedInteractionDecisionOutcome::ApprovalSelected { option_id }
             if option_id.as_str() == "allow-exact-once"));
 
     let settled = operation(wait(&backend, prompt_operation_id).await)?;
@@ -475,14 +475,14 @@ async fn retired_provider_binding_cancels_pending_approval_before_selection() ->
             .decide_typed_interaction(
                 &pending.request_id,
                 &serde_json::from_value(json!({"kind":"session","session":approver}))?,
-                collaboration_service::TypedInteractionDecision::SelectApproval {
+                collaboration_runtime::TypedInteractionDecision::SelectApproval {
                     option_id: "allow-exact-once".into(),
                     acknowledge_persistent: false,
                     note: None,
                 },
             )
             .await,
-        Err(collaboration_service::InteractionHistoryError::AlreadySettled)
+        Err(collaboration_runtime::InteractionHistoryError::AlreadySettled)
     ));
     let history = broker.list_interactions().await;
     ensure!(
@@ -491,7 +491,7 @@ async fn retired_provider_binding_cancels_pending_approval_before_selection() ->
             .any(|record| record.request_id() == pending.request_id
                 && matches!(
                     record.approval_state(),
-                    Some(collaboration_service::InteractionHistoryState::Cancelled { .. })
+                    Some(collaboration_runtime::InteractionHistoryState::Cancelled { .. })
                 ))
     );
     let failure = wait(&backend, prompt_operation_id)
@@ -651,12 +651,8 @@ async fn response_loss_is_unknown_and_reconciliation_never_replays() -> TestResu
     let root = tempfile::tempdir()?;
     let endpoint = endpoint("claude-local")?;
     let runtime = ExternalProviderRuntime::initialize(launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'loss-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.readline()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["loss".to_owned()],
     ))
     .await?;
     let backend = supervisor(&root, vec![(binding(endpoint.clone(), "claude")?, runtime)]).await?;

@@ -1,11 +1,19 @@
-#![allow(clippy::expect_used)]
 //! Explicit queue mode is shared by both ACP providers.
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
     DeliveryOutcome, EndpointAvailability, EndpointDescription, EndpointId, EndpointRef,
@@ -15,11 +23,9 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
     PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryFuture, DeliveryPrecondition, EndpointDirectory,
-    ProviderOperationStore, ProviderSessionRecord, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -48,30 +54,13 @@ impl AttemptEvidenceSink for RecordedEvidence {
 }
 
 fn one_prompt_fixture(event_socket: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'queue-fixture','version':'1'}},'_meta':{{'steering':{{'supported':True}}}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'queued-prompt')
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-delivery-route-agent.ts",
+        vec![
+            "queue".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[tokio::test]
@@ -202,7 +191,7 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
                     payload: PreparedPush {
                         push_id,
                         line,
-                        load_policy: collaboration_service::LoadPolicy::MayLoad,
+                        load_policy: collaboration_contracts::LoadPolicy::MayLoad,
                     },
                     target,
                     mode: MessageDelivery::Queue,
@@ -216,12 +205,12 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             .expect("queue delivery");
 
         assert!(
-            matches!(receipt.outcome, DeliveryOutcome::Queued),
+            matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Queued),
             "{endpoint_id}"
         );
         assert!(
-            matches!(receipt.client,
-            Some(DeliveryClientReceipt::ProviderAcp { operation_id })
+            matches!(receipt.receipt().client,
+            Some(DeliveryClientReceipt::ProviderAcp { ref operation_id })
             if operation_id.as_str() == attempt.as_str()),
             "{endpoint_id}"
         );

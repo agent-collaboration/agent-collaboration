@@ -2,6 +2,10 @@
 use serde_json::{Value, json};
 use std::{error::Error, ffi::OsString, time::Duration};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 
@@ -167,7 +171,9 @@ async fn held_message_send_prints_the_delivery_condition_and_exits_zero() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("CLI stderr is UTF-8"),
-        format!("held: {PUSH_LINK} — delivered when Claude target is next running\n")
+        format!(
+            "itemId: {PUSH_ID}\nheld: {PUSH_LINK} — delivered when Claude target is next running\n"
+        )
     );
 }
 
@@ -204,7 +210,9 @@ async fn rejected_message_send_prints_one_actionable_line_and_exit_four() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("CLI stderr is UTF-8"),
-        "error: Delivery to Claude target was rejected: target is busy — retry later\n"
+        format!(
+            "itemId: {PUSH_ID}\nerror: Delivery to Claude target was rejected: target is busy — retry later\n"
+        )
     );
 }
 
@@ -243,7 +251,9 @@ async fn claude_queue_rejection_recommends_auto_and_exits_four() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).expect("CLI stderr is UTF-8"),
-        "error: Delivery to Claude target was rejected: Queue delivery isn't supported for Claude Code terminals — resend with --delivery auto\n"
+        format!(
+            "itemId: {PUSH_ID}\nerror: Delivery to Claude target was rejected: Queue delivery isn't supported for Claude Code terminals — resend with --delivery auto\n"
+        )
     );
 }
 
@@ -285,7 +295,9 @@ async fn ambiguous_peer_rejection_lists_claims_and_the_branch_next_step() {
     let stderr = String::from_utf8(output.stderr).expect("CLI stderr is UTF-8");
     assert_eq!(
         stderr,
-        "error: Claude target is open in 2 terminals (pid 52304 terminal-one, pid 68833 fallback-terminal) — close one of these terminals, or run `/branch` in one of them\n"
+        format!(
+            "itemId: {PUSH_ID}\nerror: Claude target is open in 2 terminals (pid 52304 terminal-one, pid 68833 fallback-terminal) — close one of these terminals, or run `/branch` in one of them\n"
+        )
     );
     assert!(!stderr.contains("/Users/example"));
 }
@@ -318,7 +330,7 @@ async fn unknown_message_send_points_to_show_before_retrying_and_exits_five() {
     assert_eq!(
         String::from_utf8(output.stderr).expect("CLI stderr is UTF-8"),
         format!(
-            "error: Delivery outcome for Claude target is unknown — run agent-collaboration show {PUSH_LINK} before retrying\n"
+            "itemId: {PUSH_ID}\nerror: Delivery outcome for Claude target is unknown — run agent-collaboration show {PUSH_LINK} before retrying\n"
         )
     );
 }
@@ -359,7 +371,7 @@ async fn stored_message_send_outcome_unknown_keeps_the_push_link_and_exits_five(
     assert_eq!(
         String::from_utf8(output.stderr).expect("CLI stderr is UTF-8"),
         format!(
-            "error: Delivery to {TARGET_SESSION_ID}: {message} — inspect the target before retrying\n"
+            "itemId: {PUSH_ID}\nerror: Delivery to {TARGET_SESSION_ID}: {message} — inspect the target before retrying\n"
         )
     );
 }
@@ -642,9 +654,16 @@ enum MockReply {
 /// Runs the CLI against a stand-in API that answers its one tool call with `reply`, and
 /// returns the output with the call as `{"tool", "arguments"}`.
 async fn invoke_with_reply(
-    arguments: Vec<OsString>,
+    mut arguments: Vec<OsString>,
     reply: MockReply,
 ) -> TestResult<(std::process::Output, Value)> {
+    // MS-2: script responses use this exact identity, so supply it as the
+    // caller's identity and preserve all previous diagnostics after its line.
+    let is_send = arguments.first().and_then(|argument| argument.to_str()) == Some("message")
+        && arguments.get(1).and_then(|argument| argument.to_str()) == Some("send");
+    if is_send {
+        arguments.extend(["--item-id".into(), PUSH_ID.into()]);
+    }
     let mut fixture = FakeCollaborationApi::new(SERVICE_ID, SERVICE_EPOCH)?;
     // The message tools present a stored push's receipt; other results pass through as is.
     let reply = match reply {
@@ -663,6 +682,9 @@ async fn invoke_with_reply(
     let output = tokio::time::timeout(Duration::from_secs(5), command.output()).await??;
     let mut calls = response_task.await??;
     let request = calls.pop().ok_or("the CLI made no tool call")?;
+    if is_send && request.pointer("/arguments/itemId") != Some(&json!(PUSH_ID)) {
+        return Err("CLI did not preserve the supplied fixture identity".into());
+    }
     Ok((output, request))
 }
 

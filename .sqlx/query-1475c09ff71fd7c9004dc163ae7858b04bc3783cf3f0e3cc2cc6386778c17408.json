@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT operation_id,push_id,operation,owed_at FROM owed_push_operations ORDER BY operation_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "operation_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "owed_push_operations",
+            "name": "operation_id"
+          }
+        }
+      },
+      {
+        "name": "push_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "owed_push_operations",
+            "name": "push_id"
+          }
+        }
+      },
+      {
+        "name": "operation",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "owed_push_operations",
+            "name": "operation"
+          }
+        }
+      },
+      {
+        "name": "owed_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "owed_push_operations",
+            "name": "owed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1475c09ff71fd7c9004dc163ae7858b04bc3783cf3f0e3cc2cc6386778c17408"
+}

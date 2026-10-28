@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT DISTINCT r.row_id AS \"row_id!: String\", json_object('rowId',r.row_id,'id',r.row_id,'project',p.project_id,'scope',p.project_id,\n 'position',json_object('kind','project','position',json_object('cursor',json_object('epoch',r.epoch,'position',r.position),'origin',json_object('installation',f.origin_installation,'machine',f.origin_machine))),\n 'actorId',r.actor_id,'actor',json(a.canonical_identity),'subject',json(r.subject),\n 'tags',json((SELECT json_group_array(tag) FROM (SELECT tag FROM work_trail_tags tags WHERE tags.row_id=r.row_id ORDER BY place))),\n 'links',json((SELECT json_group_array(json(target)) FROM (SELECT target FROM work_trail_links links WHERE links.row_id=r.row_id ORDER BY place)))) AS \"metadata!: String\"\nFROM work_trail_tags t CROSS JOIN work_trail_rows r ON r.row_id=t.row_id\nCROSS JOIN project_state p\nLEFT JOIN actors a ON a.actor_id=r.actor_id\nLEFT JOIN project_feed f ON f.epoch=r.epoch AND f.position=r.position\nWHERE t.tag=? AND r.row_id>? AND r.redacted=0\nORDER BY r.row_id LIMIT 101\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "metadata!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "34cf4083643f54d04cac557f029e9d4c16557e57f847cbdc02fea61eff7178c4"
+}

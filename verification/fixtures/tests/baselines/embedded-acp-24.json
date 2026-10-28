@@ -1,0 +1,16 @@
+{
+  "original": "crates/acp-client-runtime/tests/history_replay_order.rs#REPLAY_FIXTURE",
+  "originalSHA256": "8925779b8a8ac31f8daa0e5a94c20e66f778c71b28a3fd8683aae86947cedf7f",
+  "target": "provider-history-agent.ts",
+  "arguments": ["reset", "<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"replay-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"configOptions\": [{\"id\": \"model\", \"name\": \"Model\", \"type\": \"select\", \"currentValue\": \"model-a\", \"options\": [{\"value\": \"model-a\", \"name\": \"Model A\"}]}]}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "receipt.json.early": "load preceded replay reset"
+    }
+  }
+}

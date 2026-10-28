@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 //! Fail-fast assertions for owner-edited provider configuration fixtures.
 
 use codex_router_host::ProviderConfigurationFile;

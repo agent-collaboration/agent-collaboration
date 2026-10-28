@@ -1,7 +1,5 @@
 //! Cursor create_plan is a blocking Approval with a preceding plan Item.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -18,33 +16,10 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-const CREATE_PLAN_FIXTURE: &str = r#"
-import json,sys
-receipt=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'plan-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call','toolCallId':'plan-tool',
-              'title':'Create plan','kind':'other','status':'pending'}}})
-send({'jsonrpc':'2.0','id':'create-plan','method':'cursor/create_plan',
-    'params':{'toolCallId':'plan-tool','name':'Migration plan','overview':'Move clients safely',
-              'plan':'# Steps\n\nShip in slices.',
-              'todos':[{'id':'one','content':'Build client','status':'pending'}]}})
-response=read()
-assert response['id']=='create-plan',response
-with open(receipt,'w') as output: json.dump(response,output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const CREATE_PLAN_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/cursor-plan-agent.ts"
+);
 
 struct PlanPort {
     answer: ApprovalPortOutcome,
@@ -61,6 +36,11 @@ impl InteractionPort for PlanPort {
     fn binding_retirement(_context: &Self::Context) -> CancellationToken {
         CancellationToken::new()
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_approval(
         &self,
         _context: Self::Context,
@@ -109,6 +89,15 @@ impl SessionEventSink for PlanEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if let SessionEvent::ItemStarted { item } = event
             && item.kind == SessionItemKind::Plan
@@ -123,6 +112,10 @@ impl SessionEventSink for PlanEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_plan_case(
     answer: ApprovalPortOutcome,
 ) -> (
@@ -145,10 +138,8 @@ async fn run_plan_case(
     });
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 CREATE_PLAN_FIXTURE.to_owned(),
                 receipt.to_string_lossy().into_owned(),
             ],

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO facts(fact_id, actor_id, request_id, epoch, position, router_time, time_basis, fact, links, producer_time, anchor_epoch, anchor_position, late) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b24866e7a93571d23432410a5e8acd960979297409e69f53bdff03dc5b045e51"
+}

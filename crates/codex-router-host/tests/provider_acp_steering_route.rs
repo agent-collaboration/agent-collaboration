@@ -1,11 +1,22 @@
-#![allow(clippy::expect_used)]
 //! A running Claude prompt identifies the operation receiving a steered message.
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, ConversationPromptRequest,
     DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
@@ -16,12 +27,9 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
     PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -51,6 +59,7 @@ impl AttemptEvidenceSink for RecordedEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -62,12 +71,14 @@ fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn non_creator_agent(target: &SessionRef) -> SessionRef {
     let mut sender = target.clone();
     sender.session_id = SessionId::try_from("other-session".to_owned()).expect("sender ID");
     sender
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -96,42 +107,16 @@ fn binding(target: &SessionRef) -> ProviderBindingIdentity {
 }
 
 fn steering_fixture(event_socket: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'claude-fixture','version':'1'}},'_meta':{{'steering':{{'supported':True}}}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'active')
- for index in range(3):
-  steer=json.loads(sys.stdin.readline())
-  assert steer['method']=='_session/steering'
-  if index < 2:
-   assert '"follow-up"' in steer['params']['prompt'][0]['text']
-   assert 'router://' in steer['params']['prompt'][0]['text']
-  else:
-   assert steer['params']['prompt']==[{{'type':'text','text':'follow-up'}}]
-  print(json.dumps({{'jsonrpc':'2.0','id':steer['id'],'result':{{'outcome':'injected'}}}})); sys.stdout.flush()
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-steering-route-agent.ts",
+        vec![
+            "active".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn prepared_route(
     root: &Path,
     launch: ExternalProviderLaunch,
@@ -220,107 +205,28 @@ enum IdleSteeringScenario {
 }
 
 fn idle_steering_fixture(scenario: IdleSteeringScenario) -> ExternalProviderLaunch {
-    let tail = match scenario {
-        IdleSteeringScenario::SteerOnly
-        | IdleSteeringScenario::StartsNewTurn
-        | IdleSteeringScenario::Fails => "sys.stdin.read()",
-        IdleSteeringScenario::AutoStartsPrompt => {
-            r#"
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-        }
-        IdleSteeringScenario::DropDuringSteer => "sys.exit(0)",
+    let mode = match scenario {
+        IdleSteeringScenario::SteerOnly => "idle",
+        IdleSteeringScenario::AutoStartsPrompt => "auto",
+        IdleSteeringScenario::StartsNewTurn => "started",
+        IdleSteeringScenario::Fails => "failed",
+        IdleSteeringScenario::DropDuringSteer => "drop",
     };
-    let steer_reply = match scenario {
-        IdleSteeringScenario::DropDuringSteer => "",
-        IdleSteeringScenario::SteerOnly | IdleSteeringScenario::AutoStartsPrompt => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'promptRequired'}})); sys.stdout.flush()"
-        }
-        IdleSteeringScenario::StartsNewTurn => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'startedNewTurn'}})); sys.stdout.flush()"
-        }
-        IdleSteeringScenario::Fails => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'failed','reason':'private provider detail'}})); sys.stdout.flush()"
-        }
-    };
-    let script = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'claude-fixture','version':'1'}},'_meta':{{'steering':{{'supported':True}}}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-steer=json.loads(sys.stdin.readline())
-assert steer['method']=='_session/steering'
-{steer_reply}
-{tail}
-"#
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-steering-route-agent.ts", vec![mode.to_owned()])
 }
 
 fn no_steering_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'no-steer-fixture','version':'1'}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-assert create['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-steering-route-agent.ts", vec!["none".to_owned()])
 }
 
 fn no_steering_prompt_fixture(event_socket: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'no-steer-prompt','version':'1'}}}}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-first=json.loads(sys.stdin.readline())
-assert first['method']=='session/prompt'
-assert '"follow-up"' in first['params']['prompt'][0]['text']
-assert 'router://' in first['params']['prompt'][0]['text']
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({event_socket:?})
- event.sendall(b'first')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':first['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-second=json.loads(sys.stdin.readline())
-assert second['method']=='session/prompt'
-assert '"follow-up"' in second['params']['prompt'][0]['text']
-assert 'router://' in second['params']['prompt'][0]['text']
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({event_socket:?})
- event.sendall(b'second')
-print(json.dumps({{'jsonrpc':'2.0','id':second['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-steering-route-agent.ts",
+        vec![
+            "serial".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[tokio::test]
@@ -354,9 +260,12 @@ async fn no_steering_auto_queues_without_second_concurrent_prompt() {
         .deliver(request(target, MessageDelivery::Auto), &second_evidence)
         .await
         .expect("second delivery");
-    assert!(matches!(first.outcome, DeliveryOutcome::Started));
+    assert!(matches!(
+        first.receipt().outcome.clone(),
+        DeliveryOutcome::Started
+    ));
     assert!(
-        matches!(second.outcome, DeliveryOutcome::Queued),
+        matches!(second.receipt().outcome.clone(), DeliveryOutcome::Queued),
         "{second:?}"
     );
     first_event
@@ -391,7 +300,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
         .expect("steer refusal");
     assert!(
         matches!(
-            receipt.outcome,
+            receipt.receipt().outcome.clone(),
             DeliveryOutcome::Rejected(ref rejection)
                 if rejection.reason == collaboration_protocol::DeliveryRejectionReason::SteerUnsupported
         ),
@@ -402,6 +311,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
     supervisor.shutdown().await.expect("shutdown");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn request(target: SessionRef, mode: MessageDelivery) -> DeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");
@@ -417,7 +327,7 @@ fn request(target: SessionRef, mode: MessageDelivery) -> DeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode,
@@ -465,9 +375,12 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
             .await
             .expect("steer delivery");
 
-        assert!(matches!(receipt.outcome, DeliveryOutcome::Steered));
-        assert!(matches!(receipt.client,
-            Some(DeliveryClientReceipt::ProviderAcp { operation_id }) if operation_id == running_operation));
+        assert!(matches!(
+            receipt.receipt().outcome.clone(),
+            DeliveryOutcome::Steered
+        ));
+        assert!(matches!(receipt.receipt().client,
+            Some(DeliveryClientReceipt::ProviderAcp { ref operation_id }) if operation_id.as_str() == running_operation.as_str()));
         assert!(matches!(evidence.0.lock().await.as_slice(),
             [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
             if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Accepted));
@@ -507,7 +420,7 @@ async fn idle_claude_steer_is_known_not_submitted() {
         .expect("idle steer");
 
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::NotSubmitted { retryable: false, reason }
+        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::NotSubmitted { retryable: false, reason }
         if reason == "no running turn")
     );
     assert!(matches!(evidence.0.lock().await.as_slice(),
@@ -532,9 +445,12 @@ async fn idle_claude_auto_starts_after_prompt_required() {
         .await
         .expect("idle auto");
 
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Started));
     assert!(matches!(
-        receipt.client,
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Started
+    ));
+    assert!(matches!(
+        receipt.receipt().client,
         Some(DeliveryClientReceipt::ProviderAcp { .. })
     ));
     assert!(matches!(evidence.0.lock().await.as_slice(),
@@ -560,11 +476,11 @@ async fn started_new_turn_steer_outcome_is_reported_as_started() {
         .await
         .expect("steer outcome");
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::Started),
+        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Started),
         "{receipt:?}"
     );
     assert!(
-        receipt.client.is_none(),
+        receipt.receipt().client.is_none(),
         "agent-owned turn has no Router operation ID"
     );
     route.shutdown_queue().await;
@@ -587,7 +503,7 @@ async fn failed_steer_outcome_is_not_submitted_without_agent_text() {
         .expect("steer outcome");
     assert!(
         matches!(
-            receipt.outcome,
+            receipt.receipt().outcome.clone(),
             DeliveryOutcome::NotSubmitted { ref reason, .. } if reason == "steerFailed"
         ),
         "{receipt:?}"
@@ -613,7 +529,10 @@ async fn dropped_steering_reply_remains_unknown() {
         .await
         .expect("dropped steering reply");
 
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Unknown));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Unknown
+    ));
     assert!(matches!(evidence.0.lock().await.as_slice(),
         [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
         if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Unknown));

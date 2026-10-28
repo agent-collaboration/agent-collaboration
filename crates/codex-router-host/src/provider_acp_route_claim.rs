@@ -1,10 +1,13 @@
 //! Provider route claims from catalog availability, loaded actors, and session records.
 use crate::{ExternalProviderSupervisor, ProviderSessionActivity};
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::NativeRouteClaim;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RouteUnavailableReason;
+use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{EndpointAvailability, EndpointRef, SessionRef, UuidIdentity};
-use collaboration_service::{
-    EndpointDirectory, ProviderConversationBackend, ProviderOperationStore, RouteClaim,
-    RouteUnavailableReason,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -33,21 +36,33 @@ impl ProviderAcpRouteClaim {
         }
     }
 
-    pub(crate) async fn claim(&self, target: &SessionRef) -> RouteClaim {
+    pub(crate) async fn claim(&self, target: &SessionRef) -> NativeRouteClaim {
         if !self.serves(target) {
-            return RouteClaim::NotMine;
+            return NativeRouteClaim::not_mine();
         }
-        let endpoint = self.directory.inventory().ok().and_then(|snapshot| {
+        let snapshot = match self.directory.inventory() {
+            Ok(snapshot) => snapshot,
+            Err(_) => {
+                return unavailable(
+                    "provider endpoint is not registered",
+                    "restart the Router",
+                    false,
+                    UnsentCause::ProcessingFailure,
+                );
+            }
+        };
+        let endpoint = {
             snapshot
                 .endpoints
                 .into_iter()
                 .find(|entry| entry.endpoint == target.endpoint)
-        });
+        };
         let Some(endpoint) = endpoint else {
             return unavailable(
                 "provider endpoint is not registered",
                 "restart the Router",
                 false,
+                UnsentCause::RecipientUnknown,
             );
         };
         match endpoint.availability {
@@ -56,19 +71,27 @@ impl ProviderAcpRouteClaim {
                 // A retained binding identifies a provider that launched and later retired.
                 // Configuration and startup failures have no binding for this Host lifetime.
                 let retryable = self.supervisor.binding(&target.endpoint).is_some();
-                return RouteClaim::Unavailable {
-                    reason: RouteUnavailableReason {
+                return NativeRouteClaim::unavailable(
+                    RouteUnavailableReason {
                         reason,
                         fix: fix.map_or_else(|| "check providers.json".to_owned(), String::from),
                     },
                     retryable,
-                };
+                    if retryable {
+                        holdable_endpoint()
+                    } else {
+                        UnsentCause::for_rejection(
+                            collaboration_protocol::DeliveryRejectionReason::EndpointUnavailable,
+                        )
+                    },
+                );
             }
             EndpointAvailability::Unprobed => {
                 return unavailable(
                     "provider has not started",
                     "wait for provider startup",
                     true,
+                    holdable_endpoint(),
                 );
             }
             EndpointAvailability::Available { .. } => {}
@@ -78,6 +101,7 @@ impl ProviderAcpRouteClaim {
                 "provider runtime is not ready",
                 "wait for provider startup",
                 false,
+                UnsentCause::Refused(NativeRefusalCode::RuntimeMissing),
             );
         };
         match runtime
@@ -85,16 +109,17 @@ impl ProviderAcpRouteClaim {
             .await
         {
             Ok(ProviderSessionActivity::Idle | ProviderSessionActivity::Running) => {
-                RouteClaim::Holds
+                NativeRouteClaim::holds()
             }
             Ok(ProviderSessionActivity::NotLoaded) => {
                 match self.store.lock().await.session_record(target).await {
-                    Ok(Some(_)) => RouteClaim::CanLoad,
-                    Ok(None) => RouteClaim::NotMine,
+                    Ok(Some(_)) => NativeRouteClaim::can_load(),
+                    Ok(None) => NativeRouteClaim::not_mine(),
                     Err(_) => unavailable(
                         "provider session record is unavailable",
                         "retry after storage recovers",
                         true,
+                        UnsentCause::ProcessingFailure,
                     ),
                 }
             }
@@ -102,6 +127,9 @@ impl ProviderAcpRouteClaim {
                 "provider runtime is unavailable",
                 "retry after provider restarts",
                 true,
+                UnsentCause::Holdable {
+                    otherwise: NativeRefusalCode::ActivityUnavailable,
+                },
             ),
         }
     }
@@ -112,13 +140,21 @@ impl ProviderAcpRouteClaim {
     }
 }
 
-fn unavailable(reason: &str, fix: &str, retryable: bool) -> RouteClaim {
-    RouteClaim::Unavailable {
-        reason: RouteUnavailableReason {
+fn unavailable(reason: &str, fix: &str, retryable: bool, cause: UnsentCause) -> NativeRouteClaim {
+    NativeRouteClaim::unavailable(
+        RouteUnavailableReason {
             reason: reason.to_owned(),
             fix: fix.to_owned(),
         },
         retryable,
+        cause,
+    )
+}
+fn holdable_endpoint() -> UnsentCause {
+    UnsentCause::Holdable {
+        otherwise: NativeRefusalCode::Rejection(
+            collaboration_protocol::DeliveryRejectionReason::EndpointUnavailable,
+        ),
     }
 }
 
@@ -126,11 +162,13 @@ fn unavailable(reason: &str, fix: &str, retryable: bool) -> RouteClaim {
 mod tests {
     use super::*;
     use crate::ExternalProviderSupervisor;
+    use collaboration_contracts::RouteClaim;
     use collaboration_protocol::{
         EndpointAvailability, EndpointDescription, EndpointId, EndpointRef, NonEmptyText,
         ObservationTimestamp, SessionId, SessionRef, UuidIdentity,
     };
-    use collaboration_service::{EndpointDirectory, ProviderOperationStore, RouteClaim};
+    use collaboration_runtime::EndpointDirectory;
+    use collaboration_runtime::ProviderOperationStore;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -180,7 +218,7 @@ mod tests {
             session_id: SessionId::try_from("fixture-session".to_owned()).expect("session ID"),
         };
 
-        let result = claim.claim(&target).await;
+        let result = claim.claim(&target).await.into_claim();
 
         assert!(
             matches!(result, RouteClaim::Unavailable { retryable: false, reason }
@@ -194,7 +232,7 @@ mod tests {
             session_id: target.session_id,
         };
         assert!(matches!(
-            claim.claim(&codex_target).await,
+            claim.claim(&codex_target).await.into_claim(),
             RouteClaim::NotMine
         ));
     }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE wakeup_definitions SET wakeup_status='expired',next_due_at_ms=NULL,updated_at_ms=? WHERE wakeup_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "281470edd9e8f00a5862a4a60cce261730f896c594912ea9a30c3cdeaffac482"
+}

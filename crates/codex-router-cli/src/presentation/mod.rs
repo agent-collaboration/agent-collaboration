@@ -6,14 +6,20 @@ pub(crate) mod host;
 pub(crate) mod quota;
 
 /// Marker type for the CLI presentation layer's iocraft boundary.
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "The marker records the CLI boundary that owns the iocraft dependency."
+)]
 pub(crate) struct TerminalPresentationLayer {
     _terminal_color: Option<Color>,
 }
 
 impl TerminalPresentationLayer {
     /// Creates a presentation-layer marker without enabling terminal output.
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "The boundary marker needs no terminal output or runtime instance."
+    )]
     pub(crate) const fn new() -> Self {
         Self {
             _terminal_color: None,

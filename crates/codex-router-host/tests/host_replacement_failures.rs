@@ -340,7 +340,7 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
         )
         .with_environment("CODEX_HOST_FAILURE_ROUTER_LOG", router_log)
         .with_output(ChildOutput::Null);
-    let result = HostRuntime::run(
+    let result = Box::pin(HostRuntime::run(
         HostConfig::new(HostConfigInputs {
             coordination_paths: HostCoordinationPaths::new(
                 required_path("CODEX_HOST_SIGNAL_OPERATOR_SOCKET")?,
@@ -356,7 +356,7 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
         ManagedUpdateInputs::production().with_replacement_command(ChildCommandSpec::new(
             PathBuf::from("/configured/old/codex-router"),
         )),
-    )
+    ))
     .await;
     check_equal(
         result?,

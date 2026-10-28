@@ -1,0 +1,565 @@
+--- before/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs
+@@ -240,7 +240,7 @@
+                     View(width:status_width as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                         Text(content:if mode==super::quota_provider_filters::QuotaInteractionMode::Static {row.status.label().to_owned()}else {row.status.compact(status_width)},color:Color::White)
+                         Text(content:row.active_clients.clone(),color:Color::Grey)
+-                        Text(content:format!("↻ {}",row.reset_credits),color:Color::Grey)
++                        Text(content:row.reset_credits.clone(),color:Color::Grey)
+                         Text(content:format!("Credits {}",row.credit_usage_summary),color:Color::Grey)
+                     }
+                     View(width:quota_width as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+@@ -495,11 +495,7 @@
+ 
+ pub(super) fn reset_pace_summary(reset_pace: &ResetPaceViewModel) -> String {
+     if reset_pace.state == ResetPaceState::Unavailable {
+-        return format!(
+-            "{}  {}",
+-            reset_pace_meter(reset_pace),
+-            reset_pace.semantic_label
+-        );
++        return reset_pace.semantic_label.to_owned();
+     }
+     if let Some(impact_label) = &reset_pace.impact_label {
+         if is_depleted_quota_label(impact_label) {
+--- before/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs
+@@ -123,7 +123,7 @@
+ }
+ 
+ #[test]
+-fn quota_status_unavailable_reset_pace_renders_marker_meter() {
++fn quota_status_unavailable_reset_pace_keeps_meaning_without_empty_meter() {
+     let mut view_model = quota_view_model();
+     let unavailable_reset_pace = ResetPaceViewModel::default();
+     let selected_details = selected_account_details("ssdev", "safest quota");
+@@ -137,8 +137,8 @@
+     let text = render_quota_static_capture(view_model, 160, false);
+ 
+     assert!(
+-        text.contains("□□□□□□□│□□□□□□□"),
+-        "unavailable reset pace must keep the visible center-marker meter:\n{text}"
++        !text.contains("□□□□□□□│□□□□□□□"),
++        "unavailable reset pace must not draw a decorative empty meter:\n{text}"
+     );
+     assert!(text.contains("burn unavailable"), "{text}");
+ }
+--- before/crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs
+@@ -251,8 +251,8 @@
+             credit_usage_summary: "unknown".to_owned(),
+             credit_usage: crate::quota::CreditUsageStatus::default(),
+             reason: "safest quota".to_owned(),
+-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
+-            short_window: "█████ 99% left, reset 5h".to_owned(),
++            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
++            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
+             burn_meter: "■□□□".to_owned(),
+             sample_metadata: SampleMetadata {
+                 confidence: SampleConfidence::Fresh,
+@@ -343,8 +343,8 @@
+                 credit_usage_summary: "unknown".to_owned(),
+                 credit_usage: crate::quota::CreditUsageStatus::default(),
+                 reason: "alpha detail".to_owned(),
+-                weekly_window: "█████ 83% left, reset 7d".to_owned(),
+-                short_window: "█████ 99% left, reset 5h".to_owned(),
++                weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
++                short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
+                 burn_meter: "■□□□".to_owned(),
+                 sample_metadata: SampleMetadata::default(),
+                 reset_pace: ResetPaceViewModel::default(),
+@@ -368,8 +368,8 @@
+                 credit_usage_summary: "unknown".to_owned(),
+                 credit_usage: crate::quota::CreditUsageStatus::default(),
+                 reason: "beta detail".to_owned(),
+-                weekly_window: "████ 75% left, reset 6d".to_owned(),
+-                short_window: "████ 70% left, reset 4h".to_owned(),
++                weekly_window: "████ 75%\u{a0}left reset\u{a0}6d".to_owned(),
++                short_window: "████ 70%\u{a0}left reset\u{a0}4h".to_owned(),
+                 burn_meter: "■■□□".to_owned(),
+                 sample_metadata: SampleMetadata::default(),
+                 reset_pace: ResetPaceViewModel::default(),
+@@ -404,8 +404,8 @@
+             credit_usage_summary: "unknown".to_owned(),
+             credit_usage: crate::quota::CreditUsageStatus::default(),
+             reason: format!("account {index:02} detail"),
+-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
+-            short_window: "█████ 99% left, reset 5h".to_owned(),
++            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
++            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
+             burn_meter: "■□□□".to_owned(),
+             sample_metadata: SampleMetadata::default(),
+             reset_pace: ResetPaceViewModel::default(),
+@@ -605,8 +605,8 @@
+         credit_usage_summary: "unknown".to_owned(),
+         credit_usage: crate::quota::CreditUsageStatus::default(),
+         reason: semantic_label.to_owned(),
+-        weekly_window: "█████ 83% left, reset 7d".to_owned(),
+-        short_window: "█████ 99% left, reset 5h".to_owned(),
++        weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
++        short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
+         burn_meter: String::new(),
+         sample_metadata: SampleMetadata {
+             confidence: SampleConfidence::Fresh,
+--- before/crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs
+@@ -61,7 +61,7 @@
+         )
+         .render(None)
+         .to_string();
+-        for marker in [visible_name, "1 client", "↻ 2", "resets", "83%", "99%"] {
++        for marker in [visible_name, "1 client", "2 resets", "83%", "99%"] {
+             assert!(
+                 frame.contains(marker),
+                 "missing {marker} atwidth{width}: {frame}"
+--- before/crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs
+@@ -595,7 +595,7 @@
+     assert!(text.contains("□□□□□□□│"), "{text}");
+     assert!(
+         frames.iter().any(|frame| !frame.contains("Account details")
+-            && quota_column_words(frame, 21, 9).contains("1 client ↻ 2 resets")),
++            && quota_column_words(frame, 21, 9).contains("1 client 2 resets")),
+         "the narrow browse row must preserve client/reset counts before details: {frames:?}"
+     );
+ }
+@@ -608,7 +608,7 @@
+     assert!(text.contains("5h"), "{text}");
+     assert!(text.contains("□□□□□□□│"), "{text}");
+     assert!(
+-        quota_column_words(&text, 21, 9).contains("1 client ↻ 2 resets"),
++        quota_column_words(&text, 21, 9).contains("1 client 2 resets"),
+         "{text}"
+     );
+ }
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
+@@ -108,27 +108,34 @@
+         .iter()
+         .position(|line| line.contains(title))
+         .expect("dialog title is visible");
++    let column_of = |line: &str, marker: char| {
++        line.find(marker).map(|offset| {
++            unicode_width::UnicodeWidthStr::width(
++                line.get(..offset)
++                    .expect("found marker is a UTF-8 boundary"),
++            )
++        })
++    };
++    let title_start = unicode_width::UnicodeWidthStr::width(
++        lines[title_row]
++            .get(..lines[title_row].find(title).unwrap())
++            .expect("found title is a UTF-8 boundary"),
++    );
++    let title_end = title_start + unicode_width::UnicodeWidthStr::width(title);
++    // A wide underlay glyph can occupy the top-left corner's canvas cell.
++    // The nearest complete bottom border still gives the actual modal bounds;
++    // never fall back to the outer frame and admit background row text.
++    let (bottom, left, right) = (title_row + 1..lines.len())
++        .find_map(|row| {
++            let left = column_of(lines[row], '╰')?;
++            let right = column_of(lines[row], '╯')?;
++            (left < title_start && right >= title_end).then_some((row, left, right))
++        })
++        .expect("complete modal bottom border encloses its title");
+     let top = (0..title_row)
+         .rev()
+-        .find(|row| lines[*row].contains('╭') && lines[*row].contains('╮'))
+-        .expect("dialog top border");
+-    let left_byte = lines[top].find('╭').unwrap();
+-    let right_byte = lines[top].find('╮').unwrap();
+-    let left = unicode_width::UnicodeWidthStr::width(
+-        lines[top].get(..left_byte).expect("border UTF-8 boundary"),
+-    );
+-    let right = unicode_width::UnicodeWidthStr::width(
+-        lines[top].get(..right_byte).expect("border UTF-8 boundary"),
+-    );
+-    let bottom = (title_row..lines.len())
+-        .find(|row| {
+-            lines[*row].find('╰').is_some_and(|offset| {
+-                unicode_width::UnicodeWidthStr::width(
+-                    lines[*row].get(..offset).expect("border UTF-8 boundary"),
+-                ) == left
+-            })
+-        })
+-        .expect("matching dialog bottom border");
++        .find(|row| column_of(lines[*row], '╮') == Some(right))
++        .expect("modal top-right corner matches its bottom border");
+     lines[top + 1..bottom]
+         .iter()
+         .map(|line| {
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs
+@@ -63,14 +63,23 @@
+             // Alpha's complete value across the forward page boundary.
+             sender.send(provider_filter_key(KeyCode::End)).unwrap();
+             canvas = browse_canvas(frames.as_mut(), "list End before reverse page pose").await;
++            let mut crossed_beta_start = false;
+             for backwards in 0..=12 {
+                 let text = canvas.to_string();
+                 let quota_words = alpha_browse_quota_words(&text);
+                 println!(
+                     "NORMAL BROWSE END-BACK {width}x{height} pages={backwards} quota={quota_words:?}:\n{text}"
+                 );
++                // Reverse paging first witnesses Beta's own start. Earlier
++                // content is Alpha's tail in the unchanged two-row ordering;
++                // Beta's end-of-list pace cannot satisfy this observation.
++                let beta_start_visible = text.contains("Claude");
++                let alpha_tail = crossed_beta_start && !beta_start_visible;
++                crossed_beta_start |= beta_start_visible;
+                 let has_alpha_fact = text.contains("62.5k") || quota_words.contains("99%");
+-                if has_alpha_fact && quota_words.replace(' ', "").contains("burnunavailable") {
++                if (has_alpha_fact || alpha_tail)
++                    && quota_words.replace(' ', "").contains("burnunavailable")
++                {
+                     end_back_pose = Some(backwards);
+                     break;
+                 }
+@@ -128,6 +137,18 @@
+             assert!(end_back_frame.contains("62.5k") && alpha_words.contains("99%"));
+             assert!(alpha_words.replace(' ', "").contains("burnunavailable"));
+         }
++        if end_back_frame == initial {
++            // Denser content can make one reverse page reach the top already.
++            // Exercise Home from the independently witnessed non-top End pose,
++            // instead of demanding a repaint for a legitimate no-op.
++            sender.send(provider_filter_key(KeyCode::End)).unwrap();
++            assert_eq!(
++                browse_canvas(frames.as_mut(), "non-top Home reference")
++                    .await
++                    .to_string(),
++                end_frame
++            );
++        }
+         sender.send(provider_filter_key(KeyCode::Home)).unwrap();
+         assert_eq!(
+             browse_canvas(frames.as_mut(), "reference Home")
+@@ -153,6 +174,15 @@
+             page_back, end_back_frame,
+             "same Alpha end-back frame at {width}x{height}"
+         );
++        if page_back == initial {
++            sender.send(provider_filter_key(KeyCode::End)).unwrap();
++            assert_eq!(
++                browse_canvas(frames.as_mut(), "non-top PageUp reference")
++                    .await
++                    .to_string(),
++                end_frame
++            );
++        }
+         for _ in 0..256 {
+             sender.send(provider_filter_key(KeyCode::PageUp)).unwrap();
+         }
+@@ -225,7 +255,8 @@
+         !initial_text.contains("62.5k"),
+         "the regression must reach the short viewport"
+     );
+-    assert!(initial_text.contains("東京") && initial_text.contains("83%"));
++    assert!(initial_text.contains("東京") && initial_text.contains("Weekly"));
++    let mut reached_weekly = false;
+     let mut reached_credit = false;
+     let mut reached_short_quota = false;
+     let mut reached_pace = false;
+@@ -245,6 +276,7 @@
+                 && line.contains("Quota")),
+             "headers remain fixed: {text}"
+         );
++        reached_weekly |= text.contains("83%");
+         reached_credit |= text.contains("62.5k");
+         reached_short_quota |= text.contains("99%");
+         reached_pace |= text
+@@ -253,12 +285,12 @@
+             .collect::<Vec<_>>()
+             .join(" ")
+             .contains("alpha pace");
+-        if reached_credit && reached_short_quota && reached_pace {
++        if reached_weekly && reached_credit && reached_short_quota && reached_pace {
+             break;
+         }
+     }
+     assert!(
+-        reached_credit && reached_short_quota && reached_pace,
++        reached_weekly && reached_credit && reached_short_quota && reached_pace,
+         "compact credits, short quota and pace must remain reachable"
+     );
+     // Details is used ONLY to verify captured identity, never as compact-credit proof.
+--- before/crates/codex-router-cli/src/quota/quota_status_formatting_test.rs
++++ after/crates/codex-router-cli/src/quota/quota_status_formatting_test.rs
+@@ -404,3 +404,161 @@
+         }
+     }
+ }
++
++#[test]
++fn quota_list_unit_groups_keep_typed_notes_and_actual_narrow_lines() {
++    let mut report = quota_capture_report();
++    report.rows.truncate(1);
++    let row = &mut report.rows[0];
++    row.reset_credits_available_value = Some(2);
++    row.weekly_pace = None;
++    row.windows = vec![
++        display_window(
++            V1_WEEKLY_WINDOW_SECONDS,
++            83,
++            NOW + 7 * 86400,
++            QuotaRunRateEstimate::unknown(),
++        ),
++        display_window(
++            V1_SHORT_WINDOW_SECONDS,
++            99,
++            NOW + 5 * 3600,
++            QuotaRunRateEstimate::unknown(),
++        ),
++    ];
++    let weekly = &row.windows[0];
++    assert_eq!(window_display_note(weekly, NOW), "resets in 7d");
++    for width in [48usize, 76, 120] {
++        let mut model = quota_status_view_model(&report, report.rows(), width);
++        model.selected = None;
++        let mut output = Vec::new();
++        must_ok(crate::presentation::quota::write_quota_status_view(
++            &mut output,
++            model,
++            false,
++        ));
++        let frame = must_ok(String::from_utf8(output)).replace('\u{a0}', " ");
++        println!("TYPED UNIT FRAME{width}:\n{frame}");
++        for fact in ["2 resets", "83% left", "resets 7d", "99% left", "resets 5h"] {
++            assert!(
++                frame.lines().any(|line| line.contains(fact)),
++                "complete fitting fact {fact} missing at{width}: {frame}"
++            );
++        }
++        assert!(frame.contains("burn unavailable"), "{frame}");
++        assert!(
++            !frame.contains("□□□□□□□│□□□□□□□"),
++            "no-data graphic adds no measurement: {frame}"
++        );
++        assert!(
++            frame.contains('█'),
++            "actual quota meters must remain: {frame}"
++        );
++    }
++}
++
++#[test]
++fn quota_list_unit_notes_preserve_unknown_stale_and_past_reset_meaning() {
++    for (status, reset, expected_note, expected_list_note) in [
++        (
++            QuotaWindowStatus::Stale,
++            Some(NOW + 7 * 86400),
++            "resets in 7d",
++            "resets 7d",
++        ),
++        (
++            QuotaWindowStatus::Eligible,
++            Some(NOW - 3600),
++            "resets 1h ago",
++            "resets 1h ago",
++        ),
++        (
++            QuotaWindowStatus::Eligible,
++            None,
++            "reset unknown",
++            "reset unknown",
++        ),
++        (
++            QuotaWindowStatus::Unknown,
++            None,
++            "unknown; needs refresh",
++            "unknown; needs refresh",
++        ),
++        (
++            QuotaWindowStatus::Ineligible,
++            None,
++            "quota ineligible",
++            "quota ineligible",
++        ),
++    ] {
++        let window = DisplayQuotaWindow {
++            status,
++            reset_unix_seconds: reset,
++            ..display_window(
++                V1_WEEKLY_WINDOW_SECONDS,
++                83,
++                NOW + 7 * 86400,
++                QuotaRunRateEstimate::unknown(),
++            )
++        };
++        assert_eq!(window_display_note(&window, NOW), expected_note);
++        let summary =
++            quota_account_list_window_summary(&[window], V1_WEEKLY_WINDOW_SECONDS, "", NOW);
++        assert!(
++            summary.replace('\u{a0}', " ").contains(expected_list_note),
++            "{summary:?}"
++        );
++    }
++}
++
++#[test]
++fn quota_list_unit_formatter_groups_values_at_the_typed_origin() {
++    let windows = [display_window(
++        V1_WEEKLY_WINDOW_SECONDS,
++        83,
++        NOW + 7 * 86400,
++        QuotaRunRateEstimate::unknown(),
++    )];
++    let summary = quota_account_list_window_summary(&windows, V1_WEEKLY_WINDOW_SECONDS, "", NOW);
++    assert!(
++        summary.contains("83%\u{a0}left"),
++        "remaining value/unit must stay together: {summary:?}"
++    );
++    assert!(
++        summary.contains("resets\u{a0}7d"),
++        "reset duration must stay attached: {summary:?}"
++    );
++}
++
++#[test]
++fn quota_list_unit_projection_preserves_measured_pace_graphics() {
++    let report = quota_capture_report();
++    for state in [
++        ResetPaceState::UnderBurning,
++        ResetPaceState::Healthy,
++        ResetPaceState::OverBurning,
++    ] {
++        let mut model = quota_status_view_model(&report, report.rows(), 120);
++        model.rows.truncate(1);
++        let pace = &mut model.rows[0].reset_pace;
++        pace.state = state;
++        pace.meter_left_segments.filled = 2;
++        pace.meter_right_segments.filled = 3;
++        pace.impact_label = None;
++        pace.multiple_label = "1.00x".to_owned();
++        pace.semantic_label = "measured pace";
++        let mut output = Vec::new();
++        must_ok(crate::presentation::quota::write_quota_status_view(
++            &mut output,
++            model,
++            false,
++        ));
++        let frame = must_ok(String::from_utf8(output));
++        assert!(
++            frame.contains("□□□□□■■│■■■□□□□")
++                && frame.contains("1.00x")
++                && frame.contains("measured pace"),
++            "actual measured pace must remain for{state:?}: {frame}"
++        );
++    }
++}
+--- before/crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs
++++ after/crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs
+@@ -323,7 +323,7 @@
+                     .all(|character| character == '│' || character.is_whitespace())
+         })
+         .collect::<Vec<_>>();
+-    let account_block = account_lines.join("\n");
++    let account_block = account_lines.join("\n").replace('\u{a0}', " ");
+     for fact in ["Weekly", "5h", "resets 7d", "resets 5h", "%"] {
+         assert!(
+             account_block.contains(fact),
+--- before/crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs
++++ after/crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs
+@@ -87,9 +87,25 @@
+     else {
+         return format!("{} no data {label}", quota_bar(0, true));
+     };
+-    let reset_note = window_display_note(window, now_unix_seconds).replace("resets in ", "resets ");
++    let reset = window.reset_unix_seconds.map_or_else(
++        || "reset\u{a0}unknown".to_owned(),
++        |reset| {
++            if reset >= now_unix_seconds {
++                format!("resets\u{a0}{}", format_duration(reset - now_unix_seconds))
++            } else {
++                format!(
++                    "resets\u{a0}{}\u{a0}ago",
++                    format_duration(now_unix_seconds - reset)
++                )
++            }
++        },
++    );
++    let reset_note = window_display_note_with_reset(window, reset);
++    let remaining_label = if label.is_empty() { "left" } else { label };
++    // Semantic unit spaces keep related words together when they physically fit;
++    // iocraft still wraps between the meter, remaining value and reset note.
+     format!(
+-        "{} {} {label} · {}",
++        "{} {}\u{a0}{remaining_label} {}",
+         quota_bar(window.remaining_headroom, true),
+         format_percent(window.remaining_headroom),
+         reset_note
+--- before/crates/codex-router-cli/src/quota/quota_status_json.rs
++++ after/crates/codex-router-cli/src/quota/quota_status_json.rs
+@@ -505,6 +505,10 @@
+         || "reset unknown".to_owned(),
+         |reset| format!("resets {}", format_relative_time(reset, now_unix_seconds)),
+     );
++    window_display_note_with_reset(window, reset)
++}
++
++pub(super) fn window_display_note_with_reset(window: &DisplayQuotaWindow, reset: String) -> String {
+     match window.status {
+         QuotaWindowStatus::Eligible => reset,
+         QuotaWindowStatus::Stale => reset,
+--- before/crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt
++++ after/crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt
+@@ -6,14 +6,14 @@
+ │ │    Account       Status    Quota         │ │
+ │ │  ❯ ssdev         available safest        │ │
+ │ │    ◎ OpenAI      1 client  quota         │ │
+-│ │                  ↻ 2       Weekly        │ │
+-│ │                  resets    █████ 83%     │ │
+-│ │                  Credits   left, reset   │ │
+-│ │                  unknown   7d            │ │
++│ │                  2 resets  Weekly        │ │
++│ │                  Credits   █████         │ │
++│ │                  unknown   83% left      │ │
++│ │                            reset 7d      │ │
+ │ │                            5h            │ │
+-│ │                            █████ 99%     │ │
+-│ │                            left, reset   │ │
+-│ │                            5h            │ │
++│ │                            █████         │ │
++│ │                            99% left      │ │
++│ │                            reset 5h      │ │
+ │ │                            Weekly pace   │ │
+ │ │                            □□□□□□□│□□□   │ │
+ │ │                            □□□□  1.00x   │ │
+--- before/crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt
++++ after/crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt
+@@ -5,8 +5,8 @@
+ │ ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
+ │ │    Account                                                   Status                                   Quota                                             │ │
+ │ │  ❯ ssdev                                                     ✓ available                              safest quota                                      │ │
+-│ │    ◎ OpenAI                                                  1 client                                 Weekly       █████ 83% left, reset 7d             │ │
+-│ │                                                              ↻ 2 resets                               5h           █████ 99% left, reset 5h             │ │
++│ │    ◎ OpenAI                                                  1 client                                 Weekly       █████ 83% left reset 7d              │ │
++│ │                                                              2 resets                                 5h           █████ 99% left reset 5h              │ │
+ │ │                                                              Credits unknown                          Weekly pace  □□□□□□□│□□□□□□□  1.00x reset pace    │ │
+ │ │                                                                                                                    healthy                              │ │
+ │ └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
+--- before/crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt
++++ after/crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt
+@@ -6,9 +6,9 @@
+ │ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
+ │ │  ❯ ssdev                            ✓ available            safest quota                  │  │ ssdev                                                      │ │
+ │ │    ◎ OpenAI                         1 client               Weekly                        │  │ Status      available                                      │ │
+-│ │                                     ↻ 2 resets             █████ 83% left, reset 7d      │  │ Reason      safest quota                                   │ │
++│ │                                     2 resets               █████ 83% left reset 7d       │  │ Reason      safest quota                                   │ │
+ │ │                                     Credits unknown        5h                            │  │ Quota windows                                              │ │
+-│ │                                                            █████ 99% left, reset 5h      │  │ weekly      ████ 83% left, reset 7d                        │ │
++│ │                                                            █████ 99% left reset 5h       │  │ weekly      ████ 83% left, reset 7d                        │ │
+ │ │                                                            Weekly pace                   │  │ 5h          █████ 99% left, reset 5h                       │ │
+ │ │                                                            □□□□□□□│□□□□□□□  1.00x        │  │                                                            │ │
+ │ │                                                            reset pace healthy            │  │ Reset pace                                                 │ │
+--- before/crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt
++++ after/crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt
+@@ -6,7 +6,7 @@
+ │ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
+ │ │  ❯ acct00                           ✓ available            account 00 detail           ┃ │  │ acct00                                                     │ │
+ │ │    ◎ OpenAI                         0 clients              Weekly                      │ │  │ Status      available                                      │ │
+-│ │                                     ↻ 2 resets             █████ 83% left, reset 7d    │ │  │ Reason      account 00 detail                              │ │
++│ │                                     2 resets               █████ 83% left reset 7d     │ │  │ Reason      account 00 detail                              │ │
+ │ │                                     Credits unknown        5h                          │ │  │ Quota windows                                              │ │
+ │ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
+ ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

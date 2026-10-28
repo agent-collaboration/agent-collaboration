@@ -191,7 +191,7 @@ async fn assembled_websocket_credit_source_yields_after_terminal_to_included_pee
     let runtime_secrets = secrets.clone();
     let (router_address_sender, router_address_receiver) = mpsc::channel();
     let runtime_thread = thread::spawn(move || {
-        let runtime = LoopbackRouterRuntime::start(config, runtime_secrets)
+        let runtime = LoopbackRouterRuntime::start(config, runtime_secrets.into())
             .unwrap_or_else(|error| panic!("assembled WebSocket runtime should start: {error}"));
         router_address_sender
             .send(runtime.local_addr())
@@ -386,7 +386,10 @@ fn bind_loopback_upstream() -> (TcpListener, SocketAddr) {
 }
 
 // Tungstenite's handshake callback fixes the large HTTP response error type.
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn accept_upstream_websocket(
     stream: TcpStream,
     authorization_sender: &mpsc::Sender<String>,

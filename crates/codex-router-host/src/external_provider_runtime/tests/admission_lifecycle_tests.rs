@@ -17,7 +17,7 @@ async fn missing_executable_fails_before_runtime_admission() {
 #[cfg(unix)]
 #[tokio::test]
 async fn stable_v1_initialize_admits_runtime_and_capabilities() {
-    let runtime = ExternalProviderRuntime::initialize(python_fixture(1, None))
+    let runtime = ExternalProviderRuntime::initialize(initialization_fixture(1, None))
         .await
         .expect("fixture initializes");
 
@@ -242,6 +242,7 @@ async fn text_prompt_reaches_agent_without_optional_prompt_capabilities() {
 async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
     let create_runtime = ExternalProviderRuntime::initialize_with_mcp_http(
         mcp_session_setup_fixture("session/new"),
+        acp_client_runtime::ProviderModelPicker::Standard,
         "router-collaboration",
         "http://127.0.0.1:19090/mcp",
     )
@@ -259,6 +260,7 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
 
     let load_runtime = ExternalProviderRuntime::initialize_with_mcp_http(
         mcp_session_setup_fixture("session/load"),
+        acp_client_runtime::ProviderModelPicker::Standard,
         "router-collaboration",
         "http://127.0.0.1:19090/mcp",
     )
@@ -277,9 +279,10 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
 async fn unsupported_protocol_version_is_rejected() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let error = ExternalProviderRuntime::initialize(python_fixture(0, Some(&process_id_path)))
-        .await
-        .expect_err("v0 must not be admitted");
+    let error =
+        ExternalProviderRuntime::initialize(initialization_fixture(0, Some(&process_id_path)))
+            .await
+            .expect_err("v0 must not be admitted");
 
     assert_eq!(
         error.to_string(),
@@ -315,20 +318,17 @@ async fn stdout_eof_after_initialize_retires_live_provider() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
     let close_marker = fixture_root.path().join("close-stdout");
-    let fixture = format!(
-        "import json,os,sys,time; open({:?},'w').write(str(os.getpid())); request=json.loads(sys.stdin.readline()); print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'eof-fixture','version':'1'}}}}}})); sys.stdout.flush(); marker={:?};
-while not os.path.exists(marker): time.sleep(0.01)
-os.close(1); sys.stdin.read()",
-        process_id_path.display().to_string(), close_marker.display().to_string()
+    let fixture = acp_scripted_fixture::launch_fixture_agent(
+        "host-failing-initialization-agent.ts",
+        vec![
+            "eof".to_owned(),
+            process_id_path.to_string_lossy().into_owned(),
+            close_marker.to_string_lossy().into_owned(),
+        ],
     );
-    let runtime = ExternalProviderRuntime::initialize(ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture],
-        environment: vec![],
-    })
-    .await
-    .expect("fixture initializes before stdout closes");
+    let runtime = ExternalProviderRuntime::initialize(fixture)
+        .await
+        .expect("fixture initializes before stdout closes");
     std::fs::write(&close_marker, b"close").expect("signal fixture to close stdout");
 
     tokio::time::timeout(Duration::from_secs(2), runtime.retirement().cancelled())
@@ -376,12 +376,15 @@ fn wait_for_recorded_process_id(process_id_path: &std::path::Path) -> bool {
 async fn held_initialize_times_out_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let fixture = format!(
-        "import os,sys,time; open({:?},'w').write(str(os.getpid())); sys.stdin.readline(); time.sleep(60)",
-        process_id_path.display().to_string()
+    let fixture = acp_scripted_fixture::launch_fixture_agent(
+        "host-failing-initialization-agent.ts",
+        vec![
+            "held".to_owned(),
+            process_id_path.to_string_lossy().into_owned(),
+        ],
     );
     // The timeout must not start running until the fixture is provably alive and
-    // holding initialize. A cold Python start can outlast a short timeout, and a
+    // holding initialize. A cold Node start can outlast a short timeout, and a
     // fixture killed before it records its pid leaves nothing to prove reaped.
     // A running blocking task stops the paused clock from auto-advancing, so the
     // simulated timeout elapses only after the pid file exists.
@@ -389,17 +392,10 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
         let process_id_path = process_id_path.clone();
         move || wait_for_recorded_process_id(&process_id_path)
     });
-    let error = ExternalProviderRuntime::initialize_with_timeout(
-        ExternalProviderLaunch {
-            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-            executable: PathBuf::from("/usr/bin/python3"),
-            arguments: vec!["-c".to_owned(), fixture],
-            environment: vec![],
-        },
-        Duration::from_millis(100),
-    )
-    .await
-    .expect_err("held initialize must time out");
+    let error =
+        ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_millis(100))
+            .await
+            .expect_err("held initialize must time out");
 
     assert!(
         fixture_recorded_process_id
@@ -419,24 +415,22 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
 async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let fixture = format!(
-        "import os,sys; open({:?},'w').write(str(os.getpid())); sys.stdin.readline(); print('x'*{}); sys.stdout.flush(); sys.stdin.read()",
-        process_id_path.display().to_string(),
-        MAX_ACP_FRAME_BYTES + 1
+    let fixture = acp_scripted_fixture::launch_fixture_agent(
+        "host-failing-initialization-agent.ts",
+        vec![
+            "oversized".to_owned(),
+            process_id_path.to_string_lossy().into_owned(),
+            MAX_ACP_FRAME_BYTES.to_string(),
+        ],
     );
-    let error = ExternalProviderRuntime::initialize_with_timeout(
-        ExternalProviderLaunch {
-            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-            executable: PathBuf::from("/usr/bin/python3"),
-            arguments: vec!["-c".to_owned(), fixture],
-            environment: vec![],
-        },
-        Duration::from_secs(2),
-    )
-    .await
-    .expect_err("oversized frame must fail initialization");
+    let error = ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_secs(2))
+        .await
+        .expect_err("oversized frame must fail initialization");
 
-    assert!(matches!(error, ExternalProviderRuntimeError::Initialize(_)));
+    assert!(
+        matches!(error, ExternalProviderRuntimeError::Initialize(_)),
+        "expected oversized frame rejection, got {error:?}"
+    );
     assert_process_reaped(&process_id_path).await;
 }
 
@@ -445,9 +439,10 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
 async fn dropping_admitted_runtime_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let runtime = ExternalProviderRuntime::initialize(python_fixture(1, Some(&process_id_path)))
-        .await
-        .expect("fixture initializes");
+    let runtime =
+        ExternalProviderRuntime::initialize(initialization_fixture(1, Some(&process_id_path)))
+            .await
+            .expect("fixture initializes");
 
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(2), async {

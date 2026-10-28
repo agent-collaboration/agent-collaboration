@@ -22,7 +22,8 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
     let root =
         PathBuf::from("/tmp").join(format!("ipc-proof-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: home,
         backend_socket: root.join("absent.sock"),
@@ -31,7 +32,7 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     let command: Vec<OsString> = vec![
         env!("CARGO_BIN_EXE_agent-collaboration").into(),
@@ -97,11 +98,9 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
     let forbidden = root.join("other-control.sock");
     let listener = tokio::net::UnixListener::bind(&forbidden)?;
     let probe = vec![
-        OsString::from("/usr/bin/python3"),
-        OsString::from("-c"),
-        OsString::from(
-            "import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])",
-        ),
+        codex_router_test_support::node_fixture::node_executable()?.into_os_string(),
+        codex_router_test_support::node_fixture::fixture_program("unix-access-probe.ts")
+            .into_os_string(),
         forbidden.clone().into_os_string(),
     ];
     let denied_other = sandbox

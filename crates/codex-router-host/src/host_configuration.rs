@@ -19,6 +19,12 @@ pub struct HostCoordinationPaths {
 }
 
 impl HostCoordinationPaths {
+    /// Resolves the Host's coordination artifacts from its owning Router root.
+    #[must_use]
+    pub fn for_router_root(root: &Path) -> Self {
+        Self::new(root.join("host.sock"), root.join("host.lock"))
+    }
+
     /// Creates coordination paths previously resolved by the CLI.
     #[must_use]
     pub const fn new(operator_socket: PathBuf, instance_lock: PathBuf) -> Self {
@@ -40,13 +46,30 @@ impl HostCoordinationPaths {
         &self.instance_lock
     }
 
+    /// Returns the Router root that owns these coordination artifacts.
+    #[must_use]
+    pub fn router_root(&self) -> Option<&Path> {
+        self.instance_lock.parent()
+    }
+
     /// Returns the pooled credential directory under the same router root.
     #[must_use]
     pub fn router_secret_root(&self) -> Option<PathBuf> {
-        self.instance_lock
-            .parent()
+        self.router_root()
             .map(|router_root| router_root.join("secrets"))
     }
+}
+
+/// Returns the collaboration service directory owned by this Router root.
+#[must_use]
+pub fn router_collaboration_directory(root: &Path) -> PathBuf {
+    root.join("agent-communication")
+}
+
+/// Returns the enrollment file read when this Router's Host starts.
+#[must_use]
+pub fn router_fleet_enrollment_file(root: &Path) -> PathBuf {
+    root.join("fleet/enrollment.json")
 }
 
 /// Validated host inputs with router-owned and Codex-owned paths kept separate.
@@ -55,9 +78,11 @@ pub struct HostConfig {
     owner_human_id: Option<message_board::HumanId>,
     collaboration_directory: Option<PathBuf>,
     collaboration_codex_home: Option<PathBuf>,
+    collaboration_peer_registry_directory: Option<PathBuf>,
     coordination_paths: HostCoordinationPaths,
     router_endpoint: SocketAddr,
     mcp_bind: SocketAddr,
+    remote_access: Option<crate::RemoteAccess>,
     app_server_socket: PathBuf,
     managed_executable: PathBuf,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
@@ -88,9 +113,11 @@ impl HostConfig {
             owner_human_id: None,
             collaboration_directory: None,
             collaboration_codex_home: None,
+            collaboration_peer_registry_directory: None,
             coordination_paths: inputs.coordination_paths,
             router_endpoint: inputs.router_endpoint,
             mcp_bind: inputs.mcp_bind,
+            remote_access: None,
             app_server_socket: inputs.app_server_socket,
             managed_executable: inputs.managed_executable,
             external_provider_startups: Vec::new(),
@@ -134,6 +161,19 @@ impl HostConfig {
         self.collaboration_directory = Some(directory);
         self
     }
+    /// Selects the existing private peer-registry fixture at Host composition.
+    /// Ordinary callers retain the default registry when no override is supplied.
+    #[must_use]
+    pub fn with_collaboration_peer_registry_directory(mut self, directory: PathBuf) -> Self {
+        self.collaboration_peer_registry_directory = Some(directory);
+        self
+    }
+
+    #[must_use]
+    pub fn collaboration_peer_registry_directory(&self) -> Option<&Path> {
+        self.collaboration_peer_registry_directory.as_deref()
+    }
+
     #[must_use]
     pub fn collaboration_codex_home(&self) -> Option<&Path> {
         self.collaboration_codex_home.as_deref()
@@ -157,6 +197,17 @@ impl HostConfig {
     #[must_use]
     pub const fn mcp_bind(&self) -> SocketAddr {
         self.mcp_bind
+    }
+
+    #[must_use]
+    pub const fn with_remote_access(mut self, remote_access: crate::RemoteAccess) -> Self {
+        self.remote_access = Some(remote_access);
+        self
+    }
+
+    #[must_use]
+    pub const fn remote_access(&self) -> Option<crate::RemoteAccess> {
+        self.remote_access
     }
 
     /// Returns the conventional socket derived from normal Codex home.

@@ -22,12 +22,14 @@ use super::SmokeContractAssertion;
 use super::SmokeQuotaStatus;
 use super::SmokeSeed;
 use super::SmokeTempRoot;
-use super::seed_smoke_account;
+use super::hostile_and_state::seed_smoke_account;
 
 use super::assert_codex_visible_output;
 use super::assert_redacted_three_websocket_payload;
 use super::assert_smoke_contract;
 use super::first_frame_shape_summary;
+use super::http_probe::upstream_account_token;
+use super::process_runtime::run_with_timeout;
 use super::run_hostile_no_token_smoke;
 use super::run_installed_codex_http_sse_mock_smoke;
 use super::run_installed_codex_mock_smoke;
@@ -36,9 +38,7 @@ use super::run_installed_codex_s8_overlap_quota_websocket_mock_smoke;
 use super::run_installed_codex_three_websocket_mock_e2e;
 use super::run_installed_codex_three_websocket_mock_soak;
 use super::run_installed_codex_websocket_mock_smoke;
-use super::run_with_timeout;
-use super::upstream_account_token;
-use super::validate_copied_dev_state_roots;
+use super::smoke_runtime::validate_copied_dev_state_roots;
 use super::write_redacted_transcript;
 
 #[test]
@@ -126,6 +126,10 @@ fn valid_router_audit_observation() -> RouterAuditObservation {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn websocket_scenario_all_runs_serial_concurrent_and_soak_filters() -> Result<(), String> {
     let script_path = super::workspace_root()?
@@ -162,6 +166,10 @@ fn websocket_scenario_all_runs_serial_concurrent_and_soak_filters() -> Result<()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> Result<(), String> {
     let workspace_root = super::workspace_root()?;
@@ -174,8 +182,8 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     .map_err(|error| format!("failed to read proxy DB smoke script: {error}"))?;
     let validator_script = fs::read_to_string(
         workspace_root
-            .join("scripts")
-            .join("validate-proxy-db-runtime-isolation-artifact.py"),
+            .join("verification/tooling")
+            .join("validate-proxy-db-runtime-isolation-artifact.ts"),
     )
     .map_err(|error| format!("failed to read proxy DB artifact validator: {error}"))?;
     let installed_script = fs::read_to_string(
@@ -190,20 +198,16 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     assert!(proxy_script.contains(r#"--router-root "${router_root_resolved}""#));
     assert!(proxy_script.contains(r#"--codex-home "${codex_home_resolved}""#));
     assert!(proxy_script.contains(r#"--process-home "${home_resolved}""#));
-    assert!(proxy_script.contains("validate-proxy-db-runtime-isolation-artifact.py"));
+    assert!(proxy_script.contains("validate-proxy-db-runtime-isolation-artifact.ts"));
     assert!(proxy_script.contains(r#"--scenario s8-overlap-quota"#));
     assert!(!proxy_script.contains(r#"--scenario quota-reconnect"#));
     assert!(proxy_script.contains("installed-codex-s8-overlap-quota-artifact.txt"));
     assert!(!proxy_script.contains("${quota_artifact_path}"));
-    assert!(validator_script.contains(r#"runtime_roots.get("mode") == "copied-dev-state""#));
-    assert!(validator_script.contains(r#"pressure.get("copied_db_pressure_proven") is True"#));
-    assert!(
-        validator_script.contains(r#"pressure.get("sqlite_lock_or_maintenance_pressure") is True"#)
-    );
-    assert!(
-        validator_script.contains(r#"signal_ordering.get("signal_before_persistence") is True"#)
-    );
-    assert!(validator_script.contains(r#"account_selection.get("non_reselection") is True"#));
+    assert!(validator_script.contains(r#"runtimeRoots.mode === "copied-dev-state""#));
+    assert!(validator_script.contains(r#"pressure.copied_db_pressure_proven === true"#));
+    assert!(validator_script.contains(r#"pressure.sqlite_lock_or_maintenance_pressure === true"#));
+    assert!(validator_script.contains(r#"signalOrdering.signal_before_persistence === true"#));
+    assert!(validator_script.contains(r#"accountSelection.non_reselection === true"#));
     assert!(validator_script.contains(r#"router_signal_count"#));
     assert!(validator_script.contains(r#"source_artifacts_same_s8_run_id"#));
     assert!(proxy_script.contains(r#"status=BLOCKED"#));
@@ -223,8 +227,8 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     assert!(installed_script.contains(r#"CODEX_ROUTER_INSTALLED_SMOKE_CODEX_HOME"#));
     assert!(installed_script.contains(r#"CODEX_ROUTER_INSTALLED_SMOKE_PROCESS_HOME"#));
     assert!(installed_script.contains(r#"CODEX_ROUTER_S8_RUN_ID"#));
-    assert!(installed_script.contains("os.path.realpath"));
-    assert!(!installed_script.contains("os.path.abspath(candidate)"));
+    assert!(installed_script.contains("verification/tooling/path-inspection.ts"));
+    assert!(installed_script.contains("require-copied-root"));
 
     Ok(())
 }
@@ -330,7 +334,7 @@ fn mock_http_reader_consumes_chunked_request_body_before_responding() {
         .accept()
         .unwrap_or_else(|error| panic!("failed to accept chunked fixture: {error}"));
 
-    let request = super::read_http_request(&mut stream)
+    let request = super::http_probe::read_http_request(&mut stream)
         .unwrap_or_else(|error| panic!("failed to read chunked request: {error}"));
 
     assert_eq!(request.request_line, "POST /v1/responses HTTP/1.1");
@@ -372,10 +376,11 @@ fn timed_out_codex_output_suppresses_captured_stdout_stderr() {
 
 #[test]
 fn run_with_timeout_drains_child_stderr_while_waiting() {
-    let mut command = std::process::Command::new("python3");
+    let mut command = std::process::Command::new("node");
     command
-        .arg("-c")
-        .arg("import sys; sys.stderr.write('x' * 200000); sys.stderr.flush()")
+        .arg(crate::node_fixture::fixture_program(
+            "stderr-pressure-agent.ts",
+        ))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
@@ -514,7 +519,8 @@ fn child_timeout_diagnostics_report_last_message_shape_without_content_or_path()
     fs::write(&last_message_path, SMOKE_EXPECTED_TEXT)
         .unwrap_or_else(|error| panic!("failed to write last message: {error}"));
 
-    let diagnostics = super::codex_child_timeout_diagnostics(Some(2), &last_message_path);
+    let diagnostics =
+        super::process_runtime::codex_child_timeout_diagnostics(Some(2), &last_message_path);
 
     assert!(diagnostics.contains("client_index:2"));
     assert!(diagnostics.contains("last_message_exists:true"));
@@ -672,6 +678,10 @@ fn three_websocket_artifact_rejects_raw_session_and_local_port_fields() {
     );
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn persisted_websocket_registry_report_accepts_sanitized_schema_without_raw_identifiers()
 -> Result<(), String> {

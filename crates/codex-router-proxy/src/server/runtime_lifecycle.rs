@@ -1,17 +1,24 @@
-use super::*;
+#[cfg(test)]
+use super::RuntimeCredentialStore;
+use super::{
+    ACTIVE_SESSION_EVENT_RETENTION_SECONDS, Arc, AtomicU64, JoinError,
+    LoopbackConnectionDiagnostic, LoopbackConnectionErrorReporter, LoopbackRouterRuntimeError,
+    Ordering, UpgradeTaskHandle, loopback_connection_diagnostic,
+};
+#[cfg(test)]
+use super::{LoopbackRouterRuntimeConfig, ProxyRuntimeCredentialResourcesOpenError};
 
 #[cfg(test)]
 pub(super) fn test_credential_store_for_config(
     config: &LoopbackRouterRuntimeConfig,
-) -> Result<EncryptedCredentialStore, LoopbackRouterRuntimeError> {
-    codex_router_secret_store::test_support::open_encrypted_credential_store(
-        &config.secret_store_root,
+) -> Result<RuntimeCredentialStore, LoopbackRouterRuntimeError> {
+    crate::secret_store_factory::open_proxy_secret_store(&config.secret_store_root).map_err(
+        |error| {
+            LoopbackRouterRuntimeError::CredentialResources(
+                ProxyRuntimeCredentialResourcesOpenError::SecretStore(error),
+            )
+        },
     )
-    .map_err(|error| {
-        LoopbackRouterRuntimeError::CredentialResources(
-            ProxyRuntimeCredentialResourcesOpenError::SecretStore(error),
-        )
-    })
 }
 
 pub(super) fn active_session_event_compaction_before(now_unix_seconds: u64) -> u64 {

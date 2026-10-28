@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(test)]
+use crate::quota::quota_status_formatting::write_quota_table;
 
 #[test]
 fn quota_status_width_contract_preserves_layout() {
@@ -92,15 +94,11 @@ fn quota_status_table_separates_quota_bars_from_burn_bars() {
         text.contains("%/h") && text.contains("%/h/conn"),
         "quota table should expose total and per-connection rate units:\n{text}"
     );
+    for account_label in ["ssdev", "askluna", "matches", "legacy"] {
+        assert_quota_capture_account_windows(&text, account_label);
+    }
     assert!(
-        text.contains("weekly · resets")
-            && text.contains("5h · resets")
-            && text.contains("█")
-            && text.contains("%"),
-        "main account rows should show weekly and 5h quota lines after connection/reset metadata:\n{text}"
-    );
-    assert!(
-        text.contains("weekly pace") || text.contains("weekly · runs out"),
+        text.contains("Weekly pace"),
         "account list should end with weekly burndown:\n{text}"
     );
     assert!(
@@ -162,6 +160,24 @@ fn quota_status_view_model_reports_serving_clients_from_active_mirror() {
     let view_model = quota_status_view_model(&report, report.rows(), 120);
 
     assert_eq!(view_model.serving_clients, Some(5));
+}
+
+#[test]
+fn quota_provider_filters_projection_preserves_typed_provider_independent_of_labels() {
+    use codex_router_core::provider::Provider;
+
+    let mut report = quota_capture_report();
+    report.rows[0].provider = Provider::Claude;
+    report.rows[0].account_label = "OpenAI named account".to_owned();
+    report.rows[1].provider = Provider::Openai;
+    report.rows[1].account_label = "Claude named account".to_owned();
+
+    let model = quota_status_view_model(&report, report.rows(), 120);
+
+    assert_eq!(model.rows[0].provider, Provider::Claude);
+    assert_eq!(model.rows[1].provider, Provider::Openai);
+    assert_eq!(model.rows[0].account_id, report.rows[0].account_id);
+    assert_eq!(model.rows[1].account_id, report.rows[1].account_id);
 }
 
 #[test]
@@ -388,5 +404,163 @@ fn quota_status_capture_artifacts_for_design_review() {
                 &ansi_text,
             );
         }
+    }
+}
+
+#[test]
+fn quota_list_unit_groups_keep_typed_notes_and_actual_narrow_lines() {
+    let mut report = quota_capture_report();
+    report.rows.truncate(1);
+    let row = &mut report.rows[0];
+    row.reset_credits_available_value = Some(2);
+    row.weekly_pace = None;
+    row.windows = vec![
+        display_window(
+            V1_WEEKLY_WINDOW_SECONDS,
+            83,
+            NOW + 7 * 86400,
+            QuotaRunRateEstimate::unknown(),
+        ),
+        display_window(
+            V1_SHORT_WINDOW_SECONDS,
+            99,
+            NOW + 5 * 3600,
+            QuotaRunRateEstimate::unknown(),
+        ),
+    ];
+    let weekly = &row.windows[0];
+    assert_eq!(window_display_note(weekly, NOW), "resets in 7d");
+    for width in [48usize, 76, 120] {
+        let mut model = quota_status_view_model(&report, report.rows(), width);
+        model.selected = None;
+        let mut output = Vec::new();
+        must_ok(crate::presentation::quota::write_quota_status_view(
+            &mut output,
+            model,
+            false,
+        ));
+        let frame = must_ok(String::from_utf8(output)).replace('\u{a0}', " ");
+        println!("TYPED UNIT FRAME{width}:\n{frame}");
+        for fact in ["2 resets", "83% left", "resets 7d", "99% left", "resets 5h"] {
+            assert!(
+                frame.lines().any(|line| line.contains(fact)),
+                "complete fitting fact {fact} missing at{width}: {frame}"
+            );
+        }
+        assert!(frame.contains("burn unavailable"), "{frame}");
+        assert!(
+            !frame.contains("□□□□□□□│□□□□□□□"),
+            "no-data graphic adds no measurement: {frame}"
+        );
+        assert!(
+            frame.contains('█'),
+            "actual quota meters must remain: {frame}"
+        );
+    }
+}
+
+#[test]
+fn quota_list_unit_notes_preserve_unknown_stale_and_past_reset_meaning() {
+    for (status, reset, expected_note, expected_list_note) in [
+        (
+            QuotaWindowStatus::Stale,
+            Some(NOW + 7 * 86400),
+            "resets in 7d",
+            "resets 7d",
+        ),
+        (
+            QuotaWindowStatus::Eligible,
+            Some(NOW - 3600),
+            "resets 1h ago",
+            "resets 1h ago",
+        ),
+        (
+            QuotaWindowStatus::Eligible,
+            None,
+            "reset unknown",
+            "reset unknown",
+        ),
+        (
+            QuotaWindowStatus::Unknown,
+            None,
+            "unknown; needs refresh",
+            "unknown; needs refresh",
+        ),
+        (
+            QuotaWindowStatus::Ineligible,
+            None,
+            "quota ineligible",
+            "quota ineligible",
+        ),
+    ] {
+        let window = DisplayQuotaWindow {
+            status,
+            reset_unix_seconds: reset,
+            ..display_window(
+                V1_WEEKLY_WINDOW_SECONDS,
+                83,
+                NOW + 7 * 86400,
+                QuotaRunRateEstimate::unknown(),
+            )
+        };
+        assert_eq!(window_display_note(&window, NOW), expected_note);
+        let summary =
+            quota_account_list_window_summary(&[window], V1_WEEKLY_WINDOW_SECONDS, "", NOW);
+        assert!(
+            summary.replace('\u{a0}', " ").contains(expected_list_note),
+            "{summary:?}"
+        );
+    }
+}
+
+#[test]
+fn quota_list_unit_formatter_groups_values_at_the_typed_origin() {
+    let windows = [display_window(
+        V1_WEEKLY_WINDOW_SECONDS,
+        83,
+        NOW + 7 * 86400,
+        QuotaRunRateEstimate::unknown(),
+    )];
+    let summary = quota_account_list_window_summary(&windows, V1_WEEKLY_WINDOW_SECONDS, "", NOW);
+    assert!(
+        summary.contains("83%\u{a0}left"),
+        "remaining value/unit must stay together: {summary:?}"
+    );
+    assert!(
+        summary.contains("resets\u{a0}7d"),
+        "reset duration must stay attached: {summary:?}"
+    );
+}
+
+#[test]
+fn quota_list_unit_projection_preserves_measured_pace_graphics() {
+    let report = quota_capture_report();
+    for state in [
+        ResetPaceState::UnderBurning,
+        ResetPaceState::Healthy,
+        ResetPaceState::OverBurning,
+    ] {
+        let mut model = quota_status_view_model(&report, report.rows(), 120);
+        model.rows.truncate(1);
+        let pace = &mut model.rows[0].reset_pace;
+        pace.state = state;
+        pace.meter_left_segments.filled = 2;
+        pace.meter_right_segments.filled = 3;
+        pace.impact_label = None;
+        pace.multiple_label = "1.00x".to_owned();
+        pace.semantic_label = "measured pace";
+        let mut output = Vec::new();
+        must_ok(crate::presentation::quota::write_quota_status_view(
+            &mut output,
+            model,
+            false,
+        ));
+        let frame = must_ok(String::from_utf8(output));
+        assert!(
+            frame.contains("□□□□□■■│■■■□□□□")
+                && frame.contains("1.00x")
+                && frame.contains("measured pace"),
+            "actual measured pace must remain for{state:?}: {frame}"
+        );
     }
 }

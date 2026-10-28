@@ -1,19 +1,19 @@
 //! Domain timestamps and records become the language-independent public wake snapshot here.
 use agent_automation::WakeRecord;
 use collaboration_protocol::{
-    FireKind, FireReceipt, ObservationTimestamp, SavedMessage, UuidIdentity, WakeDefinition,
-    WakeSnapshot, WakeState,
+    FireKind, FireReceipt, SavedMessage, UuidIdentity, WakeDefinition, WakeSnapshot, WakeState,
 };
+use collaboration_runtime::observation_timestamp::timestamp;
 
 pub(crate) fn snapshot(
-    record: WakeRecord<SavedMessage>,
+    record: WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     service_id: &UuidIdentity,
     observed_at_ms: i64,
 ) -> Result<WakeSnapshot, ()> {
     let definition = record.definition;
     let first_fire = record
         .first_fire
-        .map(|fire| {
+        .map(|fire| -> Result<FireReceipt, ()> {
             Ok(FireReceipt {
                 kind: FireKind::WakeFired,
                 wakeup_id: fire.wakeup_id,
@@ -43,6 +43,7 @@ pub(crate) fn snapshot(
         definition: WakeDefinition {
             wakeup_id: definition.wakeup_id,
             change_id: definition.change_id,
+            created_by: definition.created_by,
             message: definition.message,
             timing: serde_json::from_value(
                 serde_json::to_value(definition.timing).map_err(|_| ())?,
@@ -58,13 +59,6 @@ pub(crate) fn snapshot(
         pending_delivery_id: record.pending_delivery_id,
         latest_event_cursor: cursor,
     })
-}
-pub(crate) fn timestamp(value: i64) -> Result<ObservationTimestamp, ()> {
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(value)
-        .ok_or(())?
-        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-        .try_into()
-        .map_err(|_| ())
 }
 
 /// Projects a lifecycle mutation with the deliveries it retained or discarded.

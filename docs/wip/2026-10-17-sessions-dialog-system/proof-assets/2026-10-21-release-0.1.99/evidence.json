@@ -1,0 +1,23 @@
+{
+  "version": "0.1.99",
+  "machine": "One Mac / macOS",
+  "screens": [
+    "Sessions Browse",
+    "Session details",
+    "Quota Browse",
+    "Account details"
+  ],
+  "evidence": [
+    "sessions-evidence.json",
+    "quota-evidence.json"
+  ],
+  "scope": "Independent real-built screen observation plus Lead inspection, synthetic typed fixtures.",
+  "result": "No confirmed visible blocker in the four inspected scenes for the reduced release screen gate.",
+  "limits": [
+    "Sessions declared four-scene run remained failed/partial; only two actual scenes were inspected.",
+    "Quota declared two-scene run completed.",
+    "No broader provider, remote, all-menu, narrow or resize acceptance.",
+    "Current-head CI and release are separate GitHub gates."
+  ],
+  "sourceEquivalence": "Sessions8bd2 and Quota2470 use unchanged0.1.99 product/rendering artifact bytes. The intervening changes are terminal-test acknowledgement checks and documentation, not a relabelled screenshot build."
+}

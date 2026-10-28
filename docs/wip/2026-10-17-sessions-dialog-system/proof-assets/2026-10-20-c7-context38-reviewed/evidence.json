@@ -1,0 +1,623 @@
+{
+  "kind": "Actual38 original compiled32x24 scenes; targeted visual findings closed; automaticrunFAILED",
+  "source_manifest": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-verification/c7-context38-32-original-review-manifest.json",
+  "source_manifest_sha256": "5a1d6feaf41db31bb4c67514cd2601f452138578c8124b4c088e75d32d45dbab",
+  "source_counts": {
+    "indexed": 3569,
+    "capture": 2186,
+    "build": 2320,
+    "normal": 2282
+  },
+  "artifacts": {
+    "quota-component-libtest": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/quota-component-libtest",
+      "sha256": "19d0f84428f0ee6c126810ccd03828411b9768c020e043f7b20a094c5d3640bd"
+    },
+    "codex-router": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/codex-router",
+      "sha256": "f9e841540be5d85a84df4912077ac29c72241894dd67de15b2418658a1bec255"
+    },
+    "agent-sessions": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/agent-sessions",
+      "sha256": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354"
+    },
+    "capture-driver": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/capture-driver",
+      "sha256": "547b7c97d5790faa93419f04099b225cf257043ce355ba3d82d434ad090f2699"
+    },
+    "verify-tui-screen": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/verify-tui-screen",
+      "sha256": "02a77cbb22d9245abc2f34196a23580456a8d0d0a515a7067271696a327506ed"
+    },
+    "quota-reset-harness": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T004712Z/bin/quota-reset-harness",
+      "sha256": "df8102d5cd6f3f4ae248d7f550fe2ca64eb399ba4770e979d1f0bac9cb5734aa"
+    }
+  },
+  "cells": [
+    32,
+    24
+  ],
+  "pixels": [
+    350,
+    484
+  ],
+  "journey": "FixedNormal38includingrealkeysdraft/cancel/save/refresh62500→63000/facts/contextHelpfullidentity+Yesreturn/resetresult/return",
+  "automatic_result": {
+    "wrapper_exit": 1,
+    "driver_exit": 101,
+    "full_tape_exported": 38,
+    "positive_passed_before_failure": 29,
+    "failed_positive": "component-quota-confirm-no:decisioncontextalpha-tag",
+    "later_positive_unrun": 8,
+    "negative_checks_unrun": 9,
+    "Normal_receipt": false,
+    "gallery": false
+  },
+  "cleanup_effects": {
+    "recorded_pids": [
+      52054,
+      52062,
+      52068,
+      52086,
+      52088,
+      52225,
+      52226,
+      52227,
+      52228,
+      52229,
+      52230,
+      52231,
+      52232,
+      52233,
+      52234,
+      52235,
+      52236,
+      52237,
+      52238,
+      52240,
+      52241,
+      52242,
+      52243,
+      52244,
+      52245,
+      52246,
+      52247,
+      52248,
+      52249,
+      52250,
+      52251,
+      52252,
+      52253,
+      52254,
+      52255
+    ],
+    "remaining_owned_processes": [],
+    "profile_absent": true,
+    "cleanup_error_absent": true,
+    "child_exit": 0,
+    "durable_fixture_external_requests": 0,
+    "durable_fixture_persisted_writes": 0,
+    "retained_original_layer_pairs": 1718,
+    "all_layer_hashes_verified": true,
+    "source_original_archive2311_unchanged": true
+  },
+  "lead_originals_personally_opened": 38,
+  "runtime_verifier_originals_personally_opened": 38,
+  "independent_ux": {
+    "originals_personally_opened": 38,
+    "report": "independent-ux-review.md",
+    "sha256": "a6d784b271b8b33483d4b152c9763b7caf2decff113b1f655cf69a61d8b59f64",
+    "targeted_prior_findings": "VISUALLY VERIFIED CLOSED at32x24",
+    "newP0P1P2": 0,
+    "P3": "Fixture forcesFresh with unknown observation time; Root traced to synthetic fixture and assigned coherent age0s, not production freshness change"
+  },
+  "limits": [
+    "Sameoldfailedtargetmustremainimmutable/noreplay",
+    "Other5gridjobsunstarted",
+    "No automaticlater8/nineNEGresult",
+    "Root/coldUXacceptancepending",
+    "Pending/resize/Sessions/public/native/deviceproofremainopen",
+    "No final UI/PR readiness",
+    "The automatic confirmation-context check failed; current exactOCRroundoff repair is separate",
+    "Normal synthetic refresh/reset effects, not actual provider proof",
+    "Other5grids/actualresize/pending/Sessions/device proof remainopen",
+    "Browser rendering unverified"
+  ],
+  "original_images": [
+    {
+      "checkpoint": "component-quota-browse",
+      "file": "component-quota-browse.png",
+      "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "file": "component-quota-confirm-help-identity.png",
+      "sha256": "3d2df33cd71838ccbde0b808cbd57ba229343c62180804c41758ce37d3c856ee",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "file": "component-quota-confirm-help-returned.png",
+      "sha256": "af6608bfc3b40702505f4f49aa569b19a54954cf30e067ab25fbea9e3369e290",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "file": "component-quota-confirm-help-top.png",
+      "sha256": "b4710c0688f59edf658b560696ba032fe20663091f074975ccd8f109ed80e27a",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "file": "component-quota-confirm-no-returned.png",
+      "sha256": "877187d71a0dfc8c64392549a58dcc393bc5bca0155ae4f237437526d143c7a8",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "file": "component-quota-confirm-no.png",
+      "sha256": "ab7968f891b31ad21bf6916aa5439d482aeb25d3c54356cd3d7032f5a1538722",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "file": "component-quota-confirm-yes.png",
+      "sha256": "af6608bfc3b40702505f4f49aa569b19a54954cf30e067ab25fbea9e3369e290",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "file": "component-quota-credits-balance.png",
+      "sha256": "36fcd4f3184269814493b2d1d384a0e83ef5d81a08f3461ddd43e91b9855d8f2",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "file": "component-quota-credits-identity.png",
+      "sha256": "36fcd4f3184269814493b2d1d384a0e83ef5d81a08f3461ddd43e91b9855d8f2",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "file": "component-quota-credits-policy-boundary.png",
+      "sha256": "31fd91d7c6d37431aeb0536f4f2bb63b2363d77d0b7bb86b9e9275caa51339a5",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "file": "component-quota-credits-refreshed-balance.png",
+      "sha256": "03f722cb05b98d3ed5a6f0e0133c4eecfbd0214bba98eafa371384ca07161765",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "file": "component-quota-credits-refreshed-freshness.png",
+      "sha256": "097acb2cf31d5a9d8abac997fba42ee93261a0b939fd04e8886becb5324ff764",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "file": "component-quota-credits-refreshed-observation.png",
+      "sha256": "07c6d2c3d5722c6e7285e3d173d75edbe8521806f964de238903f60a169ec62e",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "file": "component-quota-details-bottom.png",
+      "sha256": "1d861ef7d896a5224358311207f4944a9d0fb6d8baaef4366978525cf44bb9b1",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "file": "component-quota-details-top.png",
+      "sha256": "37676240c3ee96a935bee5accdb971979eb8bdb7bc3b2382dfafbf93de9e77ee",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "file": "component-quota-floor-cancelled.png",
+      "sha256": "835b0a1c003afcc53b1cd15c5113e54f5c4f0fc785c8e401e90a425e0d76b9ee",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "file": "component-quota-floor-draft.png",
+      "sha256": "89fde9562ad3c67c435b791c8cdc4a19b03e7dc7f6aca9e9434ce3ffe6ce3d6e",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "file": "component-quota-floor-original.png",
+      "sha256": "835b0a1c003afcc53b1cd15c5113e54f5c4f0fc785c8e401e90a425e0d76b9ee",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "file": "component-quota-floor-saved.png",
+      "sha256": "ef5c350ca95065fb77995371256f2f2c62a0fff243367253dc647a13db5eea30",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "file": "component-quota-help-bottom.png",
+      "sha256": "8660a0df6105c0a9770cc040dedc97b54987b33b9e5cb9e77b58062b201c2f1c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "file": "component-quota-help-top.png",
+      "sha256": "1b11b6d40198d196c06d0caf9b0323580aacb4db5daf59457333551f8902d054",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "file": "component-quota-next-account.png",
+      "sha256": "d8f657a417ce9c638543fb302591526589bb54f8282870d1a9ed93e2d0b51136",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "file": "component-quota-options-identity.png",
+      "sha256": "3b0c751d4f608c7c2c1811e7cd6693b521e4952d4cf14fbfda52906357a92d01",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "file": "component-quota-policy-cancelled.png",
+      "sha256": "5d68cfa382a3faa6933ea77c30ca61ed78d291fffc34699ba343787105b06c8c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "file": "component-quota-policy-choice-returned.png",
+      "sha256": "5d68cfa382a3faa6933ea77c30ca61ed78d291fffc34699ba343787105b06c8c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "file": "component-quota-policy-choice.png",
+      "sha256": "c0e2a3a55141fa4117e847fc2018607c7c216cfc01886d2cdcfcb807d3726b4b",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "file": "component-quota-policy-draft.png",
+      "sha256": "5773ab994ae17c7b5000c4f5e29df2ff2114e1e067d4d18230b09a74dc846f00",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "file": "component-quota-policy-no-match.png",
+      "sha256": "1777d68c32b0a61914534a5bec699810f87a3af5dc6d8797a94336d5b042467f",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "file": "component-quota-policy-original.png",
+      "sha256": "5d68cfa382a3faa6933ea77c30ca61ed78d291fffc34699ba343787105b06c8c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "file": "component-quota-policy-saved.png",
+      "sha256": "5773ab994ae17c7b5000c4f5e29df2ff2114e1e067d4d18230b09a74dc846f00",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "file": "component-quota-refresh-result.png",
+      "sha256": "0b296b1d1c1158e6ede23cf068462e51ebf145fa1438c9bd12e61e3cc796d890",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "file": "component-quota-reset-inventory.png",
+      "sha256": "3fbc1943558c828acf446c8d37ff242926d6a3e45d2c8b39a1689afb1522b830",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "file": "component-quota-reset-last-page.png",
+      "sha256": "0947df3758ce4c67b8ac07670d35d5e83e2aee54072087e515f2da6ee42a4970",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "file": "component-quota-reset-result-bottom.png",
+      "sha256": "d64680a646d4b42cea4ccc44e6fc0e0411d215d7296e3388a5c03ef00e252257",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "file": "component-quota-reset-result.png",
+      "sha256": "19daa581b018f7050880ad76bee013970f05df06eebf9f066bf32693108c79ac",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "file": "component-quota-reset-review.png",
+      "sha256": "3fbc1943558c828acf446c8d37ff242926d6a3e45d2c8b39a1689afb1522b830",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "file": "component-quota-restored-account.png",
+      "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "file": "component-quota-returned.png",
+      "sha256": "2434ee57cbf76a32049dd3b22672e21cad244650edf146446621080a456e52fd",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ]
+    }
+  ]
+}

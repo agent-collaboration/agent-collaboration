@@ -1,24 +1,40 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/tailnet-verification-host",
+    "crates/board-central-test-support",
+    "crates/board-legacy-upgrade",
+    "crates/board-fleet-sync",
+    "crates/board-sync-protocol",
     "crates/message-board",
+    "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
     "crates/message-board-storage",
     "crates/agent-automation",
     "crates/automation-storage",
+    "crates/interaction-storage",
     "crates/codex-acp-adapter",
     "crates/lifecycle-observation",
     "crates/collaboration-client",
     "crates/collaboration-mcp",
     "crates/collaboration-service",
+    "crates/collaboration-contracts",
+    "crates/collaboration-runtime",
     "crates/collaboration-protocol",
+    "crates/collaboration-central-admin-protocol",
+    "crates/collaboration-central-core",
+    "crates/collaboration-central-cloudflare",
+    "crates/collaboration-central-tokio",
+    "crates/collaboration-central-conformance",
+    "crates/collaboration-mail-protocol",
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",
     "crates/codex-router-auth",
     "crates/codex-router-cli",
     "crates/codex-native-integration",
     "crates/codex-router-core",
+    "crates/codex-router-tui",
     "crates/codex-router-host",
     "crates/codex-router-quota-reset-test-harness",
     "crates/codex-router-proxy",
@@ -28,15 +44,27 @@ members = [
     "crates/codex-router-state",
     "crates/codex-router-test-support",
     "prototypes/ux_prototype",
+    "crates/workspace-architecture-check",
 ]
 
 [workspace.package]
-version = "0.1.66"
+version = "0.1.107"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-tokio-runner = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-service = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-receiver = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-writer = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-delivery = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"
@@ -46,16 +74,19 @@ fs2 = "=0.4.3"
 keyring-core = "1"
 uuid = { version = "1.26.0", features = ["v5", "v7"] }
 codex-router-core = { path = "crates/codex-router-core", version = "0.1.6" }
+codex-router-tui = { path = "crates/codex-router-tui", version = "0.1.96" }
 codex-native-integration = { path = "crates/codex-native-integration", version = "0.1.6" }
 codex-router-host = { path = "crates/codex-router-host", version = "0.1.6" }
 codex-router-quota = { path = "crates/codex-router-quota", version = "0.1.6" }
-axum = { version = "0.8.8", default-features = false, features = ["http1", "tokio"] }
+axum = { version = "0.8.8", default-features = false }
 base64 = "0.22.1"
 bytes = "1.11.0"
 chrono = "0.4.45"
 clap = { version = "4.5.53", features = ["derive", "env", "wrap_help"] }
 comfy-table = "7.2.2"
 crossterm = "0.29.0"
+either = "1.16.0"
+futures-core = "0.3.34"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 getrandom = "0.4.3"
 hmac = "0.12.1"
@@ -67,7 +98,10 @@ hyper-tungstenite = "0.20.0"
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http1", "http2", "tls12", "webpki-roots"] }
 hyper-util = { version = "0.1.19", features = ["client", "client-legacy", "server", "http1", "http2", "tokio"] }
 indicatif = "0.18.3"
-iocraft = "0.8.3"
+# Keep fullscreen diffs inside the current terminal after a height shrink.
+# Based on upstream 0.9.2; the pinned commit includes the backend regression tests.
+iocraft = { version = "=0.9.2", git = "https://github.com/ShravanSunder/iocraft.git", rev = "829ebd86bd07fe2100c096ec6d785875ec2e0c79" }
+jsonc-parser = { version = "0.34.0", features = ["serde_json"] }
 nix = { version = "0.28", features = ["user", "hostname"] }
 opentelemetry = { version = "0.31.0", features = ["logs", "metrics", "trace"] }
 opentelemetry-appender-tracing = "0.31.1"
@@ -81,25 +115,59 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 serde_json_canonicalizer = "0.3.2"
 jsonschema = { version = "0.53.0", default-features = false }
+log = "0.4.33"
+percent-encoding = "2.3.2"
+proc-macro-crate = "3.5.0"
+proc-macro2 = "1.0.106"
+quote = "1.0.46"
 rmcp = { version = "=3.4.0", default-features = false, features = ["macros", "server", "transport-streamable-http-server"] }
 schemars = "1.2.2"
 sha2 = "0.10.9"
 security-framework = "3.7"
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite"] }
+# Engine-agnostic SQLx; each crate enables the engine it uses (`sqlite`, or the sqlx-turso
+# driver). The Turso driver implements sqlx-core internals, so every SQLx crate is pinned exactly
+# and moves in lockstep.
+sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio"] }
+sqlx-core = { version = "=0.9.0", default-features = false }
+sqlx-macros-core = { version = "=0.9.0", default-features = false }
+syn = { version = "2.0.118", features = ["full", "parsing"] }
 thiserror = "2.0.18"
-tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "process", "io-util"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "process", "io-util"] }
 tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tokio-util = { version = "0.7.17", features = ["codec", "compat", "rt"] }
 tracing = "0.1.44"
 tracing-opentelemetry = "0.32.0"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "json"] }
+trybuild = "1.0.116"
+# Exact engine pin; default features would add mimalloc and FTS (Tantivy).
+turso = { version = "=0.8.1", default-features = false }
+turso_parser = "=0.8.1"
 unicode-width = "0.2.2"
+url = "2.5.8"
 zeroize = "1.9.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
+wildcard_imports = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+large_futures = "deny"
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+match_wildcard_for_single_variants = "deny"
+unwrap_in_result = "deny"
+unused_async = "deny"
+trivially_copy_pass_by_ref = "deny"
+large_stack_arrays = "deny"
+large_types_passed_by_value = "deny"
+large_stack_frames = "deny"
+enum_glob_use = "deny"
+dbg_macro = "deny"
+implicit_clone = "deny"
+inefficient_to_string = "deny"
 await_holding_invalid_type = "deny"
 await_holding_lock = "deny"
 expect_used = "deny"
@@ -126,10 +194,23 @@ incremental = false
 debug = "line-tables-only"
 incremental = false
 
+# Preserve the Worker's former standalone release settings without changing
+# the native Router release profile.
+[profile.worker-release]
+inherits = "release"
+lto = true
+opt-level = "s"
+codegen-units = 1
+
 [profile.dev.package."*"]
 debug = 0
 
 # Debug Host restarts hash the managed executable before launch and publication.
 # Keep full content verification fast enough for native TUI reconnect deadlines.
 [profile.dev.package.sha2]
+opt-level = 3
+
+# The native database executes large real-store test workloads in this profile.
+# Optimize its interpreter while retaining debug assertions and checked arithmetic.
+[profile.dev.package.turso_core]
 opt-level = 3

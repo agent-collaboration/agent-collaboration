@@ -1,0 +1,18 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#saturated",
+  "originalSHA256": "aefdcecc422cba39b53818de9cc5ef2955602f0d12cab5cb42b260d67dab0f9c",
+  "target": "host-admission-agent.ts",
+  "arguments": ["saturated", "<ROOT>/admission.log", "<RECEIPT>"],
+  "pidFiles": ["receipt.json"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"first\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/load\", \"params\": {\"sessionId\": \"second\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"saturated-load-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": "<OWN_PID>",
+    "files": {
+      "admission.log": "first\nsecond\n",
+      "receipt.json": "<OWN_PID>"
+    }
+  }
+}

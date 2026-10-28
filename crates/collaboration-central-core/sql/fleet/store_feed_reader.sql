@@ -1,0 +1,1 @@
+INSERT INTO feed_readers(reader_id, installation, last_read_position) VALUES(?, ?, CAST(? AS INTEGER)) ON CONFLICT(installation) DO UPDATE SET last_read_position = MAX(feed_readers.last_read_position, excluded.last_read_position);

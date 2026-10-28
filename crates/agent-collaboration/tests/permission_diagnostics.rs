@@ -366,8 +366,7 @@ fn api_command_families_share_permission_diagnostic() {
             &directory,
         ],
         vec![
-            "board",
-            "project",
+            "workspace",
             "list",
             "--json",
             "--service-directory",

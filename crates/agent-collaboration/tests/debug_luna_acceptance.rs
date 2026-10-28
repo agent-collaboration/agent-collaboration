@@ -9,6 +9,10 @@ mod debug_backend_restart;
 mod durable_delivery_recovery;
 #[path = "automation_live_support/native_fork_continuation.rs"]
 mod native_fork_continuation;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
 mod proof_context;
 #[path = "automation_live_support/scheduled_continuity.rs"]
@@ -79,6 +83,7 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
     let receipt = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -90,6 +95,10 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
             mode: MessageDelivery::Auto,
         })
         .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
+        return Err("Local history probe returned remote sender custody".into());
+    };
+    let receipt = receipt.receipt;
     let turn_id = match &receipt.client {
         Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
             acceptance:
@@ -176,7 +185,7 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
 #[ignore = "requires an explicitly launched isolated automation-debug-host and real Luna access"]
 async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResult<()> {
     let mut proof = ProofContext::connect().await?;
-    let python = proof_context::python_executable().await?;
+    let node = proof_context::node_executable().await?;
     let forbidden_socket = proof.root.join("other-control.sock");
     let _forbidden_listener = tokio::net::UnixListener::bind(&forbidden_socket)?;
     let forbidden_tcp = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
@@ -214,11 +223,11 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
         identity.as_str()
     );
     let permission_script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/proof-tools/socket-permission-probe.py")
+        .join("../../verification/tooling/socket-permission-probe.ts")
         .canonicalize()?;
     let permission_command = format!(
         "{} {} {} {forbidden_port}",
-        shell_quote(&python.to_string_lossy()),
+        shell_quote(&node.to_string_lossy()),
         shell_quote(&permission_script.to_string_lossy()),
         shell_quote(&forbidden_socket.to_string_lossy())
     );
@@ -228,6 +237,7 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let initial = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: alpha.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -237,6 +247,10 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
             mode: MessageDelivery::Auto,
         })
         .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(initial) = initial else {
+        return Err("Local input returned remote sender custody".into());
+    };
+    let initial = initial.receipt;
     proof.record("alphaInputAccepted", json!(initial))?;
     let initial_turn = match &initial.client {
         Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
@@ -296,6 +310,10 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let stored_reply = reply_history
         .records
         .iter()
+        .filter_map(|entry| match entry {
+            collaboration_client::protocol::MessageHistoryEntry::Local(record) => Some(record),
+            collaboration_client::protocol::MessageHistoryEntry::Remote { .. } => None,
+        })
         .find(|record| record.push_id == explicit_reply.push_id)
         .ok_or("explicit reply push is absent from the participant history")?;
     if stored_reply.target != alpha

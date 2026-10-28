@@ -1,20 +1,18 @@
 //! Explicit preparation validates the request and persists the selected route's effects.
 //! The schedule operations call `prepare_schedule`; the module keeps its name because the
 //! delivery-boundary test scans this path for client-route imports.
-#![expect(
-    clippy::result_large_err,
-    reason = "typed failures are the published payloads, returned once per IO-bound request"
-)]
 use crate::collaboration_application::ScheduleOperationFailure;
-use crate::{
-    PreparationEvidenceSink, ScheduleDestination, SchedulePreparationOutcome,
-    SchedulePreparationRequest, ScheduledRunExecution, ServiceIdentity,
-};
 use agent_automation::RouteEffectEvidence;
 use automation_storage::{
     AutomationStore, ExternalAdmission, ExternalAdmissionResult, PreparationFailureDisposition,
     PreparationFailureRecord, ScheduleInspection,
 };
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduledRunExecution;
+
 use collaboration_protocol::{
     CodexGeneration, DestinationPreparation, EndpointRef, ScheduleEffects, ScheduleFailure,
     ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction, SchedulePrepareRequest,
@@ -27,15 +25,19 @@ type PreparationResult = Result<ScheduleSnapshot, ScheduleOperationFailure>;
 
 /// Prepares a schedule's reuse-thread destination through the selected route, persisting the
 /// route's effects. A retried operation returns its retained outcome.
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 pub(crate) async fn prepare_schedule(
-    identity: &ServiceIdentity,
+    configuration: &collaboration_runtime::AutomationConfigurationHandle,
+    service_id: &collaboration_protocol::UuidIdentity,
+    execution: Option<&Arc<dyn ScheduledRunExecution>>,
+    store: Option<&Arc<Mutex<AutomationStore>>>,
     params: SchedulePrepareRequest,
 ) -> PreparationResult {
     let request = PreparationDependencies {
-        configuration: &identity.configuration,
-        service_id: &identity.service_id,
-        execution: identity.scheduled_run_execution.as_ref(),
-        store: identity.automation.as_ref(),
+        configuration,
+        service_id,
+        execution,
+        store,
     };
     let destination = match &params.destination {
         DestinationPreparation::Existing { target, .. } => ScheduleDestination::Existing {
@@ -170,7 +172,7 @@ pub(crate) async fn prepare_schedule(
             if let Some(failure) = record.failure {
                 // The retained failure is the typed failure the original attempt recorded.
                 let failure =
-                    crate::schedule_preparation_evidence_sink::upgrade_stored_failure(failure)
+                    collaboration_runtime::schedule_preparation_evidence_sink::upgrade_stored_failure(failure)
                         .ok()
                         .and_then(|failure| {
                             serde_json::from_value::<ScheduleFailure>(failure).ok()
@@ -228,14 +230,15 @@ pub(crate) async fn prepare_schedule(
         text.push_str("\n\nPrior scheduled-work summary (context, not proof):\n");
         text.push_str(summary);
     }
-    let sink = crate::schedule_preparation_evidence_sink::StoredPreparationEvidenceSink {
-        store: Arc::clone(store),
-        configuration: request.configuration.clone(),
-        operation_id: params.operation_id.clone(),
-        schedule_id: params.schedule_id.clone(),
-        expected_change_id: inspected.record.change_id,
-        working_directory: destination_cwd(&params.destination).to_owned(),
-    };
+    let sink =
+        collaboration_runtime::schedule_preparation_evidence_sink::StoredPreparationEvidenceSink {
+            store: Arc::clone(store),
+            configuration: request.configuration.clone(),
+            operation_id: params.operation_id.clone(),
+            schedule_id: params.schedule_id.clone(),
+            expected_change_id: inspected.record.change_id,
+            working_directory: destination_cwd(&params.destination).to_owned(),
+        };
     let result = execution
         .prepare_destination(
             SchedulePreparationRequest {
@@ -258,7 +261,7 @@ pub(crate) async fn prepare_schedule(
     match result {
         Ok(SchedulePreparationOutcome::Prepared(prepared)) => {
             let prepared_effects = prepared.evidence.clone();
-            if crate::schedule_preparation_evidence_sink::project_evidence(&prepared_effects).is_err() {
+            if collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(&prepared_effects).is_err() {
                 return reject(&params, ScheduleFailureKind::OutcomeUnknown,
                     "Prepared route evidence could not be projected; inspect the operation.", effects);
             }
@@ -272,11 +275,11 @@ pub(crate) async fn prepare_schedule(
                         effects,
                     ),
                 },
-                Err(crate::DeliveryContractError::PreparationOwnershipConflict) => finish_failure(store, &params, ScheduleFailureKind::OwnershipConflict,
+                Err(collaboration_contracts::DeliveryContractError::PreparationOwnershipConflict) => finish_failure(store, &params, ScheduleFailureKind::OwnershipConflict,
                     "The thread belongs to another schedule. Select a different thread; no binding was committed for this schedule.",
                     effects, false,
                 ).await,
-                Err(crate::DeliveryContractError::PreparationChangeConflict) => finish_failure(store, &params, ScheduleFailureKind::ChangeConflict,
+                Err(collaboration_contracts::DeliveryContractError::PreparationChangeConflict) => finish_failure(store, &params, ScheduleFailureKind::ChangeConflict,
                     "The schedule changed during preparation; no binding was committed. Inspect the current schedule and retained route effects before preparing again.",
                     effects, false,
                 ).await,
@@ -288,7 +291,7 @@ pub(crate) async fn prepare_schedule(
         }
         Ok(SchedulePreparationOutcome::Failed(failure)) => {
             let failed_effects = failure.evidence.clone();
-            if crate::schedule_preparation_evidence_sink::project_evidence(&failed_effects).is_err() {
+            if collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(&failed_effects).is_err() {
                 return reject(&params, ScheduleFailureKind::OutcomeUnknown,
                     "Preparation route evidence could not be projected; inspect the operation.", effects);
             }
@@ -330,6 +333,7 @@ fn destination_cwd(destination: &DestinationPreparation) -> &str {
         | DestinationPreparation::Fork { cwd, .. } => cwd,
     }
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_choice_field(
     params: &SchedulePrepareRequest,
     field: &str,
@@ -354,6 +358,7 @@ fn reject_choice_field(
     };
     Err(ScheduleOperationFailure::Preparation(failure))
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_preselection(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
@@ -409,6 +414,7 @@ fn error(
         },
     }
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
@@ -419,6 +425,7 @@ fn reject(
         params, kind, message, effects,
     )))
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn finish_failure(
     store: &Arc<Mutex<AutomationStore>>,
     params: &SchedulePrepareRequest,
@@ -455,14 +462,17 @@ async fn finish_failure(
 }
 
 fn public_effects(effects: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> ScheduleEffects {
-    match crate::schedule_preparation_evidence_sink::project_evidence(effects) {
-        Ok(evidence) => ScheduleEffects::Route { evidence },
+    match collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(effects) {
+        Ok(evidence) => ScheduleEffects::Route {
+            evidence: Box::new(evidence),
+        },
         Err(_) => ScheduleEffects::Local {
             mutation: collaboration_protocol::LocalMutationState::None,
         },
     }
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_without_route(params: &SchedulePrepareRequest, message: &str) -> PreparationResult {
     let failure = ScheduleFailure {
         kind: ScheduleFailureKind::AutomationUnavailable,
@@ -483,7 +493,7 @@ fn reject_without_route(params: &SchedulePrepareRequest, message: &str) -> Prepa
 }
 
 struct PreparationDependencies<'a> {
-    configuration: &'a crate::AutomationConfigurationHandle,
+    configuration: &'a collaboration_runtime::AutomationConfigurationHandle,
     service_id: &'a collaboration_protocol::UuidIdentity,
     execution: Option<&'a Arc<dyn ScheduledRunExecution>>,
     store: Option<&'a Arc<Mutex<AutomationStore>>>,

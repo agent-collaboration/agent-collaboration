@@ -2,12 +2,20 @@
 /// Shared request, result, identity and schema definitions used by the service.
 pub use collaboration_protocol as protocol;
 /// Message-board request, result and validated domain types.
-pub use message_board as board;
+pub mod board {
+    pub use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
+    pub use message_board::public_replies::{
+        DecisionEffectsPage, RequestDecision, RequestEffectsRead, RequestEffectsRequest,
+        RequestResult, WriteReply,
+    };
+    pub use message_board::*;
+}
 mod admission_overload;
 mod api_connection;
 mod collaboration_access;
 mod collaboration_client;
 mod message_operation;
+mod message_submission;
 mod provider_conversations;
 pub use collaboration_access::{CollaborationAccess, LocalCollaboration, LocalFuture};
 pub use provider_conversations::ProviderConversations;
@@ -86,6 +94,10 @@ fn router_version_warning(
         })
 }
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 /// The scripted API the integration tests also use, for this crate's unit tests.
 #[cfg(test)]
 #[path = "../tests/support/scripted_api.rs"]
@@ -126,7 +138,7 @@ mod router_version_warning_tests {
 pub use collaboration_protocol::JournalStatus;
 
 mod native_endpoint_selector;
-pub use native_endpoint_selector::resolve_public_native;
+pub use native_endpoint_selector::{resolve_public_native, resolve_public_native_for_endpoint};
 
 mod observation_session;
 mod provider_session_observation;
@@ -198,3 +210,11 @@ pub use native_transport_connection::{
 };
 
 pub mod session_catalog;
+
+mod owner_access;
+pub use owner_access::{OwnerAccessError, owner_app_token};
+
+mod central_admin;
+pub use central_admin::{
+    CentralAdminAnswer, CentralAdminClient, CentralAdminError, CentralAdminOperation,
+};

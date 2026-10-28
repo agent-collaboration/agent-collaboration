@@ -1,0 +1,93 @@
+{
+  "kind": "Rootbd P3 test-contract correction and fitting real-boundary proof; no product/runtime/capture artifact change",
+  "authority": "Rootbf/c0 and Vc2 explicit CPU/current2313guard return",
+  "ownedFileHashes": {
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90"
+  },
+  "change": "Initial completed Options may expose a complete named measured eligibility value OR actual voucher content; original initial-before-scroll assertion remains. Actual mounted alternative/value witness, independent voucher reachability and actual Esc/Cancel chrome-only counterexample preserve test sensitivity.",
+  "expectedValueSource": "Existing typed Normal fixture live weekly remaining percent plus eligibility rendering; actual source observed5% eligible, not a new fixture value.",
+  "causal": {
+    "eligibility-red-recorded": {
+      "receipt": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-eligibility-red-recorded.json",
+      "sha256": "ad559c4651386d2ce6556b0bbb9ef3f9785ab0b7a72fd05578db7a47f9ed598b",
+      "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-eligibility-red-recorded.log",
+      "logSha256": "1793509e12d5a42f46e1de631528f65504a21f5c294a758d24c0226b541e0f4d",
+      "counts": {
+        "passed": 0,
+        "failed": 1
+      },
+      "reason": "Voucher-only predicate rejects actual mounted allowed eligibility field without voucher"
+    },
+    "actual-chrome-only-red": {
+      "receipt": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-actual-chrome-only-red.json",
+      "sha256": "33d93b2a787fdeaad76960e25ad6511c3e2ae6accf9793f83d727c645cc1c1de",
+      "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-actual-chrome-only-red.log",
+      "logSha256": "8a84f1bfa6972dec7681e79e932c18d7b691b647dec0cf9c9efc8d2d83abef60",
+      "counts": {
+        "passed": 0,
+        "failed": 1
+      },
+      "reason": "Weak title-only predicate accepts actual Esc/Cancel/Browse chrome-only frame"
+    }
+  },
+  "currentQuality": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-final-quality.json",
+    "sha256": "4deb1e98be818c87b2eae13e5d156709e72ad18007958f5623f3f922fbff6ab5",
+    "focusedCounts": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    "testSeconds": 0.35,
+    "steps": [
+      {
+        "name": "test",
+        "exit": 0,
+        "seconds": 30.228553000371903,
+        "receiptLog": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-final-green.log",
+        "logSha256": "392c6c79c5191faa308039f56dd5e8fbcc6b03b109fb463b4793c25e05a59a45"
+      },
+      {
+        "name": "clippy",
+        "exit": 0,
+        "seconds": 30.799418916925788,
+        "receiptLog": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-lint.log",
+        "logSha256": "42b2100a48b1c49d3e11bfb828cf2d84ee80f8fe89bb7384b54d389ded30fe26"
+      },
+      {
+        "name": "fmt",
+        "exit": 0,
+        "seconds": 4.65259962528944,
+        "receiptLog": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-format.log",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "scripts/tooling/check-rust-file-size.py",
+        "exit": 0,
+        "seconds": 0.20971995778381824,
+        "receiptLog": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-size.log",
+        "logSha256": "fe724c535db0d43e6fdebb8baed0ca452b1b1213beb7c24c3ea9600daefe9d4a"
+      }
+    ]
+  },
+  "compiledTestLineage": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-two-test-source-equivalence.json",
+    "sha256": "d3fb8f5e04114d0aa4c2c3a14f8ce8785537a55c93165773de7dd90f2d48eeec",
+    "unchangedInputs": 2282,
+    "twoTestOnlyDifferences": true,
+    "component27cbUnchanged": true
+  },
+  "retainedSetupAndNonGateFailures": [
+    "c7-entry-p3-initial-wrapper-setup-failure.json (test failed at intended eligibility assertion, but sandbox ps denial prevented original child-PID/exit guard record; not a qualified wrapper)",
+    "c7-entry-p3-eligibility-green.json (separate voucher pose incorrectly assumed End; actual footer note, not product defect)",
+    "c7-entry-p3-eligibility-second-green.json (edit did not apply; unchanged-source rerun, retained as failed execution mistake)",
+    "c7-entry-p3-chrome-only-red.json (actual pending-body wrong-frame sensitivity; NOT the required chrome-only counterexample)"
+  ],
+  "sourceCustody": "Main file now held, no more Main source edits planned. Return compiler/2313 guard to Verifier to freeze AFTER this current950475ab hash.",
+  "gitStatus": "Both Main subsequent test files are currently untracked; Root must include them when staging scoped delivery. No Main commit/push.",
+  "limits": [
+    "Original fullCLI560/default9 remain bound to prior exact27cb source; these subsequent tests have separate focused and fitting-quality proof.",
+    "This corrects a test obligation, not product UI or data behavior. No UI replay/default artifact refresh solely for tests.",
+    "Current40 Normal and374/242 native qualifier remain failed until separately admitted name/tag-value reader is qualified. Pending/error/resize/Sessions/public/device/fresh-checkout/final acceptance remain open."
+  ]
+}

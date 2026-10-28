@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_cache_rebuild_records(row_id,id,kind,payload) VALUES(?,?,?,?) ON CONFLICT(id,kind) DO UPDATE SET payload=excluded.payload",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "5c931d050332406beb2efc59ed47535aee12722f5dca1c878792f55ab10ead95"
+}

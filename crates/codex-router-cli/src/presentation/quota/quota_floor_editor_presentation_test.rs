@@ -14,8 +14,8 @@ use super::quota_floor_editor::WeeklyQuotaFloorSaver;
 use super::quota_floor_editor::render_weekly_floor_editor;
 use super::quota_floor_editor::step_weekly_floor_percent;
 use super::quota_floor_editor::weekly_floor_editor_key_command;
+use super::quota_reset_component_input::forced_quota_exit_key;
 use super::quota_status_component::QuotaStatusComponent;
-use super::quota_status_component::forced_quota_exit_key;
 use super::quota_status_view_model::QuotaStatusViewModelLoader;
 
 #[test]
@@ -28,18 +28,18 @@ fn weekly_floor_stepper_clamps_to_zero_and_fifteen() {
 #[test]
 fn floor_editor_preserves_component_owned_ctrl_c_and_ctrl_d_exit_keys() {
     assert!(forced_quota_exit_key(
-        &KeyCode::Char('c'),
+        KeyCode::Char('c'),
         KeyModifiers::CONTROL
     ));
     assert!(forced_quota_exit_key(
-        &KeyCode::Char('d'),
+        KeyCode::Char('d'),
         KeyModifiers::CONTROL
     ));
     assert!(!forced_quota_exit_key(
-        &KeyCode::Char('e'),
+        KeyCode::Char('e'),
         KeyModifiers::CONTROL
     ));
-    assert!(!forced_quota_exit_key(&KeyCode::Esc, KeyModifiers::NONE));
+    assert!(!forced_quota_exit_key(KeyCode::Esc, KeyModifiers::NONE));
 }
 
 #[test]
@@ -121,11 +121,7 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
         vec![(expected_account_id, 11)]
     );
     assert!(frames.iter().any(|frame| frame.contains("Weekly floor")));
-    assert!(
-        frames
-            .last()
-            .is_some_and(|frame| frame.contains("ctrl-e edit floor"))
-    );
+    assert!(frames.last().is_some_and(|frame| frame.contains("Filters")));
 }
 
 #[tokio::test]
@@ -229,7 +225,7 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
         frames
             .iter()
             .rev()
-            .any(|frame| frame.contains("current") && frame.contains("1%"))
+            .any(|frame| frame.contains("Current") && frame.contains("1%"))
     );
 }
 
@@ -321,28 +317,155 @@ fn WeeklyFloorMouseHarness(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
 #[tokio::test]
 async fn real_iocraft_arrow_button_handles_mouse_click() {
-    let events = vec![
-        TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-            MouseEventKind::Down(crossterm::event::MouseButton::Left),
-            12,
-            5,
-        )),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
-    ];
-
-    let frames = element!(WeeklyFloorMouseHarness)
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            events,
-        )))
-        .map(|canvas| canvas.to_string())
-        .collect::<Vec<_>>()
-        .await;
-
-    assert!(frames.iter().any(|frame| frame.contains("  9%")));
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut harness = element!(WeeklyFloorMouseHarness);
+    let frames = harness.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut clicked = false;
+    let mut observed = false;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if !clicked {
+                let (row, line) = frame
+                    .lines()
+                    .enumerate()
+                    .find(|(_, line)| line.contains('▶'))
+                    .expect("visible increment control");
+                let column = unicode_width::UnicodeWidthStr::width(
+                    line.get(..line.find('▶').unwrap())
+                        .expect("matched text starts at UTF-8 boundary"),
+                );
+                sender
+                    .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                        MouseEventKind::Down(MouseButton::Left),
+                        u16::try_from(column).unwrap_or(u16::MAX),
+                        u16::try_from(row).unwrap_or(u16::MAX),
+                    )))
+                    .unwrap();
+                clicked = true;
+            } else if frame
+                .lines()
+                .any(|line| line.contains("Floor") && line.contains("11%"))
+            {
+                observed = true;
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Char('q'),
+                    )))
+                    .unwrap();
+            }
+        }
+    })
+    .await
+    .expect("actual arrow click changes the draft before exit");
+    assert!(observed);
 }
 
 fn control_key(character: char) -> KeyEvent {
     let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Char(character));
     event.modifiers = KeyModifiers::CONTROL;
     event
+}
+
+#[tokio::test]
+async fn weekly_floor_dialog_pointer_changes_draft_without_saving_on_cancel() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use unicode_width::UnicodeWidthStr;
+    let mut model = quota_two_account_view_model();
+    model.rows[0].weekly_quota_floor_percent = 0;
+    let save_calls = Arc::new(AtomicUsize::new(0));
+    let observed_saves = save_calls.clone();
+    let saver: WeeklyQuotaFloorSaver = Arc::new(move |_, _| {
+        observed_saves.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async { Ok(()) })
+    });
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(QuotaStatusComponent(view_model: model, width:120usize, height:36usize, weekly_floor_saver:Some(saver)));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let result = tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            match phase {
+                0 if frame.contains("Filters") => {
+                    sender.send(TerminalEvent::Key(control_key('e'))).unwrap();
+                    phase = 1;
+                }
+                1 if frame.contains("Weekly floor") => {
+                    let (row, line) = frame
+                        .lines()
+                        .enumerate()
+                        .find(|(_, line)| line.contains("Floor") && line.contains('▶'))
+                        .expect("real composed dialog must expose increment control");
+                    let offset = line.find('▶').unwrap();
+                    let column = UnicodeWidthStr::width(
+                        line.get(..offset)
+                            .expect("glyph begins at a UTF-8 boundary"),
+                    );
+                    assert!(
+                        column < 120 && row < 36,
+                        "increment control stays in the physical viewport: {frame}"
+                    );
+                    println!("composed_floor_increment column={column} row={row}\n{frame}");
+                    sender
+                        .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                            MouseEventKind::Down(MouseButton::Left),
+                            u16::try_from(column).expect("visible column fits terminal bounds"),
+                            u16::try_from(row).expect("visible row fits terminal bounds"),
+                        )))
+                        .unwrap();
+                    phase = 2;
+                }
+                2 if frame
+                    .lines()
+                    .any(|line| line.contains("Floor") && line.contains("1%")) =>
+                {
+                    assert_eq!(
+                        save_calls.load(Ordering::SeqCst),
+                        0,
+                        "pointer must change only draft"
+                    );
+                    sender
+                        .send(TerminalEvent::Key(KeyEvent::new(
+                            KeyEventKind::Press,
+                            KeyCode::Esc,
+                        )))
+                        .unwrap();
+                    phase = 3;
+                }
+                3 if !frame.contains("Weekly floor") && frame.contains("Filters") => {
+                    sender
+                        .send(TerminalEvent::Key(KeyEvent::new(
+                            KeyEventKind::Press,
+                            KeyCode::Esc,
+                        )))
+                        .unwrap();
+                    phase = 4;
+                }
+                _ => {}
+            }
+            last = frame;
+        }
+    })
+    .await;
+    assert!(
+        result.is_ok(),
+        "composed dialog pointer/cancel phase={phase}: {last}"
+    );
+    assert_eq!(phase, 4, "{last}");
+    assert_eq!(
+        save_calls.load(Ordering::SeqCst),
+        0,
+        "cancel cannot save draft"
+    );
 }

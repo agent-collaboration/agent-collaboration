@@ -1,0 +1,23 @@
+{
+  "kind": "One additive mounted supported-key observer; original compiled product source preserved, no runtime delta",
+  "productManifest": "tmp/tui-implementation/c7-normal-options-default-target-handoff.json",
+  "productManifestSha256": "5f245f3ccffa8f6d4cce4eb2da5922b4f909c0935168099a45982700a8c05ed3",
+  "componentSha256": "27cbcfac401131b7330c12e9e4d5ca4c2bd97797f8c6514d414681c7ff7405aa",
+  "compiledSourceInputs": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-inputs-before.json",
+  "compiledSourceInputsSha256": "d814a5e6b1f207f90b3ca8aa42a73829051c2c377fb2f30b5fc9b64e137fc441",
+  "unchangedInputs": 2283,
+  "differences": [
+    {
+      "path": "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "compiledSourceSha256": "96c7f917f269f84c0a7bdea12872475328dd921064fa69ba8617fab90059a294",
+      "currentSha256": "8f11295be1b42259f3e208aab5683c48940986068ed547e85b2e29e28b3513ed",
+      "compiledSourceSnapshot": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "removeNewFunctionRestoresExactCompiledBytes": true
+    }
+  ],
+  "newTest": "supported_page_sequences_match_end_back_pose_and_exact_home_return",
+  "observedPreFixRed": false,
+  "reason": "Independent equivalence proof for pinned VHS supported PageDown/PageUp encoding; no product bug repair",
+  "currentQuality": "tmp/tui-implementation/c7-supported-page-current-quality.json",
+  "limits": "Current full560/default9 remain bound to original27cb; additive observer has separate current-focused proof. No new product build or screenshot claim."
+}

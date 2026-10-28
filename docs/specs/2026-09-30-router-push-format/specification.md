@@ -48,11 +48,12 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
 
 - **R1 — shape.**
   ```
-  <kind emoji> <header facts> · "<preview>"[ (+N)] · router://<machine-id>/push/<push-id>
+  <kind emoji> <header facts> · "<preview>" · router://<machine-id>/push/<push-id>
+  <kind emoji> <header facts> · "<preview>…" (+N) 📖 Load full message → router://<machine-id>/push/<push-id>
   ```
   - The preview is the first 100 Unicode scalar values of the body, **counted before escaping**.
-  - `(+N)` counts the body scalars not shown.
-  - A body of 100 or fewer shows whole, with no `(+N)`.
+  - Any omitted body text adds `…` immediately before the closing quote and ` (+N) 📖 Load full message → ` after it, followed by the complete Router link. N counts original body scalars not shown, before escaping, and excludes the display ellipsis.
+  - An intact body has no added ellipsis or suffix; content already ending in an ellipsis remains intact.
   - Subscription kinds have **no preview** (neutral, U8).
 - **R2 — header facts** (emoji by default):
 
@@ -94,8 +95,9 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
   Expired or unknown ids give `not found (expired after 30 days, or never existed)`.
 - **R7 — retention (30 days).** Router deletes 30 days after creation:
   - push records of every kind, including held or undelivered ones;
-  - interaction-history entries (they gain a creation time; existing undated entries count as created at
-    upgrade);
+  - typed interaction-history entries, from their immutable creation instant in SQLite; the
+    [SQLite-only cutover](../2026-10-04-interaction-sqlite/specification.md) starts fresh without reading
+    or importing old typed JSON history. Separate legacy approval history keeps its existing contract;
   - `mailbox_deliveries` rows, deleted whole once settled and 30 days old, never while a wake still
     references them as pending;
   - whole `operation_receipts` rows older than 30 days. The idempotency window is 30 days: an operation id
@@ -143,12 +145,19 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
   push under `🧑 Owner (unverified)` and carries no authority beyond its text. Full-body delivery for
   **proven** owner messages (U12) arrives with the owner-verification follow-up; nothing in this design grants
   it on the self-declared flag.
-- **R14 — hold for DMs only.**
-  - A DM whose target isn't running is held and delivered when the target is next running, using the
-    subscriptions presence and hold rules. The result says `held`.
+- **R14 — Auto resumes; Queue holds.**
+  - A new, unguarded Auto DM to a known unloaded Router-owned Codex session resumes it and delivers
+    once, using the same load policy as wakes. Queue keeps its loaded-session requirement, and Steer
+    keeps its active-turn requirement. Desktop writer ownership still rejects as `heldByAnotherClient`.
+  - A DM already held before upgrade waits for its target's next load. Startup does not revive its
+    unloaded target. Held delivery uses `LoadedOnly`.
   - Wakes and schedule runs keep their existing delivery mode and load behaviour: Auto may resume an
     unloaded Codex thread, exactly as today.
 - **R15 — delivery outcomes.**
+  - A rejected native delivery retains operation, stage, bounded cause, admitted backend generation,
+    and resume/submission effects in `lastOutcome.outcome.nativeFailure`, visible through `show --json`.
+    Router-local refusals use `localRejection`; a genuinely unsupported native method keeps
+    `unsupportedCapability`. Detail comes from fixed Router text, never raw backend error text.
   - The push id is the delivery correlation id, which makes it unique per attempt target.
   - `outcome-unknown` counts as passed and is recorded.
   - A failure to record an accepted delivery retries the record write, never the push.
@@ -185,8 +194,8 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
 | # | Given | When | Then |
 | --- | --- | --- | --- |
 | S1 | Main sends a Sidekick "S1 is green" | it arrives | one line: `✉️ ✳️ Main (claude-local/8d47f947) @Sunbook-Pro-M4 → you · "S1 is green" · router://…/push/…` |
-| S2 | a 1,340-char receipt | it arrives | 100 scalars, `(+1240)`, the link; `show` returns everything |
-| S3 | the recipient's terminal is closed | a DM is sent | the result says `held`; the DM arrives on resume |
+| S2 | a 1,340-char receipt | it arrives | 100 source scalars plus `…`, `(+1240) 📖 Load full message → `, the complete link; `show` returns everything |
+| S3 | a known Router-owned Codex session is unloaded | a new Auto DM is sent | the same session resumes and receives one notice; Queue instead stays held until the next load |
 | S4 | the Sidekick got DMs from A then B | `message reply <A's id> "done"` | A receives it; `message reply "done"` with no id is rejected |
 | S5 | a subscription batch covers 2 threads, held | the owner resumes the session | one 🧵 line, 2 threads, `held since …`; one `show` returns both ranges |
 | S6 | a wake to an unloaded Codex thread | it fires | Auto resumes the thread as today; the push is one ⏰ line |

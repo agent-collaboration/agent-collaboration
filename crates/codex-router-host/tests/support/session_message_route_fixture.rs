@@ -5,61 +5,26 @@ use collaboration_protocol::{
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, DeliveryDisposition,
     DeliveryEvidence, DeliveryOutcome, DeliveryShowRequest, EndpointRef, MessageDelivery,
     MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory,
-    RouterAccess, SessionId, SessionRef, ThreadSubscribeRequest, WakeSendRequest, WakeShowRequest,
-};
-use message_board::{
-    BoardCreateRequest, BoardId, Description, HumanId, Identity, MessageId, MessagePostRequest,
-    MessageReferences, ParticipantRole, Placement, ProjectCreateRequest, ProjectId, ResourceName,
-    SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch,
-    ThreadJoinRequest, TopicCreateRequest, TopicId,
+    RouterAccess, SessionId, SessionRef, WakeSendRequest, WakeShowRequest,
 };
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path};
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_fixture(path: &Path) {
-    std::fs::write(
+    codex_router_test_support::node_fixture::write_node_fixture(
         path,
-        r#"#!/usr/bin/python3
-import json,sys
-session_id=sys.argv[1]
-load_marker=sys.argv[2]
-prompt_log=sys.argv[3]
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'delivery-fixture','version':'1'},'_meta':{'steering':{'supported':True}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- method=request['method']
- if method=='session/new':
-  result={'sessionId':session_id}
- elif method=='session/load':
-  open(load_marker,'a').write('load\n')
-  result={}
- elif method=='_session/steering':
-  result={'outcome':'promptRequired'}
- elif method=='session/prompt':
-  open(prompt_log,'a').write(json.dumps(request)+'\n')
-  if 'request permission' in request['params']['prompt'][0]['text']:
-   print(json.dumps({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':session_id,'toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-once','name':'Allow once','kind':'allow_once'},{'optionId':'deny-once','name':'Deny once','kind':'reject_once'}]}})); sys.stdout.flush()
-   decision=json.loads(sys.stdin.readline())
-   assert decision['id']==91
-   assert decision['result']['outcome']['outcome']=='selected'
-   assert decision['result']['outcome']['optionId']=='allow-once'
-   open(prompt_log,'a').write(json.dumps({'fixturePermissionDecision':decision})+'\n')
-  result={'stopReason':'end_turn'}
- else:
-  raise RuntimeError(method)
- print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result})); sys.stdout.flush()
- open(prompt_log,'a').write(json.dumps({'fixturePromptCompleted':request['id']})+'\n')
-"#,
+        "session-message-route-agent.ts",
+        &serde_json::json!(null),
     )
     .expect("provider fixture");
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
-        .expect("provider executable");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn message(target: SessionRef) -> MessageSendRequest {
     MessageSendRequest {
+        item_id: None,
         target,
         message: PublicMessageContent::HumanUser {
             text: MessageText::try_from("routed message".to_owned()).expect("message"),
@@ -69,6 +34,7 @@ pub(super) fn message(target: SessionRef) -> MessageSendRequest {
     }
 }
 
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(super) async fn wait_for_prompt_text(path: &Path, text: &str) -> String {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
@@ -119,6 +85,7 @@ fn provider_prompt_contains(entry: &serde_json::Value, text: &str) -> bool {
             })
 }
 
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(super) async fn wait_for_completed_provider_prompts(path: &Path, expected_count: usize) {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
@@ -142,108 +109,7 @@ pub(super) async fn wait_for_completed_provider_prompts(path: &Path, expected_co
     });
 }
 
-pub(super) async fn post_thread_activity_for_sessions(
-    client: &CollaborationClient,
-    readers: [SessionRef; 2],
-) {
-    let owner = Identity::Human {
-        human_id: HumanId::try_from("route-test-owner".to_owned()).expect("owner"),
-    };
-    let project_id = ProjectId::generate();
-    let board_id = BoardId::generate();
-    let topic_id = TopicId::generate();
-    client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
-            name: ResourceName::try_from("Route project".to_owned()).expect("project"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("project");
-    client
-        .board_create(BoardCreateRequest {
-            board_id: board_id.clone(),
-            project_id,
-            name: ResourceName::try_from("Route board".to_owned()).expect("board"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("board");
-    client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
-            board_id,
-            name: ResourceName::try_from("Route topic".to_owned()).expect("topic"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("topic");
-    let root = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic { topic_id },
-            actor: owner.clone(),
-            acting_for: None,
-            text: message_board::MessageText::try_from("Route root".to_owned()).expect("root text"),
-            references: MessageReferences::try_from(Vec::new()).expect("references"),
-        })
-        .await
-        .expect("root post");
-    let root_message_id = root.message.message_id;
-    for target in readers {
-        let reader: Identity = serde_json::from_value(json!({
-            "kind":"session", "session": target
-        }))
-        .expect("session reader");
-        client
-            .board_thread_join(ThreadJoinRequest {
-                mode: None,
-                when_idle: None,
-                root_message_id: root_message_id.clone(),
-                actor: reader.clone(),
-                role: ParticipantRole::Participant,
-                watch: true,
-                replace: None,
-                note: None,
-            })
-            .await
-            .expect("reader joined");
-        client
-            .board_thread_subscribe(ThreadSubscribeRequest {
-                actor: reader,
-                scope: SubscriptionScope::thread(root_message_id.clone()),
-                policy: SubscriptionPolicyPatch {
-                    mode: Some(SubscriptionMode::Deliver),
-                    timing: SubscriptionTimingPatch {
-                        quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
-                    },
-                    ..SubscriptionPolicyPatch::default()
-                },
-            })
-            .await
-            .expect("session subscription");
-    }
-    client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread { root_message_id },
-            actor: owner,
-            acting_for: None,
-            text: message_board::MessageText::try_from("Route reply".to_owned())
-                .expect("reply text"),
-            references: MessageReferences::try_from(Vec::new()).expect("references"),
-        })
-        .await
-        .expect("reply post");
-}
-
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn publish_peer(registry: &Path, session_id: &SessionId, protocol: u64, socket: &Path) {
     let process_id = std::process::id();
     std::fs::write(
@@ -269,6 +135,8 @@ pub(super) fn publish_peer(registry: &Path, session_id: &SessionId, protocol: u6
         .expect("private peer key");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(super) async fn create_provider_target(
     client: &CollaborationClient,
     endpoint: EndpointRef,
@@ -332,6 +200,7 @@ pub(super) async fn create_provider_target(
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn load_provider_target(
     client: &CollaborationClient,
     target: SessionRef,
@@ -394,7 +263,9 @@ pub(super) async fn load_provider_target(
     ));
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: SessionRef) {
+    // Omitted expiry ends a day after due; a fixed historical date is already expired.
     let request: WakeSendRequest = serde_json::from_value(json!({
         "operationId": OperationId::generate(),
         "message": {
@@ -403,8 +274,8 @@ pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: Ses
             "delivery": "auto",
             "generationGuard": null
         },
-        "timing": {"kind":"at","at":"2026-01-01T00:00:00.000Z"},
-        "expiry": {"kind":"none"}
+        "timing": {"kind":"at","at":chrono::Utc::now()},
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind":"none"}
     }))
     .expect("wake request");
     let wake = client.send_wakeup(request).await.expect("wake accepted");
@@ -447,7 +318,6 @@ pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: Ses
 }
 
 #[path = "provider_conversation_submission.rs"]
-#[allow(dead_code)]
 mod provider_conversation_submission;
 use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_create, submit_provider_load,

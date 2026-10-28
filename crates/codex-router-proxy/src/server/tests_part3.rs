@@ -1,5 +1,5 @@
-#![allow(unused_imports)]
 use super::*;
+use crate::server::protocol_handler::enabled_account_attempt_limit_from_accounts;
 
 #[tokio::test]
 pub(super) async fn hyper_loopback_classifier_maps_closed_canceled_incomplete_to_client_disconnect()
@@ -295,6 +295,25 @@ pub(super) async fn account_attempt_limit_read_failure_maps_to_state_unavailable
     assert!(!rendered.contains("codex_router_all_accounts_exhausted"));
 }
 
+#[test]
+pub(super) fn selection_diagnostics_account_attempt_limit_read_failure_is_scrubbed() {
+    let read_failure = StateStoreError::Sqlite {
+        message: "payload_private_marker".to_owned(),
+    };
+    let mut result = None;
+    let captured_logs = crate::test_log_capture::capture_log_output(|| {
+        result = Some(enabled_account_attempt_limit_from_accounts(Err(
+            read_failure,
+        )));
+    });
+
+    assert!(captured_logs.contains("codex_router.selection_rejected"));
+    assert!(captured_logs.contains("selection.stage=\"http_account_attempt_limit\""));
+    assert!(captured_logs.contains("error.class=\"sqlite\""));
+    assert!(!captured_logs.contains("payload_private_marker"));
+    assert!(matches!(result, Some(Err(StateStoreError::Sqlite { .. }))));
+}
+
 pub(super) async fn hyper_error_from_client_bytes(bytes: &'static [u8]) -> hyper::Error {
     let listener = TokioTcpListener::bind("127.0.0.1:0")
         .await
@@ -506,12 +525,15 @@ pub(super) async fn precommit_http_usage_limit_body_requests_account_retry_befor
     let response =
         AsyncStreamingHttpProxyResponse::new(429, HeaderCollection::new(Vec::new()), body);
 
-    match split_precommit_http_quota_response(response).await {
+    match split_precommit_http_response(response, PrecommitAuthRecoveryScope::PassThrough).await {
         Ok(PrecommitHttpResponseProbe::AccountQuotaExhausted { body }) => {
             assert_eq!(body, usage_limit_body.to_vec());
         }
         Ok(PrecommitHttpResponseProbe::Forward(_response)) => {
             panic!("quota response should request account retry before commit");
+        }
+        Ok(PrecommitHttpResponseProbe::CredentialRejected) => {
+            panic!("quota response must not be classified as credential rejection");
         }
         Err(error) => panic!("quota response should classify before commit: {error}"),
     }
@@ -616,7 +638,7 @@ pub(super) async fn precommit_http_non_error_body_replays_exact_bytes() {
     let response =
         AsyncStreamingHttpProxyResponse::new(200, HeaderCollection::new(Vec::new()), body);
 
-    match split_precommit_http_quota_response(response).await {
+    match split_precommit_http_response(response, PrecommitAuthRecoveryScope::PassThrough).await {
         Ok(PrecommitHttpResponseProbe::Forward(response)) => {
             let (_status, _headers, body) = response.into_parts();
             let forwarded_bytes = match body.collect().await {
@@ -627,6 +649,9 @@ pub(super) async fn precommit_http_non_error_body_replays_exact_bytes() {
         }
         Ok(PrecommitHttpResponseProbe::AccountQuotaExhausted { .. }) => {
             panic!("non-error response should pass through");
+        }
+        Ok(PrecommitHttpResponseProbe::CredentialRejected) => {
+            panic!("successful response must not be classified as credential rejection");
         }
         Err(error) => panic!("non-error response should pass through: {error}"),
     }

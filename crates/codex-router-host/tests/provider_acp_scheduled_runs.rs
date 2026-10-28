@@ -1,5 +1,7 @@
-#![allow(clippy::expect_used, clippy::panic)]
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{
     CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId, RunPhase, SubmissionEffect,
 };
@@ -8,6 +10,30 @@ use codex_router_host::{
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::PreparedTarget;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunExecution;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SettlementEvidence;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationPromptRequest, DeliveryOutcome,
@@ -20,15 +46,10 @@ use collaboration_protocol::{
     PushOrigin, RouterAccess, RouterLink, RunExecution, SessionId, SessionRef, UuidIdentity,
     render_push_line,
 };
-use collaboration_service::{
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, EndpointDirectory, LoadPolicy,
-    PreparationEvidenceSink, PreparedTarget, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, RunEvidenceDisposition, RunEvidenceSink, RunObservationContext,
-    RunReconciliation, RunSettlement, RunSubmission, ScheduleCapability, ScheduleDestination,
-    SchedulePreparationOutcome, SchedulePreparationRequest, ScheduleSupport, ScheduledRunExecution,
-    ScheduledRunPayload, ScheduledRunSubmission, SessionDeliveryRoute, SessionDeliveryRouter,
-    SettlementEvidence, layer_zero::PreparedPush,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::json;
 use std::{
     path::{Path, PathBuf},
@@ -117,6 +138,7 @@ fn rendered_schedule_push(
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn rendered_schedule_line(
     run_id: &RunId,
     target: &SessionRef,
@@ -139,58 +161,13 @@ fn rendered_schedule_line(
 }
 
 fn fixture_launch(event_socket: &Path, expected_scheduled_prompt: &str) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'schedule-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'scheduled-session'}}}})); sys.stdout.flush()
-active=json.loads(sys.stdin.readline())
-assert active['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'active')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':active['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-scheduled=json.loads(sys.stdin.readline())
-assert scheduled['method']=='session/prompt'
-assert scheduled['params']['prompt']==[{{'type':'text','text':{:?}}}]
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as observed:
- observed.connect({:?})
- observed.sendall((json.dumps(scheduled['params'])+'\n').encode())
- observed.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'scheduled-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'provider summary text'}}}}}}}})); sys.stdout.flush()
-print(json.dumps({{'jsonrpc':'2.0','id':scheduled['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-cancelled=json.loads(sys.stdin.readline())
-assert cancelled['method']=='session/prompt'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-print(json.dumps({{'jsonrpc':'2.0','id':cancelled['id'],'result':{{'stopReason':'cancelled'}}}})); sys.stdout.flush()
-refused=json.loads(sys.stdin.readline())
-assert refused['method']=='session/prompt'
-print(json.dumps({{'jsonrpc':'2.0','id':refused['id'],'result':{{'stopReason':'refusal'}}}})); sys.stdout.flush()
-for _ in range(256):
- prompt=json.loads(sys.stdin.readline())
- assert prompt['method']=='session/prompt'
- print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-pending=json.loads(sys.stdin.readline())
-assert pending['method']=='session/prompt'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-sys.stdin.read()
-"#,
-        event_socket.display().to_string(),
-        expected_scheduled_prompt,
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-scheduled-run-agent.ts",
+        vec![
+            event_socket.to_string_lossy().into_owned(),
+            expected_scheduled_prompt.to_owned(),
+        ],
+    )
 }
 
 #[tokio::test]
@@ -662,7 +639,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             .request_stop(stop_context.clone(), &stop_sink)
             .await
             .expect("stop request"),
-        collaboration_service::StopRequestOutcome::Requested
+        collaboration_contracts::StopRequestOutcome::Requested
     ));
     assert!(matches!(
         router
@@ -818,7 +795,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             .request_stop(pending_context.clone(), &pending_sink)
             .await
             .expect("pending stop"),
-        collaboration_service::StopRequestOutcome::Requested
+        collaboration_contracts::StopRequestOutcome::Requested
     ));
     assert!(matches!(
         router

@@ -1,5 +1,10 @@
 use super::board_preparation::{self, CommandContext, PreparedBoardCommand};
-use collaboration_client::board::*;
+use collaboration_client::board::{
+    BoardError, BoardErrorDetails, BoardNextAction, BoardShowRequest, Identity, PageRequest,
+    PostListRequest, PostListScope, PostSelection, PostShowRequest, ProtocolVersion, ReadActor,
+    RepositoryAttachRequest, RepositoryDetachRequest, ResourceIdentity, ThreadListRequest,
+    ThreadRef, ThreadShowRequest, WorkspaceListRequest,
+};
 use collaboration_client::protocol::ThreadSubscriptionWaitFilter;
 use collaboration_client::{BoardClientError, ClientError, CollaborationClient};
 use serde::Serialize;
@@ -52,7 +57,7 @@ pub(super) fn execute(command: PreparedBoardCommand, context: CommandContext) ->
         board_preparation::finalize_command(&mut command, &client)
             .map_err(CommandExecutionError::InvalidUsage)?;
         let thread_create_text_file = match &command {
-            PreparedBoardCommand::MessagePost(pending) => pending.text_file.clone(),
+            PreparedBoardCommand::ThreadPost(pending) => pending.text_file.clone(),
             _ => None,
         };
         dispatch(&mut client, command)
@@ -71,33 +76,46 @@ async fn dispatch(
     command: PreparedBoardCommand,
 ) -> Result<Value, BoardClientError> {
     match command {
+        PreparedBoardCommand::RequestEffects(request) => {
+            serialize_result(client.request_effects(request).await?)
+        }
+        PreparedBoardCommand::View(command) => {
+            super::board_view_commands::dispatch(client, *command).await
+        }
+        PreparedBoardCommand::Entity(command) => {
+            super::board_entity_execution::dispatch(client, *command).await
+        }
         PreparedBoardCommand::DiscoverySearch(request) => {
-            serialize_result(client.board_discovery_search(request).await?)
+            serialize_result(client.discovery_search(request).await?)
         }
-        PreparedBoardCommand::MessageSearch(request) => {
-            serialize_result(client.board_message_search(request).await?)
+        PreparedBoardCommand::PostSearch(request) => {
+            serialize_result(client.post_search(request).await?)
         }
-        PreparedBoardCommand::ProjectCreate(request) => {
-            serialize_result(client.board_project_create(request).await?)
+        PreparedBoardCommand::WorkspaceCreate(request) => {
+            serialize_result(client.workspace_create(request).await?)
         }
-        PreparedBoardCommand::ProjectUpdate(request) => {
-            serialize_result(client.board_project_update(request).await?)
+        PreparedBoardCommand::WorkspaceUpdate(request) => {
+            serialize_result(client.workspace_update(request).await?)
         }
-        PreparedBoardCommand::ProjectShow(request) => {
-            serialize_result(client.board_project_show(request).await?)
+        PreparedBoardCommand::WorkspaceArchive(request) => {
+            serialize_result(client.workspace_archive(request).await?)
         }
-        PreparedBoardCommand::ProjectList { repository, page } => {
+        PreparedBoardCommand::WorkspaceShow(request) => {
+            serialize_result(client.workspace_show(request).await?)
+        }
+        PreparedBoardCommand::WorkspaceList { repository, page } => {
             let repository = repository
                 .map(|repository| repository.for_client(client))
                 .transpose()?;
             serialize_result(
                 client
-                    .board_project_list(ProjectListRequest { repository, page })
+                    .workspace_list(WorkspaceListRequest { repository, page })
                     .await?,
             )
         }
         PreparedBoardCommand::RepositoryAttach {
-            project_id,
+            request,
+            workspace_id,
             repository,
             actor,
             acting_for,
@@ -105,8 +123,12 @@ async fn dispatch(
             let repository = repository.for_client(client)?;
             serialize_result(
                 client
-                    .board_repository_attach(RepositoryAttachRequest {
-                        project_id,
+                    .repository_attach(RepositoryAttachRequest {
+                        request_id: request
+                            .request_id()
+                            .map_err(|_| ClientError::InvalidRequest("invalid request metadata"))?,
+                        protocol_version: ProtocolVersion::CURRENT,
+                        workspace_id,
                         repository,
                         actor,
                         acting_for,
@@ -115,7 +137,8 @@ async fn dispatch(
             )
         }
         PreparedBoardCommand::RepositoryDetach {
-            project_id,
+            request,
+            workspace_id,
             repository,
             actor,
             acting_for,
@@ -123,8 +146,12 @@ async fn dispatch(
             let repository = repository.for_client(client)?;
             serialize_result(
                 client
-                    .board_repository_detach(RepositoryDetachRequest {
-                        project_id,
+                    .repository_detach(RepositoryDetachRequest {
+                        request_id: request
+                            .request_id()
+                            .map_err(|_| ClientError::InvalidRequest("invalid request metadata"))?,
+                        protocol_version: ProtocolVersion::CURRENT,
+                        workspace_id,
                         repository,
                         actor,
                         acting_for,
@@ -133,7 +160,7 @@ async fn dispatch(
             )
         }
         PreparedBoardCommand::RepositoryList(request) => {
-            serialize_result(client.board_repository_list(request).await?)
+            serialize_result(client.repository_list(request).await?)
         }
         PreparedBoardCommand::BoardCreate(request) => {
             serialize_result(client.board_create(request).await?)
@@ -150,47 +177,59 @@ async fn dispatch(
         PreparedBoardCommand::BoardArchive(request) => {
             serialize_result(client.board_archive(request).await?)
         }
-        PreparedBoardCommand::TopicCreate(request) => {
-            serialize_result(client.board_topic_create(request).await?)
+        PreparedBoardCommand::BoardClose(request) => {
+            serialize_result(client.board_close(request).await?)
         }
-        PreparedBoardCommand::TopicUpdate(request) => {
-            serialize_result(client.board_topic_update(request).await?)
+        PreparedBoardCommand::ProjectClaim(request) => {
+            serialize_result(client.project_claim(request).await?)
         }
-        PreparedBoardCommand::TopicList(request) => {
-            serialize_result(client.board_topic_list(request).await?)
+        PreparedBoardCommand::ProjectCreate(request) => {
+            serialize_result(client.project_create(request).await?)
         }
-        PreparedBoardCommand::MessagePost(pending) => {
-            serialize_result(client.board_message_post(pending.request).await?)
+        PreparedBoardCommand::ProjectUpdate(request) => {
+            serialize_result(client.project_update(request).await?)
         }
-        PreparedBoardCommand::MessageShow(request) => {
-            serialize_result(client.board_message_show(request).await?)
+        PreparedBoardCommand::ProjectList(request) => {
+            serialize_result(client.project_list(request).await?)
         }
-        PreparedBoardCommand::MessageList(request) => {
-            serialize_result(client.board_message_list(request).await?)
+        PreparedBoardCommand::ProjectShow(request) => {
+            serialize_result(client.project_show(request).await?)
+        }
+        PreparedBoardCommand::ThreadPost(pending) => {
+            serialize_result(client.thread_post(pending.request).await?)
+        }
+        PreparedBoardCommand::PostShow(request) => {
+            serialize_result(client.post_show(request).await?)
+        }
+        PreparedBoardCommand::PostList(request) => {
+            serialize_result(client.post_list(request).await?)
         }
         PreparedBoardCommand::ThreadShow(request) => {
-            serialize_result(client.board_thread_show(request).await?)
+            serialize_result(client.thread_show(request).await?)
+        }
+        PreparedBoardCommand::ThreadRefile(request) => {
+            serialize_result(client.thread_refile(request).await?)
         }
         PreparedBoardCommand::ThreadResolve(request) => {
-            serialize_result(client.board_thread_resolve(request).await?)
+            serialize_result(client.thread_resolve(request).await?)
         }
         PreparedBoardCommand::ThreadUnresolve(request) => {
-            serialize_result(client.board_thread_unresolve(request).await?)
+            serialize_result(client.thread_unresolve(request).await?)
         }
         PreparedBoardCommand::ThreadWatch(request) => {
-            serialize_result(client.board_thread_watch(request).await?)
+            serialize_result(client.thread_watch(request).await?)
         }
         PreparedBoardCommand::ThreadUnwatch(request) => {
-            serialize_result(client.board_thread_unwatch(request).await?)
+            serialize_result(client.thread_unwatch(request).await?)
         }
-        PreparedBoardCommand::TopicWatch(request) => {
-            serialize_result(client.board_topic_watch(request).await?)
+        PreparedBoardCommand::ProjectWatch(request) => {
+            serialize_result(client.project_watch(request).await?)
         }
-        PreparedBoardCommand::TopicUnwatch(request) => {
-            serialize_result(client.board_topic_unwatch(request).await?)
+        PreparedBoardCommand::ProjectUnwatch(request) => {
+            serialize_result(client.project_unwatch(request).await?)
         }
         PreparedBoardCommand::ThreadList(request) => {
-            serialize_result(client.board_thread_list(request).await?)
+            serialize_result(client.thread_list(request).await?)
         }
         PreparedBoardCommand::RepositoryThreadList {
             repository,
@@ -199,39 +238,37 @@ async fn dispatch(
             default_repository_path,
         } => repository_threads(client, repository, reader, page, default_repository_path).await,
         PreparedBoardCommand::ThreadCreate(pending) => {
-            serialize_result(client.board_thread_create(pending.request).await?)
+            serialize_result(client.thread_create(pending.request).await?)
         }
         PreparedBoardCommand::ThreadJoin(pending) => {
-            serialize_result(client.board_thread_join(pending.request).await?)
+            serialize_result(client.thread_join(pending.request).await?)
         }
         PreparedBoardCommand::ThreadSubscribe(pending) => {
-            serialize_result(client.board_thread_subscribe(pending.request).await?)
+            serialize_result(client.thread_subscribe(pending.request).await?)
         }
         PreparedBoardCommand::ThreadUnsubscribe(pending) => {
-            serialize_result(client.board_thread_unsubscribe(pending.request).await?)
+            serialize_result(client.thread_unsubscribe(pending.request).await?)
         }
         PreparedBoardCommand::ThreadSubscriptions(pending) => {
-            serialize_result(client.board_thread_subscriptions(pending.request).await?)
+            serialize_result(client.thread_subscriptions(pending.request).await?)
         }
-        PreparedBoardCommand::ThreadSubscriptionWait(pending) => serialize_result(
-            client
-                .board_thread_wait(pending.request, pending.timeout)
-                .await?,
-        ),
+        PreparedBoardCommand::ThreadSubscriptionWait(pending) => {
+            serialize_result(super::board_wait_execution::execute(client, pending).await?)
+        }
         PreparedBoardCommand::ThreadLeave(pending) => {
-            serialize_result(client.board_thread_leave(pending.request).await?)
+            serialize_result(client.thread_leave(pending.request).await?)
         }
         PreparedBoardCommand::ThreadParticipantList(request) => {
-            serialize_result(client.board_thread_participant_list(request).await?)
+            serialize_result(client.thread_participant_list(request).await?)
         }
         PreparedBoardCommand::InboxFetch(request) => {
-            serialize_result(client.board_inbox_fetch(request).await?)
+            serialize_result(client.inbox_fetch(request).await?)
         }
         PreparedBoardCommand::InboxAcknowledge(request) => {
-            serialize_result(client.board_inbox_acknowledge(request).await?)
+            serialize_result(client.inbox_acknowledge(request).await?)
         }
-        PreparedBoardCommand::InboxProjects(request) => {
-            serialize_result(client.board_inbox_projects(request).await?)
+        PreparedBoardCommand::InboxWorkspaces(request) => {
+            serialize_result(client.inbox_workspaces(request).await?)
         }
     }
 }
@@ -249,8 +286,8 @@ async fn repository_threads(
         )));
     }
     let repository = repository.for_client(client)?;
-    let projects = client
-        .board_project_list(ProjectListRequest {
+    let workspaces = client
+        .workspace_list(WorkspaceListRequest {
             repository: Some(repository),
             page: PageRequest {
                 limit: 100_u32
@@ -260,18 +297,18 @@ async fn repository_threads(
             },
         })
         .await?;
-    let no_project_hint = repository_thread_list_hint(
+    let no_workspace_hint = repository_thread_list_hint(
         default_repository_path.as_deref(),
-        projects.page.records.is_empty(),
+        workspaces.page.records.is_empty(),
     );
     let fallback_reader: Identity =
         serde_json::from_value(json!({"kind":"human","humanId":"repository-thread-reader"}))
             .map_err(|_| ClientError::Protocol("reader identity"))?;
     let mut records = Vec::new();
-    for project in projects.page.records {
+    for workspace in workspaces.page.records {
         let threads = client
-            .board_thread_list(ThreadListRequest {
-                project_id: project.project_id.clone(),
+            .thread_list(ThreadListRequest {
+                workspace_id: workspace.workspace_id.clone(),
                 reader: reader.clone().unwrap_or_else(|| fallback_reader.clone()),
                 watched_only: false,
                 page: PageRequest {
@@ -284,8 +321,8 @@ async fn repository_threads(
             .await?;
         for thread in threads.page.records {
             let root = client
-                .board_message_show(MessageShowRequest {
-                    message_id: thread.root_message_id.clone(),
+                .post_show(PostShowRequest {
+                    post_id: thread.thread.thread_id.clone().into(),
                 })
                 .await?
                 .0;
@@ -296,11 +333,14 @@ async fn repository_threads(
                 .await?
                 .board;
             let latest = client
-                .board_message_list(MessageListRequest {
-                    scope: MessageListScope::Thread {
-                        root_message_id: thread.root_message_id.clone(),
+                .post_list(PostListRequest {
+                    scope: PostListScope::Thread {
+                        thread: ThreadRef {
+                            thread: thread.thread.thread_id.clone(),
+                            project: Some(thread.project_id.clone()),
+                        },
                     },
-                    selection: MessageSelection::Latest,
+                    selection: PostSelection::Latest,
                     page: PageRequest {
                         limit: 1_u32
                             .try_into()
@@ -313,20 +353,37 @@ async fn repository_threads(
                 .page
                 .records
                 .first()
-                .map(|message| message.activity_sequence)
-                .unwrap_or(root.activity_sequence);
+                .map(|message| message.position.clone())
+                .unwrap_or(root.position);
             let watch_status = if reader.is_some() {
                 client
-                    .board_thread_show(ThreadShowRequest {
-                        root_message_id: thread.root_message_id.clone(),
-                        reader: reader.clone(),
+                    .thread_show(ThreadShowRequest {
+                        include_redacted: false,
+                        thread: ThreadRef {
+                            thread: thread.thread.thread_id.clone(),
+                            project: Some(thread.project_id.clone()),
+                        },
+                        reader: reader.clone().map_or(ReadActor::Anonymous {}, |reader| {
+                            ReadActor::Identified { reader }
+                        }),
                     })
                     .await?
                     .watch_status
             } else {
                 None
             };
-            records.push(json!({"projectId":project.project_id,"topicId":root.topic_id,"rootMessageId":thread.root_message_id,"title":root.text.as_str(),"orchestrator":thread.orchestrator,"implementer":thread.implementer,"lastActivity":last_activity,"watchStatus":watch_status,"boardId":board.board_id}));
+            records.push(json!({
+                "workspaceId": workspace.workspace_id,
+                "projectId": root.project_id,
+                "threadId": thread.thread.thread_id,
+                "subject": thread.subject,
+                "imported": thread.thread.imported,
+                "orchestrator": thread.thread.orchestrator,
+                "implementer": thread.thread.implementer,
+                "lastActivity": last_activity,
+                "watchStatus": watch_status,
+                "boardId": board.board_id,
+            }));
         }
     }
     records.sort_by(|left, right| {
@@ -336,7 +393,7 @@ async fn repository_threads(
             .cmp(&left.get("lastActivity").and_then(Value::as_u64))
     });
     records.truncate(page.limit.get() as usize);
-    Ok(match no_project_hint {
+    Ok(match no_workspace_hint {
         Some(message) => json!({
             "page":{"records":records,"nextCursor":null},
             "message":message
@@ -347,13 +404,13 @@ async fn repository_threads(
 
 fn repository_thread_list_hint(
     default_repository_path: Option<&str>,
-    no_associated_projects: bool,
+    no_associated_workspaces: bool,
 ) -> Option<String> {
-    if !no_associated_projects {
+    if !no_associated_workspaces {
         return None;
     }
     default_repository_path.map(|repository_path| format!(
-        "No project is associated with repository {repository_path}. Attach one with `agent-collaboration board repository attach --project-id <project-id> --repository-path {} --actor self`, or list a known project with `agent-collaboration board thread list --project-id <project-id> --reader self`.",
+        "No workspace is associated with repository {repository_path}. Attach one with `agent-collaboration repository attach --workspace-id <workspace-id> --repository-path {} --actor self`, or list a known workspace with `agent-collaboration thread list --workspace-id <workspace-id> --reader self`.",
         shell_single_quoted_argument(repository_path)
     ))
 }
@@ -363,12 +420,14 @@ mod repository_thread_list_hint_tests {
     use super::repository_thread_list_hint;
 
     #[test]
-    fn empty_default_repository_result_names_attach_and_project_fixes() {
+    fn empty_default_repository_result_names_attach_and_workspace_fixes() {
         let hint = repository_thread_list_hint(Some("/work/sample-repo"), true)
             .expect("empty default result gets a hint");
         assert!(hint.contains("/work/sample-repo"));
-        assert!(hint.contains("board repository attach --project-id <project-id> --repository-path '/work/sample-repo'"));
-        assert!(hint.contains("board thread list --project-id <project-id>"));
+        assert!(hint.contains(
+            "repository attach --workspace-id <workspace-id> --repository-path '/work/sample-repo'"
+        ));
+        assert!(hint.contains("thread list --workspace-id <workspace-id>"));
     }
 
     #[test]
@@ -417,9 +476,14 @@ fn report(result: Result<CommandExecutionResult, CommandExecutionError>, machine
             ..
         }) => report_uncertain_outcome(machine, &resource, message, next_action),
         Err(CommandExecutionError::Request {
-            error: BoardClientError::WaitOutcomeUnknown { actor, filter },
+            error:
+                BoardClientError::WaitOutcomeUnknown {
+                    actor,
+                    filter,
+                    renewals,
+                },
             ..
-        }) => report_wait_outcome_unknown(&actor, &filter),
+        }) => report_wait_outcome_unknown(&actor, &filter, &renewals),
         Err(CommandExecutionError::InvalidUsage(message)) => {
             crate::endpoint_commands::report_failure("invalidField", &message, 2, machine)
         }
@@ -470,16 +534,16 @@ fn refusal_command(
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "<path>".to_owned());
             format!(
-                "agent-collaboration board thread create --topic-id {} --actor {} --role <role> (--watch | --no-watch) --text-file {} --json",
-                refusal.topic_id.as_str(),
+                "agent-collaboration thread create --project-id {} --actor {} --role <role> (--watch | --no-watch) --text-file {} --json",
+                refusal.project_id.as_str(),
                 actor(&refusal.actor),
                 shell_single_quoted_argument(&text_file)
             )
         }
         (BoardNextAction::JoinThread, BoardErrorDetails::ParticipantRefusal { refusal }) => {
             format!(
-                "agent-collaboration board thread join --root-message-id {} --actor {} --role participant --json",
-                refusal.root_message_id.as_str(),
+                "agent-collaboration thread join --thread-id {} --actor {} --role participant --json",
+                refusal.thread_id.as_str(),
                 actor(&refusal.actor)
             )
         }
@@ -487,8 +551,8 @@ fn refusal_command(
             BoardNextAction::ReplaceOrchestrator,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread join --root-message-id {} --actor {} --role orchestrator --replace {} --json",
-            refusal.root_message_id.as_str(),
+            "agent-collaboration thread join --thread-id {} --actor {} --role orchestrator --replace {} --json",
+            refusal.thread_id.as_str(),
             actor(&refusal.actor),
             refusal
                 .holder
@@ -500,8 +564,8 @@ fn refusal_command(
             BoardNextAction::ReplaceImplementer,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread join --root-message-id {} --actor {} --role implementer --replace {} --json",
-            refusal.root_message_id.as_str(),
+            "agent-collaboration thread join --thread-id {} --actor {} --role implementer --replace {} --json",
+            refusal.thread_id.as_str(),
             actor(&refusal.actor),
             refusal
                 .holder
@@ -513,16 +577,16 @@ fn refusal_command(
             BoardNextAction::LeaveWithHandoverOrResolve,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread leave --root-message-id {} --actor {} (--to <joined-participant> | --resolve) --json",
-            refusal.root_message_id.as_str(),
+            "agent-collaboration thread leave --thread-id {} --actor {} (--to <joined-participant> | --resolve) --json",
+            refusal.thread_id.as_str(),
             actor(&refusal.actor)
         ),
         (
             BoardNextAction::JoinHandoverTarget,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread join --root-message-id {} --actor {} --role <role> --json",
-            refusal.root_message_id.as_str(),
+            "agent-collaboration thread join --thread-id {} --actor {} --role <role> --json",
+            refusal.thread_id.as_str(),
             refusal
                 .target
                 .as_ref()
@@ -533,15 +597,15 @@ fn refusal_command(
             BoardNextAction::InspectParticipants,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread participant list --root-message-id {} --json",
-            refusal.root_message_id.as_str()
+            "agent-collaboration thread participant list --thread-id {} --json",
+            refusal.thread_id.as_str()
         ),
         (
             BoardNextAction::RepeatJoinWithoutReplace,
             BoardErrorDetails::ParticipantRefusal { refusal },
         ) => format!(
-            "agent-collaboration board thread join --root-message-id {} --actor {} --role orchestrator --json",
-            refusal.root_message_id.as_str(),
+            "agent-collaboration thread join --thread-id {} --actor {} --role orchestrator --json",
+            refusal.thread_id.as_str(),
             actor(&refusal.actor)
         ),
         _ => wire_name(&error.next_action),
@@ -578,7 +642,11 @@ fn report_uncertain_outcome(
 
 const WAIT_OUTCOME_UNKNOWN_MESSAGE: &str = "wait result was lost; activity may have been handed off — run board thread subscriptions and board inbox fetch before waiting again";
 
-fn wait_outcome_unknown_output(actor: &Identity, filter: &ThreadSubscriptionWaitFilter) -> Value {
+fn wait_outcome_unknown_output(
+    actor: &Identity,
+    filter: &ThreadSubscriptionWaitFilter,
+    renewals: &[collaboration_client::protocol::SubscriptionRenewalEntry],
+) -> Value {
     json!({
         "kind":"error",
         "error":{
@@ -589,12 +657,17 @@ fn wait_outcome_unknown_output(actor: &Identity, filter: &ThreadSubscriptionWait
             "nextAction":BoardNextAction::InspectResource,
             "actor":actor,
             "filter":filter,
+            "renewals":renewals,
         }
     })
 }
 
-fn report_wait_outcome_unknown(actor: &Identity, filter: &ThreadSubscriptionWaitFilter) -> i32 {
-    write_json(&wait_outcome_unknown_output(actor, filter), 5)
+fn report_wait_outcome_unknown(
+    actor: &Identity,
+    filter: &ThreadSubscriptionWaitFilter,
+    renewals: &[collaboration_client::protocol::SubscriptionRenewalEntry],
+) -> i32 {
+    write_json(&wait_outcome_unknown_output(actor, filter, renewals), 5)
 }
 
 fn wire_name<TValue: Serialize>(value: &TValue) -> String {
@@ -659,12 +732,13 @@ mod tests {
             human_id: HumanId::try_from("cli-test-human".to_owned()).expect("human ID"),
         };
         let filter = ThreadSubscriptionWaitFilter::Roots {
-            root_message_ids: vec![
-                MessageId::try_from("01900000-0000-7000-8000-000000000031".to_owned())
-                    .expect("root message ID"),
+            threads: vec![
+                (ThreadId::try_from("01900000-0000-7000-8000-000000000031".to_owned())
+                    .expect("root message ID"))
+                .into(),
             ],
         };
-        let output = wait_outcome_unknown_output(&actor, &filter);
+        let output = wait_outcome_unknown_output(&actor, &filter, &[]);
         let schemas =
             collaboration_client::protocol::protocol_type_schemas().expect("CLI output schemas");
         let validator = jsonschema::validator_for(
@@ -691,18 +765,18 @@ mod tests {
             output["error"]["filter"],
             serde_json::to_value(&filter).expect("filter JSON")
         );
-        assert_eq!(report_wait_outcome_unknown(&actor, &filter), 5);
+        assert_eq!(report_wait_outcome_unknown(&actor, &filter, &[]), 5);
     }
 
     #[test]
     fn actor_and_text_file_arguments_escape_apostrophes() {
-        let topic_id =
-            TopicId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned()).expect("topic ID");
+        let project_id = ProjectId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
+            .expect("project ID");
         let actor = Identity::Human {
             human_id: HumanId::try_from("owner's".to_owned()).expect("human ID"),
         };
-        let text = MessageText::try_from("root text".to_owned()).expect("message text");
-        let refusal = BoardError::session_topic_post(topic_id, actor, text);
+        let text = PostText::try_from("root text".to_owned()).expect("message text");
+        let refusal = BoardError::session_project_post(project_id, actor, text);
         let command = refusal_command(&refusal, Some(Path::new("/tmp/owner's message.txt")));
 
         assert!(command.contains("--actor '{\"kind\":\"human\",\"humanId\":\"owner'\\''s\"}'"));
@@ -712,9 +786,8 @@ mod tests {
 
     #[test]
     fn holder_argument_escapes_apostrophes() {
-        let root_message_id =
-            MessageId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
-                .expect("message ID");
+        let thread_id = ThreadId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
+            .expect("message ID");
         let actor = Identity::Human {
             human_id: HumanId::try_from("requester".to_owned()).expect("human ID"),
         };
@@ -728,12 +801,12 @@ mod tests {
             next_action: BoardNextAction::ReplaceOrchestrator,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                    root_message_id,
-                    missing_root_message_ids: Vec::new(),
+                    thread_id,
+                    missing_thread_ids: Vec::new(),
                     actor,
                     allowed_roles: Vec::new(),
                     holder: Some(holder),
-                    holder_last_seen_activity: None,
+                    holder_last_seen_position: None,
                     target: None,
                     named_holder: None,
                 }),
@@ -747,9 +820,8 @@ mod tests {
 
     #[test]
     fn handover_target_argument_escapes_apostrophes() {
-        let root_message_id =
-            MessageId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
-                .expect("message ID");
+        let thread_id = ThreadId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
+            .expect("message ID");
         let actor = Identity::Human {
             human_id: HumanId::try_from("orchestrator".to_owned()).expect("human ID"),
         };
@@ -763,12 +835,12 @@ mod tests {
             next_action: BoardNextAction::JoinHandoverTarget,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                    root_message_id,
-                    missing_root_message_ids: Vec::new(),
+                    thread_id,
+                    missing_thread_ids: Vec::new(),
                     actor,
                     allowed_roles: Vec::new(),
                     holder: None,
-                    holder_last_seen_activity: None,
+                    holder_last_seen_position: None,
                     target: Some(target),
                     named_holder: None,
                 }),
@@ -782,13 +854,13 @@ mod tests {
 
     #[test]
     fn machine_refusal_serialization_includes_the_corrective_command() {
-        let topic_id =
-            TopicId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned()).expect("topic ID");
+        let project_id = ProjectId::try_from("018f6f67-64d2-7a21-bf9a-8f193f987091".to_owned())
+            .expect("project ID");
         let actor = Identity::Human {
             human_id: HumanId::try_from("owner".to_owned()).expect("human ID"),
         };
-        let text = MessageText::try_from("root text".to_owned()).expect("message text");
-        let refusal = BoardError::session_topic_post(topic_id.clone(), actor, text);
+        let text = PostText::try_from("root text".to_owned()).expect("message text");
+        let refusal = BoardError::session_project_post(project_id.clone(), actor, text);
         let output = serde_json::from_str::<serde_json::Value>(
             &serde_json::to_string(&refusal_output(
                 &refusal,
@@ -802,26 +874,29 @@ mod tests {
         assert_eq!(output["error"]["nextAction"], "createThread");
         assert_eq!(
             output["error"]["correctiveCommand"],
-            "agent-collaboration board thread create --topic-id 018f6f67-64d2-7a21-bf9a-8f193f987091 --actor '{\"kind\":\"human\",\"humanId\":\"owner\"}' --role <role> (--watch | --no-watch) --text-file '/tmp/root message.txt' --json"
+            "agent-collaboration thread create --project-id 018f6f67-64d2-7a21-bf9a-8f193f987091 --actor '{\"kind\":\"human\",\"humanId\":\"owner\"}' --role <role> (--watch | --no-watch) --text-file '/tmp/root message.txt' --json"
         );
-        assert_eq!(output["error"]["details"]["topicId"], topic_id.as_str());
+        assert_eq!(output["error"]["details"]["projectId"], project_id.as_str());
     }
 
     #[test]
     fn participant_refusal_names_an_executable_join_command_with_the_required_role() {
-        let root_message_id =
-            MessageId::try_from("019f0000-0000-7000-8000-000000000104".to_owned())
-                .expect("root message ID");
+        let thread_id = ThreadId::try_from("019f0000-0000-7000-8000-000000000104".to_owned())
+            .expect("root message ID");
         let actor = Identity::Human {
             human_id: HumanId::try_from("owner".to_owned()).expect("human ID"),
         };
-        let refusal = BoardError::participant_required(root_message_id, actor);
+        let refusal = BoardError::participant_required(thread_id, actor);
 
         let command = refusal_command(&refusal, None);
 
         assert_eq!(
             command,
-            "agent-collaboration board thread join --root-message-id 019f0000-0000-7000-8000-000000000104 --actor '{\"kind\":\"human\",\"humanId\":\"owner\"}' --role participant --json"
+            "agent-collaboration thread join --thread-id 019f0000-0000-7000-8000-000000000104 --actor '{\"kind\":\"human\",\"humanId\":\"owner\"}' --role participant --json"
         );
     }
 }
+
+#[cfg(test)]
+#[path = "board_write_output_tests.rs"]
+mod board_write_output_tests;

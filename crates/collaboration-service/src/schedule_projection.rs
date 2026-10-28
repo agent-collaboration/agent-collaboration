@@ -16,14 +16,14 @@ pub(crate) fn snapshot(
             serde_json::to_value(record.imported_continuity).map_err(|_| ())?,
         )
         .map_err(|_| ())?,
-        anchor_at: crate::wakeup_projection::timestamp(record.anchor_at_ms)?,
+        anchor_at: collaboration_runtime::observation_timestamp::timestamp(record.anchor_at_ms)?,
         next_due_at: record
             .next_due_at_ms
-            .map(crate::wakeup_projection::timestamp)
+            .map(collaboration_runtime::observation_timestamp::timestamp)
             .transpose()?,
         active_run_id: inspection.active_run_id,
         waiting_run_id: inspection.waiting_run_id,
-        created_at: crate::wakeup_projection::timestamp(record.created_at_ms)?,
-        updated_at: crate::wakeup_projection::timestamp(record.updated_at_ms)?,
+        created_at: collaboration_runtime::observation_timestamp::timestamp(record.created_at_ms)?,
+        updated_at: collaboration_runtime::observation_timestamp::timestamp(record.updated_at_ms)?,
     })
 }

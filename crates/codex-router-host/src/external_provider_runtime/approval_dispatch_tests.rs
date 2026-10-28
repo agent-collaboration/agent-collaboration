@@ -1,15 +1,17 @@
-#![allow(clippy::panic_in_result_fn)]
-
 use super::*;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, CodexGeneration, DeliveryOutcome, DeliveryReceipt,
     EndpointId, EndpointRef, GenerationNumber, OperationId, SessionId, SessionReachability,
     SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker, SessionMessageDelivery,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 use tokio::io::AsyncWriteExt as _;
 use tokio::sync::Notify;
@@ -34,19 +36,26 @@ struct AcceptedApprovalNoticeDelivery {
 impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             self.push_fixture
                 .captured_approval(request.payload.line.as_str(), &request.target)
                 .await
-                .map_err(|_| collaboration_service::DeliveryContractError::InvalidEvidence)?;
+                .map_err(|_| collaboration_contracts::DeliveryContractError::InvalidEvidence)?;
             self.notice_delivered.notify_one();
-            Ok(DeliveryReceipt {
-                outcome: DeliveryOutcome::Started,
-                reachability: Some(SessionReachability::ProviderAcp),
-                client: None,
+            Ok({
+                let receipt = DeliveryReceipt {
+                    outcome: DeliveryOutcome::Started,
+                    reachability: Some(SessionReachability::ProviderAcp),
+                    client: None,
+                };
+                collaboration_contracts::NativeDeliveryResult::observed(
+                    collaboration_contracts::NativeObservedOutcome::Started,
+                    receipt.reachability,
+                    receipt.client,
+                )
             })
         })
     }
@@ -60,102 +69,24 @@ impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
 }
 
 fn permission_dispatch_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'two-session-permission-fixture','version':'1'}}})
-first_create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':first_create['id'],'result':{'sessionId':'session-a'}})
-second_create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':second_create['id'],'result':{'sessionId':'session-b'}})
-first_prompt=json.loads(sys.stdin.readline())
-assert first_prompt['method']=='session/prompt'
-assert first_prompt['params']['sessionId']=='session-a'
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-second_prompt=json.loads(sys.stdin.readline())
-assert second_prompt['method']=='session/prompt'
-assert second_prompt['params']['sessionId']=='session-b'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-b','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-b-replied'}}}})
-send({'jsonrpc':'2.0','id':second_prompt['id'],'result':{'stopReason':'end_turn'}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='allow-a'
-send({'jsonrpc':'2.0','method':'$/cancel_request','params':{'requestId':91}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-a-approved'}}}})
-send({'jsonrpc':'2.0','id':first_prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["two".to_owned()],
+    )
 }
 
 fn permission_cancellation_fixture(cancellation_source: &str) -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-cancel_source=sys.argv[1]
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-cancellation-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'session-a'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-if cancel_source=='peer':
-    send({'jsonrpc':'2.0','method':'$/cancel_request','params':{'requestId':91}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='cancelled'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'permission-cancelled'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            fixture.to_owned(),
-            cancellation_source.to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["cancel".to_owned(), cancellation_source.to_owned()],
+    )
 }
 
 fn permission_during_steer_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'_meta':{'steering':{'supported':True}},'agentInfo':{'name':'permission-steer-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'session-a'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-steer=json.loads(sys.stdin.readline())
-assert steer['method']=='_session/steering'
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'injected'}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-a-steered-and-approved'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["steer".to_owned()],
+    )
 }
 
 fn permission_during_cancel_fixture() -> ExternalProviderLaunch {
@@ -184,78 +115,25 @@ fn permission_during_cancel_fixture() -> ExternalProviderLaunch {
 }
 
 fn permission_after_cancel_fixture(event_socket: &std::path::Path) -> ExternalProviderLaunch {
-    // ACP v1 prompt-turn.mdx:336-350 requires every permission offered during
-    // a cancelling Turn to receive `cancelled` before its prompt result.
-    let fixture = format!(
-        r#"
-import json,socket,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'late-permission-fixture','version':'1'}}}}}})
-create=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'session-a'}}}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-    event.connect({event_socket:?})
-    event.sendall(b'prompt')
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-send({{'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{{'sessionId':'session-a','toolCall':{{'toolCallId':'permission-after-cancel','title':'Late tool','kind':'execute'}},'options':[{{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}}]}}}})
-answer=json.loads(sys.stdin.readline())
-assert answer['id']==91
-assert answer['result']['outcome']['outcome']=='cancelled'
-send({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-u".to_owned(), "-c".to_owned(), fixture],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec![
+            "late".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 fn output_limit_with_pending_permission_fixture(
     event_socket: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    // ACP v1 prompt-turn.mdx:336-350 requires an outstanding permission to
-    // receive `cancelled` when Router cancels the Turn for its output limit.
-    let fixture = format!(
-        r#"
-import json,socket,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'output-limit-permission-fixture','version':'1'}}}}}})
-create=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'session-a'}}}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-send({{'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{{'sessionId':'session-a','toolCall':{{'toolCallId':'pending-tool','title':'Pending tool','kind':'execute'}},'options':[{{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}}]}}}})
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-    event.connect({event_socket:?})
-    assert event.recv(1)==b'g'
-send({{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'session-a','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'x'*(1024*1024+1)}}}}}}}})
-answer=json.loads(sys.stdin.readline())
-assert answer['id']==91
-assert answer['result']['outcome']['outcome']=='cancelled'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-send({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-u".to_owned(), "-c".to_owned(), fixture],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec![
+            "output".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 async fn wait_for_pending_approval<TPromptFuture>(
@@ -297,21 +175,21 @@ async fn observed_typed_approvals(
         .await
         .into_iter()
         .filter_map(|record| {
-            let collaboration_service::InteractionHistoryRecord::Approval {
+            let collaboration_runtime::InteractionHistoryRecord::Approval {
                 request, state, ..
             } = record
             else {
                 return None;
             };
             let (state, reason) = match state {
-                collaboration_service::InteractionHistoryState::Pending => (
+                collaboration_runtime::InteractionHistoryState::Pending => (
                     collaboration_protocol::ApprovalState::PendingClientDecision,
                     None,
                 ),
-                collaboration_service::InteractionHistoryState::Decided { .. } => {
+                collaboration_runtime::InteractionHistoryState::Decided { .. } => {
                     (collaboration_protocol::ApprovalState::Decided, None)
                 }
-                collaboration_service::InteractionHistoryState::Cancelled { reason } => (
+                collaboration_runtime::InteractionHistoryState::Cancelled { reason } => (
                     collaboration_protocol::ApprovalState::Cancelled,
                     Some(reason.as_str().to_owned()),
                 ),
@@ -380,6 +258,10 @@ async fn approval_broker_fixture(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -443,6 +325,10 @@ async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn self_approver_offer_records_actionable_refusal() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -493,6 +379,10 @@ async fn self_approver_offer_records_actionable_refusal() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -532,13 +422,17 @@ async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
         .find(|row| row.request_id() == "late-question")
         .ok_or("late question history missing")?;
     assert!(matches!(row,
-        collaboration_service::InteractionHistoryRecord::Question {
-            state: collaboration_service::QuestionHistoryState::Cancelled { reason }, ..
+        collaboration_runtime::InteractionHistoryRecord::Question {
+            state: collaboration_runtime::QuestionHistoryState::Cancelled { reason }, ..
         } if reason.as_str() == "turnCancelled"));
     Ok(())
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progresses() -> TestResult
 {
     let root = tempfile::tempdir()?;
@@ -612,6 +506,10 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> TestResult {
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
@@ -662,6 +560,10 @@ async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn peer_cancellation_and_binding_retirement_settle_permission_history_once() -> TestResult {
     for cancellation_source in ["peer", "retirement"] {
         let root = tempfile::tempdir()?;
@@ -722,6 +624,10 @@ async fn peer_cancellation_and_binding_retirement_settle_permission_history_once
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult {
     let root = tempfile::tempdir()?;
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
@@ -784,6 +690,10 @@ async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestResult {
     let root = tempfile::tempdir()?;
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
@@ -829,6 +739,10 @@ async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestR
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_arriving_after_router_cancel_is_answered_cancelled() -> TestResult {
     // ACP v1 prompt-turn.mdx:336-350: a request received after session/cancel
     // still needs its cancelled answer before the agent ends the Turn.

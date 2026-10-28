@@ -1,0 +1,16 @@
+{
+  "original": "Tailscale synthetic foreign-command fixture#STARTUP_FAILURE_FIXTURE",
+  "originalSHA256": "aed0441955b446903922ee9b83ca138f4a384a60960c2e9e1819d2adbc11865b",
+  "target": "tailscale-startup-failure-agent.ts",
+  "arguments": ["status", "--json"],
+  "environment": {},
+  "initialFiles": {},
+  "stdin": "",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"node.example.ts.net.\"}, \"CertDomains\": [\"node.example.ts.net\"]}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

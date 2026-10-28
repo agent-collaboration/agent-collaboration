@@ -1,5 +1,7 @@
-#![allow(clippy::expect_used)]
 //! Provider route decisions before any client effect.
+
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 
 use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
@@ -7,26 +9,22 @@ use agent_automation::{
 };
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
-    ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
-    ProviderAcpDeliveryRoute,
+    ExternalProviderSupervisor, ProviderAcpDeliveryRoute,
+};
+use collaboration_contracts::{
+    AttemptReconciliation, AttemptReconciliationContext, DeliveryPrecondition, LoadPolicy,
+    NOT_LOADED_REASON, RoutePresence, SessionDeliveryRoute, SessionMessageDelivery,
+    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
 };
 use collaboration_protocol::{
-    AttemptId, ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
-    DeliveryOutcome, DeliveryRejectionReason, EndpointAvailability, EndpointDescription,
-    EndpointId, EndpointRef, GenerationNumber, MessageDelivery, MessageText, NonEmptyText,
-    ObservationTimestamp, OperationId, ProviderBindingId, ProviderBindingIdentity,
-    ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
-    ProviderCapabilityStatus, ProviderKind, ProviderOperationEffect, ProviderOperationKind,
-    ProviderReconciliationState, ProviderRequestedPolicy, ProviderRuntimeIdentity,
-    ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId, SessionRef,
-    UuidIdentity,
+    AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
+    DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText, OperationId,
+    ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NOT_LOADED_REASON,
-    ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord, RouteClaim,
-    RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
+use collaboration_runtime::{
+    EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
+    SessionDeliveryRouter,
 };
 use serde_json::Value;
 use std::{
@@ -36,256 +34,14 @@ use std::{
 };
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-struct NoLivePeer;
-
-struct LivePeer;
-
-impl LiveSessionOwnershipCheck for NoLivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
-        Box::pin(async { Ok(LiveSessionOwnership::NotLive) })
-    }
-}
-
-impl LiveSessionOwnershipCheck for LivePeer {
-    fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
-        Box::pin(async { Ok(LiveSessionOwnership::LiveUnsupported) })
-    }
-}
-
-struct RecordedEvidence(tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
-
-impl AttemptEvidenceSink for RecordedEvidence {
-    fn record(
-        &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> DeliveryFuture<'_, ()> {
-        Box::pin(async move {
-            self.0.lock().await.push(evidence);
-            Ok(())
-        })
-    }
-}
-
-struct StaleRunningClaimRoute(Arc<ProviderAcpDeliveryRoute>);
-
-impl SessionDeliveryRoute for StaleRunningClaimRoute {
-    fn reachability(&self) -> collaboration_protocol::SessionReachability {
-        collaboration_protocol::SessionReachability::ProviderAcp
-    }
-
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
-        Box::pin(async { Ok(RouteClaim::Holds) })
-    }
-
-    fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
-        self.0.presence(target)
-    }
-
-    fn deliver<'a>(
-        &'a self,
-        request: PreparedDeliveryRequest,
-        evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
-        self.0.deliver(request, evidence)
-    }
-
-    fn reconcile_attempt(
-        &self,
-        context: AttemptReconciliationContext,
-    ) -> DeliveryFuture<'_, AttemptReconciliation> {
-        self.0.reconcile_attempt(context)
-    }
-}
-
-fn target() -> SessionRef {
-    SessionRef {
-        endpoint: EndpointRef {
-            service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
-                .expect("service ID"),
-            endpoint_id: EndpointId::try_from("cursor-local".to_owned()).expect("endpoint"),
-        },
-        session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
-    }
-}
-
-fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
-    ProviderBindingIdentity {
-        endpoint: target.endpoint.clone(),
-        binding_id: ProviderBindingId::try_from("cursor-fixture-binding".to_owned())
-            .expect("binding"),
-        runtime: ProviderRuntimeIdentity {
-            provider: ProviderKind::Cursor,
-            runtime_name: NonEmptyText::try_from("cursor-fixture".to_owned()).expect("runtime"),
-            runtime_version: None,
-        },
-        transport: ProviderTransport::StdioAcp,
-        generation: CodexGeneration {
-            service_epoch: UuidIdentity::try_from(
-                "1ff962c5-7fa3-4c18-a5ca-1bbe8db09e80".to_owned(),
-            )
-            .expect("epoch"),
-            generation: GenerationNumber::try_from(1).expect("generation"),
-        },
-        capabilities: ProviderCapabilities::try_from(vec![ProviderCapability {
-            name: ProviderCapabilityName::Prompt,
-            status: ProviderCapabilityStatus::Supported,
-            evidence: ProviderCapabilityEvidence::Advertised,
-        }])
-        .expect("capabilities"),
-    }
-}
-
-fn available_directory(
-    target: &SessionRef,
-    binding: &ProviderBindingIdentity,
-) -> EndpointDirectory {
-    let directory = EndpointDirectory::new(target.endpoint.service_id.clone());
-    directory
-        .publish(EndpointDescription {
-            endpoint: target.endpoint.clone(),
-            label: NonEmptyText::try_from("Cursor".to_owned()).expect("label"),
-            availability: EndpointAvailability::Available {
-                observed_at: ObservationTimestamp::try_from("2026-09-24T12:00:00Z".to_owned())
-                    .expect("time"),
-            },
-            channels: vec![ChannelDescription::ExternalProvider {
-                transport: ProviderTransport::StdioAcp,
-                binding_id: binding.binding_id.clone(),
-                binding_generation: binding.generation.generation,
-                runtime: binding.runtime.clone(),
-                capabilities: binding.capabilities.clone(),
-            }],
-        })
-        .expect("endpoint");
-    directory
-}
-
-fn cursor_prompt_fixture(
-    event_socket: &Path,
-    captured_prepared_prompt: &Path,
-) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'cursor-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'first')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-with open({:?},'w') as capture:
- json.dump(request,capture)
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'second')
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket.display().to_string(),
-        captured_prepared_prompt.display().to_string(),
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
-}
-
-fn refusing_load_fixture(load_marker: &Path, error_code: i32) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'load-fixture','version':'1'}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method']=='session/load', request['method']
- assert request['params']['sessionId']=='fixture-session'
- with open({:?},'a') as marker: marker.write('session/load\n')
- print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'error':{{'code':{error_code},'message':'provider fixture refusal','data':{{'privateText':'must not escape'}}}}}})); sys.stdout.flush()
-"#,
-        load_marker.display().to_string(),
-        error_code = error_code,
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
-}
-
-fn no_load_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'no-load-fixture','version':'1'}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method']=='session/new', request['method']
- print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
-        environment: Vec::new(),
-    }
-}
-
-fn exited_provider_fixture(exit_marker: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'exited-provider-fixture','version':'1'}}}}}})); sys.stdout.flush()
-with open({:?},'w') as marker: marker.write('provider exited')
-sys.exit(0)
-"#,
-        exit_marker.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
-}
-
-fn request(target: SessionRef, text: &str) -> PreparedDeliveryRequest {
-    let push_id =
-        PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");
-    let correlation =
-        DeliveryCorrelationId::try_from(push_id.as_str().to_owned()).expect("push id correlation");
-    let line = MessageText::try_from(format!(
-        "✉️ sender · \"{text}\" · router://{}/push/{}",
-        String::from(target.endpoint.service_id.clone()),
-        push_id.as_str()
-    ))
-    .expect("prepared push line");
-    PreparedDeliveryRequest {
-        payload: PreparedPush {
-            push_id,
-            line,
-            load_policy: LoadPolicy::MayLoad,
-        },
-        target,
-        mode: MessageDelivery::Auto,
-        precondition: DeliveryPrecondition::Unpinned,
-        correlation,
-        attempt: AttemptId::generate(),
-    }
-}
+#[path = "support/provider_delivery_fixture.rs"]
+mod provider_delivery_fixture;
+use provider_delivery_fixture::{
+    LivePeer, NoLivePeer, RecordedEvidence, StaleRunningClaimRoute,
+    assert_uuid_v7_provider_reference, available_directory, cursor_prompt_fixture,
+    exited_provider_fixture, no_load_fixture, provider_binding, refusing_load_fixture, request,
+    target,
+};
 
 #[tokio::test]
 async fn cursor_steer_rejects_before_evidence_or_client_io() {
@@ -345,7 +101,8 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
     let receipt = route
         .deliver(request, &evidence)
         .await
-        .expect("delivery refusal");
+        .expect("delivery refusal")
+        .into_receipt();
 
     assert!(
         matches!(receipt.outcome, DeliveryOutcome::Rejected(rejection)
@@ -428,7 +185,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let stale = router
         .deliver(stale_request, &stale_evidence)
         .await
-        .expect("stale guard");
+        .expect("stale guard")
+        .into_receipt();
     assert!(matches!(stale.outcome, DeliveryOutcome::Rejected(rejection)
         if rejection.reason == DeliveryRejectionReason::StaleGeneration));
     assert!(stale_evidence.0.lock().await.is_empty());
@@ -436,7 +194,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let first = router
         .deliver(request(target.clone(), "first"), &first_evidence)
         .await
-        .expect("first delivery");
+        .expect("first delivery")
+        .into_receipt();
     let (mut first_event, _) = tokio::time::timeout(Duration::from_secs(2), listener.accept())
         .await
         .expect("first event deadline")
@@ -474,7 +233,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
             &second_evidence,
         )
         .await
-        .expect("second delivery");
+        .expect("second delivery")
+        .into_receipt();
 
     assert!(matches!(first.outcome, DeliveryOutcome::Started));
     assert!(matches!(second.outcome, DeliveryOutcome::Queued));
@@ -702,7 +462,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let loaded_only_receipt = stale_router
         .deliver(loaded_only_request, &loaded_only_evidence)
         .await
-        .expect("loaded-only stale-claim refusal");
+        .expect("loaded-only stale-claim refusal")
+        .into_receipt();
     assert!(matches!(
         loaded_only_receipt.outcome,
         DeliveryOutcome::NotSubmitted {
@@ -723,7 +484,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let receipt = route
         .deliver(request(target.clone(), "hello"), &evidence)
         .await
-        .expect("load refusal");
+        .expect("load refusal")
+        .into_receipt();
 
     let outcome = serde_json::to_value(&receipt.outcome).expect("receipt encoding");
     assert_eq!(outcome["kind"], "rejected");
@@ -801,6 +563,15 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
     .await
     .expect("delivery cannot wait on unsupported load")
     .expect("delivery receipt");
+    assert_eq!(
+        receipt.unsent_cause(),
+        Some(collaboration_contracts::UnsentCause::Refused(
+            collaboration_contracts::NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::UnsupportedCapability
+            )
+        ))
+    );
+    let receipt = receipt.into_receipt();
     assert!(
         matches!(
             receipt.outcome,
@@ -911,7 +682,8 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
         let receipt = route
             .deliver(request(target, "empty restart session"), &evidence)
             .await
-            .expect("load refusal");
+            .expect("load refusal")
+            .into_receipt();
         let outcome = serde_json::to_value(&receipt.outcome).expect("receipt encoding");
 
         assert_eq!(outcome["kind"], expected_kind);
@@ -949,19 +721,8 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
     }
 }
 
-fn assert_uuid_v7_provider_reference(detail: &str, code_label: &str, provider_code: i32) {
-    assert!(
-        detail.contains(&format!("{code_label} {provider_code}; reference ")),
-        "provider code/reference missing: {detail}"
-    );
-    let correlation_reference = detail
-        .split_once("reference ")
-        .map(|(_, reference)| reference.trim_end_matches(')'))
-        .expect("provider correlation reference");
-    let correlation_uuid =
-        uuid::Uuid::parse_str(correlation_reference).expect("UUIDv7 correlation reference");
-    assert_eq!(correlation_uuid.get_version_num(), 7, "{detail}");
-}
-
 #[path = "provider_acp_delivery_route/provider_failure_tests.rs"]
 mod provider_failure_tests;
+
+#[path = "provider_acp_delivery_route/auto_direct_message_tests.rs"]
+mod auto_direct_message_tests;

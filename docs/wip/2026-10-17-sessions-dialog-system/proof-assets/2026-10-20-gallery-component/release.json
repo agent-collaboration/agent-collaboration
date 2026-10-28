@@ -1,0 +1,21 @@
+{
+  "binding": "https://demistify.getagentstudio.dev/v1/",
+  "version": "1.9.3",
+  "sourceCommit": "c191e88e6d0a3052b01bc697da33cb71cb043265",
+  "guideSha256": "dcc9db9988283ef56511a433e9a3f05ee539df0f0b9d3e41cea0cb43fafd38a8",
+  "picturesSha256": "059a093418ab0eb8035bcafdffd28eedba0181243f41bf65fed88e800d341f84",
+  "toursSha256": "be6de8a9110c248e81c393fd5655795e1eb31c7b6ce9e4cab4eb6bc2b4ebed61",
+  "productImages": {
+    "proof-assets/2026-10-20-c7-phone-pace/32x24/component-quota-browse.png": "d0a2d731854ea8104f0ce62d3d8bad1f5fc40dfa32f3f39230474fc20895fa68",
+    "proof-assets/2026-10-20-c7-density-p3/40x24/component-quota-browse.png": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+    "proof-assets/2026-10-20-c7-density-p3/48x12/component-quota-options-identity.png": "3e7220b7b68b313c1d943cea8bc200358f564d5834caf703652daa40cafc2996",
+    "proof-assets/2026-10-20-c7-density-p3/48x24/component-quota-browse.png": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+    "proof-assets/2026-10-20-c7-density-p3/76x30/component-quota-browse.png": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+    "proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-browse.png": "1e96f84191e376e7bc82292b1d49ee1a91830add6e7db1f143224a8bc1071272",
+    "proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-policy-original.png": "66030e8de8f73d9631849e6e5dc1171332d5436d1b31add71a4414c99a2bfafa",
+    "proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-confirm-yes.png": "28a4187eb898df62cca866c7239127a1d9176669523b71b6ef1048951de9a7b7",
+    "proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-options-identity.png": "e124c9a82cfb9af27792d39f858a65a20a074552a4f1b2cc44e3e1b96ee81161"
+  },
+  "browserRendered": false,
+  "renderingGap": "Existing direct-file browser route was rejected by URL policy; no alternate browser or HTTP bypass."
+}

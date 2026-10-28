@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT project_id AS \"project_id!: String\",membership_id AS \"membership_id!: String\",activated_epoch AS \"activated_epoch!: i64\",activated_position AS \"activated_position!: i64\",payload AS \"payload!: String\" FROM subscription_delivery_progress ORDER BY project_id,membership_id,activated_epoch,activated_position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "activated_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "activated_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "7b811d6b8e204fc6357a574fb08d0977abc4c66b5c50c122fba3a6f21337b36b"
+}

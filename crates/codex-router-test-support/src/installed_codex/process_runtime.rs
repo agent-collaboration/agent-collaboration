@@ -1,4 +1,10 @@
-use super::*;
+use super::{
+    BufRead, BufReader, CODEX_COMMAND_TIMEOUT, Child, CodexChildRun, CodexExecRequest, Command,
+    Duration, ErrorKind, ExitStatus, InstalledCodexSmokeMode, Instant, MockWebSocketTranscript,
+    OsString, Output, Path, PathBuf, Read, RouterProcessGuard, RouterProcessObservation,
+    SMOKE_EXPECTED_TEXT, SMOKE_PROMPT, SMOKE_TARGET_MODEL_OVERRIDE, SmokeQuotaStatus, Stdio, fs,
+    mpsc, stderr_transport_error_markers, thread,
+};
 
 pub(super) fn start_router_process(
     router_port: u16,
@@ -75,9 +81,7 @@ pub(super) fn start_router_process_with_options(
     let mut command = Command::new(&binary_path);
     command.args(&argv);
     if cfg!(debug_assertions) {
-        command
-            .env("CODEX_ROUTER_TEST_CAPACITY_RETRY_DELAY_SECONDS", "2")
-            .env("CODEX_ROUTER_TEST_SHORT_QUOTA_WAIT_JITTER_SECONDS", "2");
+        command.env("CODEX_ROUTER_TEST_SHORT_QUOTA_WAIT_JITTER_SECONDS", "2");
     }
     command
         .stdin(Stdio::null())

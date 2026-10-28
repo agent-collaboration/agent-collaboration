@@ -93,7 +93,9 @@ fn nested_paths_resolve_to_one_common_directory_and_origin_takes_precedence() ->
                 );
             }
         }
-        _ => return Err(std::io::Error::other("configured origin must take precedence").into()),
+        BoardRepositoryLocation::Local(_) => {
+            return Err(std::io::Error::other("configured origin must take precedence").into());
+        }
     }
     Ok(())
 }

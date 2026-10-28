@@ -39,9 +39,9 @@ impl OwnerObservationTrace {
 fn test_subscription_push_store(fixture: &OwnerFixture) -> SubscriptionPushStore {
     let (observations, _) = broadcast::channel(1);
     SubscriptionPushStore::new(SubscriptionPushStoreProps {
-        store: Arc::clone(&fixture.push_store),
-        delivery: Arc::new(crate::SessionDeliveryRouter::new(Vec::new())),
-        machine: crate::MachineIdentity::new(
+        store: Arc::clone(&fixture.interactions),
+        delivery: Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new())),
+        machine: collaboration_contracts::MachineIdentity::new(
             UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
             Some("Owner-test-machine"),
         )
@@ -94,7 +94,7 @@ async fn receive_expiry_request_with_owner_observations(
     runtime: &OwnerRuntime,
     trace: &mut OwnerObservationTrace,
     cycle: &str,
-) -> crate::layer_zero::DeliveryRequest {
+) -> collaboration_contracts::layer_zero::DeliveryRequest {
     let wait_for_request = async {
         loop {
             tokio::select! {
@@ -161,7 +161,7 @@ async fn close_owner_with_timeout(
 
 #[tokio::test(start_paused = true)]
 async fn successive_selected_activity_batches_store_distinct_canonical_origin_refs() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let push = test_subscription_push_store(&fixture);
     let target = target_session(&fixture.reader).unwrap();
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -170,6 +170,13 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
 
     for body in ["First batch", "Second batch"] {
         fixture.post(&fixture.root, body).await;
+        fixture
+            .store
+            .lock()
+            .await
+            .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+            .await
+            .unwrap();
         let (batch, settlement) = fixture
             .store
             .lock()
@@ -192,13 +199,15 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
         );
 
         let prepared = push
-            .activity(&target, &batch, crate::LoadPolicy::LoadedOnly)
+            .activity(
+                &target,
+                &batch,
+                collaboration_contracts::LoadPolicy::LoadedOnly,
+            )
             .await
             .unwrap();
         let stored = fixture
-            .push_store
-            .lock()
-            .await
+            .interactions
             .get_push_record(&prepared.push_id)
             .await
             .unwrap()
@@ -239,12 +248,12 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
 
 #[tokio::test]
 async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let scope = SubscriptionScope::thread(fixture.root.clone());
     let target = target_session(&fixture.reader).unwrap();
 
     let mut first_trace = OwnerObservationTrace::default();
-    let first_runtime = fixture.runtime().await;
+    let first_runtime = fixture.native_runtime().await;
     eprintln!("first expiry cycle: fresh owner started from the stored subscription");
     let first_rows_loaded =
         wait_for_owner_start_boundary(&first_runtime, &mut first_trace, "first expiry cycle").await;
@@ -259,9 +268,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     .await;
     let first_push_id = first_request.payload.push_id.clone();
     let first_record = fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(&first_request.payload.push_id)
         .await
         .unwrap()
@@ -271,7 +278,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -305,9 +312,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     )
     .await;
     let first_delivered_record = fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(&first_push_id)
         .await
         .unwrap()
@@ -331,7 +336,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -342,7 +347,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     assert!(resubscribed.generation().get() > first_generation.get());
 
     let mut second_trace = OwnerObservationTrace::default();
-    let second_runtime = fixture.runtime().await;
+    let second_runtime = fixture.native_runtime().await;
     eprintln!("second expiry cycle: fresh owner started after resubscription");
     let second_rows_loaded =
         wait_for_owner_start_boundary(&second_runtime, &mut second_trace, "second expiry cycle")
@@ -360,9 +365,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     .await;
     let second_push_id = second_request.payload.push_id.clone();
     let second_record = fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(&second_request.payload.push_id)
         .await
         .unwrap()
@@ -372,7 +375,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -408,9 +411,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     )
     .await;
     let second_delivered_record = fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(&second_push_id)
         .await
         .unwrap()
@@ -422,9 +423,10 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     close_owner_with_timeout(second_runtime, &second_trace, "second expiry cycle").await;
 }
 
-#[tokio::test(start_paused = true)]
-async fn failed_wait_attempt_mark_releases_selection_and_returns_explicit_error() {
-    let fixture = OwnerFixture::new().await;
+#[tokio::test]
+async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_explicit_error() {
+    tokio::time::timeout(Duration::from_secs(30), async {
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -434,15 +436,22 @@ async fn failed_wait_attempt_mark_releases_selection_and_returns_explicit_error(
             0,
         )
         .await;
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
+    let mut observer = sqlx_turso::TursoConnection::connect_with(
+        &sqlx_turso::TursoConnectOptions::new()
+            .filename(fixture.directory.path().join("interaction.sqlite")),
     )
     .await
     .unwrap();
-    sqlx::query("CREATE TRIGGER fail_wait_attempt BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='attempted' BEGIN SELECT RAISE(FAIL, 'injected wait attempt failure'); END").execute(&mut observer).await.unwrap();
-    let runtime = fixture.runtime().await;
-    fixture.post(&fixture.root, "Pending poll range").await;
+    sqlx::raw_sql("CREATE TRIGGER fail_wait_attempt BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='attempted' BEGIN SELECT RAISE(FAIL, 'injected wait attempt failure'); END").execute(&mut observer).await.unwrap();
+    let runtime = fixture.native_runtime().await;
+    let position = fixture.post(&fixture.root, "Pending poll range").await;
+    // Arrange the actual post scan before taking the owner's sleep-boundary barrier.
+    runtime.service.reconcile_reader(fixture.reader.clone()).await.unwrap();
+    runtime.owner_barrier(&fixture.reader).await;
+    let frozen = super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
+    assert_eq!(frozen.len(), 1);
+    let item = frozen[0].id();
+    let original = serde_json::to_value(&frozen[0]).unwrap();
     let result = runtime
         .service
         .wait(
@@ -456,146 +465,43 @@ async fn failed_wait_attempt_mark_releases_selection_and_returns_explicit_error(
         result.is_err(),
         "a failed attempted-state write must be reported to the waiter"
     );
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    let board = fixture
-        .store
-        .lock()
-        .await
-        .get_thread_subscription_record(
-            &fixture.reader,
-            &SubscriptionScope::thread(fixture.root.clone()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(board.roots()[0].pending_count(), 1);
-    let due = fixture
-        .store
-        .lock()
-        .await
-        .due_subscription_roots(&fixture.reader, fixture.clock.now())
-        .await
-        .unwrap();
-    assert_eq!(
-        due,
-        vec![fixture.root.clone()],
-        "unhanded selection must be released and remain retryable"
-    );
+    let error = result.unwrap_err();
+    assert_eq!(error.kind, message_board::BoardFailureKind::BoardUnavailable);
+    assert!(fixture.interactions.pending_poll_item(item).await.unwrap().is_some());
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if runtime.local_mail_outcome(item).await == Some(fleet_sync_protocol::RecipientOutcome::Held) { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("failed preparation leaves the exact SDK item Held");
+    assert_eq!(serde_json::to_value(super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await.first().unwrap()).unwrap(), original);
     sqlx::query("DROP TRIGGER fail_wait_attempt")
         .execute(&mut observer)
         .await
         .unwrap();
-    assert!(matches!(
-        runtime
-            .service
-            .wait(
-                fixture.reader.clone(),
-                super::super::SubscriptionWaitFilter::All,
-                60,
-                usize::MAX
-            )
-            .await
-            .unwrap(),
-        Some(super::super::SubscriptionWaitResult::Notice { .. })
-    ));
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::Settled))
-        .await;
+    let Some(super::super::SubscriptionWaitResult::Notice { push_id, batch, .. }) = runtime.service.wait(
+        fixture.reader.clone(), super::super::SubscriptionWaitFilter::All, 60, usize::MAX,
+    ).await.unwrap() else { panic!("retry returns the same frozen Poll item"); };
+    assert_eq!(push_id.as_str(), item.as_uuid().to_string());
+    assert_eq!(batch.roots.len(), 1);
+    assert_eq!(batch.roots[0].from, position);
+    assert_eq!(batch.roots[0].through, position);
+    assert_eq!(batch.roots[0].post_count, 1);
+    assert_eq!(runtime.await_mail_outcome(&push_id).await, fleet_sync_protocol::RecipientOutcome::Delivered {
+        acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
+    });
+    assert_eq!(super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await.len(), 1);
     assert!(runtime.requests.lock().await.try_recv().is_err());
     observer.close().await.unwrap();
     runtime.close().await;
+    }).await.expect("bounded failed Poll handover and same-item retry");
 }
 
-#[tokio::test(start_paused = true)]
-async fn accepted_push_record_settlement_retries_before_board_settlement_without_redelivery() {
-    let fixture = OwnerFixture::new().await;
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
-    )
-    .await
-    .unwrap();
-    sqlx::query("CREATE TRIGGER fail_push_settle BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='delivered' BEGIN SELECT RAISE(FAIL, 'injected push settlement failure'); END").execute(&mut observer).await.unwrap();
-    let runtime = fixture.runtime().await;
-    fixture.post(&fixture.root, "Accepted").await;
-    let request = runtime.requests.lock().await.recv().await.unwrap();
-    runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::PushSettlementRetry))
-        .await;
-    let board = fixture
-        .store
-        .lock()
-        .await
-        .get_thread_subscription_record(
-            &fixture.reader,
-            &SubscriptionScope::thread(fixture.root.clone()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(board.roots()[0].pending_count(), 1);
-    assert!(runtime.requests.lock().await.try_recv().is_err());
-    sqlx::query("DROP TRIGGER fail_push_settle")
-        .execute(&mut observer)
-        .await
-        .unwrap();
-    fixture.clock.advance(1).await;
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::Settled))
-        .await;
-    runtime.synchronize(&fixture.reader).await;
-    let stored = fixture
-        .push_store
-        .lock()
-        .await
-        .get_push_record(&request.payload.push_id)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stored.delivery_state, PushDeliveryState::Delivered);
-    assert!(runtime.requests.lock().await.try_recv().is_err());
-    observer.close().await.unwrap();
-    runtime.close().await;
-}
+// Decision 943 maps the former live-C5 push settlement fault to the real follow
+// outcome-fault recovery proof and the retained SDK atomic outcome/replay proof.
+// CreationAge carrier transitions stay covered by the native storage tests.
 
-#[tokio::test(start_paused = true)]
-async fn failed_record_insert_releases_selection_and_never_calls_layer_zero() {
-    let fixture = OwnerFixture::new().await;
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
-    )
-    .await
-    .unwrap();
-    sqlx::query("CREATE TRIGGER fail_push_insert BEFORE INSERT ON router_pushes BEGIN SELECT RAISE(FAIL, 'injected push insertion failure'); END").execute(&mut observer).await.unwrap();
-    let runtime = fixture.runtime().await;
-    fixture
-        .post(&fixture.root, "Never pushed without a record")
-        .await;
-    runtime.synchronize(&fixture.reader).await;
-    assert!(runtime.requests.lock().await.try_recv().is_err());
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM router_pushes")
-        .fetch_one(&mut observer)
-        .await
-        .unwrap();
-    assert_eq!(count, 0);
-    let roots = fixture
-        .store
-        .lock()
-        .await
-        .due_subscription_roots(&fixture.reader, fixture.clock.now())
-        .await
-        .unwrap();
-    assert_eq!(roots, vec![fixture.root.clone()]);
-    sqlx::query("DROP TRIGGER fail_push_insert")
-        .execute(&mut observer)
-        .await
-        .unwrap();
-    fixture.clock.advance(1).await;
-    runtime.requests.lock().await.recv().await.unwrap();
-    runtime.await_settled().await;
-    observer.close().await.unwrap();
-    runtime.close().await;
-}
+// Decision 945 maps the insertion-fault oracle to the real producer/publisher
+// recovery proof, including rollback, a stale proposal and the next normal hint.

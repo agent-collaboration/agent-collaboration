@@ -1,6 +1,8 @@
 //! Provider admission, prompt result, and safe ACP error contracts.
+#[cfg(any(test, feature = "test-observation"))]
+use super::ToolKind;
 
-use super::*;
+use super::{AcpAgentConfig, AcpProtocolVersion, PathBuf, ProviderPromptStopReason};
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -222,7 +224,7 @@ pub enum ExternalProviderRuntimeError {
     TransportFailure,
     #[error("session event consumer closed")]
     SinkClosed,
-    #[error("invalidSetting: provider setting was not advertised")]
+    #[error("invalidSetting: value requires an unambiguous advertised provider setting option")]
     InvalidSetting {
         setting: crate::ProviderSettingKind,
         value: String,

@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_auth_status.rs#AUTH_FIXTURE",
+  "originalSHA256": "46b4f2c588bc4627a534ae7cc01fd65f537c15ef184cf249aaae2a8443020885",
+  "target": "provider-auth-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"clientCapabilities\": {\"elicitation\": {\"form\": {}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"method\": \"_auth/status_update\", \"params\": {\"authStatus\": {\"kind\": \"account\", \"label\": \"Connected account\", \"account\": {\"email\": \"private@example.invalid\"}, \"vendor\": {\"token\": \"private\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"auth-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"_auth/status_update\", \"params\": {\"authStatus\": {\"kind\": \"none\", \"label\": \"Signed out\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

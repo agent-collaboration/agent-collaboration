@@ -17,16 +17,13 @@ async fn conversation_create_without_identity_or_from_reports_unavailable() {
             "schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     // Creator validation precedes the ACP connection in the common create path.
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(5),
@@ -84,16 +81,13 @@ async fn conversation_create_from_supplies_created_by_without_env() {
             "schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).expect("ACP bind");
     let peer = tokio::spawn(async move {
         for outcome in ["create", "cancel", "load", "prompt", "prompt-id", "load-id"] {

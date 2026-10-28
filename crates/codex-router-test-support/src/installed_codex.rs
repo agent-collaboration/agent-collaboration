@@ -6,8 +6,6 @@ mod retry;
 
 pub use hostile_and_state::run_hostile_no_token_smoke;
 pub use retry::run_all_weekly_exhausted_terminal;
-pub use retry::run_capacity_retry_limit_terminal;
-pub use retry::run_model_capacity_reconnect;
 pub use retry::run_three_account_short_quota_reconnect;
 pub use smoke_modes::{
     InstalledCodexSmokeReport, run_installed_codex_http_sse_mock_smoke,
@@ -107,55 +105,107 @@ const QUOTA_RECONNECT_SQLITE_PRESSURE_HOLD: Duration = Duration::from_secs(15);
 const QUOTA_RECONNECT_SQLITE_PRESSURE_READY_TIMEOUT: Duration = Duration::from_secs(5);
 const QUOTA_RECONNECT_ROUTER_MAX_CONNECTIONS: usize = 2;
 
-#[allow(dead_code)]
 #[path = "installed_codex/concurrent_websocket.rs"]
 mod concurrent_websocket;
-#[allow(dead_code)]
+
 #[path = "installed_codex/hostile_and_state.rs"]
 mod hostile_and_state;
-#[allow(dead_code)]
+
 #[path = "installed_codex/http_probe.rs"]
 mod http_probe;
-#[allow(dead_code)]
+
 #[path = "installed_codex/process_runtime.rs"]
 mod process_runtime;
-#[allow(dead_code)]
+
 #[path = "installed_codex/quota_reconnect_upstream.rs"]
 mod quota_reconnect_upstream;
-#[allow(dead_code)]
+
 #[path = "installed_codex/s8_provenance.rs"]
 mod s8_provenance;
-#[allow(dead_code)]
+
 #[path = "installed_codex/smoke_contracts.rs"]
 mod smoke_contracts;
-#[allow(dead_code)]
+
 #[path = "installed_codex/smoke_modes.rs"]
 mod smoke_modes;
-#[allow(dead_code)]
+
 #[path = "installed_codex/smoke_runtime.rs"]
 mod smoke_runtime;
 #[cfg(test)]
 #[path = "installed_codex/tests.rs"]
 mod tests;
-#[allow(dead_code)]
+
 #[path = "installed_codex/transcript_observation.rs"]
 mod transcript_observation;
-#[allow(dead_code)]
+
 #[path = "installed_codex/websocket_models.rs"]
 mod websocket_models;
-#[allow(dead_code)]
+
 #[path = "installed_codex/websocket_upstream.rs"]
 mod websocket_upstream;
 
-use concurrent_websocket::*;
-use hostile_and_state::*;
-use http_probe::*;
-use process_runtime::*;
-use quota_reconnect_upstream::*;
-use s8_provenance::*;
-use smoke_contracts::*;
-use smoke_modes::*;
-use smoke_runtime::*;
-use transcript_observation::*;
-use websocket_models::*;
-use websocket_upstream::*;
+use concurrent_websocket::{
+    overlap_duration_ms, real_overlap_duration_ms, run_concurrent_mock_websocket_session,
+    wait_for_concurrent_session_barrier, wake_mock_upstream_accept,
+};
+use hostile_and_state::{
+    QUOTA_RECONNECT_FALLBACK, QUOTA_RECONNECT_PRIMARY,
+    QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION, SmokeQuotaStatus, SmokeSeed,
+    seed_quota_reconnect_router_state, seed_router_state, seed_s8_overlap_quota_router_state,
+    selected_account_from_status_json, smoke_account_label_from_upstream_token,
+};
+use http_probe::{
+    MockHttpRequestResult, SmokeTempRoot, accept_with_deadline, account_id, command_output_text,
+    http_sse_transcript_summary, is_non_prewarm_response_create_frame, is_prewarm_request_frame,
+    join_result, looks_like_websocket_upgrade, output_status_text, parse_posix_token_assignment,
+    record_http_sse_only_transcript, redacted_optional_command_text, reserve_loopback_port,
+    respond_to_http_request, run_mock_websocket, run_no_connection_upstream,
+    run_s8_overlap_quota_local_probe, send_hostile_no_token_websocket, smoke_prewarm_events,
+    smoke_response_events, timestamp_millis, timestamp_seconds,
+};
+use process_runtime::{
+    CodexChildEnvironment, CodexTransportMode, RouterProcessStartOptions, SmokeContractAssertion,
+    assert_codex_visible_output, process_output_markers, redacted_process_output_preview,
+    run_codex_exec, run_codex_exec_with_timeout, run_codex_exec_with_timeout_observed,
+    start_router_process, start_router_process_with_options, workspace_root,
+};
+use quota_reconnect_upstream::run_concurrent_mock_upstream;
+use s8_provenance::{
+    assert_redacted_quota_reconnect_payload, assert_redacted_three_websocket_payload,
+    assert_redacted_transcript_payload, current_git_head, first_frame_shape_summary,
+    observe_router_socket_cleanup, response_create_frame_shape_summary,
+    runtime_correlations_for_three_websocket, s8_smoke_provenance, s8_smoke_run_id,
+    sanitized_artifact_path, sanitized_loopback_endpoint_text, sanitized_router_argv,
+    session_continuity_for_three_websocket, stderr_transport_error_markers,
+};
+use smoke_contracts::{
+    assert_codex_quota_reconnect_output_is_safe, assert_quota_reconnect_contract,
+    assert_smoke_contract, authorization_header_matches_expected, bearer_token_from_headers,
+    http_sse_request_asks_streaming, quota_reconnect_label_from_upstream_token,
+    quota_reconnect_role_from_label, quota_reconnect_usage_limit_frame,
+    upstream_label_from_authorization_header,
+};
+use smoke_modes::{
+    CodexChildRun, CodexExecRequest, ConcurrentUpstreamConfig, ConcurrentWebSocketHarnessConfig,
+    InstalledCodexRuntimeRoots, InstalledCodexSmokeMode, UpstreamClientSessionObservation,
+};
+use smoke_runtime::{
+    installed_codex_runtime_roots, run_installed_codex_three_websocket_mock_e2e_inner,
+};
+use transcript_observation::{
+    QuotaReconnectTranscriptInput, RedactedTranscriptInput, RouterAuditObservation,
+    RouterProcessObservation, RouterWebSocketRegistryReport, ThreeWebSocketTranscriptInput,
+    write_redacted_quota_reconnect_transcript, write_redacted_three_websocket_transcript,
+    write_redacted_transcript,
+};
+use websocket_models::{
+    ConcurrentUpstreamSharedState, ConcurrentUpstreamState, ConcurrentWebSocketTranscript,
+    MockConcurrentWebSocketUpstream, MockHttpSseTranscript, MockNoConnectionUpstream,
+    MockQuotaReconnectWebSocketUpstream, MockWebSocketTranscript, MockWebSocketUpstream,
+    QuotaReconnectSqlitePressureConfig, QuotaReconnectUpstreamState,
+    QuotaReconnectWebSocketTranscript, RouterProcessGuard, RouterSocketCleanupObservation,
+    S8OverlapQuotaErrorContext,
+};
+use websocket_upstream::{
+    run_mock_upstream, run_quota_reconnect_mock_upstream, start_s8_overlap_quota_sqlite_pressure,
+};

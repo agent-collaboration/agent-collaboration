@@ -1,0 +1,479 @@
+{
+  "at": "2026-10-20T08:13:04.418837+00:00",
+  "grid": [
+    48,
+    24
+  ],
+  "wrapper_exit": 1,
+  "driver_exit": 101,
+  "seconds": 55.69884524960071,
+  "recorded_pids": [
+    3821,
+    3829,
+    3834,
+    3857,
+    3859,
+    4050,
+    4051,
+    4052,
+    4053,
+    4054,
+    4056,
+    4057,
+    4058,
+    4059,
+    4061,
+    4063,
+    4064,
+    4065
+  ],
+  "remaining_owned_processes": [],
+  "private_profile": "/private/tmp/2026-10-tui-component-system/vhs-run-3829-0",
+  "profile_absent": true,
+  "cleanup_error_absent": true,
+  "Vsignals_orstop": false,
+  "child_exit": 0,
+  "durable_fixture_external_requests": 0,
+  "durable_fixture_persisted_writes": 0,
+  "fixture_finished": "QUOTA_COMPONENT_FIXTURE_FINISHED scenario=Normal released=false external_requests=0 persisted_writes=0",
+  "normal_receipt_exists": false,
+  "gallery_exists": false,
+  "retained_original_layer_pairs": 1805,
+  "all_layer_hashes_verified": true,
+  "archive_index_unchanged": true,
+  "V25_original_archive_unchanged": true,
+  "original_fullindex_product_hold_released_after_intake": true,
+  "images": [
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-credit-window.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-heading.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-value.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-page-returned.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-identity.png",
+      "sha256": "da4f7d7ab42cf44a6e3cb4a51924534694057ab799d774a2327575aba1dde043",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-returned.png",
+      "sha256": "efaaf12186ff17105b67ecb5ad009d09d1462a326365957725d61b5432264284",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-top.png",
+      "sha256": "ffb56c9e82676577c04071aa1342e2f6f7c5403b044f0033f7611e33762af96a",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-no-returned.png",
+      "sha256": "ce363f37446d5f8df91f34ab37857c091606b7bb4594cc2b46bfafb1fae43c24",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-no.png",
+      "sha256": "1bc03c2a2ea633c8a0ebd0ecbccf4260cffd13e7489a975902d08aae5bca67fd",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-yes.png",
+      "sha256": "efaaf12186ff17105b67ecb5ad009d09d1462a326365957725d61b5432264284",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-balance.png",
+      "sha256": "4a2e1c034120068cc5b155dd5d9dd6ff8d63c7dc31f78e34a580b147960473f2",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-identity.png",
+      "sha256": "4d05c927e6dcdad3d997a1ae0c06e84b8d3f109ca75ad9ea659e978703f73121",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-policy-boundary.png",
+      "sha256": "721b079520d1a1f94ffcff1fde205c02a45bb2ad2fc8c12a2d158251e4eccd4e",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-balance.png",
+      "sha256": "bed0c724074dea6c494aa71eefc1f66ad73fbd668cf7d1472bcd6f9ca3fb8620",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-freshness.png",
+      "sha256": "bed0c724074dea6c494aa71eefc1f66ad73fbd668cf7d1472bcd6f9ca3fb8620",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-observation.png",
+      "sha256": "bed0c724074dea6c494aa71eefc1f66ad73fbd668cf7d1472bcd6f9ca3fb8620",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-bottom.png",
+      "sha256": "c78bd54f9ecc6e91d84a418a7fc9693808eed28fe03fd1c1dac55ddbd354ab4d",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-top.png",
+      "sha256": "6f27d24d22279c594580659201356cedf0ebb8a0119082f16cd5b1be4557bb4e",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-cancelled.png",
+      "sha256": "b94593057e2a8d3b4e598f654f40bced96dbe25ed924f24bdc89dd46330d5e22",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-draft.png",
+      "sha256": "21cb3e064cdfdba33e0d715285745eedf8dcaae9510ce720a527fcb5de8029da",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-original.png",
+      "sha256": "b94593057e2a8d3b4e598f654f40bced96dbe25ed924f24bdc89dd46330d5e22",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-saved.png",
+      "sha256": "c6d8031eb23a33eee7e30a9b34f6ab3eafd6ca9967aa113df0b6bd354739d3c6",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-bottom.png",
+      "sha256": "f2f13b3ea59045efcdb287821e61575d50fcdbce2c023d187ca66cac9381c62e",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-top.png",
+      "sha256": "f57a6a038296f84f9176bcf0e2469e499f89408bd89b74ee6e4db17c63f3fa93",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-next-account.png",
+      "sha256": "7512b0d3b536907b4d84eddab2bf4787c4ddfdad602676fd6db89bf84517acf7",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-options-identity.png",
+      "sha256": "db5619aa8b7c839134e61c8c32d018d345cb5c510245e26b852c70c08a29ff06",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-cancelled.png",
+      "sha256": "8156c52625a256ed49cf1ef1cfdc8760823877a7befbec8bc4a0650e158a2149",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-choice-returned.png",
+      "sha256": "8156c52625a256ed49cf1ef1cfdc8760823877a7befbec8bc4a0650e158a2149",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-choice.png",
+      "sha256": "e064c447315e18113276edcdac38cfefa25f7fded5cf3095cbe1964fd9a3e1f3",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-draft.png",
+      "sha256": "36db01f9b1d0f567757165fe42eccc312154b6dc60ba6493cd7bfb34cdbe6694",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-no-match.png",
+      "sha256": "812eaa0219de08c825ecb765de809f432e47a46783d005ada4bf81c92ef8c1a8",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-original.png",
+      "sha256": "8156c52625a256ed49cf1ef1cfdc8760823877a7befbec8bc4a0650e158a2149",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-saved.png",
+      "sha256": "36db01f9b1d0f567757165fe42eccc312154b6dc60ba6493cd7bfb34cdbe6694",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-refresh-result.png",
+      "sha256": "fe0f5572a283d73c042124264b39cb556ca74609ace135b6f7c21c76f924cabf",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-inventory.png",
+      "sha256": "db5619aa8b7c839134e61c8c32d018d345cb5c510245e26b852c70c08a29ff06",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-last-page.png",
+      "sha256": "6b0e7dda8fc6d274667568aa34140ff013970df38407d2d54eaa0070cc8aef04",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result-bottom.png",
+      "sha256": "039ec601591210cce6714403c57adedd83a8b42e76c2a845b1e2d3e86d077400",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result.png",
+      "sha256": "0a933f2ac370945dc2a131a9aa26589c6dbe12061cd4faf0d222d98b6a8b9d06",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-review.png",
+      "sha256": "db5619aa8b7c839134e61c8c32d018d345cb5c510245e26b852c70c08a29ff06",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-restored-account.png",
+      "sha256": "86f65102bbe37da8fb5402f13946049b3902bf5cbbde4dcb9fabe94fc9a36a61",
+      "width": 514,
+      "height": 484
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-returned.png",
+      "sha256": "4c53bf61b6993f54303bc05e705c4f11093112d14c88decb3b81c3dc30542eb4",
+      "width": 514,
+      "height": 484
+    }
+  ],
+  "automatic_results": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-credit-window.image-observation.json",
+      "sha256": "7bea45440aea3ec43c27ac8db9460f8a6e5b652d4bc1a88dc0ab845659f6adeb",
+      "checkpoint": "component-quota-browse-credit-window",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-heading.image-observation.json",
+      "sha256": "3eb6d52e436d4fd3a250941861a40ff4e7790fcdfe0deba9208370f2930fa2fa",
+      "checkpoint": "component-quota-browse-pace-heading",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-value.image-observation.json",
+      "sha256": "22c13f280a6cd99ee7103e48f8606bfc86883b956994f3409e5794b6f8b02f95",
+      "checkpoint": "component-quota-browse-pace-value",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-page-returned.image-observation.json",
+      "sha256": "072dc9652ac69d1573f28fac995f272cd9d12c590e6de75a39224ab79330e30f",
+      "checkpoint": "component-quota-browse-page-returned",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse.image-observation.json",
+      "sha256": "af613d991ce75022bbe0ebdf143e536443f8c452d2ad76c57343e86b7b8a4b67",
+      "checkpoint": "component-quota-browse",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-bottom.image-observation.json",
+      "sha256": "14ae6841703ed51837afd6acc165e9c97b27b6b2bd1408ea7847fff6036fae4a",
+      "checkpoint": "component-quota-details-bottom",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-top.image-observation.json",
+      "sha256": "79162273e308c873be827cbea20e4ec27a83d3404ebe8c44df396e24fbcda70c",
+      "checkpoint": "component-quota-details-top",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-draft.image-observation.json",
+      "sha256": "cc94c3b8ebcf1ed2fd644ccb851ae43f09c31bf8e2a19511ed8ede56e4013a29",
+      "checkpoint": "component-quota-floor-draft",
+      "missing": [
+        "1%"
+      ],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-original.image-observation.json",
+      "sha256": "2aa2f856cf3e9df2dcc00834bccadec1c0ccaf015473697f6efc1d9e3d1b923b",
+      "checkpoint": "component-quota-floor-original",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-bottom.image-observation.json",
+      "sha256": "1061c3ac2b2a37540ca203101fb7ddb2aa717e57352e1dcd43090b1a2193c3dc",
+      "checkpoint": "component-quota-help-bottom",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-top.image-observation.json",
+      "sha256": "6eaae1ed46f9904f51dcfa2c3d2a7f916e6ba6478c219407663ebeab92b26744",
+      "checkpoint": "component-quota-help-top",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-next-account.image-observation.json",
+      "sha256": "19415c7279b8fb503f55178cc8de233b89666081157976710bd9089d82b6e5d1",
+      "checkpoint": "component-quota-next-account",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-restored-account.image-observation.json",
+      "sha256": "4ccbbd6634eb86d561de0b9ae09ea5fd739f8904150cf731823fffd8000b8ea9",
+      "checkpoint": "component-quota-restored-account",
+      "missing": [],
+      "unexpected": []
+    }
+  ],
+  "later_outputs": [
+    {
+      "grid": [
+        48,
+        12
+      ],
+      "exists": false
+    },
+    {
+      "grid": [
+        32,
+        24
+      ],
+      "exists": false
+    },
+    {
+      "grid": [
+        40,
+        24
+      ],
+      "exists": false
+    },
+    {
+      "grid": [
+        76,
+        30
+      ],
+      "exists": false
+    },
+    {
+      "grid": [
+        120,
+        36
+      ],
+      "exists": false
+    }
+  ],
+  "limits": [
+    "Actual FAILED driver after12positivepasses; Floor1% strictanchorunsupported, later29positive+12wrong unrun",
+    "All42exported; noNormalreceipt orautomatic42/12 pass. Fullpersonalreview/typedwholefieldmanualwitness stillpending",
+    "No vendor/Host/device/public acceptance; syntheticexternalports only"
+  ]
+}

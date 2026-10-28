@@ -5,7 +5,7 @@ use collaboration_client::{
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{MessageText, SessionId};
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, time::Duration};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -23,9 +23,8 @@ async fn create_and_first_prompt_share_one_connection_and_return_correlated_sett
         .unwrap();
     let service_id = "00000000-0000-4000-8000-000000000001";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
-    let identity=ServiceIdentity::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let identity=ApplicationFixture::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).unwrap();
     let peer = tokio::spawn(async move {
@@ -146,9 +145,8 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
         .unwrap();
     let service_id = "00000000-0000-4000-8000-000000000003";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
-    let identity=ServiceIdentity::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP rejection fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let identity=ApplicationFixture::new(service_id,service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP rejection fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).unwrap();
     let peer = tokio::spawn(async move {
@@ -244,9 +242,8 @@ async fn reusable_acp_client_orders_load_updates_and_detaches_on_caller_cancel()
         .unwrap();
     let id = "00000000-0000-4000-8000-000000000001";
     let endpoint = json!({"serviceId":id,"endpointId":"codex-local"});
-    let identity=ServiceIdentity::new(id,id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let identity=ApplicationFixture::new(id,id).unwrap().with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint,"label":"ACP fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]})).unwrap()]).unwrap();
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).unwrap();
     let (prompt_started, receive_started) = tokio::sync::oneshot::channel();

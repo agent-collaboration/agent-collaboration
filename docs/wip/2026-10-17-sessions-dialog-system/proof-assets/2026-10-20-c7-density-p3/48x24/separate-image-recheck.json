@@ -1,0 +1,1507 @@
+{
+  "start": "2026-10-20T08:46:44.799746+00:00",
+  "request_sha256": "6108c1cd960e96a1394f0b25767f2a89b1ad9f5292c14a7cdecbcc84630eff86",
+  "kind": "Separateposthoc retainedread, notruntime/Normal",
+  "steps": [
+    {
+      "case": 5,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-help-identity",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-identity.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8840,
+      "group": 8840,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-05.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-05.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 6,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-help-returned",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-returned.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8842,
+      "group": 8842,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-06.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-06.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 7,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-help-top",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-help-top.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8844,
+      "group": 8844,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-07.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-07.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 8,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-no-returned",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-no-returned.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8854,
+      "group": 8854,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-08.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-08.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 9,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-no",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-no.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8861,
+      "group": 8861,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-09.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-09.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 10,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-confirm-yes",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-yes.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8863,
+      "group": 8863,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-10.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-10.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 11,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-balance",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-balance.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8865,
+      "group": 8865,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-11.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-11.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 12,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-identity",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-identity.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8867,
+      "group": 8867,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-12.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-12.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 13,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-policy-boundary",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-policy-boundary.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8869,
+      "group": 8869,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-13.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-13.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 14,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-refreshed-balance",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-balance.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8871,
+      "group": 8871,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-14.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-14.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 15,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-refreshed-freshness",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-freshness.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8877,
+      "group": 8877,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-15.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-15.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 16,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-refreshed-observation",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-refreshed-observation.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8879,
+      "group": 8879,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-16.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-16.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 19,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-floor-cancelled",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-cancelled.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8881,
+      "group": 8881,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-19.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-19.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 22,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-floor-saved",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-saved.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8883,
+      "group": 8883,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-22.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-22.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 26,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-options-identity",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-options-identity.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8885,
+      "group": 8885,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-26.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-26.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 27,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-cancelled",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-cancelled.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8887,
+      "group": 8887,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-27.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-27.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 28,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-choice-returned",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-choice-returned.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8889,
+      "group": 8889,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-28.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-28.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 29,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-choice",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-choice.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8891,
+      "group": 8891,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-29.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-29.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 30,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-draft",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-draft.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8893,
+      "group": 8893,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-30.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-30.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 31,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-no-match",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-no-match.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8895,
+      "group": 8895,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-31.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-31.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 32,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-original",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-original.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8897,
+      "group": 8897,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-32.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-32.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 33,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-saved",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-saved.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8899,
+      "group": 8899,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-33.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-33.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 34,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-refresh-result",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-refresh-result.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8901,
+      "group": 8901,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-34.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-34.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 35,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-inventory",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-inventory.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8903,
+      "group": 8903,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-35.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-35.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 36,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-last-page",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-last-page.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8905,
+      "group": 8905,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-36.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-36.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 37,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-result-bottom",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result-bottom.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8907,
+      "group": 8907,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-37.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-37.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 38,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-result",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8909,
+      "group": 8909,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-38.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-38.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 39,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-review",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-review.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8911,
+      "group": 8911,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-39.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-39.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 41,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-returned",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-returned.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 0,
+      "timeout": false,
+      "pid": 8913,
+      "group": 8913,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-41.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-41.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 42,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-saved",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixtures/blank-startup.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8916,
+      "group": 8916,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-42.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-42.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 43,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-policy-saved",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-policy-cancelled.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8918,
+      "group": 8918,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-43.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-43.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 44,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-floor-saved",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-cancelled.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8920,
+      "group": 8920,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-44.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-44.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 45,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-floor-saved",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-draft.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8922,
+      "group": 8922,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-45.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-45.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 46,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-credits-refreshed-balance",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-credits-balance.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8924,
+      "group": 8924,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-46.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-46.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 47,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-returned",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8926,
+      "group": 8926,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-47.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-47.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 48,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-help-bottom",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-top.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8928,
+      "group": 8928,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-48.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-48.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 49,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-details-bottom",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-top.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8930,
+      "group": 8930,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-49.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-49.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 50,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-reset-result-bottom",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-confirm-yes.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8932,
+      "group": 8932,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-50.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-50.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 51,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-browse-credit-window",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-next-account.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8934,
+      "group": 8934,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-51.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-51.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 52,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-browse-pace-heading",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-next-account.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8936,
+      "group": 8936,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-52.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-52.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "case": 53,
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/bin/verify-tui-screen",
+        "component-quota-browse-pace-value",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-reset-result.png"
+      ],
+      "cap_seconds": 5,
+      "expected": 1,
+      "timeout": false,
+      "pid": 8938,
+      "group": 8938,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-53.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-53.stderr",
+      "exit": 1,
+      "ps_exit": 0,
+      "remaining_group": []
+    }
+  ],
+  "signals": [],
+  "results": [
+    {
+      "case": 0,
+      "checkpoint": "component-quota-browse-credit-window",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-credit-window.image-observation.json",
+        "sha256": "7bea45440aea3ec43c27ac8db9460f8a6e5b652d4bc1a88dc0ab845659f6adeb"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 1,
+      "checkpoint": "component-quota-browse-pace-heading",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-heading.image-observation.json",
+        "sha256": "3eb6d52e436d4fd3a250941861a40ff4e7790fcdfe0deba9208370f2930fa2fa"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 2,
+      "checkpoint": "component-quota-browse-pace-value",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-pace-value.image-observation.json",
+        "sha256": "22c13f280a6cd99ee7103e48f8606bfc86883b956994f3409e5794b6f8b02f95"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 3,
+      "checkpoint": "component-quota-browse-page-returned",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse-page-returned.image-observation.json",
+        "sha256": "072dc9652ac69d1573f28fac995f272cd9d12c590e6de75a39224ab79330e30f"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 4,
+      "checkpoint": "component-quota-browse",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-browse.image-observation.json",
+        "sha256": "af613d991ce75022bbe0ebdf143e536443f8c452d2ad76c57343e86b7b8a4b67"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 5,
+      "checkpoint": "component-quota-confirm-help-identity",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-05.stdout",
+        "sha256": "87d429b21f8557a915aea77e789ad21c7293ff709ab0eadd258084d59da60d4d"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 6,
+      "checkpoint": "component-quota-confirm-help-returned",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-06.stdout",
+        "sha256": "987a4dbabbaf725ae93b49f7d1e54b32183ae6d4afd338dba49cd0e51a974e96"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 7,
+      "checkpoint": "component-quota-confirm-help-top",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-07.stdout",
+        "sha256": "ea1ada37c65ae348564a0efb186f93c0544c2c57036e97bbe7ab373b50962f45"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 8,
+      "checkpoint": "component-quota-confirm-no-returned",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-08.stdout",
+        "sha256": "2e78ce979aa0147822e671f5719827cf92218138fefe76efab2ffb4250a382a3"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 9,
+      "checkpoint": "component-quota-confirm-no",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-09.stdout",
+        "sha256": "cd70ea9121fdf021fd2324dfc7562847529f79173115b6f9420daafdda8122a6"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 10,
+      "checkpoint": "component-quota-confirm-yes",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-10.stdout",
+        "sha256": "4d246c33993d75fbfb0478347cba0e414a83f9c9bbe3191463869e0b7366564d"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 11,
+      "checkpoint": "component-quota-credits-balance",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-11.stdout",
+        "sha256": "faba9556bdd0e4a9cccbbfb1b3af850d8c0e6641d4b01c189150f3b3ec567c92"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 12,
+      "checkpoint": "component-quota-credits-identity",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-12.stdout",
+        "sha256": "208a96d34b6fd8f7bcda385b5d9410d92cdeecc774ef33ce6a95cdd8f943e4d0"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 13,
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-13.stdout",
+        "sha256": "17da4b6816139f64791232615b0ccfb9183122ef2a4c7aeea75f3513e37b9939"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 14,
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-14.stdout",
+        "sha256": "504bad7c3c015aa04b7f7157f32fd4b3b60a38c557385d450439e8e58c59911f"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 15,
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-15.stdout",
+        "sha256": "d1d9c0438307de0e814e8ff9ab495359e2b0feb503c405a0132d3872bed50dfc"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 16,
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-16.stdout",
+        "sha256": "816109b3f794f167ccb0234f41ef93ebcbf76cb6e0ef372640e03940d2865469"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 17,
+      "checkpoint": "component-quota-details-bottom",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-bottom.image-observation.json",
+        "sha256": "14ae6841703ed51837afd6acc165e9c97b27b6b2bd1408ea7847fff6036fae4a"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 18,
+      "checkpoint": "component-quota-details-top",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-details-top.image-observation.json",
+        "sha256": "79162273e308c873be827cbea20e4ec27a83d3404ebe8c44df396e24fbcda70c"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 19,
+      "checkpoint": "component-quota-floor-cancelled",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-19.stdout",
+        "sha256": "f2ec663701bf51ea793b097565a31249b50645d28356002ce710c19790125f61"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 20,
+      "checkpoint": "component-quota-floor-draft",
+      "kind": "positive",
+      "reused": true,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-draft.image-observation.json",
+        "sha256": "cc94c3b8ebcf1ed2fd644ccb851ae43f09c31bf8e2a19511ed8ede56e4013a29"
+      },
+      "missing": [
+        "1%"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 21,
+      "checkpoint": "component-quota-floor-original",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-floor-original.image-observation.json",
+        "sha256": "2aa2f856cf3e9df2dcc00834bccadec1c0ccaf015473697f6efc1d9e3d1b923b"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 22,
+      "checkpoint": "component-quota-floor-saved",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-22.stdout",
+        "sha256": "6ba40c5029bf29d6fe074723db66b957e9b0f671d121acbb255215bfbad34cce"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 23,
+      "checkpoint": "component-quota-help-bottom",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-bottom.image-observation.json",
+        "sha256": "1061c3ac2b2a37540ca203101fb7ddb2aa717e57352e1dcd43090b1a2193c3dc"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 24,
+      "checkpoint": "component-quota-help-top",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-help-top.image-observation.json",
+        "sha256": "6eaae1ed46f9904f51dcfa2c3d2a7f916e6ba6478c219407663ebeab92b26744"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 25,
+      "checkpoint": "component-quota-next-account",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-next-account.image-observation.json",
+        "sha256": "19415c7279b8fb503f55178cc8de233b89666081157976710bd9089d82b6e5d1"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 26,
+      "checkpoint": "component-quota-options-identity",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-26.stdout",
+        "sha256": "115d56d7e6086a52b3c6623145e17919496fa4299e0ca72b5c5b1d1d84e25af9"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 27,
+      "checkpoint": "component-quota-policy-cancelled",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-27.stdout",
+        "sha256": "b01003e627cab1bcf1df027745d9c64a466c0ad735c998743d1a0f3ad247d1e9"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 28,
+      "checkpoint": "component-quota-policy-choice-returned",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-28.stdout",
+        "sha256": "9f2604c0ca50a456948a6bc5985d2afc20c759b687f148ea3f6fce961a92f682"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 29,
+      "checkpoint": "component-quota-policy-choice",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-29.stdout",
+        "sha256": "bc56faef4b00a01b0e2472d5dd515cb0efa45049cdb7c1a9997f54237130c87e"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 30,
+      "checkpoint": "component-quota-policy-draft",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-30.stdout",
+        "sha256": "9759432cf244f2567239666339e94a8cdbfe8c37f707fa137d72cce2f76d237c"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 31,
+      "checkpoint": "component-quota-policy-no-match",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-31.stdout",
+        "sha256": "8344396369de50d56012cb04d616bce8afaa1aa520103ebac19a6a738a3d16cb"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 32,
+      "checkpoint": "component-quota-policy-original",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-32.stdout",
+        "sha256": "a543ee0654be15405d43a4e89c24591b6f9f8be365a00687ae0e0b64344744ab"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 33,
+      "checkpoint": "component-quota-policy-saved",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-33.stdout",
+        "sha256": "66067a834c58f053453c7dde24486cd1acec1377ad26d74dbddd83d1a9c6f8e3"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 34,
+      "checkpoint": "component-quota-refresh-result",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-34.stdout",
+        "sha256": "bea4d5de1046f68a50b378287d6246087df1c9d9cb965975632df663a646ee9e"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 35,
+      "checkpoint": "component-quota-reset-inventory",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-35.stdout",
+        "sha256": "ad06121306daf427721386eb51fd588f5fd5e680c7abec4255b9bc504d80f8f4"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 36,
+      "checkpoint": "component-quota-reset-last-page",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-36.stdout",
+        "sha256": "967bdfec8384ab306168f2c61bdf9bdcebfe2b50eec50c68b2e655e76c47c357"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 37,
+      "checkpoint": "component-quota-reset-result-bottom",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-37.stdout",
+        "sha256": "9e63fb5732546e861c8861863d8030b0e36b019ed5b9973fcc46e364d219f1cd"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 38,
+      "checkpoint": "component-quota-reset-result",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-38.stdout",
+        "sha256": "06055111aebbc2abf14881738642689dd197632220ef2730de10c57d0ce79aa9"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 39,
+      "checkpoint": "component-quota-reset-review",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-39.stdout",
+        "sha256": "ff1c80d1b88fb1747d120829a0dc67476d15737e90c7b0cb144f29e66534c5af"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 40,
+      "checkpoint": "component-quota-restored-account",
+      "kind": "positive",
+      "reused": true,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24/quota-component-normal-48x24/component-quota-restored-account.image-observation.json",
+        "sha256": "4ccbbd6634eb86d561de0b9ae09ea5fd739f8904150cf731823fffd8000b8ea9"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 41,
+      "checkpoint": "component-quota-returned",
+      "kind": "positive",
+      "reused": false,
+      "exit": 0,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-41.stdout",
+        "sha256": "bae10682986ed4fc470c09814d06ed4576212c9e5738b5d9151408374da28d53"
+      },
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "case": 42,
+      "checkpoint": "component-quota-policy-saved",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-42.stdout",
+        "sha256": "fb1f6ac33b2bdb74e91f01b6f73f7ab25024de04a31a89d05f85ee600490e4c0"
+      },
+      "missing": [
+        "Credit usage",
+        "Use credits Allow",
+        "Cancel",
+        "Save"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 43,
+      "checkpoint": "component-quota-policy-saved",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-43.stdout",
+        "sha256": "d9cc46fd30af24e4db4ec39085c688afa5b7e6eaec1f6fd1360d209f15926069"
+      },
+      "missing": [
+        "Use credits Allow"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 44,
+      "checkpoint": "component-quota-floor-saved",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-44.stdout",
+        "sha256": "6c9653d27916b5b64561452099ebfd0e2c4c14f838f3b7dcd526fc10a7e3debe"
+      },
+      "missing": [
+        "Current 1%"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 45,
+      "checkpoint": "component-quota-floor-saved",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-45.stdout",
+        "sha256": "4028b9240c4f103bb71a0756c49497b620e8107ca99a9858487e38fdf5217285"
+      },
+      "missing": [
+        "Current 1%"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 46,
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-46.stdout",
+        "sha256": "aa9638b6948e60514d2788b0ddfc176a5f21197069d9d757d8575741fd1dc230"
+      },
+      "missing": [
+        "63,000"
+      ],
+      "unexpected": [
+        "62,500"
+      ]
+    },
+    {
+      "case": 47,
+      "checkpoint": "component-quota-returned",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-47.stdout",
+        "sha256": "ac9f79a9c8cc9a98e82feb8eea0f583c395c6d51edec9473b4933ff6c821ad72"
+      },
+      "missing": [],
+      "unexpected": [
+        "Reset result",
+        "Success"
+      ]
+    },
+    {
+      "case": 48,
+      "checkpoint": "component-quota-help-bottom",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-48.stdout",
+        "sha256": "34e53bd92f9aafb6f2cb40df37924cbb731e3c55b6b4aae9e3a04ce03332f9c8"
+      },
+      "missing": [
+        "Exit Quota unless a reset is being applied."
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 49,
+      "checkpoint": "component-quota-details-bottom",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-49.stdout",
+        "sha256": "c45b1d9383a4fa161106dcfa7b68861f3d91a652c7f6b41e7df40e2b952a7534"
+      },
+      "missing": [
+        "note"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 50,
+      "checkpoint": "component-quota-reset-result-bottom",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-50.stdout",
+        "sha256": "5f8877c669660db55e830879467688e61b30e5888b1856a9a5beb8c0e69ae432"
+      },
+      "missing": [
+        "Reset result",
+        "Return to quota status.",
+        "Close"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 51,
+      "checkpoint": "component-quota-browse-credit-window",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-51.stdout",
+        "sha256": "2317f659ab9f8aa5b8f71811b0f081f4888e9084120ef103a1e9f158e61c32a5"
+      },
+      "missing": [
+        "62.5k",
+        "captured Alpha account; foreign selected Beta",
+        "visible selected account is missing or ambiguous"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 52,
+      "checkpoint": "component-quota-browse-pace-heading",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-52.stdout",
+        "sha256": "3844aafd166234a34eadead7fefd3c69ff2acfd4a1e550bd0b9d60323d9cb1fc"
+      },
+      "missing": [
+        "99%",
+        "captured Alpha account; foreign selected Beta",
+        "visible selected account is missing or ambiguous"
+      ],
+      "unexpected": []
+    },
+    {
+      "case": 53,
+      "checkpoint": "component-quota-browse-pace-value",
+      "kind": "negative",
+      "reused": false,
+      "exit": 1,
+      "raw": {
+        "path": "/private/tmp/2026-10-tui-component-system/c7-current48-posthoc/case-53.stdout",
+        "sha256": "30bd4c87f998f3e9c9eca65a10dd0803e065ec85cdd4a450cfc8b6399ea3f962"
+      },
+      "missing": [
+        "burn unavailable",
+        "visible selected account is missing or ambiguous"
+      ],
+      "unexpected": []
+    }
+  ],
+  "passed": true,
+  "counts": {
+    "properties": 42,
+    "wrong_images": 12,
+    "strictFloorUnsupported": 1,
+    "existing_exact_results": 13,
+    "fresh_native_reads": 41
+  },
+  "limits": [
+    "41newnativeoriginalreads+13existingexacthashresults,42properties/12wrongimages accountedseparately",
+    "KnownFloorstrictunsupported mustremainrejected; completewholefieldmanualappearancewitnessseparate",
+    "HistoricalruntimeFAILED/noNormal/remainingruntimeautomaticUNRUN unchanged; posthocisnotnewruntime",
+    "NoUI/compile/newOCRmode/alias/sourceedit/globalproducthold; fixed0cce/e873source+images",
+    "Firstunexpectedstop,actualownedcleanup/sourcehashguard; remainingunrunreportedexplicitly"
+  ],
+  "seconds": 15.56018349993974,
+  "inputs_unchanged": true,
+  "finish": "2026-10-20T08:47:00.370826+00:00"
+}

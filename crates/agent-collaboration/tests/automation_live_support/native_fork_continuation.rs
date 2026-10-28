@@ -13,11 +13,15 @@ pub async fn exercise() -> ProofResult<()> {
     let source = proof.start_thread("Luna fork source").await?;
     let token = format!("FORK_CONTEXT_{}", OperationId::generate().as_str());
     let receipt = proof.client.send_agent_message(SessionMessageSendParams {
+        item_id: None,
         target: source.clone(), generation_guard: Some(proof.generation.clone()),
         message: MessageContent::Agent { sender: source.clone(), text: format!("Remember this context token: {token}. Output exactly {token}. Do not call tools or spawn agents.").try_into()? },
         mode: MessageDelivery::Auto,
     }).await?;
-    let Some(DeliveryClientReceipt::CodexAppServer(native)) = receipt.client else {
+    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
+        return Err("Local source returned remote sender custody".into());
+    };
+    let Some(DeliveryClientReceipt::CodexAppServer(native)) = receipt.receipt.client else {
         return Err("Fresh source lacked the native client receipt".into());
     };
     let NativeSendAcceptance::NativeInputAccepted { turn_id, .. } = native.acceptance else {

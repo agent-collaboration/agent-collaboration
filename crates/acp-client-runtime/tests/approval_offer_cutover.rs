@@ -1,7 +1,5 @@
 //! Scripted ACP permission exchanges over a real stdio subprocess.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -15,34 +13,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, ApprovalScope, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const PERMISSION_FIXTURE: &str = r#"
-import json,sys
-mode,receipt=sys.argv[1:]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-options=([{'optionId':'allow-always','name':'Always allow','kind':'allow_always'}]
-         if mode=='persistent' else
-         [{'optionId':'same','name':'Allow','kind':'allow_once'},
-          {'optionId':'same','name':'Reject','kind':'reject_once'}])
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{
-    'sessionId':'fixture-session',
-    'toolCall':{'toolCallId':'tool-1','title':'Run command','kind':'execute',
-                'rawInput':{'command':'echo safe','api_key':'secret'}},
-    'options':options}})
-answer=read()
-assert answer['id']==91
-with open(receipt,'w') as output: json.dump(answer['result'],output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const PERMISSION_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/permission-offer-agent.ts"
+);
 
 #[derive(Default)]
 struct CaptureInteractionPort {
@@ -61,6 +35,10 @@ impl InteractionPort for CaptureInteractionPort {
         CancellationToken::new()
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_approval(
         &self,
         _context: Self::Context,
@@ -86,6 +64,11 @@ impl InteractionPort for CaptureInteractionPort {
     ) -> InteractionFuture<'_, session_event_model::QuestionResponse> {
         Box::pin(async { session_event_model::QuestionResponse::Cancelled })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn record_refusal(
         &self,
         _context: Self::Context,
@@ -120,16 +103,18 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_permission_fixture(mode: &str) -> (Arc<CaptureInteractionPort>, serde_json::Value) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("agent-answer.json");
     let port = Arc::new(CaptureInteractionPort::default());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 PERMISSION_FIXTURE.to_owned(),
                 mode.to_owned(),
                 receipt.to_string_lossy().into_owned(),

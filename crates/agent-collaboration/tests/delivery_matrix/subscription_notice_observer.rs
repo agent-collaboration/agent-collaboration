@@ -30,16 +30,19 @@ pub(crate) async fn verify_subscription_notice(
             reference: link.to_string(),
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(shown) = shown else {
+        return Err("native proof expected a stored local push".into());
+    };
     if shown.record.kind != PushKind::SubscriptionActivity
         || shown.record.target != *target
         || !shown
             .activity_ranges
             .iter()
-            .flat_map(|range| &range.messages)
+            .flat_map(|range| &range.posts)
             .any(|message| message.text.as_str() == body_marker)
     {
         return Err("Subscription link did not expand the target's posted activity".into());
     }
     proof.record("subscriptionNotice", json!({"target":target,"pushId":shown.record.push_id,"line":notice,"rangeCount":shown.activity_ranges.len()}))?;
-    Ok(shown)
+    Ok(*shown)
 }

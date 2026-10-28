@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! A real ACP load failure keeps its trace reference through CLI show and the stored push.
 
 use codex_router_host::{
@@ -9,9 +8,11 @@ use collaboration_protocol::{
     EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionId, SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::Connection;
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt as _,
@@ -81,8 +82,9 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     let root = tempfile::tempdir().expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -94,12 +96,19 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         },
         vec![ExternalProviderStartup::Launch(
             ExternalProviderLaunchBinding::cursor(
-                "/usr/bin/python3".into(),
-                vec!["-c".to_owned(), refusing_load_provider_fixture()],
+                codex_router_test_support::node_fixture::node_executable().expect("Node"),
+                vec![
+                    codex_router_test_support::node_fixture::fixture_program(
+                        "provider-load-error-agent.ts",
+                    )
+                    .to_string_lossy()
+                    .into_owned(),
+                    PRIVATE_PROVIDER_MARKER.to_owned(),
+                ],
             )
             .expect("Cursor ACP binding"),
         )],
-    )
+    ))
     .await
     .expect("real Host startup");
 
@@ -181,11 +190,11 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         Some(&json!("wakeFired"))
     );
 
-    let automation_database = root.path().join("automation.sqlite");
+    let interaction_database = root.path().join("interaction.sqlite");
     let mut connection =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&automation_database))
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_database))
             .await
-            .expect("automation database connection");
+            .expect("native interaction database observer");
     let (push_id, delivery_state, stored_outcome) = tokio::time::timeout(
         Duration::from_secs(5),
         async {
@@ -225,6 +234,9 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         })
         .await
         .expect("stored wake push inspection");
+    let collaboration_protocol::MessageShowResult::Local(stored) = stored else {
+        panic!("native proof expected a stored local push");
+    };
     let link = stored.link;
 
     let show = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
@@ -292,25 +304,10 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     runtime.shutdown().await.expect("Host shutdown");
 }
 
-fn refusing_load_provider_fixture() -> String {
-    format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"result":{{"protocolVersion":1,"agentCapabilities":{{"loadSession":True}},"agentInfo":{{"name":"error-fixture","version":"1"}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- if request["method"]=="shutdown":
-  print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"result":{{}}}})); sys.stdout.flush()
- elif request["method"]=="exit":
-  break
- else:
-  assert request["method"]=="session/load", request["method"]
-  print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"error":{{"code":-32600,"message":"{PRIVATE_PROVIDER_MARKER}","data":{{"privateText":"{PRIVATE_PROVIDER_MARKER}"}}}}}})); sys.stdout.flush()
-"#
-    )
-}
-
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn record_unloaded_provider_session(
     directory: &Path,
     target: &SessionRef,

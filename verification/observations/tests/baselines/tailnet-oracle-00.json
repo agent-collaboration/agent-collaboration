@@ -1,0 +1,55 @@
+{
+  "function": "curl_post_arguments",
+  "args": [
+    {
+      "url": "https://node.tail.ts.net:8443/mcp"
+    },
+    {
+      "Host": "node.tail.ts.net:8443",
+      "Origin": "https://foreign.invalid"
+    }
+  ],
+  "expected": {
+    "result": [
+      "/usr/bin/curl",
+      "-q",
+      "--silent",
+      "--show-error",
+      "--globoff",
+      "--http1.1",
+      "--proto",
+      "=https",
+      "--noproxy",
+      "*",
+      "--proxy",
+      "",
+      "--no-location",
+      "--max-redirs",
+      "0",
+      "--retry",
+      "0",
+      "--connect-timeout",
+      "65",
+      "--max-time",
+      "75",
+      "--max-filesize",
+      "4194304",
+      "--request",
+      "POST",
+      "--data-binary",
+      "@-",
+      "--header",
+      "User-Agent:",
+      "--header",
+      "Expect:",
+      "--write-out",
+      "\n%{http_code}",
+      "--url",
+      "https://node.tail.ts.net:8443/mcp",
+      "--header",
+      "Host: node.tail.ts.net:8443",
+      "--header",
+      "Origin: https://foreign.invalid"
+    ]
+  }
+}

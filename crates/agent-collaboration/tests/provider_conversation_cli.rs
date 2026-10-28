@@ -1,12 +1,15 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! Compiled-CLI conversations against the real collaboration API, whose in-Host composition
 //! drives a scripted provider backend; fixture assertions fail fast at that boundary.
 
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod fake_api_support;
 #[path = "provider_conversation_cli/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
@@ -127,8 +130,7 @@ async fn external_provider_create_then_prompt_preserves_target_and_supplied_oper
         .into_iter()
         .flatten()
         .collect(),
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
 
     let create = run_cli(&root, create_arguments(CREATE_OPERATION)).await;
@@ -167,7 +169,7 @@ async fn external_provider_create_then_prompt_preserves_target_and_supplied_oper
 async fn wrong_generation_is_no_effect_response_loss_retains_id_and_show_is_read_only() {
     // The CLI read generation 7, but the binding has moved on: the Router refuses the
     // prompt before the provider sees it.
-    let wrong_fixture = ProviderFixture::start_with("wrong-generation", Vec::new(), 8).await;
+    let wrong_fixture = ProviderFixture::start_with("wrong-generation", Vec::new(), 8);
     let wrong_root = wrong_fixture.root().to_owned();
     let wrong = run_cli(&wrong_root, prompt_arguments(WRONG_GENERATION_OPERATION)).await;
     assert_eq!(
@@ -194,8 +196,7 @@ async fn wrong_generation_is_no_effect_response_loss_retains_id_and_show_is_read
             |request| assert_eq!(request["operationId"], LOST_RESPONSE_OPERATION),
             ScriptedAnswer::Never,
         )],
-    )
-    .await;
+    );
     let lost_root = lost_fixture.root().to_owned();
     let lost = run_cli(&lost_root, prompt_arguments(LOST_RESPONSE_OPERATION)).await;
     assert_eq!(lost.status.code(), Some(0));
@@ -218,8 +219,7 @@ async fn wrong_generation_is_no_effect_response_loss_retains_id_and_show_is_read
                 "applied",
             )),
         )],
-    )
-    .await;
+    );
     let show_root = show_fixture.root().to_owned();
     let show = run_cli(
         &show_root,
@@ -305,8 +305,7 @@ async fn unavailable_provider_prompt_prints_catalog_reason_and_fix() {
                 "endpoint":endpoint(),"availability":availability
             })),
         )],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let output = run_cli(&root, prompt_arguments(PROMPT_OPERATION)).await;
     assert_eq!(
@@ -355,8 +354,9 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
         .expect("owned service directory");
     std::fs::create_dir_all(&service_directory).expect("service directory");
 
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: service_directory.clone(),
             codex_home: std::env::var_os("CODEX_HOME")
                 .map(std::path::PathBuf::from)
@@ -372,7 +372,7 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
             ExternalProviderLaunchBinding::cursor(executable, arguments)
                 .expect("Cursor provider binding"),
         )],
-    )
+    ))
     .await
     .expect("collaboration runtime");
 
@@ -522,6 +522,10 @@ async fn run_wait(root: &std::path::Path, operation_id: &str) -> std::process::O
     .await
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn fixture_directory(label: &str) -> std::path::PathBuf {
     let root = std::path::PathBuf::from("/tmp").join(format!(
         "pc-{label}-{}",
@@ -543,13 +547,17 @@ struct ProviderFixture {
 }
 
 impl ProviderFixture {
-    async fn start(label: &str, steps: Vec<ScriptedStep>) -> Self {
-        Self::start_with(label, steps, 7).await
+    fn start(label: &str, steps: Vec<ScriptedStep>) -> Self {
+        Self::start_with(label, steps, 7)
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     /// `binding_generation` is the backend's current binding; the published endpoint always
     /// advertises generation 7, as the CLI reads it.
-    async fn start_with(label: &str, steps: Vec<ScriptedStep>, binding_generation: u64) -> Self {
+    fn start_with(label: &str, steps: Vec<ScriptedStep>, binding_generation: u64) -> Self {
         let root = fixture_directory(label);
         let binding = serde_json::from_value(json!({
             "endpoint":endpoint(),"bindingId":"fixture-binding",
@@ -576,13 +584,12 @@ impl ProviderFixture {
                     {"name":"cancel","status":"supported","evidence":"advertised"}]}]
         }))
         .expect("provider endpoint");
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("endpoint inventory")
             .with_provider_conversation_backend(Arc::new(backend.clone()));
-        let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-            .await
+        let served = ServedCollaborationApi::start(&root, (identity).build())
             .expect("served collaboration API");
         Self {
             root,
@@ -595,6 +602,10 @@ impl ProviderFixture {
         &self.root
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     /// Stops the API, requires every scripted provider operation to have run, and removes
     /// the directory.
     async fn finish(self) {
@@ -677,6 +688,14 @@ fn load_steps(check: impl FnOnce(&Value) + Send + 'static) -> Vec<ScriptedStep> 
     ]
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn common_result(stdout: &[u8]) -> Value {
     let lines: Vec<Value> = String::from_utf8_lossy(stdout)
         .lines()
@@ -696,6 +715,10 @@ fn common_result(stdout: &[u8]) -> Value {
     lines.last().expect("result line").clone()
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn operation_snapshot(
     operation_id: &str,
     operation: &str,
@@ -791,6 +814,10 @@ fn prompt_arguments(operation_id: &str) -> Vec<String> {
     .collect()
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_cli(root: &std::path::Path, arguments: Vec<String>) -> std::process::Output {
     tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(arguments)
@@ -801,6 +828,10 @@ async fn run_cli(root: &std::path::Path, arguments: Vec<String>) -> std::process
         .expect("CLI")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn cleanup_unpublished_fixture(root: &std::path::Path) {
     std::fs::remove_dir(root).expect("directory cleanup");
 }

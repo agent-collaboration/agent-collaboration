@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "WITH sweep_bound AS (SELECT ? AS cut, ? AS project)\nSELECT position AS \"position!: i64\", epoch AS \"epoch!: i64\", record_id AS \"record_id!: String\",\n router_time AS \"router_time?: String\", time_basis AS \"time_basis!: String\"\nFROM project_feed CROSS JOIN sweep_bound sweep\nWHERE record_kind='post' AND position>? AND position<=?\n AND (?=0 OR json_extract(content, '$.record.record.placement.kind')='project')\n AND (? IS NULL OR record_id=? OR json_extract(content, '$.record.record.placement.threadId')=?)\n AND (? IS NULL OR instr(lower(json_extract(content, '$.record.record.text')), ?)>0)\n AND (?='both'\n  OR (?='topLevel' AND (json_extract(content, '$.record.record.placement.kind')='project' OR record_id=json_extract(content, '$.record.record.placement.threadId')))\n  OR (?='thread' AND json_extract(content, '$.record.record.placement.kind')='thread' AND record_id!=json_extract(content, '$.record.record.placement.threadId')))\n AND (sweep.cut IS NULL OR\n  (CASE time_basis WHEN 'legacy_unknown' THEN 0 ELSE 1 END, COALESCE(router_time,''), sweep.project, position)\n  < (CASE json_extract(sweep.cut, '$.time.kind') WHEN 'unknown' THEN 0 ELSE 1 END, COALESCE(json_extract(sweep.cut, '$.time.value'),''), json_extract(sweep.cut, '$.projectId'), json_extract(sweep.cut, '$.position')))\nORDER BY position DESC LIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "time_basis!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "29358e1010cae5d36c5cc5afb63baf6212792e7993e14ca5f261e73ace28b92b"
+}

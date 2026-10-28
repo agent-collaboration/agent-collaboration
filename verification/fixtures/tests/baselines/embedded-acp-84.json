@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime#reject",
+  "originalSHA256": "b19da0140eb74b29254322a504084e4b53da11b4b14dda10204cb9b5d373e7be",
+  "target": "host-live-approval-agent.ts",
+  "arguments": ["reject"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 92, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"reject\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"permission-refusal-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-refusal-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 92, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"fixture-refusal-session\", \"toolCall\": {\"toolCallId\": \"refused-command\", \"title\": \"Run an unapproved command\", \"kind\": \"execute\"}, \"options\": [{\"optionId\": \"reject\", \"name\": \"Reject once\", \"kind\": \"reject_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"cancelled\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

@@ -1,5 +1,12 @@
 //! Approval, question, provider-settings and provider Session lifecycle tools.
-use super::*;
+use super::{
+    ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams, ApprovalListResponse,
+    CallToolResult, CollaborationMcpServer, ConversationCloseRequest,
+    ConversationOperationSubmission, ConversationResumeRequest, EmptyToolInput, McpToolOutput,
+    OperationEffect, Parameters, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
+    ProviderSettingsResult, ProviderSettingsSetRequest, application_result, operation_error_result,
+    rejection_failure, success_result, tool, tool_router, typed_failure_result,
+};
 
 #[tool_router(router = interaction_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
@@ -122,7 +129,7 @@ impl CollaborationMcpServer {
 /// An approval or answer refused by the broker: the decision's outcome is unknown to the
 /// caller, at the named stage, with no target or turn known.
 fn staged_failure_result(
-    rejection: &impl collaboration_service::collaboration_application::CollaborationRejection,
+    rejection: &impl collaboration_service::collaboration_rejection::CollaborationRejection,
     stage: &str,
 ) -> CallToolResult {
     let mut failure = rejection_failure(rejection, OperationEffect::Unknown);

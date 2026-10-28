@@ -172,9 +172,12 @@ impl ResetServiceProvider for FakeProvider {
         let remaining_percent = if call == 0 {
             0
         } else {
-            self.control
-                .revalidation_usage_percent
-                .load(Ordering::SeqCst) as u32
+            u32::try_from(
+                self.control
+                    .revalidation_usage_percent
+                    .load(Ordering::SeqCst),
+            )
+            .unwrap_or_else(|_| panic!("fixture percentage fits u32"))
         };
         LiveUsagePortResult::Known(LiveWeeklyUsage::new(remaining_percent))
     }
@@ -242,10 +245,14 @@ struct ScriptedResetClock {
 }
 
 impl ResetClock for ScriptedResetClock {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn now_unix_seconds(&self) -> Result<u64, RenderSafeFailure> {
         self.times
             .lock()
-            .expect("clock lock")
+            .unwrap_or_else(|_| panic!("clock lock"))
             .pop_front()
             .ok_or(RenderSafeFailure::InvalidResponse)
     }

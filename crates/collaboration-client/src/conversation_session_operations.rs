@@ -31,7 +31,11 @@ impl ConversationClient {
         input: ConversationLoadInput,
         timeout: Duration,
     ) -> Result<ConversationOperationResult, ConversationClientError> {
-        validate_target_operation(&input.target, &input.requested_by, input.approver.as_ref())?;
+        validate_target_operation(
+            &input.target,
+            input.requested_by.session(),
+            input.approver.as_ref(),
+        )?;
         validate_operation_timeout(timeout)?;
         if !input.working_directory.is_absolute() {
             return Err(ConversationClientError::InvalidInput(
@@ -43,6 +47,13 @@ impl ConversationClient {
         self.validate_operation_id(&target.endpoint, operation_id.as_ref(), "load")?;
         match &mut self {
             Self::CodexAcp(acp) => {
+                if input.requested_by.session().is_none() {
+                    return Err(unsupported(
+                        &target.endpoint,
+                        "requestedBy",
+                        "Codex load requires a Session requester; use a provider endpoint for Human Load",
+                    ));
+                }
                 if input.generation.is_some() {
                     return Err(unsupported(
                         &target.endpoint,
@@ -77,7 +88,9 @@ impl ConversationClient {
                     settlement: ConversationSettlement {
                         target: loaded,
                         stop_reason: None,
-                        detail: ConversationSettlementDetail::CodexLoad,
+                        detail: ConversationSettlementDetail::CodexLoad {
+                            permission_differences: acp.permission_differences.clone(),
+                        },
                     },
                 })
             }
@@ -94,10 +107,8 @@ impl ConversationClient {
                     target: target.clone(),
                     generation: input.generation,
                     working_directory,
-                    requested_by: input.requested_by.clone().into(),
-                    approver: input
-                        .approver
-                        .unwrap_or_else(|| ProviderIdentity::from(input.requested_by)),
+                    requested_by: input.requested_by.clone(),
+                    approver: input.approver.unwrap_or(input.requested_by),
                     requested_policy: ProviderRequestedPolicy {
                         access: input.access,
                     },
@@ -163,7 +174,11 @@ impl ConversationClient {
         timeout: Duration,
         cancel: CancellationToken,
     ) -> Result<ConversationOperationResult, ConversationClientError> {
-        validate_target_operation(&input.target, &input.requested_by, input.approver.as_ref())?;
+        validate_target_operation(
+            &input.target,
+            Some(&input.requested_by),
+            input.approver.as_ref(),
+        )?;
         validate_operation_timeout(timeout)?;
         let target = input.target.clone();
         let operation_id = input.operation_id.clone();
@@ -314,7 +329,11 @@ impl ConversationClient {
         mut self,
         input: ConversationCancelInput,
     ) -> Result<ConversationOperationSubmission, ConversationClientError> {
-        validate_target_operation(&input.target, &input.requested_by, input.approver.as_ref())?;
+        validate_target_operation(
+            &input.target,
+            Some(&input.requested_by),
+            input.approver.as_ref(),
+        )?;
         match &mut self {
             Self::CodexAcp(_) => Err(unsupported(
                 &input.target.endpoint,
@@ -510,10 +529,10 @@ fn operation_settlement_failure(
 /// belongs to no service.
 fn validate_target_operation(
     target: &SessionRef,
-    requested_by: &SessionRef,
+    requested_by: Option<&SessionRef>,
     approver: Option<&ProviderIdentity>,
 ) -> Result<(), ConversationClientError> {
-    if requested_by.endpoint.service_id != target.endpoint.service_id
+    if requested_by.is_some_and(|actor| actor.endpoint.service_id != target.endpoint.service_id)
         || approver
             .and_then(ProviderIdentity::session)
             .is_some_and(|approver| approver.endpoint.service_id != target.endpoint.service_id)

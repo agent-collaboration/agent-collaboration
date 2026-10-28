@@ -8,7 +8,7 @@ mod tests {
     };
     use collaboration_client::CollaborationClient;
     use collaboration_protocol::{CoverageState, LifecycleChange, ObservationScope};
-    use collaboration_service::ServiceIdentity;
+    use collaboration_service::ApplicationFixture;
     use futures_util::{SinkExt, StreamExt};
     use lifecycle_observation::{
         LifecycleStore, NativeObservationInputs, NativeObservationStream, ObservationJournal,
@@ -230,7 +230,7 @@ mod tests {
         scope: &ObservationScope,
         store: Arc<LifecycleStore>,
     ) -> (CollaborationClient, crate::served_api::ServedApi) {
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002",
     ).unwrap_or_else(|error| panic!("identity: {error}"))
     .with_endpoints(vec![serde_json::from_value(json!({"endpoint":scope.endpoint,"label":"Fixture Codex","availability":{"state":"unprobed"},
@@ -239,7 +239,6 @@ mod tests {
     .unwrap_or_else(|error| panic!("endpoints: {error}"))
     .with_journal(store);
         let served = crate::served_api::ServedApi::start(identity)
-            .await
             .unwrap_or_else(|error| panic!("serve: {error}"));
         let client = served
             .client("public-observation-test")

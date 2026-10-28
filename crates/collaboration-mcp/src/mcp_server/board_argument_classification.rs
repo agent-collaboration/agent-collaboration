@@ -4,11 +4,20 @@
 //! decoder's own message can name supplied keys and variants, so the tool classifies the
 //! arguments instead: the rejection names the field and its requirement and never repeats a
 //! supplied value, key or variant.
-use message_board::*;
+use message_board::{
+    ActingForIdentity, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage,
+    BoardNextAction, CommonDirectory, Description, EpochNumber, FeedPosition, Identity,
+    NormalizedOrigin, PageLimit, PageRequest, PostId, PostText, ReadActor, RecordKind,
+    RepositoryRef, ResourceName, ThreadRef, ThreadSubject,
+};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Map, Value};
 use std::{borrow::Cow, marker::PhantomData};
+
+#[path = "board_variant_validation.rs"]
+mod board_variant_validation;
+use board_variant_validation::validate_closed_variants;
 
 const IDENTITY_REQUIREMENT: &str = "must be a human identity with a 1 to 4096 byte humanId without NUL, or a session identity with a canonical service UUID, 1 to 64 byte lowercase endpointId, and 1 to 4096 byte sessionId without NUL";
 
@@ -72,13 +81,26 @@ fn classify_failure(tool: &str, arguments: &Value) -> Option<BoardError> {
     let Some(fields) = arguments.as_object() else {
         return Some(invalid_field("request", "must be a JSON object"));
     };
+    if matches!(tool, "thread_create" | "thread_refile")
+        && fields
+            .get("about")
+            .is_none_or(|about| serde_json::from_value::<ThreadSubject>(about.clone()).is_err())
+    {
+        return Some(BoardError {
+            kind: BoardFailureKind::InvalidShape,
+            ..invalid_field(
+                "about",
+                "must name a project subject line, workstream, task, work-trail row or workspace ADR",
+            )
+        });
+    }
     validate_required_identities(tool, fields)
         .err()
         .or_else(|| validate_optional_identity(fields, "actor", false).err())
-        .or_else(|| validate_optional_identity(fields, "reader", false).err())
+        .or_else(|| validate_reader(tool, fields).err())
         .or_else(|| validate_optional_identity(fields, "actingFor", true).err())
         .or_else(|| validate_known_uuid_v7_fields(fields).err())
-        .or_else(|| validate_known_activity_positions(fields).err())
+        .or_else(|| validate_known_feed_positions(fields).err())
         .or_else(|| validate_metadata_fields(tool, fields).err())
         .or_else(|| validate_page(fields).err())
         .or_else(|| validate_repository(fields).err())
@@ -96,36 +118,35 @@ fn malformed_request(tool: &str) -> BoardError {
 
 fn validate_required_identities(tool: &str, fields: &Map<String, Value>) -> Result<(), BoardError> {
     const ACTOR_METHODS: &[&str] = &[
-        "board_project_create",
-        "board_project_update",
-        "board_repository_attach",
-        "board_repository_detach",
+        "workspace_create",
+        "workspace_update",
+        "workspace_archive",
+        "repository_attach",
+        "repository_detach",
         "board_create",
         "board_update",
         "board_archive",
-        "board_topic_create",
-        "board_topic_update",
-        "board_message_post",
-        "board_thread_create",
-        "board_thread_join",
-        "board_thread_leave",
-        "board_thread_resolve",
-        "board_thread_unresolve",
-        "board_thread_watch",
-        "board_thread_unwatch",
-        "board_topic_watch",
-        "board_topic_unwatch",
-        "board_inbox_acknowledge",
-        "board_thread_subscribe",
-        "board_thread_unsubscribe",
-        "board_thread_subscriptions",
-        "board_thread_wait",
+        "board_close",
+        "project_create",
+        "project_update",
+        "thread_post",
+        "thread_create",
+        "thread_refile",
+        "thread_join",
+        "thread_leave",
+        "thread_resolve",
+        "thread_unresolve",
+        "thread_watch",
+        "thread_unwatch",
+        "project_watch",
+        "project_unwatch",
+        "inbox_acknowledge",
+        "thread_subscribe",
+        "thread_unsubscribe",
+        "thread_subscriptions",
+        "thread_wait",
     ];
-    const READER_METHODS: &[&str] = &[
-        "board_thread_list",
-        "board_inbox_fetch",
-        "board_inbox_projects",
-    ];
+    const READER_METHODS: &[&str] = &["thread_list", "inbox_fetch", "inbox_workspaces"];
     if ACTOR_METHODS.contains(&tool) && fields.get("actor").is_none_or(Value::is_null) {
         return Err(invalid_identity("actor", IDENTITY_REQUIREMENT));
     }
@@ -164,21 +185,79 @@ fn validate_optional_identity(
     Ok(())
 }
 
+fn validate_reader(tool: &str, fields: &Map<String, Value>) -> Result<(), BoardError> {
+    if !matches!(tool, "thread_show" | "feed_read" | "work_trail_show") {
+        return validate_optional_identity(fields, "reader", false);
+    }
+    let reader = fields
+        .get("reader")
+        .ok_or_else(|| invalid_field("reader", "must be anonymous or identified"))?;
+    if reader.get("kind").and_then(Value::as_str) == Some("identified")
+        && reader
+            .get("reader")
+            .is_none_or(|identity| serde_json::from_value::<Identity>(identity.clone()).is_err())
+    {
+        return Err(invalid_identity("reader.reader", IDENTITY_REQUIREMENT));
+    }
+    if serde_json::from_value::<ReadActor>(reader.clone()).is_err() {
+        return Err(invalid_field(
+            "reader",
+            "must be anonymous or identified with its reader identity",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_known_uuid_v7_fields(fields: &Map<String, Value>) -> Result<(), BoardError> {
     for field in [
-        "projectId",
+        "workspaceId",
         "boardId",
-        "topicId",
-        "messageId",
-        "rootMessageId",
+        "projectId",
+        "postId",
+        "rootPostId",
+        "threadId",
     ] {
         validate_uuid_field(fields.get(field), field)?;
     }
+    for (value, field) in [
+        (fields.get("thread"), "thread"),
+        (
+            fields
+                .get("placement")
+                .and_then(|value| value.get("thread")),
+            "placement.thread",
+        ),
+        (
+            fields.get("scope").and_then(|value| value.get("thread")),
+            "scope.thread",
+        ),
+    ] {
+        if let Some(value) = value
+            && serde_json::from_value::<ThreadRef>(value.clone()).is_err()
+        {
+            return Err(invalid_field(
+                field,
+                "must contain a thread UUIDv7 and optional project UUIDv7",
+            ));
+        }
+    }
+    if let Some(record) = fields.get("record") {
+        validate_uuid_field(record.get("id"), "record.id")?;
+        if record
+            .get("kind")
+            .is_none_or(|kind| serde_json::from_value::<RecordKind>(kind.clone()).is_err())
+        {
+            return Err(invalid_field(
+                "record.kind",
+                "must be a supported record kind",
+            ));
+        }
+    }
     for (container_name, id_fields) in [
-        ("placement", &["topicId", "rootMessageId"][..]),
+        ("placement", &["projectId", "rootPostId"][..]),
         (
             "scope",
-            &["topicId", "rootMessageId", "boardId", "projectId"][..],
+            &["projectId", "rootPostId", "boardId", "workspaceId"][..],
         ),
     ] {
         if let Some(container) = fields.get(container_name).and_then(Value::as_object) {
@@ -190,7 +269,7 @@ fn validate_known_uuid_v7_fields(fields: &Map<String, Value>) -> Result<(), Boar
     if let Some(references) = fields.get("references").and_then(Value::as_array) {
         for (index, reference) in references.iter().enumerate() {
             if let Some(reference) = reference.as_object() {
-                for field in ["messageId", "rootMessageId"] {
+                for field in ["postId", "rootPostId"] {
                     validate_uuid_field(
                         reference.get(field),
                         &format!("references[{index}].{field}"),
@@ -206,7 +285,7 @@ fn validate_uuid_field(value: Option<&Value>, field: &str) -> Result<(), BoardEr
     if let Some(value) = value
         && value
             .as_str()
-            .and_then(|value| MessageId::try_from(value.to_owned()).ok())
+            .and_then(|value| PostId::try_from(value.to_owned()).ok())
             .is_none()
     {
         return Err(invalid_field(
@@ -217,57 +296,86 @@ fn validate_uuid_field(value: Option<&Value>, field: &str) -> Result<(), BoardEr
     Ok(())
 }
 
-fn validate_known_activity_positions(fields: &Map<String, Value>) -> Result<(), BoardError> {
-    validate_activity_field(
-        fields.get("throughActivitySequence"),
-        "throughActivitySequence",
-    )?;
+fn validate_known_feed_positions(fields: &Map<String, Value>) -> Result<(), BoardError> {
     if let Some(selection) = fields.get("selection").and_then(Value::as_object) {
-        for field in [
-            "afterActivitySequence",
-            "fromActivitySequence",
-            "toActivitySequence",
-        ] {
-            validate_activity_field(selection.get(field), &format!("selection.{field}"))?;
+        for field in ["after", "from", "to"] {
+            if let Some(position) = selection.get(field)
+                && let Some(cursor) = position.get("cursor")
+            {
+                let prefix = format!("selection.{field}.cursor");
+                if let Some(projects) = cursor.get("perProject").and_then(Value::as_object) {
+                    for cursor in projects.values() {
+                        validate_feed_cursor(cursor, &prefix)?;
+                    }
+                } else {
+                    validate_feed_cursor(cursor, &prefix)?;
+                }
+            }
+        }
+    }
+    for field in ["after", "through", "before", "rangeTop"] {
+        if let Some(cursor) = fields.get(field) {
+            validate_feed_cursor(cursor, field)?;
+        }
+    }
+    if let Some(entries) = fields.get("entries").and_then(Value::as_array) {
+        for (index, entry) in entries.iter().enumerate() {
+            if let Some(cursor) = entry.get("through") {
+                validate_feed_cursor(cursor, &format!("entries[{index}].through"))?;
+            }
         }
     }
     Ok(())
 }
-
-fn validate_activity_field(value: Option<&Value>, field: &str) -> Result<(), BoardError> {
-    if let Some(value) = value
-        && value
+fn validate_feed_cursor(value: &Value, field: &str) -> Result<(), BoardError> {
+    if let Some(position) = value.get("position")
+        && position
             .as_u64()
-            .and_then(|value| ActivitySequence::try_from(value).ok())
+            .and_then(|value| FeedPosition::try_from(value).ok())
             .is_none()
     {
         return Err(invalid_field(
-            field,
+            format!("{field}.position"),
             "must be an integer from 0 through 9223372036854775807",
+        ));
+    }
+    if let Some(epoch) = value.get("epoch")
+        && epoch
+            .as_u64()
+            .and_then(|value| EpochNumber::try_from(value).ok())
+            .is_none()
+    {
+        return Err(invalid_field(
+            format!("{field}.epoch"),
+            "must be an integer from 1 through 9223372036854775807",
         ));
     }
     Ok(())
 }
 
 fn validate_metadata_fields(tool: &str, fields: &Map<String, Value>) -> Result<(), BoardError> {
-    if let Some(value) = fields.get("name") {
+    let project_metadata = matches!(tool, "project_create" | "project_update");
+    let field = if project_metadata { "title" } else { "name" };
+    if let Some(value) = fields.get(field) {
         let valid = value
             .as_str()
             .and_then(|value| ResourceName::try_from(value.to_owned()).ok())
             .is_some();
         if !valid {
-            if matches!(tool, "board_topic_create" | "board_topic_update") {
-                return Err(invalid_topic_name(
+            if project_metadata {
+                return Err(invalid_project_name(
+                    field,
                     "must trim to 1 through 256 UTF-8 bytes and be unique within its board",
                 ));
             }
             return Err(invalid_field(
-                "name",
+                field,
                 "must trim to 1 through 256 UTF-8 bytes",
             ));
         }
-    } else if matches!(tool, "board_topic_create" | "board_topic_update") {
-        return Err(invalid_topic_name(
+    } else if project_metadata {
+        return Err(invalid_project_name(
+            field,
             "is required and must trim to 1 through 256 UTF-8 bytes",
         ));
     }
@@ -285,7 +393,7 @@ fn validate_metadata_fields(tool: &str, fields: &Map<String, Value>) -> Result<(
     if let Some(value) = fields.get("text")
         && value
             .as_str()
-            .and_then(|value| MessageText::try_from(value.to_owned()).ok())
+            .and_then(|value| PostText::try_from(value.to_owned()).ok())
             .is_none()
     {
         return Err(invalid_field(
@@ -362,131 +470,6 @@ fn validate_repository(fields: &Map<String, Value>) -> Result<(), BoardError> {
     Ok(())
 }
 
-fn validate_closed_variants(tool: &str, fields: &Map<String, Value>) -> Result<(), BoardError> {
-    validate_variant::<Placement>(
-        fields,
-        "placement",
-        "must be topic or thread with its required UUIDv7 field",
-    )?;
-    if tool == "board_discovery_search" || tool == "board_message_search" {
-        if fields
-            .get("query")
-            .and_then(Value::as_str)
-            .and_then(|value| SearchQuery::try_from(value.to_owned()).ok())
-            .is_none()
-        {
-            return Err(invalid_field(
-                "query",
-                "must contain 1 to 256 UTF-8 bytes after trimming",
-            ));
-        }
-        if !fields.contains_key("scope") {
-            return Err(invalid_field("scope", "is required"));
-        }
-        if tool == "board_discovery_search" {
-            validate_variant::<DiscoveryScope>(
-                fields,
-                "scope",
-                "must select allProjects, project, or board",
-            )?;
-            validate_variant::<DiscoveryKind>(
-                fields,
-                "kind",
-                "must be all, project, board, or topic",
-            )?;
-        } else {
-            validate_variant::<MessageListScope>(
-                fields,
-                "scope",
-                "must select allProjects, project, board, topic, or thread",
-            )?;
-            validate_variant::<SearchMessageKind>(
-                fields,
-                "kind",
-                "must be both, topLevel, or thread",
-            )?;
-        }
-    } else if tool == "board_message_list" {
-        validate_variant::<MessageListScope>(
-            fields,
-            "scope",
-            "must be topic, thread, board, project, or allProjects",
-        )?;
-        validate_variant::<MessageSelection>(
-            fields,
-            "selection",
-            "must be latest, afterPosition, or an ordered inclusive range",
-        )?;
-    } else if tool == "board_inbox_fetch" {
-        if !fields.contains_key("scope") {
-            return Err(invalid_field(
-                "scope",
-                "is required and must select project, board, or topic",
-            ));
-        }
-        validate_variant::<InboxScope>(
-            fields,
-            "scope",
-            "must be project, board, or topic with its required UUIDv7 field",
-        )?;
-        validate_variant::<InboxReadMode>(fields, "readMode", "must be unread or latest")?;
-    } else if tool == "board_inbox_acknowledge" {
-        validate_variant::<ReadScope>(
-            fields,
-            "scope",
-            "must be topic or thread with its required UUIDv7 field",
-        )?;
-    } else if tool == "board_thread_subscribe" {
-        if !fields.contains_key("scope") {
-            return Err(invalid_field("scope", "is required"));
-        }
-        validate_variant::<SubscriptionScope>(
-            fields,
-            "scope",
-            "must select thread or topic with its required UUIDv7 field",
-        )?;
-        if !fields.contains_key("policy") {
-            return Err(invalid_field("policy", "is required"));
-        }
-        validate_variant::<SubscriptionPolicyPatch>(
-            fields,
-            "policy",
-            "must contain supported optional mode, idle, timing and lifetime fields",
-        )?;
-    } else if tool == "board_thread_unsubscribe" {
-        if !fields.contains_key("scope") {
-            return Err(invalid_field("scope", "is required"));
-        }
-        validate_variant::<SubscriptionScope>(
-            fields,
-            "scope",
-            "must select thread or topic with its required UUIDv7 field",
-        )?;
-    }
-    if let Some(references) = fields.get("references")
-        && serde_json::from_value::<MessageReferences>(references.clone()).is_err()
-    {
-        return Err(invalid_field(
-            "references",
-            "must contain at most 64 distinct message or thread targets",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_variant<TValue: serde::de::DeserializeOwned>(
-    fields: &Map<String, Value>,
-    field: &'static str,
-    requirement: &'static str,
-) -> Result<(), BoardError> {
-    if let Some(value) = fields.get(field)
-        && serde_json::from_value::<TValue>(value.clone()).is_err()
-    {
-        return Err(invalid_field(field, requirement));
-    }
-    Ok(())
-}
-
 fn invalid_field(field: impl Into<String>, requirement: impl Into<String>) -> BoardError {
     BoardError::invalid_field(field, requirement)
 }
@@ -504,14 +487,14 @@ fn invalid_identity(field: &'static str, requirement: &'static str) -> BoardErro
     }
 }
 
-fn invalid_topic_name(requirement: &'static str) -> BoardError {
+fn invalid_project_name(field: &'static str, requirement: &'static str) -> BoardError {
     BoardError {
-        kind: BoardFailureKind::InvalidTopicName,
+        kind: BoardFailureKind::InvalidProjectName,
         stage: BoardFailureStage::Validation,
-        message: format!("Correct name: {requirement}."),
+        message: format!("Correct {field}: {requirement}."),
         next_action: BoardNextAction::SelectDifferentName,
         details: BoardErrorDetails::FieldConstraint {
-            field: "name".to_owned(),
+            field: field.to_owned(),
             requirement: requirement.to_owned(),
         },
     }

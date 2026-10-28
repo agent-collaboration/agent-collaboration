@@ -7,23 +7,45 @@ use std::fs::Permissions;
 use std::fs::TryLockError;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use thiserror::Error;
 use tokio::net::UnixListener;
 
 use crate::HostCoordinationPaths;
 
-/// Exclusive host instance and its private operator listener.
-pub struct HostInstance {
-    listener: UnixListener,
-    socket_path: PathBuf,
+/// Holds Host singleton authority without removing or binding its operator socket.
+pub struct HostInstanceLock {
     lock_file: File,
 }
 
 impl HostInstance {
-    /// Acquires singleton authority before removing or binding the socket.
-    pub fn acquire(paths: HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
+    /// Clears refused product endpoints while this instance holds singleton authority.
+    /// Binders retain their never-unlink contract; live or uncertain endpoints survive.
+    pub async fn clear_stale_endpoint_sockets(&self, directory: &Path) -> std::io::Result<()> {
+        validate_private_runtime_directory(directory)?;
+        for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+            clear_refused_socket(&directory.join(name)).await?;
+        }
+        let provider_directory = directory.join("router-sessions");
+        match std::fs::symlink_metadata(&provider_directory) {
+            Ok(_) => validate_private_runtime_directory(&provider_directory)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        }
+        for name in ["claude-local.sock", "cursor-local.sock"] {
+            clear_refused_socket(&provider_directory.join(name)).await?;
+        }
+        Ok(())
+    }
+}
+
+impl HostInstanceLock {
+    /// Acquires the same nonblocking lock used by the running Host.
+    pub fn acquire(paths: &HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
         let lock_file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -43,7 +65,22 @@ impl HostInstance {
             .set_permissions(Permissions::from_mode(0o600))
             .map_err(InstanceAcquireError::SetLockPermissions)?;
 
-        Self::bind_with_lock(paths, lock_file)
+        Ok(Self { lock_file })
+    }
+}
+
+/// Exclusive host instance and its private operator listener.
+pub struct HostInstance {
+    listener: UnixListener,
+    socket_path: PathBuf,
+    lock_file: File,
+}
+
+impl HostInstance {
+    /// Acquires singleton authority before removing or binding the socket.
+    pub fn acquire(paths: HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
+        let authority = HostInstanceLock::acquire(&paths)?;
+        Self::bind_with_lock(paths, authority.lock_file)
     }
 
     /// Consumes the continuously held descriptor inherited through stdin.
@@ -130,6 +167,57 @@ impl HostInstance {
     pub const fn listener(&self) -> &UnixListener {
         &self.listener
     }
+}
+
+fn validate_private_runtime_directory(directory: &Path) -> std::io::Result<()> {
+    let metadata = std::fs::symlink_metadata(directory)?;
+    if !directory.is_absolute()
+        || !metadata.is_dir()
+        || metadata.uid() != rustix::process::getuid().as_raw()
+        || metadata.permissions().mode() & 0o077 != 0
+    {
+        return Err(std::io::Error::other(
+            "endpoint runtime directory must be owner-private",
+        ));
+    }
+    Ok(())
+}
+
+async fn clear_refused_socket(socket_path: &Path) -> std::io::Result<()> {
+    let before = match std::fs::symlink_metadata(socket_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if !before.file_type().is_socket() || before.uid() != rustix::process::getuid().as_raw() {
+        return Err(std::io::Error::other(
+            "endpoint path is not an owned socket",
+        ));
+    }
+    // Only ECONNREFUSED permits removal. A full backlog or failed probe is uncertain.
+    match tokio::time::timeout(
+        Duration::from_millis(250),
+        tokio::net::UnixStream::connect(socket_path),
+    )
+    .await
+    {
+        Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+        Ok(Ok(_stream)) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrInUse,
+                "endpoint socket is live",
+            ));
+        }
+        Ok(Err(error)) => return Err(error),
+        Err(error) => return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, error)),
+    }
+    let after = std::fs::symlink_metadata(socket_path)?;
+    if before.dev() != after.dev() || before.ino() != after.ino() {
+        return Err(std::io::Error::other(
+            "endpoint socket changed during probe",
+        ));
+    }
+    std::fs::remove_file(socket_path)
 }
 
 /// Stable private handoff protocol passed only by whole-Host replacement.

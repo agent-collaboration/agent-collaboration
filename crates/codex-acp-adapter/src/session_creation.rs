@@ -47,7 +47,9 @@ pub enum SessionSetupError {
     #[error("Router host location {location} is unavailable for session grants")]
     HostLocationsUnavailable { location: String },
 }
+mod recorded_session_resume;
 mod router_permission_profile;
+pub use recorded_session_resume::RecordedSessionResume;
 /// Retains one connection and a receipt minted only by successful fresh thread/start.
 mod session_load_adoption;
 use router_permission_profile::{RouterSessionProfile, access_name};
@@ -63,6 +65,7 @@ pub struct AcpSessionBinding {
     pub(crate) schemas: Arc<NativePayloadSchemas>,
     pub(crate) requested_access: Option<String>,
     pub(crate) settings_observation: SettingsObservation,
+    pub(crate) permission_differences: Vec<collaboration_protocol::PermissionDifference>,
     pub(crate) access_route: Option<crate::ApprovalRoute>,
     pub(crate) approval_broker: std::sync::Arc<dyn crate::ApprovalBroker>,
     /// The reasoning effort the resumed thread already carried, when the native
@@ -346,7 +349,7 @@ impl AcpSessionBinding {
             },
             Some(choice.access),
         );
-        profile.validate_observed(&result)?;
+        let permission_differences = profile.observed_differences(&result);
         let effective_cwd = result
             .get("cwd")
             .and_then(Value::as_str)
@@ -417,6 +420,7 @@ impl AcpSessionBinding {
             schemas: inputs.schemas,
             requested_access: Some(access_name(choice.access).to_owned()),
             settings_observation,
+            permission_differences,
             access_route: Some(access_route),
             approval_broker: inputs.approval_broker,
             persisted_effort: None,
@@ -434,12 +438,31 @@ impl AcpSessionBinding {
     pub fn generation(&self) -> &CodexGeneration {
         &self.generation
     }
+    #[must_use]
+    pub fn permission_differences(&self) -> &[collaboration_protocol::PermissionDifference] {
+        &self.permission_differences
+    }
     pub fn connection_mut(&mut self) -> &mut NativeProtocolConnection {
         &mut self.connection
     }
     #[must_use]
     pub fn new_session_result(&self) -> Value {
-        json!({"sessionId":self.session_id})
+        let mut fields = self.setup_fields();
+        fields.insert("sessionId".into(), json!(self.session_id));
+        Value::Object(fields)
+    }
+    pub(crate) fn setup_result(&self) -> Value {
+        Value::Object(self.setup_fields())
+    }
+    fn setup_fields(&self) -> serde_json::Map<String, Value> {
+        let mut fields = serde_json::Map::new();
+        if !self.permission_differences.is_empty() {
+            fields.insert(
+                "_meta".into(),
+                json!({"codexRouter":{"permissionDifferences":self.permission_differences}}),
+            );
+        }
+        fields
     }
     /// Empty configuration permits attachment to an existing native session without
     /// claiming that this adapter installed its configuration.
@@ -509,6 +532,7 @@ impl AcpSessionBinding {
             access_route: route,
             approval_broker: inputs.approval_broker,
             persisted_effort: None,
+            permission_differences: Vec::new(),
         };
         let response = session
             .resume_with_receipt(catalog, &inputs.generation, &inputs.params)

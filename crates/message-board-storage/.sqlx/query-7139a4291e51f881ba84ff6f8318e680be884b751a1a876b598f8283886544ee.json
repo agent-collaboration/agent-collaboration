@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT intent_id AS \"id!: String\" FROM notify_intents WHERE intent_id>? ORDER BY intent_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7139a4291e51f881ba84ff6f8318e680be884b751a1a876b598f8283886544ee"
+}

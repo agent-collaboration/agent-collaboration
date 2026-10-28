@@ -1,13 +1,14 @@
 //! Abrupt sender process loss preserves delivery identity and never manufactures acceptance.
 use super::*;
-use crate::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery,
-};
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     DeliveryDisposition, DeliveryEvidence, DeliveryShowRequest, OperationId, PushId,
     RouterOriginRef, SavedMessage,
 };
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::SessionDeliveryRouter;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -19,9 +20,18 @@ use std::{
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 
+#[path = "native_generic_queue_crash_tests.rs"]
+mod generic_queue_tests;
+#[path = "native_push_handoff_crash_tests.rs"]
+mod handoff_crash_tests;
+#[path = "native_wake_acceptance_fixture.rs"]
+mod native_acceptance;
+use native_acceptance::{WakeAcceptanceFixture, accepting_native_call};
+
 const ROOT_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_ROOT";
 const STAGE_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_STAGE";
 const ID_ENV: &str = "NATIVE_DELIVERY_TEST_CRASH_ID";
+const GENERIC_QUEUE_ENV: &str = "NATIVE_DELIVERY_TEST_GENERIC_QUEUE";
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const OLD_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 const NEW_EPOCH: &str = "00000000-0000-4000-8000-000000000003";
@@ -46,7 +56,7 @@ fn native_delivery_crash_root(fixture_id: &OperationId) -> PathBuf {
 
 #[tokio::test]
 async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> TestResult<()> {
-    for stage in ["intent-persisted", "receipt-before-commit"] {
+    for stage in ["intent-persisted", "receipt-before-commit", "push-settled"] {
         let fixture_id = OperationId::generate();
         let root = native_delivery_crash_root(&fixture_id);
         std::fs::DirBuilder::new().mode(0o700).create(&root)?;
@@ -79,7 +89,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
             serde_json::from_slice(&std::fs::read(root.join("delivery-id.json"))?)?;
         let push_id: PushId = serde_json::from_slice(&std::fs::read(root.join("push-id.json"))?)?;
         let witness_path = root.join("native-receipt.json");
-        if witness_path.exists() != (stage == "receipt-before-commit") {
+        if witness_path.exists() != (stage != "intent-persisted") {
             return Err(
                 format!("{stage}: native receipt witness disagrees with checkpoint").into(),
             );
@@ -96,7 +106,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         let before = store
             .lock()
             .await
-            .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
+            .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
             .await?;
         let before_attempt = before.attempt.ok_or("persisted attempt missing")?;
         if before.status != agent_automation::DeliveryStatus::Dispatching
@@ -104,7 +114,18 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         {
             return Err("abrupt exit did not leave the uncommitted native outcome".into());
         }
-        let identity = identity(&root, Arc::clone(&store), NEW_EPOCH)?;
+        let identity = identity(&root, Arc::clone(&store), NEW_EPOCH).await?;
+        let interactions = identity
+            .interaction_store
+            .clone()
+            .ok_or("interaction owner missing")?;
+        let push_before = interactions
+            .get_push_record(&push_id)
+            .await?
+            .ok_or("crash push missing")?;
+        if push_before.last_outcome.is_some() != (stage == "push-settled") {
+            return Err("push receipt disagrees with the selected crash boundary".into());
+        }
         let stop = CancellationToken::new();
         let worker = tokio::spawn(
             identity
@@ -112,7 +133,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
                 .ok_or("wake worker missing")?
                 .run(stop.clone()),
         );
-        let application = crate::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let observed = tokio::time::timeout(Duration::from_secs(3), async {
             let mut interval = tokio::time::interval(Duration::from_millis(10));
             loop {
@@ -147,12 +168,23 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         let recovered = store
             .lock()
             .await
-            .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
+            .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery)
             .await?;
         if recovered.receipt.is_some() {
             return Err("recovery fabricated a lost native acceptance receipt".into());
         }
+        let push_after = interactions
+            .get_push_record(&push_id)
+            .await?
+            .ok_or("recovered push missing")?;
+        if serde_json::to_value(push_before)? != serde_json::to_value(push_after)? {
+            return Err("automation recovery rewrote the settled push receipt".into());
+        }
         drop(store);
+        Arc::try_unwrap(interactions)
+            .map_err(|_| "crash fixture interaction owner remained shared")?
+            .close()
+            .await?;
         for entry in std::fs::read_dir(&root)? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
@@ -208,9 +240,12 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
-    let globally_settled = store
-        .lock()
-        .await
+    let identity = identity(&root, Arc::clone(&store), NEW_EPOCH).await?;
+    let interactions = identity
+        .interaction_store
+        .clone()
+        .ok_or("interaction owner missing")?;
+    let globally_settled = interactions
         .settle_interrupted_pushes(chrono::Utc::now())
         .await?;
     if globally_settled != 0 {
@@ -219,88 +254,34 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
     let before = store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(
+        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(
             &delivery_id,
         )
         .await?;
     if before.status != agent_automation::DeliveryStatus::Pending || before.attempt.is_some() {
         return Err("fire commit did not leave one undispatched mailbox row".into());
     }
-    let push_before = store
-        .lock()
-        .await
+    let push_before = interactions
         .get_push_record(&expected_push_id)
         .await?
         .ok_or("committed wake push missing after restart")?;
-    if push_before.delivery_state != automation_storage::PushDeliveryState::Attempted {
+    if push_before.delivery_state != collaboration_protocol::PushDeliveryState::Attempted {
         return Err("Wake-owned attempt did not remain available to its worker".into());
     }
 
-    let listener = tokio::net::UnixListener::bind(root.join("native.sock"))?;
-    let (correlation_sender, correlation_receiver) = tokio::sync::oneshot::channel();
-    let native = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await?;
-        let mut socket = tokio_tungstenite::accept_async(stream).await?;
-        let init: Value =
-            serde_json::from_str(socket.next().await.ok_or("missing init")??.to_text()?)?;
-        socket
-            .send(Message::Text(
-                json!({"id":init["id"],"result":{}}).to_string().into(),
-            ))
-            .await?;
-        let _initialized = socket.next().await.ok_or("missing initialized")??;
-        let read: Value = serde_json::from_str(
-            socket
-                .next()
-                .await
-                .ok_or("missing native read")??
-                .to_text()?,
-        )?;
-        if read.get("method") != Some(&json!("thread/read")) {
-            return Err("wake delivery skipped the native residency read".into());
-        }
-        socket
-            .send(Message::Text(
-                json!({"id":read["id"],"result":{"thread":{"id":"fixture-thread","status":{"type":"idle"}}}})
-                    .to_string()
-                    .into(),
-            ))
-            .await?;
-        let start: Value = serde_json::from_str(
-            socket
-                .next()
-                .await
-                .ok_or("missing native start")??
-                .to_text()?,
-        )?;
-        if start.get("method") != Some(&json!("turn/start")) {
-            return Err("wake delivery did not use the saved auto mode".into());
-        }
-        let correlation = start
-            .pointer("/params/clientUserMessageId")
-            .and_then(Value::as_str)
-            .ok_or("wake push correlation missing")?
-            .to_owned();
-        socket
-            .send(Message::Text(
-                json!({"id":start["id"],"result":{"turn":{"id":"fixture-turn"}}})
-                    .to_string()
-                    .into(),
-            ))
-            .await?;
-        correlation_sender
-            .send(correlation)
-            .map_err(|_| "wake correlation receiver dropped")?;
-        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
-    });
-    let identity = identity(&root, Arc::clone(&store), NEW_EPOCH)?;
-    let sender = WakeDeliverySender {
-        delivery: identity
+    let WakeAcceptanceFixture {
+        native,
+        correlation: correlation_receiver,
+    } = accepting_native_call(&root)?;
+    let sender = WakeDeliverySender::new(
+        Arc::clone(&interactions),
+        identity
             .session_delivery
+            .clone()
             .ok_or("session delivery missing")?,
-        configuration: identity.configuration,
-        machine_identity: identity.machine_identity,
-    };
+        identity.configuration.clone(),
+        identity.machine_identity.clone(),
+    );
     tokio::time::timeout(
         Duration::from_secs(5),
         sender.dispatch(Arc::clone(&store), delivery_id.clone()),
@@ -319,25 +300,29 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         .read_delivery::<
             SessionRef,
             CodexGeneration,
-            crate::stored_delivery_receipt::StoredDeliveryReceipt,
+            collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
         >(&delivery_id)
         .await?;
     if recovered.status != agent_automation::DeliveryStatus::Accepted || recovered.receipt.is_none()
     {
         return Err("restart delivery did not commit its accepted mailbox result".into());
     }
-    let push_after = store
-        .lock()
-        .await
+    let push_after = interactions
         .get_push_record(&expected_push_id)
         .await?
         .ok_or("wake push missing after restart delivery")?;
     if push_after.push_id != push_before.push_id
-        || push_after.delivery_state != automation_storage::PushDeliveryState::Delivered
+        || push_after.delivery_state != collaboration_protocol::PushDeliveryState::Delivered
     {
         return Err("restart did not settle the original wake push".into());
     }
+    drop(sender);
+    drop(identity);
     drop(store);
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "restart fixture interaction owner remained shared")?
+        .close()
+        .await?;
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
@@ -361,19 +346,23 @@ async fn native_delivery_crash_child() -> TestResult<()> {
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
+    let generic_queue = std::env::var(GENERIC_QUEUE_ENV).as_deref() == Ok("true");
     let saved: SavedMessage = serde_json::from_value(json!({
         "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"fixture-thread"},
-        "content":{"kind":"humanUser","text":"fixture work"},"delivery":"auto","generationGuard":null
+        "content":{"kind":"humanUser","text":"fixture work"},"delivery":if generic_queue {"queue"} else {"auto"},"generationGuard":null
     }))?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 1000;
     let wake = store
         .lock()
         .await
         .create_wakeup(&automation_storage::WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: saved,
             timing: agent_automation::TimingRule::After { seconds: 1 },
             expiry: agent_automation::ExpiryRule::None,
-            now_ms: 0,
+            now_ms: anchor_ms,
         })
         .await?;
     let automation_storage::WakeEvaluation::Fired {
@@ -381,7 +370,11 @@ async fn native_delivery_crash_child() -> TestResult<()> {
     } = store
         .lock()
         .await
-        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 1000, build_wake_push_draft)
+        .evaluate_wakeup::<SavedMessage>(
+            &wake.definition.wakeup_id,
+            anchor_ms + 1000,
+            build_wake_push_draft,
+        )
         .await?
     else {
         return Err("fixture firing missing".into());
@@ -394,9 +387,24 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id,
     };
-    let push = store
-        .lock()
-        .await
+    let mut identity = identity(&root, Arc::clone(&store), OLD_EPOCH).await?;
+    let interactions = identity
+        .interaction_store
+        .clone()
+        .ok_or("interaction owner missing")?;
+    let owed = store.lock().await.list_owed_push_operations(100).await?;
+    let [operation] = owed.as_slice() else {
+        return Err("one owed wake admission expected in crash child".into());
+    };
+    std::fs::write(
+        root.join("push-id.json"),
+        serde_json::to_vec(&operation.push_id)?,
+    )?;
+    checkpoint("fire-owed");
+    collaboration_runtime::PushHandoffWorker::new(Arc::clone(&store), Arc::clone(&interactions))
+        .apply_pending()
+        .await?;
+    let push = interactions
         .get_push_record_by_origin_reference(&origin)
         .await?
         .ok_or("wake push missing in crash child")?;
@@ -405,11 +413,7 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         serde_json::to_vec(&push.push_id)?,
     )?;
     if std::env::var(STAGE_ENV).as_deref() == Ok("fire-committed") {
-        store
-            .lock()
-            .await
-            .mark_push_attempted(&push.push_id)
-            .await?;
+        interactions.mark_wake_push_attempted(&push.push_id).await?;
     }
     checkpoint("fire-committed");
     let listener = tokio::net::UnixListener::bind(root.join("native.sock"))?;
@@ -425,7 +429,14 @@ async fn native_delivery_crash_child() -> TestResult<()> {
             ))
             .await?;
         let _initialized = socket.next().await.ok_or("missing initialized")??;
-        for method in ["thread/read", "turn/start"] {
+        for method in [
+            "thread/read",
+            if generic_queue {
+                "thread/queue/add"
+            } else {
+                "turn/start"
+            },
+        ] {
             let request: Value = serde_json::from_str(
                 socket
                     .next()
@@ -444,10 +455,17 @@ async fn native_delivery_crash_child() -> TestResult<()> {
                 std::fs::write(
                     &witness,
                     serde_json::to_vec(
-                        &json!({"clientUserMessageId":request.pointer("/params/clientUserMessageId")}),
+                        &json!({"clientUserMessageId":request.pointer("/params/clientUserMessageId"),"input":request.pointer("/params/input")}),
                     )?,
                 )?;
-                json!({"turn":{"id":"fixture-turn"}})
+                if generic_queue {
+                    checkpoint("queue-before-response");
+                }
+                if generic_queue {
+                    json!({"queuedSubmission":{"id":"fixture-queue"}})
+                } else {
+                    json!({"turn":{"id":"fixture-turn"}})
+                }
             };
             socket
                 .send(Message::Text(
@@ -460,23 +478,42 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         std::future::pending::<()>().await;
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     });
-    let identity = identity(&root, Arc::clone(&store), OLD_EPOCH)?;
-    let sender = WakeDeliverySender {
-        delivery: identity
+    // Retain the real configured broker through dispatch; no recorded route exists.
+    let recorded_owner = if generic_queue {
+        identity.approval_broker.clone()
+    } else {
+        None
+    };
+    if let Some(broker) = &recorded_owner {
+        let route: Arc<dyn SessionDeliveryRoute> = Arc::new(
+            CodexAppServerDeliveryRoute::new(
+                SERVICE.to_owned().try_into()?,
+                identity.endpoint_directory(),
+                identity.native_backend.clone().ok_or("backend missing")?,
+                Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
+            )
+            .with_approval_broker(broker),
+        );
+        identity =
+            identity.with_session_delivery(Arc::new(SessionDeliveryRouter::new(vec![route])));
+    }
+    let sender = WakeDeliverySender::new(
+        interactions,
+        identity
             .session_delivery
             .ok_or("session delivery missing")?,
-        configuration: identity.configuration,
-        machine_identity: identity.machine_identity,
-    };
+        identity.configuration,
+        identity.machine_identity,
+    );
     sender.dispatch(store, delivery_id).await?;
     Err("sender did not stop at selected checkpoint".into())
 }
 
-fn identity(
+async fn identity(
     root: &Path,
     store: Arc<Mutex<AutomationStore>>,
     epoch: &str,
-) -> TestResult<crate::ServiceIdentity> {
+) -> TestResult<crate::ApplicationFixture> {
     let mut definitions = serde_json::Map::new();
     for name in [
         "ThreadRead",
@@ -486,6 +523,8 @@ fn identity(
         "TurnStart",
         "TurnSteer",
         "TurnInterrupt",
+        "ThreadQueueAdd",
+        "ThreadQueueList",
     ] {
         definitions.insert(format!("{name}Params"), json!({"type":"object"}));
         definitions.insert(format!("{name}Response"), json!({"type":"object"}));
@@ -504,16 +543,23 @@ fn identity(
         json!({"endpoint":endpoint,"label":"fixture","availability":{"state":"available","observedAt":"2026-09-09T00:00:00Z"},
         "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":schemas.schema_digest(),"generation":generation}]}),
     )?;
-    let gate = crate::NativeGenerationGate::default();
+    let gate = collaboration_runtime::NativeGenerationGate::default();
     gate.activate(generation, root.join("native.sock"), Some(schemas))?;
     let backend = NativeControlBackend {
         endpoint,
         gate,
         codex_home: root.to_owned(),
     };
-    let identity = crate::ServiceIdentity::new(SERVICE, epoch)
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
+        SERVICE.to_owned().try_into()?,
+        backend.clone(),
+        root.join("approval-routes.json"),
+    )
+    .await?;
+    let identity = crate::ApplicationFixture::new(SERVICE, epoch)
         .map_err(std::io::Error::other)?
         .with_automation_store(store)
+        .with_approval_broker(broker)
         .with_endpoints(vec![description])
         .map_err(std::io::Error::other)?
         .with_native_backend(backend.clone())
@@ -522,7 +568,7 @@ fn identity(
         collaboration_protocol::UuidIdentity::try_from(SERVICE.to_owned())?,
         identity.endpoint_directory(),
         backend,
-        Arc::new(crate::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));

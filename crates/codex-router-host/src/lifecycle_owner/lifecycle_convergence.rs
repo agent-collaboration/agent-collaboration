@@ -3,7 +3,11 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use super::*;
+use super::{
+    AppServerChild, AppServerLaunchPlan, AppServerReadiness, Arc, HostConfig, HostError, HostExit,
+    PreExecTelemetry, ProcessGroupChild, ProcessGroupError, RouterChild, ShutdownOutcome,
+    request_admission, require_unowned_app_server_endpoint, status_observation,
+};
 
 pub(super) struct ShutdownContext<'a> {
     pub(super) activation: &'a mut Option<request_admission::ActiveHostReplacement>,
@@ -31,6 +35,18 @@ pub(super) async fn settle_for_shutdown(context: ShutdownContext<'_>) -> Result<
     settle_recovery_for_shutdown(context.recovery, context.app_server).await;
     shutdown_retained_children(context.app_server, context.router).await
 }
+
+pub(super) async fn settle_failed_tailnet_exposure(
+    error: std::io::Error,
+    context: ShutdownContext<'_>,
+) -> Result<HostExit, HostError> {
+    settle_for_shutdown(context).await?;
+    Err(HostError::Collaboration(error))
+}
+
+#[cfg(test)]
+#[path = "tailnet_failure_tests.rs"]
+mod tailnet_failure_tests;
 
 pub(super) enum RecoveryCompletion {
     Ready(AppServerChild, AppServerReadiness),

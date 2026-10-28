@@ -2,7 +2,9 @@ use collaboration_protocol::{
     CodexGeneration, NativeSessionListParams, NativeSessionObservation, NativeSessionScope,
     NativeSessionSource, NativeSessionView, SessionRef,
 };
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -78,15 +80,13 @@ async fn runtime_inventory_filters_unmaterialized_threads_and_keeps_rows_on_turn
         gate,
         codex_home: temporary.path().to_owned(),
     };
-    let identity = ServiceIdentity::new(service_id, service_epoch)
+    let identity = ApplicationFixture::new(service_id, service_epoch)
         .expect("service identity")
         .with_endpoints(vec![endpoint])
         .expect("register endpoint")
         .with_native_backend(native_backend)
         .expect("register native backend");
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(identity).expect("serve the API");
     let thread_ids = ["empty-thread", "error-thread", "preview-thread"];
     let backend = tokio::spawn(async move {
         let mut turns_list_params = Vec::new();

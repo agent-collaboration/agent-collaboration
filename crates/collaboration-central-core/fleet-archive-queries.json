@@ -1,0 +1,50 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_archive.rs",
+  "metadata": "fleet-archive-query-metadata.json",
+  "queries": [
+    {
+      "name": "list_archive_reports",
+      "sql": "sql/fleet/list_archive_reports.sql",
+      "row": "StoredArchiveReport",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_archive_report",
+      "sql": "sql/fleet/insert_archive_report.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "report_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "report",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

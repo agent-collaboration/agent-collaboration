@@ -5,8 +5,19 @@ use crate::sqlite::StateStoreError;
 mod definitions;
 mod validation;
 
-use definitions::*;
-use validation::*;
+use definitions::{
+    ACCOUNT_CREDIT_OBSERVATIONS, ACCOUNT_CREDIT_POLICIES, ACCOUNT_ROUTING_POLICIES,
+    ACCOUNT_WINDOW_OBSERVATIONS, ACCOUNT_WINDOW_REJECTIONS, ACTIVE_CLIENT_LEASES,
+    ACTIVE_CLIENT_LEASES_V7, ACTIVE_SESSION_EVENTS, ACTIVE_SESSION_ROLLUPS, BASE_TABLES,
+    CREDENTIAL_MAINTENANCE, CURRENT_ACCOUNTS, CURRENT_SESSION_ACCOUNT_AFFINITIES, ColumnSpec,
+    QUOTA_HISTORY_OBSERVATIONS, ROUTE_BAND_ACCOUNT_STATES, SESSION_ACCOUNT_AFFINITIES,
+};
+use validation::{
+    incompatible_schema, load_columns, reject_leftover_replacement_tables,
+    reject_unexpected_dependents, schema_tokens, table_exists, table_matches,
+    validate_all_required_indexes, validate_column, validate_named_indexes,
+    validate_no_owned_table_triggers, validate_optional_exact_table, validate_table,
+};
 
 pub(crate) enum LeaseShape {
     Missing,

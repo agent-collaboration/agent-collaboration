@@ -75,7 +75,11 @@ use provider_initialize_request::initialize_provider_connection;
 use provider_request_fallback::{
     ProviderKnownSessions, ProviderRequestFallback, ProviderRequestSessionGuard,
 };
-use provider_session_admission::*;
+use provider_session_admission::{
+    CreateAdmissionInputs, StaticSessionActivation, fail_pending_session_admission,
+    publish_pending_session_admission, register_provider_session, register_static_provider_session,
+    run_create_admission,
+};
 use session_event_model::InputId;
 use session_event_model::StopReason as ProviderPromptStopReason;
 use std::collections::HashMap;
@@ -277,5 +281,5 @@ impl<P: InteractionPort> Drop for AgentSessionClient<P> {
 }
 
 #[cfg(test)]
-#[path = "provider_prompt_order_tests.rs"]
-mod provider_prompt_order_tests;
+#[path = "agent_session_client/turn_admission_tests.rs"]
+mod turn_admission_tests;

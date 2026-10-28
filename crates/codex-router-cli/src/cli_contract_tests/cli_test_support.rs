@@ -64,7 +64,8 @@ pub(super) fn assert_router_profile_contract(output: &str, port: u16) {
     assert!(!output.contains("[profiles.codex-router]\n"));
     assert!(output.contains("model_provider = \"codex-router\"\n"));
     assert!(output.contains("[model_providers.codex-router]\n"));
-    assert!(output.contains("name = \"codex-router\"\n"));
+    assert!(output.contains("name = \"OpenAI\"\n"));
+    assert!(output.contains("enable_request_compression = false\n"));
     assert!(output.contains(format!("base_url = \"http://127.0.0.1:{port}/v1\"\n").as_str()));
     assert!(output.contains("wire_api = \"responses\"\n"));
     assert!(output.contains("requires_openai_auth = true\n"));
@@ -73,18 +74,6 @@ pub(super) fn assert_router_profile_contract(output: &str, port: u16) {
     assert!(!output.contains("env_http_headers"));
     assert!(!output.contains("sk-"));
     assert!(!output.contains("oauth"));
-}
-
-pub(super) fn git_diff_text(workspace_root: &Path, args: &[&str]) -> String {
-    let output = match ProcessCommand::new("git")
-        .args(args)
-        .current_dir(workspace_root)
-        .output()
-    {
-        Ok(output) if output.status.success() => output,
-        _ => return String::new(),
-    };
-    String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
 #[track_caller]

@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#permission",
+  "originalSHA256": "9eecf302b51ec05d3a74e0924133a97d01f834d79cfc5fffc975bdb850819736",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["permission"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"allow-exact-once\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"permission-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"fixture-session\", \"toolCall\": {\"toolCallId\": \"permission-tool\"}, \"options\": [{\"optionId\": \"allow-exact-once\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}, {\"optionId\": \"deny-exact-once\", \"name\": \"Deny once\", \"kind\": \"reject_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

@@ -9,13 +9,16 @@ publish.workspace = true
 workspace = true
 
 [features]
-quota-reset-test-harness = []
+quota-reset-test-harness = ["dep:sqlx"]
 
 [[bin]]
 name = "agent-sessions"
 path = "src/bin/agent-sessions.rs"
 
 [dependencies]
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
+chrono.workspace = true
 tokio-util.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
@@ -24,29 +27,56 @@ message-board = { path = "../message-board", version = "0.1.20" }
 codex-native-integration.workspace = true
 clap.workspace = true
 comfy-table.workspace = true
-crossterm.workspace = true
+crossterm = { workspace = true, features = ["osc52"] }
 iocraft.workspace = true
+codex-router-tui.workspace = true
+jsonc-parser.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+rmcp = { workspace = true, features = ["client"] }
+url.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml = "1.1.2"
+tempfile = "3.27.0"
+sqlx = { workspace = true, features = ["sqlite"], optional = true }
 thiserror.workspace = true
-tokio = { workspace = true, features = ["io-std"] }
+tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
+durable-steps.workspace = true
+fleet-sync-delivery = { workspace = true, features = ["test-support"] }
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-writer.workspace = true
+fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
+board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
+fleet-sync-session.workspace = true
+fleet-sync-tokio-runner.workspace = true
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+fleet-sync-protocol.workspace = true
+runtime-primitives.workspace = true
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+tokio = { workspace = true, features = ["test-util"] }
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 claude-code-peer-messaging = { path = "../claude-code-peer-messaging", version = "0.1.37" }
-tempfile = "3.27.0"
 jsonschema.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 sha2.workspace = true
-sqlx.workspace = true
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12"] }
+sqlx = { workspace = true, features = ["sqlite"] }
 uuid.workspace = true
-chrono.workspace = true
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 automation-storage = { path = "../automation-storage", version = "0.1.16" }
-codex-router-host.workspace = true
+codex-router-host = { workspace = true, features = ["runtime-test-support"] }
 lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
-collaboration-service = { path = "../collaboration-service", version = "0.1.14" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 tokio-util.workspace = true

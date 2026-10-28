@@ -1,0 +1,15 @@
+{
+  "function": "observe_native_readiness",
+  "args": [
+    {
+      "serviceEpoch": "epoch",
+      "sequence": 2,
+      "endpoints": []
+    },
+    "destination",
+    "epoch"
+  ],
+  "expected": {
+    "refused": true
+  }
+}

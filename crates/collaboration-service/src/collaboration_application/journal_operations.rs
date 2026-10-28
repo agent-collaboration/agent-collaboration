@@ -1,16 +1,32 @@
 //! The lifecycle journal and the address book: long-polled lifecycle reads and paged address
 //! snapshots for the endpoints this Router publishes.
-use super::{
-    CollaborationRejection, CollaborationRejectionReason, PublishedRejection, SessionOperations,
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 use collaboration_protocol::{AddressListParams, JournalReadParams, JournalStatus};
 use lifecycle_observation::{AddressPage, JournalBounds, JournalError, JournalPage};
 use serde_json::json;
 
-impl<'service> SessionOperations<'service> {
+pub struct JournalOperations {
+    identity: collaboration_contracts::RouterIdentity,
+    directory: collaboration_runtime::EndpointDirectory,
+    journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
+}
+impl JournalOperations {
+    pub fn new(
+        identity: collaboration_contracts::RouterIdentity,
+        directory: collaboration_runtime::EndpointDirectory,
+        journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
+    ) -> Self {
+        Self {
+            identity,
+            directory,
+            journal,
+        }
+    }
     /// The lifecycle journal's bounds, or `unavailable` when this Router keeps no journal.
-    pub async fn journal_status(&self) -> JournalStatus {
-        match self.identity.journal.as_ref() {
+    pub(crate) async fn journal_status(&self) -> JournalStatus {
+        match self.journal.as_ref() {
             Some(store) => match store.bounds().await {
                 Ok(bounds) => JournalStatus::Available { bounds },
                 Err(_) => JournalStatus::Unavailable,
@@ -20,7 +36,7 @@ impl<'service> SessionOperations<'service> {
     }
 
     /// Reads one endpoint's lifecycle records after `after`, waiting up to `waitMilliseconds`.
-    pub async fn journal_read(
+    pub(crate) async fn journal_read(
         &self,
         request: JournalReadParams,
     ) -> Result<JournalPage, JournalFailure> {
@@ -62,7 +78,7 @@ impl<'service> SessionOperations<'service> {
     }
 
     /// Pages one endpoint's address book from a snapshot taken on the first page.
-    pub async fn address_list(
+    pub(crate) async fn address_list(
         &self,
         request: AddressListParams,
     ) -> Result<AddressPage, JournalFailure> {
@@ -71,7 +87,7 @@ impl<'service> SessionOperations<'service> {
         }
         let store = self.local_journal(&request.endpoint)?;
         let unavailable = JournalFailure::Unavailable(JournalUnavailableKind::Unavailable);
-        let Ok(snapshot_id) = crate::new_service_uuid() else {
+        let Ok(snapshot_id) = collaboration_runtime::new_service_uuid() else {
             return Err(unavailable);
         };
         let Ok(at) = collaboration_protocol::ObservationTimestamp::try_from(
@@ -105,13 +121,13 @@ impl<'service> SessionOperations<'service> {
     fn local_journal(
         &self,
         endpoint: &collaboration_protocol::EndpointRef,
-    ) -> Result<&'service lifecycle_observation::LifecycleStore, JournalFailure> {
-        if endpoint.service_id != self.identity.service_id {
+    ) -> Result<&lifecycle_observation::LifecycleStore, JournalFailure> {
+        if endpoint.service_id != *self.identity.service_id() {
             return Err(JournalFailure::Unavailable(
                 JournalUnavailableKind::WrongService,
             ));
         }
-        match self.identity.directory.read_endpoint(endpoint) {
+        match self.directory.read_endpoint(endpoint) {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return Err(JournalFailure::Unavailable(
@@ -124,12 +140,9 @@ impl<'service> SessionOperations<'service> {
                 ));
             }
         }
-        self.identity
-            .journal
-            .as_deref()
-            .ok_or(JournalFailure::Unavailable(
-                JournalUnavailableKind::Unavailable,
-            ))
+        self.journal.as_deref().ok_or(JournalFailure::Unavailable(
+            JournalUnavailableKind::Unavailable,
+        ))
     }
 }
 

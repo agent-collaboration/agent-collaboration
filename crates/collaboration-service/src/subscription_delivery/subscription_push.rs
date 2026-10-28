@@ -1,27 +1,27 @@
 //! Store-first subscription records and their prepared Layer-0 delivery.
 use super::SubscriptionClock;
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, LoadPolicy, MachineIdentity, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
-use agent_automation::{AttemptId, RouteEffectEvidence};
-use automation_storage::AutomationStore;
+use agent_automation::AttemptId;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId,
-    MessageDelivery, MessageText, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId,
-    PushKind, PushLineInput, PushOrigin, PushRecordDraft, RouterLink, RouterOriginRef,
-    SessionReachability, SessionRef, render_push_line,
+    DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
+    MessageText, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind,
+    PushLineInput, PushOrigin, PushRecordDraft, RouterLink, RouterOriginRef, SessionRef,
+    render_push_line,
 };
+use interaction_storage::InteractionStore;
 use message_board::{
     BoardError, Identity, SubscriptionBatch, SubscriptionGeneration, SubscriptionScope,
 };
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 pub(super) struct SubscriptionPushStore {
-    pub(super) store: Arc<Mutex<AutomationStore>>,
+    pub(super) store: Arc<InteractionStore>,
     pub(super) delivery: Arc<dyn SessionMessageDelivery>,
     pub(super) machine: MachineIdentity,
     pub(super) clock: Arc<dyn SubscriptionClock>,
@@ -31,19 +31,13 @@ pub(super) struct SubscriptionPushStore {
 }
 
 pub(super) struct SubscriptionPushStoreProps {
-    pub store: Arc<Mutex<AutomationStore>>,
+    pub store: Arc<InteractionStore>,
     pub delivery: Arc<dyn SessionMessageDelivery>,
     pub machine: MachineIdentity,
     pub clock: Arc<dyn SubscriptionClock>,
     pub shutdown: CancellationToken,
     #[cfg(test)]
     pub observations: tokio::sync::broadcast::Sender<super::subscription_service::OwnerObservation>,
-}
-
-pub(super) struct SubscriptionPushReceipt {
-    pub push_id: PushId,
-    pub receipt: DeliveryReceipt,
-    pub evidence: serde_json::Value,
 }
 
 impl SubscriptionPushStore {
@@ -79,7 +73,7 @@ impl SubscriptionPushStore {
         let message_count = batch
             .roots
             .iter()
-            .try_fold(0_u64, |count, root| count.checked_add(root.message_count))
+            .try_fold(0_u64, |count, root| count.checked_add(root.post_count))
             .ok_or_else(BoardError::board_unavailable)?;
         let header_facts = PushHeaderFacts::SubscriptionActivity {
             root_count,
@@ -92,9 +86,10 @@ impl SubscriptionPushStore {
                 .roots
                 .iter()
                 .map(|root| PushActivityRange {
-                    root_message_id: root.root_id.clone(),
-                    from_activity_sequence: root.from_sequence,
-                    through_activity_sequence: root.through_sequence,
+                    thread_id: root.thread_id.clone(),
+                    project_id: root.project_id.clone(),
+                    from: root.from,
+                    through: root.through,
                 })
                 .collect(),
             held: batch.held,
@@ -123,8 +118,8 @@ impl SubscriptionPushStore {
     ) -> Result<PreparedPush, BoardError> {
         let (kind, id) = scope.kind_and_id();
         let argument = match scope {
-            SubscriptionScope::Thread { .. } => "--root-message-id",
-            SubscriptionScope::Topic { .. } => "--topic-id",
+            SubscriptionScope::Thread { .. } => "--thread-id",
+            SubscriptionScope::Project { .. } => "--project-id",
         };
         let draft = self.draft(
             target,
@@ -138,7 +133,7 @@ impl SubscriptionPushStore {
                 scope: format!("{kind} {id}"),
             },
             Some(format!(
-                "Renew with: agent-collaboration board thread subscribe {argument} {id}"
+                "Renew with: agent-collaboration thread subscribe {argument} {id}"
             )),
             None,
         )?;
@@ -198,8 +193,6 @@ impl SubscriptionPushStore {
         .map_err(|_| BoardError::board_unavailable())?;
         let line = MessageText::try_from(line).map_err(|_| BoardError::board_unavailable())?;
         self.store
-            .lock()
-            .await
             .insert_push_record(draft)
             .await
             .map_err(|_| BoardError::board_unavailable())?;
@@ -212,8 +205,6 @@ impl SubscriptionPushStore {
 
     pub(super) async fn mark_attempted(&self, prepared: &PreparedPush) -> Result<(), BoardError> {
         self.store
-            .lock()
-            .await
             .mark_push_attempted(&prepared.push_id)
             .await
             .map_err(|_| BoardError::board_unavailable())?;
@@ -224,7 +215,7 @@ impl SubscriptionPushStore {
         &self,
         target: &SessionRef,
         prepared: PreparedPush,
-    ) -> Result<SubscriptionPushReceipt, BoardError> {
+    ) -> Result<(), BoardError> {
         self.mark_attempted(&prepared).await?;
         let correlation = DeliveryCorrelationId::try_from(prepared.push_id.as_str().to_owned())
             .map_err(|_| BoardError::board_unavailable())?;
@@ -236,53 +227,12 @@ impl SubscriptionPushStore {
             correlation,
             attempt: AttemptId::generate(),
         };
-        let sink = CapturedAttemptEvidence::default();
-        let mut receipt = tokio::select! {
-            () = self.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
-            receipt = self.delivery.deliver(request, &sink) => receipt.unwrap_or_else(|_| unknown_receipt()),
-        };
-        if prepared.load_policy == LoadPolicy::LoadedOnly
-            && receipt.reachability == Some(SessionReachability::ProviderAcp)
-            && receipt.outcome == DeliveryOutcome::Queued
-        {
-            receipt = self.reconcile_queued(target, &prepared, &sink).await;
-        }
+        let attempted = self
+            .dispatch_mail_attempt(PushKind::SubscriptionActivity, request)
+            .await?;
+        let receipt = attempted.into_receipt();
         self.record_receipt(&prepared, &receipt, true).await?;
-        let evidence = serde_json::json!({ "receipt": receipt, "routeEvidence": sink.recorded.lock().await.clone() });
-        Ok(SubscriptionPushReceipt {
-            push_id: prepared.push_id,
-            receipt,
-            evidence,
-        })
-    }
-
-    async fn reconcile_queued(
-        &self,
-        target: &SessionRef,
-        prepared: &PreparedPush,
-        sink: &CapturedAttemptEvidence,
-    ) -> DeliveryReceipt {
-        let Some(recorded) = sink.recorded.lock().await.clone() else {
-            return unknown_receipt();
-        };
-        let context = AttemptReconciliationContext {
-            target: target.clone(),
-            prepared_push_id: prepared.push_id.clone(),
-            mode: MessageDelivery::Auto,
-            recorded,
-        };
-        match self.delivery.reconcile_attempt(context).await {
-            Ok(AttemptReconciliation::Accepted(receipt)) => *receipt,
-            Ok(AttemptReconciliation::KnownNotSubmitted) => DeliveryReceipt {
-                outcome: DeliveryOutcome::NotSubmitted {
-                    retryable: true,
-                    reason: "queued input was not submitted".to_owned(),
-                },
-                reachability: Some(SessionReachability::ProviderAcp),
-                client: None,
-            },
-            Ok(AttemptReconciliation::StillUnknown) | Err(_) => unknown_receipt(),
-        }
+        Ok(())
     }
 
     /// After an effect, retry only its evidence write. The owning actor stays serialized.
@@ -295,7 +245,7 @@ impl SubscriptionPushStore {
         let mut delay = std::time::Duration::from_secs(1);
         loop {
             let result = {
-                let mut store = self.store.lock().await;
+                let store = &self.store;
                 if allow_hold
                     && matches!(
                         receipt.outcome,
@@ -335,30 +285,6 @@ impl SubscriptionPushStore {
                 .saturating_mul(2)
                 .min(std::time::Duration::from_secs(30));
         }
-    }
-}
-
-#[derive(Default)]
-struct CapturedAttemptEvidence {
-    recorded: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
-}
-impl AttemptEvidenceSink for CapturedAttemptEvidence {
-    fn record(
-        &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> DeliveryFuture<'_, ()> {
-        Box::pin(async move {
-            *self.recorded.lock().await = Some(evidence);
-            Ok(())
-        })
-    }
-}
-
-fn unknown_receipt() -> DeliveryReceipt {
-    DeliveryReceipt {
-        outcome: DeliveryOutcome::Unknown,
-        reachability: None,
-        client: None,
     }
 }
 

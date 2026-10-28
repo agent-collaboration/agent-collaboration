@@ -1,0 +1,1 @@
+SELECT entry_id, CAST(position AS TEXT) AS position, typeof(position) AS position_class, record_id, payload, router_time, time_basis, origin_installation, origin_machine, as_of FROM fleet_feed WHERE fleet_feed.position > CAST(? AS INTEGER) ORDER BY fleet_feed.position LIMIT CAST(? AS INTEGER);

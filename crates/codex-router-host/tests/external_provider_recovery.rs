@@ -2,6 +2,7 @@ use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor,
 };
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationCreateRequest,
     ConversationLoadRequest, ConversationOperationReconcileRequest,
@@ -13,9 +14,8 @@ use collaboration_protocol::{
     ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory, RouterAccess, SessionId,
     SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    ProviderConversationBackend, ProviderOperationAdmission, ProviderOperationStore,
-};
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationStore;
 use std::{path::Path, path::PathBuf, process::Command, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
@@ -52,7 +52,7 @@ macro_rules! ensure_eq {
 fn endpoint() -> TestResult<EndpointRef> {
     Ok(EndpointRef {
         service_id: UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?,
-        endpoint_id: EndpointId::try_from("claude-recovery".to_owned())?,
+        endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
     })
 }
 
@@ -121,48 +121,34 @@ fn working_directory() -> TestResult<ProviderWorkingDirectory> {
     Ok(ProviderWorkingDirectory::try_from("/tmp".to_owned())?)
 }
 
-fn launch(script: String) -> ExternalProviderLaunch {
+fn launch(arguments: Vec<String>) -> ExternalProviderLaunch {
+    let script =
+        codex_router_test_support::node_fixture::fixture_program("provider-recovery-agent.ts");
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
+        executable: PathBuf::from("node"),
+        arguments: std::iter::once(script.to_string_lossy().into_owned())
+            .chain(arguments)
+            .collect(),
         environment: vec![],
     }
 }
 
 fn held_dispatch_fixture(dispatch_log: &Path, expected_method: &str) -> ExternalProviderLaunch {
     let process_id_path = dispatch_log.with_extension("pid");
-    launch(format!(
-        r#"
-import json,os,sys
-log={:?}
-open({:?},'w').write(str(os.getpid()))
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'recovery-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=={:?}
-open(log,'a').write(request['method']+'\n')
-sys.stdin.read()
-"#,
-        dispatch_log.display().to_string(),
-        process_id_path.display().to_string(),
-        expected_method
-    ))
+    launch(vec![
+        "held".to_owned(),
+        dispatch_log.to_string_lossy().into_owned(),
+        process_id_path.to_string_lossy().into_owned(),
+        expected_method.to_owned(),
+    ])
 }
 
-fn no_replay_fixture(dispatch_log: &Path) -> ExternalProviderLaunch {
-    launch(format!(
-        r#"
-import json,sys
-log={:?}
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'reopened-fixture','version':'1'}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
-    request=json.loads(line)
-    open(log,'a').write(request.get('method','unknown')+'\n')
-"#,
-        dispatch_log.display().to_string()
-    ))
+fn reopened_provider_fixture(dispatch_log: &Path) -> ExternalProviderLaunch {
+    launch(vec![
+        "reopened".to_owned(),
+        dispatch_log.to_string_lossy().into_owned(),
+    ])
 }
 
 async fn supervisor(
@@ -317,7 +303,8 @@ async fn reopened_supervisor(
     database_path: &Path,
     replay_log: &Path,
 ) -> TestResult<ExternalProviderSupervisor> {
-    let runtime = ExternalProviderRuntime::initialize(no_replay_fixture(replay_log)).await?;
+    let runtime =
+        ExternalProviderRuntime::initialize(reopened_provider_fixture(replay_log)).await?;
     supervisor_with_binding(database_path, runtime, restarted_binding()?).await
 }
 
@@ -347,6 +334,7 @@ async fn host_restart_preserves_admission_without_claiming_effect() -> TestResul
     ensure!(shown.target.is_none());
     ensure!(!dispatch_log.exists());
     ensure!(!replay_log.exists());
+    backend.shutdown().await?;
     Ok(())
 }
 
@@ -435,7 +423,9 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
     );
 
     let after_reconcile = backend
-        .show(ConversationOperationShowRequest { operation_id })
+        .show(ConversationOperationShowRequest {
+            operation_id: operation_id.clone(),
+        })
         .await
         .map_err(|error| format!("show after reconcile failed: {error:?}"))?;
     ensure_eq!(
@@ -443,13 +433,14 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
         ProviderReconciliationState::NotReconcilable
     );
     ensure_eq!(after_reconcile.effect, ProviderOperationEffect::Unknown);
+    ensure!(!replay_log.exists());
     let fresh_operation_id = OperationId::generate();
     let restarted_generation = restarted_binding()?.generation;
     let fresh = if mode == "create" {
         backend
             .create(ConversationCreateRequest {
                 settings: None,
-                operation_id: fresh_operation_id,
+                operation_id: fresh_operation_id.clone(),
                 endpoint: endpoint()?,
                 generation: Some(restarted_generation),
                 working_directory: working_directory()?,
@@ -461,7 +452,7 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
     } else {
         backend
             .load(ConversationLoadRequest {
-                operation_id: fresh_operation_id,
+                operation_id: fresh_operation_id.clone(),
                 target: target()?,
                 generation: Some(restarted_generation),
                 working_directory: working_directory()?,
@@ -471,16 +462,29 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
             })
             .await
     };
-    let fresh = match fresh {
-        Ok(value) => return Err(format!("fresh mutation unexpectedly admitted: {value:?}").into()),
-        Err(failure) => failure,
-    };
+    let fresh =
+        fresh.map_err(|failure| format!("new generation refused fresh operation: {failure:?}"))?;
+    ensure_eq!(fresh.admission, ConversationAdmissionState::Admitted);
+    let settled = backend
+        .wait(collaboration_protocol::ConversationOperationWaitRequest {
+            operation_id: fresh_operation_id,
+            timeout_seconds: collaboration_protocol::PositiveSeconds::try_from(5)?,
+        })
+        .await
+        .map_err(|failure| format!("fresh operation wait failed: {failure:?}"))?;
+    ensure_eq!(settled.operation.effect, ProviderOperationEffect::Applied);
+    let historical = backend
+        .show(ConversationOperationShowRequest { operation_id })
+        .await
+        .map_err(|failure| format!("historical readback failed: {failure:?}"))?;
     ensure_eq!(
-        fresh.kind,
-        collaboration_protocol::ConversationOperationFailureKind::Busy
+        serde_json::to_value(historical)?,
+        serde_json::to_value(after_reconcile)?
     );
-    ensure_eq!(fresh.effect, ProviderOperationEffect::None);
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    ensure!(!replay_log.exists());
+    backend.shutdown().await?;
+    ensure_eq!(
+        std::fs::read_to_string(replay_log)?,
+        format!("session/{mode}\n").replace("create", "new")
+    );
     Ok(())
 }

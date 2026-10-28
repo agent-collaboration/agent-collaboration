@@ -1,4 +1,35 @@
-use super::*;
+use super::{
+    AccountRecord, AccountStatus, Arc, AsyncAccountSelectorRuntimeState,
+    AsyncHttpAffinityOwnerRecorder, AsyncHttpBodyError, AsyncProxyCredentialResolverFactory,
+    AsyncRepositoryBackedAccountSelector, AsyncSqliteProviderErrorObserver, AsyncSqliteStateStore,
+    AsyncStreamingHttpProxyResponse, AsyncStreamingUpstreamHttpTransport, AsyncWebSocketTunnel,
+    AuditFileSink, AuditRouteKind, AuthenticatedHttpProxyService, BodyExt, BoxBody, Bytes,
+    CancellationToken, ClaudeEdgeRuntimeConfig, ClaudeFiveHourReservePercent, ClaudeServerRuntime,
+    CredentialStoreAvailability, DEFAULT_ACCOUNT_HOLD_COOLDOWN_SECONDS, DbWriteActor, HttpMethod,
+    HttpProxyError, HttpProxyRequest, HttpRequest, HttpResponse, HyperHttpUpstreamTransport,
+    HyperProtocolDispatch, HyperProtocolSwitchpoint, Incoming, Infallible, LocalAuthError,
+    LoopbackRouterRuntimeError, Method, PrecommitAuthRecoveryScope, PrecommitHttpResponseFailure,
+    PrecommitHttpResponseProbe, PreparedAsyncStreamingHttpProxyRequest,
+    PreparedHttpResponseForCommit, RouteBand, RouteBandAccountHolds, RouteBandQueueHealth,
+    RouteBandReservationBooks, RouteBandRuntimeExhaustions, RouteBandWeightedSelectors, RouteClass,
+    RouterCompatibility, RuntimeAccountAdmissionAssessor, RuntimeAffinitySecretProvider,
+    SelectionReservationLock, SharedSessionAccountAffinityCache, SocketAddr,
+    SqliteActiveClientLeaseReporter, StateStoreError, StatusCode, StderrAuditFailureReporter,
+    StreamingHttpProxyCompletion, SystemTime, TaskTracker, TokioIo, TransportKind, UNIX_EPOCH,
+    UpstreamEndpoint, Uri, WebSocketHandshakeRequest, WebSocketProtocolRouter,
+    WebSocketRevocationRegistry, all_accounts_exhausted_response, append_audit_event_with_reporter,
+    async_streaming_http_response_to_hyper, box_body_from_bytes, classify_route, empty_body,
+    empty_response, extract_presented_local_token_from_request,
+    finish_hyper_connection_after_serve_result, has_forbidden_websocket_subprotocol_auth_carrier,
+    header_value, http_error_response, http1, hyper_request_to_streaming_proxy_request,
+    is_claude_edge_path, is_websocket_upgrade, local_auth_rejection_audit_event, method_from_hyper,
+    observe_precommit_http_quota_exhaustion_for_retry, path_without_query,
+    provider_credential_failure_response, quota_state_unavailable_response,
+    request_metadata_prefix_is_complete_json, router_websocket_config, sanitize_error_for_log,
+    sanitize_route_path_for_log, service_fn, split_precommit_http_response,
+    unsupported_claude_path_response, websocket_handshake_from_hyper_headers,
+    websocket_runtime_error_kind,
+};
 
 #[derive(Clone)]
 pub(super) struct LoopbackProtocolConnectionHandler {
@@ -186,14 +217,13 @@ impl LoopbackProtocolConnectionHandler {
         let upgrade_task = tokio::spawn(async move {
             match websocket.await {
                 Ok(local_websocket) => {
-                    task_context
-                        .handle_hyper_websocket_upgraded(
-                            local_websocket,
-                            handshake,
-                            path,
-                            local_peer_addr,
-                        )
-                        .await
+                    Box::pin(task_context.handle_hyper_websocket_upgraded(
+                        local_websocket,
+                        handshake,
+                        path,
+                        local_peer_addr,
+                    ))
+                    .await
                 }
                 Err(error) => Err(LoopbackRouterRuntimeError::WebSocket(
                     crate::websocket::WebSocketTunnelError::Transport(error),
@@ -341,9 +371,10 @@ impl LoopbackProtocolConnectionHandler {
                 Ok(request) => request,
                 Err(_error) => return empty_response(StatusCode::BAD_REQUEST),
             };
-        let replayable_request = full_replay_body
+        let mut replayable_request = full_replay_body
             .filter(|body| request_metadata_prefix_is_complete_json(body))
             .map(|body| request.clone().with_body(body));
+        let auth_recovery_scope = PrecommitAuthRecoveryScope::for_request(&request);
 
         let max_account_attempts = if replayable_request.is_some() {
             match self.enabled_account_attempt_limit().await {
@@ -354,9 +385,15 @@ impl LoopbackProtocolConnectionHandler {
             1
         };
         let mut first_attempt_body = Some(body);
+        let mut had_credential_rejection = false;
         for attempt_index in 0..max_account_attempts {
             let (attempt_request, attempt_body) = if attempt_index == 0 {
                 let Some(first_attempt_body) = first_attempt_body.take() else {
+                    crate::account_selection::record_selection_rejected(
+                        crate::account_selection::SelectionDiagnosticStage::HttpReplayUnavailable,
+                        "request_body_unavailable",
+                        None,
+                    );
                     return empty_response(StatusCode::SERVICE_UNAVAILABLE);
                 };
                 (request.clone(), first_attempt_body)
@@ -364,6 +401,11 @@ impl LoopbackProtocolConnectionHandler {
                 let retry_body = box_body_from_bytes(replayable_request.body().to_vec());
                 (replayable_request, retry_body)
             } else {
+                crate::account_selection::record_selection_rejected(
+                    crate::account_selection::SelectionDiagnosticStage::HttpReplayUnavailable,
+                    "request_replay_unavailable",
+                    None,
+                );
                 return empty_response(StatusCode::SERVICE_UNAVAILABLE);
             };
 
@@ -372,15 +414,20 @@ impl LoopbackProtocolConnectionHandler {
                 .await
             {
                 Ok(prepared) => prepared,
+                Err(HttpProxyError::Selection {
+                    reason:
+                        crate::account_selection::QuotaAwareAccountSelectorError::NoEligibleAccounts,
+                }) if had_credential_rejection => return provider_credential_failure_response(),
                 Err(error) => return http_error_response(error),
             };
             let (upstream_request, completion) = prepared.into_parts();
+            let route_band = completion.route_band();
             let response = match self.upstream.send_streaming(upstream_request).await {
                 Ok(response) => response,
                 Err(error) => return http_error_response(error),
             };
             match self
-                .observe_precommit_http_quota_response(response, completion)
+                .observe_precommit_http_response(response, completion, auth_recovery_scope)
                 .await
             {
                 Ok(prepared_response) => {
@@ -389,8 +436,13 @@ impl LoopbackProtocolConnectionHandler {
                         prepared_response.response,
                     );
                 }
-                Err(PrecommitHttpQuotaResponse::AccountQuotaExhausted) => {
+                Err(PrecommitHttpResponseFailure::AccountQuotaExhausted) => {
                     if replayable_request.is_none() {
+                        crate::account_selection::record_selection_rejected(
+                            crate::account_selection::SelectionDiagnosticStage::HttpReplayUnavailable,
+                            "quota_replay_unavailable",
+                            Some(route_band),
+                        );
                         return quota_state_unavailable_response();
                     }
                     tracing::info!(
@@ -399,16 +451,37 @@ impl LoopbackProtocolConnectionHandler {
                         "codex_router.http_precommit_account_exhausted_retry"
                     );
                 }
-                Err(PrecommitHttpQuotaResponse::ProbeFailed(error)) => {
+                Err(PrecommitHttpResponseFailure::CredentialRejected { account_id }) => {
+                    had_credential_rejection = true;
+                    let Some(retry_request) = replayable_request.as_mut() else {
+                        return provider_credential_failure_response();
+                    };
+                    *retry_request = retry_request.clone().with_excluded_account(account_id);
+                }
+                Err(PrecommitHttpResponseFailure::ProbeFailed(error)) => {
+                    crate::account_selection::record_selection_rejected(
+                        crate::account_selection::SelectionDiagnosticStage::HttpPrecommitObservation,
+                        crate::account_selection::selection_error_class(&error),
+                        Some(route_band),
+                    );
                     return http_error_response(error);
                 }
-                Err(PrecommitHttpQuotaResponse::ObservationFailed) => {
+                Err(PrecommitHttpResponseFailure::ObservationFailed) => {
+                    crate::account_selection::record_selection_rejected(
+                        crate::account_selection::SelectionDiagnosticStage::HttpPrecommitObservation,
+                        "observation_failed",
+                        Some(route_band),
+                    );
                     return empty_response(StatusCode::SERVICE_UNAVAILABLE);
                 }
             }
         }
 
-        all_accounts_exhausted_response()
+        if had_credential_rejection {
+            provider_credential_failure_response()
+        } else {
+            all_accounts_exhausted_response()
+        }
     }
 
     pub(super) async fn enabled_account_attempt_limit(&self) -> Result<usize, StateStoreError> {
@@ -485,7 +558,14 @@ pub(super) fn router_compatibility_response(
 pub(super) fn enabled_account_attempt_limit_from_accounts(
     accounts: Result<Vec<AccountRecord>, StateStoreError>,
 ) -> Result<usize, StateStoreError> {
-    Ok(accounts?
+    let accounts = accounts.inspect_err(|error| {
+        crate::account_selection::record_selection_rejected(
+            crate::account_selection::SelectionDiagnosticStage::HttpAccountAttemptLimit,
+            crate::account_selection::state_store_error_class(error),
+            None,
+        );
+    })?;
+    Ok(accounts
         .iter()
         .filter(|account| account.status() == AccountStatus::Enabled)
         .count()
@@ -569,15 +649,16 @@ impl LoopbackProtocolConnectionHandler {
         )
     }
 
-    pub(super) async fn observe_precommit_http_quota_response(
+    pub(super) async fn observe_precommit_http_response(
         &self,
         response: AsyncStreamingHttpProxyResponse,
         completion: StreamingHttpProxyCompletion,
-    ) -> Result<PreparedHttpResponseForCommit, PrecommitHttpQuotaResponse> {
+        auth_recovery_scope: PrecommitAuthRecoveryScope,
+    ) -> Result<PreparedHttpResponseForCommit, PrecommitHttpResponseFailure> {
         let provider_error_observer = completion.provider_error_observer().cloned();
         let account_id = completion.account_id().clone();
         let route_band = completion.route_band();
-        match split_precommit_http_quota_response(response).await {
+        match split_precommit_http_response(response, auth_recovery_scope).await {
             Ok(PrecommitHttpResponseProbe::Forward(response)) => {
                 Ok(PreparedHttpResponseForCommit {
                     response,
@@ -592,9 +673,12 @@ impl LoopbackProtocolConnectionHandler {
                     route_band,
                     current_unix_seconds().unwrap_or(0),
                 )?;
-                Err(PrecommitHttpQuotaResponse::AccountQuotaExhausted)
+                Err(PrecommitHttpResponseFailure::AccountQuotaExhausted)
             }
-            Err(error) => Err(PrecommitHttpQuotaResponse::ProbeFailed(error)),
+            Ok(PrecommitHttpResponseProbe::CredentialRejected) => {
+                Err(PrecommitHttpResponseFailure::CredentialRejected { account_id })
+            }
+            Err(error) => Err(PrecommitHttpResponseFailure::ProbeFailed(error)),
         }
     }
 

@@ -13,8 +13,11 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         let root = tempfile::tempdir()?;
         let provider_endpoint = endpoint("cursor-local")?;
         let creator = actor(provider_endpoint.clone(), "creator")?;
-        let script = SETTINGS_CREATE_FIXTURE.replace("__MODE__", mode);
-        let runtime = ExternalProviderRuntime::initialize(launch(&script)).await?;
+        let runtime = ExternalProviderRuntime::initialize(launch(
+            "supervisor-settings-create-agent.ts",
+            vec![mode.to_owned()],
+        ))
+        .await?;
         let backend = supervisor(
             &root,
             vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
@@ -26,7 +29,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         let default_models = models.borrow().clone();
         ensure_eq!(
             default_models.as_slice(),
-            &[collaboration_service::ProviderModelEntry::try_new(
+            &[collaboration_runtime::ProviderModelEntry::try_new(
                 "provider-default".into(),
                 "provider default".into(),
                 "The provider selects its default model".into(),
@@ -80,12 +83,12 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
                 ensure_eq!(
                     advertised_models.as_slice(),
                     &[
-                        collaboration_service::ProviderModelEntry::try_new(
+                        collaboration_runtime::ProviderModelEntry::try_new(
                             "a".into(),
                             "a".into(),
                             "Advertised by the provider".into()
                         )?,
-                        collaboration_service::ProviderModelEntry::try_new(
+                        collaboration_runtime::ProviderModelEntry::try_new(
                             "b".into(),
                             "b".into(),
                             "Advertised by the provider".into()

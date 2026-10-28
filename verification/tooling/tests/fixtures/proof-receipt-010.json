@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "guard false",
+    "operation": "guard",
+    "arguments": ["G-synthetic", "source/*.rs absent.rs"],
+    "originalArguments": ["G-synthetic", "source/*.rs absent.rs"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "source/z.rs": "",
+      "source/a.rs": ""
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": []
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {}
+  },
+  "original": "scripts/proof-matrix.sh#block-0",
+  "originalSHA256": "47483e529c5693769257a6172680fa1f96fe3eeed13f1e0b5b48c2273edf3336"
+}

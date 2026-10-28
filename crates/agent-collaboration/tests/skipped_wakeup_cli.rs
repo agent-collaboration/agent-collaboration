@@ -1,7 +1,7 @@
 //! Replaying creation must observe the current skipped wake through the CLI wait path.
 use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
 use collaboration_client::protocol::{OperationId, SavedMessage};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 
@@ -24,6 +24,8 @@ async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std
     let operation_id = OperationId::generate();
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: operation_id.clone(),
             message,
             timing: agent_automation::TimingRule::After { seconds: 1 },
@@ -42,14 +44,11 @@ async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std
             .await?;
     }
     let store = Arc::new(tokio::sync::Mutex::new(store));
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .map_err(std::io::Error::other)?
         .with_automation_store(Arc::clone(&store));
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await?;
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())?;
 
     // Act: recover the existing creation receipt, then wait on the current wake.
     let output = tokio::time::timeout(

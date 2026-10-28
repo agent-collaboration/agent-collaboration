@@ -3,14 +3,18 @@ use codex_acp_adapter::{
     AcpSchemaCatalog, ApprovalBroker, ApprovalRoute, BrokeredApprovalOutcome,
     BrokeredApprovalRequest, PendingPermission,
 };
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
     RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
 };
-use collaboration_service::{
-    EndpointDirectory, MachineIdentity, ManifestPublication, NativeControlBackend,
-    NativeGenerationGate, ServiceIdentity, ServiceInteractionBroker,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::ManifestPublication;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -50,34 +54,34 @@ struct ApprovalFixture {
 struct ApprovalDeliveryCapture {
     requester: SessionRef,
     approver: SessionRef,
-    automation_store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     broker: Arc<ServiceInteractionBroker>,
     machine_identity: MachineIdentity,
 }
 
 struct AcceptedTypedNoticeDelivery;
 
-impl collaboration_service::SessionMessageDelivery for AcceptedTypedNoticeDelivery {
+impl collaboration_contracts::SessionMessageDelivery for AcceptedTypedNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
-        _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         Box::pin(async {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::Started,
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
-            })
+            Ok(collaboration_contracts::NativeDeliveryResult::observed(
+                collaboration_contracts::NativeObservedOutcome::Started,
+                Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                None,
+            ))
         })
     }
 
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -166,17 +170,17 @@ impl ApprovalFixture {
         )
         .await
         .expect("approval broker");
-        let route: Arc<dyn collaboration_service::SessionDeliveryRoute> =
-            Arc::new(collaboration_service::CodexAppServerDeliveryRoute::new(
+        let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+            Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
                 service_id.clone(),
                 endpoints,
                 native_backend.clone(),
-                Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+                Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ));
-        let delivery: Arc<dyn collaboration_service::SessionMessageDelivery> = if typed_notice {
+        let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> = if typed_notice {
             Arc::new(AcceptedTypedNoticeDelivery)
         } else {
-            Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
+            Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
                 route,
             ]))
         };
@@ -200,13 +204,12 @@ impl ApprovalFixture {
             ApprovalDeliveryCapture {
                 requester: requester.clone(),
                 approver: approver.clone(),
-                automation_store: Arc::clone(&automation_store),
                 broker: Arc::clone(&broker),
                 machine_identity: machine_identity.clone(),
             },
             delivery_tx,
         ));
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("service endpoint")
@@ -224,12 +227,11 @@ impl ApprovalFixture {
         } else {
             "control.sock"
         });
-        let application = collaboration_service::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let service_api = ServedApi::unix(
             &api_config(application.clone(), directory.path()),
             &api_socket,
-        )
-        .await;
+        );
         let forwarded_decisions = drop_decision_reply.then(|| Arc::new(AtomicUsize::new(0)));
         let fault_task = forwarded_decisions.as_ref().map(|forwarded_decisions| {
             let listener = tokio::net::UnixListener::bind(directory.path().join("control.sock"))
@@ -262,17 +264,16 @@ impl ApprovalFixture {
         self.directory.path()
     }
 
-    async fn begin_permission_request(
+    fn begin_permission_request(
         &self,
         suffix: &str,
     ) -> tokio::task::JoinHandle<
         Result<BrokeredApprovalOutcome, codex_acp_adapter::ApprovalBrokerError>,
     > {
         self.begin_permission_request_for_generation(suffix, self.generation.clone())
-            .await
     }
 
-    async fn begin_permission_request_for_generation(
+    fn begin_permission_request_for_generation(
         &self,
         suffix: &str,
         generation: CodexGeneration,
@@ -419,7 +420,7 @@ async fn serve_approval_deliveries(
                     let text = request["params"]["input"][0]["text"]
                         .as_str()
                         .expect("push delivery line");
-                    let (_, link_text) = text.rsplit_once(" · ").expect("push link suffix");
+                    let link_text = text.split_whitespace().last().expect("push link suffix");
                     let link = RouterLink::parse(link_text).expect("valid router push link");
                     assert_eq!(
                         link.machine_id(),
@@ -429,9 +430,8 @@ async fn serve_approval_deliveries(
                     assert!(!text.contains("Intended recipient:"));
 
                     let push = capture
-                        .automation_store
-                        .lock()
-                        .await
+                        .broker
+                        .interaction_store()
                         .get_push_record(link.push_id())
                         .await
                         .expect("read delivered push")

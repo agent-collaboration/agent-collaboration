@@ -2,10 +2,7 @@
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
-#[cfg(test)]
-use std::io::Read;
-#[cfg(test)]
-use std::io::Write;
+
 use std::net::AddrParseError;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
@@ -68,8 +65,8 @@ use codex_router_core::route_profile::DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT;
 use codex_router_core::route_profile::RouteProfile;
 use codex_router_core::router_compatibility::RouterCompatibility;
 use codex_router_core::routes::RouteBand;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStoreStatus;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStoreStatus;
 use codex_router_selection::selection_outcome::CredentialStoreAvailability;
 use codex_router_selection::selection_outcome::HeadroomTimestamp;
 use codex_router_selection::selection_outcome::SelectionHoldReason;
@@ -182,15 +179,21 @@ mod runtime_config;
 mod runtime_lifecycle;
 
 pub use auth_reloader::*;
-use connection_diagnostics::*;
-use db_affinity::*;
+use connection_diagnostics::{LoopbackConnectionDiagnostic, loopback_connection_diagnostic};
+use db_affinity::{AsyncSqliteProviderErrorObserver, DbWriteAffinityOwnerRecorder};
 pub use errors_and_adapters::*;
 pub(crate) use hyper_request::*;
 pub use loopback_bind::*;
-use protocol_handler::*;
+use protocol_handler::{
+    LoopbackProtocolConnectionHandler, SharedUpgradeTasks, UpgradeTaskHandle, current_unix_seconds,
+};
 pub(crate) use response_body::*;
 pub use runtime_config::*;
-use runtime_lifecycle::*;
+use runtime_lifecycle::{
+    active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    store_connection_join_error, store_optional_connection_join_error,
+    supervise_detached_connection_handler,
+};
 
 #[cfg(test)]
 #[path = "server/tests.rs"]

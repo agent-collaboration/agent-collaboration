@@ -20,8 +20,9 @@ mod foreground_launch;
 pub(crate) mod operator_client;
 mod provider_launch_configuration;
 pub(crate) mod replacement_outcome;
+#[cfg(test)]
+mod tailnet_tests;
 
-const DEFAULT_HOST_PORT: u16 = 8787;
 const STATUS_REQUEST_DEADLINE: Duration = Duration::from_secs(40);
 const APP_SERVER_RESTART_DEADLINE: Duration = Duration::from_secs(40);
 const ROUTER_RESTART_DEADLINE: Duration = Duration::from_secs(30);
@@ -66,6 +67,7 @@ pub(crate) struct HostCommand {
     router_root: Option<PathBuf>,
     port: Option<u16>,
     mcp_bind: Option<SocketAddr>,
+    remote_access: Option<codex_router_host::RemoteAccess>,
     provider_operation_retention_days: std::num::NonZeroU32,
     claude_acp_executable: Option<PathBuf>,
     claude_acp_arguments: Vec<String>,
@@ -90,6 +92,13 @@ impl HostCommand {
             router_root: parsed.router_root,
             port: parsed.port,
             mcp_bind: parsed.mcp_bind,
+            remote_access: parsed.remote_access.map(|mode| match mode {
+                RemoteAccessMode::Tailscale => codex_router_host::RemoteAccess::tailscale(
+                    parsed
+                        .tailscale_https_port
+                        .unwrap_or(DEFAULT_TAILSCALE_HTTPS_PORT),
+                ),
+            }),
             provider_operation_retention_days: parsed.provider_operation_retention_days,
             claude_acp_executable: parsed.claude_acp_executable,
             claude_acp_arguments: parsed.claude_acp_arguments,
@@ -136,11 +145,15 @@ struct ClapHostCommand {
     #[arg(
         long,
         global = true,
-        help = "Provider port (debug default: 18787; installed default: 8787)"
+        help = "Provider port (debug default: 18787; installed default: 19741)"
     )]
     port: Option<u16>,
     #[arg(long, global = true, value_parser = parse_loopback_mcp_bind)]
     mcp_bind: Option<SocketAddr>,
+    #[arg(long, global = true, value_enum)]
+    remote_access: Option<RemoteAccessMode>,
+    #[arg(long, global = true, requires = "remote_access")]
+    tailscale_https_port: Option<std::num::NonZeroU16>,
     #[arg(long, global = true, default_value = "60")]
     provider_operation_retention_days: std::num::NonZeroU32,
     #[arg(long, global = true)]
@@ -163,6 +176,14 @@ struct ClapHostCommand {
     cursor_acp_arguments: Vec<String>,
     #[arg(long, global = true, hide = true)]
     require_debug_isolation: bool,
+}
+
+const DEFAULT_TAILSCALE_HTTPS_PORT: std::num::NonZeroU16 =
+    std::num::NonZeroU16::new(8443).expect("positive Tailscale HTTPS default");
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+enum RemoteAccessMode {
+    Tailscale,
 }
 
 pub(crate) async fn run_host_command<W: Write + Send>(
@@ -204,11 +225,10 @@ pub(crate) async fn run_host_command<W: Write + Send>(
         command.require_debug_isolation,
         owner_home.as_deref(),
     );
-    let coordination_paths =
-        HostCoordinationPaths::new(router_root.join("host.sock"), router_root.join("host.lock"));
+    let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
     if command.runs_foreground() {
         let provider_launches = external_provider_launches(&command)?;
-        return foreground_launch::run_foreground_host(
+        return Box::pin(foreground_launch::run_foreground_host(
             foreground_launch::ForegroundHostInputs {
                 owner_human_id: command.owner_human_id.clone(),
                 router_root,
@@ -218,13 +238,14 @@ pub(crate) async fn run_host_command<W: Write + Send>(
                 mcp_bind: command
                     .mcp_bind
                     .unwrap_or(default_mcp_bind(launch_mode.is_isolated())),
+                remote_access: command.remote_access,
                 provider_operation_retention_days: command.provider_operation_retention_days,
                 coordination_paths,
                 external_provider_launches: provider_launches,
             },
             context,
             telemetry,
-        )
+        ))
         .await;
     }
 
@@ -427,6 +448,19 @@ pub enum HostCommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_host_port_overrides_keep_the_selected_port() {
+        for port in [8787, 9876] {
+            let command = HostCommand::parse(vec![
+                OsString::from("--port"),
+                OsString::from(port.to_string()),
+            ])
+            .expect("explicit Host port");
+
+            assert_eq!(command.port, Some(port));
+        }
+    }
 
     #[test]
     fn operator_deadlines_cover_their_owned_lifecycle_bounds() {

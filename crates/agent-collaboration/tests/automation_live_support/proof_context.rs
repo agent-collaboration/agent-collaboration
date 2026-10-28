@@ -2,7 +2,8 @@
 #[path = "native_notification_diagnostics.rs"]
 mod native_notification_diagnostics;
 use codex_native_integration::{
-    NativeOperation, NativePayloadSchemas, NativeProtocolConnection, NativeSchemaExport,
+    DEFAULT_ROUTER_PORT, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
+    NativeSchemaExport,
 };
 use collaboration_client::CollaborationClient;
 use collaboration_client::protocol::{
@@ -34,7 +35,6 @@ impl ProofContext {
         Self::connect_with_prior_host(None).await
     }
 
-    #[allow(dead_code)]
     pub async fn reconnect_after_owned_host_restart(prior_host_pid: u64) -> ProofResult<Self> {
         Self::connect_with_prior_host(Some(prior_host_pid)).await
     }
@@ -56,7 +56,7 @@ impl ProofContext {
             || marker
                 .get("port")
                 .and_then(Value::as_u64)
-                .is_none_or(|port| port == 8787 || port == 0)
+                .is_none_or(|port| port == u64::from(DEFAULT_ROUTER_PORT) || port == 0)
         {
             return Err("Host did not establish the isolated debug profile and Luna model".into());
         }
@@ -178,7 +178,7 @@ impl ProofContext {
     }
 
     // Shared helper is also compiled by scripted acceptance binaries without DX tasks.
-    #[allow(dead_code)]
+
     pub async fn start_skill_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
         self.start_thread_with_instructions(
             role,
@@ -189,7 +189,6 @@ impl ProofContext {
         .await
     }
 
-    #[allow(dead_code)]
     pub async fn start_messaging_skill_thread(
         &mut self,
         role: &str,
@@ -489,16 +488,17 @@ pub fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
 }
 
-pub async fn python_executable() -> ProofResult<PathBuf> {
-    let output = tokio::process::Command::new("python3")
+pub async fn node_executable() -> ProofResult<PathBuf> {
+    let output = tokio::process::Command::new("node")
         .args([
-            "-c",
-            "import sys; assert sys.version_info >= (3, 12); print(sys.executable)",
+            "-p",
+            "(() => { if (process.versions.node !== require(process.argv[1]).engines.node) throw new Error('repository Node version required'); return process.execPath; })()",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../verification/package.json"),
         ])
         .output()
         .await?;
     if !output.status.success() {
-        return Err("Python 3.12 or newer is required for the permission probe".into());
+        return Err("The Node version pinned in verification/package.json is required for the permission probe".into());
     }
     Ok(PathBuf::from(String::from_utf8(output.stdout)?.trim()).canonicalize()?)
 }

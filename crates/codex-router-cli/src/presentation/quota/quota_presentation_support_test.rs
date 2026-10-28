@@ -45,6 +45,50 @@ async fn render_quota_capture_frames(
     .await
 }
 
+async fn render_quota_navigation_until(
+    view_model: QuotaStatusViewModel,
+    width: usize,
+    height: usize,
+    events: Vec<TerminalEvent>,
+    marker: &str,
+) -> Vec<String> {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let stream = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(QuotaStatusComponent(view_model, width, height));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(stream));
+    tokio::pin!(frames);
+    let mut events = Some(events);
+    let mut completed = false;
+    let mut output = Vec::new();
+    let result = tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if let Some(events) = events.take() {
+                for event in events {
+                    sender.send(event).unwrap();
+                }
+            } else if !completed && frame.contains(marker) {
+                completed = true;
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Esc,
+                    )))
+                    .unwrap();
+            }
+            output.push(frame);
+        }
+    })
+    .await;
+    assert!(
+        result.is_ok() && completed,
+        "navigation must reveal {marker} before exit: {output:?}"
+    );
+    output
+}
+
 pub(super) fn assert_quota_golden(name: &str, actual: &str) {
     let normalized = normalize_quota_golden(actual);
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -186,25 +230,39 @@ fn quota_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 100,
         route_line: "responses -> ssdev    [preferred]".to_owned(),
+        header: test_header_facts(1, 1),
         why_line: "why: safest quota".to_owned(),
         pool_freshness_summary: "fresh 1".to_owned(),
         selection_projection_degraded: false,
         serving_clients: None,
         rows: vec![QuotaStatusAccountViewModel {
+            provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id("ssdev"),
             account_tag: "test-tag".to_owned(),
             active_credential_generation: Some(1),
             enabled: true,
             selected: true,
             account: "ssdev".to_owned(),
-            status: "[usable]".to_owned(),
+            status: super::quota_status_symbols::QuotaRowStatus::Account(
+                super::quota_status_symbols::QuotaAccountStatus::Available,
+            ),
             active_clients: "1 client".to_owned(),
             reset_credits: "2 resets".to_owned(),
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: crate::quota::CreditUsageStatus::default(),
             reason: "safest quota".to_owned(),
-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
-            short_window: "█████ 99% left, reset 5h".to_owned(),
+            display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 83,
+                reset_in_seconds: Some(604800),
+                stale: false,
+            },
+            display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 99,
+                reset_in_seconds: Some(18000),
+                stale: false,
+            },
+            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
             burn_meter: "■□□□".to_owned(),
             sample_metadata: SampleMetadata {
                 confidence: SampleConfidence::Fresh,
@@ -240,6 +298,7 @@ fn quota_empty_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 100,
         route_line: "responses -> none    [empty]".to_owned(),
+        header: test_header_facts(0, 0),
         why_line: "why: no accounts configured".to_owned(),
         pool_freshness_summary: "unknown".to_owned(),
         selection_projection_degraded: false,
@@ -253,6 +312,10 @@ fn quota_error_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 100,
         route_line: "responses -> unavailable    [error]".to_owned(),
+        header: super::quota_status_symbols::QuotaHeaderFacts {
+            credential_notice: Some("quota status unavailable".to_owned()),
+            ..test_header_facts(0, 0)
+        },
         why_line: "why: quota status unavailable".to_owned(),
         pool_freshness_summary: "unknown".to_owned(),
         selection_projection_degraded: true,
@@ -268,26 +331,40 @@ pub(super) fn quota_two_account_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 120,
         route_line: "responses -> alpha    [preferred]".to_owned(),
+        header: test_header_facts(2, 2),
         why_line: "why: alpha detail".to_owned(),
         pool_freshness_summary: "fresh 2".to_owned(),
         selection_projection_degraded: false,
         serving_clients: None,
         rows: vec![
             QuotaStatusAccountViewModel {
+                provider: codex_router_core::provider::Provider::Openai,
                 account_id: test_account_id("alpha"),
                 account_tag: "alpha-tag".to_owned(),
                 active_credential_generation: Some(1),
                 enabled: true,
                 selected: true,
                 account: "alpha".to_owned(),
-                status: "[usable]".to_owned(),
+                status: super::quota_status_symbols::QuotaRowStatus::Account(
+                    super::quota_status_symbols::QuotaAccountStatus::Available,
+                ),
                 active_clients: "1 client".to_owned(),
                 reset_credits: "2 resets".to_owned(),
                 credit_usage_summary: "unknown".to_owned(),
                 credit_usage: crate::quota::CreditUsageStatus::default(),
                 reason: "alpha detail".to_owned(),
-                weekly_window: "█████ 83% left, reset 7d".to_owned(),
-                short_window: "█████ 99% left, reset 5h".to_owned(),
+                display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 83,
+                    reset_in_seconds: Some(604800),
+                    stale: false,
+                },
+                display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 99,
+                    reset_in_seconds: Some(18000),
+                    stale: false,
+                },
+                weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+                short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
                 burn_meter: "■□□□".to_owned(),
                 sample_metadata: SampleMetadata::default(),
                 reset_pace: ResetPaceViewModel::default(),
@@ -296,20 +373,33 @@ pub(super) fn quota_two_account_view_model() -> QuotaStatusViewModel {
                 details: alpha_details.clone(),
             },
             QuotaStatusAccountViewModel {
+                provider: codex_router_core::provider::Provider::Openai,
                 account_id: test_account_id("beta"),
                 account_tag: "beta-tag".to_owned(),
                 active_credential_generation: Some(1),
                 enabled: true,
                 selected: false,
                 account: "beta".to_owned(),
-                status: "[usable]".to_owned(),
+                status: super::quota_status_symbols::QuotaRowStatus::Account(
+                    super::quota_status_symbols::QuotaAccountStatus::Available,
+                ),
                 active_clients: "0 clients".to_owned(),
                 reset_credits: "2 resets".to_owned(),
                 credit_usage_summary: "unknown".to_owned(),
                 credit_usage: crate::quota::CreditUsageStatus::default(),
                 reason: "beta detail".to_owned(),
-                weekly_window: "████ 75% left, reset 6d".to_owned(),
-                short_window: "████ 70% left, reset 4h".to_owned(),
+                display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 75,
+                    reset_in_seconds: Some(518400),
+                    stale: false,
+                },
+                display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 70,
+                    reset_in_seconds: Some(14400),
+                    stale: false,
+                },
+                weekly_window: "████ 75%\u{a0}left reset\u{a0}6d".to_owned(),
+                short_window: "████ 70%\u{a0}left reset\u{a0}4h".to_owned(),
                 burn_meter: "■■□□".to_owned(),
                 sample_metadata: SampleMetadata::default(),
                 reset_pace: ResetPaceViewModel::default(),
@@ -329,20 +419,33 @@ fn quota_many_account_view_model() -> QuotaStatusViewModel {
         let account = format!("acct{index:02}");
         let details = selected_account_details(&account, &format!("account {index:02} detail"));
         rows.push(QuotaStatusAccountViewModel {
+            provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id(&account),
             account_tag: format!("tag-{index:02}"),
             active_credential_generation: Some(1),
             enabled: true,
             selected: index == 0,
             account,
-            status: "[usable]".to_owned(),
+            status: super::quota_status_symbols::QuotaRowStatus::Account(
+                super::quota_status_symbols::QuotaAccountStatus::Available,
+            ),
             active_clients: format!("{index} clients"),
             reset_credits: "2 resets".to_owned(),
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: crate::quota::CreditUsageStatus::default(),
             reason: format!("account {index:02} detail"),
-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
-            short_window: "█████ 99% left, reset 5h".to_owned(),
+            display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 83,
+                reset_in_seconds: Some(604800),
+                stale: false,
+            },
+            display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 99,
+                reset_in_seconds: Some(18000),
+                stale: false,
+            },
+            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
             burn_meter: "■□□□".to_owned(),
             sample_metadata: SampleMetadata::default(),
             reset_pace: ResetPaceViewModel::default(),
@@ -354,6 +457,7 @@ fn quota_many_account_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 160,
         route_line: "responses -> acct00    [preferred]".to_owned(),
+        header: test_header_facts(10, 10),
         why_line: "why: primary".to_owned(),
         pool_freshness_summary: "fresh 10".to_owned(),
         selection_projection_degraded: false,
@@ -365,16 +469,22 @@ fn quota_many_account_view_model() -> QuotaStatusViewModel {
 
 fn quota_no_authoritative_selection_view_model() -> QuotaStatusViewModel {
     let mut view_model = quota_view_model();
-    view_model.route_line = "responses -> none    [blocked]    no selectable account".to_owned();
+    view_model.route_line = "responses -> none    blocked    no selectable account".to_owned();
     view_model.why_line = "why: no usable accounts".to_owned();
     view_model.selected = None;
+    view_model.header.pool = super::quota_status_symbols::QuotaPoolCensus {
+        blocked: 1,
+        ..Default::default()
+    };
     for row in &mut view_model.rows {
         row.selected = false;
-        row.status = "[blocked]".to_owned();
+        row.status = super::quota_status_symbols::QuotaRowStatus::Account(
+            super::quota_status_symbols::QuotaAccountStatus::Blocked,
+        );
         row.reason = "quota ineligible".to_owned();
         row.weekly_window = "░░░░░░░░░░ 0% left, reset 7d".to_owned();
         row.reset_pace = ResetPaceViewModel::default();
-        row.details.status = "[blocked]".to_owned();
+        row.details.status = "blocked".to_owned();
         row.details.reason = "quota ineligible".to_owned();
         row.details.weekly_window = "░░░░░░░░░░ 0% left, reset 7d".to_owned();
         row.details.reset_pace = ResetPaceViewModel::default();
@@ -389,7 +499,7 @@ fn quota_no_authoritative_selection_view_model() -> QuotaStatusViewModel {
 fn selected_account_details(account: &str, reason: &str) -> QuotaSelectedAccountViewModel {
     QuotaSelectedAccountViewModel {
         account: account.to_owned(),
-        status: "[usable]".to_owned(),
+        status: "available".to_owned(),
         reason: reason.to_owned(),
         short_window: "█████ 99% left, reset 5h".to_owned(),
         weekly_window: "████ 83% left, reset 7d".to_owned(),
@@ -447,6 +557,7 @@ fn quota_state_color_view_model() -> QuotaStatusViewModel {
     QuotaStatusViewModel {
         width: 160,
         route_line: "responses -> healthy    [preferred]".to_owned(),
+        header: test_header_facts(3, 3),
         why_line: "why: reset pace colors".to_owned(),
         pool_freshness_summary: "fresh 1".to_owned(),
         selection_projection_degraded: false,
@@ -519,20 +630,33 @@ fn quota_state_color_row(
         unavailable_reason: None,
     };
     QuotaStatusAccountViewModel {
+        provider: codex_router_core::provider::Provider::Openai,
         account_id: test_account_id(account),
         account_tag: format!("{account}-tag"),
         active_credential_generation: Some(1),
         enabled: true,
         selected,
         account: account.to_owned(),
-        status: "[usable]".to_owned(),
+        status: super::quota_status_symbols::QuotaRowStatus::Account(
+            super::quota_status_symbols::QuotaAccountStatus::Available,
+        ),
         active_clients: "0 clients".to_owned(),
         reset_credits: "2 resets".to_owned(),
         credit_usage_summary: "unknown".to_owned(),
         credit_usage: crate::quota::CreditUsageStatus::default(),
         reason: semantic_label.to_owned(),
-        weekly_window: "█████ 83% left, reset 7d".to_owned(),
-        short_window: "█████ 99% left, reset 5h".to_owned(),
+        display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+            remaining_percent: 83,
+            reset_in_seconds: Some(604800),
+            stale: false,
+        },
+        display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+            remaining_percent: 99,
+            reset_in_seconds: Some(18000),
+            stale: false,
+        },
+        weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+        short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
         burn_meter: String::new(),
         sample_metadata: SampleMetadata {
             confidence: SampleConfidence::Fresh,
@@ -553,4 +677,78 @@ fn quota_state_color_row(
 fn test_account_id(value: &str) -> AccountId {
     AccountId::new(format!("test-{value}"))
         .unwrap_or_else(|error| panic!("test account id should be valid: {error}"))
+}
+
+fn quota_cells_from_column(line: &str, start: usize) -> String {
+    let mut column = 0;
+    line.chars()
+        .filter(|character| {
+            let keep = column >= start;
+            column += unicode_width::UnicodeWidthChar::width(*character).unwrap_or(0);
+            keep
+        })
+        .collect()
+}
+fn quota_selected_panel_text(frame: &str) -> String {
+    let heading = frame
+        .lines()
+        .find(|line| line.contains("Selected account"))
+        .expect("selected panel heading");
+    let start = unicode_width::UnicodeWidthStr::width(
+        heading
+            .get(..heading.find("Selected account").unwrap())
+            .expect("matched text starts at UTF-8 boundary"),
+    );
+    frame
+        .lines()
+        .map(|line| quota_cells_from_column(line, start))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn quota_column_words(frame: &str, start: usize, width: usize) -> String {
+    frame
+        .lines()
+        .map(|line| {
+            let mut column = 0;
+            line.chars()
+                .filter(|character| {
+                    let keep = column >= start && column < start + width;
+                    column += unicode_width::UnicodeWidthChar::width(*character).unwrap_or(0);
+                    keep
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn test_header_facts(usable: usize, fresh: usize) -> super::quota_status_symbols::QuotaHeaderFacts {
+    use super::quota_status_symbols::*;
+    QuotaHeaderFacts {
+        route_band: "responses".to_owned(),
+        pool: QuotaPoolCensus {
+            usable,
+            ..Default::default()
+        },
+        freshness: QuotaFreshnessCensus {
+            fresh,
+            ..Default::default()
+        },
+        observed_clients: None,
+        credential_notice: None,
+    }
+}
+
+fn quota_selected_panel_has_facts(frame: &str, account: &str, status: &str, reason: &str) -> bool {
+    let panel = quota_selected_panel_text(frame);
+    let words = panel.split_whitespace().collect::<Vec<_>>().join(" ");
+    panel
+        .lines()
+        .any(|line| line.trim_matches(['│', ' ']) == account)
+        && words.contains(&format!("Status {status}"))
+        && words.contains(&format!("Reason {reason}"))
 }

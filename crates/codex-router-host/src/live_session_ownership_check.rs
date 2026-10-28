@@ -1,6 +1,6 @@
 //! Provider load veto for a session currently owned by another live client.
+use collaboration_contracts::DeliveryFuture;
 use collaboration_protocol::SessionRef;
-use collaboration_service::DeliveryFuture;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LiveSessionOwnership {

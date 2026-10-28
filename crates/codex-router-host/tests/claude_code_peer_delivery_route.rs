@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Real registry/socket fixtures at the peer route boundary.
 
 use agent_automation::{
@@ -7,16 +6,22 @@ use agent_automation::{
 };
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
     DeliveryRejectionReason, EndpointId, EndpointRef, MessageDelivery, MessageText, PushId,
     SessionId, SessionReachability, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliationContext, DeliveryFuture, DeliveryPrecondition,
-    RouteClaim, RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path, sync::Arc};
@@ -38,6 +43,7 @@ impl AttemptEvidenceSink for RecordedPeerEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -49,6 +55,11 @@ fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
 fn publish_peer(root: &Path, status: Option<&str>) -> std::path::PathBuf {
     let pid = std::process::id();
     let socket_path = root.join("peer.sock");
@@ -74,6 +85,11 @@ fn publish_peer(root: &Path, status: Option<&str>) -> std::path::PathBuf {
     socket_path
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
 fn publish_peer_claim(root: &Path, process_id: u32, name: Option<&str>, cwd: Option<&str>) {
     let mut record = json!({
         "pid": process_id,
@@ -90,6 +106,7 @@ fn publish_peer_claim(root: &Path, process_id: u32, name: Option<&str>, cwd: Opt
         .expect("registry claim fixture");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn delivery(mode: MessageDelivery) -> PreparedDeliveryRequest {
     let target = target();
     let push_id =
@@ -106,7 +123,7 @@ fn delivery(mode: MessageDelivery) -> PreparedDeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode,
@@ -151,7 +168,7 @@ async fn prepared_push_reaches_peer_route_as_the_exact_router_line() {
         payload: PreparedPush {
             push_id,
             line: line.clone(),
-            load_policy: collaboration_service::LoadPolicy::LoadedOnly,
+            load_policy: collaboration_contracts::LoadPolicy::LoadedOnly,
         },
         target: target(),
         mode: MessageDelivery::Auto,
@@ -165,13 +182,16 @@ async fn prepared_push_reaches_peer_route_as_the_exact_router_line() {
         .await
         .expect("prepared push delivery");
 
-    assert_eq!(receipt.outcome, DeliveryOutcome::PeerMessageWritten);
     assert_eq!(
-        receipt.reachability,
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::PeerMessageWritten
+    );
+    assert_eq!(
+        receipt.receipt().reachability,
         Some(SessionReachability::ClaudeCodePeer)
     );
     assert!(matches!(
-        receipt.client,
+        receipt.receipt().client,
         Some(DeliveryClientReceipt::ClaudeCodePeer)
     ));
     let user = receiver.await.expect("receiver");
@@ -209,16 +229,27 @@ async fn peer_queue_rejects_but_idle_steer_writes_to_the_live_socket() {
         .deliver(delivery(MessageDelivery::Queue), &evidence)
         .await
         .expect("queue response");
+    assert_eq!(
+        queued.unsent_cause(),
+        Some(collaboration_contracts::UnsentCause::Refused(
+            collaboration_contracts::NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::QueueUnsupported
+            )
+        ))
+    );
     let steered = route
         .deliver(delivery(MessageDelivery::Steer), &evidence)
         .await
         .expect("steer response");
 
     assert!(
-        matches!(queued.outcome, DeliveryOutcome::Rejected(rejection)
+        matches!(queued.receipt().outcome.clone(), DeliveryOutcome::Rejected(rejection)
             if rejection.reason == DeliveryRejectionReason::QueueUnsupported)
     );
-    assert_eq!(steered.outcome, DeliveryOutcome::PeerMessageWritten);
+    assert_eq!(
+        steered.receipt().outcome.clone(),
+        DeliveryOutcome::PeerMessageWritten
+    );
     assert_eq!(receiver.await.expect("receiver")["type"], "user");
     assert_eq!(evidence.0.lock().await.len(), 2);
 }
@@ -252,8 +283,15 @@ async fn live_unknown_peer_protocol_reports_live_elsewhere() {
         .await
         .expect("delivery refusal");
 
+    assert_eq!(
+        claim.unsent_cause(),
+        Some(collaboration_contracts::UnsentCause::for_rejection(
+            DeliveryRejectionReason::LiveElsewhere
+        ))
+    );
+    assert_eq!(receipt.unsent_cause(), claim.unsent_cause());
     assert!(matches!(
-        claim,
+        claim.into_claim(),
         RouteClaim::LiveElsewhere {
             writable: false,
             detail: Some(reason),
@@ -264,9 +302,75 @@ async fn live_unknown_peer_protocol_reports_live_elsewhere() {
         RoutePresence::LiveElsewhere { detail: Some(reason) } if reason.contains("protocol 99")
     ));
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::Rejected(rejection)
+        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Rejected(rejection)
         if rejection.reason == DeliveryRejectionReason::LiveElsewhere)
     );
+    assert!(evidence.0.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn registry_read_failure_preserves_the_legacy_receipt_with_processing_failure_cause() {
+    let root = tempfile::tempdir().expect("registry root");
+    let registry_file = root.path().join("not-a-directory");
+    std::fs::write(&registry_file, "registry cannot be a file").expect("forced read error");
+    let registry = Arc::new(ClaudeCodeSessionRegistry::new(registry_file));
+    let legacy_detail = registry
+        .lookup(&target().session_id)
+        .expect_err("forced registry read error")
+        .to_string();
+    let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
+        target().endpoint,
+        registry,
+        Arc::new(ClaudeCodePeerSocket::new(root.path().to_owned())),
+    ));
+    let evidence = RecordedPeerEvidence(tokio::sync::Mutex::new(Vec::new()));
+
+    let claim = route.claim(&target()).await.expect("classified claim");
+    let direct = route
+        .deliver(delivery(MessageDelivery::Auto), &evidence)
+        .await
+        .expect("direct result");
+    let router = SessionDeliveryRouter::new(vec![route]);
+    let selected = router
+        .deliver(delivery(MessageDelivery::Auto), &evidence)
+        .await
+        .expect("selected result");
+
+    assert_eq!(
+        claim.unsent_cause(),
+        Some(collaboration_contracts::UnsentCause::ProcessingFailure)
+    );
+    assert_eq!(
+        serde_json::to_value(claim.into_claim()).expect("claim JSON"),
+        json!({
+            "kind":"liveElsewhere", "writable":false, "detail":legacy_detail,
+        })
+    );
+    for (result, reachability) in [
+        (direct, Some(SessionReachability::ClaudeCodePeer)),
+        (selected, None),
+    ] {
+        assert_eq!(
+            result.unsent_cause(),
+            Some(collaboration_contracts::UnsentCause::ProcessingFailure)
+        );
+        let legacy = collaboration_protocol::DeliveryReceipt {
+            outcome: DeliveryOutcome::Rejected(collaboration_protocol::DeliveryRejection {
+                native_failure: None,
+                reason: DeliveryRejectionReason::LiveElsewhere,
+                next_action: collaboration_protocol::DeliveryNextAction::InspectTarget,
+                client_code: None,
+                detail: Some(legacy_detail.clone()),
+                claims: None,
+            }),
+            reachability,
+            client: None,
+        };
+        assert_eq!(
+            serde_json::to_value(result.into_receipt()).expect("receipt JSON"),
+            serde_json::to_value(legacy).expect("legacy receipt JSON")
+        );
+    }
     assert!(evidence.0.lock().await.is_empty());
 }
 
@@ -296,14 +400,14 @@ async fn ambiguous_live_peer_claims_are_preserved_in_the_rejection() {
         .await
         .expect("ambiguous route rejection");
 
-    let DeliveryOutcome::Rejected(rejection) = receipt.outcome else {
+    let DeliveryOutcome::Rejected(rejection) = receipt.receipt().outcome.clone() else {
         panic!(
             "ambiguous live records must be rejected: {:?}",
-            receipt.outcome
+            receipt.receipt().outcome.clone()
         );
     };
     assert_eq!(
-        receipt.reachability,
+        receipt.receipt().reachability,
         Some(SessionReachability::ClaudeCodePeer)
     );
     assert_eq!(rejection.reason, DeliveryRejectionReason::LiveElsewhere);
@@ -372,7 +476,7 @@ async fn every_live_registry_status_allows_auto_and_steer_peer_writes() {
                 .expect("peer delivery");
 
             assert_eq!(
-                outcome.outcome,
+                outcome.receipt().outcome.clone(),
                 DeliveryOutcome::PeerMessageWritten,
                 "status={status:?}, mode={mode:?}"
             );

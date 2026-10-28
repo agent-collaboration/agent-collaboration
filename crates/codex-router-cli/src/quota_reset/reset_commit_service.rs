@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use codex_router_core::ids::AccountId;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
 
 use super::QuotaResetError;
 use super::credential_authority::CredentialFingerprint;
@@ -31,13 +31,13 @@ use super::reset_credit_policy::validate_credit_inventory;
 
 pub(in crate::quota_reset) struct LiveResetAuthorityReader {
     state_database_path: PathBuf,
-    credential_store: EncryptedCredentialStore,
+    credential_store: RuntimeCredentialStore,
 }
 
 impl LiveResetAuthorityReader {
     pub(in crate::quota_reset) fn new(
         state_database_path: PathBuf,
-        credential_store: EncryptedCredentialStore,
+        credential_store: RuntimeCredentialStore,
     ) -> Self {
         Self {
             state_database_path,
@@ -165,7 +165,7 @@ fn render_safe_provider_failure(error: &QuotaResetError) -> RenderSafeFailure {
         | QuotaResetError::CredentialStoreUnavailable => RenderSafeFailure::CredentialUnavailable,
         QuotaResetError::Request { .. } => RenderSafeFailure::Transport,
         QuotaResetError::Status { .. } => RenderSafeFailure::ProviderStatus,
-        _ => RenderSafeFailure::InvalidResponse,
+        QuotaResetError::Response { .. } => RenderSafeFailure::InvalidResponse,
     }
 }
 
@@ -554,7 +554,7 @@ where
         };
         let usage = self.revalidate_usage(context.clone()).await;
         let inventory = self
-            .revalidate_inventory(context.clone(), now_unix_seconds as i64)
+            .revalidate_inventory(context.clone(), now_unix_seconds.cast_signed())
             .await;
         let authorization =
             Self::validate_revalidation(context, &usage, &inventory).and_then(|validated| {

@@ -1,6 +1,9 @@
 //! Ordered router and app-server startup convergence with retained-child cleanup.
 
-use super::*;
+use super::{
+    AppServerChild, AppServerLaunchPlan, AppServerReadiness, ChildCommandSpec, HostConfig,
+    HostError, RouterChild, RouterCondition, RouterProbeError, RouterProbeResult, probe_router,
+};
 use codex_router_secret_store::{
     file_backend::FileSecretStore,
     local_router_token::{LocalRouterTokenError, LocalRouterTokenService},
@@ -29,14 +32,22 @@ pub(super) async fn start_router(
             crate::router_credential_migration::migrate_before_router_spawn(&secret_root).await;
             let mut command = command.command();
             let mut child = RouterChild::spawn(&mut command)?;
+            #[cfg(debug_assertions)]
+            let readiness_started = std::time::Instant::now();
             let probe_result = match await_router_readiness(
                 config.router_endpoint(),
                 config.deadlines().router_start(),
             )
             .await
             {
-                Ok(result) => result,
+                Ok(result) => {
+                    #[cfg(debug_assertions)]
+                    record_router_startup_observation(&mut child, readiness_started, Some(result));
+                    result
+                }
                 Err(error) => {
+                    #[cfg(debug_assertions)]
+                    record_router_startup_observation(&mut child, readiness_started, None);
                     let _shutdown_outcome = child.shutdown().await?;
                     return Err(HostError::RouterProbe(error));
                 }
@@ -60,6 +71,48 @@ pub(super) async fn start_router(
                 }
             }
         }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn record_router_startup_observation(
+    child: &mut RouterChild,
+    started: std::time::Instant,
+    readiness: Option<RouterProbeResult>,
+) {
+    use std::os::unix::process::ExitStatusExt;
+    let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let child_pid = child.process_id();
+    match child.observe_startup_status() {
+        Ok(Some(status)) => tracing::debug!(target: "codex_router_host::startup_diagnostics", {
+            event.name = "codex_router.host.router_startup_child",
+            stage = "router_readiness",
+            child_state = "exited",
+            child_pid,
+            exit_code = ?status.code(),
+            exit_signal = ?status.signal(),
+            readiness = ?readiness,
+            elapsed_ms,
+            }, "Observed retained Router child"
+        ),
+        Ok(None) => tracing::debug!(target: "codex_router_host::startup_diagnostics", {
+            event.name = "codex_router.host.router_startup_child",
+            stage = "router_readiness",
+            child_state = "running",
+            child_pid,
+            readiness = ?readiness,
+            elapsed_ms,
+            }, "Observed retained Router child"
+        ),
+        Err(_) => tracing::debug!(target: "codex_router_host::startup_diagnostics", {
+            event.name = "codex_router.host.router_startup_child",
+            stage = "router_readiness",
+            child_state = "observation_failed",
+            child_pid,
+            readiness = ?readiness,
+            elapsed_ms,
+            }, "Retained Router status unavailable"
+        ),
     }
 }
 
@@ -133,12 +186,16 @@ pub(super) async fn shutdown_owned_router_after_startup_failure(
 }
 
 #[cfg(test)]
+#[cfg(debug_assertions)]
+#[path = "startup_diagnostic_tests.rs"]
+mod diagnostic_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{ExternalProviderLaunchBinding, ExternalProviderStartup};
     use codex_router_core::local_auth::LocalRouterTokenRecord;
     use collaboration_protocol::ProviderKind;
-    use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener};
     use std::path::PathBuf;
 
@@ -243,13 +300,16 @@ mod tests {
                     }),
                 )
                 .launch();
-        let fixture_executable = fake_acp_launch.executable.to_string_lossy().into_owned();
+        let fixture_executable = codex_router_test_support::node_fixture::node_executable()
+            .expect("absolute Node fixture executable")
+            .to_string_lossy()
+            .into_owned();
         let fixture_arguments = fake_acp_launch.arguments;
         claude_binding.launch.executable = fake_acp_launch.executable;
         claude_binding.launch.arguments = vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
-            "import os, sys\nwith open(sys.argv[1], 'w', encoding='utf-8') as output:\n    output.write(os.environ['ANTHROPIC_AUTH_TOKEN'])\nexecutable = sys.argv[2]\nos.execvpe(executable, [executable, *sys.argv[3:]], os.environ)\n".to_owned(),
+            codex_router_test_support::node_fixture::fixture_program("token-observed-exec.ts")
+                .to_string_lossy()
+                .into_owned(),
             claude_token_observation_path.to_string_lossy().into_owned(),
             fixture_executable,
         ];
@@ -282,9 +342,72 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
+    async fn router_health_fixture_consumes_headers_before_closing() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // A legal header spans more than the fixture's old single-read buffer.
+        // The real TCP peer must consume it before closing its response socket.
+        let router_root = tempfile::tempdir().expect("isolated Router root");
+        let secret_root = router_root.path().join("secrets");
+        provision_local_router_token(&secret_root).expect("provision fixture token");
+        let endpoint = unused_loopback_endpoint();
+        let observation_path = router_root.path().join("router-token-at-startup");
+        let command = ChildCommandSpec::new(std::env::current_exe().expect("Host test executable"))
+            .with_arguments([
+                "--ignored",
+                "router_child_reads_host_token_and_serves_health",
+            ])
+            .with_environment(TEST_ROUTER_SECRET_ROOT_ENV, secret_root.as_os_str())
+            .with_environment(
+                TEST_ROUTER_ENDPOINT_ENV,
+                std::ffi::OsString::from(endpoint.to_string()),
+            )
+            .with_environment(
+                TEST_ROUTER_TOKEN_OBSERVATION_ENV,
+                observation_path.as_os_str(),
+            )
+            .with_output(crate::ChildOutput::Null);
+        let mut child = RouterChild::spawn(&mut command.command()).expect("start Router fixture");
+        let ready = await_router_readiness(endpoint, std::time::Duration::from_secs(10)).await;
+        if !matches!(&ready, Ok(RouterProbeResult::Compatible)) {
+            child.shutdown().await.expect("stop unready Router fixture");
+        }
+        assert_eq!(
+            ready.expect("fixture readiness"),
+            RouterProbeResult::Compatible
+        );
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let mut stream = tokio::net::TcpStream::connect(endpoint).await?;
+            let request = format!(
+                "GET /healthz HTTP/1.1\r\nhost: {endpoint}\r\nx-fixture-padding: {}\r\nconnection: close\r\n\r\n",
+                "a".repeat(4096)
+            );
+            stream.write_all(request.as_bytes()).await?;
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).await?;
+            Ok::<_, std::io::Error>(bytes)
+        })
+        .await;
+        child.shutdown().await.expect("stop Router fixture");
+        let bytes = response
+            .expect("bounded health response")
+            .expect("valid HTTP headers receive the complete response without a reset");
+        assert!(bytes.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        let body_offset = bytes
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .expect("HTTP response headers")
+            + 4;
+        let body: serde_json::Value =
+            serde_json::from_slice(&bytes[body_offset..]).expect("complete compatibility body");
+        assert_eq!(body["product"], "codex-router");
+    }
+
+    #[tokio::test]
     #[ignore = "spawned by the Host startup-convergence acceptance test"]
-    fn router_child_reads_host_token_and_serves_health() {
+    async fn router_child_reads_host_token_and_serves_health() {
         let secret_root = std::env::var_os(TEST_ROUTER_SECRET_ROOT_ENV)
             .map(PathBuf::from)
             .expect("isolated Router secret root");
@@ -303,24 +426,20 @@ mod tests {
         std::fs::write(&observation_path, token.token().expose_secret())
             .expect("record token observed at Router process start");
 
-        let listener = TcpListener::bind(endpoint).expect("bind isolated Router endpoint");
-        let body = serde_json::to_string(
-            &codex_router_core::router_compatibility::RouterCompatibility::current(false),
-        )
-        .expect("serialize Host-compatible Router health");
-        for incoming in listener.incoming() {
-            let mut stream = incoming.expect("Host Router readiness probe");
-            let mut health_request_buffer = [0; 1024];
-            let _request_bytes = stream
-                .read(&mut health_request_buffer)
-                .expect("read health request");
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                body.len()
-            )
-            .expect("write Host-compatible Router health");
-        }
+        let listener = tokio::net::TcpListener::bind(endpoint)
+            .await
+            .expect("bind isolated Router endpoint");
+        let health = axum::Router::new().route(
+            "/healthz",
+            axum::routing::get(|| async {
+                axum::Json(
+                    codex_router_core::router_compatibility::RouterCompatibility::current(false),
+                )
+            }),
+        );
+        axum::serve(listener, health)
+            .await
+            .expect("serve Router health fixture");
     }
 
     fn load_current_local_router_token(secret_root: &Path) -> LocalRouterTokenRecord {

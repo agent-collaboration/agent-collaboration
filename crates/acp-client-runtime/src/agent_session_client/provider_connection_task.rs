@@ -1,10 +1,30 @@
 //! Own the ACP connection task, provider process, and Session admission loop.
+#[cfg(any(test, feature = "test-observation"))]
+use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
-use super::*;
+use super::{
+    AcpAgent, AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc,
+    CancellationToken, Client, CreateAdmissionInputs, CursorPlanItems, Duration,
+    ExternalProviderAdmission, ExternalProviderApprovalRefusalReason, ExternalProviderLaunch,
+    ExternalProviderRuntimeError, HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer,
+    NewSessionRequest, Ordering, PendingSessionAdmission, PermissionDispatchState, ProtocolVersion,
+    ProviderAuthStatusHandler, ProviderCapabilityReport, ProviderCommand,
+    ProviderConnectionActivity, ProviderCursorCreatePlanHandler, ProviderCursorQuestionHandler,
+    ProviderCursorTodoHandler, ProviderFormElicitationHandler, ProviderFrameObservation,
+    ProviderKnownSessions, ProviderPromptDispatchObservation, ProviderRequestFallback,
+    ProviderRequestSessionGuard, ProviderSessionActivity, ProviderSessionCommand,
+    ProviderSessionRuntimeHandles, RequestPermissionRequest, SessionEventSink,
+    StaticSessionActivation, ToolCallOwnershipHandler, active_turn_cancellation,
+    fail_pending_session_admission, initialize_provider_connection, provider_lifecycle_requests,
+    provider_session_restore, publish_pending_session_admission, record_permission_refusal,
+    register_provider_session, register_static_provider_session, run_create_admission,
+    sanitized_initialization_error, spawn_external_approval_dispatch,
+};
 
 impl<P: InteractionPort> AgentSessionClient<P> {
     pub(super) async fn initialize_with_timeout_and_mcp_servers(
         launch: ExternalProviderLaunch,
+        model_picker: crate::ProviderModelPicker,
         initialize_timeout: Duration,
         configured_mcp_servers: Vec<McpServer>,
         interaction_port: Arc<P>,
@@ -12,7 +32,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let agent = AcpAgent::new(launch.sdk_config());
         let persistence_target = launch.persistence_target;
-        let (stdin, stdout, mut stderr, mut child) = agent
+        let (stdin, stdout, stderr, mut child) = agent
             .spawn_process()
             .map_err(|error| ExternalProviderRuntimeError::Launch(error.to_string()))?;
         let shutdown = CancellationToken::new();
@@ -124,14 +144,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 FuturesAsyncReadCompatExt as _, FuturesAsyncWriteCompatExt as _,
             };
 
-            let stderr_task = tokio::spawn(async move {
-                use futures_util::io::AsyncReadExt as _;
-                let mut buffer = [0_u8; 8 * 1024];
-                while stderr.read(&mut buffer).await.unwrap_or(0) != 0 {}
-            });
-            let outgoing = futures_util::SinkExt::<String>::sink_map_err(
-                FramedWrite::new(stdin.compat_write(), LinesCodec::new()),
-                std::io::Error::other,
+            let stderr_task =
+                tokio::spawn(crate::provider_transport_diagnostics::drain_provider_stderr(stderr));
+            let outgoing = crate::provider_transport_diagnostics::ObservedProviderSink::new(
+                futures_util::SinkExt::<String>::sink_map_err(
+                    FramedWrite::new(stdin.compat_write(), LinesCodec::new()),
+                    std::io::Error::other,
+                ),
             );
             let incoming_frame_observation = Arc::clone(&task_frame_observation);
             let incoming = FramedRead::new(
@@ -139,7 +158,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 LinesCodec::new_with_max_length(MAX_ACP_FRAME_BYTES),
             )
             .map(move |line| {
+                if let Ok(frame) = &line {
+                    crate::provider_transport_diagnostics::record_incoming_frame(frame);
+                }
                 line.map_err(|error| {
+                    crate::provider_transport_diagnostics::record_incoming_error();
                     if matches!(
                         error,
                         tokio_util::codec::LinesCodecError::MaxLineLengthExceeded
@@ -161,6 +184,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry)))
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, connection| {
+                        crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
                         let context = callback_approval_contexts.lock().ok().and_then(|contexts| {
@@ -236,7 +260,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         () = task_shutdown.cancelled() => {
                             return Ok(());
                         }
-                        response = initialize_provider_connection(&connection) => response,
+                        response = initialize_provider_connection(&connection, model_picker) => response,
                     };
                     let admission = match initialized {
                         Ok(response) if response.protocol_version == ProtocolVersion::V1 => {

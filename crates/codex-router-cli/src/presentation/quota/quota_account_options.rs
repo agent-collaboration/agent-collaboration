@@ -1,3 +1,5 @@
+#[path = "credit_balance_presentation.rs"]
+pub(super) mod credit_balance_presentation;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -159,6 +161,7 @@ pub(super) struct CreditPolicyEditorState {
     pub(super) draft_policy: CreditUsagePolicy,
     pub(super) phase: CreditPolicyEditorPhase,
     pub(super) operation_generation: u64,
+    pub(super) choice: codex_router_tui::SearchSelectState<CreditUsagePolicy>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -204,11 +207,14 @@ impl AccountOptionsState {
     fn start_editing(&mut self) {
         let generation = self.allocate_operation_generation();
         let saved_policy = self.target.credit_usage.policy;
+        let mut choice = codex_router_tui::SearchSelectState::Closed;
+        choice.open(saved_policy);
         self.editor = Some(CreditPolicyEditorState {
             saved_policy,
             draft_policy: saved_policy,
             phase: CreditPolicyEditorPhase::Editing,
             operation_generation: generation,
+            choice,
         });
         self.message = None;
     }
@@ -410,19 +416,19 @@ pub(super) fn account_options_key_action(
             return AccountOptionsKeyAction::Close;
         }
         if reset_phase != crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
-            && super::quota_status_component::forced_quota_exit_key(&code, modifiers)
+            && super::quota_reset_component_input::forced_quota_exit_key(code, modifiers)
         {
             return AccountOptionsKeyAction::ResetWorkflow;
         }
         if reset_phase == crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
             && (code == KeyCode::Char('q')
-                || super::quota_status_component::forced_quota_exit_key(&code, modifiers))
+                || super::quota_reset_component_input::forced_quota_exit_key(code, modifiers))
         {
             return AccountOptionsKeyAction::ExitPending;
         }
         return AccountOptionsKeyAction::Ignore;
     }
-    if super::quota_status_component::forced_quota_exit_key(&code, modifiers) {
+    if super::quota_reset_component_input::forced_quota_exit_key(code, modifiers) {
         return if reset_phase == crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
         {
             AccountOptionsKeyAction::ExitPending
@@ -627,6 +633,7 @@ mod events;
 #[path = "quota_account_options_rendering.rs"]
 mod rendering;
 pub(super) use rendering::AccountOptionsPanelProps;
+pub(super) use rendering::render_account_options_content;
 pub(super) use rendering::render_account_options_panel;
 
 pub(crate) fn credit_usage_compact_summary(usage: &CreditUsageStatus) -> String {
@@ -641,7 +648,10 @@ pub(crate) fn credit_usage_compact_summary(usage: &CreditUsageStatus) -> String 
         CreditAvailability::Unlimited => format!("unlimited {freshness}"),
         CreditAvailability::Available {
             balance: Some(balance),
-        } => format!("{} {freshness}", balance.as_str()),
+        } => format!(
+            "{} {freshness}",
+            credit_balance_presentation::compact_credit_balance(balance)
+        ),
         CreditAvailability::Available { balance: None } => format!("available {freshness}"),
     }
 }
@@ -649,3 +659,19 @@ pub(crate) fn credit_usage_compact_summary(usage: &CreditUsageStatus) -> String 
 #[cfg(test)]
 #[path = "quota_account_options_test.rs"]
 mod tests;
+
+pub(super) fn credit_policy_choices() -> Vec<codex_router_tui::ChoiceOption<CreditUsagePolicy>> {
+    [CreditUsagePolicy::Disallow, CreditUsagePolicy::Allow]
+        .into_iter()
+        .map(|policy| {
+            codex_router_tui::ChoiceOption::available(
+                policy,
+                if policy == CreditUsagePolicy::Allow {
+                    "Allow"
+                } else {
+                    "Disallow"
+                },
+            )
+        })
+        .collect()
+}

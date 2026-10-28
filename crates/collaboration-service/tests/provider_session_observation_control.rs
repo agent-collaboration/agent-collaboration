@@ -7,9 +7,10 @@ use collaboration_protocol::{
     BoundedObservationRequest, EndpointDescription, ObservationEndReason, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind};
 use tokio::sync::Mutex;
@@ -22,7 +23,7 @@ struct ProviderFixture {
     target: SessionRef,
     board_target: message_board::SessionRef,
     hub: Arc<ProviderSessionEventHub>,
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
 }
 
 async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error>> {
@@ -69,7 +70,8 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
             "runtime":{"provider":"claudeCode","runtimeName":"fixture"},
             "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
     }))?;
-    let identity = ServiceIdentity::new(service_id, epoch)?.with_provider_session_hub(hub.clone());
+    let identity =
+        ApplicationFixture::new(service_id, epoch)?.with_provider_session_hub(hub.clone());
     identity.endpoint_directory().publish(description)?;
     Ok(ProviderFixture {
         _root: root,
@@ -84,9 +86,7 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
 async fn the_client_hands_on_each_streamed_event_before_the_call_returns() {
     // Arrange: one retained event; the call is bounded at two events and thirty seconds.
     let fixture = provider_fixture().await.expect("provider fixture");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("streaming-observer")
         .await
@@ -144,6 +144,152 @@ async fn the_client_hands_on_each_streamed_event_before_the_call_returns() {
 }
 
 #[tokio::test]
+async fn a_stale_epoch_streams_its_resync_marker_without_a_cursor() {
+    // Arrange: the hub's current epoch, then a call that names an older one.
+    let fixture = provider_fixture().await.expect("provider fixture");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
+    let client = served
+        .client("stale-observer")
+        .await
+        .expect("observing client");
+    let (_, epoch) = single_event(&client, &fixture.target, None, None)
+        .await
+        .expect("current epoch");
+    let (observed, mut streamed) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act
+    let result = client
+        .observe_provider_session_streaming(
+            BoundedObservationRequest {
+                target: fixture.target.clone(),
+                timeout_seconds: 1,
+                max_events: 1,
+                max_bytes: 262_144,
+                after_sequence: Some(1),
+                epoch: Some(epoch.expect("provider epoch") + 1),
+            },
+            Some(observed),
+        )
+        .await
+        .expect("stale epoch response");
+
+    // Assert: the marker was streamed like every other event, with no cursor to continue
+    // from; the result is unchanged.
+    let marker = streamed.try_recv().expect("the resync marker was streamed");
+    assert_eq!(
+        marker,
+        collaboration_protocol::ObservationEventNotification {
+            event: json!({"kind":"resyncRequired"}),
+            cursor: None,
+        }
+    );
+    assert_eq!(result.events, vec![json!({"kind":"resyncRequired"})]);
+    assert_eq!(result.end_reason, ObservationEndReason::ResyncRequired);
+    served.stop().await.expect("API stops");
+}
+
+#[tokio::test]
+async fn a_stale_epoch_answers_its_resync_marker_even_when_the_budget_cannot_hold_it() {
+    // Arrange: a call naming an older epoch, with the smallest valid event and byte budget.
+    let fixture = provider_fixture().await.expect("provider fixture");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
+    let client = served
+        .client("small-budget-observer")
+        .await
+        .expect("observing client");
+    let (_, epoch) = single_event(&client, &fixture.target, None, None)
+        .await
+        .expect("current epoch");
+    let (observed, mut streamed) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act
+    let result = client
+        .observe_provider_session_streaming(
+            BoundedObservationRequest {
+                target: fixture.target.clone(),
+                timeout_seconds: 1,
+                max_events: 1,
+                max_bytes: 1,
+                after_sequence: Some(1),
+                epoch: Some(epoch.expect("provider epoch") + 1),
+            },
+            Some(observed),
+        )
+        .await
+        .expect("stale epoch response");
+
+    // Assert: the marker is the answer itself, so the budget does not apply to it.
+    assert_eq!(result.events, vec![json!({"kind":"resyncRequired"})]);
+    assert_eq!(result.end_reason, ObservationEndReason::ResyncRequired);
+    let marker = streamed.try_recv().expect("the resync marker was streamed");
+    assert_eq!(
+        marker,
+        collaboration_protocol::ObservationEventNotification {
+            event: json!({"kind":"resyncRequired"}),
+            cursor: None,
+        }
+    );
+    assert!(
+        streamed.try_recv().is_err(),
+        "one notification carries the marker"
+    );
+    served.stop().await.expect("API stops");
+}
+
+#[tokio::test]
+async fn a_reset_during_an_open_call_streams_its_resync_marker_without_a_cursor() {
+    // Arrange: an open call that has streamed the retained event.
+    let fixture = provider_fixture().await.expect("provider fixture");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
+    let client = served
+        .client("reset-observer")
+        .await
+        .expect("observing client");
+    let (observed, mut streamed) = tokio::sync::mpsc::unbounded_channel();
+    let request = BoundedObservationRequest {
+        target: fixture.target.clone(),
+        timeout_seconds: 30,
+        max_events: 10,
+        max_bytes: 262_144,
+        after_sequence: None,
+        epoch: None,
+    };
+    let call = tokio::spawn(async move {
+        client
+            .observe_provider_session_streaming(request, Some(observed))
+            .await
+    });
+    let retained = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.recv())
+        .await
+        .expect("the retained event streamed while the call was open")
+        .expect("streamed event");
+
+    // Act: the Session's history is invalidated while the call is open.
+    fixture
+        .hub
+        .begin_history_unavailable(fixture.board_target.clone())
+        .await
+        .expect("history reset");
+    let result = call
+        .await
+        .expect("call joins")
+        .expect("bounded observation");
+    let marker = streamed.recv().await.expect("resync marker streamed");
+
+    // Assert: the hub numbered the marker, but nothing continues after it, so it has no
+    // cursor; the result still ends with it and reports the resync.
+    assert_eq!(retained.event["sequence"], 1);
+    assert_eq!(
+        marker.event["event"]["kind"], "resyncRequired",
+        "{marker:?}"
+    );
+    assert_eq!(marker.cursor, None, "{marker:?}");
+    assert_eq!(result.events.last(), Some(&marker.event));
+    assert_eq!(result.end_reason, ObservationEndReason::ResyncRequired);
+    served.stop().await.expect("API stops");
+}
+
+#[tokio::test]
 async fn provider_observers_read_snapshot_and_live_order() {
     let ProviderFixture {
         _root,
@@ -153,9 +299,7 @@ async fn provider_observers_read_snapshot_and_live_order() {
         identity,
     } = provider_fixture().await.expect("provider fixture");
 
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(identity).expect("serve the API");
     let bounded = served
         .client("provider-observer")
         .await
@@ -287,6 +431,91 @@ fn item(item_id: &str, text: &str) -> SessionEvent {
             text: Some(text.into()),
         },
     }
+}
+
+/// Metadata stays available through the existing public observation surface,
+/// independently of whether a transcript facade chooses to display an Item.
+#[tokio::test]
+async fn metadata_payloads_remain_exact_in_retained_and_live_public_observation() {
+    // Arrange: usage already retained, and a catalogue that will arrive live.
+    let fixture = provider_fixture().await.expect("provider fixture");
+    let usage = SessionEvent::ItemStarted {
+        item: SessionItem {
+            item_id: "usage-metadata".into(),
+            kind: SessionItemKind::Usage,
+            text: Some(r#"{"used":12,"size":100,"cost":{"amount":0.25,"currency":"USD"}}"#.into()),
+        },
+    };
+    let commands = SessionEvent::ItemStarted {
+        item: SessionItem {
+            item_id: "command-metadata".into(),
+            kind: SessionItemKind::Notice,
+            text: Some(
+                r#"{"availableCommands":[{"name":"compact","description":"Compact context"}]}"#
+                    .into(),
+            ),
+        },
+    };
+    fixture
+        .hub
+        .publish(fixture.board_target.clone(), usage.clone())
+        .await
+        .expect("retain usage");
+    let served = served_api::ServedApi::start(fixture.identity).expect("served API");
+    let client = served.client("metadata-observer").await.expect("client");
+    let request = BoundedObservationRequest {
+        target: fixture.target.clone(),
+        timeout_seconds: 5,
+        max_events: 2,
+        max_bytes: 262_144,
+        after_sequence: Some(1),
+        epoch: Some(0),
+    };
+    let (observed, mut streamed) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: await the retained event as the actual attachment signal, then publish live.
+    let call = tokio::spawn(async move {
+        client
+            .observe_provider_session_streaming(request, Some(observed))
+            .await
+    });
+    let retained = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.recv())
+        .await
+        .expect("retained metadata deadline")
+        .expect("retained metadata");
+    assert!(
+        !call.is_finished(),
+        "the observer must still be attached for live metadata"
+    );
+    fixture
+        .hub
+        .publish(fixture.board_target, commands.clone())
+        .await
+        .expect("publish commands");
+    let result = call
+        .await
+        .expect("observation joins")
+        .expect("observation succeeds");
+
+    // Assert: exact original kinds and JSON bodies, with resumable positions.
+    assert_eq!(retained.event, json!({"sequence":2,"event":usage}));
+    assert_eq!(
+        result.events,
+        vec![
+            json!({"sequence":2,"event":usage}),
+            json!({"sequence":3,"event":commands})
+        ]
+    );
+    assert_eq!(result.epoch, Some(0));
+    assert_eq!(result.end_reason, ObservationEndReason::ResultLimitReached);
+    assert_eq!(
+        streamed.recv().await.expect("live metadata").cursor,
+        Some(collaboration_protocol::ObservationCursor {
+            epoch: 0,
+            after_sequence: 3
+        })
+    );
+    served.stop().await.expect("API stops");
 }
 
 /// The next event after `after_sequence` in `epoch`, waiting up to two seconds for it, with the

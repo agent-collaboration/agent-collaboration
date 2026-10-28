@@ -10,7 +10,10 @@ fn saved_switch_band_refresh_keeps_active_socket_when_no_healthy_peer_exists() {
     run_saved_switch_band_websocket_case(false);
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
     let test_root = TestRoot::new("joined-graceful-floor-websocket");
     must_ok(fs::create_dir(test_root.path()));
@@ -155,7 +158,7 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         secret_root.clone(),
     )
     .with_quota_clock(1_100, 300);
-    let router = must_ok(LoopbackRouterRuntime::start(config, secrets.clone()));
+    let router = must_ok(LoopbackRouterRuntime::start(config, secrets.clone().into()));
     let router_port = router.local_addr().port();
     let floor_notifier = router.websocket_quota_floor_notifier();
     let router_thread = thread::spawn(move || {

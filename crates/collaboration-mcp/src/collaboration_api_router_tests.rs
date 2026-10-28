@@ -1,14 +1,12 @@
 //! The collaboration API through the real axum app on both listeners: localhost TCP and a
-//! Unix socket. Every call stands alone: no session, no handshake state between calls.
+//! Unix socket. Public calls are stateless; metadata uses one fixture machine session.
 use crate::api_test_harness::{
     ServedApi, TEST_PROTOCOL_VERSION, TEST_SERVICE_ID, api_config, test_identity,
 };
 use collaboration_service::CollaborationApplication;
 use message_board::{
-    Description, Identity, PageRequest, ProjectCreateRequest, ProjectId, ProjectListRequest,
-    ResourceName,
+    BoardId, Identity, PageRequest, ProjectId, ProjectListRequest, RequestId, WorkspaceId,
 };
-use message_board_storage::BoardStore;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
@@ -23,17 +21,88 @@ fn private_directory() -> tempfile::TempDir {
     directory
 }
 
-async fn board_store(directory: &std::path::Path) -> Arc<Mutex<BoardStore>> {
-    let board = BoardStore::open(&directory.join("board.sqlite"))
-        .await
-        .expect("board store");
-    Arc::new(Mutex::new(board))
+async fn project_admission(
+    directory: &std::path::Path,
+) -> (
+    Arc<collaboration_service::ProjectAdmission>,
+    Arc<collaboration_runtime::ProjectStoreRegistry>,
+    Arc<collaboration_runtime::FleetClient>,
+    board_central_test_support::FleetTestRuntime,
+) {
+    let registry =
+        crate::native_board_test_fixture::new_registry(directory).expect("native project registry");
+    let origin = message_board::ActorOrigin {
+        installation: TEST_SERVICE_ID
+            .to_owned()
+            .try_into()
+            .expect("fixture service"),
+        machine: "API proof".to_owned().try_into().expect("fixture machine"),
+    };
+    let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+        directory,
+        Arc::new(crate::native_board_test_fixture::PendingRegistration),
+        &origin,
+    )
+    .await
+    .expect("real central fixture");
+    let fleet = Arc::new(fleet);
+    let admission = Arc::new(
+        collaboration_service::ProjectAdmission::new(
+            collaboration_service::ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: fleet.clone(),
+                identity: collaboration_contracts::MachineIdentity::new(
+                    collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
+                        .expect("service"),
+                    Some("API proof"),
+                )
+                .expect("machine"),
+            },
+        )
+        .expect("admission"),
+    );
+    (admission, registry, fleet, fleet_runtime)
 }
-
-async fn board_application(directory: &std::path::Path) -> CollaborationApplication {
-    CollaborationApplication::new(test_identity().with_board_store(board_store(directory).await))
+async fn board_application(
+    directory: &std::path::Path,
+) -> (
+    CollaborationApplication,
+    board_central_test_support::FleetTestRuntime,
+) {
+    let (admission, _, _, runtime) = project_admission(directory).await;
+    (
+        (test_identity().with_project_admission(admission)).build(),
+        runtime,
+    )
 }
-
+async fn board_scope(api: &ServedApi) -> BoardId {
+    let workspace = WorkspaceId::generate();
+    let board = BoardId::generate();
+    let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":owner()});
+    let mut request = header();
+    request["workspaceId"] = json!(workspace);
+    request["name"] = json!("API workspace");
+    request["description"] = json!("");
+    let reply = api.call_tool("workspace_create", request).await;
+    assert_eq!(
+        structured(&reply)["result"]["decision"]["kind"],
+        "accepted",
+        "{reply:?}"
+    );
+    let mut request = header();
+    request["workspaceId"] = json!(workspace);
+    request["boardId"] = json!(board);
+    request["name"] = json!("API board");
+    request["description"] = json!("");
+    request["kind"] = json!({"kind":"area"});
+    let reply = api.call_tool("board_create", request).await;
+    assert_eq!(
+        structured(&reply)["result"]["decision"]["kind"],
+        "accepted",
+        "{reply:?}"
+    );
+    board
+}
 async fn automation_store(
     directory: &std::path::Path,
 ) -> Arc<Mutex<automation_storage::AutomationStore>> {
@@ -45,30 +114,20 @@ async fn automation_store(
 }
 
 async fn wake_application(directory: &std::path::Path) -> CollaborationApplication {
-    CollaborationApplication::new(
-        test_identity().with_automation_store(automation_store(directory).await),
-    )
+    (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
-fn project_create_arguments(name: &str) -> Value {
-    serde_json::to_value(ProjectCreateRequest {
-        project_id: ProjectId::generate(),
-        name: ResourceName::try_from(name.to_owned()).expect("name"),
-        description: Description::try_from(String::new()).expect("description"),
-        actor: owner(),
-        acting_for: None,
-    })
-    .expect("project request")
+fn project_create_arguments(name: &str, board: &BoardId, project: ProjectId) -> Value {
+    json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,
+        "projectId":project,"boardId":board,"title":name,"actor":owner()})
 }
-
-fn project_list_arguments() -> Value {
+fn project_list_arguments(board: &BoardId) -> Value {
     serde_json::to_value(ProjectListRequest {
-        repository: None,
+        board_id: board.clone(),
         page: PageRequest::default(),
     })
     .expect("list request")
 }
-
 fn owner() -> Identity {
     serde_json::from_value(json!({"kind":"human","humanId":"api-test-owner"})).expect("owner")
 }
@@ -93,7 +152,7 @@ fn wake_send_arguments() -> Value {
             "generationGuard": null
         },
         "timing": {"kind": "after", "seconds": 600},
-        "expiry": {"kind": "none"}
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
     })
 }
 
@@ -101,18 +160,52 @@ fn wake_send_arguments() -> Value {
 async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     // Arrange
     let directory = private_directory();
-    let config = api_config(board_application(directory.path()).await, directory.path());
+    let (admission, registry, fleet, fleet_runtime) = project_admission(directory.path()).await;
+    let config = api_config(
+        (test_identity().with_project_admission(admission.clone())).build(),
+        directory.path(),
+    );
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let create = project_create_arguments("API listeners");
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
+    let board = board_scope(&tcp).await;
+    let create = project_create_arguments("API listeners", &board, ProjectId::generate());
     let project_id = create["projectId"].clone();
-    let created = tcp.call_tool("board_project_create", create).await;
+    let creating_input: message_board::ProjectCreateRequest =
+        serde_json::from_value(create.clone()).unwrap();
+    // Exercise Pending -> Accepted and an already Accepted replay with the
+    // same durable input/IDs. Ready recovery may initialize it before the call.
+    for _ in 0..2 {
+        crate::native_board_test_fixture::prepare_registered_creation(
+            &fleet,
+            &registry,
+            &creating_input,
+            &message_board::ActorOrigin {
+                installation: TEST_SERVICE_ID.to_owned().try_into().unwrap(),
+                machine: "API proof".to_owned().try_into().unwrap(),
+            },
+        )
+        .await
+        .expect("accepted registered creation input");
+    }
+    let created = tcp.call_tool("project_create", create).await;
     assert_eq!(created.is_error, Some(false), "{created:?}");
-    let list = project_list_arguments();
+    let store = registry
+        .existing_project(&creating_input.project_id)
+        .await
+        .unwrap()
+        .expect("created native project");
+    let read = store.snapshot().await.unwrap();
+    assert_eq!(
+        read.high_water().position.get(),
+        3,
+        "the creating ledger must appear once across helper and API replays"
+    );
+    read.finish().await.unwrap();
+    let list = project_list_arguments(&board);
 
     // Act
-    let over_tcp = tcp.call_tool("board_project_list", list.clone()).await;
-    let over_unix = unix.call_tool("board_project_list", list).await;
+    let over_tcp = tcp.call_tool("project_list", list.clone()).await;
+    let over_unix = unix.call_tool("project_list", list).await;
     let tcp_tools = tcp
         .client()
         .await
@@ -129,12 +222,16 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     // Assert
     assert_eq!(structured(&over_tcp), structured(&over_unix));
     assert_eq!(
-        structured(&over_tcp)["page"]["records"][0]["projectId"],
+        structured(&over_tcp)["page"]["records"][0]["id"],
         project_id
     );
     assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
     tcp.stop().await;
     unix.stop().await;
+    fleet_runtime
+        .shutdown()
+        .await
+        .expect("stop real central fixture");
 }
 
 #[tokio::test]
@@ -142,7 +239,7 @@ async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change
     // Arrange
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let wake = api.call_tool("wake_send", wake_send_arguments()).await;
     let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
     let first = api
@@ -194,112 +291,12 @@ async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change
 }
 
 #[tokio::test]
-async fn a_client_that_disconnects_cancels_its_call_on_both_listeners() {
-    // Arrange
-    let directory = private_directory();
-    let config = api_config(wake_application(directory.path()).await, directory.path());
-    let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let long_wait = json!({"wakeupId": wakeup_id, "timeoutSeconds": 1500});
-
-    for api in [&tcp, &unix] {
-        // Act: the call is in flight, then its client goes away.
-        api.abandon_tool_call("wake_wait_until_first_fire", long_wait.clone())
-            .await;
-
-        // Assert: the handler was cancelled and released the Router, long before its bound.
-        api.await_active_calls(0, Duration::from_secs(5)).await;
-    }
-    tcp.stop().await;
-    unix.stop().await;
-}
-
-#[tokio::test]
-async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_no_mutation() {
-    // Arrange: the board store is held, so an admitted project create waits on it. The board
-    // tools do not watch their cancellation themselves.
-    let directory = private_directory();
-    let board = board_store(directory.path()).await;
-    let config = api_config(
-        CollaborationApplication::new(test_identity().with_board_store(Arc::clone(&board))),
-        directory.path(),
-    );
-    let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let held = board.lock().await;
-
-    for (api, name) in [(&tcp, "Abandoned over TCP"), (&unix, "Abandoned over Unix")] {
-        // Act: the create is admitted and waits on the store, then its client goes away.
-        api.abandon_tool_call("board_project_create", project_create_arguments(name))
-            .await;
-
-        // Assert: the call ended while the store was still held.
-        api.await_active_calls(0, Duration::from_secs(5)).await;
-    }
-    drop(held);
-
-    // Assert: releasing the store runs neither abandoned create.
-    let listed = tcp
-        .call_tool("board_project_list", project_list_arguments())
-        .await;
-    assert_eq!(structured(&listed)["page"]["records"], json!([]));
-    tcp.stop().await;
-    unix.stop().await;
-}
-
-#[tokio::test]
-async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
-    // Arrange: a wake-up, then its store held by someone else past the waits' one-second bound.
-    let directory = private_directory();
-    let automation = automation_store(directory.path()).await;
-    let config = api_config(
-        CollaborationApplication::new(
-            test_identity().with_automation_store(Arc::clone(&automation)),
-        ),
-        directory.path(),
-    );
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let wake = api.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let cursor = structured(&wake)["latestEventCursor"].clone();
-    let held = automation.lock().await;
-
-    // Act: one wait starts from the current state and one resumes from the cursor; both need
-    // the held store before they can observe anything.
-    let ended = tokio::time::timeout(Duration::from_secs(5), async {
-        tokio::join!(
-            api.call_tool(
-                "wake_wait_until_first_fire",
-                json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
-            ),
-            api.call_tool(
-                "wake_wait_until_first_fire",
-                json!({"wakeupId": wakeup_id, "after": cursor, "timeoutSeconds": 1}),
-            ),
-        )
-    })
-    .await;
-    drop(held);
-
-    // Assert: both ended at their bound while the store was still held. With no cursor yet
-    // the start is unavailable; the resumed wait times out at the cursor it was given.
-    let (starting, resuming) = ended.expect("the waits ended at their bound");
-    assert_eq!(starting.is_error, Some(true), "{starting:?}");
-    assert_eq!(structured(&starting)["kind"], "waitUnavailable");
-    assert_eq!(structured(&resuming)["outcome"]["kind"], "timedOut");
-    assert_eq!(structured(&resuming)["cursor"], cursor);
-    api.stop().await;
-}
-
-#[tokio::test]
 async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_both_listeners() {
     // Arrange: tools whose arguments rmcp decodes before the handler runs.
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let target = json!({
         "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
         "sessionId": "rename-target"
@@ -406,7 +403,8 @@ async fn a_listener_past_its_request_limit_answers_overloaded() {
 async fn a_foreign_browser_origin_is_refused_before_dispatch() {
     // Arrange
     let directory = private_directory();
-    let config = api_config(board_application(directory.path()).await, directory.path());
+    let (application, fleet_runtime) = board_application(directory.path()).await;
+    let config = api_config(application, directory.path());
     let api = ServedApi::tcp(&config).await;
 
     // Act
@@ -423,13 +421,18 @@ async fn a_foreign_browser_origin_is_refused_before_dispatch() {
     // Assert
     assert_eq!(response.status(), reqwest::StatusCode::FORBIDDEN);
     api.stop().await;
+    fleet_runtime
+        .shutdown()
+        .await
+        .expect("stop real central fixture");
 }
 
 #[tokio::test]
 async fn the_api_serves_on_ipv6_loopback() {
     // Arrange
     let directory = private_directory();
-    let config = api_config(board_application(directory.path()).await, directory.path());
+    let (application, fleet_runtime) = board_application(directory.path()).await;
+    let config = api_config(application, directory.path());
     let api = ServedApi::tcp_at(&config, "[::1]:0").await;
 
     // Act
@@ -445,13 +448,18 @@ async fn the_api_serves_on_ipv6_loopback() {
             .is_some_and(|tools| !tools.is_empty())
     );
     api.stop().await;
+    fleet_runtime
+        .shutdown()
+        .await
+        .expect("stop real central fixture");
 }
 
 #[tokio::test]
 async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
     // Arrange
     let directory = private_directory();
-    let config = api_config(board_application(directory.path()).await, directory.path());
+    let (application, fleet_runtime) = board_application(directory.path()).await;
+    let config = api_config(application, directory.path());
     let api = ServedApi::tcp(&config).await;
     let (_, listed) = api
         .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
@@ -488,6 +496,10 @@ async fn schema_required_fields_reach_each_tool_without_missing_field_errors() {
         }
     }
     api.stop().await;
+    fleet_runtime
+        .shutdown()
+        .await
+        .expect("stop real central fixture");
 }
 
 fn schema_required_object(schema: &Value, definitions: &Value) -> Value {
@@ -548,3 +560,6 @@ fn schema_required_object(schema: &Value, definitions: &Value) -> Value {
         _ => Value::Null,
     }
 }
+
+#[path = "collaboration_api_router_tests/call_lifecycle.rs"]
+mod call_lifecycle;

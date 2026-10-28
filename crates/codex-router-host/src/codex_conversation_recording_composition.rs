@@ -1,9 +1,9 @@
 //! Host composition for durable Codex ACP conversation creation.
+use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{EndpointId, EndpointRef, NonEmptyText, UuidIdentity};
-use collaboration_service::{
-    CodexConversationOperationRecorder, ConversationOperationRecorder, ProviderOperationStore,
-    UnavailableConversationOperationRecorder,
-};
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::UnavailableConversationOperationRecorder;
 use std::{io, path::Path, sync::Arc};
 
 pub(crate) fn recording_for_store(

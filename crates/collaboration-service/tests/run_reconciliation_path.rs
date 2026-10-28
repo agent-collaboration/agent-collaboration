@@ -5,7 +5,9 @@ use agent_automation::{
 };
 use automation_storage::{AutomationStore, RunDispatchIntent, ScheduleCreate};
 use collaboration_protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
@@ -172,16 +174,16 @@ async fn exercise(
         gate,
         codex_home: root.clone(),
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_automation_store(store.clone())
         .with_scheduled_run_execution(Arc::new(
-            collaboration_service::CodexAppServerScheduledRuns::new(
+            collaboration_runtime::CodexAppServerScheduledRuns::new(
                 native_backend.clone(),
-                Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+                Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ),
         ))
         .with_native_backend(native_backend)?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("run-reconcile-fixture").await?;
     let status = status.to_owned();
     let observed_id = observed_id.to_owned();

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT kind AS \"kind!: String\", count AS \"count!: i64\" FROM (SELECT 'project' AS kind, COUNT(*) AS count FROM project_state UNION ALL SELECT 'workstream' AS kind, COUNT(*) AS count FROM workstreams UNION ALL SELECT 'task' AS kind, COUNT(*) AS count FROM tasks UNION ALL SELECT 'subtask' AS kind, COUNT(*) AS count FROM subtasks UNION ALL SELECT 'taskLinkEvent' AS kind, COUNT(*) AS count FROM task_link_events UNION ALL SELECT 'thread' AS kind, COUNT(*) AS count FROM threads UNION ALL SELECT 'post' AS kind, COUNT(*) AS count FROM posts UNION ALL SELECT 'threadRefiled' AS kind, COUNT(*) AS count FROM thread_refilings UNION ALL SELECT 'roleAssignment' AS kind, COUNT(*) AS count FROM role_assignments UNION ALL SELECT 'ownerGrant' AS kind, COUNT(*) AS count FROM owner_grants UNION ALL SELECT 'standDownAcknowledgement' AS kind, COUNT(*) AS count FROM stand_down_acknowledgements UNION ALL SELECT 'fact' AS kind, COUNT(*) AS count FROM facts UNION ALL SELECT 'planRevision' AS kind, COUNT(*) AS count FROM plan_revisions UNION ALL SELECT 'workTrailRow' AS kind, COUNT(*) AS count FROM work_trail_rows UNION ALL SELECT 'request' AS kind, COUNT(*) AS count FROM request_decisions UNION ALL SELECT 'notifyIntent' AS kind, COUNT(*) AS count FROM notify_intents UNION ALL SELECT 'subscriptionMembership' AS kind, COUNT(*) AS count FROM subscription_memberships UNION ALL SELECT 'readMark' AS kind, COUNT(*) AS count FROM read_marks UNION ALL SELECT 'trailRedaction' AS kind,COUNT(*) AS count FROM project_feed WHERE record_kind='trailRedaction') WHERE count>0 ORDER BY kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "BLOB"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "BLOB"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "9739ce6c039f494c66a7003dd0e5ae6aaef84ce145c0c30df96a394c7f1b7bd2"
+}

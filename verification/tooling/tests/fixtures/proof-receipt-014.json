@@ -1,0 +1,29 @@
+{
+  "input": {
+    "name": "S-01 true",
+    "operation": "serial",
+    "arguments": ["S-01", "receipt.json", "artifact.json", "output.txt"],
+    "originalArguments": ["S-01", "receipt.json", "artifact.json", "output.txt"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "artifact.json": "{\"router_process\":{\"binary_path\":\"/synthetic/router\",\"pid\":77,\"argv\":[\"serve\"],\"listener\":\"127.0.0.1:9999\",\"readiness_line\":\"ready\",\"cleanup_result\":\"terminated\",\"spawned_real_serve_child\":true},\"websocket\":{\"request_frame_count\":1},\"upstream\":{\"handshake_count\":1}}",
+      "output.txt": "all good"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json", "S-01-transcript.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"S-01-transcript.json\"\n  ],\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Installed Codex WebSocket smoke passed with tokenless spawned router profile.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-test-support/src/installed_codex.rs\",\n    \"tests/smoke/installed_codex_mock.sh\",\n    \"crates/codex-router-cli/src/lib.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/websocket.rs\"\n  ]\n}\n",
+      "S-01-transcript.json": "{\"router_process\":{\"binary_path\":\"/synthetic/router\",\"pid\":77,\"argv\":[\"serve\"],\"listener\":\"127.0.0.1:9999\",\"readiness_line\":\"ready\",\"cleanup_result\":\"terminated\",\"spawned_real_serve_child\":true},\"websocket\":{\"request_frame_count\":1},\"upstream\":{\"handshake_count\":1}}"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-4",
+  "originalSHA256": "438ab4f2b8b87511cda52551f10f3d32e57883e29ee04ddcbca86dc6e20b0f9b"
+}

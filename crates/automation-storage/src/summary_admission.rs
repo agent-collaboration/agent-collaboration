@@ -89,6 +89,7 @@ pub(crate) fn make_attempt<TTarget, TGeneration>(
         deadline_at_ms: timing.deadline_at_ms,
         phase: agent_automation::SummaryPhase::Preparing,
         effects: agent_automation::NativeEffectEvidence {
+            permission_differences: Vec::new(),
             target: None,
             generation: None,
             client_user_message_id: None,

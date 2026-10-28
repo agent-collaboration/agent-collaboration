@@ -11,6 +11,7 @@ use std::sync::Arc;
 use codex_native_integration::AppServerCommandSpec;
 use codex_native_integration::CodexPaths;
 use codex_native_integration::CodexRouterProfile;
+use codex_native_integration::DEFAULT_ROUTER_PORT;
 use codex_native_integration::DesktopLaunchPolicyCommand;
 use codex_router_host::AppServerLaunchPlan;
 use codex_router_host::ChildCommandSpec;
@@ -26,10 +27,13 @@ use codex_router_host::ManagedUpdateInputs;
 use codex_router_host::PreExecTelemetry;
 
 use super::HostCommandError;
+mod debug_profile_loader;
 mod router_child_command;
 
 use crate::CliContext;
 use router_child_command::{RouterChildCommandInputs, router_child_command};
+#[cfg(test)]
+mod tailnet_replacement_tests;
 
 struct HostPreExecTelemetry(crate::telemetry::TelemetryShutdownHandle);
 
@@ -46,6 +50,7 @@ pub(super) struct ForegroundHostInputs {
     pub owner_home: Option<PathBuf>,
     pub port: u16,
     pub mcp_bind: SocketAddr,
+    pub remote_access: Option<codex_router_host::RemoteAccess>,
     pub provider_operation_retention_days: std::num::NonZeroU32,
     pub coordination_paths: HostCoordinationPaths,
     pub external_provider_launches: Vec<codex_router_host::ExternalProviderLaunchBinding>,
@@ -63,6 +68,7 @@ pub(super) async fn run_foreground_host(
         owner_home,
         port,
         mcp_bind,
+        remote_access,
         provider_operation_retention_days,
         coordination_paths,
         external_provider_launches,
@@ -70,14 +76,7 @@ pub(super) async fn run_foreground_host(
     let launch_started_at = std::time::Instant::now();
     let codex_home = resolve_codex_home(context)?;
     let isolated_debug = launch_mode.is_isolated();
-    let debug_profile = if isolated_debug {
-        let path = codex_home.join("codex-router-debug.config.toml");
-        let profile = codex_native_integration::DebugCodexProfile::read(&codex_home, port)
-            .map_err(|source| HostCommandError::IsolatedDebugProfile { path, source })?;
-        Some(profile)
-    } else {
-        None
-    };
+    let debug_profile = debug_profile_loader::load_debug_profile(&codex_home, launch_mode, port)?;
     if isolated_debug {
         let protected_root = owner_home
             .ok_or(HostCommandError::OwnerHomeUnavailable)?
@@ -89,7 +88,7 @@ pub(super) async fn run_foreground_host(
     let app_server_socket =
         crate::app_server_socket_or_default(context, &codex_paths, isolated_debug)
             .map_err(|message| HostCommandError::AppServerSocket(message.to_owned()))?;
-    let collaboration_directory = router_root.join("agent-communication");
+    let collaboration_directory = codex_router_host::router_collaboration_directory(&router_root);
     let profile = CodexRouterProfile::new(port);
     let app_server_spec = AppServerCommandSpec::new(&codex_paths, &profile, &app_server_socket);
     let app_server_spec = match debug_profile.as_ref() {
@@ -133,7 +132,7 @@ pub(super) async fn run_foreground_host(
     }
     let app_server =
         AppServerLaunchPlan::new(app_server_command, running_identity, running_version)
-            .with_schema_directory(router_root.join("agent-communication"));
+            .with_schema_directory(collaboration_directory.clone());
     codex_router_host::record_debug_readiness_timing("appServerPlanBuilt", launch_started_at);
     // Schema export is optional raw-native enrichment; do not delay app-server
     // socket startup on this best-effort operation.
@@ -154,6 +153,7 @@ pub(super) async fn run_foreground_host(
         router_root: router_root.clone(),
         port,
         mcp_bind,
+        remote_access,
         provider_operation_retention_days,
         owner_human_id: owner_human_id.as_ref(),
         external_provider_launches: &external_provider_launches,
@@ -173,6 +173,9 @@ pub(super) async fn run_foreground_host(
     })
     .with_provider_operation_retention_days(provider_operation_retention_days)
     .with_collaboration_directory(collaboration_directory, codex_home);
+    if let Some(remote_access) = remote_access {
+        config = config.with_remote_access(remote_access);
+    }
     if let Some(owner_human_id) = owner_human_id {
         config = config.with_owner_human_id(owner_human_id);
     }
@@ -186,13 +189,13 @@ pub(super) async fn run_foreground_host(
         update_inputs =
             update_inputs.with_pre_exec_telemetry(Arc::new(HostPreExecTelemetry(telemetry)));
     }
-    HostRuntime::run_acquired_with_progress(
+    Box::pin(HostRuntime::run_acquired_with_progress(
         config,
         child_launch_plans,
         update_inputs,
         instance,
         None,
-    )
+    ))
     .await?;
     Ok(())
 }
@@ -232,7 +235,7 @@ impl HostLaunchMode {
 
     pub(super) const fn default_port(self) -> u16 {
         match self {
-            Self::OwnerProduction => super::DEFAULT_HOST_PORT,
+            Self::OwnerProduction => DEFAULT_ROUTER_PORT,
             Self::IsolatedDebug => 18787,
         }
     }
@@ -264,6 +267,7 @@ struct HostReplacementCommandInputs<'a> {
     router_root: PathBuf,
     port: u16,
     mcp_bind: SocketAddr,
+    remote_access: Option<codex_router_host::RemoteAccess>,
     provider_operation_retention_days: std::num::NonZeroU32,
     owner_human_id: Option<&'a message_board::HumanId>,
     external_provider_launches: &'a [codex_router_host::ExternalProviderLaunchBinding],
@@ -276,6 +280,7 @@ fn host_replacement_command(inputs: HostReplacementCommandInputs<'_>) -> ChildCo
         router_root,
         port,
         mcp_bind,
+        remote_access,
         provider_operation_retention_days,
         owner_human_id,
         external_provider_launches,
@@ -292,6 +297,14 @@ fn host_replacement_command(inputs: HostReplacementCommandInputs<'_>) -> ChildCo
         OsString::from("--provider-operation-retention-days"),
         OsString::from(provider_operation_retention_days.to_string()),
     ];
+    if let Some(codex_router_host::RemoteAccess::Tailscale { https_port }) = remote_access {
+        arguments.extend([
+            OsString::from("--remote-access"),
+            OsString::from("tailscale"),
+            OsString::from("--tailscale-https-port"),
+            OsString::from(https_port.to_string()),
+        ]);
+    }
     if let Some(owner_human_id) = owner_human_id {
         arguments.push(OsString::from("--owner-human-id"));
         arguments.push(OsString::from(owner_human_id.as_str()));
@@ -398,7 +411,7 @@ mod tests {
             HostLaunchMode::resolve(&owner_root, &owner_context, false, Some(&owner_home)),
             HostLaunchMode::OwnerProduction,
         );
-        assert_eq!(HostLaunchMode::OwnerProduction.default_port(), 8787);
+        assert_eq!(HostLaunchMode::OwnerProduction.default_port(), 19741);
         assert_eq!(HostLaunchMode::IsolatedDebug.default_port(), 18787);
     }
 
@@ -437,6 +450,7 @@ mod tests {
                 router_root: router_root.clone(),
                 port: 19087,
                 mcp_bind,
+                remote_access: None,
                 provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
                 owner_human_id: None,
                 external_provider_launches: &[],
@@ -471,6 +485,7 @@ mod tests {
             router_root: router_root.clone(),
             port: 19087,
             mcp_bind,
+            remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: None,
             external_provider_launches: &[provider],
@@ -507,6 +522,7 @@ mod tests {
             router_root: router_root.clone(),
             port: 19087,
             mcp_bind: SocketAddr::from(([127, 0, 0, 1], 19088)),
+            remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: Some(&owner),
             external_provider_launches: &[],
@@ -537,6 +553,7 @@ mod tests {
             router_root: PathBuf::from("/tmp/private-router"),
             port: 18787,
             mcp_bind: SocketAddr::from(([127, 0, 0, 1], 18788)),
+            remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: None,
             external_provider_launches: &[],

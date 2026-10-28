@@ -1,7 +1,14 @@
 //! SQLite sync migrations responsibilities.
 #[cfg(test)]
 use super::policy_mutation::redacted_weekly_floor_sqlite_error;
-use super::*;
+use super::{
+    ASYNC_ACTIVE_CLIENT_SCHEMA_STATEMENTS, ASYNC_ACTIVE_SESSION_HISTORY_INDEX_STATEMENTS,
+    ASYNC_ACTIVE_SESSION_HISTORY_TABLE_STATEMENTS, ASYNC_CREDIT_USAGE_SCHEMA_STATEMENTS,
+    ASYNC_QUOTA_HISTORY_SCHEMA_STATEMENTS, ASYNC_ROUTE_BAND_ACCOUNT_STATE_SCHEMA_STATEMENTS,
+    CURRENT_SCHEMA_VERSION, Connection, SqliteStateStore, StateStoreError, params, sqlite_error,
+};
+#[cfg(test)]
+use std::path::Path;
 
 #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
 pub(super) const PREVIOUS_SCHEMA_VERSION: i64 = 12;

@@ -29,6 +29,21 @@ impl SecretKey {
 /// Secret-store operation error.
 #[derive(Debug, Error)]
 pub enum SecretStoreError {
+    #[error("invalid central credential key")]
+    InvalidCentralSecretKey,
+    #[error("invalid Fleet secret key: expected purpose, canonical installation and generation")]
+    InvalidFleetSecretKey,
+    #[error("Fleet secrets require encrypted storage or an explicitly declared debug root")]
+    FleetSecretRequiresEncryption,
+    /// Plaintext pooled credentials require an explicit isolated debug declaration.
+    #[error("debug plaintext credential storage is unavailable or undeclared")]
+    DebugPlaintextUnavailable,
+    /// The chosen root overlaps normal Router storage or another storage policy.
+    #[error("debug plaintext credential root is not isolated or has conflicting storage metadata")]
+    DebugPlaintextRootRejected,
+    /// The root-local debug policy declaration is not the supported exact value.
+    #[error("debug plaintext credential declaration is invalid")]
+    InvalidDebugPlaintextDeclaration,
     /// Secret key contained unsupported characters.
     #[error("invalid secret key: {value}")]
     InvalidSecretKey {

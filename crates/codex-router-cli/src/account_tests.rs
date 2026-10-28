@@ -26,6 +26,91 @@ mod account_provider_cli_tests {
     use codex_router_core::provider::Provider;
 
     #[test]
+    fn login_rejects_mixed_provider_duplicate_labels() {
+        assert_duplicate_login_labels_rejected(Provider::Openai, Provider::Claude);
+    }
+
+    #[test]
+    fn login_rejects_same_provider_duplicate_labels() {
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert_duplicate_login_labels_rejected(provider, provider);
+        }
+    }
+
+    fn assert_duplicate_login_labels_rejected(first: Provider, second: Provider) {
+        // Arrange: the store admits two IDs sharing an exact display label.
+        let root = tempfile::tempdir().unwrap();
+        let runtime = account_command_runtime().unwrap();
+        let state = runtime
+            .block_on(AsyncSqliteStateStore::open(
+                &root.path().join("state.sqlite"),
+            ))
+            .unwrap();
+        for (id, provider) in [("acct_a_existing", first), ("acct_b_existing", second)] {
+            runtime
+                .block_on(state.upsert_account(&AccountRecord::new(
+                    provider,
+                    AccountId::new(id).unwrap(),
+                    "ambiguous label",
+                    AccountStatus::Enabled,
+                )))
+                .unwrap();
+        }
+        assert_eq!(runtime.block_on(state.list_accounts()).unwrap().len(), 2);
+        runtime.block_on(state.close()).unwrap();
+
+        // Act/assert: login preflight refuses ambiguity for either provider.
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert!(
+                matches!(
+                    resolve_login_account_id_at_router_root(
+                        root.path(),
+                        "ambiguous label",
+                        provider
+                    ),
+                    Err(AccountCommandError::DuplicateAccountLabel { .. })
+                ),
+                "duplicate labels must never select the first matching account"
+            );
+        }
+    }
+
+    #[test]
+    fn new_login_label_derives_identity_and_rejects_another_accounts_id() {
+        // Arrange: a different label already owns the normalized ID.
+        let root = tempfile::tempdir().unwrap();
+        let runtime = account_command_runtime().unwrap();
+        let state = runtime
+            .block_on(AsyncSqliteStateStore::open(
+                &root.path().join("state.sqlite"),
+            ))
+            .unwrap();
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert_eq!(
+                resolve_login_account_id(&state, "brand new", provider, &runtime).unwrap(),
+                AccountId::new("acct_brand_new").unwrap()
+            );
+        }
+        runtime
+            .block_on(state.upsert_account(&AccountRecord::new(
+                Provider::Openai,
+                AccountId::new("acct_brand_new").unwrap(),
+                "unrelated label",
+                AccountStatus::Enabled,
+            )))
+            .unwrap();
+
+        // Act/assert: neither provider may activate into another label's ID.
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert!(matches!(
+                resolve_login_account_id(&state, "brand new", provider, &runtime),
+                Err(AccountCommandError::DuplicateAccountLabel { .. })
+            ));
+        }
+        runtime.block_on(state.close()).unwrap();
+    }
+
+    #[test]
     fn login_refuses_a_label_owned_by_another_provider_before_device_request() {
         let temporary_root = tempfile::tempdir().expect("temporary router root should exist");
         let runtime = account_command_runtime().expect("test runtime should initialize");
@@ -203,5 +288,78 @@ mod claude_login_glue_tests {
             map_credential_activation_error(CredentialActivationError::AccountProviderMismatch),
             AccountCommandError::AccountProviderMismatch
         ));
+    }
+
+    #[test]
+    fn claude_login_reauthenticates_account_with_non_derived_id() {
+        // Arrange: imported identity survives a different current display label.
+        let root = tempfile::tempdir().unwrap();
+        let runtime = account_command_runtime().unwrap();
+        let state = runtime
+            .block_on(AsyncSqliteStateStore::open(
+                &root.path().join("state.sqlite"),
+            ))
+            .unwrap();
+        let stored_id = AccountId::new("acct_imported_claude_identity").unwrap();
+        let account = AccountRecord::new(
+            Provider::Claude,
+            stored_id.clone(),
+            "current label",
+            AccountStatus::Disabled,
+        )
+        .with_active_credential_generation(1);
+        runtime.block_on(state.upsert_account(&account)).unwrap();
+        runtime.block_on(state.close()).unwrap();
+        let secrets = codex_router_secret_store::test_support::open_encrypted_credential_store(
+            root.path().join("secrets"),
+        )
+        .unwrap();
+        let flow = RecordingClaudeLoginFlow::new();
+        let mut output = Vec::new();
+
+        // Act: fake flow returns test credentials, with no OAuth network or Keychain.
+        login_with_claude_oauth(
+            &mut output,
+            &mut Cursor::new(b"test-code#test-state\n"),
+            root.path().to_path_buf(),
+            "current label".to_owned(),
+            &flow,
+            Some(secrets.clone().into()),
+        )
+        .unwrap();
+
+        // Assert: same account, next generation, newly activated fixture credentials.
+        assert_eq!(flow.pasted_callbacks.lock().unwrap().len(), 1);
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .contains("account_id: acct_imported_claude_identity")
+        );
+        let reopened = runtime
+            .block_on(AsyncSqliteStateStore::open(
+                &root.path().join("state.sqlite"),
+            ))
+            .unwrap();
+        let accounts = runtime.block_on(reopened.list_accounts()).unwrap();
+        assert_eq!(accounts.len(), 1);
+        let active = runtime
+            .block_on(reopened.load_account(&stored_id))
+            .unwrap()
+            .unwrap();
+        assert_eq!(active.status(), AccountStatus::Enabled);
+        assert_eq!(active.active_credential_generation(), Some(2));
+        let key = codex_router_secret_store::account_tokens::provider_credential_bundle_key(
+            Provider::Claude,
+            &stored_id,
+            2,
+        )
+        .unwrap();
+        let bundle = CredentialBundle::from_secret_string(
+            Provider::Claude,
+            secrets.read_secret(&key).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(bundle.access_token().expose_secret(), "glue-access-canary");
+        runtime.block_on(reopened.close()).unwrap();
     }
 }

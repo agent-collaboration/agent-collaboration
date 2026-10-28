@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT link_id AS \"link_id!: String\", row_id AS \"row_id!: String\", place AS \"place!: i64\", target AS \"target!: String\" FROM work_trail_links WHERE row_id IN (SELECT value FROM json_each(?)) ORDER BY row_id, place",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "place!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "target!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8a70db1c8344819e022005b0c119e4c3a2c2d76298372c5919c0d2658463ac0b"
+}

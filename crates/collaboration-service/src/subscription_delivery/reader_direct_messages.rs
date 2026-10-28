@@ -1,5 +1,10 @@
 //! DM presence, submission and response handling inside the target's single delivery actor.
-use super::*;
+use super::{
+    BoardError, LoadPolicy, PRESENCE_INTERVAL, PushRecord, ReaderDeliveryOwner, TargetPresence,
+    target_session,
+};
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::{MessageDelivery, PushDeliveryState};
 
 impl ReaderDeliveryOwner {
@@ -7,6 +12,7 @@ impl ReaderDeliveryOwner {
         let Ok(target) = target_session(&self.reader) else {
             return Ok(false);
         };
+        let native_pending = self.resume_native_held_mail(&target).await?;
         let records = self.push.direct_messages(&target).await?;
         self.dm_checked_presence
             .retain(|push_id, _| records.iter().any(|record| &record.push_id == push_id));
@@ -28,7 +34,12 @@ impl ReaderDeliveryOwner {
                 self.presence.presence(&target).await,
                 Ok(TargetPresence::Wakeable)
             );
-            let settled = if !known_unloaded {
+            let new_auto = collaboration_runtime::mail_push_preparation::direct_message_load_policy(
+                record.mode,
+                record.guard.as_ref(),
+                record.delivery_state,
+            ) == LoadPolicy::MayLoad;
+            let settled = if !known_unloaded || new_auto {
                 self.push.deliver_direct_message(record).await?
             } else if record.mode == Some(MessageDelivery::Steer) || record.guard.is_some() {
                 self.push.reject_direct_message(record).await?
@@ -55,7 +66,7 @@ impl ReaderDeliveryOwner {
                 self.answer_direct_message(&record);
             }
         }
-        Ok(!self.push.direct_messages(&target).await?.is_empty())
+        Ok(native_pending || !self.push.direct_messages(&target).await?.is_empty())
     }
 
     fn answer_direct_message(&mut self, record: &PushRecord) {

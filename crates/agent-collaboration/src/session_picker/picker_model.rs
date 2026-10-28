@@ -22,25 +22,9 @@ use crate::sessions::{SessionPickerIdentity, SessionPickerRecord};
 
 pub(super) const VISIBLE_SESSION_ROWS: usize = 8;
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) enum SessionsPickerRuntimeView {
-    Blocked,
-    Active,
-    Idle,
-    #[default]
-    All,
-}
-
-impl SessionsPickerRuntimeView {
-    pub(crate) const fn next(self) -> Self {
-        match self {
-            Self::All => Self::Blocked,
-            Self::Blocked => Self::Active,
-            Self::Active => Self::Idle,
-            Self::Idle => Self::All,
-        }
-    }
-}
+#[path = "picker_runtime_view.rs"]
+mod picker_runtime_view;
+pub(crate) use picker_runtime_view::SessionsPickerRuntimeView;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(super) enum SessionsPickerFocus {
@@ -50,10 +34,14 @@ pub(super) enum SessionsPickerFocus {
 }
 
 /// Pure sessions picker state. iocraft owns rendering/input, this owns behavior.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct SessionsPickerModel {
     pub(super) request: SessionsPickerRequest,
     pub(super) width: usize,
+    pub(super) machine_controls: super::picker_machine_controls::PickerMachineControls,
+    pub(super) fork_confirmation: Option<super::picker_fork_confirmation::ForkConfirmation>,
+    pub(super) source_switch_checkpoint: Option<super::picker_source_view::SourceSwitchCheckpoint>,
+    pub(super) source_progress: Vec<super::source_reload_progress::SourceReadProgress>,
     pub(super) root: SessionsPickerRoot,
     pub(super) provider: SessionsProvider,
     pub(super) source: SessionsSource,
@@ -61,7 +49,17 @@ pub(crate) struct SessionsPickerModel {
     pub(super) sort: SessionsSort,
     pub(super) search: String,
     pub(super) show_help: bool,
+    pub(super) source_action: super::source_action_state::PickerSourceAction,
+    pub(super) client_action: super::client_action_state::PickerClientAction,
+    pub(super) provider_choice:
+        codex_router_tui::SearchSelectState<super::provider_filter_model::SessionFilterValue>,
+    pub(super) provider_filter: super::provider_filter_model::SessionProviderFilter,
+    pub(super) provider_filter_draft: Option<super::provider_filter_model::ProviderFilterDraft>,
+    pub(super) new_session: Option<super::new_session_form::NewSessionDraft>,
+    pub(super) next_client_generation: u64,
+    pub(super) details_dialog: Option<super::details_dialog_state::SessionDetailsDialog>,
     pub(super) runtime_coverage: PickerRuntimeCoverage,
+    pub(super) native_live_coverage: Vec<crate::picker_runtime_status::NativeLiveCoverage>,
     focus: SessionsPickerFocus,
     pointer_window_start: Option<usize>,
     visible_indices: Vec<usize>,
@@ -69,7 +67,18 @@ pub(crate) struct SessionsPickerModel {
 }
 
 impl SessionsPickerModel {
-    pub(crate) fn new(request: SessionsPickerRequest, width: usize) -> Self {
+    pub(crate) fn new(mut request: SessionsPickerRequest, width: usize) -> Self {
+        let default_source = match request.machine_mode {
+            super::PickerMachineSourceMode::HostedDefault => {
+                super::PickerSourceContext::DefaultHosted
+            }
+            super::PickerMachineSourceMode::LocalCodex => super::PickerSourceContext::LocalCodex,
+        };
+        for record in &mut request.records {
+            if record.source_context.is_none() {
+                record.source_context = Some(default_source.clone());
+            }
+        }
         let mut model = Self {
             root: request.root,
             provider: request.provider.clone(),
@@ -78,9 +87,22 @@ impl SessionsPickerModel {
             sort: request.sort,
             request,
             width,
+            machine_controls: super::picker_machine_controls::PickerMachineControls::default(),
+            fork_confirmation: None,
+            source_progress: Vec::new(),
+            source_switch_checkpoint: None,
             search: String::new(),
             show_help: false,
+            source_action: super::source_action_state::PickerSourceAction::default(),
+            client_action: super::client_action_state::PickerClientAction::Idle,
+            provider_choice: codex_router_tui::SearchSelectState::Closed,
+            provider_filter: super::provider_filter_model::SessionProviderFilter::All,
+            provider_filter_draft: None,
+            details_dialog: None,
+            new_session: None,
+            next_client_generation: 0,
             runtime_coverage: PickerRuntimeCoverage::Unobserved,
+            native_live_coverage: Vec::new(),
             focus: SessionsPickerFocus::StartNew,
             pointer_window_start: None,
             visible_indices: Vec::new(),
@@ -92,7 +114,12 @@ impl SessionsPickerModel {
     }
 
     pub(crate) fn handle_key(&mut self, key: SessionsPickerKey) {
-        self.pointer_window_start = None;
+        if self.source_action.pending.is_some() && !matches!(key, SessionsPickerKey::ToggleHelp) {
+            return;
+        }
+        if !matches!(key, SessionsPickerKey::ToggleHelp) {
+            self.pointer_window_start = None;
+        }
         match key {
             SessionsPickerKey::MoveDown => {
                 let visible_len = self.visible_len();
@@ -170,8 +197,84 @@ impl SessionsPickerModel {
         }
     }
 
+    pub(super) fn append_search_text(&mut self, text: &str) {
+        if self.source_action.pending.is_some() {
+            return;
+        }
+        let previous_length = self.search.len();
+        self.search
+            .extend(text.chars().filter(|character| !character.is_control()));
+        if self.search.len() == previous_length {
+            return;
+        }
+        let previous_index = self.focused_visible_index();
+        self.pointer_window_start = None;
+        self.rebuild_visible_rows();
+        self.restore_focus_or_fallback(previous_index);
+    }
+
     pub(crate) fn set_width(&mut self, width: usize) {
         self.width = width;
+    }
+
+    pub(super) fn open_provider_filters(&mut self) {
+        if self.fork_confirmation.is_none()
+            && matches!(
+                self.machine_controls.stage,
+                super::picker_machine_controls::PickerMachineStage::Browsing
+            )
+            && self.provider_filter_draft.is_none()
+            && self.details_dialog.is_none()
+        {
+            self.provider_choice = codex_router_tui::SearchSelectState::Closed;
+            self.provider_filter_draft =
+                Some(super::provider_filter_model::ProviderFilterDraft::new(
+                    self.provider_filter,
+                    self.data_query(),
+                    self.runtime_view,
+                ));
+        }
+    }
+
+    pub(super) fn apply_provider_filters(&mut self) {
+        if self.provider_choice.is_open() {
+            return;
+        }
+        let Some(draft) = self.provider_filter_draft.take() else {
+            return;
+        };
+        self.provider_filter = draft.selection;
+        self.root = draft.query.root;
+        self.provider = draft.query.provider;
+        self.source = draft.query.source;
+        self.sort = draft.query.sort;
+        self.runtime_view = draft.runtime_view;
+        self.provider_choice = codex_router_tui::SearchSelectState::Closed;
+        self.pointer_window_start = None;
+        self.rebuild_visible_rows();
+        if self
+            .focused_identity()
+            .is_some_and(|identity| self.visible_index_for_identity(identity).is_none())
+        {
+            self.focus_start_new();
+            self.focus_first_record_when_available();
+        }
+    }
+
+    pub(super) fn open_details_dialog(&mut self) {
+        if self.focused_record().is_none() {
+            self.open_new_form();
+            return;
+        }
+        if self.provider_filter_draft.is_none()
+            && self.fork_confirmation.is_none()
+            && matches!(
+                self.machine_controls.stage,
+                super::picker_machine_controls::PickerMachineStage::Browsing
+            )
+        {
+            self.open_captured_details();
+        }
     }
 
     pub(crate) fn data_query(&self) -> SessionsPickerDataQuery {
@@ -189,24 +292,31 @@ impl SessionsPickerModel {
         let previous_index = self.focused_visible_index();
         self.pointer_window_start = None;
         self.request.records = snapshot.records;
+        let default_source = self.source_contexts().into_iter().next();
+        for record in &mut self.request.records {
+            if record.source_context.is_none() {
+                record.source_context = default_source.clone();
+            }
+        }
         self.runtime_coverage = snapshot.runtime_coverage;
+        self.native_live_coverage = snapshot.native_live_coverage;
         self.rebuild_visible_rows();
         self.restore_focus_or_fallback(previous_index);
     }
 
     pub(crate) fn invalidate_runtime_statuses(&mut self) {
         self.runtime_coverage = PickerRuntimeCoverage::Unavailable;
-        if self
-            .request
-            .records
-            .iter()
-            .all(|record| record.runtime_status == PickerRuntimeStatus::Unknown)
-        {
+        self.native_live_coverage.clear();
+        if self.request.records.iter().all(|record| {
+            record.runtime_status == PickerRuntimeStatus::Unknown && record.provider_state.is_none()
+        }) {
             return;
         }
         let previous_index = self.focused_visible_index();
         for record in &mut self.request.records {
             record.runtime_status = PickerRuntimeStatus::Unknown;
+            record.provider_state = None;
+            record.native_peer = None;
         }
         self.rebuild_visible_rows();
         self.restore_focus_or_fallback(previous_index);
@@ -250,6 +360,9 @@ impl SessionsPickerModel {
         identity: &SessionPickerIdentity,
         window_start: Option<usize>,
     ) -> bool {
+        if self.provider_filter_draft.is_some() || self.details_dialog.is_some() {
+            return false;
+        }
         if self.visible_index_for_identity(identity).is_none() {
             return false;
         }
@@ -265,11 +378,7 @@ impl SessionsPickerModel {
         self.focus = SessionsPickerFocus::StartNew;
     }
 
-    pub(crate) fn focus_start_new_in_window(&mut self, window_start: usize) {
-        self.pointer_window_start = Some(window_start);
-        self.focus = SessionsPickerFocus::StartNew;
-    }
-
+    #[cfg(test)]
     pub(crate) fn focused_session_id(&self) -> Option<&str> {
         self.focused_record()
             .map(|record| record.session_id.as_str())
@@ -282,25 +391,77 @@ impl SessionsPickerModel {
         }
     }
 
+    pub(super) fn source_contexts(&self) -> Vec<super::PickerSourceContext> {
+        if let super::picker_machine_controls::PickerMachineStage::Loading { source, .. } =
+            &self.machine_controls.stage
+        {
+            return vec![source.as_ref().clone()];
+        }
+        if let super::picker_machine_controls::PickerMachineFilter::Single { source } =
+            &self.machine_controls.filter
+        {
+            return vec![source.as_ref().clone()];
+        }
+        let default_source = match self.request.machine_mode {
+            super::PickerMachineSourceMode::HostedDefault => {
+                super::PickerSourceContext::DefaultHosted
+            }
+            super::PickerMachineSourceMode::LocalCodex => super::PickerSourceContext::LocalCodex,
+        };
+        let mut sources = vec![default_source];
+        if self.machine_controls.filter == super::picker_machine_controls::PickerMachineFilter::All
+            && let crate::sessions::RouterRegistryRead::Ready(registry) =
+                &self.request.router_registry
+        {
+            sources.extend(
+                registry
+                    .routers
+                    .iter()
+                    .cloned()
+                    .map(super::PickerSourceContext::ConfiguredHosted),
+            );
+        }
+        sources
+    }
+
+    pub(super) fn start_new_action(&mut self) -> Option<SessionsPickerOutcome> {
+        if self.provider_filter_draft.is_some() || self.details_dialog.is_some() {
+            return None;
+        }
+        self.open_new_form();
+        None
+    }
+
     pub(crate) fn activation_outcome_for_focus(&self) -> Option<SessionsPickerOutcome> {
         match self.focused_record() {
             Some(record) if record.identity.is_provider() => None,
             Some(record) => Some(SessionsPickerOutcome::ResumeSession(
-                record.session_id.clone(),
+                crate::sessions::SessionActionSelection::from_picker_record(record),
             )),
             None => Some(SessionsPickerOutcome::StartNewSession),
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn fork_outcome_for_focus(&self) -> Option<SessionsPickerOutcome> {
         self.focused_record()
             .filter(|record| !record.identity.is_provider())
-            .map(|record| SessionsPickerOutcome::ForkSession(record.session_id.clone()))
+            .map(|record| {
+                SessionsPickerOutcome::ForkSession(
+                    crate::sessions::SessionActionSelection::from_picker_record(record),
+                )
+            })
     }
 
     #[cfg(test)]
     pub(crate) fn render_snapshot(&self) -> String {
         render_model_snapshot(self)
+    }
+
+    pub(super) fn open_fork_confirmation(&mut self) {
+        self.fork_confirmation = self.focused_record().map(|record| {
+            super::picker_fork_confirmation::ForkConfirmation::capture(record, &self.request)
+        });
     }
 
     #[cfg(test)]
@@ -366,6 +527,10 @@ impl SessionsPickerModel {
             .filter(|(_index, record)| provider_matches(&self.provider, &self.request, record))
             .filter(|(_index, record)| source_matches(self.source, record))
             .filter(|(_index, record)| runtime_view_matches(self.runtime_view, record))
+            .filter(|(_index, record)| {
+                self.provider_filter
+                    .matches(record.client_provider_family())
+            })
             .filter(|(_index, record)| search.is_empty() || record.matches_search(&search))
             .map(|(index, _record)| index)
             .collect::<Vec<_>>();
@@ -436,16 +601,6 @@ impl SessionsPickerModel {
     }
 }
 
-pub(super) fn visible_window_start(
-    focused_index: usize,
-    visible_len: usize,
-    max_visible: usize,
-) -> usize {
-    if visible_len <= max_visible {
-        return 0;
-    }
-    focused_index
-        .saturating_add(1)
-        .saturating_sub(max_visible)
-        .min(visible_len.saturating_sub(max_visible))
-}
+#[path = "picker_visible_window.rs"]
+mod picker_visible_window;
+pub(super) use picker_visible_window::visible_window_start;

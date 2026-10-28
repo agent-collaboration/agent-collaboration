@@ -142,6 +142,10 @@ pub(super) fn format_recency_at_ms(recency_at_ms: Option<i64>) -> String {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "Negative timestamps return above, so this widening conversion is nonnegative."
+    )]
     let recency_at_ms = recency_at_ms as u128;
     if now_ms >= recency_at_ms {
         let duration = format_duration_ms(now_ms - recency_at_ms);

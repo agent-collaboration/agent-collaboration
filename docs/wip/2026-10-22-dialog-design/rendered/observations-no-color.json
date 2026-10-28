@@ -1,0 +1,121 @@
+{
+  "renderer": "iocraft 0.9.2",
+  "method": "ElementExt::render + Canvas::write/write_ansi; isolated sample composition, no Router dependencies or account state",
+  "observations": [
+    {
+      "name": "quota",
+      "width": 132,
+      "height": 34,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        132
+      ],
+      "sha256": "4070bacdedff64d41c74449c39aa6be2a8318bdb53592782ebe1d5be81a8c11f"
+    },
+    {
+      "name": "session",
+      "width": 132,
+      "height": 34,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        132
+      ],
+      "sha256": "a587f5b484cb9ef37a9119feff895ad7adf94835c048661b26d558afb176ab0c"
+    },
+    {
+      "name": "quota",
+      "width": 100,
+      "height": 34,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        100
+      ],
+      "sha256": "f4a67558fa5adbca0687b3e1789836073eddaf9cf507b2ac121443a067d226d5"
+    },
+    {
+      "name": "session",
+      "width": 100,
+      "height": 34,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        100
+      ],
+      "sha256": "c5829f06c2f9b4678e561ae2ee2a6b95e1418f299ce46ac7b53487211120949b"
+    },
+    {
+      "name": "quota",
+      "width": 48,
+      "height": 32,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        48
+      ],
+      "sha256": "5b5da2688c62a034ff7b445fd9fbe5b8da0f2aca527ac5bf6c79245a2aa52d65"
+    },
+    {
+      "name": "session",
+      "width": 48,
+      "height": 32,
+      "pass": false,
+      "results": {
+        "rowCount": true,
+        "footerPresent": true,
+        "wrongControlRejects": true,
+        "titleColor": false,
+        "labelColor": false,
+        "selectedColor": false,
+        "surfaceColor": false
+      },
+      "codePointLineWidths": [
+        48
+      ],
+      "sha256": "fe11533e3b209a26501912d76b2fb73a1ff017067da716202d9c1cff1114e472"
+    }
+  ],
+  "limits": "Renderer feasibility only. Probe simplifies quota rows relative to HTML; no HTML DOM, input interaction, real terminal display/color perception, installed Router or backend proof."
+}

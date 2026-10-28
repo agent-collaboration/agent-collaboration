@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT assignment_id AS \"id!: String\" FROM role_assignments WHERE holder=? AND ended IS NULL AND (? OR role IN ('lead','implementer','verifier')) ORDER BY assignment_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d0b88a419bd4ee88a6ad3de8cabc2774e20cfbde4077396c8546da330c756b01"
+}

@@ -1,7 +1,6 @@
 //! Carrier response loss through the stateless collaboration API: a lost or refused carrier
 //! answer keeps the known target and effect, and nothing is replayed.
 use crate::api_test_harness::{ServedApi, api_config};
-use collaboration_service::CollaborationApplication;
 use futures_util::StreamExt;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -81,7 +80,7 @@ async fn run_stateless_mcp_resumed_prompt_after_load(load_error: Option<Value>) 
         "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}", collaboration_protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_endpoints(vec![description])
         .expect("endpoint directory");
@@ -144,11 +143,7 @@ async fn run_stateless_mcp_resumed_prompt_after_load(load_error: Option<Value>) 
             );
         }
     });
-    let listener = ServedApi::tcp(&api_config(
-        CollaborationApplication::new(identity),
-        temporary.path(),
-    ))
-    .await;
+    let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
     let client = reqwest::Client::new();
     let response = client
         .post(listener.url())
@@ -240,7 +235,7 @@ async fn stateless_http_observation_attach_failure_retains_target_and_pre_dispat
     let service_id = "00000000-0000-4000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"observe-thread"});
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_endpoints(vec![serde_json::from_value(json!({
             "endpoint":{"serviceId":service_id,"endpointId":"codex-local"}, "label":"MCP observation fixture",
@@ -248,11 +243,7 @@ async fn stateless_http_observation_attach_failure_retains_target_and_pre_dispat
             "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"missing-native.sock","schemaDigest":null,"generation":{"serviceEpoch":epoch,"generation":1}}]
         })).expect("endpoint description")])
         .expect("endpoint directory");
-    let listener = ServedApi::tcp(&api_config(
-        CollaborationApplication::new(identity),
-        temporary.path(),
-    ))
-    .await;
+    let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
     let client = reqwest::Client::new();
     let response = client.post(listener.url()).header(CONTENT_TYPE, "application/json").header(ACCEPT, "application/json, text/event-stream").header("mcp-protocol-version", "2025-11-25").json(&json!({
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"events_observe","arguments":{"target":target,"timeoutSeconds":1,"maxEvents":1,"maxBytes":1}}
@@ -286,7 +277,7 @@ async fn stateless_http_observation_resume_response_loss_retains_target_and_unkn
     let service_id = "00000000-0000-4000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"observe-thread"});
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch).expect("service identity").with_endpoints(vec![serde_json::from_value(json!({
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch).expect("service identity").with_endpoints(vec![serde_json::from_value(json!({
         "endpoint":{"serviceId":service_id,"endpointId":"codex-local"}, "label":"MCP observation resume fixture",
         "availability":{"state":"available","observedAt":"2026-09-19T00:00:00Z"},
         "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":{"serviceEpoch":epoch,"generation":1}}]
@@ -336,11 +327,7 @@ async fn stateless_http_observation_resume_response_loss_retains_target_and_unkn
         assert_eq!(resume["method"], "thread/resume");
         assert_eq!(resume["params"]["threadId"], "observe-thread");
     });
-    let listener = ServedApi::tcp(&api_config(
-        CollaborationApplication::new(identity),
-        temporary.path(),
-    ))
-    .await;
+    let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
     let client = reqwest::Client::new();
     let response = client.post(listener.url()).header(CONTENT_TYPE, "application/json").header(ACCEPT, "application/json, text/event-stream").header("mcp-protocol-version", "2025-11-25").json(&json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"events_observe","arguments":{"target":target,"timeoutSeconds":1,"maxEvents":1,"maxBytes":1}}})).send().await.expect("observation response");
     let body = protocol_response_json(response).await;
@@ -388,7 +375,7 @@ async fn run_stateless_mcp_create_response_loss(
         "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}", collaboration_protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_endpoints(vec![description])
         .expect("endpoint directory");
@@ -451,11 +438,7 @@ async fn run_stateless_mcp_create_response_loss(
             "a lost ACP response must not create a replacement connection or replay the mutation"
         );
     });
-    let listener = ServedApi::tcp(&api_config(
-        CollaborationApplication::new(identity),
-        temporary.path(),
-    ))
-    .await;
+    let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
     let client = reqwest::Client::new();
     let response = client.post(listener.url()).header(CONTENT_TYPE, "application/json").header(ACCEPT, "application/json, text/event-stream").header("mcp-protocol-version", "2025-11-25").json(&json!({
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"conversation_create","arguments":{

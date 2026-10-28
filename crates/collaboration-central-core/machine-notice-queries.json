@@ -1,0 +1,154 @@
+{
+  "migrations": [
+    "session_migrations"
+  ],
+  "output": "src/generated_machine_notices.rs",
+  "metadata": "machine-notice-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_machine_notice_state",
+      "sql": "sql/machine_notices/read_machine_notice_state.sql",
+      "row": "StoredMachineNoticeState",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "initialize_machine_notice_state",
+      "sql": "sql/machine_notices/initialize_machine_notice_state.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "remember_machine_notice_peer",
+      "sql": "sql/machine_notices/remember_machine_notice_peer.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "peer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "advance_machine_notice_head",
+      "sql": "sql/machine_notices/advance_machine_notice_head.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "advance_machine_notice_floor",
+      "sql": "sql/machine_notices/advance_machine_notice_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "append_machine_notice",
+      "sql": "sql/machine_notices/append_machine_notice.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "notice_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expires_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_machine_notices",
+      "sql": "sql/machine_notices/read_machine_notices.sql",
+      "row": "StoredMachineNotice",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_expired_machine_notices",
+      "sql": "sql/machine_notices/read_expired_machine_notices.sql",
+      "row": "StoredMachineNotice",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "prune_machine_notices",
+      "sql": "sql/machine_notices/prune_machine_notices.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "through",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_machine_notice_expiry",
+      "sql": "sql/machine_notices/read_machine_notice_expiry.sql",
+      "row": "MachineNoticeExpiry",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "read_machine_notice_bounds",
+      "sql": "sql/machine_notices/read_machine_notice_bounds.sql",
+      "row": "MachineNoticeBounds",
+      "result": "optional",
+      "parameters": []
+    }
+  ]
+}

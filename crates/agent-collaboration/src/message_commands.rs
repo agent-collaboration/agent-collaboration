@@ -10,6 +10,7 @@ use std::{
     path::PathBuf,
 };
 
+mod message_cancellation;
 mod message_send_reply;
 mod push_record_queries;
 
@@ -25,6 +26,8 @@ struct MessageArguments {
 
 #[derive(Subcommand)]
 enum MessageCommand {
+    /// Request one cancellation; Pending does not promise prevention.
+    Cancel(MessageCancelArguments),
     /// Submit information. Acceptance is not completion or a peer reply.
     Send(MessageSendArguments),
     /// List unread direct-message notices for this session.
@@ -33,6 +36,22 @@ enum MessageCommand {
     History(HistoryArguments),
     /// Reply to one stored direct message by push id or Router link.
     Reply(ReplyArguments),
+}
+
+#[derive(clap::Args)]
+struct MessageCancelArguments {
+    #[arg(long)]
+    item: String,
+    #[arg(long)]
+    cancel_id: Option<String>,
+    #[arg(long = "from", hide = true, conflicts_with = "human_user")]
+    sender: Option<String>,
+    #[arg(long)]
+    human_user: bool,
+    #[arg(long)]
+    service_directory: Option<PathBuf>,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -84,6 +103,8 @@ struct ReplyArguments {
     about = "Fetch one stored Router push record"
 )]
 struct PushRecordShowArguments {
+    #[arg(long)]
+    human_user: bool,
     #[arg(value_name = "PUSH_ID_OR_LINK")]
     reference: String,
     #[arg(long)]
@@ -99,6 +120,7 @@ pub fn run_message_command(arguments: Vec<OsString>) -> i32 {
             Err(code) => return code,
         };
     match parsed.command {
+        MessageCommand::Cancel(args) => message_cancellation::run(args),
         MessageCommand::Send(args) => message_send_reply::run_message_send(args),
         MessageCommand::Inbox(args) => push_record_queries::run_message_inbox(args),
         MessageCommand::History(args) => push_record_queries::run_message_history(args),
@@ -125,6 +147,15 @@ fn validate_push_reference(reference: &str) -> Result<(), String> {
 
 fn report_message_failure(kind: &str, message: &str, exit_code: i32, machine: bool) -> i32 {
     if machine {
+        if kind == "invalidShape" {
+            let error = serde_json::json!({"kind":kind,"message":message,"effect":"none"});
+            let _ = writeln!(
+                io::stdout(),
+                "{}",
+                serde_json::json!({"kind":"error","error":error})
+            );
+            return exit_code;
+        }
         return crate::endpoint_commands::report_failure(kind, message, exit_code, true);
     }
     let next_step = match kind {

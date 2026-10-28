@@ -7,12 +7,22 @@ use std::{path::Path, time::Duration};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
+    #[error("wake request refused: {0:?}")]
+    WakeRefused(collaboration_protocol::WakeRefusal),
     #[error("automation storage unavailable")]
     Database(#[from] sqlx::Error),
     #[error("automation database has unsupported schema version {0}")]
     UnsupportedVersion(i64),
     #[error("automation database contains an unexpected schema; existing data was not replaced")]
     InvalidSchema,
+    #[error(
+        "legacy message rows remain in {tables:?}; stop the Router and run codex-router-board-upgrade before starting it"
+    )]
+    MessageUpgradeRequired { tables: Vec<&'static str> },
+    #[error(
+        "mail_items contains {rows} rows of pre-release state; clear this development-only state by hand before running codex-router-board-upgrade or starting the Router"
+    )]
+    PreReleaseMailPresent { rows: u64 },
     #[error("operation identity already belongs to a different request")]
     OperationConflict,
     #[error(
@@ -27,9 +37,12 @@ pub enum StorageError {
         "attempt cursor must preserve its observation time, latest attempt and last emitted identity"
     )]
     InvalidAttemptCursor,
+    #[error("push identity already belongs to different content")]
+    PushContentConflict,
+    // Workflow operations translate these failures from their message-store boundary.
     #[error("push record id already exists")]
     PushAlreadyExists,
-    #[error("push record was not found in this automation database")]
+    #[error("push record was not found in message storage")]
     PushNotFound,
     #[error("push record delivery state does not permit this transition")]
     PushStateConflict,
@@ -99,14 +112,7 @@ pub struct AutomationStore {
 }
 impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Delete)
-            .synchronous(SqliteSynchronous::Full)
-            .busy_timeout(Duration::from_secs(1));
-        let mut connection = SqliteConnection::connect_with(&options).await?;
+        let mut connection = connect(path, true).await?;
         crate::schema_initialization::initialize(&mut connection).await?;
         Ok(Self { connection })
     }
@@ -114,4 +120,27 @@ impl AutomationStore {
         self.connection.close().await?;
         Ok(())
     }
+}
+
+/// Applies the message drop after the upgrade has committed and verified its copy.
+///
+/// The caller must stop all file owners and verify counts and per-row digests
+/// across the source and destination first. Pre-release mail state always refuses.
+pub async fn apply_message_drop_migration(path: &Path) -> Result<(), StorageError> {
+    let mut connection = connect(path, false).await?;
+    let initialized =
+        crate::schema_initialization::initialize_after_verified_message_copy(&mut connection).await;
+    let closed = connection.close().await.map_err(StorageError::from);
+    initialized.and(closed)
+}
+
+async fn connect(path: &Path, create_if_missing: bool) -> Result<SqliteConnection, StorageError> {
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(create_if_missing)
+        .foreign_keys(true)
+        .journal_mode(SqliteJournalMode::Delete)
+        .synchronous(SqliteSynchronous::Full)
+        .busy_timeout(Duration::from_secs(1));
+    Ok(SqliteConnection::connect_with(&options).await?)
 }

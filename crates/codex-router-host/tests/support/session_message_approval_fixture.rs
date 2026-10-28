@@ -9,6 +9,12 @@ use collaboration_protocol::{
 use serde_json::json;
 use std::path::Path;
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(crate) async fn prompt_and_approve_from_peer_provider(
     client: &CollaborationClient,
     requester: SessionRef,
@@ -63,7 +69,7 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
             .kind,
         collaboration_protocol::PushKind::Approval,
     );
-    let notice_link = notice_line.rsplit_once(" · ").expect("notice link").1;
+    let notice_link = notice_line.split_whitespace().last().expect("notice link");
     let locator =
         collaboration_protocol::RouterLink::parse(notice_link).expect("validated stored push link");
     let stored_notice = client
@@ -73,6 +79,9 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
         })
         .await
         .expect("Host-composed stored approval push");
+    let collaboration_protocol::MessageShowResult::Local(stored_notice) = stored_notice else {
+        panic!("native proof expected a stored local push");
+    };
     assert_eq!(&stored_notice.record.push_id, locator.push_id());
     assert_eq!(stored_notice.link, notice_link);
     assert_eq!(
@@ -186,5 +195,5 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
     })
     .await
     .expect("approver Session idle before later board activity");
-    stored_notice
+    *stored_notice
 }

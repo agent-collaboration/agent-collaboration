@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT task_id AS \"task!: String\" FROM tasks WHERE workstream_id = ? AND task_id > ? ORDER BY task_id LIMIT 101",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "249edd1a5d29c8274c497f4621fa70fa7dbaa2d5061ca1be180b257926daedb5"
+}

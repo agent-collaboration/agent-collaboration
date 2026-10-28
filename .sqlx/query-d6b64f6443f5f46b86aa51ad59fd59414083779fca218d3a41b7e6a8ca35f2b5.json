@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT created_at_ms as \"created_at_ms!\",wakeup_id as \"wakeup_id!\" FROM (SELECT created_at_ms,wakeup_id FROM wakeup_definitions UNION ALL SELECT created_at_ms,wakeup_id FROM remote_wake_requests WHERE wakeup_id IS NOT NULL) ORDER BY created_at_ms DESC,wakeup_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "created_at_ms!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "created_at_ms"
+          }
+        }
+      },
+      {
+        "name": "wakeup_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "wakeup_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "d6b64f6443f5f46b86aa51ad59fd59414083779fca218d3a41b7e6a8ca35f2b5"
+}

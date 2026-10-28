@@ -189,46 +189,46 @@ fn response_terminal_error_matching_tracks_codex_status_and_codes() {
 
 #[tokio::test]
 async fn policy_revocation_waits_for_current_terminal_and_never_forwards_the_next_create() {
-    assert_policy_revocation_waits_for_terminal_delivery(
+    Box::pin(assert_policy_revocation_waits_for_terminal_delivery(
         r#"{"type":"response.completed","turn":2}"#,
         false,
-    )
+    ))
     .await;
 }
 
 #[tokio::test]
 async fn policy_revocation_rechecks_after_failed_terminal_delivery() {
-    assert_policy_revocation_waits_for_terminal_delivery(
+    Box::pin(assert_policy_revocation_waits_for_terminal_delivery(
         r#"{"type":"response.failed","turn":2}"#,
         false,
-    )
+    ))
     .await;
 }
 
 #[tokio::test]
 async fn policy_revocation_rechecks_after_incomplete_terminal_delivery() {
-    assert_policy_revocation_waits_for_terminal_delivery(
+    Box::pin(assert_policy_revocation_waits_for_terminal_delivery(
         r#"{"type":"response.incomplete","response":{"id":"resp_2","status":"incomplete"}}"#,
         false,
-    )
+    ))
     .await;
 }
 
 #[tokio::test]
 async fn policy_revocation_rechecks_after_status_bearing_response_terminal_error_delivery() {
-    assert_policy_revocation_waits_for_terminal_delivery(
+    Box::pin(assert_policy_revocation_waits_for_terminal_delivery(
         r#"{"type":"error","status":400,"error":{"type":"invalid_request_error","code":"invalid_request_error","message":"terminal request error"}}"#,
         false,
-    )
+    ))
     .await;
 }
 
 #[tokio::test]
 async fn policy_revocation_keeps_statusless_error_open_until_response_terminal() {
-    assert_policy_revocation_waits_for_terminal_delivery(
+    Box::pin(assert_policy_revocation_waits_for_terminal_delivery(
         r#"{"type":"response.completed","turn":2}"#,
         true,
-    )
+    ))
     .await;
 }
 
@@ -430,9 +430,9 @@ async fn assert_policy_revocation_waits_for_terminal_delivery(
             "queued disallowed create must not reach upstream: {upstream_end:?}"
         );
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(8), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(8), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("credit-turn integration should complete through the loopback WebSocket");
     assert!(

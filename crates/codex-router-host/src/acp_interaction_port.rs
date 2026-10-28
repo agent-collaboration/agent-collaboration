@@ -7,9 +7,9 @@ use acp_client_runtime::{
     ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer, SessionEventSink,
 };
 use collaboration_protocol::OperationId;
-use collaboration_service::{
-    RefusedApprovalOption, RefusedTypedApproval, ServiceInteractionBroker,
-};
+use collaboration_runtime::RefusedApprovalOption;
+use collaboration_runtime::RefusedTypedApproval;
+use collaboration_runtime::ServiceInteractionBroker;
 use message_board::{Identity, SessionRef as BoardSessionRef};
 use session_event_model::{
     ApprovalRequest, PendingInteraction, QuestionRequest, QuestionResponse, SessionEvent,
@@ -96,7 +96,7 @@ impl InteractionPort for HostInteractionPort {
                     request.clone(),
                     turn_cancellation.clone(),
                     context.binding_retirement.clone(),
-                    Some(collaboration_service::TypedApprovalLegacyContext {
+                    Some(collaboration_runtime::TypedApprovalLegacyContext {
                         operation_id: context.operation_id.clone(),
                         target: context.target.clone(),
                         generation: context.binding_generation.clone(),
@@ -106,10 +106,10 @@ impl InteractionPort for HostInteractionPort {
                 .await
             {
                 Ok(receiver) => receiver,
-                Err(collaboration_service::InteractionHistoryError::NotPending) => {
+                Err(collaboration_runtime::InteractionHistoryError::NotPending) => {
                     return ApprovalPortOutcome::Cancelled;
                 }
-                Err(collaboration_service::InteractionHistoryError::SelfApprover) => {
+                Err(collaboration_runtime::InteractionHistoryError::SelfApprover) => {
                     let refusal = RefusedTypedApproval {
                         request_id: request.request_id,
                         title: request.title,
@@ -410,18 +410,18 @@ fn board_session_ref(value: &collaboration_protocol::SessionRef) -> Option<Board
 
 fn approval_receiver_outcome(
     selected: Result<
-        collaboration_service::TypedApprovalResolution,
+        collaboration_runtime::TypedApprovalResolution,
         tokio::sync::oneshot::error::RecvError,
     >,
 ) -> ApprovalPortOutcome {
     match selected {
-        Ok(collaboration_service::TypedApprovalResolution::Selected(selected)) => {
+        Ok(collaboration_runtime::TypedApprovalResolution::Selected(selected)) => {
             ApprovalPortOutcome::Selected {
                 option_id: selected.option_id.as_str().to_owned(),
                 note: selected.note,
             }
         }
-        Ok(collaboration_service::TypedApprovalResolution::Cancelled) => {
+        Ok(collaboration_runtime::TypedApprovalResolution::Cancelled) => {
             ApprovalPortOutcome::Cancelled
         }
         Err(_) => ApprovalPortOutcome::Cancelled,
@@ -465,13 +465,15 @@ mod provider_actor_tests {
         }
     }
 
-    impl collaboration_service::SessionMessageDelivery for StalledNoticeDelivery {
+    impl collaboration_contracts::SessionMessageDelivery for StalledNoticeDelivery {
         fn deliver<'a>(
             &'a self,
-            _: collaboration_service::layer_zero::DeliveryRequest,
-            _: &'a dyn collaboration_service::AttemptEvidenceSink,
-        ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt>
-        {
+            _: collaboration_contracts::layer_zero::DeliveryRequest,
+            _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+        ) -> collaboration_contracts::DeliveryFuture<
+            'a,
+            collaboration_contracts::NativeDeliveryResult,
+        > {
             let entered = Arc::clone(&self.entered);
             let dropped = Arc::clone(&self.dropped);
             Box::pin(async move {
@@ -483,10 +485,12 @@ mod provider_actor_tests {
 
         fn reconcile_attempt(
             &self,
-            _: collaboration_service::AttemptReconciliationContext,
-        ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
-        {
-            Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+            _: collaboration_contracts::AttemptReconciliationContext,
+        ) -> collaboration_contracts::DeliveryFuture<
+            '_,
+            collaboration_contracts::AttemptReconciliation,
+        > {
+            Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
         }
     }
 
@@ -498,6 +502,10 @@ mod provider_actor_tests {
             Box::pin(async { Ok(()) })
         }
 
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "A poisoned fixture event capture must fail its test."
+        )]
         fn publish(
             &self,
             _: &str,
@@ -523,9 +531,9 @@ mod provider_actor_tests {
         };
         let broker = ServiceInteractionBroker::load(
             service_id.clone(),
-            collaboration_service::NativeControlBackend {
+            collaboration_runtime::NativeControlBackend {
                 endpoint: endpoint.clone(),
-                gate: collaboration_service::NativeGenerationGate::default(),
+                gate: collaboration_runtime::NativeGenerationGate::default(),
                 codex_home: directory.path().to_owned(),
             },
             directory.path().join("approval-routes.json"),
@@ -540,11 +548,11 @@ mod provider_actor_tests {
             .expect("approval push store"),
         ));
         let machine_identity =
-            collaboration_service::MachineIdentity::new(service_id.clone(), Some("fixture-host"))
+            collaboration_contracts::MachineIdentity::new(service_id.clone(), Some("fixture-host"))
                 .expect("machine identity");
         let service_id_text = String::from(service_id.clone());
         let broker_context =
-            collaboration_service::ServiceIdentity::new(&service_id_text, &service_id_text)
+            collaboration_service::ApplicationFixture::new(&service_id_text, &service_id_text)
                 .expect("service identity")
                 .with_machine_identity(machine_identity)
                 .expect("machine identity belongs to service")

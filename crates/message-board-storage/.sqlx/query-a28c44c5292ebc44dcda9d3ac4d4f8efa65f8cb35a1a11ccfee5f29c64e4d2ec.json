@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT (SELECT a.acknowledgement_id FROM stand_down_acknowledgements a WHERE a.assignment_id=CAST(k.value AS TEXT) AND a.actor_id=? ORDER BY a.through_position DESC, a.acknowledgement_id DESC LIMIT 1) AS \"id?: String\" FROM json_each(?) k",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a28c44c5292ebc44dcda9d3ac4d4f8efa65f8cb35a1a11ccfee5f29c64e4d2ec"
+}

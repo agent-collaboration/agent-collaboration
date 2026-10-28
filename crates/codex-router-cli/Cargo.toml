@@ -26,6 +26,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.14", optional = true }
 base64.workspace = true
 chrono.workspace = true
@@ -37,6 +38,13 @@ codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4" }
 codex-router-selection = { path = "../codex-router-selection", version = "0.1.4" }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4" }
 codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.96" }
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.96" }
+collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.102" }
+fleet-sync-protocol.workspace = true
+fleet-sync-lease.workspace = true
+fs2.workspace = true
+uuid.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 message-board = { path = "../message-board", version = "0.1.20" }
 clap.workspace = true
@@ -44,6 +52,7 @@ comfy-table.workspace = true
 crossterm.workspace = true
 indicatif.workspace = true
 iocraft.workspace = true
+codex-router-tui.workspace = true
 nix.workspace = true
 opentelemetry.workspace = true
 opentelemetry-appender-tracing.workspace = true
@@ -53,7 +62,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, features = ["sqlite"] }
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -63,6 +72,8 @@ tracing-subscriber.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
+board-central-test-support = { path = "../board-central-test-support", version = "0.1.96" }
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.96" }
 tempfile = "3.27.0"
 codex-router-host = { path = "../codex-router-host", version = "0.1.4", features = ["keychain-test-support"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
@@ -72,4 +83,6 @@ codex-router-state = { path = "../codex-router-state", version = "0.1.4", featur
 futures-util.workspace = true
 rustix.workspace = true
 tokio-tungstenite.workspace = true
+toml = "1.1.2"
 tungstenite = "0.28.0"
+tokio = { workspace = true, features = ["test-util"] }

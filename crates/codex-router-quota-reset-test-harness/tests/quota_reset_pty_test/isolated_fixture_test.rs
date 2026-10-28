@@ -60,7 +60,179 @@ pub(super) struct QuotaResetFixture {
     secret_manifest_before: BTreeMap<String, String>,
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum ProviderFilterFixtureScenario {
+    MixedAccounts,
+    ClaudeAccountsDisabled,
+}
+
 impl QuotaResetFixture {
+    pub(super) async fn create_provider_filters(
+        scenario: ProviderFilterFixtureScenario,
+    ) -> TestResult<Self> {
+        let mut fixture = Self::create().await?;
+        let state = AsyncSqliteStateStore::open(&fixture.root.join("state.sqlite")).await?;
+        let claude_enabled = matches!(scenario, ProviderFilterFixtureScenario::MixedAccounts);
+        for (provider, account_name, label, status, generation) in [
+            (
+                codex_router_core::provider::Provider::Openai,
+                "acct_pty_alpha",
+                "OpenAI Alpha",
+                AccountStatus::Enabled,
+                Some(7),
+            ),
+            (
+                codex_router_core::provider::Provider::Openai,
+                "acct_pty_beta",
+                "OpenAI Beta",
+                AccountStatus::Disabled,
+                Some(11),
+            ),
+            (
+                codex_router_core::provider::Provider::Claude,
+                "acct_filter_gamma",
+                "Claude Gamma",
+                if claude_enabled {
+                    AccountStatus::Enabled
+                } else {
+                    AccountStatus::Disabled
+                },
+                None,
+            ),
+            (
+                codex_router_core::provider::Provider::Claude,
+                "acct_filter_delta",
+                "Claude Delta",
+                AccountStatus::Disabled,
+                None,
+            ),
+        ] {
+            let account_id = AccountId::new(account_name)?;
+            let account = AccountRecord::new(provider, account_id, label, status);
+            let account = if let Some(generation) = generation {
+                account.with_active_credential_generation(generation)
+            } else {
+                account
+            };
+            state.upsert_account(&account).await?;
+        }
+        state.close().await?;
+        // Arrange must complete before the byte-level no-mutation baseline.
+        fixture.state_bytes_before = fs::read(fixture.root.join("state.sqlite"))?;
+        fixture.assert_secrets_unchanged()?;
+        Ok(fixture)
+    }
+
+    /// Extra visual scene: normal reset/provider fixtures remain unchanged.
+    pub(super) async fn create_visual_hard_cases() -> TestResult<Self> {
+        let mut fixture =
+            Self::create_provider_filters(ProviderFilterFixtureScenario::MixedAccounts).await?;
+        let state = AsyncSqliteStateStore::open(&fixture.root.join("state.sqlite")).await?;
+        let now = current_unix_seconds();
+        for (name, generation, weekly, short, stale) in [
+            ("acct_pty_alpha", 7, 92, Some(83), false),
+            ("acct_pty_beta", 11, 75, None, true),
+        ] {
+            let account_id = AccountId::new(name)?;
+            let observed = if stale { now.saturating_sub(3601) } else { now };
+            let status = if stale {
+                SelectorQuotaWindowStatus::Stale
+            } else {
+                SelectorQuotaWindowStatus::Eligible
+            };
+            let mut weekly_window =
+                PersistedSelectorQuotaWindow::new(account_id.clone(), "responses", 604800, status)
+                    .with_remaining_headroom(weekly)
+                    .with_effective(true)
+                    .with_observed_unix_seconds(observed);
+            if !stale {
+                weekly_window = weekly_window.with_reset_unix_seconds(now.saturating_add(576000));
+            }
+            let mut windows = vec![weekly_window];
+            if let Some(remaining) = short {
+                windows.push(
+                    PersistedSelectorQuotaWindow::new(
+                        account_id.clone(),
+                        "responses",
+                        18000,
+                        SelectorQuotaWindowStatus::Eligible,
+                    )
+                    .with_remaining_headroom(remaining)
+                    .with_effective(true)
+                    .with_observed_unix_seconds(observed)
+                    .with_reset_unix_seconds(now.saturating_add(7800)),
+                );
+            }
+            let history = windows
+                .iter()
+                .map(|window| {
+                    let observation = PersistedQuotaHistoryObservation::new(
+                        account_id.clone(),
+                        account_id.as_str(),
+                        "responses",
+                        window.limit_window_seconds(),
+                        observed,
+                        window.remaining_headroom(),
+                    )
+                    .with_effective(window.effective())
+                    .with_window_status(window.status())
+                    .with_refresh_source(QuotaSnapshotSource::OpenAiEndpoint)
+                    .with_refresh_outcome(QuotaHistoryRefreshOutcome::Success);
+                    window
+                        .reset_unix_seconds()
+                        .map_or(observation.clone(), |reset| {
+                            observation.with_reset_unix_seconds(reset)
+                        })
+                })
+                .collect::<Vec<_>>();
+            let observation = CreditProviderObservation::new(
+                CreditAvailability::Available {
+                    balance: Some(CreditBalance::new(if stale {
+                        "125.50"
+                    } else {
+                        "62500.00"
+                    })?),
+                },
+                CreditSpendControl::Clear,
+                None,
+            );
+            let snapshot = PersistedQuotaSnapshot::new(
+                account_id.clone(),
+                QuotaSnapshotSource::OpenAiEndpoint,
+            )
+            .with_observed_unix_seconds(observed)
+            .with_route_band("responses", weekly)
+            .with_stale_penalty(stale);
+            let attempt = state
+                .begin_credit_refresh_attempt(&account_id, generation)
+                .await?;
+            ensure(
+                state
+                    .record_responses_refresh_success(
+                        codex_router_state::credit_store::ResponsesRefreshSuccessCommit {
+                            attempt: &attempt,
+                            selector_windows: &windows,
+                            observed_unix_seconds: observed,
+                            stale_after_unix_seconds: if stale {
+                                now.saturating_sub(1)
+                            } else {
+                                now.saturating_add(3600)
+                            },
+                            provider_observation: &observation,
+                            history_observations: &history,
+                            snapshot: &snapshot,
+                        },
+                    )
+                    .await?,
+                "visual hard-case fixture commit must own its attempt",
+            )?;
+        }
+        state.close().await?;
+        fixture.state_bytes_before = fs::read(fixture.root.join("state.sqlite"))?;
+        fixture.assert_secrets_unchanged()?;
+        Ok(fixture)
+    }
+
     pub(super) async fn create() -> TestResult<Self> {
         let sequence = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!(
@@ -299,5 +471,75 @@ fn collect_manifest(
     for child in children {
         collect_manifest(root, &child, manifest)?;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn visual_hard_cases_survive_canonical_store_readback_without_changing_normal_fixture()
+-> TestResult<()> {
+    let fixture = QuotaResetFixture::create_visual_hard_cases().await?;
+    let state = AsyncSqliteStateStore::open_read_only(&fixture.root.join("state.sqlite")).await?;
+    let inputs = state
+        .selector_inputs_for_route_band("responses", current_unix_seconds())
+        .await?;
+    let alpha = inputs
+        .iter()
+        .find(|row| row.account_id().as_str() == "acct_pty_alpha")
+        .ok_or_else(|| std::io::Error::other("missing Alpha"))?;
+    let beta = inputs
+        .iter()
+        .find(|row| row.account_id().as_str() == "acct_pty_beta")
+        .ok_or_else(|| std::io::Error::other("missing Beta"))?;
+    let alpha_windows = alpha.windows();
+    let beta_windows = beta.windows();
+    ensure(
+        alpha_windows.len() == 2,
+        "Alpha must have two quota windows",
+    )?;
+    ensure(
+        alpha_windows.iter().any(|window| {
+            window.limit_window_seconds() == 604800
+                && window.remaining_headroom() == 92
+                && window.reset_unix_seconds().is_some()
+        }),
+        "Alpha weekly fixture facts mismatch",
+    )?;
+    ensure(
+        alpha_windows.iter().any(|window| {
+            window.limit_window_seconds() == 18000 && window.remaining_headroom() == 83
+        }),
+        "Alpha 5h fixture facts mismatch",
+    )?;
+    ensure(
+        beta_windows.len() == 1,
+        "Beta must have only its weekly quota window",
+    )?;
+    ensure(
+        beta_windows.iter().any(|window| {
+            window.limit_window_seconds() == 604800
+                && window.remaining_headroom() == 75
+                && window.reset_unix_seconds().is_none()
+        }),
+        "Beta known amount and unknown reset mismatch",
+    )?;
+    let credit = state
+        .load_account_credit_observation(beta.account_id())
+        .await?
+        .ok_or_else(|| std::io::Error::other("missing Beta credits"))?;
+    ensure(
+        credit.provider_observation().availability()
+            == &CreditAvailability::Available {
+                balance: Some(CreditBalance::new("125.50")?),
+            },
+        "Beta exact credit balance mismatch",
+    )?;
+    ensure(
+        credit
+            .stale_after_unix_seconds()
+            .is_some_and(|time| time < current_unix_seconds()),
+        "Beta credits must be stale",
+    )?;
+    state.close().await?;
+    fixture.assert_read_only()?;
     Ok(())
 }

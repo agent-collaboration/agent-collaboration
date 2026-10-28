@@ -83,6 +83,8 @@ instructions. Do not add another declaration manually.
 Delivery defaults to `auto`: steer an observed active turn, start idle loaded
 work, or resume that exact stored thread before submitting. Resume can activate
 previously queued input. Unknown or lost identities are not replaced.
+Previously held messages wait until their target next loads; Router startup does
+not resume unloaded targets to drain those messages.
 For a provider Session that does not advertise steering (currently Claude Code
 and Cursor through ACP), `auto` on a running turn queues the message and
 delivers it once when the turn settles; the receipt reports `queued`, not
@@ -92,6 +94,11 @@ Use `--delivery steer` only for an active target; it fails if the exact turn is 
 longer active. Use `--delivery queue` for deferred input on a loaded target. Queue
 does not resume an unloaded thread or override native interruption. A concurrent
 unload after admission can leave accepted input pending.
+
+For a rejected native message, `show <push id or link> --json` retains the
+operation, stage, bounded cause, backend generation and resume/submission facts
+under `lastOutcome.outcome.nativeFailure`. Router-local refusals use
+`localRejection`; an unsupported native method uses `unsupportedCapability`.
 
 To return information, explicitly send a new message to the original sender's
 address. Neither completion nor a notification automatically sends a reply or

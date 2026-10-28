@@ -1,8 +1,6 @@
 //! Wakes and their deliveries: durable reminders in automation storage. Timing workers own the
 //! later native submission; these operations never touch a native thread.
-use super::{
-    CollaborationRejection, CollaborationRejectionReason, PublishedRejection, ResultByteBudget,
-};
+use super::ResultByteBudget;
 use crate::wakeup_subscription::{WakeResumeError, WakeSubscriptionState};
 use agent_automation::WakeupId;
 use automation_storage::{
@@ -19,12 +17,19 @@ use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
+mod failure;
 /// Wake and delivery operations over automation storage.
-pub struct WakeOperations<'service> {
-    service_id: &'service UuidIdentity,
-    store: Option<&'service Arc<Mutex<AutomationStore>>>,
+mod remote;
+pub use failure::WakeWaitFailure;
+pub(crate) use failure::{WakeFailureContext, wake_failure};
+use failure::{invalid_field, storage_reason};
+
+pub struct WakeOperations {
+    service_id: UuidIdentity,
+    remote: Option<Arc<crate::MailDeliveryRuntime>>,
+    store: Option<Arc<Mutex<AutomationStore>>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
-    wait_permits: Option<&'service Arc<Semaphore>>,
+    wait_permits: Option<Arc<Semaphore>>,
 }
 
 /// How often a first-fire wait checks for new automation events.
@@ -34,29 +39,28 @@ const DEFAULT_WAKE_WAIT_SECONDS: u32 = 60;
 /// The longest a single first-fire wait may run.
 const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 
-impl<'service> WakeOperations<'service> {
-    pub(crate) fn new(
-        service_id: &'service UuidIdentity,
-        store: Option<&'service Arc<Mutex<AutomationStore>>>,
-    ) -> Self {
+impl WakeOperations {
+    pub fn new(service_id: &UuidIdentity, store: Option<&Arc<Mutex<AutomationStore>>>) -> Self {
         Self {
-            service_id,
-            store,
+            service_id: service_id.clone(),
+            remote: None,
+            store: store.cloned(),
             wait_permits: None,
         }
     }
 
     /// Lets this handle run first-fire waits, sharing `wait_permits` with every other wait.
-    pub(crate) fn with_wait_capacity(mut self, wait_permits: &'service Arc<Semaphore>) -> Self {
-        self.wait_permits = Some(wait_permits);
+    pub fn with_wait_capacity(mut self, wait_permits: &Arc<Semaphore>) -> Self {
+        self.wait_permits = Some(wait_permits.clone());
         self
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     fn store(
         &self,
         context: &WakeFailureContext,
-    ) -> Result<&'service Arc<Mutex<AutomationStore>>, WakeFailure> {
-        self.store.ok_or_else(|| {
+    ) -> Result<&Arc<Mutex<AutomationStore>>, WakeFailure> {
+        self.store.as_ref().ok_or_else(|| {
             wake_failure(
                 context.clone(),
                 WakeFailureReason::AutomationUnavailable,
@@ -66,7 +70,11 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Creates a wake, or replays the wake an earlier request with this operation created.
-    pub async fn wake_send(&self, request: WakeSendRequest) -> Result<WakeSnapshot, WakeFailure> {
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(crate) async fn wake_send_local(
+        &self,
+        request: WakeSendRequest,
+    ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::operation(request.operation_id.clone());
         let store = self.store(&context)?;
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -87,6 +95,8 @@ impl<'service> WakeOperations<'service> {
             .await
             .create_wakeup(&WakeCreate {
                 operation_id: request.operation_id,
+                requested_by: request.requested_by,
+                replace: request.replace,
                 message: request.message,
                 timing,
                 expiry,
@@ -97,7 +107,7 @@ impl<'service> WakeOperations<'service> {
             // Creation and replay return the cursor time of the durable creation receipt.
             Ok(record) => {
                 let observed = record.definition.created_at_ms;
-                crate::wakeup_projection::snapshot(record, self.service_id, observed).map_err(
+                crate::wakeup_projection::snapshot(record, &self.service_id, observed).map_err(
                     |()| {
                         wake_failure(
                             context,
@@ -119,7 +129,11 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Shows one wake as of now.
-    pub async fn wake_show(&self, request: WakeShowRequest) -> Result<WakeSnapshot, WakeFailure> {
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(crate) async fn wake_show_local(
+        &self,
+        request: WakeShowRequest,
+    ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
         let store = self.store(&context)?;
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -129,7 +143,7 @@ impl<'service> WakeOperations<'service> {
             .read_wakeup::<SavedMessage>(&request.wakeup_id)
             .await;
         match read {
-            Ok(record) => crate::wakeup_projection::snapshot(record, self.service_id, now_ms)
+            Ok(record) => crate::wakeup_projection::snapshot(record, &self.service_id, now_ms)
                 .map_err(|()| {
                     wake_failure(
                         context,
@@ -146,6 +160,7 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Lists wakes newest first; the page shrinks until its response fits `budget`.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_list(
         &self,
         request: AutomationPageRequest,
@@ -161,7 +176,7 @@ impl<'service> WakeOperations<'service> {
             Some(cursor) => {
                 let decoded = crate::automation_collection_cursor::decode(
                     &cursor,
-                    self.service_id,
+                    &self.service_id,
                     "wake/list",
                     &digest,
                 )
@@ -191,33 +206,47 @@ impl<'service> WakeOperations<'service> {
         let page = store
             .lock()
             .await
-            .list_wakeups::<SavedMessage>(after, u32::from(request.limit))
+            .wake_listing_keys(after, u32::from(request.limit))
             .await
             .map_err(|_| fail(WakeFailureReason::AutomationUnavailable))?;
         let now = chrono::Utc::now().timestamp_millis();
-        self.fit_wake_page(page, &digest, now, budget)
+        let mut snapshots = Vec::new();
+        for key in page.records {
+            let shown = if key.remote {
+                self.wake_show(WakeShowRequest {
+                    wakeup_id: key.wakeup_id,
+                })
+                .await?
+            } else {
+                self.wake_show_local(WakeShowRequest {
+                    wakeup_id: key.wakeup_id,
+                })
+                .await?
+            };
+            snapshots.push(shown);
+        }
+        self.fit_wake_page(snapshots, page.next, &digest, now, budget)
             .map_err(|()| fail(WakeFailureReason::InvalidRecord))
     }
 
     fn fit_wake_page(
         &self,
-        page: automation_storage::WakeListPage<SavedMessage>,
+        mut records: Vec<WakeSnapshot>,
+        page_next: Option<WakeListPosition>,
         digest: &str,
-        now: i64,
+        _now: i64,
         budget: ResultByteBudget,
     ) -> Result<AutomationPage<WakeSnapshot>, ()> {
-        let positions: Vec<_> = page
-            .records
+        let positions: Vec<_> = records
             .iter()
             .map(|record| {
-                (
-                    record.definition.created_at_ms,
-                    record.definition.wakeup_id.clone(),
-                )
+                String::from(record.definition.created_at.clone())
+                    .parse::<chrono::DateTime<chrono::Utc>>()
+                    .map(|at| (at.timestamp_millis(), record.definition.wakeup_id.clone()))
+                    .map_err(|_| ())
             })
-            .collect();
-        let upper = page
-            .next
+            .collect::<Result<_, _>>()?;
+        let upper = page_next
             .as_ref()
             .map(|position| {
                 (
@@ -226,12 +255,7 @@ impl<'service> WakeOperations<'service> {
                 )
             })
             .or_else(|| positions.last().cloned());
-        let mut records = page
-            .records
-            .into_iter()
-            .map(|record| crate::wakeup_projection::snapshot(record, self.service_id, now))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut next = page.next;
+        let mut next = page_next;
         loop {
             let next_cursor = next
                 .as_ref()
@@ -272,7 +296,8 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Pauses a wake; deliveries already handed to a native thread are not recalled.
-    pub async fn wake_pause(
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(crate) async fn wake_pause_local(
         &self,
         request: WakeMutationRequest,
     ) -> Result<WakeMutationResult, WakeFailure> {
@@ -280,7 +305,8 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Resumes a paused wake.
-    pub async fn wake_resume(
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(crate) async fn wake_resume_local(
         &self,
         request: WakeMutationRequest,
     ) -> Result<WakeMutationResult, WakeFailure> {
@@ -288,13 +314,15 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Cancels a wake; a cancelled wake is never implicitly recreated.
-    pub async fn wake_cancel(
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(crate) async fn wake_cancel_local(
         &self,
         request: WakeMutationRequest,
     ) -> Result<WakeMutationResult, WakeFailure> {
         self.mutate(request, WakeAction::Cancel).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn mutate(
         &self,
         request: WakeMutationRequest,
@@ -317,7 +345,7 @@ impl<'service> WakeOperations<'service> {
             })
             .await;
         match mutated {
-            Ok(result) => crate::wakeup_projection::project_mutation(result, self.service_id)
+            Ok(result) => crate::wakeup_projection::project_mutation(result, &self.service_id)
                 .map_err(|()| {
                     wake_failure(
                         context,
@@ -346,6 +374,7 @@ impl<'service> WakeOperations<'service> {
     }
 
     /// Shows one wake delivery and its retained native evidence.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_show(
         &self,
         request: DeliveryShowRequest,
@@ -382,7 +411,7 @@ impl<'service> WakeOperations<'service> {
     /// start that cannot read the wake-up in time is unavailable (it has no cursor yet), and a
     /// resume or an observation read that cannot finish in time times out at the last cursor
     /// it reached. An observation read is dropped before it advances its position.
-    pub async fn wake_wait_until_first_fire(
+    pub(crate) async fn wake_wait_local(
         &self,
         request: WakeWaitRequest,
     ) -> Result<WakeWaitResult, WakeWaitFailure> {
@@ -489,12 +518,12 @@ impl<'service> WakeOperations<'service> {
     fn wait_admission(
         &self,
         wakeup_id: &WakeupId,
-    ) -> Result<(&'service Arc<Mutex<AutomationStore>>, OwnedSemaphorePermit), WakeWaitFailure>
-    {
+    ) -> Result<(&Arc<Mutex<AutomationStore>>, OwnedSemaphorePermit), WakeWaitFailure> {
         let permit = self
             .wait_permits
+            .as_ref()
             .and_then(|permits| Arc::clone(permits).try_acquire_owned().ok());
-        match (self.store, permit) {
+        match (self.store.as_ref(), permit) {
             (Some(store), Some(permit)) => Ok((store, permit)),
             _ => Err(WakeWaitFailure::unavailable(wakeup_id.clone())),
         }
@@ -512,183 +541,5 @@ fn settled_outcome(snapshot: &WakeSnapshot) -> Option<WakeWaitOutcome> {
         WakeState::Cancelled => Some(WakeWaitOutcome::Cancelled),
         WakeState::Expired => Some(WakeWaitOutcome::Expired),
         WakeState::Finished => Some(WakeWaitOutcome::FinishedWithoutFiring),
-    }
-}
-
-/// The identities a wake failure reports back, taken from the request that failed.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct WakeFailureContext {
-    pub(crate) operation_id: Option<OperationId>,
-    pub(crate) wakeup_id: Option<WakeupId>,
-}
-
-impl WakeFailureContext {
-    fn operation(operation_id: OperationId) -> Self {
-        Self {
-            operation_id: Some(operation_id),
-            wakeup_id: None,
-        }
-    }
-
-    fn wakeup(wakeup_id: WakeupId) -> Self {
-        Self {
-            operation_id: None,
-            wakeup_id: Some(wakeup_id),
-        }
-    }
-}
-
-/// A wake failure with the stage, message and next action its reason implies.
-pub(crate) fn wake_failure(
-    context: WakeFailureContext,
-    reason: WakeFailureReason,
-    mutation: LocalMutationState,
-) -> WakeFailure {
-    let (stage,next_action,message)=match &reason {
-        WakeFailureReason::InvalidField {constraint,..}=>(WakeFailureStage::Validation,WakeNextAction::CorrectRequest,constraint.clone()),
-        WakeFailureReason::ResourceNotFound=>(WakeFailureStage::Inspection,WakeNextAction::VerifyResourceAddress,"Wake-up was not found in this service; verify the service and wakeupId.".into()),
-        WakeFailureReason::OperationConflict=>(WakeFailureStage::Admission,WakeNextAction::InspectOperation,"Operation identity belongs to a different request; inspect it before submitting new work.".into()),
-        WakeFailureReason::LifecycleConflict=>(WakeFailureStage::Validation,WakeNextAction::InspectWakeup,"This wake cannot perform that lifecycle transition. Inspect its state; cancelled or expired reminders are not implicitly recreated.".into()),
-        WakeFailureReason::Overloaded=>(WakeFailureStage::Admission,WakeNextAction::RetryLater,"Request capacity exceeded; no wake mutation was dispatched.".into()),
-        _ if matches!(mutation,LocalMutationState::Unknown|LocalMutationState::Committed)=>(WakeFailureStage::Storage,WakeNextAction::InspectOperation,"Local mutation may exist; inspect or replay the same operation identity. Do not create a new identity blindly.".into()),
-        _=>(WakeFailureStage::Storage,WakeNextAction::RetryLater,"Automation storage is unavailable or inconsistent; no new native submission was dispatched.".into()),
-    };
-    WakeFailure {
-        reason,
-        stage,
-        message,
-        operation_id: context.operation_id,
-        wakeup_id: context.wakeup_id,
-        effects: LocalMutationEvidence::Local { mutation },
-        next_action,
-    }
-}
-
-pub(crate) fn invalid_field(field: &str, constraint: &str) -> WakeFailureReason {
-    WakeFailureReason::InvalidField {
-        field: field.into(),
-        constraint: constraint.into(),
-    }
-}
-
-fn storage_reason(error: StorageError) -> WakeFailureReason {
-    match error {
-        StorageError::WakeNotFound => WakeFailureReason::ResourceNotFound,
-        StorageError::OperationConflict => WakeFailureReason::OperationConflict,
-        StorageError::Database(_) => WakeFailureReason::AutomationUnavailable,
-        StorageError::InvalidTiming(error) => WakeFailureReason::InvalidField {
-            field: "timing".into(),
-            constraint: error.to_string(),
-        },
-        StorageError::InvalidWake { field, reason } => WakeFailureReason::InvalidField {
-            field: field.into(),
-            constraint: reason.into(),
-        },
-        _ => WakeFailureReason::InvalidRecord,
-    }
-}
-
-/// Why a first-fire wait could not start.
-#[derive(Clone, Debug)]
-pub enum WakeWaitFailure {
-    /// No wait capacity or storage; reconnect the wait without recreating the reminder.
-    Unavailable(WaitUnavailable),
-    NotFound(WakeNotFound),
-    /// The wait's cursor or timeout is invalid.
-    InvalidField {
-        field: &'static str,
-        constraint: &'static str,
-    },
-}
-
-impl WakeWaitFailure {
-    pub(crate) fn unavailable(wakeup_id: WakeupId) -> Self {
-        Self::Unavailable(WaitUnavailable {
-            kind: collaboration_protocol::WaitUnavailableKind::WaitUnavailable,
-            stage: collaboration_protocol::WaitStage::WaitForFirstFire,
-            message: "Wake wait unavailable; reconnect the wait without recreating or cancelling the reminder.".into(),
-            wakeup_id,
-            first_occurrence_id: None,
-            effects: collaboration_protocol::WaitUnavailableEffects {
-                first_fire: collaboration_protocol::UnknownFire::Unknown,
-                wakeup_mutation: collaboration_protocol::NoMutation::None,
-            },
-            next_action: collaboration_protocol::WaitNextAction::ReconnectWait,
-        })
-    }
-
-    pub(crate) fn not_found(wakeup_id: WakeupId) -> Self {
-        Self::NotFound(WakeNotFound {
-            kind: collaboration_protocol::WakeNotFoundKind::WakeNotFound,
-            stage: collaboration_protocol::WaitStage::WaitForFirstFire,
-            message: "Wake-up was not found in this service; verify the wake identity. Historical firing is unknown.".into(),
-            wakeup_id,
-            first_occurrence_id: None,
-            effects: collaboration_protocol::UnknownFirstFire {
-                first_fire: collaboration_protocol::UnknownFire::Unknown,
-            },
-            next_action: collaboration_protocol::VerifyWakeupAddress::VerifyWakeupAddress,
-        })
-    }
-}
-
-impl CollaborationRejection for WakeFailure {
-    fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
-        match self.reason {
-            WakeFailureReason::Overloaded => Some(CollaborationRejectionReason::Overloaded),
-            WakeFailureReason::InvalidField { .. } => {
-                Some(CollaborationRejectionReason::InvalidShape)
-            }
-            WakeFailureReason::OperationConflict => {
-                Some(CollaborationRejectionReason::ConflictingRequest)
-            }
-            WakeFailureReason::AutomationUnavailable
-            | WakeFailureReason::ResourceNotFound
-            | WakeFailureReason::InvalidRecord
-            | WakeFailureReason::LifecycleConflict => None,
-        }
-    }
-
-    fn published_rejection(&self) -> PublishedRejection {
-        PublishedRejection::typed(
-            PublishedRejection::OPERATION_FAILED,
-            "Wake operation failed",
-            self,
-        )
-    }
-}
-
-impl CollaborationRejection for WakeWaitFailure {
-    fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
-        match self {
-            Self::InvalidField { .. } => Some(CollaborationRejectionReason::InvalidShape),
-            Self::Unavailable(_) | Self::NotFound(_) => None,
-        }
-    }
-
-    fn published_rejection(&self) -> PublishedRejection {
-        match self {
-            Self::Unavailable(data) => PublishedRejection::typed(
-                PublishedRejection::OPERATION_FAILED,
-                "Wake wait unavailable",
-                data,
-            ),
-            Self::NotFound(data) => PublishedRejection::typed(
-                PublishedRejection::OPERATION_FAILED,
-                "Wake not found",
-                data,
-            ),
-            Self::InvalidField { field, constraint } => PublishedRejection::typed(
-                PublishedRejection::INVALID_PARAMS,
-                *constraint,
-                &json!({
-                    "kind":"invalidField",
-                    "stage":"waitForFirstFire",
-                    "field":field,
-                    "constraint":constraint,
-                    "message":constraint,
-                }),
-            ),
-        }
     }
 }

@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT version AS \"version!\", success AS \"success!: i64\", checksum AS \"checksum!: Vec<u8>\", typeof(version) AS \"version_storage!: String\", typeof(success) AS \"success_storage!: String\", typeof(checksum) AS \"checksum_storage!: String\" FROM _sqlx_migrations ORDER BY version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": {
+          "name": "BIGINT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "success!: i64",
+        "type_info": {
+          "name": "BOOLEAN"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "checksum!: Vec<u8>",
+        "type_info": {
+          "name": "BLOB"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "version_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "success_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "checksum_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1ac8515d1d0020bb3aa30429c51e5d23308c1f2279e6787909f45177cfbb3be1"
+}

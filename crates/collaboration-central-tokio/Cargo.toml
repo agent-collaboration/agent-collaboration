@@ -1,0 +1,80 @@
+[package]
+name = "collaboration-central-tokio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
+
+[dependencies]
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", optional = true, default-features = false }
+sqlx-core = { workspace = true, optional = true }
+serde_json.workspace = true
+axum = { workspace = true, features = ["http1", "tokio", "ws", "json"] }
+futures-util.workspace = true
+tokio-util.workspace = true
+fleet-sync-lease.workspace = true
+message-board = { version = "0.1.96", path = "../message-board" }
+tokio.workspace = true
+fleet-sync-protocol.workspace = true
+fleet-sync-session.workspace = true
+reqwest.workspace = true
+runtime-primitives = { workspace = true, features = ["tokio"] }
+thiserror.workspace = true
+tracing.workspace = true
+base64 = "0.22.1"
+ring = "=0.17.14"
+aws-lc-rs = { version = "=1.18.2", default-features = false, features = ["alloc", "non-fips"] }
+serde.workspace = true
+chrono.workspace = true
+collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
+durable-steps = { workspace = true, features = ["turso"] }
+fleet-sync-tokio-runner.workspace = true
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+
+[dev-dependencies]
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
+chrono.workspace = true
+message-board-storage = { version = "0.1.96", path = "../message-board-storage" }
+collaboration-service = { version = "0.1.96", path = "../collaboration-service", features = ["test-support"] }
+board-fleet-sync = { version = "0.1.96", path = "../board-fleet-sync" }
+board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
+fleet-sync-delivery.workspace = true
+fleet-sync-writer.workspace = true
+reqwest-websocket = "=0.5.1"
+futures-util.workspace = true
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
+fleet-admission = { version = "0.1.96", path = "../fleet-admission" }
+fleet-sync-receiver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx-core.workspace = true
+tempfile = "3.27.0"
+tracing-subscriber.workspace = true
+
+[[example]]
+name = "step_scope_workerd"
+required-features = ["conformance"]
+
+[[example]]
+name = "session_scope_workerd"
+required-features = ["conformance"]
+
+[[example]]
+name = "bootstrap_scope_workerd"
+required-features = ["conformance"]
+
+[[example]]
+name = "fleet_effects_workerd"
+required-features = ["conformance"]
+
+[[example]]
+name = "composed_scope_workerd"
+required-features = ["conformance"]

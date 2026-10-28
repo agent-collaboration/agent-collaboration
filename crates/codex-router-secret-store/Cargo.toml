@@ -17,6 +17,7 @@ aes-gcm.workspace = true
 base64.workspace = true
 codex-router-core.workspace = true
 fs2.workspace = true
+rustix.workspace = true
 getrandom.workspace = true
 keyring-core.workspace = true
 serde.workspace = true

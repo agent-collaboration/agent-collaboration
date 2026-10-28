@@ -5,6 +5,21 @@ use crate::{
     ProviderCancelActiveTurnError, ProviderPromptContentsError, ProviderQueueAdmissionError,
     ProviderQueueCancellationError, ProviderSteerContentsError, ProviderSteeringOutcome,
 };
+use collaboration_contracts::CommandFailure;
+use collaboration_contracts::CommandFuture;
+use collaboration_contracts::CreateSessionCommand;
+use collaboration_contracts::PromptSessionCommand;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::QueueInputCommand;
+use collaboration_contracts::QueuedSessionInput;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventAttachment;
+use collaboration_contracts::SessionEventHub;
+use collaboration_contracts::SessionSteerOutcome;
+use collaboration_contracts::SessionTargetCommand;
+use collaboration_contracts::SessionTurnHandle;
+use collaboration_contracts::SetSessionSettingCommand;
+use collaboration_contracts::SteerSessionCommand;
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationFailure, ConversationOperationFailureKind,
@@ -15,13 +30,8 @@ use collaboration_protocol::{
     ProviderSettingsSetRequest, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
-    ProviderConversationBackend, ProviderOperationStore, ProviderSessionEventHub,
-    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionEventAttachment,
-    SessionEventHub, SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle,
-    SetSessionSettingCommand, SteerSessionCommand,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{Identity, SessionEndpointRef};
 use session_event_model::{InputId, SessionEvent};
 use std::{sync::Arc, time::Duration};
@@ -56,7 +66,7 @@ impl HostSessionCommandPort {
     async fn stored_session(
         &self,
         target: &SessionRef,
-    ) -> Result<collaboration_service::ProviderSessionRecord, CommandFailure> {
+    ) -> Result<collaboration_runtime::ProviderSessionRecord, CommandFailure> {
         self.store
             .lock()
             .await

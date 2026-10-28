@@ -11,9 +11,10 @@ use collaboration_protocol::{
     ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
     RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
 };
-use collaboration_service::{
-    CollaborationApplication, ManifestPublication, OwnerOnlySocket, SocketCleanup,
-};
+use collaboration_runtime::ManifestPublication;
+use collaboration_runtime::OwnerOnlySocket;
+use collaboration_runtime::SocketCleanup;
+use collaboration_service::CollaborationApplication;
 use futures_util::StreamExt;
 use rmcp::{
     model::{
@@ -57,14 +58,11 @@ pub struct ServedCollaborationApi {
 
 impl ServedCollaborationApi {
     /// `directory` must be an owner-only (0700) directory the test owns.
-    pub async fn start(
-        directory: &Path,
-        application: CollaborationApplication,
-    ) -> io::Result<Self> {
-        Self::start_with(directory, application, TestServeOptions::default()).await
+    pub fn start(directory: &Path, application: CollaborationApplication) -> io::Result<Self> {
+        Self::start_with(directory, application, TestServeOptions::default())
     }
 
-    pub async fn start_with(
+    pub fn start_with(
         directory: &Path,
         application: CollaborationApplication,
         options: TestServeOptions,
@@ -134,6 +132,22 @@ impl ServedCollaborationApi {
     /// Calls one tool and answers `{"result": <structured result>}`, or `{"error": {"code",
     /// "message", "data"}}` carrying the rejection the Router published.
     pub async fn call(&self, tool: &str, arguments: Value) -> io::Result<Value> {
+        self.call_projecting_failure(tool, arguments, published_error)
+            .await
+    }
+
+    /// Preserves the complete structured tool error, including its public effect field.
+    pub async fn call_structured(&self, tool: &str, arguments: Value) -> io::Result<Value> {
+        self.call_projecting_failure(tool, arguments, |failure| failure)
+            .await
+    }
+
+    async fn call_projecting_failure(
+        &self,
+        tool: &str,
+        arguments: Value,
+        project_failure: fn(Value) -> Value,
+    ) -> io::Result<Value> {
         let Value::Object(arguments) = arguments else {
             return Err(io::Error::other("tool arguments must be an object"));
         };
@@ -191,7 +205,7 @@ impl ServedCollaborationApi {
                     return Err(io::Error::other("not a tool result"));
                 };
                 match (result.is_error == Some(true), result.structured_content) {
-                    (true, Some(structured)) => json!({"error": published_error(structured)}),
+                    (true, Some(structured)) => json!({"error": project_failure(structured)}),
                     // Every tool error is structured, a refusal before the tool ran included;
                     // a client could not read one that is not.
                     (true, None) => {

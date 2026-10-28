@@ -1,0 +1,15 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#SETTING_RESPONSE_FIXTURE",
+  "originalSHA256": "9546960986a1d8101bc3a54557a861fc5298dbb24a7f592a6ca1b7ad5d30db47",
+  "target": "provider-setting-response-agent.ts",
+  "arguments": ["rejected"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/set_config_option\", \"params\": {\"configId\": \"mode\", \"value\": \"ask\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"setting-response-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"configOptions\": [{\"id\": \"mode\", \"name\": \"Mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"auto\", \"options\": [{\"value\": \"auto\", \"name\": \"Auto\"}, {\"value\": \"ask\", \"name\": \"Ask\"}]}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"error\": {\"code\": -32602, \"message\": \"private detail\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

@@ -1,7 +1,5 @@
 //! Cursor's connection requests must retain their originating Session.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -15,76 +13,15 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent, SessionItemKind};
 use tokio_util::sync::CancellationToken;
 
-const TWO_SESSION_TODOS: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'todo-fixture','version':'1'}}})
-for session_id in ('first','second'):
-    request=read()
-    assert request['method']=='session/new',request
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':session_id}})
-prompts={}
-for _ in range(2):
-    prompt=read()
-    assert prompt['method']=='session/prompt',prompt
-    prompts[prompt['params']['sessionId']]=prompt['id']
-for session_id,tool_id,content in (('first','tool-first','First task'),('second','tool-second','Second task')):
-    send({'jsonrpc':'2.0','method':'session/update','params':{
-        'sessionId':session_id,'update':{'sessionUpdate':'tool_call',
-        'toolCallId':tool_id,'title':'Update plan','kind':'other','status':'pending'}}})
-    send({'jsonrpc':'2.0','id':'todo-'+session_id,'method':'cursor/update_todos',
-        'params':{'toolCallId':tool_id,'todos':[{'id':'one','content':content,'status':'pending'}],
-                  'merge':False}})
-    response=read()
-    assert response['id']=='todo-'+session_id,response
-    assert response.get('result')=={},response
-    send({'jsonrpc':'2.0','id':'plan-'+session_id,'method':'cursor/create_plan',
-        'params':{'toolCallId':tool_id,'name':'Plan for '+session_id,
-                  'overview':'Scoped plan','plan':'# Steps',
-                  'todos':[{'id':'one','content':content,'status':'completed'}]}})
-    response=read()
-    assert response['id']=='plan-'+session_id and response.get('result')=={'outcome':'cancelled'},response
-send({'jsonrpc':'2.0','id':'todo-unknown','method':'cursor/update_todos',
-    'params':{'toolCallId':'unknown','todos':[{'id':'x','content':'Must not appear','status':'pending'}],
-              'merge':False}})
-response=read()
-assert response['id']=='todo-unknown' and response.get('result')=={},response
-send({'jsonrpc':'2.0','id':'question-unknown','method':'cursor/ask_question',
-    'params':{'toolCallId':'unknown','questions':[{'id':'q','prompt':'Which?',
-        'options':[{'id':'a','label':'A'}]}]}})
-response=read()
-assert response['id']=='question-unknown' and response.get('result')=={'outcome':{'outcome':'cancelled'}},response
-for session_id,prompt_id in prompts.items():
-    send({'jsonrpc':'2.0','id':prompt_id,'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const TWO_SESSION_TODOS: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/cursor-todos-agent.ts"
+);
 
-const SINGLE_RUNNING_TODO: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'single-todo-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'only-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','id':'todo','method':'cursor/update_todos',
-    'params':{'toolCallId':'unobserved','todos':[{'id':'one','content':'Fallback task','status':'pending'}],
-              'merge':False}})
-response=read()
-assert response['id']=='todo' and response.get('result')=={},response
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const SINGLE_RUNNING_TODO: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/cursor-todos-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -139,6 +76,15 @@ impl SessionEventSink for CaptureEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         self.0
             .lock()
@@ -156,12 +102,8 @@ async fn concurrent_cursor_todos_publish_to_their_observed_sessions() {
     let sink = Arc::new(CaptureEventSink::default());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                TWO_SESSION_TODOS.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![TWO_SESSION_TODOS.to_owned(), "two".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -238,12 +180,8 @@ async fn a_single_running_turn_routes_an_unobserved_cursor_todo() {
     let sink = Arc::new(CaptureEventSink::default());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                SINGLE_RUNNING_TODO.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![SINGLE_RUNNING_TODO.to_owned(), "single".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

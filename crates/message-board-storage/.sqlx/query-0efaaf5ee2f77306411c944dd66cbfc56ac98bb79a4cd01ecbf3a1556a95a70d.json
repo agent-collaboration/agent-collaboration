@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT kind AS \"kind!: String\", id AS \"id!: String\", payload AS \"payload!: String\" FROM cached_fleet_records ORDER BY kind, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0efaaf5ee2f77306411c944dd66cbfc56ac98bb79a4cd01ecbf3a1556a95a70d"
+}

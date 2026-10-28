@@ -1,7 +1,10 @@
 use super::*;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn blocking_websocket_tunnel_preserves_first_frame_and_sanitizes_upstream_handshake() {
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -472,7 +475,10 @@ async fn async_websocket_tunnel_handles_control_frames_before_first_data_without
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 async fn async_websocket_tunnel_sanitizes_upstream_handshake() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,

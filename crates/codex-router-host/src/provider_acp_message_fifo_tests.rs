@@ -1,5 +1,3 @@
-#![allow(clippy::expect_used)]
-
 use super::*;
 use crate::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
@@ -7,6 +5,15 @@ use crate::{
     ProviderAcpDeliveryRoute, ProviderSessionActivity,
 };
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCloseRequest, ConversationOperationQueueState,
     ConversationOperationSettlement, ConversationOperationShowRequest,
@@ -18,13 +25,10 @@ use collaboration_protocol::{
     ProviderCapabilityStatus, ProviderKind, ProviderRequestedPolicy, ProviderRuntimeIdentity,
     ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryContractError, DeliveryFuture, DeliveryPrecondition,
-    EndpointDirectory, LoadPolicy, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
-use std::{path::PathBuf, sync::Arc};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use std::sync::Arc;
 
 struct NoLivePeer;
 
@@ -84,38 +88,14 @@ fn close_and_load_fixture(
     close_marker: &std::path::Path,
     load_marker: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,
- 'agentCapabilities':{{'loadSession':True,'sessionCapabilities':{{'close':{{}}}}}},
- 'agentInfo':{{'name':'fifo-close-fixture','version':'1'}}}}}})
-request=read()
-assert request['method']=='session/new'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fifo-session'}}}})
-for line in sys.stdin:
- request=json.loads(line)
- if request['method']=='session/close':
-  with open({:?},'w') as marker: marker.write('closed')
- elif request['method']=='session/load':
-  with open({:?},'w') as marker: marker.write('loaded')
- else:
-  raise AssertionError(request['method'])
- send({{'jsonrpc':'2.0','id':request['id'],'result':{{}}}})
-"#,
-        close_marker.display().to_string(),
-        load_marker.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-fifo-load-agent.ts",
+        vec![
+            "close".to_owned(),
+            close_marker.to_string_lossy().into_owned(),
+            load_marker.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[tokio::test]
@@ -411,7 +391,10 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
         )
         .await
         .expect("queued delivery receipt");
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Queued));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Queued
+    ));
     assert!(close_marker.exists(), "session close precedes FIFO enqueue");
 
     let queue_state = tokio::time::timeout(
@@ -425,7 +408,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
     assert_eq!(
         queue_state,
         ConversationOperationQueueState::NotSubmitted {
-            reason: collaboration_service::NOT_LOADED_REASON.to_owned(),
+            reason: collaboration_contracts::NOT_LOADED_REASON.to_owned(),
         }
     );
     assert!(

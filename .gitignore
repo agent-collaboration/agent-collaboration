@@ -1,10 +1,14 @@
 /target/
 /.nextest/
 /tmp/
+/.wrangler/
 __pycache__/
 *.py[cod]
 *.log
 .DS_Store
+
+# The Cloudflare CLI caches account details here.
+.cloudflare/
 
 # Local document-reader preferences.
 *.mindle.json

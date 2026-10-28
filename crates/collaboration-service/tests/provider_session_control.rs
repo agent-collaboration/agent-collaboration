@@ -6,9 +6,10 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderSessionListParams, ProviderSessionState,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use tokio::sync::Mutex;
 #[path = "support/served_api.rs"]
@@ -140,7 +141,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
     }))
     .expect("Cursor endpoint");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description, cursor_description, no_channel])
         .expect("endpoint")
@@ -148,9 +149,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         .with_provider_session_hub(hub.clone())
         .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(registry_directory)));
     let second_identity = identity.clone();
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("socket");
+    let served = served_api::ServedApi::start(identity).expect("socket");
     let client = served
         .client("provider-list-test")
         .await
@@ -178,6 +177,11 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     );
     let wire = serde_json::to_value(&cold.sessions[0]).expect("row JSON");
     assert_eq!(wire["approver"], json!(creator));
+    assert_eq!(
+        wire["requestedPolicy"],
+        json!({"access":"write-restricted"}),
+        "Stored inventory must project the seeded policy, never New's workspace-write default"
+    );
     assert!(wire.get("title").is_none());
     let cursor_page = client
         .list_provider_sessions(ProviderSessionListParams {
@@ -224,7 +228,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     ));
     let terminal = client
         .list_provider_sessions(ProviderSessionListParams {
-            view: NativeSessionView::Active,
+            view: NativeSessionView::Loaded,
             source: NativeSessionSource::Interactive,
             page_size: 10,
             ..params.clone()
@@ -303,22 +307,29 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             ..
         }
     ));
-    let invalid_source = client
+    let stored_native = client
         .list_provider_sessions(ProviderSessionListParams {
             source: NativeSessionSource::Interactive,
             ..params
         })
         .await
-        .expect_err("Claude terminal stored view is unsupported");
-    assert!(matches!(
-        invalid_source,
-        collaboration_client::ClientError::Rejected { code: -32050, .. }
-    ));
+        .expect("native Stored history has independent coverage");
+    assert!(
+        stored_native.sessions.is_empty(),
+        "the peer registry is not historical job storage"
+    );
+    assert_eq!(
+        stored_native
+            .native_coverage
+            .expect("native coverage")
+            .background,
+        collaboration_protocol::NativeClaudeInventoryPart::Unavailable {
+            reason: collaboration_protocol::NativeInventoryUnavailableReason::ReadUnavailable
+        }
+    );
     served.stop().await.expect("close");
 
-    let served = served_api::ServedApi::start(second_identity)
-        .await
-        .expect("second socket");
+    let served = served_api::ServedApi::start(second_identity).expect("second socket");
     let client = served
         .client("provider-list-test")
         .await
@@ -356,16 +367,14 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         "availability":{"state":"unavailable","observedAt":"2026-09-26T00:00:00Z","reason":"ACP unavailable"},
         "channels":[]
     })).expect("unavailable Claude endpoint");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![unavailable_claude])
         .expect("endpoint")
         .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(
             root.path().join("claude-fixture-registry"),
         )));
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("third socket");
+    let served = served_api::ServedApi::start(identity).expect("third socket");
     let client = served
         .client("terminal-only-list-test")
         .await
@@ -373,7 +382,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     let terminal_only = client
         .list_provider_sessions(ProviderSessionListParams {
             endpoint: target.endpoint,
-            view: NativeSessionView::Active,
+            view: NativeSessionView::Loaded,
             scope: NativeSessionScope::Any,
             source: NativeSessionSource::Interactive,
             query: None,

@@ -1,7 +1,9 @@
 //! The API publishes every listed Codex session with all of its fields; a stored session with no
 //! recorded model or reasoning effort publishes neither, and never invents one. (Control alone
 //! filled the absent two with `null`; the typed result omits them.)
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 #[path = "support/served_api.rs"]
@@ -42,11 +44,11 @@ async fn stored_catalog(home: &std::path::Path) -> Result<(), Box<dyn std::error
 }
 
 async fn send_raw(
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
     tool: &str,
     params: Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let response = served.call(tool, params).await?;
     served.stop().await?;
     Ok(response)
@@ -73,7 +75,7 @@ async fn stored_sessions_omit_absent_model_and_effort() -> Result<(), Box<dyn st
             "generation": null
         }]
     }))?;
-    let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000032")?
+    let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000032")?
         .with_endpoints(vec![description])?
         .with_native_backend(NativeControlBackend {
             endpoint: serde_json::from_value(endpoint.clone())?,

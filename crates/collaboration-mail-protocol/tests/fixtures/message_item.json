@@ -1,0 +1,27 @@
+{
+  "id": "01900000-0000-7000-8000-000000000001",
+  "sender": {
+    "kind": "humanUser",
+    "installation": "00000000-0000-4000-8000-000000000001"
+  },
+  "recipient": {
+    "endpoint": {
+      "serviceId": "00000000-0000-4000-8000-000000000002",
+      "endpointId": "codex-local"
+    },
+    "sessionId": "recipient"
+  },
+  "validUntil": "2026-10-16T10:00:00Z",
+  "body": {
+    "kind": "message",
+    "text": "Hello, μ",
+    "delivery": "queue",
+    "guard": {
+      "serviceEpoch": "00000000-0000-4000-8000-000000000003",
+      "generation": 1
+    },
+    "senderDisplayName": null,
+    "replyTo": null
+  },
+  "digest": "7e66acdabcfdf28d59bd0f4f670d6f930b41f5c3d838615cd8716be816d77727"
+}

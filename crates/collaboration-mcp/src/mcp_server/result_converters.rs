@@ -1,6 +1,11 @@
 //! Tool results shared by every tool: delivery receipts, operation failures and the client
 //! errors the carrier tools still meet.
-use super::*;
+use super::{
+    CallToolResponse, CallToolResult, ClientError, DeliveryOutcome, McpToolError, McpToolOutput,
+    MessageReplyResult, MessageSendResult, OperationEffect, PushDeliveryState,
+    PushMessageSendResult, SessionMessageReplyResult, operation_failure_from_client_error,
+    operation_failure_result, success_result,
+};
 
 /// A carrier tool's typed result, or its client error as an operation failure.
 pub(super) fn structured_result<TValue: serde::Serialize>(
@@ -58,7 +63,14 @@ pub(super) fn failure_naming(
 
 /// A stored push: success unless its delivery was refused, not submitted or is unknown, which
 /// a model must see as an error that still carries the push.
-pub(super) fn message_receipt_result(push: PushMessageSendResult) -> CallToolResult {
+pub(super) fn message_receipt_result(result: MessageSendResult) -> CallToolResult {
+    match result {
+        MessageSendResult::Local(push) => local_message_receipt_result(push),
+        queued @ MessageSendResult::Queued { .. } => success_result(&queued),
+    }
+}
+
+fn local_message_receipt_result(push: PushMessageSendResult) -> CallToolResult {
     if push.delivery_state == PushDeliveryState::Held {
         return success_result(&push);
     }
@@ -85,7 +97,14 @@ pub(super) fn message_receipt_result(push: PushMessageSendResult) -> CallToolRes
 }
 
 /// A stored reply, judged by its delivery like a sent message.
-pub(super) fn message_reply_receipt_result(reply: SessionMessageReplyResult) -> CallToolResult {
+pub(super) fn message_reply_receipt_result(result: MessageReplyResult) -> CallToolResult {
+    match result {
+        MessageSendResult::Local(reply) => local_message_reply_receipt_result(reply),
+        queued @ MessageSendResult::Queued { .. } => success_result(&queued),
+    }
+}
+
+fn local_message_reply_receipt_result(reply: SessionMessageReplyResult) -> CallToolResult {
     if reply.delivery_state == PushDeliveryState::Held {
         return success_result(&reply);
     }
@@ -133,14 +152,16 @@ fn receipt_error<TReceipt: serde::Serialize>(
 pub(super) fn thread_wait_outcome_unknown(
     actor: &message_board::Identity,
     filter: &collaboration_protocol::ThreadSubscriptionWaitFilter,
+    renewals: &[collaboration_protocol::SubscriptionRenewalEntry],
 ) -> CallToolResult {
     structured_tool_error(serde_json::json!({
         "kind": "outcomeUnknown",
         "stage": "response",
         "effect": "unknown",
-        "message": "The wait result was lost; activity may have been handed off. Inspect the Reader's subscriptions and unread inbox (run board thread subscriptions, then board inbox fetch) before waiting again.",
+        "message": "The wait result was lost; activity may have been handed off. Inspect the Reader's subscriptions and unread inbox (run thread subscriptions, then inbox fetch) before waiting again.",
         "actor": actor,
         "filter": filter,
+        "renewals": renewals,
     }))
 }
 

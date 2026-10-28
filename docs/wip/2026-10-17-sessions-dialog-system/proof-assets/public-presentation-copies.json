@@ -1,0 +1,24 @@
+{
+  "kind": "presentation-only redaction receipt",
+  "limits": "Original product image bytes unchanged. Original private review summaries retained outside publication; no runtime outcome is added.",
+  "reviews": [
+    {
+      "path": "proof-assets/2026-10-20-c7-paging-options-source/independent-source-review.md",
+      "originalSha256": "e9729fde17118122ed466604a1823ad0885da726c5cfc86dd45eef439171342f",
+      "publicSha256": "26ffd5759255c2a70524353a49d505f2cdcf2779f6e33efaa3abd4f5f632e977"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/independent-code-dx-followup.md",
+      "originalSha256": "836a5c469823bb3363ae7f006f91461484ca2ee8e057868271659ca754d190c5",
+      "publicSha256": "7c72a78f04cb988633a8097b7c34d99070060fa769494b6967a855a61e9b68bb"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-proof-index/independent-marker-review.md",
+      "originalSha256": "2589bf421e710ed6c69d8f6ba9521c31c98c9b290a764409fa464d09ae3fb43c",
+      "publicSha256": "5d30be3fb85ce3bd5b8a63c18363c24b09fd4dbd4bd0adca7ca061b4ec1fdf02"
+    }
+  ],
+  "updatedPresentationReferences": [
+    "proof-assets/2026-10-20-c7-paging-options-source/evidence.json"
+  ]
+}

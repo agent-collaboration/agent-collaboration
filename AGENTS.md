@@ -1,5 +1,27 @@
 # AGENTS.md
 
+## Module Cycle Ratchet
+
+With cargo-modules 0.28.0 installed, run `cargo nextest run -p workspace-architecture-check --run-ignored only`.
+After reducing cycles or their edges, update `architecture/module-cycle-baseline.json` with `ARCHITECTURE_BLESS=1 cargo nextest run -p workspace-architecture-check --run-ignored only`; blessing an existing baseline refuses growth.
+
+## Languages
+
+- No Python in this repository. Write code in TypeScript or Rust; for any
+  other language, ask the owner first.
+
+## Verification Tooling
+
+- Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
+  Run `check`, `lint`, `format:check`, and `test` through that package.
+- The isolated Tailnet Host driver is a verification-only Rust executable:
+  `cargo build -p codex-router-tailnet-verification-host` and
+  `target/debug/codex-router-tailnet-verification-host host "$HOST_PLAN"`.
+  Follow its [runbook](crates/tailnet-verification-host/README.md) and the
+  verification skill's declared-target and allocation requirements.
+- Check that driver with `cargo test -p codex-router-tailnet-verification-host`
+  and `cargo clippy -p codex-router-tailnet-verification-host --all-targets -- -D warnings`.
+
 ## Release And Homebrew Distribution
 
 - Before merging a user-facing code change, advance the workspace package
@@ -11,7 +33,7 @@
   installation.
 - The release workflow's tap job waits for a second macOS runner. Once its
   build job has published the release asset, run
-  `python3 -m scripts.publish_homebrew_tap_local` from the repository root on
+  `node verification/tooling/publish-homebrew-tap-local.ts` from the repository root on
   an Apple Silicon Mac instead of waiting: it verifies the tag is on `main` and
   the asset matches the release digest, updates the formula, runs the tap
   job's Homebrew checks against a real install, and pushes the tap. The CI tap
@@ -33,15 +55,20 @@
   `APPLE_CERTIFICATE_PASSWORD` secrets and fails without them; it does not
   notarize, because Homebrew installs the tarball without quarantine.
 - Local Apple Silicon `cargo run` and `cargo test`, in any profile, go
-  through `scripts/cargo_debug_signing_runner.sh`, which signs `codex-router`,
-  `agent-collaboration` and `agent-sessions` with the same certificate under
-  `dev.shravansunder.<executable>.debug`, without a secure timestamp so it
-  works offline. Debug and released builds are different code identities on
+  through `scripts/cargo_debug_signing_runner.sh`, which signs every
+  executable it runs with the same certificate, without a secure timestamp so
+  it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`,
+  `codex-router-board-upgrade` and `board-debug-runtime` under
+  `dev.shravansunder.<executable>.debug`, and test, example and helper
+  binaries under `dev.shravansunder.test.<name>`. Never execute a freshly
+  built binary unsigned: macOS verifies each new ad-hoc-signed executable,
+  and nextest launches every test binary. Debug and released builds are different code identities on
   purpose: the debug Router keeps its own Keychain item, and approvals given
   to one never apply to the other. A debug build another process starts
   directly, such as the `--router-binary` a debug-host example launches,
   bypasses the runner; sign it first with
-  `scripts/cargo_debug_signing_runner.sh --sign-only target/debug/codex-router`.
+  `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
+  built executable).
   When signing cannot happen (no certificate in the login keychain, a locked
   keychain) the runner runs the build linker-signed and says so.
 - Keep release publication separate from production process replacement.
@@ -119,3 +146,9 @@
   does not change the proxy or the harness connections.
 - Every other server uses axum, HTTP clients use reqwest, and MCP uses rmcp
   mounted on axum.
+
+## Upstream Workarounds
+
+- Log each fix we carry for an upstream library's defect in
+  `docs/upstream-workarounds/`, with its evidence, how to recreate it, and the
+  check that says it can be removed.

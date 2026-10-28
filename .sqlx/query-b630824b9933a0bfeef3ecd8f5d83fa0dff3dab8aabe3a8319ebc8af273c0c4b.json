@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS(SELECT 1 FROM owed_push_operations WHERE push_id=?) AS \"owed!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "owed!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b630824b9933a0bfeef3ecd8f5d83fa0dff3dab8aabe3a8319ebc8af273c0c4b"
+}

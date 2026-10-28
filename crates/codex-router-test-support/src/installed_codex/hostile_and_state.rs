@@ -1,4 +1,14 @@
-use super::*;
+use super::{
+    AccountCredentialBundle, AccountRecord, AccountStateRepository, AccountStatus, CliContext,
+    Command, Duration, EncryptedCredentialStore, LocalRouterTokenService, MockNoConnectionUpstream,
+    OsString, Path, PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotRepository,
+    QuotaSnapshotSource, SecretStore, SecretString, SelectorQuotaRepository,
+    SelectorQuotaWindowStatus, Shell, SmokeTempRoot, SqliteStateStore, Value, account_id,
+    export_token_assignment, fs, openai_account_credential_bundle_key,
+    parse_posix_token_assignment, reserve_loopback_port, run_with_io_async,
+    send_hostile_no_token_websocket, start_router_process, timestamp_seconds,
+    upstream_access_token_key,
+};
 
 /// Runs a hostile local no-token smoke and verifies upstream remains untouched.
 pub fn run_hostile_no_token_smoke() -> Result<(), String> {
@@ -251,28 +261,12 @@ pub(super) fn reset_fixture_route_band_state(
     fixtures: &[SmokeAccountFixture],
     scenario_label: &str,
 ) -> Result<(), String> {
-    let mut command = Command::new("python3");
+    let mut command = Command::new("node");
     command
-        .arg("-c")
-        .arg(
-            r#"
-import sqlite3
-import sys
-
-database_path = sys.argv[1]
-account_ids = sys.argv[2:]
-connection = sqlite3.connect(database_path, timeout=0)
-try:
-    for account_id in account_ids:
-        connection.execute(
-            "DELETE FROM route_band_account_states WHERE account_id = ? AND route_band = 'responses'",
-            (account_id,),
-        )
-    connection.commit()
-finally:
-    connection.close()
-"#,
-        )
+        .arg(crate::node_fixture::fixture_program(
+            "sqlite-pressure-agent.ts",
+        ))
+        .arg("reset")
         .arg(state_path);
     for account_fixture in fixtures {
         command.arg(account_fixture.account_id);

@@ -16,7 +16,6 @@ use serde_json::Value;
 )]
 // Keep the public completed-result shape stable; future stop values add one
 // string payload but do not justify boxing every existing settlement caller.
-#[allow(clippy::large_enum_variant)]
 pub enum ConversationOperationResult {
     Completed {
         target: SessionRef,
@@ -112,7 +111,10 @@ pub enum ConversationSettlementDetail {
         permission_required: bool,
         result: Option<Value>,
     },
-    CodexLoad,
+    CodexLoad {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        permission_differences: Vec<collaboration_protocol::PermissionDifference>,
+    },
     ProviderPrompt {
         output: ProviderPromptOutput,
     },

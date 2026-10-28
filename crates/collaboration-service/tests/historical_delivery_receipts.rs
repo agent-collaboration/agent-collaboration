@@ -6,7 +6,7 @@ use collaboration_protocol::{
     AutomationEventDetails, AutomationEventsRequest, DeliveryAttemptsRequest, DeliveryEvidence,
     DeliveryReceipt, OperationId, SavedMessage, SessionRef,
 };
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use sqlx::Connection;
 use std::sync::Arc;
@@ -24,10 +24,10 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
     let service_id = "00000000-0000-4000-8000-000000000001";
-    let identity = ServiceIdentity::new(service_id, service_id)
+    let identity = ApplicationFixture::new(service_id, service_id)
         .map_err(std::io::Error::other)?
         .with_automation_store(Arc::clone(&store));
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("history-fixture").await?;
     let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"fixture-thread"});
     let message: SavedMessage = serde_json::from_value(json!({
@@ -39,6 +39,8 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },

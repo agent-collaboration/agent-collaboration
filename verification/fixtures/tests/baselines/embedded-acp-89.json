@@ -1,0 +1,21 @@
+{
+  "original": "Tailscale synthetic foreign-command fixture#CHILD_FIXTURE",
+  "originalSHA256": "76ef45ce1d64f374283a6fa5feb75e043fee40e3d888a71be83d7b4e97b98c72",
+  "target": "tailscale-command-agent.ts",
+  "arguments": ["status", "--json"],
+  "environment": {
+    "TAILNET_TEST_MODE": "overflow"
+  },
+  "initialFiles": {},
+  "stdin": "",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "63be28c14377de31674813c9b075d062a6d20288307c0ad20bf4db6b7ab8d6db",
+      "bytes": 65538
+    },
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "original": "Composed Host integration#content",
+  "originalSHA256": "186d458488b571cd51641e735f80cd2cc54f193aa3f74de8474996b9f933d81e",
+  "target": "provider-content-command-agent.ts",
+  "arguments": ["content"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"Read\"}, {\"type\": \"resource_link\", \"uri\": \"https://example.test/context\", \"name\": \"context\"}]}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"content-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

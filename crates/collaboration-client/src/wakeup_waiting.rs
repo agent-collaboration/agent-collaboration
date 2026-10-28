@@ -164,6 +164,7 @@ impl WakeWaitError {
 pub struct WakeWaitConnection {
     client: CollaborationClient,
     wakeup_id: WakeupId,
+    owner_service: collaboration_protocol::UuidIdentity,
     start: WakeWaitStart,
 }
 
@@ -196,7 +197,14 @@ impl CollaborationClient {
         if snapshot.definition.wakeup_id != wakeup_id {
             return Err(ClientError::Protocol("wake subscription identity mismatch").into());
         }
-        cursor_sequence(&snapshot.latest_event_cursor, &self.identity().service_id)?;
+        let owner_service = snapshot
+            .definition
+            .message
+            .target
+            .endpoint
+            .service_id
+            .clone();
+        cursor_sequence(&snapshot.latest_event_cursor, &owner_service)?;
         let start = match settled_outcome(&snapshot) {
             Some(outcome) => WakeWaitStart::Settled(outcome),
             None => WakeWaitStart::After(snapshot.latest_event_cursor),
@@ -204,6 +212,7 @@ impl CollaborationClient {
         Ok(WakeWaitConnection {
             client: self,
             wakeup_id,
+            owner_service,
             start,
         })
     }
@@ -253,8 +262,8 @@ impl WakeWaitConnection {
             if waited.wakeup_id != id {
                 return Err(ClientError::Protocol("wake wait identity mismatch").into());
             }
-            let previous = cursor_sequence(&after, &self.client.identity().service_id)?;
-            let sequence = cursor_sequence(&waited.cursor, &self.client.identity().service_id)?;
+            let previous = cursor_sequence(&after, &self.owner_service)?;
+            let sequence = cursor_sequence(&waited.cursor, &self.owner_service)?;
             if sequence < previous {
                 return Err(ClientError::Protocol("wake wait cursor moved backwards").into());
             }

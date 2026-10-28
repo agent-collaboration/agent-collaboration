@@ -3,9 +3,13 @@
 mod serve_command;
 pub(super) use serve_command::ServeCommand;
 
+#[cfg(test)]
+#[path = "cli_argument_parsing/debug_plaintext_tests.rs"]
+mod debug_plaintext_tests;
+
 use super::{
-    AccountCommand, CliError, DEFAULT_PROFILE_PORT, HostCommand, LiveCommand, QuotaCommand, Shell,
-    router_secret_root_or_default,
+    AccountCommand, CentralCommand, CliError, DEFAULT_ROUTER_PORT, FleetCommand, HostCommand,
+    LiveCommand, QuotaCommand, Shell, router_secret_root_or_default,
 };
 use std::ffi::OsString;
 use std::num::NonZeroU64;
@@ -20,8 +24,10 @@ pub(super) enum CliCommand {
     Quota(QuotaCommand),
     Live(LiveCommand),
     Host(HostCommand),
+    Fleet(FleetCommand),
+    Central(CentralCommand),
     Version,
-    Help,
+    Help(&'static str),
 }
 
 impl CliCommand {
@@ -31,11 +37,11 @@ impl CliCommand {
     {
         let mut parser = ArgumentParser::new(args.into_iter().collect());
         let Some(command) = parser.next_string()? else {
-            return Ok(Self::Help);
+            return Ok(Self::Help(super::HELP_TEXT));
         };
         if is_binary_name(&command) {
             let Some(command_after_binary_name) = parser.next_string()? else {
-                return Ok(Self::Help);
+                return Ok(Self::Help(super::HELP_TEXT));
             };
             return Self::parse_after_binary(command_after_binary_name, &mut parser);
         }
@@ -45,7 +51,13 @@ impl CliCommand {
 
     fn parse_after_binary(command: String, parser: &mut ArgumentParser) -> Result<Self, CliError> {
         match command.as_str() {
-            "serve" => Ok(Self::Serve(ServeCommand::parse(parser)?)),
+            "serve" => {
+                if parser.next_if_help()? {
+                    parser.reject_remaining()?;
+                    return Ok(Self::Help(serve_command::HELP_TEXT));
+                }
+                Ok(Self::Serve(ServeCommand::parse(parser)?))
+            }
             "profile" => Ok(Self::Profile(ProfileCommand::parse(parser)?)),
             "doctor" => {
                 parser.reject_remaining()?;
@@ -55,6 +67,12 @@ impl CliCommand {
             "account" => Ok(Self::Account(AccountCommand::parse(parser)?)),
             "quota" => Ok(Self::Quota(QuotaCommand::parse(parser)?)),
             "live" => Ok(Self::Live(LiveCommand::parse(parser)?)),
+            "fleet" => Ok(Self::Fleet(FleetCommand::parse(
+                parser.remaining_arguments(),
+            )?)),
+            "central" => Ok(Self::Central(CentralCommand::parse(
+                parser.remaining_arguments(),
+            )?)),
             "host" => Ok(Self::Host(
                 HostCommand::parse(parser.remaining_arguments())
                     .map_err(|message| CliError::HostParse { message })?,
@@ -63,7 +81,7 @@ impl CliCommand {
                 parser.reject_remaining()?;
                 Ok(Self::Version)
             }
-            "--help" | "-h" | "help" => Ok(Self::Help),
+            "--help" | "-h" | "help" => Ok(Self::Help(super::HELP_TEXT)),
             unknown => Err(CliError::UnknownCommand {
                 command: unknown.to_owned(),
             }),
@@ -254,7 +272,7 @@ struct ProfileOptions {
 impl ProfileOptions {
     fn parse(parser: &mut ArgumentParser) -> Result<Self, CliError> {
         let mut options = Self {
-            port: DEFAULT_PROFILE_PORT,
+            port: DEFAULT_ROUTER_PORT,
             codex_home: None,
             dry_run: false,
             approve_codex_home_write: false,

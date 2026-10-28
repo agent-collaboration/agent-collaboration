@@ -1,0 +1,601 @@
+{
+  "kind": "partial-compiled-ui-checkpoint-before-constrained-height-repair",
+  "productHead": "626a5653693c3e7ab6efee7d094914a569cdc687",
+  "sourceBindingDigest": "80ab384c934add9133247d39a4474791bdbf5add5b02c609fe88958e3cd92155",
+  "captureDriverSha256": "b1d73f5660c7496ca14a416a3a1be62245068856043ecd6600471b0677759285",
+  "runtimeHarnessSha256": "889557286814e21a2f37bb28fb4b44787bbb834c40a3fa71b0de3a99876c8a4d",
+  "imageCheckerSha256": "150e8d00dc7171d4b4e4698be03e72168b02ea622f3e38ac18f11d0dbe4602c4",
+  "build": "Actual compiled iocraft product at626a5653. The capture driver was rebuilt for the bounded wrapped-label matcher; rendering code and runtime harness were unchanged. The later d7bb5ce8 product repair is not represented by these pixels.",
+  "run": {
+    "exit": 101,
+    "started_at": "2026-10-19T13:44:53.977326+00:00",
+    "observed_at": "2026-10-19T13:45:44.772895+00:00",
+    "work_seconds": 1840.0,
+    "cleanup_seconds": 90.0,
+    "work_deadline": "2026-10-19T14:15:33.977326+00:00",
+    "whole_deadline": "2026-10-19T14:17:03.977326+00:00",
+    "deadline_reached": false,
+    "driver_settled": true,
+    "stop_error": null
+  },
+  "perGridResult": "At each completed grid: eight positive image checks, three blank/wrong-scene controls, zero provider requests, unchanged state/secrets, normal child exit0 and owned cleanup. The fourth grid48x12 failed before PNG export; the failure and cleanup remain retained.",
+  "dataAndEffects": "Real compiled UI and PTY input, synthetic account data and external effect ports. No live-account, vendor, remote or production claim.",
+  "inspection": "Verifier opened every original. Lead opened all24 unique images or checked exact byte equality to originals already opened.",
+  "actionEvidence": [
+    {
+      "viewport": [
+        120,
+        36
+      ],
+      "receiptSha256": "e9674c7e57957bdb5877ed04a635eb5464aa734cf37984279f452c6d0ba4103c",
+      "positiveImages": 8,
+      "negativeControls": 3,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    },
+    {
+      "viewport": [
+        48,
+        24
+      ],
+      "receiptSha256": "1dab9e834029d3c67b8daa5dfd7c11977dcf8fdf8e7d179b7a1c31012359fd8f",
+      "positiveImages": 8,
+      "negativeControls": 3,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    },
+    {
+      "viewport": [
+        76,
+        30
+      ],
+      "receiptSha256": "350b46957bf1516c24b3d61c90996d19aacc70868c46a8bfb9af8bb9abfd0cd0",
+      "positiveImages": 8,
+      "negativeControls": 3,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    }
+  ],
+  "limits": [
+    "48x12 has no original PNG from this run; its real terminal output revealed the hidden empty-result message.",
+    "The shared choice reveal repair passed mounted tests but needs a fresh compiled capture.",
+    "Long names, CJK, credit formatting, lower scrolling, actual resize, remaining dialogs and Sessions are outside these images.",
+    "HTML browser rendering remains unverified."
+  ],
+  "images": [
+    {
+      "file": "120x36-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "a3adec1e006a5d2be82d8c932f03024091b8c2b333b5522fb3cc1831b7982f2d",
+      "bytes": 217768,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Initial All/Shown browse; Up3 focuses Claude Delta.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The Account, Status and Quota columns retain their grouping. Account names and provider rows share the selection gutter; yellow identifies the selected account. The title and header actions remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "d2d7ff5752d32b14060169fc87e348331ea7e6535cf2e66ddc5d570283ea63e1",
+      "bytes": 160949,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Ctrl+F; Enter provider choice; type zznomatchzz.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Provider search reports no matching choices inside the single filter dialog. The empty message wraps at 48 columns. Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "bb86226df5caa96059c86198bb9f62e8f1c204da5d09592643916ee7fa3d84e8",
+      "bytes": 157813,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Escape no-match; choose OpenAI draft.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The draft is OpenAI while the committed summary remains All / Shown / 4 of 4. Field labels and values align; there is one dialog and no footer.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "01729578c4cb5d775a6ea9a131c0d31bae26083cd2a7671cc388616d89c47ede",
+      "bytes": 219281,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "F1 from filter dialog.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Help uses one title, section headings and aligned shortcut descriptions. Close remains visible. Longer descriptions wrap within the frame.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-disabled-choice.png",
+      "title": "Choose disabled-account visibility",
+      "sha256": "845d1dadbc24f33420104ffa746a628dd35db18d900b71af0a43e4e9355ffbca",
+      "bytes": 161147,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Close Help; choose Claude draft; Tab then open disabled choice.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "One inline searchable choice shows Shown selected in yellow and Hidden in white. The provider and disabled-account fields share the value column; Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Choose Hidden then Apply.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The committed filter is Claude / Hidden / 1 of 4, with Claude Gamma selected. The account/provider gutter and three column groups remain aligned.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Reopen filters; change draft to OpenAI; Escape discards.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "After cancelling an OpenAI draft, the committed Claude / Hidden / 1 of 4 result remains. No filter dialog or draft text remains on screen.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "120x36-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "d86434158a978326830422a26d15204123667230fb4e52f3e7476b249b3772fc",
+      "bytes": 148888,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "F4 on Claude Gamma after cancellation.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Details identifies Claude Gamma, its state and exclusion reason, with quota labels, bars and values aligned. The title, Help and Close remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "ceef63385b7a08d054c64b19e84880c26e711662c051886c51036855d3bfb072",
+      "bytes": 134510,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Initial All/Shown browse; Up3 focuses Claude Delta.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The Account, Status and Quota columns retain their grouping. Account names and provider rows share the selection gutter; yellow identifies the selected account. The title and header actions remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Only the top accounts fit; list scrolling remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "52f1a75bfc1eb7de7d1d62693033395528ef0f80067086a1d399968424a6c20f",
+      "bytes": 106102,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Ctrl+F; Enter provider choice; type zznomatchzz.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Provider search reports no matching choices inside the single filter dialog. The empty message wraps at 48 columns. Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "32689d4583f769ab5834aa295507db642d2019c45bbcacefe624c89fd0dfcf4c",
+      "bytes": 102293,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Escape no-match; choose OpenAI draft.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The draft is OpenAI while the committed summary remains All / Shown / 4 of 4. Field labels and values align; there is one dialog and no footer.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "6cf0fc54b06cbd6eccb2187fd4770c3fc5c50f584e1c92ec5e692196edae2c8f",
+      "bytes": 113508,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "F1 from filter dialog.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Help uses one title, section headings and aligned shortcut descriptions. Close remains visible. Longer descriptions wrap within the frame.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-disabled-choice.png",
+      "title": "Choose disabled-account visibility",
+      "sha256": "66f7d49f0664c4b30c46c58a9d51a973a217dd3f1a1b306406bd41da9bee6219",
+      "bytes": 105411,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Close Help; choose Claude draft; Tab then open disabled choice.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "One inline searchable choice shows Shown selected in yellow and Hidden in white. The provider and disabled-account fields share the value column; Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Choose Hidden then Apply.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The committed filter is Claude / Hidden / 1 of 4, with Claude Gamma selected. The account/provider gutter and three column groups remain aligned.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Reopen filters; change draft to OpenAI; Escape discards.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "After cancelling an OpenAI draft, the committed Claude / Hidden / 1 of 4 result remains. No filter dialog or draft text remains on screen.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "76x30-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "9fd7c63d9fa884f366fa127273d4b44eaa51b2ec83127369e80041ec6b597b0b",
+      "bytes": 96279,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "F4 on Claude Gamma after cancellation.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Details identifies Claude Gamma, its state and exclusion reason, with quota labels, bars and values aligned. The title, Help and Close remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "6e11185f336a02750dcacb798ca538f7aca6620a1014c60c74bf2ec6840bb935",
+      "bytes": 80722,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Initial All/Shown browse; Up3 focuses Claude Delta.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The Account, Status and Quota columns retain their grouping. Account names and provider rows share the selection gutter; yellow identifies the selected account. The title and header actions remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Only the top accounts fit; list scrolling remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "b900f204c3591b81c58e2777b8f90b93d6a92a0e4491634d7ec45f9edae1c5f6",
+      "bytes": 67676,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Ctrl+F; Enter provider choice; type zznomatchzz.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Provider search reports no matching choices inside the single filter dialog. The empty message wraps at 48 columns. Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "234c795f6b8cff8771ff7f0ccdc8e48c8c2e3e3f4ab7f5b60f21c639506ce39d",
+      "bytes": 69663,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Escape no-match; choose OpenAI draft.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The draft is OpenAI while the committed summary remains All / Shown / 4 of 4. Field labels and values align; there is one dialog and no footer.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "9eb70cafc43132ace26056a7aa6b136ed6ab914085181364682fb444f2756f37",
+      "bytes": 63411,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "F1 from filter dialog.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Help uses one title, section headings and aligned shortcut descriptions. Close remains visible. Longer descriptions wrap within the frame.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-disabled-choice.png",
+      "title": "Choose disabled-account visibility",
+      "sha256": "7c0618eb9ce81da83c552d0c64bf08b81cae4e744d6513a227817c6f142b59cc",
+      "bytes": 72767,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "Close Help; choose Claude draft; Tab then open disabled choice.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "One inline searchable choice shows Shown selected in yellow and Hidden in white. The provider and disabled-account fields share the value column; Cancel and Apply remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "2243c1147dfa7156ed1b7a68c6a86564d084b36072d09bafb63c7310a00130b6",
+      "bytes": 81401,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Choose Hidden then Apply.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "The committed filter is Claude / Hidden / 1 of 4, with Claude Gamma selected. The account/provider gutter and three column groups remain aligned.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "2243c1147dfa7156ed1b7a68c6a86564d084b36072d09bafb63c7310a00130b6",
+      "bytes": 81401,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "Reopen filters; change draft to OpenAI; Escape discards.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "After cancelling an OpenAI draft, the committed Claude / Hidden / 1 of 4 result remains. No filter dialog or draft text remains on screen.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    },
+    {
+      "file": "48x24-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "175a6e7f6b61797d01bbdf767c91d424dc23aa79fbbdf59b96a8407899d0dcb0",
+      "bytes": 70344,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "F4 on Claude Gamma after cancellation.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Details identifies Claude Gamma, its state and exclusion reason, with quota labels, bars and values aligned. The title, Help and Close remain visible.",
+      "limits": "These fixtures use short names; long names, CJK and live credit balances are not established. Lower content is outside the captured body; scrolling to it remains to be exercised.",
+      "result": "This scene and its completed-grid checks passed; the whole four-grid run failed at48x12 before the product repair."
+    }
+  ]
+}

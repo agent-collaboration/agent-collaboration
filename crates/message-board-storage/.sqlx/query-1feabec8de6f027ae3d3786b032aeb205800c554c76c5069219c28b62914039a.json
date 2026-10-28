@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT l.link_id AS \"link_id!: String\", l.from_task AS \"from_task!: String\", l.link_kind AS \"link_kind!: String\", l.to_task AS \"to_task!: String\", fw.project_id AS \"from_project?: String\", tw.project_id AS \"to_project?: String\" FROM task_links l LEFT JOIN tasks ft ON ft.task_id=l.from_task LEFT JOIN workstreams fw ON fw.workstream_id=ft.workstream_id LEFT JOIN tasks tt ON tt.task_id=l.to_task LEFT JOIN workstreams tw ON tw.workstream_id=tt.workstream_id ORDER BY l.from_task, l.link_kind, l.to_task",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "from_task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "link_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "to_task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "from_project?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "to_project?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1feabec8de6f027ae3d3786b032aeb205800c554c76c5069219c28b62914039a"
+}

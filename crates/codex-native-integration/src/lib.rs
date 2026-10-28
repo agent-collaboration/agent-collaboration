@@ -43,16 +43,19 @@ pub use native_protocol_observation::AppServerObservation;
 pub use native_protocol_observation::CodexProtocolError;
 pub use native_protocol_observation::observe_app_server;
 pub use native_session_launch::CallerOverrides;
+pub use native_session_launch::NativeWorkingDirectoryMetadata;
 pub use native_session_launch::ResumeModelChoice;
 pub use native_session_launch::SessionLaunch;
 pub use native_session_launch::SessionProfile;
 pub use native_session_launch::caller_overrides;
+pub use native_session_launch::native_working_directory_metadata;
 pub use native_state_paths::CodexPaths;
 pub use remote_control_observation::RemoteControlObservation;
 pub use remote_resume_permission_keys::{
     REMOTE_RESUME_PERMISSION_KEYS, profile_remote_resume_permission_keys,
 };
 pub use router_profile_projection::CodexRouterProfile;
+pub use router_profile_projection::DEFAULT_ROUTER_PORT;
 pub use router_profile_projection::router_permission_profile_overrides;
 pub use router_tool_locations::{
     READ_ONLY_INSIDE_TOOL_LOCATIONS, RESTRICTED_TOOL_LOCATIONS, WORKSPACE_TOOL_LOCATIONS,
@@ -95,4 +98,6 @@ pub use debug_endpoint_selection::{
 };
 
 mod debug_profile_projection;
-pub use debug_profile_projection::{DebugCodexProfile, DebugProfileError};
+pub use debug_profile_projection::{
+    DebugCodexProfile, DebugProfileError, project_debug_profile_endpoint,
+};

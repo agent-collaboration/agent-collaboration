@@ -1,16 +1,15 @@
 //! Inspect one durable provider Session with its live connection observations.
 
 use super::ExternalProviderSupervisor;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{
     ProviderConfigOptionView, ProviderConfigValueView, ProviderHistoryAvailability,
     ProviderInspectFailure, ProviderInspectFailureKind, ProviderSessionInspectRequest,
     ProviderSessionInspectResult, ProviderSessionState, ProviderSettingChoiceView,
     ProviderSettingsCatalogView, SessionRef,
 };
-use collaboration_service::SessionEventHub;
 use session_event_model::SessionState;
 
-#[allow(clippy::result_large_err)]
 pub(super) async fn inspect(
     supervisor: &ExternalProviderSupervisor,
     request: ProviderSessionInspectRequest,

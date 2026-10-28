@@ -3,18 +3,21 @@ use crate::provider_acp_session_loading::{
     ProviderSessionLoadability, inspect_provider_session_loadability,
 };
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, OperationId, ProviderOperationEffect, ProviderOperationStage,
-    SessionReachability, SessionRef,
-};
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, RouteClaim, RoutePresence, SessionDeliveryRoute,
+    OperationId, ProviderOperationEffect, ProviderOperationStage, SessionReachability, SessionRef,
 };
 use std::sync::Arc;
 
 impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
-    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_service::ScheduledRunRoute>> {
+    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
         Some(Arc::new(
             crate::provider_acp_scheduled_runs::ProviderAcpScheduledRuns::new(
                 self.service_id.clone(),
@@ -29,7 +32,10 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
         SessionReachability::ProviderAcp
     }
 
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
+    fn claim(
+        &self,
+        target: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         let target = target.clone();
         Box::pin(async move { Ok(self.claim.claim(&target).await) })
     }
@@ -40,7 +46,7 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
             if !self.serves(&target) {
                 return Ok(RoutePresence::NotMine);
             }
-            let presence = match self.claim.claim(&target).await {
+            let presence = match self.claim.claim(&target).await.into_claim() {
                 RouteClaim::NotMine => RoutePresence::NotMine,
                 RouteClaim::Holds => RoutePresence::Running,
                 RouteClaim::Rejected { rejection } => RoutePresence::LiveElsewhere {
@@ -87,9 +93,9 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
 
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move { self.deliver_provider(request.into(), sink).await })
     }
 
@@ -130,14 +136,14 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
             Ok(match (record.stage, record.effect) {
                 (ProviderOperationStage::Terminal, ProviderOperationEffect::Applied) => {
                     let outcome = if provider.submission == SubmissionEffect::RouterQueued {
-                        DeliveryOutcome::Queued
+                        collaboration_contracts::NativeObservedOutcome::Queued
                     } else {
-                        DeliveryOutcome::Started
+                        collaboration_contracts::NativeObservedOutcome::Started
                     };
-                    AttemptReconciliation::Accepted(Box::new(ProviderAcpDeliveryRoute::receipt(
-                        outcome,
-                        Some(operation_id),
-                    )))
+                    AttemptReconciliation::Accepted(Box::new(
+                        ProviderAcpDeliveryRoute::observed(outcome, Some(operation_id))
+                            .into_receipt(),
+                    ))
                 }
                 (ProviderOperationStage::Terminal, ProviderOperationEffect::None) => {
                     AttemptReconciliation::KnownNotSubmitted

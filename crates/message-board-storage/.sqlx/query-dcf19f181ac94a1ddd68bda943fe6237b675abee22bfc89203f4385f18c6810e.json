@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE project_watches SET start_epoch=CASE WHEN active=1 AND ?=1 THEN start_epoch ELSE ? END, start_position=CASE WHEN active=1 AND ?=1 THEN start_position ELSE ? END, active=? WHERE watch_id=? AND reader_actor=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "dcf19f181ac94a1ddd68bda943fe6237b675abee22bfc89203f4385f18c6810e"
+}

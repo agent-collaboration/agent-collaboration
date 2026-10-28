@@ -1,22 +1,20 @@
 //! Durable direct-message work carried by the same target actor as subscription notices.
 use super::subscription_push::SubscriptionPushStore;
-use crate::{
-    DeliveryPrecondition, LoadPolicy,
-    layer_zero::{DeliveryRequest, PreparedPush},
-    session_delivery_contract::UnstoredAttemptEvidenceSink,
-};
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    AttemptId, DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, MachineId, MessageDelivery, MessageText, PushId,
-    PushKind, PushLineInput, PushRecord, RouterLink, SessionRef, render_push_line,
+    AttemptId, DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
+    MessageText, PushId, PushKind, PushLineInput, PushRecord, RouterLink, SessionRef,
+    render_push_line,
 };
 use message_board::BoardError;
 
 impl SubscriptionPushStore {
     pub(super) async fn restore_direct_messages(
         &self,
-    ) -> Result<Vec<SessionRef>, automation_storage::StorageError> {
-        let mut store = self.store.lock().await;
+    ) -> Result<Vec<SessionRef>, interaction_storage::StorageError> {
+        let store = &self.store;
         store.settle_interrupted_pushes(self.clock.now()).await?;
         store.direct_message_recovery_targets().await
     }
@@ -26,8 +24,6 @@ impl SubscriptionPushStore {
         target: &SessionRef,
     ) -> Result<Vec<PushRecord>, BoardError> {
         self.store
-            .lock()
-            .await
             .list_unsent_direct_messages(target)
             .await
             .map_err(|_| BoardError::board_unavailable())
@@ -35,8 +31,6 @@ impl SubscriptionPushStore {
 
     pub(super) async fn direct_message(&self, push_id: &PushId) -> Result<PushRecord, BoardError> {
         self.store
-            .lock()
-            .await
             .get_push_record(push_id)
             .await
             .map_err(|_| BoardError::board_unavailable())?
@@ -48,8 +42,6 @@ impl SubscriptionPushStore {
         record: &PushRecord,
     ) -> Result<PushRecord, BoardError> {
         self.store
-            .lock()
-            .await
             .hold_unsent_direct_message(
                 &record.push_id,
                 DeliveryReceipt {
@@ -87,13 +79,12 @@ impl SubscriptionPushStore {
                 client_code: None,
                 detail: Some(detail.to_owned()),
                 claims: None,
+                native_failure: None,
             }),
             reachability: None,
             client: None,
         };
         self.store
-            .lock()
-            .await
             .reject_unsent_direct_message(&record.push_id, receipt, self.clock.now())
             .await
             .map_err(|_| BoardError::board_unavailable())
@@ -103,10 +94,11 @@ impl SubscriptionPushStore {
         &self,
         record: &PushRecord,
     ) -> Result<PushRecord, BoardError> {
-        if record.kind != PushKind::DirectMessage {
-            return Err(BoardError::board_unavailable());
-        }
-        let mode = record.mode.ok_or_else(BoardError::board_unavailable)?;
+        let mode = match record.kind {
+            PushKind::DirectMessage => record.mode.ok_or_else(BoardError::board_unavailable)?,
+            PushKind::BoardNotification => MessageDelivery::Auto,
+            _ => return Err(BoardError::board_unavailable()),
+        };
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
                 MachineId::from(self.machine.service_id().clone()),
@@ -121,7 +113,11 @@ impl SubscriptionPushStore {
         let prepared = PreparedPush {
             push_id: record.push_id.clone(),
             line: MessageText::try_from(line).map_err(|_| BoardError::board_unavailable())?,
-            load_policy: LoadPolicy::LoadedOnly,
+            load_policy: collaboration_runtime::mail_push_preparation::direct_message_load_policy(
+                record.mode,
+                record.guard.as_ref(),
+                record.delivery_state,
+            ),
         };
         let correlation = DeliveryCorrelationId::try_from(record.push_id.as_str().to_owned())
             .map_err(|_| BoardError::board_unavailable())?;
@@ -140,48 +136,10 @@ impl SubscriptionPushStore {
         };
         self.mark_attempted(&prepared).await?;
         let allow_hold = mode != MessageDelivery::Steer && record.guard.is_none();
-        let mut receipt = tokio::select! {
-            () = self.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
-            receipt = self.delivery.deliver(request, &UnstoredAttemptEvidenceSink) => receipt.unwrap_or(DeliveryReceipt { outcome: DeliveryOutcome::Unknown, reachability: None, client: None }),
-        };
-
-        let no_route = matches!(
-            &receipt.outcome,
-            DeliveryOutcome::Rejected(rejection)
-                if rejection.reason == DeliveryRejectionReason::NoRoute
-        );
-        let unsupported_mode =
-            no_route && !self.delivery.supports_delivery_mode(&record.target, mode);
-        if unsupported_mode {
-            receipt = DeliveryReceipt {
-                outcome: DeliveryOutcome::Rejected(DeliveryRejection {
-                    reason: DeliveryRejectionReason::QueueUnsupported,
-                    next_action: DeliveryNextAction::CorrectRequest,
-                    client_code: None,
-                    detail: Some(
-                        "Queue delivery isn't supported for Claude Code terminals".to_owned(),
-                    ),
-                    claims: None,
-                }),
-                reachability: None,
-                client: None,
-            };
-        } else if allow_hold
-            && matches!(
-                &receipt.outcome,
-                DeliveryOutcome::Rejected(rejection)
-                    if rejection.reason == DeliveryRejectionReason::NoRoute
-            )
-        {
-            receipt = DeliveryReceipt {
-                outcome: DeliveryOutcome::NotSubmitted {
-                    retryable: true,
-                    reason: "no route currently claims the session; direct message held".to_owned(),
-                },
-                reachability: None,
-                client: None,
-            };
-        }
+        let receipt = self
+            .dispatch_mail_attempt(record.kind, request)
+            .await?
+            .into_receipt();
         self.record_receipt(&prepared, &receipt, allow_hold).await?;
         self.direct_message(&record.push_id).await
     }

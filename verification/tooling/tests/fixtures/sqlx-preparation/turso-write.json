@@ -1,0 +1,167 @@
+{
+  "kind": "turso",
+  "mode": "write",
+  "expected": {
+    "status": 0,
+    "calls": [
+      {
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/interaction-storage",
+          "--example",
+          "seed_native_schema",
+          "--",
+          "<root>/tmp/<schema>/schema.db",
+          "crates/interaction-storage/migrations"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "clean",
+          "--package",
+          "path+file://<root>/crates/board-legacy-upgrade"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--jobs",
+          "1",
+          "--package",
+          "path+file://<root>/crates/board-legacy-upgrade",
+          "--all-targets",
+          "--all-features"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "board-legacy-upgrade",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/board-legacy-upgrade",
+          "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/interaction-storage",
+          "--example",
+          "seed_native_schema",
+          "--",
+          "<root>/tmp/<schema>/schema.db",
+          "crates/interaction-storage/migrations"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/interaction-storage"],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--jobs",
+          "1",
+          "--package",
+          "path+file://<root>/crates/interaction-storage",
+          "--all-targets",
+          "--all-features"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "interaction-storage",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/interaction-storage",
+          "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/interaction-storage",
+          "--example",
+          "seed_native_schema",
+          "--",
+          "<root>/tmp/<schema>/schema.db",
+          "crates/message-board-storage/project_migrations",
+          "crates/message-board-storage/project_bookkeeping_migrations",
+          "crates/message-board-storage/fleet_cache_migrations",
+          "crates/message-board-storage/fleet_outbox_migrations",
+          "crates/message-board-storage/cursor_migrations"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "clean",
+          "--package",
+          "path+file://<root>/crates/message-board-storage"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--jobs",
+          "1",
+          "--package",
+          "path+file://<root>/crates/message-board-storage",
+          "--all-targets",
+          "--all-features"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "message-board-storage",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/message-board-storage",
+          "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
+        }
+      }
+    ],
+    "metadata": {
+      "crates/board-legacy-upgrade/.sqlx": {
+        "query-board-legacy-upgrade.json": "board-legacy-upgrade"
+      },
+      "crates/interaction-storage/.sqlx": {
+        "query-interaction-storage.json": "interaction-storage"
+      },
+      "crates/message-board-storage/.sqlx": {
+        "query-message-board-storage.json": "message-board-storage"
+      }
+    },
+    "stderr": ""
+  }
+}

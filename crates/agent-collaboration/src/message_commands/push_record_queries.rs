@@ -3,8 +3,7 @@ use super::{
     operation_failure_line, report_message_failure, validate_push_reference,
 };
 use collaboration_client::protocol::{
-    PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, PushRecordShowParams,
-    PushRecordShowResult, SessionRef,
+    PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, SessionRef,
 };
 use collaboration_client::{
     ClientError, CollaborationClient, OperationEffect, operation_failure_from_client_error,
@@ -16,14 +15,15 @@ use std::{
 };
 
 enum PushRecordQuery {
-    Show(String),
+    Show { reference: String, human_user: bool },
     Inbox { limit: u32 },
     History { with: SessionRef, limit: u32 },
 }
 
 enum PushRecordReadResult {
-    Show(Box<PushRecordShowResult>),
+    Show(Box<collaboration_client::protocol::MessageShowResult>),
     List(PushRecordListResult),
+    History(collaboration_client::protocol::MessageHistoryResult),
 }
 
 pub(super) fn run_push_record_show(args: PushRecordShowArguments) -> i32 {
@@ -33,7 +33,10 @@ pub(super) fn run_push_record_show(args: PushRecordShowArguments) -> i32 {
     run_push_record_query(
         args.service_directory,
         args.json,
-        PushRecordQuery::Show(args.reference),
+        PushRecordQuery::Show {
+            reference: args.reference,
+            human_user: args.human_user,
+        },
     )
 }
 
@@ -72,16 +75,28 @@ fn run_push_record_query(
     machine: bool,
     query: PushRecordQuery,
 ) -> i32 {
-    let harness_identity = match crate::current_session_identity::read_harness_session_identity() {
-        Ok(identity) => identity,
-        Err(error) => {
-            return report_message_failure(
-                "currentSessionUnavailable",
-                &format!("{error}; run agent-collaboration whoami --json"),
-                2,
-                machine,
-            );
+    let harness_identity = if matches!(
+        &query,
+        PushRecordQuery::Show {
+            human_user: true,
+            ..
         }
+    ) {
+        None
+    } else {
+        Some(
+            match crate::current_session_identity::read_harness_session_identity() {
+                Ok(identity) => identity,
+                Err(error) => {
+                    return report_message_failure(
+                        "currentSessionUnavailable",
+                        &format!("{error}; run agent-collaboration whoami --json"),
+                        2,
+                        machine,
+                    );
+                }
+            },
+        )
     };
     let directory = match crate::endpoint_commands::resolve_directory(service_directory) {
         Ok(directory) => directory,
@@ -106,26 +121,47 @@ fn run_push_record_query(
         )
         .await?;
         let caller = harness_identity
-            .session_ref(&client.identity().service_id)
+            .map(|identity| identity.session_ref(&client.identity().service_id))
+            .transpose()
             .map_err(|_| ClientError::InvalidRequest("invalid current session identity"))?;
         match query {
-            PushRecordQuery::Show(reference) => client
-                .router_show(PushRecordShowParams { caller, reference })
+            PushRecordQuery::Show {
+                reference,
+                human_user,
+            } => client
+                .router_show(collaboration_client::protocol::MessageShowRequest {
+                    caller: if human_user {
+                        collaboration_client::protocol::MessageReadCaller::Human(
+                            collaboration_client::protocol::HumanMessageReader::HumanUser,
+                        )
+                    } else {
+                        collaboration_client::protocol::MessageReadCaller::Session(
+                            caller
+                                .ok_or(ClientError::InvalidRequest("session identity missing"))?,
+                        )
+                    },
+                    reference,
+                })
                 .await
                 .map(Box::new)
                 .map(PushRecordReadResult::Show),
             PushRecordQuery::Inbox { limit } => client
-                .message_inbox(PushRecordListParams { caller, limit })
-                .await
-                .map(PushRecordReadResult::List),
-            PushRecordQuery::History { with, limit } => client
-                .message_history(PushRecordHistoryParams {
-                    caller,
-                    with,
+                .message_inbox(PushRecordListParams {
+                    caller: caller
+                        .ok_or(ClientError::InvalidRequest("session identity missing"))?,
                     limit,
                 })
                 .await
                 .map(PushRecordReadResult::List),
+            PushRecordQuery::History { with, limit } => client
+                .message_history(PushRecordHistoryParams {
+                    caller: caller
+                        .ok_or(ClientError::InvalidRequest("session identity missing"))?,
+                    with,
+                    limit,
+                })
+                .await
+                .map(PushRecordReadResult::History),
         }
     });
     report_push_record_read(outcome, machine)
@@ -145,6 +181,30 @@ fn report_push_record_read(
         return code;
     }
     match result {
+        Ok(PushRecordReadResult::History(history)) => {
+            let output = if machine {
+                crate::endpoint_commands::result_envelope(json!(history)).to_string()
+            } else {
+                history
+                    .records
+                    .into_iter()
+                    .map(|record| match record {
+                        collaboration_client::protocol::MessageHistoryEntry::Local(record) => {
+                            record.line
+                        }
+                        collaboration_client::protocol::MessageHistoryEntry::Remote { mail } => {
+                            json!({"mail":mail}).to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            if writeln!(io::stdout(), "{output}").is_ok() {
+                0
+            } else {
+                3
+            }
+        }
         Ok(PushRecordReadResult::Show(show)) => {
             let written = if machine {
                 writeln!(io::stdout(), "{}", push_record_show_envelope(*show))
@@ -196,7 +256,15 @@ fn report_push_record_read(
     }
 }
 
-fn push_record_show_envelope(show: PushRecordShowResult) -> serde_json::Value {
+fn push_record_show_envelope(
+    show: collaboration_client::protocol::MessageShowResult,
+) -> serde_json::Value {
+    let show = match show {
+        collaboration_client::protocol::MessageShowResult::Local(show) => show,
+        collaboration_client::protocol::MessageShowResult::Remote { mail } => {
+            return crate::endpoint_commands::result_envelope(json!({"mail":mail}));
+        }
+    };
     let link = show.link;
     let activity_ranges = show.activity_ranges;
     let mut envelope = crate::endpoint_commands::result_envelope(json!(show.record));

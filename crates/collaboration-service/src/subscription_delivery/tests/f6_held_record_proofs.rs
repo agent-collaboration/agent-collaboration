@@ -1,39 +1,43 @@
 use super::super::SubscriptionClock;
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
-use collaboration_protocol::{DeliveryOutcome, PushId, UuidIdentity};
-use message_board::{SubscriptionScope, ThreadSubscriptionUnsubscribeRequest};
-use serde_json::{Value, json};
+use crate::subscription_delivery::subscription_service::OwnerObservation;
+use collaboration_protocol::{
+    DeliveryOutcome, DeliveryReceipt, PushActivityRange, PushActivitySnapshot, PushDeliveryState,
+    PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft, RouterOriginRef,
+};
+use message_board::{
+    BatchId, FeedCursor, SubscriptionMode, SubscriptionScope, ThreadId,
+    ThreadSubscriptionUnsubscribeRequest, WhenIdle,
+};
 use sqlx::Connection;
 use std::time::Duration;
 
 // SQLite works on background threads; its acknowledgement bound needs real time.
 #[tokio::test]
 async fn cleanup_write_retry_does_not_block_reader_reconcile() {
-    let fixture = OwnerFixture::new().await;
-    let runtime = fixture.runtime().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
+        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .await;
+    let position = fixture
         .post(&fixture.root, "Held before ending scope")
         .await;
-    let held_id = hold_next_push(&runtime).await;
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
-        .await;
-    runtime.synchronize(&fixture.reader).await;
+    let held_id = copied_held_snapshot(&fixture, vec![(fixture.root.clone(), position)]).await;
+    let runtime = fixture.runtime().await;
+    runtime.reconcile(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
+    assert_copied_snapshot_state(&fixture, &held_id, PushDeliveryState::Held).await;
     while runtime.observations.lock().await.try_recv().is_ok() {}
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
+    let mut observer = sqlx_turso::TursoConnection::connect_with(
+        &sqlx_turso::TursoConnectOptions::new()
+            .filename(fixture.directory.path().join("interaction.sqlite")),
     )
     .await
     .unwrap();
-    sqlx::query("CREATE TRIGGER fail_held_cleanup BEFORE UPDATE OF delivery_state ON router_pushes WHEN OLD.delivery_state='held' AND NEW.delivery_state='rejected' BEGIN SELECT RAISE(FAIL, 'injected cleanup write failure'); END").execute(&mut observer).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER fail_held_cleanup BEFORE UPDATE OF delivery_state ON router_pushes WHEN OLD.delivery_state='held' AND NEW.delivery_state='rejected' BEGIN SELECT RAISE(FAIL, 'injected cleanup write failure'); END").execute(&mut observer).await.unwrap();
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -55,14 +59,12 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
         matches!(acknowledged, Ok(Ok(()))),
         "cleanup write retry blocked a queued reconcile command"
     );
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     // A command acknowledges before the failed cleanup has been repaired.
     // The marker remains pending, and the next regular pass retries it.
     assert_eq!(
         fixture
-            .push_store
-            .lock()
-            .await
+            .interactions
             .get_push_record(&held_id)
             .await
             .unwrap()
@@ -75,142 +77,55 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
         .await
         .unwrap();
     fixture.clock.advance_without_tokio_time(30);
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1)))
-        .await;
-    observer.close().await.unwrap();
-    runtime.close().await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn delayed_batch_cleanup_never_supersedes_a_newer_held_push() {
-    let fixture = OwnerFixture::new().await;
-    let runtime = fixture.runtime().await;
-    fixture.post(&fixture.root, "Batch before N").await;
-    let old_id = hold_next_push(&runtime).await;
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
-        .await;
-    runtime.synchronize(&fixture.reader).await;
-    while runtime.observations.lock().await.try_recv().is_ok() {}
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        runtime
+            .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1))),
     )
     .await
-    .unwrap();
-    sqlx::query("CREATE TRIGGER fail_held_cleanup BEFORE UPDATE OF delivery_state ON router_pushes WHEN OLD.delivery_state='held' AND NEW.delivery_state='rejected' BEGIN SELECT RAISE(FAIL, 'injected cleanup write failure'); END").execute(&mut observer).await.unwrap();
-    fixture.clock.advance(30).await;
-    let batch_n = runtime.requests.lock().await.recv().await.unwrap();
-    runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::Sleeping(Some(_))))
-        .await;
-
-    // Persist the N+1 held state while N's pending cleanup waits for another
-    // owner pass. Eligibility must be recomputed without touching newer data.
-    fixture.clock.advance(1).await;
-    let mut store = fixture.push_store.lock().await;
-    let old_record = store.get_push_record(&old_id).await.unwrap().unwrap();
-    let newer_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
-    store
-        .insert_push_record(collaboration_protocol::PushRecordDraft {
-            push_id: newer_id.clone(),
-            kind: old_record.kind,
-            origin: old_record.origin,
-            origin_router_ref: Some(
-                collaboration_protocol::RouterOriginRef::SubscriptionActivity {
-                    target: old_record.target.clone(),
-                    batch_id: message_board::BatchId::generate(),
-                }
-                .canonical_string()
-                .unwrap(),
-            ),
-            target: old_record.target,
-            reply_to_push_id: None,
-            header_facts: old_record.header_facts,
-            body: None,
-            activity: old_record.activity,
-            mode: None,
-            guard: None,
-            created_at: fixture.clock.now(),
-        })
+    .expect("failed cleanup marker must survive until the repaired next pass");
+    assert_copied_snapshot_state(&fixture, &held_id, PushDeliveryState::Rejected).await;
+    let rejected = fixture
+        .interactions
+        .get_push_record(&held_id)
         .await
+        .unwrap()
         .unwrap();
-    store.mark_push_attempted(&newer_id).await.unwrap();
-    store
-        .hold_push_record(
-            &newer_id,
-            collaboration_protocol::DeliveryReceipt {
-                outcome: DeliveryOutcome::NotSubmitted {
-                    retryable: true,
-                    reason: "N+1 held".to_owned(),
-                },
-                reachability: None,
-                client: None,
-            },
-        )
-        .await
-        .unwrap();
-    drop(store);
-    sqlx::query("DROP TRIGGER fail_held_cleanup")
-        .execute(&mut observer)
-        .await
-        .unwrap();
-    runtime.reconcile(&fixture.reader).await;
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(_)))
-        .await;
-    let mut store = fixture.push_store.lock().await;
     assert_eq!(
-        store
-            .get_push_record(&newer_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .delivery_state,
-        collaboration_protocol::PushDeliveryState::Held,
-        "N's delayed cleanup mislabeled N+1 as superseded"
+        rejected.last_outcome.unwrap().outcome,
+        DeliveryOutcome::NotSubmitted {
+            retryable: false,
+            reason: "subscription ended: cancelled".to_owned(),
+        }
     );
-    assert_eq!(
-        store
-            .get_push_record(&old_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .delivery_state,
-        collaboration_protocol::PushDeliveryState::Rejected
-    );
-    assert_eq!(
-        store
-            .get_push_record(&batch_n.payload.push_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .delivery_state,
-        collaboration_protocol::PushDeliveryState::Delivered
-    );
-    drop(store);
     observer.close().await.unwrap();
     runtime.close().await;
 }
 
 #[tokio::test(start_paused = true)]
 async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let active_root = fixture.add_root().await;
-    fixture.post(&fixture.root, "Ending root").await;
-    fixture.post(&active_root, "Active root").await;
+    for root in [&fixture.root, &active_root] {
+        fixture
+            .policy(root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+            .await;
+    }
+    let ending_position = fixture.post(&fixture.root, "Ending root").await;
+    let active_position = fixture.post(&active_root, "Active root").await;
+    let push_id = copied_held_snapshot(
+        &fixture,
+        vec![
+            (fixture.root.clone(), ending_position),
+            (active_root.clone(), active_position),
+        ],
+    )
+    .await;
     let runtime = fixture.runtime().await;
-    let push_id = hold_next_push(&runtime).await;
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
-        .await;
+    runtime.reconcile(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -225,9 +140,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
         .await;
     assert_eq!(
         fixture
-            .push_store
-            .lock()
-            .await
+            .interactions
             .get_push_record(&push_id)
             .await
             .unwrap()
@@ -236,67 +149,11 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
         collaboration_protocol::PushDeliveryState::Held,
         "one ended scope must not settle activity for a live root"
     );
-    runtime.close().await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn next_reader_batch_rejects_prior_held_push_with_current_link() {
-    let fixture = OwnerFixture::new().await;
-    let runtime = fixture.runtime().await;
-    fixture.post(&fixture.root, "First held batch").await;
-    let first_push_id = hold_next_push(&runtime).await;
-
-    fixture.clock.advance(30).await;
-    let replacement = runtime.requests.lock().await.recv().await.unwrap();
-    runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1)))
-        .await;
-
-    let identity = service_identity(&fixture);
-    let first = show_record(&fixture, &identity, &first_push_id).await;
-    assert_eq!(
-        first.pointer("/result/record/deliveryState"),
-        Some(&json!("rejected"))
-    );
-    assert_eq!(
-        first.pointer("/result/record/lastOutcome/outcome/kind"),
-        Some(&json!("notSubmitted"))
-    );
-    let replacement_record = fixture
-        .push_store
-        .lock()
-        .await
-        .get_push_record(&replacement.payload.push_id)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        first.pointer("/result/record/lastOutcome/outcome/reason"),
-        Some(&Value::String(format!(
-            "superseded by {}",
-            crate::push_record_resolver::link_for(&replacement_record, &identity)
-        )))
-    );
-
-    runtime.close().await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn ended_subscription_rejects_its_held_push_with_end_reason() {
-    let fixture = OwnerFixture::new().await;
-    let runtime = fixture.runtime().await;
-    fixture.post(&fixture.root, "Held before unsubscribe").await;
-    let held_push_id = hold_next_push(&runtime).await;
-
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
-                scope: SubscriptionScope::thread(fixture.root.clone()),
+                scope: SubscriptionScope::thread(active_root),
             },
             fixture.clock.now(),
         )
@@ -306,73 +163,110 @@ async fn ended_subscription_rejects_its_held_push_with_end_reason() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1)))
         .await;
-
-    let identity = service_identity(&fixture);
-    let held = show_record(&fixture, &identity, &held_push_id).await;
-    assert_eq!(
-        held.pointer("/result/record/deliveryState"),
-        Some(&json!("rejected"))
-    );
-    assert_eq!(
-        held.pointer("/result/record/lastOutcome/outcome/reason"),
-        Some(&json!("subscription ended: cancelled"))
-    );
-
+    assert_copied_snapshot_state(&fixture, &push_id, PushDeliveryState::Rejected).await;
     runtime.close().await;
 }
 
-async fn hold_next_push(runtime: &OwnerRuntime) -> PushId {
-    let request = runtime.requests.lock().await.recv().await.unwrap();
-    runtime
-        .completions
-        .send(DeliveryOutcome::NotSubmitted {
-            retryable: true,
-            reason: "target closed after presence check".to_owned(),
-        })
-        .unwrap();
-    runtime
-        .observe(|event| matches!(event, OwnerObservation::Held))
-        .await;
-    request.payload.push_id
-}
+// Decision 756 maps the former live C5 Held cases to native_follow_mail_proofs
+// (same-generation frozen retry) and native_follow_cancel_proofs (real membership
+// end, frozen child, SDK Prevented and the canonical public cancellation reason).
 
-fn service_identity(fixture: &OwnerFixture) -> crate::ServiceIdentity {
-    let service_id = UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap();
-    crate::ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
-        .unwrap()
-        .with_machine_identity(
-            crate::MachineIdentity::new(service_id, Some("held-push-test"))
-                .expect("machine identity"),
-        )
-        .unwrap()
-        .with_automation_store(std::sync::Arc::clone(&fixture.push_store))
-        .with_board_store(std::sync::Arc::clone(&fixture.store))
-}
-
-async fn show_record(
+// This is an explicit post-copy CreationAge snapshot. SDK admission and the D4 copy
+// are outside these cleanup cases; public native writes establish only their input.
+async fn copied_held_snapshot(
     fixture: &OwnerFixture,
-    identity: &crate::ServiceIdentity,
-    push_id: &PushId,
-) -> Value {
-    let record = fixture
-        .push_store
-        .lock()
+    positions: Vec<(ThreadId, FeedCursor)>,
+) -> PushId {
+    let target = target_session(&fixture.reader).unwrap();
+    let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
+    fixture
+        .interactions
+        .insert_push_record(PushRecordDraft {
+            push_id: push_id.clone(),
+            kind: PushKind::SubscriptionActivity,
+            origin: PushOrigin::Router(PushKind::SubscriptionActivity),
+            origin_router_ref: Some(
+                RouterOriginRef::SubscriptionActivity {
+                    target: target.clone(),
+                    batch_id: BatchId::generate(),
+                }
+                .canonical_string()
+                .unwrap(),
+            ),
+            target,
+            reply_to_push_id: None,
+            header_facts: PushHeaderFacts::SubscriptionActivity {
+                root_count: u8::try_from(positions.len()).unwrap(),
+                message_count: u64::try_from(positions.len()).unwrap(),
+                held_since: Some(fixture.clock.now().to_rfc3339()),
+                thread_resolved: false,
+            },
+            body: None,
+            activity: Some(PushActivitySnapshot {
+                ranges: positions
+                    .into_iter()
+                    .map(|(thread_id, position)| PushActivityRange {
+                        thread_id,
+                        project_id: fixture.project.clone(),
+                        from: position,
+                        through: position,
+                    })
+                    .collect(),
+                held: true,
+                draining: false,
+            }),
+            mode: None,
+            guard: None,
+            created_at: fixture.clock.now(),
+        })
         .await
+        .unwrap();
+    fixture
+        .interactions
+        .mark_push_attempted(&push_id)
+        .await
+        .unwrap();
+    fixture
+        .interactions
+        .hold_push_record(
+            &push_id,
+            DeliveryReceipt {
+                outcome: DeliveryOutcome::NotSubmitted {
+                    retryable: true,
+                    reason: "copied held snapshot".to_owned(),
+                },
+                reachability: None,
+                client: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_copied_snapshot_state(fixture, &push_id, PushDeliveryState::Held).await;
+    push_id
+}
+
+async fn assert_copied_snapshot_state(
+    fixture: &OwnerFixture,
+    push_id: &PushId,
+    expected: PushDeliveryState,
+) {
+    let record = fixture
+        .interactions
         .get_push_record(push_id)
         .await
         .unwrap()
         .unwrap();
-    let shown = crate::CollaborationApplication::new(identity.clone())
-        .messages()
-        .push_show(collaboration_protocol::PushRecordShowParams {
-            caller: target_session(&fixture.reader).unwrap(),
-            reference: crate::push_record_resolver::link_for(&record, identity),
-        })
-        .await;
-    match shown {
-        Ok(result) => json!({ "result": result }),
-        Err(failure) => json!({
-            "error": crate::collaboration_application::CollaborationRejection::published_rejection(&failure)
-        }),
+    assert_eq!(record.delivery_state, expected);
+    if expected == PushDeliveryState::Held {
+        assert!(
+            fixture
+                .interactions
+                .list_held_carrier_push_records(&record.target)
+                .await
+                .unwrap()
+                .iter()
+                .any(|candidate| candidate.push_id == *push_id),
+            "fixture must use the CreationAge carrier class"
+        );
     }
 }

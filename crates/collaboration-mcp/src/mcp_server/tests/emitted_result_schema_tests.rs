@@ -7,7 +7,7 @@ use collaboration_service::collaboration_application::{
     NativeSessionFailure, NativeSessionFailureKind, NativeSessionStage,
 };
 
-fn advertised_output_validator(tool_name: &str) -> jsonschema::Validator {
+pub(super) fn advertised_output_validator(tool_name: &str) -> jsonschema::Validator {
     let schema = CollaborationMcpServer::catalog_only()
         .resolved_tools()
         .into_iter()
@@ -18,7 +18,66 @@ fn advertised_output_validator(tool_name: &str) -> jsonschema::Validator {
         .unwrap_or_else(|error| panic!("{tool_name} output validator: {error}"))
 }
 
-fn validated_structured_content(
+#[test]
+fn forwarded_post_outcomes_match_both_advertised_post_schemas() {
+    for tool in ["thread_create", "thread_post"] {
+        let validator = advertised_output_validator(tool);
+        for value in [
+            serde_json::json!({"kind":"notHeld"}),
+            serde_json::json!({"kind":"holderUnreachable","decision":{"lastSeen":"2026-10-22T00:00:00Z"}}),
+            serde_json::json!({"kind":"holderUnreachable","decision":{"lastSeen":null}}),
+            serde_json::json!({"kind":"unanswered"}),
+            serde_json::json!({"kind":"overloaded"}),
+        ] {
+            let reply: message_board::public_replies::WriteReply =
+                serde_json::from_value(serde_json::json!({"result":value,"reader":null})).unwrap();
+            let encoded = validated_structured_content(
+                &validator,
+                tool,
+                super::super::success_result(&reply),
+            );
+            assert_eq!(encoded["result"], value);
+        }
+        assert!(!validator.is_valid(&serde_json::json!({"result":{"kind":"holderUnreachable","decision":{"lastSeen":42}},"reader":null})));
+        assert!(
+            !validator
+                .is_valid(&serde_json::json!({"result":{"kind":"unknownForward"},"reader":null}))
+        );
+    }
+}
+
+#[test]
+fn accepted_pending_project_creation_is_a_success_with_a_required_project_identity() {
+    let project: message_board::ProjectId = FIXTURE_PUSH_ID.to_owned().try_into().unwrap();
+    let reply = message_board::public_replies::WriteReply {
+        result: message_board::public_replies::RequestResult::ProjectCreationPending {
+            project: project.clone(),
+        },
+        reader: None,
+    };
+    let validator = advertised_output_validator("project_create");
+    let mut encoded = validated_structured_content(
+        &validator,
+        "project_create",
+        super::super::success_result(&reply),
+    );
+    assert_eq!(
+        encoded["result"],
+        serde_json::json!({
+            "kind":"projectCreationPending", "decision":{"project":project},
+        })
+    );
+    encoded["result"]["decision"]
+        .as_object_mut()
+        .unwrap()
+        .remove("project");
+    assert!(
+        !validator.is_valid(&encoded),
+        "accepted pending reply lost its durable project identity"
+    );
+}
+
+pub(super) fn validated_structured_content(
     validator: &jsonschema::Validator,
     tool_name: &str,
     result: rmcp::model::CallToolResult,
@@ -61,22 +120,22 @@ fn session_inspect_and_rename_schemas_accept_every_classified_failure_they_emit(
             native_rejection(
                 stage,
                 "thread has an active turn and is busy",
-                "busy",
-                "useDeliverySteer",
+                collaboration_protocol::DeliveryRejectionReason::Busy,
+                collaboration_protocol::DeliveryNextAction::UseDeliverySteer,
                 None,
             ),
             native_rejection(
                 stage,
                 "Native control operation failed",
-                "unknown",
-                "retryLater",
+                collaboration_protocol::DeliveryRejectionReason::Unknown,
+                collaboration_protocol::DeliveryNextAction::RetryLater,
                 Some(-32099),
             ),
             native_rejection(
                 stage,
                 "thread 019f0000-0000-7000-8000-000000000001 already has an active writer",
-                "heldByAnotherClient",
-                "messageFromHoldingCodexClient",
+                collaboration_protocol::DeliveryRejectionReason::HeldByAnotherClient,
+                collaboration_protocol::DeliveryNextAction::MessageFromHoldingCodexClient,
                 None,
             ),
             NativeSessionFailure::Refused {
@@ -210,4 +269,310 @@ fn run_show_schema_accepts_provider_and_peer_run_evidence() {
         !validator.is_valid(&provider_structured),
         "run_show schema accepts the removed native-only evidence field"
     );
+}
+
+#[test]
+fn work_view_schema_accepts_typed_writer_observations_and_refuses_removed_shapes() {
+    use message_board::{
+        CopySource, CurrentWriter, EpochNumber, FeedCursor, FeedPosition, ProjectId, WorkView,
+    };
+
+    let validator = advertised_output_validator("view_work");
+    let project = ProjectId::generate();
+    let head = FeedCursor {
+        epoch: EpochNumber::try_from(4).expect("fixture epoch"),
+        position: FeedPosition::try_from(17).expect("fixture head"),
+    };
+    let granted = EpochNumber::try_from(9).expect("actual grant differs from inherited head");
+    for (source, writer, expected_writer) in [
+        (
+            CopySource::Writer {},
+            CurrentWriter::Held { epoch: granted },
+            serde_json::json!({"kind":"held","epoch":9}),
+        ),
+        (
+            CopySource::ReadCopy {},
+            CurrentWriter::Unheld {},
+            serde_json::json!({"kind":"unheld"}),
+        ),
+        (
+            CopySource::ReadCopy {},
+            CurrentWriter::Held { epoch: granted },
+            serde_json::json!({"kind":"held","epoch":9}),
+        ),
+        (
+            CopySource::ReadCopy {},
+            CurrentWriter::Unknown {},
+            serde_json::json!({"kind":"unknown"}),
+        ),
+    ] {
+        let view = WorkView {
+            project: project.clone(),
+            as_of: head,
+            replicated_through: head,
+            workstreams: Vec::new(),
+            ready_queue: Vec::new(),
+            blocked: Vec::new(),
+            open_in_closed_workstreams: Vec::new(),
+            current_writer: writer,
+            writer_observation: None,
+            source,
+        };
+        let encoded = validated_structured_content(
+            &validator,
+            "view_work",
+            super::super::success_result(&view),
+        );
+        assert_eq!(encoded["currentWriter"], expected_writer);
+        assert_eq!(
+            encoded["asOf"],
+            serde_json::json!({"epoch":4,"position":17})
+        );
+        assert_eq!(encoded["replicatedThrough"], encoded["asOf"]);
+        assert_eq!(
+            encoded["source"],
+            match source {
+                CopySource::Writer {} => serde_json::json!({"kind":"writer"}),
+                CopySource::ReadCopy {} => serde_json::json!({"kind":"readCopy"}),
+            }
+        );
+        assert!(encoded.get("currentEpoch").is_none());
+        let mut provisional = encoded.clone();
+        provisional["currentWriter"] = serde_json::json!({"kind":"provisional"});
+        assert!(
+            !validator.is_valid(&provisional),
+            "removed provisional writer remains advertised"
+        );
+        let mut tail_report = encoded.clone();
+        tail_report["rejectedTails"] = serde_json::json!([]);
+        assert!(
+            !validator.is_valid(&tail_report),
+            "removed tail bookkeeping remains advertised"
+        );
+
+        let mut legacy = encoded.clone();
+        legacy
+            .as_object_mut()
+            .expect("view object")
+            .remove("currentWriter");
+        legacy["currentEpoch"] = serde_json::json!(9);
+        assert!(
+            !validator.is_valid(&legacy),
+            "old currentEpoch shape remains advertised"
+        );
+        for removed_source in [
+            serde_json::json!("writer"),
+            serde_json::json!("readCopy"),
+            serde_json::json!({"kind":"superseded","supersededBy":9}),
+            serde_json::json!({"kind":"superseded","supersededBy":null}),
+        ] {
+            let mut invalid = encoded.clone();
+            invalid["source"] = removed_source;
+            assert!(
+                !validator.is_valid(&invalid),
+                "removed copy source remains advertised: {invalid}"
+            );
+        }
+    }
+}
+
+#[test]
+fn cards_and_cross_project_rows_require_their_own_copy_context() {
+    use message_board::{
+        ContinuationCard, CopySource, EpochNumber, FeedCursor, FeedPosition, HumanId, Identity,
+        LeadLoad, LeadObligation, LeadOwed, OwnerView, OwnerWait, ProjectId, RecordedActor,
+        SessionRunningState,
+    };
+
+    let project = ProjectId::generate();
+    let head = FeedCursor {
+        epoch: EpochNumber::try_from(4).expect("fixture epoch"),
+        position: FeedPosition::try_from(17).expect("fixture head"),
+    };
+    let since = FeedCursor {
+        position: FeedPosition::try_from(3).expect("question position"),
+        ..head
+    };
+    let lead = RecordedActor::declared(Identity::Human {
+        human_id: HumanId::try_from("view schema owner".to_owned()).expect("fixture identity"),
+    });
+    for source in [CopySource::Writer {}, CopySource::ReadCopy {}] {
+        let owed = LeadOwed {
+            project: project.clone(),
+            subject: project.clone().into(),
+            obligation: LeadObligation::CloseOut,
+            source,
+            as_of: head,
+            replicated_through: head,
+        };
+        let owner = OwnerView {
+            as_of: "2026-10-19T00:00:00Z"
+                .parse()
+                .expect("fixture observation time"),
+            waiting: vec![OwnerWait {
+                project: project.clone(),
+                subject: project.clone().into(),
+                blocks: Vec::new(),
+                since,
+                source,
+                as_of: head,
+                replicated_through: head,
+            }],
+            unavailable_projects: Vec::new(),
+        };
+        let load = LeadLoad {
+            lead: lead.clone(),
+            owed: vec![owed.clone()],
+            unavailable_projects: Vec::new(),
+        };
+        let card = ContinuationCard {
+            subject: project.clone().into(),
+            plan_revision: None,
+            assignment: None,
+            pending_handbacks: Vec::new(),
+            pending_decisions: Vec::new(),
+            next_obligation: Some(owed),
+            recent_trail: Vec::new(),
+            counts: std::collections::BTreeMap::new(),
+            as_of: head,
+            replicated_through: head,
+            source,
+            silence_rule: "fixture silence rule".to_owned(),
+            notify_intents: Vec::new(),
+            blockers: Vec::new(),
+            session_state: SessionRunningState::NotSession {},
+        };
+        let cases = [
+            (
+                "view_owner",
+                super::super::success_result(&owner),
+                "/waiting/0",
+            ),
+            (
+                "view_lead_load",
+                super::super::success_result(&load),
+                "/owed/0",
+            ),
+            (
+                "view_card",
+                super::super::success_result(&card),
+                "/nextObligation",
+            ),
+        ];
+        for (tool, result, row_path) in cases {
+            let validator = advertised_output_validator(tool);
+            let encoded = validated_structured_content(&validator, tool, result);
+            let row = encoded.pointer(row_path).expect("actual row payload");
+            assert_eq!(
+                row["source"],
+                serde_json::to_value(source).expect("copy label")
+            );
+            assert_eq!(row["asOf"], serde_json::json!({"epoch":4,"position":17}));
+            assert_eq!(row["replicatedThrough"], row["asOf"]);
+            if tool == "view_owner" {
+                assert_eq!(row["since"], serde_json::json!({"epoch":4,"position":3}));
+            }
+            for required in ["source", "asOf", "replicatedThrough"] {
+                let mut incomplete = encoded.clone();
+                assert!(
+                    incomplete
+                        .pointer_mut(row_path)
+                        .expect("row")
+                        .as_object_mut()
+                        .expect("row object")
+                        .remove(required)
+                        .is_some()
+                );
+                assert!(
+                    !validator.is_valid(&incomplete),
+                    "{tool} accepts a row missing {required}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn remote_status_history_and_requested_cancel_results_keep_closed_advertised_shapes() {
+    use collaboration_protocol::{
+        MailReadContext, MessageHistoryEntry, MessageHistoryResult, MessageShowResult, PushOrigin,
+        RemoteMessageStatus, RequestedCancelOutcome, RequestedCancelResult,
+    };
+    let show = advertised_output_validator("router_show");
+    let history = advertised_output_validator("message_history");
+    let item: collaboration_protocol::MailItemId = FIXTURE_PUSH_ID.to_owned().try_into().unwrap();
+    let context = MailReadContext::Direct {
+        origin: PushOrigin::OwnerUnverified,
+        recipient: serde_json::from_value(fixture_session("codex-local", "recipient")).unwrap(),
+    };
+    for status in [
+        serde_json::json!({"kind":"queued"}),
+        serde_json::json!({"kind":"sent","seq":7}),
+        serde_json::json!({"kind":"atMachine"}),
+        serde_json::json!({"kind":"held"}),
+        serde_json::json!({"kind":"delivered","acceptance":"peerMessageWritten"}),
+        serde_json::json!({"kind":"uncertain"}),
+        serde_json::json!({"kind":"expired"}),
+        serde_json::json!({"kind":"cancelled"}),
+        serde_json::json!({"kind":"refused","reason":{"kind":"recipientRevoked"}}),
+    ] {
+        let mail = RemoteMessageStatus {
+            item: item.clone(),
+            context: context.clone(),
+            recorded_at: "2026-10-22T00:00:00Z".parse().unwrap(),
+            status: serde_json::from_value(status.clone()).unwrap(),
+        };
+        let mut shown = validated_structured_content(
+            &show,
+            "router_show",
+            super::super::success_result(&MessageShowResult::Remote {
+                mail: Box::new(mail.clone()),
+            }),
+        );
+        assert_eq!(shown["mail"]["status"], status);
+        assert!(
+            shown.get("record").is_none(),
+            "sender custody invented a push"
+        );
+        shown["mail"]["status"] = serde_json::json!({"kind":"provisional"});
+        assert!(
+            !show.is_valid(&shown),
+            "remote status accepted an unknown state"
+        );
+        let encoded = validated_structured_content(
+            &history,
+            "message_history",
+            super::super::success_result(&MessageHistoryResult {
+                records: vec![MessageHistoryEntry::Remote { mail }],
+            }),
+        );
+        assert_eq!(encoded["records"][0]["mail"]["status"], status);
+    }
+    for tool in ["message_cancel", "project_notification_cancel"] {
+        let validator = advertised_output_validator(tool);
+        for outcome in [
+            serde_json::json!({"kind":"pending"}),
+            serde_json::json!({"kind":"prevented"}),
+            serde_json::json!({"kind":"tooLate","at":"delivered"}),
+            serde_json::json!({"kind":"tooLate","at":"uncertain"}),
+            serde_json::json!({"kind":"refused","reason":{"kind":"mailboxFull"}}),
+        ] {
+            let result = RequestedCancelResult {
+                cancel: item.clone(),
+                target: item.clone(),
+                outcome: serde_json::from_value::<RequestedCancelOutcome>(outcome.clone()).unwrap(),
+            };
+            let mut encoded = validated_structured_content(
+                &validator,
+                tool,
+                super::super::success_result(&result),
+            );
+            assert_eq!(encoded["outcome"], outcome);
+            encoded["outcome"] = serde_json::json!({"kind":"done"});
+            assert!(
+                !validator.is_valid(&encoded),
+                "{tool} accepted an unknown control result"
+            );
+        }
+    }
 }

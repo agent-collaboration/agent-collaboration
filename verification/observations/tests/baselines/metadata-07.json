@@ -1,0 +1,102 @@
+{
+  "name": "test_either_historical_view_leaking_metadata_is_rejected",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 1,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "commands",
+            "kind": {
+              "kind": "notice"
+            },
+            "text": "{\"availableCommands\":[{\"name\":\"compact\",\"description\":\"Compact context\"}]}"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 3,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "usage",
+            "kind": {
+              "kind": "usage"
+            },
+            "text": "{\"used\":12,\"size\":100}"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            },
+            {
+              "id": "commands",
+              "type": "agentMessage",
+              "text": "Even formatted metadata is not assistant speech"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "ACP_OK",
+  "resumedTerminal": "ACP_OK",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "error": "provider metadata leaked into a Codex transcript item"
+  }
+}

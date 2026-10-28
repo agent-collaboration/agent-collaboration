@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-20T08:21:22.478036+00:00",
+  "parentReceipt": "tmp/tui-implementation/c7-density-p3-modal-crop-clippy.json",
+  "originalImmediateRemainingGroup": [
+    " 4993  4936 (clippy-driver)",
+    " 4994  4936 (clippy-driver)"
+  ],
+  "psExit": 0,
+  "remaining": [],
+  "signals": [],
+  "settled": true,
+  "limits": "Original immediate receipt retains two exiting clippy-driver entries. This later independent check establishes absence; no earlier absence or successful Clippy claimed."
+}

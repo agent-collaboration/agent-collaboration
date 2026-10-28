@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fixture assertions at the Host endpoint boundary.
 
 use codex_router_host::{
@@ -11,6 +10,7 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path};
 
 fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
     CollaborationRuntimeInputs {
+        board_session: None,
         directory: directory.to_owned(),
         codex_home: directory.to_owned(),
         backend_socket: directory.join("backend.sock"),
@@ -22,16 +22,13 @@ fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn fixture_provider(directory: &Path) -> std::path::PathBuf {
-    let executable = directory.join("fixture-provider.py");
-    std::fs::write(
+    let executable = directory.join("fixture-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
         &executable,
-        r#"#!/usr/bin/python3
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'startup-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"startup"}),
     )
     .expect("write fixture provider");
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
@@ -39,6 +36,7 @@ sys.stdin.read()
     executable
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn endpoint<'a>(endpoints: &'a [EndpointDescription], id: &str) -> &'a EndpointDescription {
     endpoints
         .iter()
@@ -56,13 +54,19 @@ async fn missing_executable_isolated_from_other_provider_and_codex() {
     let mut runtime = CollaborationRuntime::start_with_external_providers(
         runtime_inputs(root.path()),
         vec![
-            ExternalProviderStartup::Launch(
-                ExternalProviderLaunchBinding::claude(
+            ExternalProviderStartup::Launch({
+                let mut binding = ExternalProviderLaunchBinding::claude(
                     root.path().join("missing-claude-agent-acp"),
                     Vec::new(),
                 )
-                .expect("Claude binding"),
-            ),
+                .expect("Claude binding");
+                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                    root.path(),
+                    &mut binding.launch.environment,
+                )
+                .expect("declare test-owned global Claude executable");
+                binding
+            }),
             ExternalProviderStartup::Launch(
                 ExternalProviderLaunchBinding::cursor(cursor, Vec::new()).expect("Cursor binding"),
             ),
@@ -118,18 +122,29 @@ async fn failed_initialize_isolated_from_other_provider() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private root");
     let cursor = fixture_provider(root.path());
-    let failing = root.path().join("failing-provider.py");
-    std::fs::write(&failing, "#!/usr/bin/python3\nimport sys\nsys.exit(4)\n")
-        .expect("write failure fixture");
+    let failing = root.path().join("failing-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &failing,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"failure"}),
+    )
+    .expect("write failure fixture");
     std::fs::set_permissions(&failing, std::fs::Permissions::from_mode(0o700))
         .expect("make failure fixture executable");
 
     let runtime = CollaborationRuntime::start_with_external_providers(
         runtime_inputs(root.path()),
         vec![
-            ExternalProviderStartup::Launch(
-                ExternalProviderLaunchBinding::claude(failing, Vec::new()).expect("Claude binding"),
-            ),
+            ExternalProviderStartup::Launch({
+                let mut binding = ExternalProviderLaunchBinding::claude(failing, Vec::new())
+                    .expect("Claude binding");
+                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                    root.path(),
+                    &mut binding.launch.environment,
+                )
+                .expect("declare test-owned global Claude executable");
+                binding
+            }),
             ExternalProviderStartup::Launch(
                 ExternalProviderLaunchBinding::cursor(cursor, Vec::new()).expect("Cursor binding"),
             ),

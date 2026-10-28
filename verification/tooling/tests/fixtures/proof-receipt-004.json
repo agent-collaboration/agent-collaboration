@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "I-18 patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "I-18"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Real served-router WebSocket fixture traversed actual listener, Hyper upgrade, persisted quota selection during blocked refresh, upstream forwarding, and registry shutdown cleanup.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-cli/src/lib.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/websocket.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-9",
+  "originalSHA256": "54c61d49f3c55398c5a532b2406d61bf91ebc01e0345343b551269839dac7a5d"
+}

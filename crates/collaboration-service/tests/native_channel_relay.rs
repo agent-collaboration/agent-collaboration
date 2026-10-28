@@ -1,4 +1,4 @@
-use collaboration_service::relay_native_channels;
+use collaboration_runtime::relay_native_channels;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{
     WebSocketStream,

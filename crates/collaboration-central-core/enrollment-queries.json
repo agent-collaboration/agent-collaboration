@@ -1,0 +1,218 @@
+{
+  "migrations": [
+    "registry_migrations"
+  ],
+  "output": "src/generated_enrollment.rs",
+  "metadata": "enrollment-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_enrollments",
+      "sql": "sql/read_enrollments.sql",
+      "row": "StoredEnrollment",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "service",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "client",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "credential",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "peer",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "insert_enrollment",
+      "sql": "sql/insert_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "machine_label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "access_client_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "credential_hash",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expires_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_enrollment",
+      "sql": "sql/update_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "machine_label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "access_client_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "credential_hash",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expires_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "revoke_enrollment",
+      "sql": "sql/revoke_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "operation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "admit_readmission",
+      "sql": "sql/admit_readmission.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "machine_label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "access_client_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "credential_hash",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expires_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "operation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "activate_enrollment",
+      "sql": "sql/activate_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "record_machine_presence",
+      "sql": "sql/record_machine_presence.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "last_seen",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_installation_peer_page",
+      "sql": "sql/read_installation_peer_page.sql",
+      "row": "StoredInstallationPeer",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_present",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

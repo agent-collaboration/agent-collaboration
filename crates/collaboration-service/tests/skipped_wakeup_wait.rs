@@ -2,7 +2,7 @@
 use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
 use collaboration_client::WakeWaitError;
 use collaboration_protocol::{OperationId, SavedMessage, WakeShowRequest};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
@@ -22,6 +22,8 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
     }))?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: agent_automation::TimingRule::After { seconds: 1 },
@@ -40,13 +42,13 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
             .await?;
     }
     let store = Arc::new(tokio::sync::Mutex::new(store));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(Arc::clone(&store));
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("skipped-wait").await?;
     let current = client
         .read_wakeup(WakeShowRequest {

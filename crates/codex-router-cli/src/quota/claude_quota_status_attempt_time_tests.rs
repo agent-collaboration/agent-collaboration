@@ -1,4 +1,10 @@
 use super::*;
+#[cfg(test)]
+use crate::quota::{
+    AccountId, AsyncProviderCredentialResolver, CredentialResolverError, QuotaRefreshErrorClass,
+    QuotaRefreshProvider, QuotaRefreshProviderRequest, QuotaRefreshProviderResponse,
+    QuotaRefreshReport, SecretString, current_unix_seconds, refresh_quota_with_dependencies,
+};
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;

@@ -1,6 +1,11 @@
 //! Claude subscription quota polling and observed OAuth usage response parsing.
 
-use super::*;
+use super::{
+    QuotaCommandError, QuotaRefreshProviderRequest, QuotaRefreshProviderResponse,
+    QuotaRefreshProviderWindow, QuotaWindowHeadroom,
+};
+#[cfg(test)]
+use crate::quota::Duration;
 
 const CLAUDE_USAGE_ENDPOINT: &str = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_OAUTH_BETA: &str = "oauth-2025-04-20";
@@ -193,7 +198,12 @@ fn parse_percent_window(
             message: "Claude quota utilization percentage is negative or not finite".to_owned(),
         });
     }
-    let remaining_basis_points = ((100.0 - utilization_percent.min(100.0)) * 100.0).round() as u32;
+    let remaining = ((100.0 - utilization_percent.min(100.0)) * 100.0).round();
+    let remaining_basis_points = format!("{remaining:.0}").parse::<u32>().map_err(|error| {
+        QuotaCommandError::ProviderResponse {
+            message: error.to_string(),
+        }
+    })?;
     let reset_unix_seconds = resets_at
         .map(|reset| {
             chrono::DateTime::parse_from_rfc3339(reset)

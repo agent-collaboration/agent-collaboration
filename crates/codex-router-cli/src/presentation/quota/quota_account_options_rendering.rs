@@ -1,3 +1,4 @@
+use codex_router_tui::{UiHeading, UiHeadingLevel};
 use iocraft::prelude::*;
 
 use crate::quota::CreditUsageFreshness;
@@ -26,11 +27,29 @@ pub(in crate::presentation::quota) struct AccountOptionsPanelProps<'a> {
 }
 
 pub(in crate::presentation::quota) fn render_account_options_panel(
-    props: AccountOptionsPanelProps<'_>,
+    mut props: AccountOptionsPanelProps<'_>,
 ) -> AnyElement<'static> {
-    let width = props.width.max(32);
+    let width = props.width;
+    let height = props.height;
+    props.width = width.saturating_sub(4);
+    let identity = format!(
+        "{} [{}]",
+        props.options.target.account_label, props.options.target.account_tag
+    );
+    let editor_title = props.options.editor.is_some().then(
+        || element!(UiHeading(content:"Credit usage".to_owned(),level:UiHeadingLevel::Section)),
+    );
+    let content = render_account_options_content(props, None);
+    element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),height:u32::try_from(height).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {#(editor_title) Text(content:identity,color:Color::White) View(height:1) {} #(content)}}.into_any()
+}
+
+pub(in crate::presentation::quota) fn render_account_options_content(
+    props: AccountOptionsPanelProps<'_>,
+    state: Option<State<Option<AccountOptionsState>>>,
+) -> AnyElement<'static> {
+    let width = props.width.max(1);
     let height = props.height.max(1);
-    let body_height = height.saturating_sub(7);
+    let body_height = height.saturating_sub(7 + usize::from(props.options.pending_tab.is_some()));
     let body = match props.options.tab {
         AccountOptionsTab::Resets => render_resets_tab_body(
             props.options,
@@ -41,34 +60,29 @@ pub(in crate::presentation::quota) fn render_account_options_panel(
             props.inventory_page_start,
             props.spinner_tick,
         ),
-        AccountOptionsTab::Credits => {
-            render_credit_tab_body(props.options, width.saturating_sub(2), body_height)
-        }
+        AccountOptionsTab::Credits => Some(render_credit_tab_body(
+            props.options,
+            width.saturating_sub(2),
+            state,
+        )),
     };
-    let target = &props.options.target;
-    let identity = format!("{}  [{}]", target.account_label, target.account_tag);
+    let has_body = body.is_some();
+    // Interactive dialogs already name the active page in their title and
+    // expose tab navigation in their actions. Keep tabs in static panels.
+    let show_tabs = state.is_none() && props.options.editor.is_none();
     let resets_tab = render_tab_label("Resets", props.options.tab == AccountOptionsTab::Resets);
     let credits_tab = render_tab_label("Credits", props.options.tab == AccountOptionsTab::Credits);
 
     element! {
         View(
-            width: width as u32,
-            height: height as u32,
+            width: u32::try_from(width).unwrap_or(u32::MAX),
             flex_direction: FlexDirection::Column,
-            border_style: BorderStyle::Single,
-            border_color: Color::DarkGrey,
-            overflow: Overflow::Hidden,
-            padding_left: 1,
-            padding_right: 1,
+            flex_shrink:0.0_f32,max_width:100pct,
         ) {
-            Text(content: truncate_account_options_line(&identity, width.saturating_sub(4)), color: Color::White, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-            View(height: 1) {}
-            View(width: 100pct, flex_direction: FlexDirection::Row, column_gap: 2) {
-                #(resets_tab)
-                #(credits_tab)
-            }
-            View(width: 100pct, height: 1, border_style: BorderStyle::Single, border_edges: Edges::Bottom, border_color: Color::DarkGrey) {}
-            View(height: 1) {}
+            #(show_tabs.then(||element! {View(width:100pct,flex_direction:FlexDirection::Row,column_gap:2) {#(resets_tab) #(credits_tab)}}))
+            #(props.options.pending_tab.is_some().then(|| element!(codex_router_tui::FocusReveal(has_focus:true) {Text(content: "Tab change pending", color: Color::Grey, wrap: TextWrap::Wrap)}).into_any()))
+            #((show_tabs&&has_body).then(||element!(View(width:100pct,height:1,border_style:BorderStyle::Single,border_edges:Edges::Bottom,border_color:Color::DarkGrey))))
+            #((show_tabs&&has_body).then(||element!(View(height:1))))
             #(body)
         }
     }
@@ -81,17 +95,17 @@ pub(in crate::presentation::quota) fn account_options_content_height(
     reset_target: Option<&ResetPaneTarget>,
     inventory_page_start: usize,
 ) -> usize {
+    let options_header_rows = 7 + usize::from(options.pending_tab.is_some());
     if options.tab == AccountOptionsTab::Resets
         && let (Some(snapshot), Some(target)) = (reset_snapshot, reset_target)
         && snapshot.phase() != WorkflowPhase::Browse
     {
         return reset_options_content_height(snapshot, target, inventory_page_start)
-            .saturating_add(7);
+            .saturating_add(options_header_rows);
     }
-    const OPTIONS_HEADER_ROWS: usize = 7;
     match options.tab {
         AccountOptionsTab::Resets => {
-            OPTIONS_HEADER_ROWS + 3 + usize::from(options.message.is_some())
+            options_header_rows + 3 + usize::from(options.message.is_some())
         }
         AccountOptionsTab::Credits => {
             let base_body_rows = 9;
@@ -102,7 +116,7 @@ pub(in crate::presentation::quota) fn account_options_content_height(
                 usize::from(options.editor.as_ref().is_some_and(|editor| {
                     !matches!(editor.phase, CreditPolicyEditorPhase::Editing)
                 }));
-            OPTIONS_HEADER_ROWS
+            options_header_rows
                 + base_body_rows
                 + floor_row
                 + provider_control_row
@@ -134,6 +148,18 @@ pub(super) fn account_options_message_text(message: AccountOptionsMessage) -> &'
     }
 }
 
+fn account_options_message_role(message: AccountOptionsMessage) -> codex_router_tui::UiTextRole {
+    use codex_router_tui::UiTextRole;
+    match message {
+        AccountOptionsMessage::Refreshing => UiTextRole::Secondary,
+        AccountOptionsMessage::Refreshed => UiTextRole::Success,
+        AccountOptionsMessage::RefreshFailed => UiTextRole::Error,
+        AccountOptionsMessage::RefreshUnavailable(_) | AccountOptionsMessage::ResetReviewActive => {
+            UiTextRole::Warning
+        }
+    }
+}
+
 pub(in crate::presentation::quota) fn account_options_inspection_footer(
     phase: WorkflowPhase,
     width: usize,
@@ -160,15 +186,28 @@ pub(in crate::presentation::quota) fn account_options_inspection_footer(
     }
 }
 
-pub(super) fn render_credit_usage_body(
-    usage: &CreditUsageStatus,
+pub(super) struct CreditUsageBodyProps<'a> {
+    usage: &'a CreditUsageStatus,
     weekly_quota_floor_percent: u16,
     width: usize,
-    height: usize,
-    editor: Option<&super::CreditPolicyEditorState>,
+    editor: Option<&'a super::CreditPolicyEditorState>,
     message: Option<AccountOptionsMessage>,
-) -> AnyElement<'static> {
-    let text_width = width.saturating_sub(2);
+    pending_tab: Option<super::AccountOptionsTab>,
+    on_select: Handler<codex_router_core::credit_usage::CreditUsagePolicy>,
+    on_open: Handler<()>,
+}
+
+pub(super) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyElement<'static> {
+    let CreditUsageBodyProps {
+        usage,
+        weekly_quota_floor_percent,
+        width,
+        editor,
+        message,
+        pending_tab,
+        on_select,
+        on_open,
+    } = props;
     let entitlement = credit_entitlement_label(usage);
     let freshness = credit_freshness_label(usage.freshness);
     let age = if usage.age_label == "unknown" {
@@ -186,44 +225,87 @@ pub(super) fn render_credit_usage_body(
             CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
         )
     });
-    let balance_heading = element! {
-        Text(content: "Credit balance", color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-    }
-    .into_any();
-    let usage_heading = element! {
-        Text(content: "Credit usage", color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-    }
-    .into_any();
-    let policy_row = render_policy_row(policy, is_editing, width);
+    let form = editor.is_some();
+    let balance_heading = (!form).then(|| {
+        element! {
+            UiHeading(content: "Credit balance".to_owned(), level: UiHeadingLevel::Section)
+        }
+        .into_any()
+    });
+    let usage_heading = (!form).then(|| {
+        element! {
+            UiHeading(content: "Credit usage".to_owned(), level: UiHeadingLevel::Section)
+        }
+        .into_any()
+    });
+    let policy_row = render_policy_row(CreditPolicyRowProps {
+        policy,
+        editing: is_editing,
+        has_focus: pending_tab.is_none() && message.is_none(),
+        editor,
+        width,
+        on_select,
+        on_open,
+    });
     let provider_note = provider_control_note(usage);
     let floor_note = (weekly_quota_floor_percent > 0)
         .then(|| format!("Weekly floor {weekly_quota_floor_percent}% blocks credit routing."));
     let editor_status = editor.and_then(|editor| match editor.phase {
         CreditPolicyEditorPhase::Editing => None,
-        CreditPolicyEditorPhase::Saving => Some(("Saving preference…", Color::Yellow)),
-        CreditPolicyEditorPhase::SaveFailed(error) => Some((error.message(), Color::Red)),
+        CreditPolicyEditorPhase::Saving => Some((
+            "Saving preference…",
+            codex_router_tui::UiTextRole::Secondary,
+        )),
+        CreditPolicyEditorPhase::SaveFailed(error) => {
+            Some((error.message(), codex_router_tui::UiTextRole::Error))
+        }
         CreditPolicyEditorPhase::SavedReloadFailed => Some((
             "Saved, but account data could not be reloaded.",
-            Color::Yellow,
+            codex_router_tui::UiTextRole::Warning,
         )),
     });
-    let message = message.map(account_options_message_text);
+    let message = message.map(|message| {
+        (
+            account_options_message_text(message),
+            account_options_message_role(message),
+        )
+    });
+    let mut notices = Vec::new();
+    for note in [floor_note, provider_note].into_iter().flatten() {
+        notices.push(element!(codex_router_tui::UiText(content:format!("Warning: {note}"),role:codex_router_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)).into_any());
+    }
+    if let Some((text, role)) = editor_status {
+        let text = if role == codex_router_tui::UiTextRole::Error {
+            format!("Error: {text}")
+        } else if role == codex_router_tui::UiTextRole::Warning {
+            format!("Warning: {text}")
+        } else {
+            text.to_owned()
+        };
+        notices.push(
+            element!(codex_router_tui::FocusReveal(has_focus:pending_tab.is_none() && message.is_none()) {codex_router_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any(),
+        );
+    }
+    if let Some((text, role)) = message {
+        let text = if role == codex_router_tui::UiTextRole::Warning {
+            format!("Warning: {text}")
+        } else {
+            text.to_owned()
+        };
+        notices.push(element!(codex_router_tui::FocusReveal(has_focus:pending_tab.is_none()) {codex_router_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any());
+    }
+    let has_notices = !notices.is_empty();
 
     element! {
-        View(width: width as u32, height: height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(balance_heading)
-            #(account_options_field_line("Status", &entitlement, width, Color::White))
-            #(account_options_field_line("Freshness", freshness, width, freshness_color(usage.freshness)))
-            #(account_options_field_line("Observation", &age, width, Color::Grey))
-            View(height: 1) {}
+            #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, width, Color::White))
+            #((!form||usage.freshness!=crate::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,width,freshness_color(usage.freshness))))
+            #((!form).then(||account_options_field_line("Observation",&age,width,Color::Grey)))
+            View(height: 1, flex_shrink: 0.0_f32) {}
             #(usage_heading)
             #(policy_row)
-            Text(content: truncate_account_options_line("Included quota on eligible accounts always comes first.", text_width), color: Color::Grey, wrap: TextWrap::NoWrap)
-            Text(content: truncate_account_options_line("Allow is limited to eligible OpenAI Responses requests.", text_width), color: Color::Grey, wrap: TextWrap::NoWrap)
-            #(floor_note.map(|note| element! { Text(content: truncate_account_options_line(&note, text_width), color: Color::Yellow, wrap: TextWrap::NoWrap) }.into_any()))
-            #(provider_note.map(|note| element! { Text(content: truncate_account_options_line(&note, text_width), color: Color::Yellow, wrap: TextWrap::NoWrap) }.into_any()))
-            #(editor_status.map(|(text, color)| element! { Text(content: truncate_account_options_line(text, text_width), color, wrap: TextWrap::NoWrap) }.into_any()))
-            #(message.map(|text| element! { Text(content: truncate_account_options_line(text, text_width), color: Color::Yellow, wrap: TextWrap::NoWrap) }.into_any()))
+            #(has_notices.then(||element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:1,row_gap:1) {#(notices)}}))
         }
     }
     .into_any()
@@ -232,16 +314,61 @@ pub(super) fn render_credit_usage_body(
 fn render_credit_tab_body(
     options: &AccountOptionsState,
     width: usize,
-    height: usize,
+    state: Option<State<Option<AccountOptionsState>>>,
 ) -> AnyElement<'static> {
-    render_credit_usage_body(
-        &options.target.credit_usage,
-        options.target.weekly_quota_floor_percent,
+    let expected_account = options.target.account_id.clone();
+    let open_account = expected_account.clone();
+    let expected_session = options.session_generation;
+    let expected_operation = options
+        .editor
+        .as_ref()
+        .map(|editor| editor.operation_generation);
+    let on_select = Handler::from(move |policy| {
+        if let Some(mut state) = state {
+            let mut current = state.write();
+            if let Some(options) = current.as_mut().filter(|options| {
+                options.target.account_id == expected_account
+                    && options.session_generation == expected_session
+            }) && let Some(editor) = options.editor.as_mut().filter(|editor| {
+                Some(editor.operation_generation) == expected_operation
+                    && matches!(
+                        editor.phase,
+                        CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
+                    )
+            }) {
+                editor.draft_policy = policy;
+                editor.phase = CreditPolicyEditorPhase::Editing;
+                editor.choice = codex_router_tui::SearchSelectState::Closed;
+            }
+        }
+    });
+    let on_open = Handler::from(move |_| {
+        if let Some(mut state) = state {
+            let mut current = state.write();
+            if let Some(options) = current.as_mut().filter(|options| {
+                options.target.account_id == open_account
+                    && options.session_generation == expected_session
+            }) && let Some(editor) = options.editor.as_mut().filter(|editor| {
+                Some(editor.operation_generation) == expected_operation
+                    && matches!(
+                        editor.phase,
+                        CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
+                    )
+            }) {
+                editor.choice.open(editor.draft_policy);
+            }
+        }
+    });
+    render_credit_usage_body(CreditUsageBodyProps {
+        usage: &options.target.credit_usage,
+        weekly_quota_floor_percent: options.target.weekly_quota_floor_percent,
         width,
-        height,
-        options.editor.as_ref(),
-        options.message,
-    )
+        editor: options.editor.as_ref(),
+        message: options.message,
+        pending_tab: options.pending_tab,
+        on_select,
+        on_open,
+    })
 }
 
 fn render_resets_tab_body(
@@ -252,19 +379,19 @@ fn render_resets_tab_body(
     height: usize,
     inventory_page_start: usize,
     spinner_tick: usize,
-) -> AnyElement<'static> {
+) -> Option<AnyElement<'static>> {
     if let (Some(snapshot), Some(target)) = (reset_snapshot, reset_target)
         && snapshot.phase() != WorkflowPhase::Browse
     {
-        return render_reset_panel_content(
+        return Some(render_reset_panel_content(
             snapshot,
             target,
             width,
-            height,
             inventory_page_start,
             account_options_reset_inventory_page_size(height),
             spinner_tick,
-        );
+            None,
+        ));
     }
     let unavailable_reason = if !options.target.enabled {
         Some("Resets are unavailable while this account is disabled.")
@@ -273,23 +400,22 @@ fn render_resets_tab_body(
     } else {
         None
     };
-    let explanation = if let Some(reason) = unavailable_reason {
-        reason
-    } else if reset_target.is_some() {
-        "Checking reset eligibility…"
-    } else {
-        "Press Enter to inspect reset eligibility."
-    };
-    let text_width = width.saturating_sub(2);
-    element! {
-        View(width: width as u32, height: height as u32, flex_direction: FlexDirection::Column) {
-            Text(content: "Reset credits", color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-            Text(content: truncate_account_options_line(explanation, text_width), color: Color::Grey, wrap: TextWrap::NoWrap)
-            Text(content: truncate_account_options_line("No reset is consumed without explicit confirmation.", text_width), color: Color::Grey, wrap: TextWrap::NoWrap)
-            #(options.message.map(|message| element! { Text(content: truncate_account_options_line(account_options_message_text(message), text_width), color: Color::Yellow, wrap: TextWrap::NoWrap) }.into_any()))
-        }
+    let explanation =
+        unavailable_reason.or_else(|| reset_target.map(|_| "Checking reset eligibility…"));
+    if explanation.is_none() && options.message.is_none() {
+        return Some(account_options_field_line(
+            "Eligibility",
+            "Not checked",
+            width,
+            Color::White,
+        ));
     }
-    .into_any()
+    Some(element! {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+            #(explanation.map(|text|element!(codex_router_tui::UiText(content:text.to_owned(),role:codex_router_tui::UiTextRole::Secondary,wrap:TextWrap::Wrap))))
+            #(options.message.map(|message|element!(codex_router_tui::UiText(content:account_options_message_text(message).to_owned(),role:account_options_message_role(message),wrap:TextWrap::Wrap))))
+        }
+    }.into_any())
 }
 
 fn render_tab_label(label: &str, active: bool) -> AnyElement<'static> {
@@ -301,34 +427,49 @@ fn render_tab_label(label: &str, active: bool) -> AnyElement<'static> {
     element! { Text(content, color, weight, wrap: TextWrap::NoWrap) }.into_any()
 }
 
-fn render_policy_row(
+struct CreditPolicyRowProps<'a> {
     policy: codex_router_core::credit_usage::CreditUsagePolicy,
     editing: bool,
+    has_focus: bool,
+    editor: Option<&'a super::CreditPolicyEditorState>,
     width: usize,
-) -> AnyElement<'static> {
+    on_select: Handler<codex_router_core::credit_usage::CreditUsagePolicy>,
+    on_open: Handler<()>,
+}
+fn render_policy_row(props: CreditPolicyRowProps<'_>) -> AnyElement<'static> {
+    let CreditPolicyRowProps {
+        policy,
+        editing,
+        has_focus,
+        editor,
+        width,
+        on_select,
+        on_open,
+    } = props;
+    let label = if policy == codex_router_core::credit_usage::CreditUsagePolicy::Allow {
+        "Allow"
+    } else {
+        "Disallow"
+    };
     if !editing {
-        let label = match policy {
-            codex_router_core::credit_usage::CreditUsagePolicy::Allow => "Allow",
-            codex_router_core::credit_usage::CreditUsagePolicy::Disallow => "Disallow",
-        };
-        return account_options_field_line("Usage", label, width, Color::Yellow);
+        return element!(codex_router_tui::FocusReveal(has_focus:editor.is_none()&&has_focus) {#(account_options_field_line("Use credits",label,width,Color::White))}).into_any();
     }
-    let allow_active = policy.allows_credit_usage();
-    let disallow_active = !allow_active;
-    element! {
-        View(width: width as u32, flex_direction: FlexDirection::Row, column_gap: 2) {
-            View(width: 14) { Text(content: "Usage", color: Color::Grey, wrap: TextWrap::NoWrap) }
-            View(flex_direction: FlexDirection::Row, column_gap: 1) {
-                Text(content: if disallow_active { "›" } else { " " }, color: if disallow_active { Color::Yellow } else { Color::Grey }, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-                Text(content: "Disallow", color: if disallow_active { Color::Yellow } else { Color::Grey }, weight: if disallow_active { Weight::Bold } else { Weight::Normal }, wrap: TextWrap::NoWrap)
-            }
-            View(flex_direction: FlexDirection::Row, column_gap: 1) {
-                Text(content: if allow_active { "›" } else { " " }, color: if allow_active { Color::Yellow } else { Color::Grey }, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-                Text(content: "Allow", color: if allow_active { Color::Yellow } else { Color::Grey }, weight: if allow_active { Weight::Bold } else { Weight::Normal }, wrap: TextWrap::NoWrap)
-            }
-        }
-    }
-    .into_any()
+    let choice = editor
+        .map(|editor| editor.choice.clone())
+        .unwrap_or_default();
+    let expanded = choice.is_open();
+    let body = if expanded {
+        element!(codex_router_tui::SearchSelect<codex_router_core::credit_usage::CreditUsagePolicy>(state:choice,options:super::credit_policy_choices(),on_select)).into_any()
+    } else {
+        element! {codex_router_tui::DialogButton(handler:on_open) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else {Color::White})}}
+            .into_any()
+    };
+    let body = if expanded {
+        body
+    } else {
+        element!(codex_router_tui::SelectableRow(selected:false) {#(body)}).into_any()
+    };
+    element! {codex_router_tui::FormField(label:"Use credits".to_owned(),label_width:if width<52 {11u16}else {14u16},stacked:width<34,has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {#(body)}}.into_any()
 }
 
 fn account_options_field_line(
@@ -337,14 +478,11 @@ fn account_options_field_line(
     width: usize,
     value_color: Color,
 ) -> AnyElement<'static> {
-    let value_width = width.saturating_sub(16);
     element! {
-        View(width: width as u32, flex_direction: FlexDirection::Row) {
-            View(width: 14) { Text(content: label, color: Color::Grey, wrap: TextWrap::NoWrap) }
-            Text(content: truncate_account_options_line(value, value_width), color: value_color, wrap: TextWrap::NoWrap)
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32) {
+            codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,stacked:width<52) {Text(content:value.to_owned(),color:value_color)}
         }
-    }
-    .into_any()
+    }.into_any()
 }
 
 fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {
@@ -354,7 +492,10 @@ fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {
         CreditAvailability::Unlimited => "Unlimited".to_owned(),
         CreditAvailability::Available {
             balance: Some(balance),
-        } => format!("Available · {}", balance.as_str()),
+        } => format!(
+            "Available · {}",
+            super::credit_balance_presentation::detailed_credit_balance(balance)
+        ),
         CreditAvailability::Available { balance: None } => {
             "Available · balance withheld".to_owned()
         }
@@ -372,7 +513,7 @@ fn credit_freshness_label(freshness: CreditUsageFreshness) -> &'static str {
 fn freshness_color(freshness: CreditUsageFreshness) -> Color {
     match freshness {
         CreditUsageFreshness::Fresh => Color::Green,
-        CreditUsageFreshness::Stale => Color::Yellow,
+        CreditUsageFreshness::Stale => codex_router_tui::UiTextRole::Warning.color(),
         CreditUsageFreshness::Unknown => Color::Grey,
     }
 }
@@ -389,18 +530,4 @@ fn provider_control_note(usage: &CreditUsageStatus) -> Option<String> {
             .filter(|reason| reason.blocks_credit_usage())
             .map(|reason| format!("Provider reports {}.", reason.as_str().replace('_', " "))),
     }
-}
-
-fn truncate_account_options_line(value: &str, width: usize) -> String {
-    let line = value.replace('\n', " ");
-    if line.chars().count() <= width {
-        return line;
-    }
-    if width == 0 {
-        return String::new();
-    }
-    if width == 1 {
-        return "…".to_owned();
-    }
-    format!("{}…", line.chars().take(width - 1).collect::<String>())
 }

@@ -1,0 +1,41 @@
+{
+  "start": "2026-10-20T09:56:49.152869+00:00",
+  "independent_intake_seconds": 0.9106832919642329,
+  "index": 0,
+  "grid": [
+    32,
+    24
+  ],
+  "plan": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-phone-pace-32-20261020T095422Z/c7-current-32x24-component-plan.json",
+  "plan_sha256": "fecac7928cf7fc0a1955a64e2051b8d2f3da2bcd2dba56bcc44f9884e600acee",
+  "command": [
+    "/Users/shravansunder/.local/bin/uv",
+    "run",
+    "--offline",
+    "--no-project",
+    "--with",
+    "pydantic==2.14.1",
+    "--python",
+    "3.13",
+    "python",
+    "-B",
+    "-m",
+    "scripts.verification.tui_component_capture",
+    "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-phone-pace-32-20261020T095422Z/c7-current-32x24-component-plan.json"
+  ],
+  "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-phone-pace-32-20261020T095422Z/repository",
+  "output": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-phone-pace-32-20261020T095422Z/observation-32x24",
+  "budget": {
+    "preflightSeconds": 50,
+    "workSeconds": 1900,
+    "cleanupSeconds": 90,
+    "wholeSeconds": 2040
+  },
+  "timeout": false,
+  "V_stop_requested": false,
+  "V_signals": [],
+  "wrapper_pid": 16729,
+  "exit": 0,
+  "finish": "2026-10-20T09:57:58.389301+00:00",
+  "seconds": 69.23584212502465
+}

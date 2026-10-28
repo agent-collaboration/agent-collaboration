@@ -4,255 +4,66 @@ use std::path::PathBuf;
 
 #[cfg(unix)]
 fn replay_fixture(update_count: usize) -> ExternalProviderLaunch {
-    let fixture = format!(
-        r#"
-import json,sys,time
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'replay-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/load'
-for index in range({update_count}):
-    update={{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'fixture-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'historic-'+str(index)}}}}}}}}
-    print(json.dumps(update))
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-update={{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'fixture-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'CURRENT_OUTPUT'}}}}}}}}
-print(json.dumps(update)); print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-pressure-agent.ts",
+        vec!["replay".to_owned(), update_count.to_string()],
+    )
 }
 
 #[cfg(unix)]
 fn many_prompt_updates_fixture(update_count: usize) -> ExternalProviderLaunch {
-    let fixture = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'many-updates-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-for index in range({update_count}):
-    update={{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'fixture-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'x'}}}}}}}}
-    print(json.dumps(update))
-done={{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'fixture-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'DONE'}}}}}}}}
-print(json.dumps(done)); print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-pressure-agent.ts",
+        vec!["updates".to_owned(), update_count.to_string()],
+    )
 }
 
 #[cfg(unix)]
 fn output_limit_and_late_update_fixture(control_path: &std::path::Path) -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,socket,sys
-control=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-control.connect(sys.argv[1])
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'output-limit-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-first=json.loads(sys.stdin.readline())
-assert first['method']=='session/prompt'
-oversized={'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'x'*(1024*1024+1)}}}}
-print(json.dumps(oversized)); sys.stdout.flush()
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-print(json.dumps({'jsonrpc':'2.0','id':first['id'],'result':{'stopReason':'cancelled'}})); sys.stdout.flush()
-late={'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'LATE_OUTPUT'}}}}
-print(json.dumps(late)); sys.stdout.flush()
-print(json.dumps({'jsonrpc':'2.0','id':99,'method':'probe/unknown','params':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-barrier=json.loads(sys.stdin.readline())
-assert barrier['id']==99 and 'error' in barrier, barrier
-control.sendall(b'r')
-second=json.loads(sys.stdin.readline())
-assert second['method']=='session/prompt'
-current={'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'CURRENT_OUTPUT'}}}}
-print(json.dumps(current)); print(json.dumps({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            fixture.to_owned(),
-            control_path.to_string_lossy().into_owned(),
-        ],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-cancel-agent.ts",
+        vec![control_path.to_string_lossy().into_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn unknown_request_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'unknown-request-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-send({'jsonrpc':'2.0','id':91,'method':'session/unknown','params':{'sessionId':'fixture-session'}})
-idle_response=None
-prompt=None
-while idle_response is None or prompt is None:
-    message=read()
-    if message.get('method')=='session/prompt':
-        prompt=message
-    elif message.get('id')==91 and 'error' in message:
-        idle_response=message
-    else:
-        raise AssertionError('unexpected message while awaiting unknown-request reply and prompt')
-send({'jsonrpc':'2.0','id':91,'method':'session/unknown','params':{'sessionId':'fixture-session'}})
-active_response=read()
-report=json.dumps([idle_response,active_response])
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':report}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-unknown-request-agent.ts",
+        vec!["session".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn sessionless_unknown_request_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'sessionless-request-fixture','version':'1'}}})
-send({'jsonrpc':'2.0','id':91,'method':'unknown/sessionless','params':{}})
-response=None
-prompt=None
-while response is None or prompt is None:
-    message=read()
-    if message.get('method')=='session/new':
-        send({'jsonrpc':'2.0','id':message['id'],'result':{'sessionId':'fixture-session'}})
-    elif message.get('method')=='session/prompt':
-        prompt=message
-    elif message.get('id')==91 and 'error' in message:
-        response=message
-    else:
-        raise AssertionError('unexpected message while awaiting sessionless reply and prompt')
-report=json.dumps(response)
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':report}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-unknown-request-agent.ts",
+        vec!["sessionless".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn large_provider_frames_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'large-frames-fixture','version':'1'}}})
-for session_id in ['large-session','second-session']:
-    request=read()
-    assert request['method']=='session/new'
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':session_id}})
-prompts=[read(),read()]
-assert all(request['method']=='session/prompt' for request in prompts)
-prompt_by_session={request['params']['sessionId']:request for request in prompts}
-first=prompt_by_session['large-session']
-second=prompt_by_session['second-session']
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'large-session','update':{'sessionUpdate':'tool_call','toolCallId':'large-tool','title':'large result','kind':'other','status':'in_progress'}}})
-large='x'*(2*1024*1024)
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'large-session','update':{'sessionUpdate':'tool_call_update','toolCallId':'large-tool','rawOutput':{'payload':large},'status':'completed'}}})
-send({'jsonrpc':'2.0','id':first['id'],'result':{'stopReason':'end_turn','_meta':{'payload':large}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'second-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'SECOND_SESSION_OK'}}}})
-send({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-pressure-agent.ts",
+        vec!["frames".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn large_permission_frame_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'large-permission-fixture','version':'1'}}})
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-large='x'*(2*1024*1024)
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'fixture-session','toolCall':{'toolCallId':'large-tool','title':'large permission','kind':'execute','rawInput':{'payload':large}},'options':[{'optionId':'reject','name':'Reject','kind':'reject_once'}]}})
-response=read()
-assert response['id']==91
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-pressure-agent.ts",
+        vec!["permission".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn oversized_active_frame_fixture() -> ExternalProviderLaunch {
-    let fixture = format!(
-        r#"
-import json,sys,time
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=read()
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'frame-limit-fixture','version':'1'}}}}}})
-request=read()
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})
-prompt=read()
-time.sleep(0.1)
-frame={{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'fixture-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'x'*({} + 1)}}}}}}}}
-send(frame)
-sys.stdin.read()
-"#,
-        64 * 1024 * 1024,
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture],
-        environment: vec![],
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-output-pressure-agent.ts",
+        vec!["limit".to_owned()],
+    )
 }
 
 #[cfg(unix)]

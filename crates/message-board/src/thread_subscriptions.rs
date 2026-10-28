@@ -1,4 +1,4 @@
-//! Durable per-reader Thread and Topic subscription contracts.
+//! Durable per-reader Thread and Project subscription contracts.
 mod root_notice;
 
 pub use root_notice::{
@@ -6,7 +6,7 @@ pub use root_notice::{
     SubscriptionBatchSettlement,
 };
 
-use crate::{Identity, MessageId, TopicId};
+use crate::{Identity, ProjectId, ThreadId};
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,35 +44,35 @@ fn invalid_subscription_field(
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum SubscriptionScope {
     #[serde(rename_all = "camelCase")]
-    Thread { root_message_id: MessageId },
+    Thread { thread_id: ThreadId },
     #[serde(rename_all = "camelCase")]
-    Topic { topic_id: TopicId },
+    Project { project_id: ProjectId },
 }
 
 impl SubscriptionScope {
     #[must_use]
-    pub fn thread(root_message_id: MessageId) -> Self {
-        Self::Thread { root_message_id }
+    pub fn thread(thread_id: ThreadId) -> Self {
+        Self::Thread { thread_id }
     }
 
     #[must_use]
-    pub fn topic(topic_id: TopicId) -> Self {
-        Self::Topic { topic_id }
+    pub fn project(project_id: ProjectId) -> Self {
+        Self::Project { project_id }
     }
 
     #[must_use]
     pub fn kind_and_id(&self) -> (&'static str, &str) {
         match self {
-            Self::Thread { root_message_id } => ("thread", root_message_id.as_str()),
-            Self::Topic { topic_id } => ("topic", topic_id.as_str()),
+            Self::Thread { thread_id } => ("thread", thread_id.as_str()),
+            Self::Project { project_id } => ("project", project_id.as_str()),
         }
     }
 
     #[must_use]
-    pub fn root_message_id(&self) -> Option<&MessageId> {
+    pub fn thread_id(&self) -> Option<&ThreadId> {
         match self {
-            Self::Thread { root_message_id } => Some(root_message_id),
-            Self::Topic { .. } => None,
+            Self::Thread { thread_id } => Some(thread_id),
+            Self::Project { .. } => None,
         }
     }
 }
@@ -490,6 +490,7 @@ macro_rules! uuid_v7_id {
         }
 
         impl $name {
+            #[cfg(not(target_arch = "wasm32"))]
             #[must_use]
             pub fn generate() -> Self {
                 Self(Uuid::now_v7().hyphenated().to_string())
@@ -550,7 +551,7 @@ pub enum SubscriptionDeliveryOutcome {
     try_from = "RawSubscriptionRootRecord"
 )]
 pub struct SubscriptionRootRecord {
-    root_message_id: MessageId,
+    thread_id: ThreadId,
     opened_at: DateTime<Utc>,
     last_arrival_at: DateTime<Utc>,
     pending_count: u64,
@@ -562,7 +563,7 @@ pub struct SubscriptionRootRecord {
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RawSubscriptionRootRecord {
-    root_message_id: MessageId,
+    thread_id: ThreadId,
     opened_at: DateTime<Utc>,
     last_arrival_at: DateTime<Utc>,
     pending_count: u64,
@@ -576,7 +577,7 @@ impl TryFrom<RawSubscriptionRootRecord> for SubscriptionRootRecord {
 
     fn try_from(raw: RawSubscriptionRootRecord) -> Result<Self, Self::Error> {
         Self::new(SubscriptionRootRecordProps {
-            root_message_id: raw.root_message_id,
+            thread_id: raw.thread_id,
             opened_at: raw.opened_at,
             last_arrival_at: raw.last_arrival_at,
             pending_count: raw.pending_count,
@@ -589,7 +590,7 @@ impl TryFrom<RawSubscriptionRootRecord> for SubscriptionRootRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscriptionRootRecordProps {
-    pub root_message_id: MessageId,
+    pub thread_id: ThreadId,
     pub opened_at: DateTime<Utc>,
     pub last_arrival_at: DateTime<Utc>,
     pub pending_count: u64,
@@ -607,7 +608,7 @@ impl SubscriptionRootRecord {
             ));
         }
         Ok(Self {
-            root_message_id: props.root_message_id,
+            thread_id: props.thread_id,
             opened_at: props.opened_at,
             last_arrival_at: props.last_arrival_at,
             pending_count: props.pending_count,
@@ -618,8 +619,8 @@ impl SubscriptionRootRecord {
     }
 
     #[must_use]
-    pub fn root_message_id(&self) -> &MessageId {
-        &self.root_message_id
+    pub fn thread_id(&self) -> &ThreadId {
+        &self.thread_id
     }
 
     #[must_use]

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT membership_id AS \"id!: String\" FROM subscription_memberships WHERE reader_actor=? AND scope_kind=? AND scope_id=? ORDER BY generation DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d0245f31d48c3845873aad4766b8f352ee960d79f56526b437db4132dba5d4c6"
+}

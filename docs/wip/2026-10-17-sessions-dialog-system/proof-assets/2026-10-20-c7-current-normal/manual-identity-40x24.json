@@ -1,0 +1,50 @@
+{
+  "kind": "Manual full captured-identity original witnesses; existing personal-review boundary",
+  "typedTargetSources": [
+    {
+      "path": "crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs",
+      "line": 60,
+      "sha256": "7ef6f68d368869904270fb0ebef89763ff3a208ad98c7bce2639ad00c72349b2"
+    },
+    {
+      "path": "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs",
+      "line": 333,
+      "sha256": "1964bed78369d7514c782f1a55d51d0493b7b4cb2145bbff5965d34bb9ede0d5"
+    }
+  ],
+  "images": [
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/40x24-failed/component-quota-confirm-help-top.png",
+      "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+      "expectedAccountName": "東京 OpenAI Research Account Alpha Long Name",
+      "expectedTagValue": "alpha-tag",
+      "observedCompleteValue": "東京 OpenAI Research Account Alpha Long Name [alpha-tag]",
+      "field": "Quota Help / Account",
+      "manualObserver": "Root personally opened original; independent complete-value witnesses in linked reports",
+      "manualResult": "Complete exact name/tag value/delimiters visibly match typed captured target",
+      "rawNativeTagCandidate": "Lalpha-tag]",
+      "automaticIdentityResult": "UNSUPPORTED/rejected; no automatic promotion",
+      "strictPosthocChecks": "Pending actual separately recorded execution; not inferred",
+      "limits": "Still does not establish input dispatch, captured-effect identity, duplicate absence or actual provider state"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/40x24-failed/component-quota-confirm-help-identity.png",
+      "sha256": "29b9057f605467f014878695f1c33e77e6ad11d1b55ca343c119853c1411c7a9",
+      "expectedAccountName": "東京 OpenAI Research Account Alpha Long Name",
+      "expectedTagValue": "alpha-tag",
+      "observedCompleteValue": "東京 OpenAI Research Account Alpha Long Name [alpha-tag]",
+      "field": "Quota Help / Account",
+      "manualObserver": "Root personally opened original; independent complete-value witnesses in linked reports",
+      "manualResult": "Complete exact name/tag value/delimiters visibly match typed captured target",
+      "rawNativeTagCandidate": "[alpha-tagl",
+      "automaticIdentityResult": "UNSUPPORTED/rejected; no automatic promotion",
+      "strictPosthocChecks": "Pending actual separately recorded execution; not inferred",
+      "limits": "Still does not establish input dispatch, captured-effect identity, duplicate absence or actual provider state"
+    }
+  ],
+  "independentReports": [
+    "independent-ux-40x24.md",
+    "independent-composite-identity-proof-design.md"
+  ],
+  "result": "Manual full identity visible in both original fields; automatic40 gate remains open"
+}

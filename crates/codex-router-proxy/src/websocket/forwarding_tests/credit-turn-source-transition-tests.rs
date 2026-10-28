@@ -241,9 +241,9 @@ async fn ordinary_unknown_source_continues_for_two_websocket_turns() {
             );
         }
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(8), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(8), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("ordinary fallback WebSocket turns should finish");
     assert!(
@@ -264,7 +264,7 @@ async fn ordinary_unknown_source_continues_for_two_websocket_turns() {
 
 #[tokio::test]
 async fn ordinary_unknown_source_continues_on_websocket() {
-    ordinary_unknown_source_continues_for_two_websocket_turns().await;
+    Box::pin(ordinary_unknown_source_continues_for_two_websocket_turns()).await;
 }
 
 #[tokio::test]
@@ -466,9 +466,9 @@ async fn included_source_observes_credit_transition_and_saved_disallow_before_ne
             "denied turn 3 must not reach upstream: {upstream_end:?}"
         );
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(8), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(8), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("included-to-credit transition should finish through the loopback WebSocket");
     assert!(

@@ -2,7 +2,6 @@
 //! Router's own provider operations, here a scripted provider backend that records what it
 //! was asked.
 use crate::api_test_harness::{ServedApi, api_config, test_identity};
-use collaboration_service::CollaborationApplication;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use scripted_provider_backend::ScriptedProviderBackend;
 use serde_json::{Value, json};
@@ -10,6 +9,9 @@ use std::sync::Arc;
 
 #[path = "provider_conversation_http_tests/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
+
+#[path = "provider_conversation_http_tests/human_load_tests.rs"]
+mod human_load_tests;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
@@ -343,7 +345,7 @@ async fn provider_prompt_without_operation_id_names_uuidv7_generator_before_muta
         .as_str()
         .expect("generator fix");
     assert!(
-        fix.contains("python3 -c 'import uuid; print(uuid.uuid7())'"),
+        fix == "Generate a fresh UUIDv7 and pass it as operationId",
         "{fix}"
     );
     let load = call_tool(
@@ -370,7 +372,7 @@ async fn provider_prompt_without_operation_id_names_uuidv7_generator_before_muta
     assert!(
         load["result"]["structuredContent"]["fix"]
             .as_str()
-            .is_some_and(|fix| fix.contains("python3 -c 'import uuid; print(uuid.uuid7())'"))
+            .is_some_and(|fix| fix == "Generate a fresh UUIDv7 and pass it as operationId")
     );
     assert!(
         backend.calls().is_empty(),
@@ -438,7 +440,7 @@ async fn start_listener(path: &std::path::Path, backend: &ScriptedProviderBacken
         ])
         .expect("endpoint directory")
         .with_provider_conversation_backend(Arc::new(backend.clone()));
-    ServedApi::tcp(&api_config(CollaborationApplication::new(identity), path)).await
+    ServedApi::tcp(&api_config((identity).build(), path)).await
 }
 
 fn operation_snapshot(operation_id: &str, operation: &str) -> Value {
@@ -583,7 +585,7 @@ async fn shutdown_aborts_a_call_that_ignores_cancellation_and_joins_it() {
         ])
         .expect("endpoint directory")
         .with_provider_conversation_backend(Arc::new(backend.clone()));
-    let config = api_config(CollaborationApplication::new(identity), temporary.path());
+    let config = api_config((identity).build(), temporary.path());
     let listener =
         ServedApi::tcp_with_call_grace(&config, std::time::Duration::from_millis(200)).await;
     let client = reqwest::Client::new();

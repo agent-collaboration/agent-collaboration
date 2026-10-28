@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO local_delivery_retries(item_id,retry_attempts,scheduled_retry_at) VALUES (?,?,?) ON CONFLICT(item_id) DO UPDATE SET retry_attempts=excluded.retry_attempts,scheduled_retry_at=excluded.scheduled_retry_at",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "29fae38576c9023aa35401d367a584bb35735aae85042ad6ba9382a17fa92838"
+}

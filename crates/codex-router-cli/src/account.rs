@@ -19,9 +19,9 @@ use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
 use codex_router_secret_store::SecretStore;
 use codex_router_secret_store::account_tokens::AccountCredentialBundle;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStoreStatus;
 use codex_router_secret_store::model::SecretStoreError;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStoreStatus;
 #[cfg(test)]
 use codex_router_state::account::AccountRecord;
 use codex_router_state::account::AccountStatus;
@@ -38,8 +38,21 @@ use crate::ArgumentParser;
 use crate::CliError;
 use crate::router_root_or_default;
 
+#[path = "account_help.rs"]
+mod account_help;
+#[path = "account_login_identity.rs"]
+mod account_login_identity;
 #[path = "account_options.rs"]
 mod account_options;
+use account_help::{
+    ACCOUNT_DISABLE_HELP_TEXT, ACCOUNT_ENABLE_HELP_TEXT, ACCOUNT_HELP_TEXT, ACCOUNT_LIST_HELP_TEXT,
+    ACCOUNT_LOGIN_HELP_TEXT, ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT,
+};
+#[cfg(test)]
+use account_login_identity::account_id_from_label;
+use account_login_identity::{
+    normalize_label, resolve_login_account_id, resolve_login_account_id_at_router_root,
+};
 use account_options::{
     AccountLoginOptions, AccountRootOptions, AccountSetWeeklyFloorOptions, AccountStatusOptions,
 };
@@ -57,6 +70,9 @@ pub enum AccountCommand {
         label: String,
         /// Typed provider flow selected by the shared login dispatcher.
         provider_login_flow: ProviderLoginFlow,
+        /// Explicit isolated-root debug plaintext initialization.
+        #[cfg(debug_assertions)]
+        allow_plaintext_file_secrets: bool,
     },
     /// Lists router-owned accounts.
     List {
@@ -120,6 +136,8 @@ impl AccountCommand {
                     router_root: options.router_root()?,
                     label: options.label()?,
                     provider_login_flow,
+                    #[cfg(debug_assertions)]
+                    allow_plaintext_file_secrets: options.allow_plaintext_file_secrets,
                 })
             }
             "list" => {
@@ -317,7 +335,7 @@ pub(crate) fn run_account_command_with_input_and_openai_client_and_secret_store(
     reader: &mut impl BufRead,
     command: AccountCommand,
     openai_client: &OpenAiOAuthDeviceLoginClient,
-    secret_store: EncryptedCredentialStore,
+    secret_store: RuntimeCredentialStore,
 ) -> Result<(), AccountCommandError> {
     run_account_command_with_input_and_provider_flows_and_store_overrides(
         stdout,
@@ -331,12 +349,16 @@ pub(crate) fn run_account_command_with_input_and_openai_client_and_secret_store(
 }
 
 #[cfg(all(test, target_os = "macos"))]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 pub(crate) fn run_account_command_with_input_and_claude_flow_and_secret_store(
     stdout: &mut impl Write,
     reader: &mut impl BufRead,
     command: AccountCommand,
     claude_flow: &impl AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin>,
-    secret_store: EncryptedCredentialStore,
+    secret_store: RuntimeCredentialStore,
 ) -> Result<(), AccountCommandError> {
     assert!(
         matches!(
@@ -367,9 +389,9 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     reader: &mut impl BufRead,
     command: AccountCommand,
     openai_client: &OpenAiOAuthDeviceLoginClient,
-    openai_secret_store_override: Option<EncryptedCredentialStore>,
+    openai_secret_store_override: Option<RuntimeCredentialStore>,
     claude_flow_override: Option<&dyn AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin>>,
-    claude_secret_store_override: Option<EncryptedCredentialStore>,
+    claude_secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     match command {
         AccountCommand::Help(text) => stdout
@@ -379,33 +401,44 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
             router_root,
             label,
             provider_login_flow,
-        } => match provider_login_flow {
-            ProviderLoginFlow::OpenAiDevice => login_with_openai_device_auth(
-                stdout,
-                router_root,
-                label,
-                openai_client,
-                openai_secret_store_override,
-            ),
-            ProviderLoginFlow::ClaudeOAuth => match claude_flow_override {
-                Some(claude_flow) => login_with_claude_oauth(
+            #[cfg(debug_assertions)]
+            allow_plaintext_file_secrets,
+        } => {
+            #[cfg(debug_assertions)]
+            if allow_plaintext_file_secrets {
+                crate::secret_store_factory::initialize_plaintext_debug_root(
+                    &router_root.join("secrets"),
+                )
+                .map_err(AccountCommandError::SecretStore)?;
+            }
+            match provider_login_flow {
+                ProviderLoginFlow::OpenAiDevice => login_with_openai_device_auth(
                     stdout,
-                    reader,
                     router_root,
                     label,
-                    claude_flow,
-                    claude_secret_store_override,
+                    openai_client,
+                    openai_secret_store_override,
                 ),
-                None => login_with_claude_oauth(
-                    stdout,
-                    reader,
-                    router_root,
-                    label,
-                    &ClaudeOAuthLoginFlow::new(),
-                    claude_secret_store_override,
-                ),
-            },
-        },
+                ProviderLoginFlow::ClaudeOAuth => match claude_flow_override {
+                    Some(claude_flow) => login_with_claude_oauth(
+                        stdout,
+                        reader,
+                        router_root,
+                        label,
+                        claude_flow,
+                        claude_secret_store_override,
+                    ),
+                    None => login_with_claude_oauth(
+                        stdout,
+                        reader,
+                        router_root,
+                        label,
+                        &ClaudeOAuthLoginFlow::new(),
+                        claude_secret_store_override,
+                    ),
+                },
+            }
+        }
         AccountCommand::List { router_root } => list_accounts(stdout, router_root),
         AccountCommand::SetStatus {
             router_root,
@@ -420,63 +453,16 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     }
 }
 
-const ACCOUNT_HELP_TEXT: &str = "\
-codex-router account
-
-commands:
-  disable --account <name>  Stop routing to an account while retaining its credentials
-  enable --account <name>   Resume routing to an account
-  login --provider <openai|claude> --label <name>  Add a provider OAuth account
-  list                  Show configured router accounts
-  set-weekly-floor      Set or disable one account's weekly quota floor
-";
-
-const ACCOUNT_LOGIN_HELP_TEXT: &str = "\
-codex-router account login --provider <openai|claude> --label <name>
-
-Adds an OAuth account to router-owned encrypted storage.
-
-options:
-  --label <name>         Friendly account name shown in quota and account list
-  --provider <name>      OAuth account provider [default: openai]
-  OpenAI login displays a device URL and code, then waits for approval.
-  Claude login opens the hosted authorization URL and asks you to paste code#state.
-";
-
-const ACCOUNT_LIST_HELP_TEXT: &str = "\
-codex-router account list
-
-Shows configured router accounts.
-";
-
-const ACCOUNT_ENABLE_HELP_TEXT: &str = "\
-codex-router account enable --account <label>
-
-Resumes routing to one account without changing its credentials, quota, or history.
-";
-
-const ACCOUNT_DISABLE_HELP_TEXT: &str = "\
-codex-router account disable --account <label>
-
-Changes one account's routing status without removing its credentials, quota, or history.
-";
-
-const ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT: &str = "\
-codex-router account set-weekly-floor --account <label> --percent <0-15>
-
-Sets an integer weekly quota floor for exactly one account label. Zero disables it.
-";
-
 fn login_with_openai_device_auth(
     stdout: &mut impl Write,
     router_root: PathBuf,
     label: String,
     client: &OpenAiOAuthDeviceLoginClient,
-    secret_store_override: Option<EncryptedCredentialStore>,
+    secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     let label = normalize_label(&label)?;
-    ensure_account_label_available_at_router_root(&router_root, &label, Provider::Openai)?;
-    let account_id = account_id_from_label(&label)?;
+    let account_id =
+        resolve_login_account_id_at_router_root(&router_root, &label, Provider::Openai)?;
     let runtime = account_command_runtime()?;
     let tokens = collect_openai_oauth_tokens(stdout, client, &runtime)?;
 
@@ -484,7 +470,9 @@ fn login_with_openai_device_auth(
     let state = runtime.block_on(AsyncSqliteStateStore::open(
         &router_root.join("state.sqlite"),
     ))?;
-    ensure_account_label_available(&state, &label, Provider::Openai, &runtime)?;
+    if resolve_login_account_id(&state, &label, Provider::Openai, &runtime)? != account_id {
+        return Err(AccountCommandError::DuplicateAccountLabel { label });
+    }
     let secret_store = match secret_store_override {
         Some(secret_store) => secret_store,
         None => runtime
@@ -581,11 +569,11 @@ fn login_with_claude_oauth(
     router_root: PathBuf,
     label: String,
     flow: &(impl AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin> + ?Sized),
-    secret_store_override: Option<EncryptedCredentialStore>,
+    secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     let label = normalize_label(&label)?;
-    ensure_account_label_available_at_router_root(&router_root, &label, Provider::Claude)?;
-    let account_id = account_id_from_label(&label)?;
+    let account_id =
+        resolve_login_account_id_at_router_root(&router_root, &label, Provider::Claude)?;
     let bundle = collect_claude_oauth_bundle(stdout, reader, flow)?;
 
     create_router_root(&router_root)?;
@@ -593,7 +581,9 @@ fn login_with_claude_oauth(
     let state = runtime.block_on(AsyncSqliteStateStore::open(
         &router_root.join("state.sqlite"),
     ))?;
-    ensure_account_label_available(&state, &label, Provider::Claude, &runtime)?;
+    if resolve_login_account_id(&state, &label, Provider::Claude, &runtime)? != account_id {
+        return Err(AccountCommandError::DuplicateAccountLabel { label });
+    }
     let secret_store = match secret_store_override {
         Some(secret_store) => secret_store,
         None => runtime
@@ -737,15 +727,15 @@ fn list_accounts(stdout: &mut impl Write, router_root: PathBuf) -> Result<(), Ac
         let maintenance =
             runtime.block_on(state.load_credential_maintenance(account.account_id()))?;
         let oauth_status = match credential_store.status() {
-            EncryptedCredentialStoreStatus::KeyUnavailable => "keychain_locked".to_owned(),
-            EncryptedCredentialStoreStatus::MigrationIncomplete { accounts, failure } => {
+            RuntimeCredentialStoreStatus::KeyUnavailable => "keychain_locked".to_owned(),
+            RuntimeCredentialStoreStatus::MigrationIncomplete { accounts, failure } => {
                 if accounts.is_empty() {
                     format!("migration incomplete ({failure})")
                 } else {
                     format!("migration incomplete ({failure}): {}", accounts.join(", "))
                 }
             }
-            EncryptedCredentialStoreStatus::Ready => match maintenance
+            RuntimeCredentialStoreStatus::Ready => match maintenance
                 .as_ref()
                 .filter(|record| {
                     Some(record.credential_generation) == account.active_credential_generation()
@@ -768,47 +758,6 @@ fn list_accounts(stdout: &mut impl Write, router_root: PathBuf) -> Result<(), Ac
     }
     writeln!(stdout, "{table}").map_err(AccountCommandError::Stdout)?;
 
-    Ok(())
-}
-
-fn ensure_account_label_available_at_router_root(
-    router_root: &Path,
-    label: &str,
-    provider: Provider,
-) -> Result<(), AccountCommandError> {
-    let state_database_path = router_root.join("state.sqlite");
-    if !state_database_path.exists() {
-        return Ok(());
-    }
-
-    let runtime = account_command_runtime()?;
-    let state = runtime.block_on(AsyncSqliteStateStore::open(&state_database_path))?;
-    ensure_account_label_available(&state, label, provider, &runtime)?;
-    runtime.block_on(state.close())?;
-    Ok(())
-}
-
-fn ensure_account_label_available(
-    state: &AsyncSqliteStateStore,
-    label: &str,
-    provider: Provider,
-    runtime: &tokio::runtime::Runtime,
-) -> Result<(), AccountCommandError> {
-    let accounts = runtime.block_on(state.list_accounts())?;
-    let account_id = account_id_from_label(label)?;
-    for account in accounts {
-        if account.label() != label && account.account_id() != &account_id {
-            continue;
-        }
-        let is_same_account = account.label() == label
-            && account.account_id() == &account_id
-            && account.provider() == provider;
-        if !is_same_account {
-            return Err(AccountCommandError::DuplicateAccountLabel {
-                label: label.to_owned(),
-            });
-        }
-    }
     Ok(())
 }
 
@@ -928,35 +877,4 @@ fn create_router_root(router_root: &Path) -> Result<(), AccountCommandError> {
         path: router_root.to_path_buf(),
         source,
     })
-}
-
-fn normalize_label(label: &str) -> Result<String, AccountCommandError> {
-    let trimmed = label.trim();
-    if trimmed.is_empty() {
-        return Err(AccountCommandError::EmptyLabel);
-    }
-
-    Ok(trimmed.to_owned())
-}
-
-fn account_id_from_label(label: &str) -> Result<AccountId, AccountCommandError> {
-    let mut normalized = String::new();
-    let mut previous_was_separator = false;
-    for character in label.chars() {
-        if character.is_ascii_alphanumeric() {
-            normalized.extend(character.to_lowercase());
-            previous_was_separator = false;
-        } else if !previous_was_separator {
-            normalized.push('_');
-            previous_was_separator = true;
-        }
-    }
-    let normalized = normalized.trim_matches('_');
-    let stem = if normalized.is_empty() {
-        "imported"
-    } else {
-        normalized
-    };
-
-    AccountId::new(format!("acct_{stem}")).map_err(|_| AccountCommandError::EmptyLabel)
 }

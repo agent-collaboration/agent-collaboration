@@ -1,0 +1,14 @@
+{
+  "original": "Provider route integration#idle-started",
+  "originalSHA256": "814eb2c2dfd97958a6a4e173efe1b16d07bbb30ec6f76bdbd3b60268bd5116a7",
+  "target": "provider-steering-route-agent.ts",
+  "arguments": ["started"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"_session/steering\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"claude-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"outcome\": \"startedNewTurn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

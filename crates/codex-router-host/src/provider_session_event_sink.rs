@@ -11,7 +11,7 @@ use std::{
 use acp_client_runtime::{
     EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
 };
-use collaboration_service::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionEventHub;
 use message_board::{SessionEndpointRef, SessionId, SessionRef};
 use session_event_model::{SessionEvent, SessionItemKind};
 use tokio::{
@@ -290,15 +290,17 @@ impl SessionEventSink for HubSessionEventSink {
 mod tests {
     use super::*;
     use acp_client_runtime::{ApprovalPortOutcome, InteractionPort, SessionEventSink};
+    use collaboration_contracts::SessionEventHub;
     use collaboration_protocol::{
         CodexGeneration, EndpointId as ProtocolEndpointId, EndpointRef as ProtocolEndpointRef,
         GenerationNumber, OperationId, ProviderIdentity, SessionId as ProtocolSessionId,
         SessionRef as ProtocolSessionRef, UuidIdentity,
     };
-    use collaboration_service::{
-        NativeControlBackend, NativeGenerationGate, ProviderOperationStore,
-        ProviderSessionEventHub, ServiceInteractionBroker, SessionEventHub,
-    };
+    use collaboration_runtime::NativeControlBackend;
+    use collaboration_runtime::NativeGenerationGate;
+    use collaboration_runtime::ProviderOperationStore;
+    use collaboration_runtime::ProviderSessionEventHub;
+    use collaboration_runtime::ServiceInteractionBroker;
     use message_board::{EndpointId, ServiceId, SessionEndpointRef, SessionId, SessionRef};
     use session_event_model::{SessionEvent, TurnOutcome};
     use std::sync::Arc;
@@ -416,7 +418,7 @@ mod tests {
             .decide_typed_interaction(
                 "approval-one",
                 &actor,
-                collaboration_service::TypedInteractionDecision::SelectApproval {
+                collaboration_runtime::TypedInteractionDecision::SelectApproval {
                     option_id: "allow-once".into(),
                     acknowledge_persistent: false,
                     note: Some("note".into()),
@@ -531,11 +533,11 @@ mod tests {
                 .decide_typed_interaction(
                     "approval-cancelled",
                     &actor,
-                    collaboration_service::TypedInteractionDecision::Cancel,
+                    collaboration_runtime::TypedInteractionDecision::Cancel,
                 )
                 .await
                 .expect("approver cancel"),
-            collaboration_service::TypedInteractionDecisionOutcome::ApprovalCancelled
+            collaboration_runtime::TypedInteractionDecisionOutcome::ApprovalCancelled
         );
         assert_eq!(
             approval_cancel_task.await.expect("approval cancel task"),
@@ -577,11 +579,11 @@ mod tests {
                 .decide_typed_interaction(
                     "question-cancelled",
                     &actor,
-                    collaboration_service::TypedInteractionDecision::Cancel,
+                    collaboration_runtime::TypedInteractionDecision::Cancel,
                 )
                 .await
                 .expect("approver cancel"),
-            collaboration_service::TypedInteractionDecisionOutcome::QuestionCancelled
+            collaboration_runtime::TypedInteractionDecisionOutcome::QuestionCancelled
         );
         assert_eq!(
             question_cancel_task.await.expect("question cancel task"),

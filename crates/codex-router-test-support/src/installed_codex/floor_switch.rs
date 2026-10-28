@@ -30,14 +30,14 @@ use super::CodexTransportMode;
 use super::QUOTA_RECONNECT_FALLBACK;
 use super::QUOTA_RECONNECT_PRIMARY;
 use super::QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION;
-use super::SmokeAccountFixture;
 use super::SmokeTempRoot;
 use super::account_id;
 use super::assert_codex_visible_output;
+use super::hostile_and_state::SmokeAccountFixture;
+use super::hostile_and_state::reset_fixture_route_band_state;
+use super::hostile_and_state::seed_smoke_account;
 use super::process_output_markers;
-use super::reset_fixture_route_band_state;
 use super::run_codex_exec_with_timeout;
-use super::seed_smoke_account;
 
 const FIXTURE_WAIT: Duration = Duration::from_secs(30);
 
@@ -92,7 +92,7 @@ impl FloorRouter {
                 state_path.to_path_buf(),
                 secret_root.to_path_buf(),
             ),
-            credential_store,
+            credential_store.into(),
         )
         .map_err(|error| format!("floor fixture router failed to start: {error}"))?;
         let port = runtime.local_addr().port();

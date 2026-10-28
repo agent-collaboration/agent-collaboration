@@ -44,10 +44,10 @@ async fn ctrl_r_inspects_the_focused_stable_account_and_generation() {
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
             Some("❯ duplicate"),
         ),
-        (TerminalEvent::Key(control_key('r')), Some("Reset credits")),
+        (TerminalEvent::Key(control_key('r')), Some("Inspect")),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-            Some("ctrl-r account options"),
+            Some("Filters"),
         ),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -233,24 +233,37 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         });
         let (events, expected_frame, frame_acknowledgements) = acknowledged_quota_events(vec![
             (
+                TerminalEvent::Resize(
+                    u16::try_from(width).unwrap_or(u16::MAX),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
+                Some("declared initial viewport"),
+            ),
+            (
                 TerminalEvent::Key(control_key('r')),
                 Some("Checking live eligibility"),
             ),
             (
-                TerminalEvent::Resize(width.saturating_sub(1) as u16, height as u16),
-                Some("Checking live eligibility"),
+                TerminalEvent::Resize(
+                    u16::try_from(width.saturating_sub(1)).expect("fixture width fits u16"),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
+                Some("narrow inspection frame"),
             ),
             (
-                TerminalEvent::Resize(width as u16, height as u16),
-                Some("Checking live eligibility"),
+                TerminalEvent::Resize(
+                    u16::try_from(width).unwrap_or(u16::MAX),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
+                Some("wide inspection frame"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-                Some("enter inspect"),
+                Some("Inspect"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-                Some("ctrl-r account options"),
+                Some("Pool details"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -258,10 +271,11 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
         ]);
 
+        let terminal_width_reader: fn() -> Option<usize> = || None;
         let frames = element! {
             QuotaStatusComponent(
                 view_model: quota_two_account_view_model(),
-                width: 0usize,
+                width: 0usize,terminal_width_reader:Some(terminal_width_reader),
                 height,
                 reset_intent_sender: Some(ports.intent_sender),
                 reset_snapshot_receiver: Some(ports.snapshot_receiver),
@@ -271,7 +285,28 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
             if let Some(marker) = *expected_frame.borrow()
-                && frame.contains(marker)
+                && match marker {
+                    "declared initial viewport" => {
+                        frame.contains("Quota status")
+                            && frame.lines().count() == height
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width
+                            })
+                    }
+                    "narrow inspection frame" => {
+                        frame.contains("Checking live eligibility")
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width - 1
+                            })
+                    }
+                    "wide inspection frame" => {
+                        frame.contains("Checking live eligibility")
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width
+                            })
+                    }
+                    _ => frame.contains(marker),
+                }
             {
                 let _ = frame_acknowledgements.send(marker);
             }
@@ -286,7 +321,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             .collect::<Vec<_>>();
         assert!(
             reset_frames.iter().any(|frame| {
-                frame.contains("[ Resets ]") && frame.contains("Checking live eligibility")
+                frame.contains("Options · Resets") && frame.contains("Checking live eligibility")
             }),
             "account-options Resets tab should render the active inspection: {frames:?}"
         );
@@ -296,19 +331,14 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
                 .all(|frame| !frame.contains("Selected account")),
             "reset and selected-account detail panes must be mutually exclusive: {reset_frames:?}"
         );
-        if width == 160 {
-            let has_sidecar = |frame: &str| {
-                frame
-                    .lines()
-                    .any(|line| line.matches('┌').count() >= 2 && line.matches('┐').count() >= 2)
-            };
+        for expected_width in [width - 1, width] {
             assert!(
-                reset_frames.iter().any(|frame| !has_sidecar(frame)),
-                "shrinking to 159 columns should stack the active inspection: {reset_frames:?}"
-            );
-            assert!(
-                reset_frames.iter().any(|frame| has_sidecar(frame)),
-                "growing back to 160 columns should restore the active inspection sidecar: {reset_frames:?}"
+                reset_frames
+                    .iter()
+                    .any(|frame| frame.lines().next().is_some_and(|line| {
+                        unicode_width::UnicodeWidthStr::width(line) == expected_width
+                    }) && frame.contains("Options · Resets")),
+                "same active inspection survives actual {expected_width}-cell resize: {reset_frames:?}"
             );
         }
         if height == 48 {
@@ -316,25 +346,31 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
                 let lines = frame.lines().collect::<Vec<_>>();
                 let footer_index = lines
                     .iter()
-                    .position(|line| line.contains("esc/ctrl-r back"))
+                    .position(|line| line.contains("Cancel"))
                     .expect("reset footer should be visible");
+                let dialog_bottom = lines
+                    .iter()
+                    .skip(footer_index + 1)
+                    .position(|line| line.contains('╰') && line.contains('╯'))
+                    .map(|offset| footer_index + 1 + offset)
+                    .expect("bounded dialog bottom after actions");
                 assert!(
-                    footer_index >= lines.len().saturating_sub(3),
-                    "reset footer must remain bottom-aligned: {frame}"
+                    footer_index > 0 && footer_index < dialog_bottom && dialog_bottom < height,
+                    "actions follow body within independently clamped frame; remaining space stays below: {frame}"
                 );
             }
         }
         assert!(
             frames
                 .iter()
-                .any(|frame| { frame.contains("[ Resets ]") && frame.contains("enter inspect") }),
+                .any(|frame| { frame.contains("Options · Resets") && frame.contains("Inspect") }),
             "the account-options Resets tab should remain after inspection cancellation: {frames:?}"
         );
         assert!(
-            frames
-                .last()
-                .is_some_and(|frame| frame.contains("ctrl-r account options")),
-            "closing the Resets tab should restore the quota browse footer: {frames:?}"
+            frames.last().is_some_and(
+                |frame| frame.contains("Pool details") && !frame.contains("Options · Resets")
+            ),
+            "closing the Resets tab should restore browse controls: {frames:?}"
         );
     }
 }
@@ -378,6 +414,85 @@ fn committing_reset_detail_shows_only_current_wait_and_safe_target_tag() {
     assert!(text.contains("⠋ waiting"), "{text}");
     assert!(!text.contains("inspect usage"), "{text}");
     assert!(!text.contains("not started"), "{text}");
+}
+
+#[test]
+fn interactive_reset_confirmation_colors_distinguish_selected_and_disabled_choices() {
+    // The interactive renderer must distinguish the actual typed selection.
+    // R4/U5 defines yellow selected, white ordinary and grey disabled options.
+    for (selection, disabled_reason, no_label, no_color, yes_label, yes_color) in [
+        (
+            ConfirmationSelection::No,
+            None,
+            "[No]",
+            Color::Yellow,
+            "Yes",
+            Color::White,
+        ),
+        (
+            ConfirmationSelection::Yes,
+            None,
+            "No",
+            Color::White,
+            "[Yes]",
+            Color::Yellow,
+        ),
+        (
+            ConfirmationSelection::No,
+            Some(ResetEligibilityDisabledReason::LiveInspectionIncomplete),
+            "[No]",
+            Color::Yellow,
+            "Yes disabled",
+            Color::Grey,
+        ),
+    ] {
+        let snapshot = ResetWorkflowSnapshot::test_snapshot(
+            WorkflowPhase::Confirming,
+            selection,
+            completed_inspection_activities(),
+            None,
+            Some(LiveWeeklyDisplayFacts {
+                remaining_percent: 0,
+                provenance: ResetValueProvenance::CurrentLive,
+            }),
+            test_credit_inventory(),
+            disabled_reason,
+        );
+        let canvas = super::quota_reset_detail_rendering::render_reset_panel_content(
+            &snapshot,
+            &test_reset_target(),
+            100,
+            0,
+            4,
+            0,
+            None,
+        )
+        .render(None);
+        let frame = canvas.to_string();
+        let (row, line) = frame
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains(no_label) && line.contains(yes_label))
+            .unwrap_or_else(|| panic!("confirmation choices missing: {frame}"));
+        for (label, expected_color) in [(no_label, no_color), (yes_label, yes_color)] {
+            let offset = line.find(label).expect("rendered confirmation label");
+            let column = line
+                .get(..offset)
+                .expect("matched choice is a UTF-8 boundary")
+                .chars()
+                .count();
+            let style = canvas
+                .cell(column, row)
+                .expect("choice cell")
+                .text_style()
+                .expect("choice text style");
+            assert_eq!(
+                style.color,
+                Some(expected_color),
+                "{selection:?} choice {label:?} has the wrong interactive color: {frame}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -483,7 +598,8 @@ fn inspected_reset_detail_has_user_facing_sections_readable_expiry_and_content_h
     assert!(!frame.contains("inspect usage"), "{frame}");
     assert!(!frame.contains("not started"), "{frame}");
     assert!(!frame.contains("saved weekly"), "{frame}");
-    assert_eq!(page_size, 2);
+    // The content-sized panel includes the warning's new spacer row.
+    assert_eq!(page_size, 3);
     assert!(content_height < 21, "content height was {content_height}");
     assert_quota_golden(
         "reset-inspected-panel-width-100",
@@ -503,7 +619,10 @@ fn shared_detail_viewport_pages_every_credit_once_without_corrupting_stacked_geo
         },
         2,
         Some(0),
-        super::responsive_quota_layout::selected_detail_height(true),
+        super::responsive_quota_layout::selected_detail_height(
+            true,
+            super::quota_provider_filters::QuotaInteractionMode::Static,
+        ),
     );
     let detail_height = stacked_layout.detail_viewport_height(false);
     let page_size = super::quota_reset_presentation_model::reset_inventory_page_size(detail_height);
@@ -528,7 +647,10 @@ fn shared_detail_viewport_pages_every_credit_once_without_corrupting_stacked_geo
     assert!(stacked_layout.show_stacked_details);
     assert_eq!(
         stacked_layout.stacked_details_height,
-        super::responsive_quota_layout::selected_detail_height(true),
+        super::responsive_quota_layout::selected_detail_height(
+            true,
+            super::quota_provider_filters::QuotaInteractionMode::Static
+        ),
         "stacked detail must be content-sized instead of consuming all remaining terminal rows"
     );
     assert!(
@@ -752,15 +874,15 @@ fn acknowledged_quota_events(
             expected_marker,
         )| async move {
             if let Some(expected_marker) = expected_marker {
-                loop {
-                    match frame_acknowledgement_receiver.recv().await {
-                        Some(actual_marker) if actual_marker == expected_marker => break,
-                        Some(_) => {}
-                        None => panic!(
-                            "rendered-frame acknowledgement channel closed before marker {expected_marker:?}"
-                        ),
+                tokio::time::timeout(Duration::from_secs(2), async {
+                    loop {
+                        match frame_acknowledgement_receiver.recv().await {
+                            Some(actual_marker) if actual_marker == expected_marker => break,
+                            Some(_) => {}
+                            None => panic!("rendered-frame acknowledgement channel closed before marker {expected_marker:?}"),
+                        }
                     }
-                }
+                }).await.unwrap_or_else(|_| panic!("actual rendered frame did not acknowledge marker {expected_marker:?}"));
             }
             let (event, next_marker) = pending_events.next()?;
             expected_frame_sender.send_replace(next_marker);

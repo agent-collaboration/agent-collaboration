@@ -1,0 +1,68 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT 'mark' AS \"kind!: String\",mark_id AS \"row_id!: String\",scope_kind AS \"scope_kind!: String\",scope_id AS \"scope_id!: String\",through_epoch AS \"epoch!: i64\",through_position AS \"position!: i64\",NULL AS \"active?: i64\" FROM read_marks WHERE reader_actor=? UNION ALL SELECT 'watch' AS \"kind!: String\",watch_id AS \"row_id!: String\",'thread' AS \"scope_kind!: String\",thread_id AS \"scope_id!: String\",start_epoch AS \"epoch!: i64\",start_position AS \"position!: i64\",active AS \"active?: i64\" FROM thread_watches WHERE reader_actor=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "scope_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "scope_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "active?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "6d431097ede304666a3494151b41189aa05e4f2fcceecfd36c99cb4fe91718c9"
+}

@@ -1,5 +1,5 @@
 use collaboration_protocol::{EndpointDescription, UuidIdentity};
-use collaboration_service::EndpointDirectory;
+use collaboration_runtime::EndpointDirectory;
 use serde_json::json;
 
 fn codex_endpoint(service_id: &str) -> Result<EndpointDescription, serde_json::Error> {

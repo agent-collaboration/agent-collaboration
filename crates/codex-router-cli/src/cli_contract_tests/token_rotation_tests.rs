@@ -113,7 +113,7 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
         let result = run_serve_command_with_upkeep_start_and_token_reload_observer(
             &mut stdout,
             command,
-            secrets,
+            secrets.into(),
             move |state_database_path, credential_store| {
                 let _send_result = serve_ready_sender.send(());
                 credential_upkeep_worker::start_background_credential_upkeep_worker(
@@ -225,7 +225,10 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn serve_command_reloads_token_rotation_without_restart() {
     let test_root = TestRoot::new("serve-command-token-rotation");
     must_ok(fs::create_dir(test_root.path()));

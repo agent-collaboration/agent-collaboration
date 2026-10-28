@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO capture_feed_marks(epoch,captured_position,last_feed_position,max_handoff_seq,max_expansion_seq,settled_through,snapshot_identity) VALUES(?,?,?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2b7f67069090e13790820fa8a6272309c67d95805dec6e931e30ce33516ea9d3"
+}

@@ -1,4 +1,27 @@
-use super::*;
+#[cfg(debug_assertions)]
+use super::ClaudeUpstreamEndpoint;
+use super::{
+    Arc, AsyncHttpAffinityOwnerRecorder, AsyncLoopbackServerRuntime,
+    AsyncProxyCredentialResolverFactory, AsyncSqliteStateStore, AtomicU64, AuditFileSink,
+    CancellationToken, ClaudeEdgeRuntimeConfig, ClaudeFiveHourReservePercent,
+    CredentialStoreAvailability, DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT,
+    DEFAULT_SESSION_PIN_IDLE_TTL, DbWriteActor, DbWriteAffinityOwnerRecorder, Duration,
+    HyperHttpUpstreamTransport, JoinSet, LocalAuthReloader, LocalRouterAuth,
+    LocalRouterTokenRecord, LoopbackBindAddress, LoopbackProtocolConnectionHandler,
+    LoopbackRouterRuntimeError, MAINTENANCE_QUEUE_CAPACITY, MaintenanceActor, MaintenanceHint,
+    PROVIDER_EXHAUSTION_QUEUE_CAPACITY, Path, PathBuf, ProxyRuntimeCredentialResources, RouteBand,
+    RouteBandAccountHolds, RouteBandQueueHealth, RouteBandReservationBooks,
+    RouteBandRuntimeExhaustions, RouteBandWeightedSelectors, RuntimeAffinitySecretProvider,
+    RuntimeCredentialStore, RuntimeCredentialStoreStatus, SelectionReservationLock,
+    SessionAccountAffinityCache, SharedSessionAccountAffinityCache, SocketAddr,
+    SqliteDbWriteRepository, StateStoreError, TaskTracker, UpstreamEndpoint,
+    WebSocketQuotaFloorNotifier, WebSocketRegistrySnapshot, WebSocketRevocationRegistry,
+    WithSubscriber, active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    current_unix_seconds, store_connection_join_error, store_optional_connection_join_error,
+    supervise_detached_connection_handler,
+};
+#[cfg(test)]
+use crate::server::runtime_lifecycle::test_credential_store_for_config;
 
 /// Runtime configuration for the assembled loopback router.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -240,7 +263,7 @@ impl LoopbackRouterRuntime {
     /// Opens router-owned state and binds using the process-owned encrypted credential handle.
     pub fn start(
         config: LoopbackRouterRuntimeConfig,
-        credential_store: EncryptedCredentialStore,
+        credential_store: RuntimeCredentialStore,
     ) -> Result<Self, LoopbackRouterRuntimeError> {
         let caller_dispatcher = tracing::dispatcher::get_default(|dispatcher| dispatcher.clone());
         Self::start_with_test_maintenance_completion_sender(
@@ -271,7 +294,7 @@ impl LoopbackRouterRuntime {
     #[cfg(test)]
     pub(crate) fn start_with_maintenance_completion_sender(
         config: LoopbackRouterRuntimeConfig,
-        credential_store: EncryptedCredentialStore,
+        credential_store: RuntimeCredentialStore,
         completion_sender: std::sync::mpsc::Sender<crate::maintenance_actor::MaintenanceCompletion>,
     ) -> Result<Self, LoopbackRouterRuntimeError> {
         let caller_dispatcher = tracing::dispatcher::get_default(|dispatcher| dispatcher.clone());
@@ -285,7 +308,7 @@ impl LoopbackRouterRuntime {
 
     pub(super) fn start_with_test_maintenance_completion_sender(
         config: LoopbackRouterRuntimeConfig,
-        credential_store: EncryptedCredentialStore,
+        credential_store: RuntimeCredentialStore,
         #[cfg(test)] completion_sender: Option<
             std::sync::mpsc::Sender<crate::maintenance_actor::MaintenanceCompletion>,
         >,
@@ -300,11 +323,11 @@ impl LoopbackRouterRuntime {
         let fixed_now_unix_seconds = config.fixed_now_unix_seconds;
         let claude_edge_runtime_config = config.claude_edge_runtime_config.clone();
         let credential_store_availability = match credential_store.status() {
-            EncryptedCredentialStoreStatus::Ready => CredentialStoreAvailability::Available,
-            EncryptedCredentialStoreStatus::KeyUnavailable => {
+            RuntimeCredentialStoreStatus::Ready => CredentialStoreAvailability::Available,
+            RuntimeCredentialStoreStatus::KeyUnavailable => {
                 CredentialStoreAvailability::KeyUnreadable
             }
-            EncryptedCredentialStoreStatus::MigrationIncomplete { .. } => {
+            RuntimeCredentialStoreStatus::MigrationIncomplete { .. } => {
                 CredentialStoreAvailability::MigrationIncomplete
             }
         };

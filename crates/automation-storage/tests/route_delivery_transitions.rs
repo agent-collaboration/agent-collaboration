@@ -43,6 +43,8 @@ async fn claimed_attempt(
 {
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: StoredMessage {
                 target: "target".into(),
@@ -178,6 +180,7 @@ async fn native_attempt_rejects_router_queued_submission() -> Result<(), Box<dyn
     let mut store = AutomationStore::open(&path).await?;
     let (delivery_id, attempt_id) = claimed_attempt(&mut store).await?;
     let native = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("target".to_owned()),
         generation: Some("generation-1".to_owned()),
         client_user_message_id: None,

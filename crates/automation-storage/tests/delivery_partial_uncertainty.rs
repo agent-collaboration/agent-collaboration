@@ -33,6 +33,7 @@ impl DurableMessage for Message {
 }
 fn effects(submission: SubmissionEffect) -> NativeEffectEvidence<String, String> {
     NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("B".into()),
         generation: Some("g1".into()),
         client_user_message_id: None,
@@ -54,6 +55,8 @@ async fn unknown_resume_effect_is_retained_even_when_input_was_not_dispatched()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),

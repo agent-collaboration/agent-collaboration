@@ -1,6 +1,6 @@
 use automation_storage::AutomationStore;
 use collaboration_protocol::{OperationId, WakeSendRequest, WakeShowRequest};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
@@ -16,17 +16,17 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
         OperationId::generate().as_str()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("wake-test").await?;
     let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"});
     let request: WakeSendRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"message":{"target":target.clone(),"content":{"kind":"agent","sender":target,"text":"Check status"},"delivery":"queue","generationGuard":null},"timing":{"kind":"after","seconds":60},"expiry":{"kind":"after","seconds":120}}),
+        json!({"operationId":OperationId::generate(),"message":{"target":target.clone(),"content":{"kind":"agent","sender":target,"text":"Check status"},"delivery":"queue","generationGuard":null},"timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"after","seconds":120}}),
     )?;
     // Actual SDK -> Unix stream -> service -> SQLite, with no native process or model.
     let first = client.send_wakeup(request.clone()).await?;
@@ -93,7 +93,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     let past = (chrono::Utc::now() - chrono::Duration::seconds(1))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let immediate: WakeSendRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"message":current.definition.message,"timing":{"kind":"at","at":past},"expiry":{"kind":"none"}}),
+        json!({"operationId":OperationId::generate(),"message":current.definition.message,"timing":{"kind":"at","at":past},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
     )?;
     let immediate = client.send_wakeup(immediate).await?;
     let delivery = match store
@@ -220,7 +220,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
         return Err("SDK cancellation replay changed evidence".into());
     }
     let changed: WakeSendRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"message":current.definition.message,"timing":{"kind":"cron","expression":"* * * * *","timezone":"invalid-zone"},"expiry":{"kind":"none"}}),
+        json!({"operationId":OperationId::generate(),"message":current.definition.message,"timing":{"kind":"cron","expression":"* * * * *","timezone":"invalid-zone"},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
     )?;
     let error = client
         .send_wakeup(changed.clone())

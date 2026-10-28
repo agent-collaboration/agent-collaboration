@@ -59,13 +59,9 @@ fn account_login_selects_claude_oauth_flow() {
 }
 
 #[test]
-fn account_login_rejects_legacy_codex_child_and_plaintext_file_options() {
+fn account_login_rejects_legacy_codex_child_options() {
     for provider in ["openai", "claude"] {
-        for legacy_options in [
-            vec!["--device-auth"],
-            vec!["--codex-bin", "codex"],
-            vec!["--allow-plaintext-file-secrets"],
-        ] {
+        for legacy_options in [vec!["--device-auth"], vec!["--codex-bin", "codex"]] {
             let mut arguments = vec![
                 OsString::from("account"),
                 OsString::from("login"),
@@ -77,7 +73,7 @@ fn account_login_rejects_legacy_codex_child_and_plaintext_file_options() {
             arguments.extend(legacy_options.into_iter().map(OsString::from));
 
             let error = CliCommand::parse(arguments)
-                .expect_err("login must not accept Codex child or plaintext-file options");
+                .expect_err("login must not accept legacy Codex child options");
             assert!(matches!(error, CliError::UnknownOption { .. }));
         }
     }
@@ -109,7 +105,7 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
             &mut reader,
             command,
             &client,
-            traced_secret_store,
+            traced_secret_store.into(),
         ),
     );
 
@@ -238,6 +234,15 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
 
 #[test]
 fn openai_device_login_reauthenticates_the_same_account() {
+    exercise_openai_relogin("acct_device_primary");
+}
+
+#[test]
+fn openai_device_login_reauthenticates_account_with_non_derived_id() {
+    exercise_openai_relogin("acct_imported_stable_identity");
+}
+
+fn exercise_openai_relogin(stored_id: &str) {
     let test_root = TestRoot::new("openai-device-login-same-account");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
@@ -246,7 +251,7 @@ fn openai_device_login_reauthenticates_the_same_account() {
     let secret_root = router_root.join("secrets");
     let account = AccountRecord::new(
         Provider::Openai,
-        account_id("acct_device_primary"),
+        account_id(stored_id),
         "device primary",
         AccountStatus::Disabled,
     )
@@ -279,19 +284,30 @@ fn openai_device_login_reauthenticates_the_same_account() {
     let command = parse_openai_login(&router_root, "device primary");
     let mut stdout = Vec::new();
     must_ok(
-        crate::account::run_account_command_with_input_and_openai_client(
+        crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
             &mut stdout,
             &mut Cursor::new(Vec::<u8>::new()),
             command,
             &client,
+            secrets.into(),
         ),
     );
-    issuer.finish();
+    assert_eq!(
+        issuer.finish().len(),
+        3,
+        "re-login must reach the fake OAuth issuer"
+    );
+    assert!(
+        String::from_utf8(stdout)
+            .unwrap()
+            .contains(&format!("account_id: {stored_id}"))
+    );
 
     let reopened = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    let account =
-        must_ok(runtime.block_on(reopened.load_account(&account_id("acct_device_primary"))))
-            .expect("same-account login should keep the account");
+    let account = must_ok(runtime.block_on(reopened.load_account(&account_id(stored_id))))
+        .expect("same-account login should keep the account");
+    assert_eq!(must_ok(runtime.block_on(reopened.list_accounts())).len(), 1);
+    assert_eq!(account.account_id(), &account_id(stored_id));
     assert_eq!(account.status(), AccountStatus::Enabled);
     assert_eq!(account.active_credential_generation(), Some(2));
     let secrets = must_ok(

@@ -133,6 +133,10 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         ))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_provider_credentials(
         &self,
         provider: Provider,
@@ -146,7 +150,7 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         );
         self.observed_account_ids
             .send(account_id.clone())
-            .expect("credential upkeep should observe the account");
+            .unwrap_or_else(|_| panic!("credential upkeep should observe the account"));
         CredentialBundle::new_claude(
             SecretString::new("claude-next-access-canary"),
             SecretString::new("claude-next-refresh-canary"),
@@ -353,7 +357,7 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
     let upkeep_worker = must_ok(
         crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
-            secrets,
+            secrets.into(),
             RecordingClaudeUpkeepRefreshClient {
                 observed_account_ids: observed_sender,
             },

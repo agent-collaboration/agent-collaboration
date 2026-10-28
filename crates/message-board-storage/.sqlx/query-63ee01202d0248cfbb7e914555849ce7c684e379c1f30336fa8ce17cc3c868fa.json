@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT inherited_through AS \"inherited_through!: i64\" FROM epoch_lines WHERE epoch>? ORDER BY epoch LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inherited_through!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "63ee01202d0248cfbb7e914555849ce7c684e379c1f30336fa8ce17cc3c868fa"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT operation_id FROM operation_receipts WHERE operation_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "operation_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "operation_receipts",
+            "name": "operation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "fc0724f79417029dcf48843d5aa0af8632cd60f8bef0a4ca075a950dc2713742"
+}

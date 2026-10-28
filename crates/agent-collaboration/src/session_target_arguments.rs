@@ -48,19 +48,26 @@ impl SessionTargetArguments {
 
 impl ParsedSessionTarget {
     pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SessionRef, String> {
+        let target = self.into_mail_recipient(service_id);
+        if &target.endpoint.service_id == service_id {
+            Ok(target)
+        } else {
+            Err("--to addresses a different collaboration service".into())
+        }
+    }
+    pub(crate) fn into_mail_recipient(self, local_service: &UuidIdentity) -> SessionRef {
         match self {
-            Self::Exact(target) if &target.endpoint.service_id == service_id => Ok(target),
-            Self::Exact(_) => Err("--to addresses a different collaboration service".into()),
+            Self::Exact(target) => target,
             Self::Pair {
                 endpoint_id,
                 session_id,
-            } => Ok(SessionRef {
+            } => SessionRef {
                 endpoint: EndpointRef {
-                    service_id: service_id.clone(),
+                    service_id: local_service.clone(),
                     endpoint_id,
                 },
                 session_id,
-            }),
+            },
         }
     }
     pub(crate) fn endpoint_id(&self) -> EndpointId {

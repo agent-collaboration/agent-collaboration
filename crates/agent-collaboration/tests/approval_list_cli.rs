@@ -4,27 +4,35 @@ use tokio_util::sync::CancellationToken;
 
 struct AcceptedNoticeDelivery;
 
-impl collaboration_service::SessionMessageDelivery for AcceptedNoticeDelivery {
+impl collaboration_contracts::SessionMessageDelivery for AcceptedNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
-        _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         Box::pin(async {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::Started,
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
+            Ok({
+                let receipt = collaboration_protocol::DeliveryReceipt {
+                    outcome: collaboration_protocol::DeliveryOutcome::Started,
+                    reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                    client: None,
+                };
+                collaboration_contracts::NativeDeliveryResult::observed(
+                    collaboration_contracts::NativeObservedOutcome::Started,
+                    receipt.reachability,
+                    receipt.client,
+                )
             })
         })
     }
 
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -42,11 +50,11 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         service_id: typed_service_id.clone(),
         endpoint_id: "claude-local".to_owned().try_into().expect("endpoint ID"),
     };
-    let broker = collaboration_service::ServiceInteractionBroker::load(
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
         typed_service_id,
-        collaboration_service::NativeControlBackend {
+        collaboration_runtime::NativeControlBackend {
             endpoint: endpoint.clone(),
-            gate: collaboration_service::NativeGenerationGate::default(),
+            gate: collaboration_runtime::NativeGenerationGate::default(),
             codex_home: directory.path().to_owned(),
         },
         directory.path().join("approval-routes.json"),
@@ -61,7 +69,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
             .await
             .expect("automation store"),
     ));
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_automation_store(Arc::clone(&automation_store))
         .with_approval_broker(Arc::clone(&broker));
@@ -93,7 +101,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
             request,
             CancellationToken::new(),
             CancellationToken::new(),
-            Some(collaboration_service::TypedApprovalLegacyContext {
+            Some(collaboration_runtime::TypedApprovalLegacyContext {
                 operation_id: collaboration_protocol::OperationId::generate(),
                 target: serde_json::from_value(
                     json!({"endpoint":endpoint,"sessionId":"provider-session"}),
@@ -108,9 +116,8 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         .expect("pending provider approval");
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         directory.path(),
-        collaboration_service::CollaborationApplication::new(identity),
+        (identity).build(),
     )
-    .await
     .expect("serve collaboration API");
     let listed = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
@@ -162,7 +169,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         String::from_utf8_lossy(&decided.stderr)
     );
     assert!(matches!(receiver.await.expect("agent resolution"),
-        collaboration_service::TypedApprovalResolution::Selected(selected)
+        collaboration_runtime::TypedApprovalResolution::Selected(selected)
             if selected.option_id.as_str() == "allow-once"));
     served.stop().await.expect("collaboration API stops");
 }
@@ -176,14 +183,11 @@ async fn approval_list_rejection_preserves_rejected_kind_and_exit_four() {
         .expect("private fixture directory");
     let service_id = "00000000-0000-4000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let identity =
-        collaboration_service::ServiceIdentity::new(service_id, epoch).expect("service identity");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
+        .expect("service identity");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(["approval", "list", "--json", "--service-directory"])
         .arg(&root)

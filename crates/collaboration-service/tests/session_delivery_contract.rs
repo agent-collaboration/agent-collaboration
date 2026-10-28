@@ -1,9 +1,11 @@
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RouteUnavailableReason;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::RunSummarySource;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryPeerClaim, DeliveryRejection, DeliveryRejectionReason,
-};
-use collaboration_service::{
-    DeliveryPrecondition, RouteClaim, RouteUnavailableReason, RunSettlement, RunSubmission,
-    RunSummarySource,
 };
 use serde_json::{json, to_value};
 
@@ -37,6 +39,7 @@ fn route_claims_and_preconditions_keep_tagged_meaning() -> Result<(), Box<dyn st
     }
     let rejected = RouteClaim::Rejected {
         rejection: DeliveryRejection {
+            native_failure: None,
             reason: DeliveryRejectionReason::LiveElsewhere,
             next_action: DeliveryNextAction::InspectTarget,
             client_code: None,
@@ -111,6 +114,7 @@ fn scheduled_submission_and_settlement_keep_distinct_recovery_outcomes()
             client_code: None,
             detail: Some("worker still active".into()),
             claims: None,
+            native_failure: None,
         }),
         RunSubmission::Unknown,
     ] {

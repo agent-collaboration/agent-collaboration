@@ -74,7 +74,11 @@ fn non_file_service_manifest_is_rejected() {
 fn oversized_service_manifest_is_rejected() {
     let directory = tempfile::tempdir().expect("service directory");
     let manifest_path = directory.path().join("service.json");
-    let oversized_manifest = vec![b' '; (MAX_SERVICE_MANIFEST_BYTES + 1) as usize];
+    let oversized_manifest = vec![
+        b' ';
+        usize::try_from(MAX_SERVICE_MANIFEST_BYTES + 1)
+            .expect("fixture manifest limit fits usize")
+    ];
     fs::write(&manifest_path, oversized_manifest).expect("oversized manifest fixture");
 
     let error = parse_router_proxy_endpoint(&manifest_path)
@@ -262,14 +266,14 @@ async fn new_and_resume_commands_set_routed_environment_on_child_command_only() 
             .get_args()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>(),
-        vec!["--verbose"]
+        vec!["--bg", "--verbose"]
     );
     assert_eq!(
         resume_command
             .get_args()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>(),
-        vec!["--resume", SESSION_ID]
+        vec!["--bg", "--resume", SESSION_ID]
     );
     assert_eq!(new_command.get_current_dir(), None);
     assert_eq!(
@@ -437,6 +441,27 @@ fn active_inventory_records_include_only_local_claude_interactive_sessions() {
 
 #[tokio::test]
 async fn active_inventory_uses_the_existing_claude_local_discovery() {
+    if std::env::var_os("CLAUDE_PEER_INVENTORY_CONTROLLED_CHILD").is_none() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("claude");
+        codex_router_test_support::node_fixture::write_node_fixture(
+            &executable,
+            "native-cli-catalogue-agent.ts",
+            &serde_json::json!({"kind":"text","text":"[]"}),
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        let output=tokio::time::timeout(Duration::from_secs(20),tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact","sessions::claude_launch_target::tests::active_inventory_uses_the_existing_claude_local_discovery","--nocapture"])
+            .env("CLAUDE_PEER_INVENTORY_CONTROLLED_CHILD","1").env("PATH",format!("{}:/usr/bin:/bin",root.path().display())).kill_on_drop(true).output()).await.unwrap().unwrap();
+        assert!(
+            output.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
     let root = tempfile::tempdir().expect("runtime root");
     let service_directory = root.path().join("agent-communication");
     let peer_registry_directory = root.path().join("claude-sessions");
@@ -469,8 +494,9 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
         "fixture endpoint".to_owned(),
     )
     .expect("Claude endpoint fixture");
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: service_directory.clone(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -481,7 +507,7 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
             owner_human_id: None,
         },
         vec![claude_endpoint],
-    )
+    ))
     .await
     .expect("collaboration runtime");
     let launch_target = ClaudeLaunchTarget {
@@ -492,10 +518,43 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
 
     let inventory = launch_target.active_session_records(10).await;
     runtime.shutdown().await.expect("runtime shutdown");
-    let records = inventory.expect("active Claude inventory");
+    let records = inventory.expect("active Claude inventory").records;
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0]["sessionId"], SESSION_ID);
     assert_eq!(records[0]["source"], "active");
     assert_eq!(records[0]["name"], "Active local Claude");
+}
+
+#[path = "claude_native_catalogue_tests.rs"]
+mod native_catalogue_tests;
+
+#[test]
+fn background_arguments_preserve_all_supplied_tokens_and_literal_prompt_boundary() {
+    let target = ClaudeLaunchTarget {
+        service_directory: PathBuf::new(),
+        secret_root: PathBuf::new(),
+        claude_projects_directory: None,
+    };
+    for aliases in [
+        vec![],
+        vec!["--bg"],
+        vec!["--background"],
+        vec!["--bg", "--background", "--bg"],
+    ] {
+        let arguments = aliases.into_iter().map(OsString::from).collect::<Vec<_>>();
+        let launch = target.launch_arguments(None, &arguments);
+        assert_eq!(
+            launch.as_slice(),
+            std::iter::once(OsString::from("--bg"))
+                .chain(arguments)
+                .collect::<Vec<_>>()
+        );
+    }
+    let literal = ["--", "--print", "--bg", "a prompt with spaces"].map(OsString::from);
+    let launch = target.launch_arguments(None, &literal);
+    assert_eq!(
+        launch.as_slice(),
+        ["--bg", "--", "--print", "--bg", "a prompt with spaces"].map(OsString::from)
+    );
 }

@@ -1,7 +1,5 @@
 //! Cursor questions cross the real ACP dispatcher and the typed Question port.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -19,36 +17,10 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-const ASK_QUESTION_FIXTURE: &str = r#"
-import json,sys
-receipt=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'question-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call','toolCallId':'question-tool',
-              'title':'Ask','kind':'think','status':'pending'}}})
-send({'jsonrpc':'2.0','id':'question-request','method':'cursor/ask_question',
-    'params':{'toolCallId':'question-tool','title':'Choose',
-    'questions':[
-        {'id':'single','prompt':'First?',
-         'options':[{'id':'first-id','label':'Same'},{'id':'second-id','label':'Same'}]},
-        {'id':'multi','prompt':'Which?', 'allowMultiple':True,
-         'options':[{'id':'alpha','label':'Alpha'},{'id':'beta','label':'Beta'}]}]}})
-response=read()
-assert response['id']=='question-request',response
-with open(receipt,'w') as output: json.dump(response,output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const ASK_QUESTION_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/cursor-question-agent.ts"
+);
 
 struct QuestionPort {
     response: QuestionResponse,
@@ -73,6 +45,11 @@ impl InteractionPort for QuestionPort {
     ) -> InteractionFuture<'_, ApprovalPortOutcome> {
         Box::pin(async { ApprovalPortOutcome::Cancelled })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_question(
         &self,
         _context: Self::Context,
@@ -138,10 +115,8 @@ async fn cursor_question_preserves_choice_ids_and_answer_shape() {
     });
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 ASK_QUESTION_FIXTURE.to_owned(),
                 receipt.to_string_lossy().into_owned(),
             ],

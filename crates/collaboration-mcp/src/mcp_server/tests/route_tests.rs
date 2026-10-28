@@ -55,7 +55,16 @@ fn router_push_tools_expose_reported_caller_and_reference_contracts() {
         .as_str()
         .and_then(|reference| reference.strip_prefix("#/$defs/"))
         .expect("message_send success definition");
-    let required = output_schema["$defs"][success_definition]["required"]
+    let alternatives = output_schema["$defs"][success_definition]["oneOf"]
+        .as_array()
+        .expect("closed local-or-queued result");
+    assert_eq!(alternatives.len(), 2);
+    let local_definition = alternatives[0]["$ref"]
+        .as_str()
+        .unwrap()
+        .strip_prefix("#/$defs/")
+        .unwrap();
+    let required = output_schema["$defs"][local_definition]["required"]
         .as_array()
         .expect("message_send success fields");
     for field in ["pushId", "link", "target", "deliveryState", "receipt"] {
@@ -69,27 +78,37 @@ fn router_push_tools_expose_reported_caller_and_reference_contracts() {
 /// Session delivery that writes every message to a Claude Code peer.
 struct PeerWrittenDelivery;
 
-impl collaboration_service::SessionMessageDelivery for PeerWrittenDelivery {
+impl collaboration_contracts::SessionMessageDelivery for PeerWrittenDelivery {
     fn deliver<'a>(
         &'a self,
-        _request: collaboration_service::layer_zero::DeliveryRequest,
-        _evidence: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+        _request: collaboration_contracts::layer_zero::DeliveryRequest,
+        _evidence: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         Box::pin(async {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::PeerMessageWritten,
-                reachability: Some(collaboration_protocol::SessionReachability::ClaudeCodePeer),
-                client: Some(collaboration_protocol::DeliveryClientReceipt::ClaudeCodePeer),
-            })
+            Ok(collaboration_contracts::NativeDeliveryResult::observed(
+                collaboration_contracts::NativeObservedOutcome::PeerMessageWritten,
+                Some(collaboration_protocol::SessionReachability::ClaudeCodePeer),
+                Some(collaboration_protocol::DeliveryClientReceipt::ClaudeCodePeer),
+            ))
         })
     }
 
     fn reconcile_attempt(
         &self,
-        _context: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _context: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
+    }
+}
+
+impl collaboration_contracts::TargetPresenceProbe for PeerWrittenDelivery {
+    fn presence(
+        &self,
+        _: &collaboration_protocol::SessionRef,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
+        Box::pin(async { Ok(collaboration_contracts::TargetPresence::Running) })
     }
 }
 
@@ -99,23 +118,29 @@ async fn message_server(
 ) -> (
     CollaborationMcpServer,
     collaboration_service::SubscriptionDeliveryService,
+    crate::native_mail_owner::NativeMailOwner,
 ) {
     let store = std::sync::Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
             .await
             .expect("push store"),
     ));
-    let delivery: std::sync::Arc<dyn collaboration_service::SessionMessageDelivery> =
+    let delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery> =
         std::sync::Arc::new(PeerWrittenDelivery);
-    let presence: std::sync::Arc<dyn collaboration_service::TargetPresenceProbe> =
-        std::sync::Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
+    let presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe> =
+        std::sync::Arc::new(PeerWrittenDelivery);
+    let interactions = std::sync::Arc::new(
+        interaction_storage::InteractionStore::open(directory.join("interaction.sqlite"))
+            .await
+            .expect("native carrier owner"),
+    );
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
-            push_store: std::sync::Arc::clone(&store),
+            push_store: interactions.clone(),
             delivery: std::sync::Arc::clone(&delivery),
             presence: std::sync::Arc::clone(&presence),
-            machine_identity: collaboration_service::MachineIdentity::new(
+            machine_identity: collaboration_contracts::MachineIdentity::new(
                 collaboration_protocol::UuidIdentity::try_from(FIXTURE_SERVICE_ID.to_owned())
                     .expect("service id"),
                 Some("mcp-message-test"),
@@ -128,13 +153,27 @@ async fn message_server(
     let identity = crate::api_test_harness::test_identity()
         .with_automation_store(store)
         .with_session_delivery(delivery)
-        .with_subscription_delivery_service(owner.clone(), presence);
+        .with_subscription_delivery_service(owner.clone(), presence.clone());
+    let (identity, native) = crate::native_mail_owner::NativeMailOwner::start(
+        identity,
+        crate::native_board_test_fixture::fixture_peer().expect("fixture peer"),
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: owner.clone(),
+            presence,
+            machine: collaboration_contracts::MachineIdentity::new(
+                FIXTURE_SERVICE_ID.to_owned().try_into().expect("service"),
+                Some("mcp-message-test"),
+            )
+            .expect("machine"),
+            clock: std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+        },
+    )
+    .expect("native mail owner");
     (
-        CollaborationMcpServer::for_application(
-            collaboration_service::CollaborationApplication::new(identity),
-            directory.to_owned(),
-        ),
+        CollaborationMcpServer::for_application((identity).build(), directory.to_owned()),
         owner,
+        native,
     )
 }
 
@@ -142,10 +181,10 @@ async fn message_server(
 async fn direct_message_tools_store_show_list_and_reply_through_the_application() {
     // Arrange
     let temporary = tempfile::tempdir().expect("temporary directory");
-    let (server, owner) = message_server(temporary.path()).await;
+    let (server, owner, native) = message_server(temporary.path()).await;
     let target = fixture_session("claude-local", "target-session");
     let sender = fixture_session("codex-local", "reported-sender");
-    let request: collaboration_client::MessageSendRequest =
+    let request: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
             "target":target,
             "message":{"kind":"agent","sender":sender,"text":"reporting identity"},
@@ -233,15 +272,18 @@ async fn direct_message_tools_store_show_list_and_reply_through_the_application(
         "a reply goes to the referenced sender"
     );
     assert_eq!(reply["receipt"]["outcome"]["kind"], "peerMessageWritten");
+    drop(server);
     owner.shutdown().await;
+    drop(owner);
+    native.close().await.expect("close native mail owner");
 }
 
 #[tokio::test]
 async fn router_show_by_an_unrelated_session_is_a_typed_not_permitted_error() {
     // Arrange
     let temporary = tempfile::tempdir().expect("temporary directory");
-    let (server, owner) = message_server(temporary.path()).await;
-    let request: collaboration_client::MessageSendRequest =
+    let (server, owner, native) = message_server(temporary.path()).await;
+    let request: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
             "target":fixture_session("claude-local", "target-session"),
             "message":{"kind":"agent","sender":fixture_session("codex-local", "sender"),"text":"private"},
@@ -267,7 +309,10 @@ async fn router_show_by_an_unrelated_session_is_a_typed_not_permitted_error() {
     assert_eq!(structured["serviceKind"], "notPermitted");
     assert_eq!(structured["stage"], "inspect");
     assert_eq!(structured["effect"], "none");
+    drop(server);
     owner.shutdown().await;
+    drop(owner);
+    native.close().await.expect("close native mail owner");
 }
 
 #[tokio::test]
@@ -366,7 +411,9 @@ fn message_send_route_push_results_match_advertised_output_schema() {
         let push_result: collaboration_protocol::PushMessageSendResult =
             serde_json::from_value(value.clone())
                 .unwrap_or_else(|error| panic!("{route} push result fixture: {error}"));
-        let result = super::super::message_receipt_result(push_result);
+        let result = super::super::message_receipt_result(
+            collaboration_protocol::MessageSendResult::Local(push_result),
+        );
         assert_ne!(result.is_error, Some(true), "{route} tool result");
         let structured = result.structured_content.expect("structured receipt");
         assert_eq!(structured, value, "{route} success wire shape changed");
@@ -394,13 +441,53 @@ fn message_send_held_delivery_is_structured_success() {
         }))
         .expect("typed held push result");
 
-    let result = super::super::message_receipt_result(push_result);
+    let result = super::super::message_receipt_result(
+        collaboration_protocol::MessageSendResult::Local(push_result),
+    );
 
     assert_ne!(result.is_error, Some(true));
     let structured = result.structured_content.expect("structured held success");
     assert_eq!(structured["deliveryState"], "held");
     assert_eq!(structured["link"], link);
     assert_eq!(structured["receipt"]["outcome"]["kind"], "notSubmitted");
+}
+
+#[test]
+fn queued_send_and_reply_are_custody_successes_matching_the_advertised_schemas() {
+    let server = CollaborationMcpServer::catalog_only();
+    let expected = serde_json::json!({"queued":{
+        "item":FIXTURE_PUSH_ID,
+        "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000099","endpointId":"codex-local"},"sessionId":"remote-recipient"},
+        "targetIdentity":"remote recipient"
+    }});
+    let send =
+        super::super::message_receipt_result(serde_json::from_value(expected.clone()).unwrap());
+    let reply = super::super::message_reply_receipt_result(
+        serde_json::from_value(expected.clone()).unwrap(),
+    );
+    for (name, result) in [("message_send", send), ("message_reply", reply)] {
+        assert_ne!(result.is_error, Some(true));
+        assert_eq!(result.structured_content.as_ref(), Some(&expected));
+        let schema = server
+            .resolved_tools()
+            .into_iter()
+            .find(|tool| tool.name == name)
+            .unwrap()
+            .output_schema
+            .unwrap();
+        let schema = Value::Object((*schema).clone());
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        assert!(
+            validator.is_valid(&expected),
+            "{name} refused queued custody"
+        );
+        let mut invented_receipt = expected.clone();
+        invented_receipt["queued"]["receipt"] = serde_json::json!({"outcome":{"kind":"queued"}});
+        assert!(
+            !validator.is_valid(&invented_receipt),
+            "{name} accepted a fabricated native receipt"
+        );
+    }
 }
 
 #[test]
@@ -467,7 +554,9 @@ fn message_reply_held_delivery_is_structured_success() {
         }))
         .expect("typed held reply result");
 
-    let result = super::super::message_reply_receipt_result(reply_result);
+    let result = super::super::message_reply_receipt_result(
+        collaboration_protocol::MessageSendResult::Local(reply_result),
+    );
 
     assert_ne!(result.is_error, Some(true));
     let structured = result.structured_content.expect("structured held success");
@@ -493,6 +582,7 @@ fn message_send_post_submission_failure_matches_advertised_output_schema() {
     }))
     .expect("target");
     let stored_but_unknown = collaboration_service::collaboration_application::MessageFailure {
+        existing: None,
         kind: collaboration_service::collaboration_application::MessageFailureKind::OutcomeUnknown,
         stage: collaboration_service::collaboration_application::MessageFailureStage::Store,
         message: "The message was stored; whether it was delivered is unknown.".to_owned(),
@@ -532,7 +622,9 @@ fn message_send_unknown_delivery_retains_outcome_in_typed_error() {
             "receipt":{"outcome":{"kind":"unknown"},"reachability":null,"client":null}
         }))
         .expect("typed unknown push result");
-    let result = super::super::message_receipt_result(push_result);
+    let result = super::super::message_receipt_result(
+        collaboration_protocol::MessageSendResult::Local(push_result),
+    );
     assert_eq!(result.is_error, Some(true));
     let structured = result.structured_content.expect("structured error receipt");
     assert_eq!(structured["mcpResult"], "error");
@@ -553,10 +645,10 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
     let filter: collaboration_protocol::ThreadSubscriptionWaitFilter =
         serde_json::from_value(serde_json::json!({
             "kind":"roots",
-            "rootMessageIds":["019f0000-0000-7000-8000-000000000005"]
+            "threads":[{"thread":"019f0000-0000-7000-8000-000000000005"}]
         }))
         .expect("thread-root wait filter");
-    let tool_result = super::super::thread_wait_outcome_unknown(&actor, &filter);
+    let tool_result = super::super::thread_wait_outcome_unknown(&actor, &filter, &[]);
     assert_eq!(tool_result.is_error, Some(true));
     let structured = tool_result
         .structured_content
@@ -579,8 +671,8 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
         "activity may have been handed off",
         "subscriptions",
         "unread inbox",
-        "board thread subscriptions",
-        "board inbox fetch",
+        "thread subscriptions",
+        "inbox fetch",
     ] {
         assert!(message.contains(phrase), "{message}");
     }
@@ -589,7 +681,7 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
     let schema = server
         .resolved_tools()
         .into_iter()
-        .find(|tool| tool.name == "board_thread_wait")
+        .find(|tool| tool.name == "thread_wait")
         .and_then(|tool| tool.output_schema)
         .expect("advertised board_thread_wait output schema");
     let schema = Value::Object((*schema).clone());
@@ -627,7 +719,9 @@ fn message_send_foreign_writer_rejection_has_typed_action_in_mcp_error() {
             }
         }))
         .expect("typed rejected push result");
-    let result = super::super::message_receipt_result(push_result);
+    let result = super::super::message_receipt_result(
+        collaboration_protocol::MessageSendResult::Local(push_result),
+    );
     assert_eq!(result.is_error, Some(true));
     let structured = result.structured_content.expect("structured MCP error");
     assert_eq!(structured["mcpResult"], "error");
@@ -653,15 +747,15 @@ fn message_send_foreign_writer_rejection_has_typed_action_in_mcp_error() {
 async fn message_rejections_before_submission_have_no_effect_and_keep_service_detail() {
     // Arrange
     let temporary = tempfile::tempdir().expect("temporary directory");
-    let (server, owner) = message_server(temporary.path()).await;
-    let foreign_target = serde_json::json!({
+    let (server, owner, native) = message_server(temporary.path()).await;
+    let foreign_sender = serde_json::json!({
         "endpoint":{"serviceId":"00000000-0000-4000-8000-0000000000ff","endpointId":"codex-local"},
         "sessionId":"elsewhere"
     });
-    let send: collaboration_client::MessageSendRequest =
+    let send: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
-            "target":foreign_target,
-            "message":{"kind":"humanUser","text":"wrong Router"},
+            "target":fixture_session("claude-local", "target-session"),
+            "message":{"kind":"agent","sender":foreign_sender,"text":"wrong Router"},
             "delivery":"auto",
             "generationGuard":null
         }))
@@ -690,7 +784,10 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
     assert_eq!(replied["serviceKind"], "notFound");
     assert_eq!(replied["effect"], "none");
     assert!(replied["caller"].is_null());
+    drop(server);
     owner.shutdown().await;
+    drop(owner);
+    native.close().await.expect("close native mail owner");
 }
 
 #[test]
@@ -698,6 +795,7 @@ fn a_message_stored_without_a_known_delivery_names_its_target_with_unknown_effec
     let target: collaboration_protocol::SessionRef =
         serde_json::from_value(fixture_session("codex-local", "message-thread")).expect("target");
     let stored_but_unknown = collaboration_service::collaboration_application::MessageFailure {
+        existing: None,
         kind: collaboration_service::collaboration_application::MessageFailureKind::OutcomeUnknown,
         stage: collaboration_service::collaboration_application::MessageFailureStage::Store,
         message: "The message was stored; whether it was delivered is unknown.".to_owned(),

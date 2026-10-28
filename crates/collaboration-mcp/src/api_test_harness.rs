@@ -9,7 +9,9 @@ use collaboration_protocol::{
     ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
     RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
 };
-use collaboration_service::{CollaborationApplication, ManifestPublication, ServiceIdentity};
+use collaboration_runtime::ManifestPublication;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::CollaborationApplication;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use rmcp::{
     ClientHandler, RoleClient, ServiceExt as _,
@@ -39,8 +41,8 @@ pub(crate) const TEST_SERVICE_EPOCH: &str = "00000000-0000-4000-8000-00000000000
 pub(crate) const TEST_PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// A Router identity with no stores; tests add the stores their operations need.
-pub(crate) fn test_identity() -> ServiceIdentity {
-    ServiceIdentity::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
+pub(crate) fn test_identity() -> ApplicationFixture {
+    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
 }
 
 /// The configuration a Host would hand every listener, over `application`.
@@ -94,6 +96,7 @@ enum ServedEndpoint {
 /// One listener serving the API until stopped.
 pub(crate) struct ServedApi {
     endpoint: ServedEndpoint,
+    http_client: reqwest::Client,
     shutdown: CancellationToken,
     tool_calls: ToolCallRegistry,
     task: JoinHandle<io::Result<()>>,
@@ -122,10 +125,24 @@ impl ServedApi {
         address: &str,
         grace: Option<Duration>,
     ) -> Self {
+        Self::tcp_with_proxy_authority(config, address, grace, None).await
+    }
+
+    pub(crate) async fn tcp_with_proxy_authority(
+        config: &CollaborationApiConfig,
+        address: &str,
+        grace: Option<Duration>,
+        proxy_authority: Option<crate::ProxyAuthority>,
+    ) -> Self {
         let listener = TcpListener::bind(address).await.expect("bind loopback TCP");
         let address = listener.local_addr().expect("loopback address");
-        let mut api =
-            collaboration_api_router(config, CollaborationApiListener::LoopbackTcp(address));
+        let mut api = collaboration_api_router(
+            config,
+            CollaborationApiListener::LoopbackTcp {
+                address,
+                proxy_authority,
+            },
+        );
         if let Some(grace) = grace {
             api = api.with_call_grace(grace);
         }
@@ -137,6 +154,7 @@ impl ServedApi {
         ));
         Self {
             endpoint: ServedEndpoint::LoopbackTcp(address),
+            http_client: reqwest::Client::new(),
             shutdown: config.shutdown.clone(),
             tool_calls,
             task,
@@ -144,7 +162,7 @@ impl ServedApi {
         }
     }
 
-    pub(crate) async fn unix(config: &CollaborationApiConfig, socket: &Path) -> Self {
+    pub(crate) fn unix(config: &CollaborationApiConfig, socket: &Path) -> Self {
         let listener = UnixListener::bind(socket).expect("bind Unix socket");
         let api = collaboration_api_router(config, CollaborationApiListener::UnixSocket);
         let tool_calls = api.tool_calls();
@@ -155,6 +173,7 @@ impl ServedApi {
         ));
         Self {
             endpoint: ServedEndpoint::UnixSocket(socket.to_owned()),
+            http_client: reqwest::Client::new(),
             shutdown: config.shutdown.clone(),
             tool_calls,
             task,
@@ -164,13 +183,12 @@ impl ServedApi {
 
     /// Serves the API on the service directory's `control.sock` and publishes the manifest
     /// beside it, the way the CLIs find a Host.
-    pub(crate) async fn service_socket(config: &CollaborationApiConfig) -> Self {
+    pub(crate) fn service_socket(config: &CollaborationApiConfig) -> Self {
         let directory = &config.service_directory;
         let mut served = Self::unix(
             config,
             &directory.join(ApiSocketPath::ServiceSocket.file_name()),
-        )
-        .await;
+        );
         served.publication = Some(publish_manifest(directory, &config.application));
         served
     }
@@ -229,7 +247,8 @@ impl ServedApi {
     /// Posts one JSON-RPC message over TCP without a client handshake; stateless calls need
     /// none. Answers the JSON-RPC response, whether sent as JSON or as one SSE event.
     pub(crate) async fn post(&self, message: &Value) -> (reqwest::StatusCode, Value) {
-        let response = reqwest::Client::new()
+        let response = self
+            .http_client
             .post(self.url())
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json, text/event-stream")

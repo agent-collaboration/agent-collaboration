@@ -2,7 +2,8 @@
 use automation_storage::AutomationStore;
 use codex_router_host::AutomationSettingsFile;
 use collaboration_protocol::{AutomationConfiguration, AutomationConfigureRequest, OperationId};
-use collaboration_service::{AutomationConfigurationBackend, AutomationConfigurationHandle};
+use collaboration_runtime::AutomationConfigurationBackend;
+use collaboration_runtime::AutomationConfigurationHandle;
 use serde_json::json;
 use std::{
     os::unix::fs::{DirBuilderExt, MetadataExt},

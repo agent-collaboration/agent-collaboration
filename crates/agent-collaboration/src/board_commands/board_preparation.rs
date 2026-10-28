@@ -1,10 +1,48 @@
-use super::board_arguments::*;
+#[path = "board_inbox_preparation.rs"]
+mod board_inbox_preparation;
+use board_inbox_preparation::prepare_inbox;
+#[path = "board_thread_preparation.rs"]
+mod board_thread_preparation;
+use board_thread_preparation::{prepare_message, prepare_thread};
+#[path = "board_metadata_preparation.rs"]
+mod board_metadata_preparation;
+use super::board_arguments::{
+    BoardCommand, BoardMetadataCommand, CommonArguments, InboxCommand, ParticipantRoleKind,
+    PlacementKind, PostCommand, ProjectCommand, RepositoryCommand, ThreadCommand,
+    ThreadCreateArguments, ThreadJoinArguments, ThreadLeaveArguments, ThreadMutationArguments,
+    ThreadParticipantCommand, ThreadWatchArguments, WorkspaceCommand,
+};
+use super::board_inbox_arguments::InboxModeKind;
 use super::board_thread_subscription_preparation::PendingSubscriptionActor;
-use super::board_thread_wait_preparation::PendingSubscriptionWait;
-use super::board_value_parsing::*;
+pub(super) use super::board_thread_wait_preparation::PendingSubscriptionWait;
+use super::board_value_parsing::{
+    command_context, inbox_scope, message_scope, message_selection, optional_repository,
+    parse_acting_for, parse_addressees, parse_bounded_text, parse_identity,
+    parse_mutation_identity, parse_or_generate_uuid_v7, parse_thread_ref, parse_thread_subject,
+    parse_uuid_v7, prepare_page_request, read_actor, read_message_file, required_repository,
+};
+use board_metadata_preparation::{
+    prepare_board_metadata, prepare_project, prepare_repository_command, prepare_workspace,
+};
 use collaboration_client::BoardRepositoryLocation;
 use collaboration_client::CollaborationClient;
-use collaboration_client::board::*;
+use collaboration_client::board::{
+    AcknowledgementEntry, ActingForIdentity, BoardArchiveRequest, BoardCloseRequest,
+    BoardCreateRequest, BoardListRequest, BoardShowRequest, BoardUpdateRequest,
+    DiscoverySearchRequest, EndpointId, HumanId, Identity, InboxAcknowledgeRequest,
+    InboxAcknowledgeRequestProps, InboxFetchRequest, InboxFetchRequestProps, InboxReadMode,
+    InboxScope, InboxWorkspacesRequest, InvalidPostReferences, LeaveFollowUp, PageRequest,
+    ParticipantRole, PostListRequest, PostReferences, PostSearchRequest, PostShowRequest,
+    PostTarget, ProjectCreateRequest, ProjectListRequest, ProjectShowRequest, ProjectUpdateRequest,
+    ProjectWatchRequest, ProtocolVersion, ReadActor, ReadInitializationEntry, ReferenceTarget,
+    RepositoryListRequest, RequestEffectsRequest, RequestEffectsScope, RequestId, ServiceId,
+    SessionEndpointRef, SessionId, SessionRef, TextValidationError, ThreadCreateRequest,
+    ThreadJoinRequest, ThreadLeaveRequest, ThreadListRequest, ThreadParticipantListRequest,
+    ThreadPostRequest, ThreadRef, ThreadRefileRequest, ThreadResolutionReason,
+    ThreadResolveRequest, ThreadShowRequest, ThreadUnresolveRequest, ThreadUnwatchRequest,
+    ThreadWatchRequest, WorkspaceArchiveRequest, WorkspaceCreateRequest, WorkspaceId,
+    WorkspaceShowRequest, WorkspaceUpdateRequest,
+};
 use collaboration_client::protocol::{
     ThreadSubscribeRequest, ThreadSubscriptionsRequest, ThreadUnsubscribeRequest,
 };
@@ -16,23 +54,29 @@ pub(super) struct CommandContext {
 }
 
 pub(super) enum PreparedBoardCommand {
+    RequestEffects(RequestEffectsRequest),
+    View(Box<super::board_view_commands::PreparedViewCommand>),
+    Entity(Box<super::board_entity_preparation::PreparedEntityCommand>),
     DiscoverySearch(DiscoverySearchRequest),
-    MessageSearch(MessageSearchRequest),
-    ProjectCreate(ProjectCreateRequest),
-    ProjectUpdate(ProjectUpdateRequest),
-    ProjectShow(ProjectShowRequest),
-    ProjectList {
+    PostSearch(PostSearchRequest),
+    WorkspaceCreate(WorkspaceCreateRequest),
+    WorkspaceUpdate(WorkspaceUpdateRequest),
+    WorkspaceArchive(WorkspaceArchiveRequest),
+    WorkspaceShow(WorkspaceShowRequest),
+    WorkspaceList {
         repository: Option<BoardRepositoryLocation>,
         page: PageRequest,
     },
     RepositoryAttach {
-        project_id: ProjectId,
+        request: super::board_request_arguments::RequestMetadataArguments,
+        workspace_id: WorkspaceId,
         repository: BoardRepositoryLocation,
         actor: Identity,
         acting_for: Option<ActingForIdentity>,
     },
     RepositoryDetach {
-        project_id: ProjectId,
+        request: super::board_request_arguments::RequestMetadataArguments,
+        workspace_id: WorkspaceId,
         repository: BoardRepositoryLocation,
         actor: Identity,
         acting_for: Option<ActingForIdentity>,
@@ -43,19 +87,23 @@ pub(super) enum PreparedBoardCommand {
     BoardShow(BoardShowRequest),
     BoardList(BoardListRequest),
     BoardArchive(BoardArchiveRequest),
-    TopicCreate(TopicCreateRequest),
-    TopicUpdate(TopicUpdateRequest),
-    TopicList(TopicListRequest),
-    MessagePost(PendingMessagePost),
-    MessageShow(MessageShowRequest),
-    MessageList(MessageListRequest),
+    BoardClose(BoardCloseRequest),
+    ProjectClaim(board_sync_protocol::ProjectClaimRequest),
+    ProjectCreate(ProjectCreateRequest),
+    ProjectUpdate(ProjectUpdateRequest),
+    ProjectList(ProjectListRequest),
+    ProjectShow(ProjectShowRequest),
+    ThreadPost(PendingThreadPost),
+    PostShow(PostShowRequest),
+    PostList(PostListRequest),
     ThreadShow(ThreadShowRequest),
     ThreadResolve(ThreadResolveRequest),
+    ThreadRefile(ThreadRefileRequest),
     ThreadUnresolve(ThreadUnresolveRequest),
     ThreadWatch(ThreadWatchRequest),
     ThreadUnwatch(ThreadUnwatchRequest),
-    TopicWatch(TopicWatchRequest),
-    TopicUnwatch(TopicWatchRequest),
+    ProjectWatch(ProjectWatchRequest),
+    ProjectUnwatch(ProjectWatchRequest),
     ThreadList(ThreadListRequest),
     RepositoryThreadList {
         repository: BoardRepositoryLocation,
@@ -73,7 +121,7 @@ pub(super) enum PreparedBoardCommand {
     ThreadParticipantList(ThreadParticipantListRequest),
     InboxFetch(InboxFetchRequest),
     InboxAcknowledge(InboxAcknowledgeRequest),
-    InboxProjects(InboxProjectsRequest),
+    InboxWorkspaces(InboxWorkspacesRequest),
 }
 
 #[derive(Clone)]
@@ -87,8 +135,8 @@ pub(super) struct PendingThreadCreate {
     pub actor: ActorInput,
 }
 
-pub(super) struct PendingMessagePost {
-    pub request: MessagePostRequest,
+pub(super) struct PendingThreadPost {
+    pub request: ThreadPostRequest,
     pub text_file: Option<PathBuf>,
 }
 
@@ -137,7 +185,10 @@ fn self_identity(client: &CollaborationClient) -> Result<Identity, String> {
     })
 }
 
-fn finalize_identity(identity: &mut Identity, client: &CollaborationClient) -> Result<(), String> {
+pub(super) fn finalize_identity(
+    identity: &mut Identity,
+    client: &CollaborationClient,
+) -> Result<(), String> {
     if identity
         .as_human()
         .is_some_and(|id| id.as_str() == "__agent_collaboration_self__")
@@ -152,12 +203,17 @@ pub(super) fn finalize_command(
     client: &CollaborationClient,
 ) -> Result<(), String> {
     match command {
+        PreparedBoardCommand::Entity(command) => command.finalize(client)?,
+        PreparedBoardCommand::View(command) => command.finalize(client)?,
         PreparedBoardCommand::RepositoryAttach { actor, .. }
         | PreparedBoardCommand::RepositoryDetach { actor, .. } => finalize_identity(actor, client)?,
-        PreparedBoardCommand::ProjectCreate(request) => {
+        PreparedBoardCommand::WorkspaceCreate(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::ProjectUpdate(request) => {
+        PreparedBoardCommand::WorkspaceUpdate(request) => {
+            finalize_identity(&mut request.actor, client)?
+        }
+        PreparedBoardCommand::WorkspaceArchive(request) => {
             finalize_identity(&mut request.actor, client)?
         }
         PreparedBoardCommand::BoardCreate(request) => {
@@ -169,19 +225,23 @@ pub(super) fn finalize_command(
         PreparedBoardCommand::BoardArchive(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::TopicCreate(request) => {
+        PreparedBoardCommand::BoardClose(request) => finalize_identity(&mut request.actor, client)?,
+        PreparedBoardCommand::ProjectCreate(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::TopicUpdate(request) => {
+        PreparedBoardCommand::ProjectUpdate(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::MessagePost(pending) => {
+        PreparedBoardCommand::ThreadPost(pending) => {
             finalize_identity(&mut pending.request.actor, client)?
         }
         PreparedBoardCommand::ThreadShow(request) => {
-            if let Some(reader) = &mut request.reader {
+            if let ReadActor::Identified { reader } = &mut request.reader {
                 finalize_identity(reader, client)?;
             }
+        }
+        PreparedBoardCommand::ThreadRefile(request) => {
+            finalize_identity(&mut request.actor, client)?
         }
         PreparedBoardCommand::ThreadResolve(request) => {
             finalize_identity(&mut request.actor, client)?
@@ -195,7 +255,8 @@ pub(super) fn finalize_command(
         PreparedBoardCommand::ThreadUnwatch(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::TopicWatch(request) | PreparedBoardCommand::TopicUnwatch(request) => {
+        PreparedBoardCommand::ProjectWatch(request)
+        | PreparedBoardCommand::ProjectUnwatch(request) => {
             finalize_identity(&mut request.actor, client)?
         }
         PreparedBoardCommand::ThreadList(request) => {
@@ -211,7 +272,7 @@ pub(super) fn finalize_command(
         PreparedBoardCommand::InboxAcknowledge(request) => {
             finalize_identity(&mut request.actor, client)?
         }
-        PreparedBoardCommand::InboxProjects(request) => {
+        PreparedBoardCommand::InboxWorkspaces(request) => {
             finalize_identity(&mut request.reader, client)?
         }
         PreparedBoardCommand::ThreadCreate(pending) => {
@@ -242,7 +303,7 @@ pub(super) fn finalize_command(
         }
         PreparedBoardCommand::ThreadLeave(pending) => {
             pending.request.actor = finalize_actor(&pending.actor, client)?;
-            if let Some(handover) = &mut pending.request.to {
+            if let Some(LeaveFollowUp::HandTo { to: handover }) = &mut pending.request.after_leave {
                 finalize_identity(handover, client)?;
             }
         }
@@ -255,398 +316,50 @@ pub(super) fn prepare(
     command: BoardCommand,
 ) -> Result<(PreparedBoardCommand, CommandContext), String> {
     match command {
+        BoardCommand::RequestEffects(arguments) => {
+            let scope = match (arguments.project_id, arguments.workspace_id) {
+                (Some(project), None) => RequestEffectsScope::Project {
+                    project_id: parse_uuid_v7(project, "--project-id")?,
+                },
+                (None, Some(workspace)) => RequestEffectsScope::Fleet {
+                    workspace_id: parse_uuid_v7(workspace, "--workspace-id")?,
+                },
+                _ => return Err("select exactly one --project-id or --workspace-id".to_owned()),
+            };
+            Ok((
+                PreparedBoardCommand::RequestEffects(RequestEffectsRequest {
+                    scope,
+                    request: parse_uuid_v7(arguments.request, "request")?,
+                    after: arguments.after,
+                }),
+                command_context(arguments.common),
+            ))
+        }
+        BoardCommand::View { command } => super::board_view_commands::prepare_view(command),
+        BoardCommand::Workstream { command } => {
+            super::board_entity_preparation::prepare_workstream(command)
+        }
+        BoardCommand::Task { command } => super::board_entity_preparation::prepare_task(command),
+        BoardCommand::Subtask { command } => {
+            super::board_entity_preparation::prepare_subtask(command)
+        }
+        BoardCommand::WorkTrail { command } => {
+            super::board_entity_preparation::prepare_worktrail(command)
+        }
+        BoardCommand::Role { command } => super::board_entity_preparation::prepare_role(command),
+        BoardCommand::Fact { command } => super::board_entity_preparation::prepare_fact(command),
+        BoardCommand::Feed { command } => super::board_entity_preparation::prepare_feed(command),
+        BoardCommand::Adr { command } => super::board_entity_preparation::prepare_adr(command),
         BoardCommand::Search(arguments) => {
             super::board_search_commands::prepare_discovery_search(arguments)
         }
-        BoardCommand::Project { command } => prepare_project(command),
+        BoardCommand::Workspace { command } => prepare_workspace(command),
         BoardCommand::Repository { command } => prepare_repository_command(command),
-        BoardCommand::Create(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let request = BoardCreateRequest {
-                board_id: parse_or_generate_uuid_v7(arguments.board_id, "--board-id")?,
-                project_id: parse_uuid_v7(arguments.project_id, "--project-id")?,
-                name: parse_bounded_text(arguments.name, "--name")?,
-                description: parse_bounded_text(arguments.description, "--description")?,
-                actor,
-                acting_for,
-            };
-            Ok((
-                PreparedBoardCommand::BoardCreate(request),
-                command_context(arguments.common),
-            ))
-        }
-        BoardCommand::Update(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let request = BoardUpdateRequest {
-                board_id: parse_uuid_v7(arguments.board_id, "--board-id")?,
-                name: parse_bounded_text(arguments.name, "--name")?,
-                description: parse_bounded_text(arguments.description, "--description")?,
-                actor,
-                acting_for,
-            };
-            Ok((
-                PreparedBoardCommand::BoardUpdate(request),
-                command_context(arguments.common),
-            ))
-        }
-        BoardCommand::Show(arguments) => Ok((
-            PreparedBoardCommand::BoardShow(BoardShowRequest {
-                board_id: parse_uuid_v7(arguments.board_id, "--board-id")?,
-            }),
-            command_context(arguments.common),
-        )),
-        BoardCommand::List(arguments) => Ok((
-            PreparedBoardCommand::BoardList(BoardListRequest {
-                project_id: arguments
-                    .project_id
-                    .map(|value| parse_uuid_v7(value, "--project-id"))
-                    .transpose()?,
-                include_archived: arguments.include_archived,
-                page: prepare_page_request(arguments.page)?,
-            }),
-            command_context(arguments.common),
-        )),
-        BoardCommand::Archive(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            Ok((
-                PreparedBoardCommand::BoardArchive(BoardArchiveRequest {
-                    board_id: parse_uuid_v7(arguments.board_id, "--board-id")?,
-                    actor,
-                    acting_for,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        BoardCommand::Topic { command } => prepare_topic(command),
-        BoardCommand::Message { command } => prepare_message(command),
+        BoardCommand::Board { command } => prepare_board_metadata(command),
+        BoardCommand::Project { command } => prepare_project(command),
+        BoardCommand::Post { command } => prepare_message(command),
         BoardCommand::Thread { command } => prepare_thread(command),
         BoardCommand::Inbox { command } => prepare_inbox(command),
-    }
-}
-
-fn prepare_project(
-    command: ProjectCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        ProjectCommand::Create(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            Ok((
-                PreparedBoardCommand::ProjectCreate(ProjectCreateRequest {
-                    project_id: parse_or_generate_uuid_v7(arguments.project_id, "--project-id")?,
-                    name: parse_bounded_text(arguments.name, "--name")?,
-                    description: parse_bounded_text(arguments.description, "--description")?,
-                    actor,
-                    acting_for,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        ProjectCommand::Update(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            Ok((
-                PreparedBoardCommand::ProjectUpdate(ProjectUpdateRequest {
-                    project_id: parse_uuid_v7(arguments.project_id, "--project-id")?,
-                    name: parse_bounded_text(arguments.name, "--name")?,
-                    description: parse_bounded_text(arguments.description, "--description")?,
-                    actor,
-                    acting_for,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        ProjectCommand::Show(arguments) => Ok((
-            PreparedBoardCommand::ProjectShow(ProjectShowRequest {
-                project_id: parse_uuid_v7(arguments.project_id, "--project-id")?,
-            }),
-            command_context(arguments.common),
-        )),
-        ProjectCommand::List(arguments) => Ok((
-            PreparedBoardCommand::ProjectList {
-                repository: optional_repository(arguments.repository)?,
-                page: prepare_page_request(arguments.page)?,
-            },
-            command_context(arguments.common),
-        )),
-    }
-}
-
-fn prepare_repository_command(
-    command: RepositoryCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        RepositoryCommand::Attach(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let project_id = parse_uuid_v7(arguments.project_id, "--project-id")?;
-            let repository = required_repository(arguments.repository)?;
-            Ok((
-                PreparedBoardCommand::RepositoryAttach {
-                    project_id,
-                    repository,
-                    actor,
-                    acting_for,
-                },
-                command_context(arguments.common),
-            ))
-        }
-        RepositoryCommand::Detach(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let project_id = parse_uuid_v7(arguments.project_id, "--project-id")?;
-            let repository = required_repository(arguments.repository)?;
-            Ok((
-                PreparedBoardCommand::RepositoryDetach {
-                    project_id,
-                    repository,
-                    actor,
-                    acting_for,
-                },
-                command_context(arguments.common),
-            ))
-        }
-        RepositoryCommand::List(arguments) => Ok((
-            PreparedBoardCommand::RepositoryList(RepositoryListRequest {
-                project_id: parse_uuid_v7(arguments.project_id, "--project-id")?,
-                page: prepare_page_request(arguments.page)?,
-            }),
-            command_context(arguments.common),
-        )),
-    }
-}
-
-fn prepare_topic(command: TopicCommand) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        TopicCommand::Create(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            Ok((
-                PreparedBoardCommand::TopicCreate(TopicCreateRequest {
-                    topic_id: parse_or_generate_uuid_v7(arguments.topic_id, "--topic-id")?,
-                    board_id: parse_uuid_v7(arguments.board_id, "--board-id")?,
-                    name: parse_bounded_text(arguments.name, "--name")?,
-                    description: parse_bounded_text(arguments.description, "--description")?,
-                    actor,
-                    acting_for,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        TopicCommand::Update(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            Ok((
-                PreparedBoardCommand::TopicUpdate(TopicUpdateRequest {
-                    topic_id: parse_uuid_v7(arguments.topic_id, "--topic-id")?,
-                    name: parse_bounded_text(arguments.name, "--name")?,
-                    description: parse_bounded_text(arguments.description, "--description")?,
-                    actor,
-                    acting_for,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        TopicCommand::List(arguments) => Ok((
-            PreparedBoardCommand::TopicList(TopicListRequest {
-                board_id: parse_uuid_v7(arguments.board_id, "--board-id")?,
-                page: prepare_page_request(arguments.page)?,
-            }),
-            command_context(arguments.common),
-        )),
-    }
-}
-
-fn prepare_message(
-    command: MessageCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        MessageCommand::Search(arguments) => {
-            super::board_search_commands::prepare_message_search(arguments)
-        }
-        MessageCommand::Post(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let placement = match arguments.placement {
-                PlacementKind::Topic => Placement::Topic {
-                    topic_id: parse_uuid_v7(
-                        require_only(
-                            arguments.topic_id,
-                            arguments.root_message_id,
-                            "--topic-id",
-                            "--root-message-id",
-                        )?,
-                        "--topic-id",
-                    )?,
-                },
-                PlacementKind::Thread => Placement::Thread {
-                    root_message_id: parse_uuid_v7(
-                        require_only(
-                            arguments.root_message_id,
-                            arguments.topic_id,
-                            "--root-message-id",
-                            "--topic-id",
-                        )?,
-                        "--root-message-id",
-                    )?,
-                },
-            };
-            let text_file = arguments.text_file.clone();
-            let message_text = match (arguments.text, arguments.text_file) {
-                (Some(value), None) => value,
-                (None, Some(path)) => read_message_file(&path)?,
-                _ => return Err("exactly one of --text or --text-file is required".into()),
-            };
-            let mut references = Vec::with_capacity(
-                arguments.reference_message.len() + arguments.reference_thread.len(),
-            );
-            for value in arguments.reference_message {
-                references.push(ReferenceTarget::Message {
-                    message_id: parse_uuid_v7(value, "--reference-message")?,
-                });
-            }
-            for value in arguments.reference_thread {
-                references.push(ReferenceTarget::Thread {
-                    root_message_id: parse_uuid_v7(value, "--reference-thread")?,
-                });
-            }
-            Ok((
-                PreparedBoardCommand::MessagePost(PendingMessagePost {
-                    request: MessagePostRequest {
-                        message_id: parse_or_generate_uuid_v7(
-                            arguments.message_id,
-                            "--message-id",
-                        )?,
-                        placement,
-                        actor,
-                        acting_for,
-                        text: parse_bounded_text(message_text, "--text/--text-file")?,
-                        references: references
-                            .try_into()
-                            .map_err(|error: InvalidMessageReferences| error.to_string())?,
-                    },
-                    text_file,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        MessageCommand::Show(arguments) => Ok((
-            PreparedBoardCommand::MessageShow(MessageShowRequest {
-                message_id: parse_uuid_v7(arguments.message_id, "--message-id")?,
-            }),
-            command_context(arguments.common),
-        )),
-        MessageCommand::List(arguments) => {
-            let scope = message_scope(&arguments)?;
-            let selection = message_selection(&arguments)?;
-            selection
-                .validate()
-                .map_err(|error| format!("--selection range is invalid: {error}"))?;
-            Ok((
-                PreparedBoardCommand::MessageList(MessageListRequest {
-                    scope,
-                    selection,
-                    page: prepare_page_request(arguments.page)?,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-    }
-}
-
-fn prepare_thread(
-    command: ThreadCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        ThreadCommand::Create(arguments) => prepare_thread_create(arguments),
-        ThreadCommand::Join(arguments) => prepare_thread_join(arguments),
-        ThreadCommand::Subscribe(arguments) => {
-            super::board_thread_subscription_preparation::prepare_subscribe(arguments)
-        }
-        ThreadCommand::Unsubscribe(arguments) => {
-            super::board_thread_subscription_preparation::prepare_unsubscribe(arguments)
-        }
-        ThreadCommand::Subscriptions(arguments) => {
-            super::board_thread_subscription_preparation::prepare_subscriptions(arguments)
-        }
-        ThreadCommand::Leave(arguments) => prepare_thread_leave(arguments),
-        ThreadCommand::Participant { command } => prepare_thread_participant(command),
-        ThreadCommand::Show(arguments) => Ok((
-            PreparedBoardCommand::ThreadShow(ThreadShowRequest {
-                root_message_id: parse_uuid_v7(arguments.root_message_id, "--root-message-id")?,
-                reader: arguments
-                    .reader
-                    .map(|value| parse_identity(&value, "--reader"))
-                    .transpose()?,
-            }),
-            command_context(arguments.common),
-        )),
-        ThreadCommand::Resolve(arguments) => thread_mutation(
-            arguments,
-            PreparedBoardCommand::ThreadResolve,
-            |root_message_id, actor, acting_for| ThreadResolveRequest {
-                root_message_id,
-                actor,
-                acting_for,
-            },
-        ),
-        ThreadCommand::Unresolve(arguments) => thread_mutation(
-            arguments,
-            PreparedBoardCommand::ThreadUnresolve,
-            |root_message_id, actor, acting_for| ThreadUnresolveRequest {
-                root_message_id,
-                actor,
-                acting_for,
-            },
-        ),
-        ThreadCommand::Watch(arguments) => prepare_watch(arguments, true),
-        ThreadCommand::Unwatch(arguments) => prepare_watch(arguments, false),
-        ThreadCommand::List(arguments) => Ok((
-            super::board_thread_list_preparation::prepare_thread_list(&arguments)?,
-            command_context(arguments.common),
-        )),
-        ThreadCommand::Wait(arguments) => super::board_thread_wait_preparation::prepare(arguments),
-    }
-}
-
-fn prepare_watch(
-    arguments: ThreadWatchArguments,
-    watch: bool,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-    let command = match (arguments.root_message_id, arguments.topic_id, watch) {
-        (Some(root), None, true) => PreparedBoardCommand::ThreadWatch(ThreadWatchRequest {
-            root_message_id: parse_uuid_v7(root, "--root-message-id")?,
-            actor,
-            acting_for,
-        }),
-        (Some(root), None, false) => PreparedBoardCommand::ThreadUnwatch(ThreadUnwatchRequest {
-            root_message_id: parse_uuid_v7(root, "--root-message-id")?,
-            actor,
-            acting_for,
-        }),
-        (None, Some(topic), true) => PreparedBoardCommand::TopicWatch(TopicWatchRequest {
-            topic_id: parse_uuid_v7(topic, "--topic-id")?,
-            actor,
-            acting_for,
-        }),
-        (None, Some(topic), false) => PreparedBoardCommand::TopicUnwatch(TopicWatchRequest {
-            topic_id: parse_uuid_v7(topic, "--topic-id")?,
-            actor,
-            acting_for,
-        }),
-        _ => return Err("Choose exactly one of --root-message-id or --topic-id".into()),
-    };
-    Ok((command, command_context(arguments.common)))
-}
-
-fn prepare_thread_participant(
-    command: ThreadParticipantCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        ThreadParticipantCommand::List(arguments) => {
-            require_thread_json(&arguments.common, "Thread Participant List")?;
-            Ok((
-                PreparedBoardCommand::ThreadParticipantList(ThreadParticipantListRequest {
-                    root_message_id: parse_uuid_v7(arguments.root_message_id, "--root-message-id")?,
-                    page: prepare_page_request(arguments.page)?,
-                }),
-                command_context(arguments.common),
-            ))
-        }
     }
 }
 
@@ -663,224 +376,4 @@ pub(super) fn placeholder_identity() -> Result<Identity, String> {
         human_id: HumanId::try_from("pending-actor-finalization".to_owned())
             .map_err(|_| "could not prepare actor identity".to_owned())?,
     })
-}
-
-fn watch_choice(watch: bool, no_watch: bool) -> Result<bool, String> {
-    match (watch, no_watch) {
-        (true, false) => Ok(true),
-        (false, true) => Ok(false),
-        _ => Err("Choose exactly one Watch choice: --watch or --no-watch".into()),
-    }
-}
-
-fn participant_role(role: ParticipantRoleKind) -> ParticipantRole {
-    match role {
-        ParticipantRoleKind::Orchestrator => ParticipantRole::Orchestrator,
-        ParticipantRoleKind::Implementer => ParticipantRole::Implementer,
-        ParticipantRoleKind::Advisor => ParticipantRole::Advisor,
-        ParticipantRoleKind::Reviewer => ParticipantRole::Reviewer,
-        ParticipantRoleKind::Participant => ParticipantRole::Participant,
-    }
-}
-
-fn thread_references(
-    message_references: Vec<String>,
-    thread_references: Vec<String>,
-) -> Result<MessageReferences, String> {
-    let mut references = Vec::with_capacity(message_references.len() + thread_references.len());
-    for value in message_references {
-        references.push(ReferenceTarget::Message {
-            message_id: parse_uuid_v7(value, "--reference-message")?,
-        });
-    }
-    for value in thread_references {
-        references.push(ReferenceTarget::Thread {
-            root_message_id: parse_uuid_v7(value, "--reference-thread")?,
-        });
-    }
-    references
-        .try_into()
-        .map_err(|error: InvalidMessageReferences| error.to_string())
-}
-
-fn prepare_thread_create(
-    arguments: ThreadCreateArguments,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    require_thread_json(&arguments.common, "Thread Create")?;
-    let actor = parse_actor_input(&arguments.actor)?;
-    let acting_for = arguments
-        .acting_for
-        .as_deref()
-        .map(parse_acting_for)
-        .transpose()?;
-    let role = arguments.role.map(participant_role);
-    let watch = watch_choice(arguments.watch, arguments.no_watch)?;
-    if matches!(&actor, ActorInput::Explicit(Identity::Session { .. })) && role.is_none() {
-        return Err("Thread Create requires --role for a session actor".into());
-    }
-    let request = ThreadCreateRequest {
-        message_id: parse_or_generate_uuid_v7(arguments.message_id, "--message-id")?,
-        topic_id: parse_uuid_v7(arguments.topic_id, "--topic-id")?,
-        actor: match &actor {
-            ActorInput::Explicit(identity) => identity.clone(),
-            ActorInput::Self_ => placeholder_identity()?,
-        },
-        acting_for,
-        text: parse_bounded_text(read_message_file(&arguments.text_file)?, "--text-file")?,
-        references: thread_references(arguments.reference_message, arguments.reference_thread)?,
-        role,
-        watch,
-    };
-    Ok((
-        PreparedBoardCommand::ThreadCreate(Box::new(PendingThreadCreate { request, actor })),
-        command_context(arguments.common),
-    ))
-}
-
-fn prepare_thread_join(
-    arguments: ThreadJoinArguments,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    require_thread_json(&arguments.common, "Thread Join")?;
-    let actor = parse_actor_input(&arguments.actor)?;
-    let role = participant_role(arguments.role);
-    let replace = arguments
-        .replace
-        .map(|value| parse_identity(&value, "--replace"))
-        .transpose()?;
-    if replace.is_some() && role != ParticipantRole::Orchestrator {
-        return Err("--replace requires --role orchestrator".into());
-    }
-    let request = ThreadJoinRequest {
-        mode: arguments
-            .mode
-            .map(super::board_thread_subscription_preparation::subscription_mode),
-        when_idle: arguments
-            .when_idle
-            .map(super::board_thread_subscription_preparation::when_idle),
-        root_message_id: parse_uuid_v7(arguments.root_message_id, "--root-message-id")?,
-        actor: match &actor {
-            ActorInput::Explicit(identity) => identity.clone(),
-            ActorInput::Self_ => placeholder_identity()?,
-        },
-        role,
-        watch: !arguments.no_watch,
-        replace,
-        note: arguments
-            .note
-            .map(|value| parse_bounded_text(value, "--note"))
-            .transpose()?,
-    };
-    Ok((
-        PreparedBoardCommand::ThreadJoin(Box::new(PendingThreadJoin { request, actor })),
-        command_context(arguments.common),
-    ))
-}
-
-fn prepare_thread_leave(
-    arguments: ThreadLeaveArguments,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    require_thread_json(&arguments.common, "Thread Leave")?;
-    let actor = parse_actor_input(&arguments.actor)?;
-    let request = ThreadLeaveRequest {
-        root_message_id: parse_uuid_v7(arguments.root_message_id, "--root-message-id")?,
-        actor: match &actor {
-            ActorInput::Explicit(identity) => identity.clone(),
-            ActorInput::Self_ => placeholder_identity()?,
-        },
-        to: arguments
-            .to
-            .map(|value| parse_identity(&value, "--to"))
-            .transpose()?,
-        resolve: arguments.resolve,
-    };
-    Ok((
-        PreparedBoardCommand::ThreadLeave(PendingThreadLeave { request, actor }),
-        command_context(arguments.common),
-    ))
-}
-
-fn require_thread_json(common: &CommonArguments, command: &str) -> Result<(), String> {
-    if common.json {
-        Ok(())
-    } else {
-        Err(format!("{command} requires --json"))
-    }
-}
-
-fn thread_mutation<TRequest>(
-    arguments: ThreadMutationArguments,
-    wrap: impl FnOnce(TRequest) -> PreparedBoardCommand,
-    build: impl FnOnce(MessageId, Identity, Option<ActingForIdentity>) -> TRequest,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-    let request = build(
-        parse_uuid_v7(arguments.root_message_id, "--root-message-id")?,
-        actor,
-        acting_for,
-    );
-    Ok((wrap(request), command_context(arguments.common)))
-}
-
-fn prepare_inbox(command: InboxCommand) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        InboxCommand::Fetch(arguments) => Ok((
-            PreparedBoardCommand::InboxFetch(InboxFetchRequest {
-                scope: inbox_scope(&arguments)?,
-                read_mode: match arguments.read_mode {
-                    InboxModeKind::Unread => InboxReadMode::Unread,
-                    InboxModeKind::Latest => InboxReadMode::Latest,
-                },
-                reader: parse_identity(&arguments.reader, "--reader")?,
-                page: prepare_page_request(arguments.page)?,
-            }),
-            command_context(arguments.common),
-        )),
-        InboxCommand::Acknowledge(arguments) => {
-            let (actor, acting_for) = parse_mutation_identity(&arguments.identity)?;
-            let scope = match arguments.scope {
-                ReadScopeKind::Topic => ReadScope::Topic {
-                    topic_id: parse_uuid_v7(
-                        require_only(
-                            arguments.topic_id,
-                            arguments.root_message_id,
-                            "--topic-id",
-                            "--root-message-id",
-                        )?,
-                        "--topic-id",
-                    )?,
-                },
-                ReadScopeKind::Thread => ReadScope::Thread {
-                    root_message_id: parse_uuid_v7(
-                        require_only(
-                            arguments.root_message_id,
-                            arguments.topic_id,
-                            "--root-message-id",
-                            "--topic-id",
-                        )?,
-                        "--root-message-id",
-                    )?,
-                },
-            };
-            Ok((
-                PreparedBoardCommand::InboxAcknowledge(InboxAcknowledgeRequest {
-                    actor,
-                    acting_for,
-                    scope,
-                    through_activity_sequence: activity_sequence(
-                        arguments.through_activity_sequence,
-                        "--through-activity-sequence",
-                    )?,
-                }),
-                command_context(arguments.common),
-            ))
-        }
-        InboxCommand::Projects(arguments) => Ok((
-            PreparedBoardCommand::InboxProjects(InboxProjectsRequest {
-                reader: parse_identity(&arguments.reader, "--reader")?,
-                unread_only: arguments.unread_only,
-                page: prepare_page_request(arguments.page)?,
-            }),
-            command_context(arguments.common),
-        )),
-    }
 }

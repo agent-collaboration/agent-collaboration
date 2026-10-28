@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#startup",
+  "originalSHA256": "a6c9d64e89d755d5c0cf12cda24a3df092dfeffab88aa9dafd040abb6edd0843",
+  "target": "host-composition-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"startup-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  },
+  "configuration": {
+    "mode": "startup"
+  }
+}

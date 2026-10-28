@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT target_json,canonical_request,body_json,valid_until_ms,wakeup_id,snapshot_json FROM remote_wake_requests WHERE operation_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "target_json",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "target_json"
+          }
+        }
+      },
+      {
+        "name": "canonical_request",
+        "ordinal": 1,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "canonical_request"
+          }
+        }
+      },
+      {
+        "name": "body_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "body_json"
+          }
+        }
+      },
+      {
+        "name": "valid_until_ms",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "valid_until_ms"
+          }
+        }
+      },
+      {
+        "name": "wakeup_id",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "wakeup_id"
+          }
+        }
+      },
+      {
+        "name": "snapshot_json",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "snapshot_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "a744400b100cd568cb5c4601131363d29014d81456677f80e9fe92834871da4f"
+}

@@ -4,9 +4,10 @@ use super::{
     matrix_marker,
 };
 use codex_native_integration::NativeOperation;
-use collaboration_client::board::{Identity, MessageId, SubscriptionScope};
+use collaboration_client::board::{Identity, SubscriptionScope, ThreadId};
 use collaboration_client::protocol::{
-    RouterAccess, SessionRef, ThreadSubscriptionPresence, ThreadSubscriptionsRequest,
+    PushRecordShowParams, RouterAccess, SessionRef, ThreadSubscriptionPresence,
+    ThreadSubscriptionsRequest,
 };
 use collaboration_client::{
     ConversationClient, ConversationLoadInput, ConversationOperationResult,
@@ -65,6 +66,39 @@ async fn prepare_materialized_target(
         .ok_or("Unloaded preparation did not accept a native turn")?
         .to_owned();
     let deadline = tokio::time::Instant::now() + OBSERVATION_TIMEOUT;
+    let thread_id = String::from(target.session_id.clone());
+    // Acknowledging turn/start precedes persistence of the first rollout. Observe
+    // the accepted turn's completion before asking history to prove its contents.
+    tokio::time::timeout_at(deadline, async {
+        loop {
+            let message = proof.native.next_message().await?;
+            if message.get("id").is_some() && message.get("method").is_some() {
+                return Err::<(), Box<dyn std::error::Error + Send + Sync>>(
+                    "Preparation encountered an unexpected native callback".into(),
+                );
+            }
+            if message.get("method").and_then(Value::as_str) == Some("turn/completed")
+                && message.pointer("/params/threadId").and_then(Value::as_str)
+                    == Some(thread_id.as_str())
+                && message.pointer("/params/turn/id").and_then(Value::as_str)
+                    == Some(turn_id.as_str())
+            {
+                if message
+                    .pointer("/params/turn/status")
+                    .and_then(Value::as_str)
+                    != Some("completed")
+                {
+                    return Err("Preparation turn did not complete successfully".into());
+                }
+                proof.record(
+                    "preparationTurnCompleted",
+                    json!({"target":target,"turnId":turn_id}),
+                )?;
+                return Ok(());
+            }
+        }
+    })
+    .await??;
     let mut observation = tokio::time::interval(Duration::from_millis(250));
     loop {
         observation.tick().await;
@@ -164,9 +198,21 @@ pub(super) async fn cover_held_dm_cell(
     let item = super::wait_for_codex_input(proof, target, &marker, OBSERVATION_TIMEOUT).await?;
     let observed_line = super::user_message_text(&item)?;
     super::assert_exact_notice_line(&observed_line, &expected_line)?;
-    let (delivered, delivered_line) = dm_notice_and_show(proof, target, &push_id).await?;
+    // The first show marked this DM read, so it no longer belongs in the unread inbox.
+    let delivered = proof
+        .client
+        .router_show(PushRecordShowParams {
+            caller: target.clone(),
+            reference: held.link.clone(),
+        })
+        .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(delivered) = delivered else {
+        return Err("native proof expected a stored local push".into());
+    };
+    let delivered_line = super::expected_push_line(&delivered, &super::machine_label(proof)?)?;
     if delivered.record.delivery_state != PushDeliveryState::Delivered
         || delivered.record.push_id.as_str() != push_id
+        || delivered.record.target != *target
         || delivered_line != expected_line
     {
         return Err("S3 load did not deliver the original stored DM line".into());
@@ -182,15 +228,17 @@ pub(super) async fn cover_held_subscription_batch_cell(
     proof: &mut ProofContext,
     sender: &SessionRef,
     target: &SessionRef,
+    resources: &mut super::owned_resources::OwnedMatrixResources,
 ) -> ProofResult<()> {
     require_unloaded_target(proof, target).await?;
     let first_marker = matrix_marker("held-subscription-first-root");
     let second_marker = matrix_marker("held-subscription-second-root");
     let roots = super::held_subscription_producer::board_two_thread_subscription_push(
-        proof,
+        &proof.client,
         sender,
         target,
         [&first_marker, &second_marker],
+        resources,
     )
     .await?;
 
@@ -241,7 +289,7 @@ async fn load_codex_target(
                 operation_id: None,
                 target: target.clone(),
                 working_directory: proof.workspace.clone(),
-                requested_by: requested_by.clone(),
+                requested_by: requested_by.clone().into(),
                 approver: Some(requested_by.clone().into()),
                 access: RouterAccess::WorkspaceWrite,
                 generation: None,
@@ -260,7 +308,7 @@ async fn load_codex_target(
 async fn wait_for_held_subscription_roots(
     proof: &mut ProofContext,
     target: &SessionRef,
-    roots: &[MessageId],
+    roots: &[ThreadId],
 ) -> ProofResult<()> {
     if roots.len() != 2 || roots.first() == roots.last() {
         return Err("S5 requires two distinct subscription roots".into());
@@ -272,7 +320,7 @@ async fn wait_for_held_subscription_roots(
         observation.tick().await;
         let page = proof
             .client
-            .board_thread_subscriptions(ThreadSubscriptionsRequest {
+            .thread_subscriptions(ThreadSubscriptionsRequest {
                 actor: reader.clone(),
             })
             .await?;
@@ -344,7 +392,7 @@ fn assert_held_two_root_batch(
     let has_marker = |marker: &str| {
         show.activity_ranges.iter().any(|range| {
             range
-                .messages
+                .posts
                 .iter()
                 .any(|message| message.text.as_str() == marker)
         })

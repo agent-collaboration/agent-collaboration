@@ -1,5 +1,5 @@
 use collaboration_protocol::CodexGeneration;
-use collaboration_service::NativeGenerationGate;
+use collaboration_runtime::NativeGenerationGate;
 
 #[test]
 fn retirement_cancels_existing_admission_and_rejects_new_connections() {

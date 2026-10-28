@@ -1,31 +1,46 @@
 //! Real Board/automation storage and authenticated Claude peer composition for resume proof.
+#[path = "../../../collaboration-service/tests/support/native_mail_owner.rs"]
+mod native_mail_owner;
+#[path = "../../../collaboration-service/tests/support/native_registry.rs"]
+mod native_registry;
 #[path = "claude_peer_subscription_clock.rs"]
 mod observed_clock;
+#[path = "claude_peer_subscription_transport.rs"]
+mod peer_transport;
 use automation_storage::AutomationStore;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use claude_code_peer_messaging::{
     ClaudeCodePeerSocket, ClaudeCodeSessionRegistry, PeerSessionLookup, PeerSessionRecord,
 };
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     EndpointId as PeerEndpointId, EndpointRef, PushId, PushRecord, RouterOriginRef, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, SessionDeliveryRouter, SessionMessageDelivery,
-    SubscriptionClock, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    TargetPresence, TargetPresenceProbe,
-};
-use message_board::{
-    BoardCreateRequest, BoardId, Description, Identity, InboxFetchRequest, InboxPage,
-    InboxReadMode, InboxScope, Message, MessageId, MessagePostRequest, MessageReferences,
-    MessageText, ParticipantRole, Placement, ProjectCreateRequest, ProjectId, ResourceName,
-    ServiceId, SessionEndpointRef, SessionId as BoardSessionId, SessionRef as BoardSessionRef,
-    SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch,
-    ThreadCreateRequest, ThreadJoinRequest, ThreadSubscriptionRecord, TopicCreateRequest, TopicId,
-    WhenIdle,
-};
-use message_board_storage::BoardStore;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service as mail_service;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::CollaborationApplication;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+
+use collaboration_service::BoardAvailability;
+use collaboration_service::SubscriptionWindowStore;
+
+use collaboration_service::SubscriptionClock;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+
+use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
+use message_board::{SessionId as BoardSessionId, SessionRef as BoardSessionRef, *};
+use native_mail_owner::NativeMailOwner;
 use observed_clock::ManualSubscriptionClock;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -39,9 +54,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt as _, BufReader},
     net::UnixListener,
-    sync::mpsc::UnboundedReceiver,
     task::JoinHandle,
-    time::Instant,
 };
 
 pub type ProofResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -63,52 +76,87 @@ pub struct PeerMessageFrames {
 }
 
 pub struct ClaudePeerSubscriptionFixture {
+    fleet_runtime: board_central_test_support::FleetTestRuntime,
     _directory: tempfile::TempDir,
     registry_directory: PathBuf,
     socket_path: PathBuf,
     target: SessionRef,
     reader: Identity,
     writer: Identity,
-    root_message_id: MessageId,
+    thread_id: ThreadId,
     project_id: ProjectId,
     clock: Arc<ManualSubscriptionClock>,
-    owner_sleep_deadlines: UnboundedReceiver<Instant>,
     peer_registry: Arc<ClaudeCodeSessionRegistry>,
     peer_route: Arc<ClaudeCodePeerDeliveryRoute>,
     router: Arc<SessionDeliveryRouter>,
     service: Option<SubscriptionDeliveryService>,
-    board_store: Arc<tokio::sync::Mutex<BoardStore>>,
+    board_store: Arc<tokio::sync::Mutex<SubscriptionWindowStore>>,
     automation_store: Arc<tokio::sync::Mutex<AutomationStore>>,
+    interactions: Arc<interaction_storage::InteractionStore>,
+    application: CollaborationApplication,
+    native: NativeMailOwner,
+    publisher: Arc<collaboration_service::NotificationPublisher>,
+    project_registry: Arc<ProjectStoreRegistry>,
 }
 
 impl ClaudePeerSubscriptionFixture {
     pub async fn start() -> ProofResult<Self> {
         let directory = tempfile::tempdir()?;
-        let board_path = directory.path().join("board.sqlite");
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
         let automation_path = directory.path().join("automation.sqlite");
         let registry_directory = directory.path().join("claude-sessions");
         std::fs::create_dir(&registry_directory)?;
 
-        let (clock, owner_sleep_deadlines) = ManualSubscriptionClock::new(Utc::now());
+        let clock = ManualSubscriptionClock::new(Utc::now());
         let clock = Arc::new(clock);
-        let board_store = Arc::new(tokio::sync::Mutex::new(
-            BoardStore::open(&board_path).await?,
-        ));
+        let project_registry = native_registry::new_registry(directory.path())?;
+        let origin = ActorOrigin {
+            installation: ServiceId::try_from(SERVICE_ID.to_owned())?,
+            machine: MachineLabel::try_from("claude-peer-resume-fixture".to_owned())?,
+        };
+        let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+            directory.path(),
+            Arc::new(native_registry::PendingRegistration),
+            &origin,
+        )
+        .await?;
+        let fleet = Arc::new(fleet);
+        let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            registry: project_registry.clone(),
+            fleet: fleet.clone(),
+            identity: MachineIdentity::new(
+                UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+                Some("claude-peer-resume-fixture"),
+            )?,
+        })?);
+        let application =
+            (ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
+                .with_project_admission(admission.clone()))
+            .build();
         let automation_store = Arc::new(tokio::sync::Mutex::new(
             AutomationStore::open(&automation_path).await?,
         ));
         let target = peer_target()?;
         let reader = board_reader_identity()?;
         let writer = human_identity("peer-resume-test-writer")?;
-        let root_message_id = MessageId::generate();
-        let project_id = create_board_thread_and_subscription(
-            &board_store,
+        let thread_id = ThreadId::generate();
+        let project_id = create_project_thread_and_subscription(
+            &application,
             &reader,
-            &writer,
-            &root_message_id,
-            clock.now(),
+            &thread_id,
+            &fleet,
+            &project_registry,
         )
         .await?;
+        let interactions = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await?,
+        );
+        let board_store = Arc::new(tokio::sync::Mutex::new(
+            admission.subscription_window_store(interactions.clone()),
+        ));
 
         let peer_registry = Arc::new(ClaudeCodeSessionRegistry::new(registry_directory.clone()));
         let peer_route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
@@ -121,7 +169,7 @@ impl ClaudePeerSubscriptionFixture {
         let presence: Arc<dyn TargetPresenceProbe> = router.clone();
         let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Available(Arc::clone(&board_store)),
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery,
             presence,
             machine_identity: MachineIdentity::new(
@@ -130,25 +178,54 @@ impl ClaudePeerSubscriptionFixture {
             )?,
             clock: clock.clone(),
         });
+        drop(application);
+        let (identity, native) = NativeMailOwner::start(
+            ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
+                .with_automation_store(automation_store.clone())
+                .with_project_admission(admission.clone())
+                .with_subscription_delivery_service(service.clone(), router.clone()),
+            native_registry::fixture_peer()?,
+            collaboration_service::MailPushDeliveryProps {
+                interactions: interactions.clone(),
+                actors: service.clone(),
+                presence: router.clone(),
+                machine: MachineIdentity::new(
+                    target.endpoint.service_id.clone(),
+                    Some("claude-peer-resume-fixture"),
+                )?,
+                clock: clock.clone(),
+            },
+        )?;
+        let publisher = Arc::new(collaboration_service::NotificationPublisher::new(
+            admission,
+            interactions.clone(),
+            Arc::downgrade(&native.runtime_handle()),
+        ));
+        let application = (identity.with_notification_publisher(publisher.clone())).build();
         service.start().await?;
 
         Ok(Self {
+            fleet_runtime,
             socket_path: registry_directory.join("peer.sock"),
             _directory: directory,
             registry_directory,
             target,
             reader,
             writer,
-            root_message_id,
+            thread_id,
             project_id,
             clock,
-            owner_sleep_deadlines,
             peer_registry,
             peer_route,
             router,
             service: Some(service),
             board_store,
             automation_store,
+            interactions,
+            application,
+            native,
+            publisher,
+            project_registry,
         })
     }
 
@@ -156,165 +233,134 @@ impl ClaudePeerSubscriptionFixture {
         &self.target
     }
 
-    pub fn root_message_id(&self) -> &MessageId {
-        &self.root_message_id
+    pub fn thread_id(&self) -> &ThreadId {
+        &self.thread_id
     }
 
     pub fn socket_path(&self) -> &Path {
         &self.socket_path
     }
 
-    pub fn current_monotonic(&self) -> ProofResult<Instant> {
-        self.clock.current_monotonic()
-    }
-
     pub fn advance(&self, amount: Duration) -> ProofResult {
         self.clock.advance(amount)
-    }
-
-    pub async fn next_owner_sleep(
-        &mut self,
-        stage: &'static str,
-        exact_remaining: Option<Duration>,
-    ) -> ProofResult<Instant> {
-        ManualSubscriptionClock::next_sleep_deadline_matching(
-            &self.clock,
-            &mut self.owner_sleep_deadlines,
-            stage,
-            exact_remaining,
-        )
-        .await
     }
 
     pub async fn presence(&self) -> ProofResult<TargetPresence> {
         Ok(self.router.presence(&self.target).await?)
     }
 
-    pub fn lookup_peer(&self) -> ProofResult<PeerSessionLookup> {
-        Ok(self.peer_registry.lookup(&self.target.session_id)?)
-    }
-
-    pub fn publish_writable_peer(&self) -> ProofResult<(Arc<UnixListener>, PeerSessionRecord)> {
-        let listener = Arc::new(UnixListener::bind(&self.socket_path)?);
-        let process_id = publish_peer_registry_record(&self.registry_directory, &self.socket_path)?;
-        match self.peer_registry.lookup(&self.target.session_id)? {
-            PeerSessionLookup::Writable(peer)
-                if u32::from(peer.process_id) == process_id
-                    && peer.session_id == self.target.session_id
-                    && peer.socket_path == self.socket_path =>
-            {
-                Ok((listener, peer))
-            }
-            _ => Err(std::io::Error::other(
-                "published Claude peer did not become writable in the real registry",
-            )
-            .into()),
-        }
-    }
-
-    pub fn receive_one_peer_batch(
-        listener: Arc<UnixListener>,
-    ) -> JoinHandle<ProofResult<PeerMessageFrames>> {
-        tokio::spawn(async move {
-            let (stream, _) = tokio::time::timeout(OWNER_EVENT_TIMEOUT, listener.accept())
-                .await
-                .map_err(|_| std::io::Error::other("Claude peer did not accept the notice"))??;
-            let mut lines = BufReader::new(stream).lines();
-            let authentication: Value = serde_json::from_str(
-                &lines
-                    .next_line()
-                    .await?
-                    .ok_or_else(|| std::io::Error::other("Claude peer auth frame is missing"))?,
-            )?;
-            let user: Value =
-                serde_json::from_str(&lines.next_line().await?.ok_or_else(|| {
-                    std::io::Error::other("Claude peer user Batch frame is missing")
-                })?)?;
-            let extra_frame = lines.next_line().await?;
-            Ok(PeerMessageFrames {
-                authentication,
-                user,
-                extra_frame,
-            })
-        })
-    }
-
     pub async fn initialize_unread_inbox(&self) -> ProofResult<InboxPage> {
-        self.fetch_project_inbox().await
+        self.fetch_project_inbox(vec![ReadInitializationEntry {
+            project_id: self.project_id.clone(),
+            request_id: RequestId::generate(),
+        }])
+        .await
     }
 
     pub async fn unread_project_inbox(&self) -> ProofResult<InboxPage> {
-        self.fetch_project_inbox().await
+        self.fetch_project_inbox(Vec::new()).await
     }
 
-    async fn fetch_project_inbox(&self) -> ProofResult<InboxPage> {
+    async fn fetch_project_inbox(
+        &self,
+        initializations: Vec<ReadInitializationEntry>,
+    ) -> ProofResult<InboxPage> {
         Ok(self
-            .board_store
-            .lock()
-            .await
-            .fetch_inbox(InboxFetchRequest {
+            .application
+            .board()
+            .inbox_fetch(InboxFetchRequest::new(InboxFetchRequestProps {
+                protocol_version: ProtocolVersion::CURRENT,
+                acting_for: None,
                 scope: InboxScope::Project {
                     project_id: self.project_id.clone(),
                 },
                 reader: self.reader.clone(),
                 read_mode: InboxReadMode::Unread,
-                page: message_board::PageRequest::default(),
-            })
+                initializations,
+                page: PageRequest::default(),
+            })?)
             .await?
             .page)
     }
 
-    pub async fn post_activity(&self) -> ProofResult<Message> {
-        Ok(self
-            .board_store
-            .lock()
-            .await
-            .post_message(
-                MessagePostRequest {
-                    message_id: MessageId::generate(),
-                    placement: Placement::Thread {
-                        root_message_id: self.root_message_id.clone(),
-                    },
-                    actor: self.writer.clone(),
-                    acting_for: None,
-                    text: MessageText::try_from(POSTED_MESSAGE_TEXT.to_owned())?,
-                    references: MessageReferences::try_from(Vec::new())?,
-                },
-                self.clock.now(),
-            )
+    pub async fn post_activity(&self) -> ProofResult<Post> {
+        let post_id = PostId::generate();
+        let request = serde_json::from_value(json!({
+            "requestId":RequestId::generate(),"protocolVersion":1,
+            "actor":self.writer,"actingFor":null,"postId":post_id,"placement":{"kind":"thread","thread":{"thread":self.thread_id}},
+            "text":POSTED_MESSAGE_TEXT,"references":[],"addressees":[]
+        }))?;
+        require_accepted(&self.application.board().thread_post(request).await?)?;
+        let store = self
+            .project_registry
+            .existing_project(&self.project_id)
             .await?
-            .message)
+            .ok_or("project missing")?;
+        let mut read = store.snapshot().await?;
+        let record = read.record(&post_id.into()).await?.ok_or("post missing")?;
+        read.finish().await?;
+        let Record::Post(post) = record else {
+            return Err("post kind".into());
+        };
+        // Delivery's manual clock follows the actual admitted record's closing fact;
+        // no public fake admission clock, arbitrary sleep or estimated deadline.
+        let RecordTime::Router(recorded_at) = post.envelope.time else {
+            return Err("a live fixture post has unknown record time".into());
+        };
+        let elapsed = recorded_at.signed_duration_since(self.clock.now());
+        if elapsed > chrono::Duration::zero() {
+            self.clock.advance(elapsed.to_std()?)?;
+        }
+        Ok(post)
     }
 
-    pub async fn subscription(&self) -> ProofResult<ThreadSubscriptionRecord> {
-        self.board_store
-            .lock()
-            .await
-            .get_thread_subscription_record(
-                &self.reader,
-                &SubscriptionScope::thread(self.root_message_id.clone()),
-            )
+    pub async fn subscription(
+        &self,
+    ) -> ProofResult<collaboration_protocol::ThreadSubscriptionView> {
+        self.application
+            .board()
+            .thread_subscriptions(collaboration_protocol::ThreadSubscriptionsRequest {
+                actor: self.reader.clone(),
+            })
             .await?
+            .subscriptions
+            .into_iter()
+            .find(|entry| entry.scope == SubscriptionScope::thread(self.thread_id.clone()))
             .ok_or_else(|| std::io::Error::other("thread subscription was not persisted").into())
+    }
+
+    pub async fn held_push_records(&self) -> ProofResult<Vec<PushRecord>> {
+        Ok(self
+            .interactions
+            .list_held_mail_push_records(&self.target)
+            .await?)
+    }
+
+    pub async fn await_push_state(
+        &self,
+        push: &PushId,
+        expected: collaboration_protocol::PushDeliveryState,
+    ) -> ProofResult<PushRecord> {
+        tokio::time::timeout(OWNER_EVENT_TIMEOUT, async {
+            loop {
+                if let Some(record) = self.interactions.get_push_record(push).await?
+                    && record.delivery_state == expected
+                {
+                    return Ok(record);
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .map_err(|_| std::io::Error::other("native push did not reach its expected state"))?
     }
 
     pub async fn pending_push_records(
         &self,
     ) -> ProofResult<Vec<collaboration_protocol::PushRecord>> {
         Ok(self
-            .automation_store
-            .lock()
-            .await
+            .interactions
             .list_pending_push_records(&self.target)
-            .await?)
-    }
-
-    pub async fn push_record(&self, push_id: &PushId) -> ProofResult<Option<PushRecord>> {
-        Ok(self
-            .automation_store
-            .lock()
-            .await
-            .get_push_record(push_id)
             .await?)
     }
 
@@ -323,14 +369,12 @@ impl ClaudePeerSubscriptionFixture {
         origin: &RouterOriginRef,
     ) -> ProofResult<Option<PushRecord>> {
         Ok(self
-            .automation_store
-            .lock()
-            .await
+            .interactions
             .get_push_record_by_origin_reference(origin)
             .await?)
     }
 
-    pub async fn due_subscription_roots(&self) -> ProofResult<Vec<MessageId>> {
+    pub async fn due_subscription_roots(&self) -> ProofResult<Vec<ThreadId>> {
         Ok(self
             .board_store
             .lock()
@@ -349,20 +393,34 @@ impl ClaudePeerSubscriptionFixture {
     }
 
     pub async fn shutdown(mut self) -> ProofResult {
+        self.publisher.shutdown().await;
+        drop(self.application);
+        drop(self.publisher);
         if let Some(service) = self.service.take() {
             service.shutdown().await;
             drop(service);
         }
+        drop(self.native.stop().await?);
         drop(self.router);
         drop(self.peer_route);
+        let board_store = Arc::try_unwrap(self.board_store)
+            .map_err(|_| std::io::Error::other("delivery owner retained subscription windows"))?
+            .into_inner();
+        drop(board_store);
+        for project in self.project_registry.project_ids().await? {
+            if let Some(store) = self.project_registry.existing_project(&project).await? {
+                store.close_connections().await;
+            }
+        }
         let automation_store = Arc::try_unwrap(self.automation_store)
             .map_err(|_| std::io::Error::other("delivery owner retained AutomationStore"))?
             .into_inner();
         automation_store.close().await?;
-        let board_store = Arc::try_unwrap(self.board_store)
-            .map_err(|_| std::io::Error::other("delivery owner retained BoardStore"))?
-            .into_inner();
-        board_store.close().await?;
+        Arc::try_unwrap(self.interactions)
+            .map_err(|_| std::io::Error::other("delivery owner retained interaction storage"))?
+            .close()
+            .await?;
+        self.fleet_runtime.shutdown().await?;
         Ok(())
     }
 }
@@ -395,105 +453,73 @@ fn human_identity(name: &str) -> ProofResult<Identity> {
     })
 }
 
-fn publish_peer_registry_record(registry_directory: &Path, socket_path: &Path) -> ProofResult<u32> {
-    let process_id = std::process::id();
-    std::fs::write(
-        registry_directory.join(format!("{process_id}.json")),
-        json!({
-            "pid": process_id,
-            "sessionId": SESSION_ID,
-            "status": "idle",
-            "peerProtocol": 1,
-            "messagingSocketPath": socket_path,
-        })
-        .to_string(),
-    )?;
-    let socket_text = socket_path
-        .to_str()
-        .ok_or_else(|| std::io::Error::other("peer socket path is not UTF-8"))?;
-    let digest = Sha256::digest(socket_text.as_bytes());
-    let key_path = registry_directory.join(format!("{process_id}.{digest:x}.key"));
-    std::fs::write(&key_path, json!({"peerToken": PEER_TOKEN}).to_string())?;
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))?;
-    Ok(process_id)
-}
-
-async fn create_board_thread_and_subscription(
-    store: &Arc<tokio::sync::Mutex<BoardStore>>,
+async fn create_project_thread_and_subscription(
+    application: &CollaborationApplication,
     reader: &Identity,
-    writer: &Identity,
-    root_message_id: &MessageId,
-    now: DateTime<Utc>,
+    thread: &ThreadId,
+    fleet: &FleetClient,
+    registry: &ProjectStoreRegistry,
 ) -> ProofResult<ProjectId> {
-    let project_id = ProjectId::generate();
-    let board_id = BoardId::generate();
-    let topic_id = TopicId::generate();
-    {
-        let mut board = store.lock().await;
-        board
-            .create_project(ProjectCreateRequest {
-                project_id: project_id.clone(),
-                name: ResourceName::try_from("Peer resume proof project".to_owned())?,
-                description: Description::try_from(String::new())?,
-                actor: writer.clone(),
-                acting_for: None,
+    let workspace = WorkspaceId::generate();
+    let board = BoardId::generate();
+    let project = ProjectId::generate();
+    let writer = human_identity("peer-resume-test-writer")?;
+    let request = |fields: Value| -> ProofResult<Value> {
+        let mut request = json!({"requestId":RequestId::generate(),"protocolVersion":1,"actor":writer,"actingFor":null});
+        request
+            .as_object_mut()
+            .ok_or("request")?
+            .extend(fields.as_object().ok_or("fields")?.clone());
+        Ok(request)
+    };
+    require_accepted(&application.board().workspace_create(serde_json::from_value(request(json!({"workspaceId":workspace,"name":"Peer resume proof workspace","description":""}))?)?).await?)?;
+    require_accepted(&application.board().board_create(serde_json::from_value(request(json!({"workspaceId":workspace,"boardId":board,"name":"Peer resume proof board","description":"","kind":{"kind":"area"}}))?)?).await?)?;
+    let creation = serde_json::from_value(request(
+        json!({"projectId":project,"boardId":board,"title":"Peer resume proof project"}),
+    )?)?;
+    // Directory acceptance and the persisted grant are explicit component inputs.
+    // Peer delivery below is real; this fixture does not observe central enrollment.
+    native_registry::prepare_registered_creation(
+        fleet,
+        registry,
+        &creation,
+        &ActorOrigin {
+            installation: ServiceId::try_from(SERVICE_ID.to_owned())?,
+            machine: MachineLabel::try_from("claude-peer-resume-fixture".to_owned())?,
+        },
+    )
+    .await?;
+    require_accepted(&application.board().project_create(creation).await?)?;
+    require_accepted(&application.board().role_grant(serde_json::from_value(request(json!({"projectId":project,"operation":{"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":writer,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}}))?)?).await?)?;
+    require_accepted(&application.board().thread_create(serde_json::from_value(request(json!({"projectId":project,"postId":thread,"about":{"kind":"project","subject":{"line":"Peer resume proof"}},"text":ROOT_THREAD_TEXT,"references":[],"role":null,"watch":false,"addressees":[]}))?)?).await?)?;
+    require_accepted(
+        &application
+            .board()
+            .thread_join(ThreadJoinRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                thread: (thread.clone()).into(),
+                actor: reader.clone(),
+                role: ParticipantRole::Participant,
+                watch: true,
+                mode: Some(SubscriptionMode::Deliver),
+                when_idle: Some(WhenIdle::Hold),
+                replace: None,
+                note: None,
             })
-            .await?;
-        board
-            .create_board(BoardCreateRequest {
-                board_id: board_id.clone(),
-                project_id: project_id.clone(),
-                name: ResourceName::try_from("Peer resume proof board".to_owned())?,
-                description: Description::try_from(String::new())?,
-                actor: writer.clone(),
+            .await?,
+    )?;
+    require_accepted(
+        &application
+            .board()
+            .project_write(ProjectRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                project_id: project.clone(),
+                actor: reader.clone(),
                 acting_for: None,
-            })
-            .await?;
-        board
-            .create_topic(TopicCreateRequest {
-                topic_id: topic_id.clone(),
-                board_id,
-                name: ResourceName::try_from("Resume proof topic".to_owned())?,
-                description: Description::try_from(String::new())?,
-                actor: writer.clone(),
-                acting_for: None,
-            })
-            .await?;
-        board
-            .create_thread(
-                ThreadCreateRequest {
-                    message_id: root_message_id.clone(),
-                    topic_id,
-                    actor: writer.clone(),
-                    acting_for: None,
-                    text: MessageText::try_from(ROOT_THREAD_TEXT.to_owned())?,
-                    references: MessageReferences::try_from(Vec::new())?,
-                    role: None,
-                    watch: false,
-                },
-                now,
-            )
-            .await?;
-        board
-            .join_thread(
-                ThreadJoinRequest {
-                    root_message_id: root_message_id.clone(),
-                    actor: reader.clone(),
-                    role: ParticipantRole::Participant,
-                    watch: true,
-                    mode: Some(SubscriptionMode::Deliver),
-                    when_idle: Some(WhenIdle::Hold),
-                    replace: None,
-                    note: None,
-                },
-                now,
-            )
-            .await?;
-        board
-            .subscribe_thread_subscription(
-                message_board::ThreadSubscriptionSubscribeRequest {
-                    reader: reader.clone(),
-                    scope: SubscriptionScope::thread(root_message_id.clone()),
+                operation: BoardOperation::ThreadSubscribe {
+                    scope: SubscriptionScope::thread(thread.clone()),
                     policy: SubscriptionPolicyPatch {
                         mode: Some(SubscriptionMode::Deliver),
                         when_idle: Some(WhenIdle::Hold),
@@ -504,9 +530,19 @@ async fn create_board_thread_and_subscription(
                         ..SubscriptionPolicyPatch::default()
                     },
                 },
-                now,
-            )
-            .await?;
+            })
+            .await?,
+    )?;
+    Ok(project)
+}
+
+fn require_accepted(reply: &WriteReply) -> ProofResult {
+    if matches!(
+        reply.result,
+        RequestResult::Decided(RequestDecision::Accepted { .. })
+    ) {
+        Ok(())
+    } else {
+        Err(format!("native fixture admission refused: {reply:?}").into())
     }
-    Ok(project_id)
 }

@@ -1,0 +1,185 @@
+use collaboration_protocol::{EndpointRef, QuestionAnswerParams, QuestionResponse, QuestionState};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ApplicationFixture;
+use message_board::{HumanId, Identity, SessionEndpointRef, SessionId, SessionRef};
+use serde_json::json;
+#[path = "support/served_api.rs"]
+mod served_api;
+
+// R18: the public API client and service agree on field projection, actor
+// authorization, and the exact response sent to the waiting agent.
+#[tokio::test]
+async fn question_list_and_answer_cross_the_real_api() {
+    let root = tempfile::tempdir().expect("temporary service directory");
+    let service_id = "00000000-0000-4000-8000-000000000001";
+    let epoch = "00000000-0000-4000-8000-000000000002";
+    let endpoint: EndpointRef = serde_json::from_value(json!({
+        "serviceId":service_id,"endpointId":"claude-local"
+    }))
+    .expect("endpoint");
+    let original = b"obsolete JSON must be ignored, including malformed content";
+    tokio::fs::write(root.path().join("interaction-history.json"), original)
+        .await
+        .expect("ignored JSON before broker load");
+    let broker = ServiceInteractionBroker::load(
+        service_id.to_owned().try_into().expect("service ID"),
+        NativeControlBackend {
+            endpoint,
+            gate: NativeGenerationGate::default(),
+            codex_home: root.path().to_path_buf(),
+        },
+        root.path().join("approval-routes.json"),
+    )
+    .await
+    .expect("broker");
+    let identity = ApplicationFixture::new(service_id, epoch)
+        .expect("identity")
+        .with_approval_broker(broker.clone());
+    let requester = SessionRef {
+        endpoint: SessionEndpointRef {
+            service_id: service_id.to_owned().try_into().expect("service"),
+            endpoint_id: "claude-local".to_owned().try_into().expect("endpoint"),
+        },
+        session_id: SessionId::try_from("provider-session".to_owned()).expect("session"),
+    };
+    let approver = Identity::Human {
+        human_id: HumanId::try_from("owner".to_owned()).expect("human"),
+    };
+    let request = serde_json::from_value(json!({
+        "requestId":"question-1", "prompt":"Choose launch settings", "fields":[
+            {"kind":"number","fieldId":"count","label":"Count","description":null,"required":true},
+            {"kind":"boolean","fieldId":"dryRun","label":"Dry run","description":null,"required":true},
+            {"kind":"singleChoice","fieldId":"color","label":"Color","description":null,"required":true,"options":[{"optionId":"red","label":"Red"},{"optionId":"blue","label":"Blue"}]}
+        ]
+    })).expect("question");
+    let agent_reply = broker
+        .request_question(requester, approver.clone(), request, None)
+        .await
+        .expect("pending question");
+    let served = served_api::ServedApi::start(identity).expect("serve the API");
+    let client = served.client("question-test").await.expect("initialize");
+    let list = client.list_questions(true).await.expect("list");
+    assert_eq!(list.questions.len(), 1);
+    assert_eq!(list.questions[0].prompt, "Choose launch settings");
+    assert_eq!(list.questions[0].fields.len(), 3);
+    let answer = QuestionResponse::Answered {
+        content: serde_json::from_value(
+            json!({"count":3,"dryRun":true,"color":{"selectedOptionIds":["blue"]}}),
+        )
+        .expect("content"),
+    };
+    let wrong_actor = Identity::Human {
+        human_id: HumanId::try_from("other".to_owned()).expect("human"),
+    };
+    let wrong = client
+        .answer_question(QuestionAnswerParams {
+            request_id: "question-1".into(),
+            actor: wrong_actor,
+            response: answer.clone(),
+        })
+        .await
+        .expect_err("wrong actor");
+    let failure = wrong.into_parts().0;
+    assert_eq!(
+        failure.service_kind.as_deref(),
+        Some("wrongActor"),
+        "{failure:?}"
+    );
+    assert_eq!(
+        client
+            .list_questions(true)
+            .await
+            .expect("still pending after rejection")
+            .questions
+            .len(),
+        1
+    );
+    let mut rejected_observer = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(root.path().join("interaction.sqlite"))
+            .read_only(true),
+    )
+    .await
+    .expect("independent rejection observer");
+    let unchanged: String = sqlx::query_scalar(
+        "SELECT record_json FROM typed_interaction_history WHERE request_id='question-1'",
+    )
+    .fetch_one(&mut rejected_observer)
+    .await
+    .expect("rejected action leaves durable row");
+    assert!(matches!(
+        serde_json::from_str::<collaboration_runtime::InteractionHistoryRecord>(&unchanged)
+            .expect("pending durable record"),
+        collaboration_runtime::InteractionHistoryRecord::Question {
+            state: collaboration_runtime::QuestionHistoryState::Pending,
+            ..
+        }
+    ));
+    sqlx::Connection::close(rejected_observer)
+        .await
+        .expect("close rejection observer");
+    // A rejection leaves the client usable: each call is its own request.
+    let receipt = client
+        .answer_question(QuestionAnswerParams {
+            request_id: "question-1".into(),
+            actor: approver,
+            response: answer.clone(),
+        })
+        .await
+        .expect("answer");
+    assert_eq!(receipt.state, QuestionState::Answered);
+    assert_eq!(agent_reply.await.expect("agent reply"), answer);
+    assert!(
+        client
+            .list_questions(true)
+            .await
+            .expect("pending list")
+            .questions
+            .is_empty()
+    );
+    drop(client);
+    served
+        .stop()
+        .await
+        .expect("stop public route before durable reopen");
+    drop(broker);
+    let mut observer = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(root.path().join("interaction.sqlite"))
+            .read_only(true),
+    )
+    .await
+    .expect("independent durable observation");
+    let record_json: String = sqlx::query_scalar(
+        "SELECT record_json FROM typed_interaction_history WHERE request_id='question-1'",
+    )
+    .fetch_one(&mut observer)
+    .await
+    .expect("actual answer persisted through public MCP route");
+    let stored: collaboration_runtime::InteractionHistoryRecord =
+        serde_json::from_str(&record_json).expect("typed stored answer");
+    let collaboration_runtime::InteractionHistoryRecord::Question {
+        state: collaboration_runtime::QuestionHistoryState::Answered { content },
+        ..
+    } = stored
+    else {
+        panic!("durable Question must be answered");
+    };
+    assert_eq!(QuestionResponse::Answered { content }, answer);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM typed_interaction_history")
+        .fetch_one(&mut observer)
+        .await
+        .expect("real route mutation only");
+    assert_eq!(count, 1);
+    assert_eq!(
+        tokio::fs::read(root.path().join("interaction-history.json"))
+            .await
+            .expect("ignored JSON bytes"),
+        original
+    );
+    sqlx::Connection::close(observer)
+        .await
+        .expect("close durable observer");
+}

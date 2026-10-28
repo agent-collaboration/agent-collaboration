@@ -1,5 +1,4 @@
 //! Command-line entry points for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 use std::ffi::OsString;
 use std::io::IsTerminal;
@@ -8,6 +7,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use codex_native_integration::DEFAULT_ROUTER_PORT;
 use codex_router_auth::live_quota::DEFAULT_CHATGPT_BACKEND_BASE_URL;
 use codex_router_core::local_auth::LocalRouterTokenRecord;
 use codex_router_proxy::server::LoopbackBindAddress;
@@ -17,13 +17,15 @@ use codex_router_proxy::session_account_affinity_cache::DEFAULT_SESSION_PIN_IDLE
 #[cfg(debug_assertions)]
 use codex_router_proxy::upstream::ClaudeUpstreamEndpoint;
 use codex_router_proxy::upstream::UpstreamEndpoint;
-use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
 use codex_router_secret_store::file_backend::FileSecretStore;
+use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
 
 pub mod account;
+mod central_command;
 mod credential_runtime;
 mod credential_upkeep_worker;
 pub mod doctor;
+mod fleet_command;
 mod host_command;
 mod live;
 mod presentation;
@@ -35,6 +37,8 @@ mod telemetry;
 pub mod token;
 
 use account::AccountCommand;
+use central_command::CentralCommand;
+use fleet_command::FleetCommand;
 use host_command::HostCommand;
 use live::LiveCommand;
 use profile::CodexRouterProfile;
@@ -63,7 +67,6 @@ mod cli_argument_parsing;
 pub(crate) use cli_argument_parsing::ArgumentParser;
 use cli_argument_parsing::{CliCommand, ProfileCommand, TokenCommand};
 
-const DEFAULT_PROFILE_PORT: u16 = 8787;
 const DEFAULT_MAX_SNAPSHOT_AGE_SECONDS: u64 = 300;
 const DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 180;
 const DEFAULT_SESSION_PIN_IDLE_TTL_SECONDS: u64 = DEFAULT_SESSION_PIN_IDLE_TTL.as_secs();
@@ -98,7 +101,10 @@ pub async fn run_async() -> i32 {
     let context = CliContext::from_process();
     let parsed_command = CliCommand::parse(args.clone());
     let uses_async_dispatch = matches!(&parsed_command, Ok(CliCommand::Quota(_)))
-        || matches!(&parsed_command, Ok(CliCommand::Host(_)));
+        || matches!(
+            &parsed_command,
+            Ok(CliCommand::Host(_) | CliCommand::Fleet(_) | CliCommand::Central(_))
+        );
     if !uses_async_dispatch {
         return std::thread::spawn(move || run_sync_process_args(args))
             .join()
@@ -116,13 +122,13 @@ pub async fn run_async() -> i32 {
     let _run_span_guard = run_span.enter();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
-    if let Err(error) = run_with_io_async_with_telemetry(
+    if let Err(error) = Box::pin(run_with_io_async_with_telemetry(
         args,
         &context,
         &mut stdout,
         &mut stderr,
         Some(telemetry_shutdown),
-    )
+    ))
     .await
     {
         let _ = writeln!(stderr, "{error}");
@@ -190,7 +196,10 @@ where
     W: std::io::Write + Send,
     E: std::io::Write,
 {
-    run_with_io_async_with_telemetry(args, context, stdout, stderr, None).await
+    Box::pin(run_with_io_async_with_telemetry(
+        args, context, stdout, stderr, None,
+    ))
+    .await
 }
 
 async fn run_with_io_async_with_telemetry<W, E>(
@@ -205,6 +214,10 @@ where
     E: std::io::Write,
 {
     match CliCommand::parse(args.clone())? {
+        CliCommand::Central(command) => {
+            central_command::run_central_command(command, stdout).await?;
+            stderr.flush().map_err(CliError::Stderr)
+        }
         CliCommand::Quota(command) => {
             quota::run_quota_command(
                 stdout,
@@ -216,8 +229,18 @@ where
             .await?;
             stderr.flush().map_err(CliError::Stderr)
         }
+        CliCommand::Fleet(command) => {
+            fleet_command::run_fleet_command(command, context, stdout).await?;
+            stderr.flush().map_err(CliError::Stderr)
+        }
         CliCommand::Host(command) => {
-            host_command::run_host_command(stdout, command, context, telemetry_shutdown).await?;
+            Box::pin(host_command::run_host_command(
+                stdout,
+                command,
+                context,
+                telemetry_shutdown,
+            ))
+            .await?;
             stderr.flush().map_err(CliError::Stderr)
         }
         _ => run_with_io(args, context, stdout, stderr),
@@ -227,10 +250,10 @@ where
 fn run_serve_command_with_upkeep_start(
     stdout: &mut impl Write,
     command: cli_argument_parsing::ServeCommand,
-    credential_store: EncryptedCredentialStore,
+    credential_store: RuntimeCredentialStore,
     upkeep_start: impl FnOnce(
         &Path,
-        EncryptedCredentialStore,
+        RuntimeCredentialStore,
     ) -> Result<
         credential_upkeep_worker::CredentialUpkeepWorker,
         credential_upkeep_worker::CredentialUpkeepStartError,
@@ -248,10 +271,10 @@ fn run_serve_command_with_upkeep_start(
 fn run_serve_command_with_upkeep_start_and_token_reload_observer(
     stdout: &mut impl Write,
     command: cli_argument_parsing::ServeCommand,
-    credential_store: EncryptedCredentialStore,
+    credential_store: RuntimeCredentialStore,
     upkeep_start: impl FnOnce(
         &Path,
-        EncryptedCredentialStore,
+        RuntimeCredentialStore,
     ) -> Result<
         credential_upkeep_worker::CredentialUpkeepWorker,
         credential_upkeep_worker::CredentialUpkeepStartError,
@@ -525,6 +548,11 @@ where
     let command = CliCommand::parse(args)?;
     match command {
         CliCommand::Serve(command) => {
+            #[cfg(debug_assertions)]
+            if command.allow_plaintext_file_secrets {
+                secret_store_factory::initialize_plaintext_debug_root(&command.secret_root)
+                    .map_err(|_| CliError::CredentialStoreOpen)?;
+            }
             let credential_store =
                 secret_store_factory::open_cli_secret_store(&command.secret_root)
                     .map_err(|_| CliError::CredentialStoreOpen)?;
@@ -596,13 +624,19 @@ where
         CliCommand::Quota(_) => return Err(QuotaCommandError::AsyncDispatchRequired.into()),
         CliCommand::Live(command) => live::run_live_command(stdout, command)?,
         CliCommand::Host(_) => return Err(CliError::HostRequiresAsyncDispatch),
+        CliCommand::Fleet(_) => {
+            return Err(fleet_command::FleetCommandError::AsyncDispatchRequired.into());
+        }
+        CliCommand::Central(_) => {
+            return Err(central_command::CentralCommandError::AsyncDispatchRequired.into());
+        }
         CliCommand::Version => {
             writeln!(stdout, "codex-router {}", env!("CARGO_PKG_VERSION"))
                 .map_err(CliError::Stdout)?;
         }
-        CliCommand::Help => {
+        CliCommand::Help(text) => {
             stdout
-                .write_all(HELP_TEXT.as_bytes())
+                .write_all(text.as_bytes())
                 .map_err(CliError::Stdout)?;
         }
     }
@@ -802,6 +836,10 @@ commands:
   host app-server restart        Restart managed Codex without updating it
   host app-server update         Update managed Codex and activate it if changed
   host router restart            Restart the router when host-owned
+  fleet enroll                  Enroll this installation; active at the next Router start
+  fleet status                  Inspect enrollment metadata without restarting
+  central serve                 Run a self-hosted Tokio central
+  central mint                  Mint a private owner or machine enrollment credential
   doctor                        Diagnose local router setup
   profile print                 Print the Codex profile snippet
 

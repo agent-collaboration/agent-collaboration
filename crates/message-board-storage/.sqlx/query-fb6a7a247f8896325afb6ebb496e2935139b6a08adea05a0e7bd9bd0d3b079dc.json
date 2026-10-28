@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT s.subtask_id AS \"id!: String\", s.task_id AS \"task!: String\", w.project_id AS \"project?: String\" FROM subtasks s LEFT JOIN tasks t ON t.task_id=s.task_id LEFT JOIN workstreams w ON w.workstream_id=t.workstream_id WHERE s.subtask_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "project?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "fb6a7a247f8896325afb6ebb496e2935139b6a08adea05a0e7bd9bd0d3b079dc"
+}

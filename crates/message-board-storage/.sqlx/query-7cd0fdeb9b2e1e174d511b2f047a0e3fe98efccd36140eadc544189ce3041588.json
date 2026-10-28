@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT first_feed_position AS \"first?: i64\",last_feed_position AS \"last?: i64\",max_handoff_seq AS \"handoff?: i64\",max_expansion_seq AS \"expansion?: i64\",settled_through AS \"frontier?: i64\" FROM capture_feed_marks WHERE epoch=? AND captured_position=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "handoff?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expansion?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "frontier?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "7cd0fdeb9b2e1e174d511b2f047a0e3fe98efccd36140eadc544189ce3041588"
+}

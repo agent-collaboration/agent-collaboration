@@ -1,10 +1,27 @@
 //! Shared client routing for create, target prompt, load, and cancel CLI commands.
 use super::create_input_validation::validate_create_endpoint_options;
-use super::*;
+use super::{
+    CancelArguments, CancellationToken, ClientError, CloseArguments, CodexGeneration,
+    CollaborationClient, ConversationAccess, ConversationCancelInput, ConversationClient,
+    ConversationClientError, ConversationCreateActor, ConversationCreateInput,
+    ConversationCreateOutcome, ConversationCreatePromptInput, ConversationCreatePromptOutcome,
+    ConversationLoadInput, ConversationOperationFailure, ConversationOperationFailureKind,
+    ConversationOperationResult, ConversationPromptInput, ConversationRecord,
+    ConversationStopReason, CreateArguments, Duration, EndpointRef, LoadArguments, OperationEffect,
+    OperationFailure, OperationId, PromptArguments, PublicPromptContent, RouterAccess, SessionId,
+    SessionRef, Write, conversation_target, current_session_ref, io, operation_failure_exit,
+    operation_failure_from_client_error, prepare, validate_choice_value,
+};
 
 #[path = "conversation_client_command_reporting.rs"]
 mod reporting;
-use reporting::*;
+use reporting::{
+    emit_cancel_submission, emit_create_outcome, emit_create_start, emit_operation_outcome,
+    emit_operation_start, endpoint_has_provider_channel, operation_result_exit,
+    parse_cli_generation, parse_cli_operation_id, parse_optional_session_ref, parse_session_ref,
+    report_conversation_failure, report_create_client_error,
+    report_uninspectable_codex_operation_id, resolve_create_endpoint,
+};
 
 #[path = "conversation_client_lifecycle.rs"]
 mod lifecycle;
@@ -593,22 +610,32 @@ pub(super) fn run_load(args: LoadArguments) -> i32 {
         Err(_) => return 3,
     };
     runtime.block_on(async move {
-        let sender = match current_session_ref(&target.endpoint.service_id, args.from.as_deref()) {
-            Ok(value) => value,
-            Err(message) => {
-                return crate::endpoint_commands::report_failure(
-                    "invalidField",
-                    &message,
-                    2,
-                    args.json,
-                );
-            }
-        };
-        let approver =
-            match parse_optional_session_ref(args.approver.as_deref(), "--approver", args.json) {
+        let sender =
+            match lifecycle::lifecycle_actor(&target.endpoint.service_id, args.from.as_deref()) {
                 Ok(value) => value,
-                Err(exit) => return exit,
+                Err(message) => {
+                    return crate::endpoint_commands::report_failure(
+                        "invalidField",
+                        &message,
+                        2,
+                        args.json,
+                    );
+                }
             };
+        let approver = match args.approver.as_deref() {
+            Some(value) => match lifecycle::lifecycle_approver(Some(value), &sender) {
+                Ok(value) => Some(value),
+                Err(message) => {
+                    return crate::endpoint_commands::report_failure(
+                        "invalidField",
+                        message,
+                        2,
+                        args.json,
+                    );
+                }
+            },
+            None => None,
+        };
         let client = match ConversationClient::connect(
             &collaboration_client::CollaborationAccess::api(&directory),
             &target.endpoint,
@@ -630,7 +657,7 @@ pub(super) fn run_load(args: LoadArguments) -> i32 {
             target: target.clone(),
             working_directory: args.cwd,
             requested_by: sender,
-            approver: approver.map(Into::into),
+            approver,
             access: match args.access {
                 ConversationAccess::WriteRestricted => RouterAccess::WriteRestricted,
                 ConversationAccess::WorkspaceWrite => RouterAccess::WorkspaceWrite,

@@ -1,0 +1,699 @@
+{
+  "at": "2026-10-20T04:45:55.584509+00:00",
+  "grid": [
+    48,
+    12
+  ],
+  "wrapper_exit": 0,
+  "driver_exit": 0,
+  "seconds": 68.12610445916653,
+  "recorded_pids": [
+    79041,
+    79050,
+    79055,
+    79078,
+    79080,
+    79249,
+    79250,
+    79251,
+    79252,
+    79253,
+    79254,
+    79255,
+    79256,
+    79257,
+    79258,
+    79259,
+    79260,
+    79261,
+    79262,
+    79263,
+    79264,
+    79265,
+    79266,
+    79267,
+    79268,
+    79269,
+    79270,
+    79271,
+    79272,
+    79273,
+    79274,
+    79275,
+    79276,
+    79277,
+    79278,
+    79279,
+    79280,
+    79281,
+    79282,
+    79283,
+    79284,
+    79285,
+    79286,
+    79287,
+    79288,
+    79289,
+    79290,
+    79291,
+    79292,
+    79293,
+    79294,
+    79295,
+    79296,
+    79297,
+    79298,
+    79299,
+    79300,
+    79301
+  ],
+  "remaining_owned_processes": [],
+  "private_profile": "/private/tmp/2026-10-tui-component-system/vhs-run-79050-0",
+  "profile_absent": true,
+  "cleanup_error_absent": true,
+  "Vsignals_orstop": false,
+  "child_exit": 0,
+  "durable_fixture_external_requests": 0,
+  "durable_fixture_persisted_writes": 0,
+  "normal_receipt_exists": true,
+  "gallery_exists": true,
+  "retained_original_layer_pairs": 1827,
+  "all_layer_hashes_verified": true,
+  "source_original_archive2313_unchanged": true,
+  "later_outputs": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-32x24",
+      "absent": true
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24",
+      "absent": true
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-48x24",
+      "absent": true
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-76x30",
+      "absent": true
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-120x36",
+      "absent": true
+    }
+  ],
+  "images": [
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-credit-window.png",
+      "sha256": "3154cd75ac4e46931c1c718cdd7407cd8b5b2c2762d035563fe3aa074c69dedc",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-pace-heading.png",
+      "sha256": "7e124097dcbd380bfeffcbccd1655c9ce22ab0615e302c3eaf2a6b271b3d7f70",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-pace-value.png",
+      "sha256": "1b80917fcceaf1ceeda32716c8288e1a72d7c42a48fdf8b383fb794aa04e3f77",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-page-returned.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-identity.png",
+      "sha256": "b6ba993681d74def2344647d195a9135b636facc8b2a197ba48ac107033ad52e",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-returned.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-top.png",
+      "sha256": "651808e3a1642712fdcc9c540c295b65a57ed57d5f03d81e2449edf1cca943b8",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-no-returned.png",
+      "sha256": "478f13f13039b9132e4fe34341756ddf0fb687845323349ddaea68bcce9b2da0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-no.png",
+      "sha256": "03db283f328c823ead0a9567e4630b122c2eea002c84122a38f3dd97e9971f75",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-yes.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-balance.png",
+      "sha256": "9ae720bb3e0e9e1ee18473d75a04896ce4d1075578d06fa685e3f343184600c0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-identity.png",
+      "sha256": "463736d6d200ffed5d26f25fd5409c337cfeacc87fa820826f16f9d8cb857d0a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-policy-boundary.png",
+      "sha256": "d6df15328a8ab988657da399cbf1242d8f7a90b9535995fc5a22f0d1d1c20f2d",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-balance.png",
+      "sha256": "9a3b5e5a336f080b8b217fdc2dd2d5392c4b974f17f962e1e790f4aae0426be0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-freshness.png",
+      "sha256": "f8b1a8ab49a4d4648b8ea39be30638e481f50fdb986b8f83ccb7a9073b450753",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-observation.png",
+      "sha256": "5c4e14cc54cdaa0ebfe415d561a1bcbaeeea36d0897d61d386773c9fe3ec4a2c",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-details-bottom.png",
+      "sha256": "804c5025383f5be41731363c8575aedda371b15404a2b9e33aa9e429deab817a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-details-top.png",
+      "sha256": "41bc44997a14fdd653c4417791e7452b876f643015a2338e64ec5f8ea91387ec",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-cancelled.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-draft.png",
+      "sha256": "02e1329361a88b832753b97fb2a97e5f8326c08c15d5a78c89ecfa553da5d97a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-original.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-saved.png",
+      "sha256": "2ab2b27091beba76f531c0f26c498d5b73ebe9588a599d7d5bedc727dc7f673c",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-help-bottom.png",
+      "sha256": "f9a1b7d7349064390bcccf3ee1efbfde8e135fe140b75e1b03ab16c7afd71438",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-help-top.png",
+      "sha256": "3baca93cf3052e56e37ac235f3f33b425b1568601f7ef3c030a039cd20dddead",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-next-account.png",
+      "sha256": "f5ade57e2d4e7561c7f0b10ecfe22c8da0cbf4314460e7eda36da8ed435a2f95",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-options-identity.png",
+      "sha256": "3e7220b7b68b313c1d943cea8bc200358f564d5834caf703652daa40cafc2996",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-cancelled.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-choice-returned.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-choice.png",
+      "sha256": "26ac8446613b35c0f86815aea5a67430fee73f7d3e50a10a39fe9322e45aaa12",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-draft.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-no-match.png",
+      "sha256": "37792089c11c6ad16af21b3f476cd258686136c32bf4090f908c2fdb50f151c3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-original.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-saved.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-refresh-result.png",
+      "sha256": "64999ad9920a9442710661daa58f9acc8d324fb98651b1288193351d2b168ee4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-inventory.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-last-page.png",
+      "sha256": "17fe90bf652ef511e570a82dee11a3b6f05831b5d7d4f3e3806440aeb81fcdc0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-result-bottom.png",
+      "sha256": "5ecb92210c259e97fe252b5464717311f3262ce0241dc3ec12f9f4fa151ffa5d",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-result.png",
+      "sha256": "b4c3599e0cdd554019bee11254d54e532a5601c073274ddd36293172efee4628",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-review.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-restored-account.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-returned.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "pending"
+    }
+  ],
+  "limits": [
+    "MechanicalNormalpass only if actualwrapper+driver0 and receipt/gallery present; personal original-image review remains separate",
+    "This one grid compiledsyntheticfixture only; no all6/resize/pending/public/device claim"
+  ]
+}

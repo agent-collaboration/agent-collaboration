@@ -1,7 +1,11 @@
 //! Provider Session observation: bounded, resumable reads of the same hub attached faces use.
 //! Following a Session is a chain of these reads, each resuming after the last event.
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::{HubEvent, ServiceIdentity, SessionEventAttachment, SessionEventHubError};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionEventAttachment;
+use collaboration_contracts::SessionEventHubError;
 use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
     EndpointAvailability, ObservationEndReason, ObservationEventNotification,
@@ -15,13 +19,24 @@ use tokio::sync::broadcast;
 pub type ObservedEventSink = tokio::sync::mpsc::UnboundedSender<ObservationEventNotification>;
 
 /// Observation operations over the provider Session event hub.
-pub struct ObservationOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct ObservationOperations {
+    pub(super) identity: collaboration_contracts::RouterIdentity,
+    pub(super) provider_session_hub:
+        Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
+    pub(super) directory: collaboration_runtime::EndpointDirectory,
 }
 
-impl<'service> ObservationOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl ObservationOperations {
+    pub fn new(
+        identity: collaboration_contracts::RouterIdentity,
+        provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
+        directory: collaboration_runtime::EndpointDirectory,
+    ) -> Self {
+        Self {
+            identity,
+            provider_session_hub,
+            directory,
+        }
     }
 
     /// Collects events after `afterSequence` (in `epoch`) until a bound or the deadline,
@@ -31,7 +46,7 @@ impl<'service> ObservationOperations<'service> {
         request: BoundedObservationRequest,
         observed: Option<ObservedEventSink>,
     ) -> Result<BoundedObservationResult, ObservationFailure> {
-        collect(request, self.identity, observed).await
+        collect(request, self, observed).await
     }
 }
 
@@ -43,7 +58,7 @@ const MAX_EVENT_BYTES: usize = MAX_BYTES - 65_536;
 
 async fn collect(
     request: BoundedObservationRequest,
-    identity: &ServiceIdentity,
+    operations: &ObservationOperations,
     observed: Option<ObservedEventSink>,
 ) -> Result<BoundedObservationResult, ObservationFailure> {
     if request.timeout_seconds == 0
@@ -58,30 +73,34 @@ async fn collect(
         .checked_add(std::time::Duration::from_secs(request.timeout_seconds))
         .ok_or(ObservationFailure::InvalidField)?;
     let (attachment, generation) =
-        tokio::time::timeout_at(deadline, attach(&request.target, identity))
+        tokio::time::timeout_at(deadline, attach(&request.target, operations))
             .await
             .map_err(|_| ObservationFailure::Unavailable)??;
     if request.after_sequence.is_some() && request.epoch.is_none() {
         return Err(ObservationFailure::InvalidField);
     }
     let current_epoch = attachment.epoch;
-    if request.epoch.is_some_and(|epoch| epoch != current_epoch) {
-        return Ok(BoundedObservationResult {
-            target: request.target,
-            generation,
-            attached: true,
-            events: vec![json!({"kind":"resyncRequired"})],
-            end_reason: ObservationEndReason::ResyncRequired,
-            continuation_gap: true,
-            epoch: Some(current_epoch),
-        });
-    }
     let mut events = CollectedEvents {
         events: Vec::new(),
         bytes: 0,
         epoch: current_epoch,
         observed,
     };
+    if request.epoch.is_some_and(|epoch| epoch != current_epoch) {
+        // The marker is this call's whole answer, so the event and byte budgets do not apply
+        // to it: it is always returned and streamed.
+        let marker = json!({"kind":"resyncRequired"});
+        events.stream(ObservationEventNotification::resync_marker(marker.clone()));
+        return Ok(BoundedObservationResult {
+            target: request.target,
+            generation,
+            attached: true,
+            events: vec![marker],
+            end_reason: ObservationEndReason::ResyncRequired,
+            continuation_gap: true,
+            epoch: Some(current_epoch),
+        });
+    }
     let mut snapshot = attachment.snapshot.into_iter().filter(|event| {
         request
             .after_sequence
@@ -91,7 +110,7 @@ async fn collect(
     let end_reason = loop {
         let event = if let Some(event) = snapshot.next() {
             if matches!(&event.event, SessionEvent::ResyncRequired { .. }) {
-                let _ = events.append(event_value_bounded(event), &request)?;
+                let _ = events.append_resync_marker(event_value_bounded(event), &request)?;
                 break ObservationEndReason::ResyncRequired;
             }
             event_value_bounded(event)
@@ -107,12 +126,13 @@ async fn collect(
                         ..
                     },
                 ) => {
-                    let _ = events.append(event_value_bounded(event), &request)?;
+                    let _ = events.append_resync_marker(event_value_bounded(event), &request)?;
                     break ObservationEndReason::ResyncRequired;
                 }
                 Ok(event) => event_value_bounded(event),
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    let _ = events.append(json!({"kind":"resyncRequired"}), &request)?;
+                    let _ =
+                        events.append_resync_marker(json!({"kind":"resyncRequired"}), &request)?;
                     break ObservationEndReason::ResyncRequired;
                 }
                 Err(broadcast::error::RecvError::Closed) => {
@@ -147,10 +167,32 @@ struct CollectedEvents {
 }
 
 impl CollectedEvents {
-    /// Adds `event` if it fits the request's bounds, streaming it; `false` when it does not.
+    /// Adds a history event if it fits the request's bounds, streaming it with the cursor
+    /// that continues after it; `false` when it does not fit.
     fn append(
         &mut self,
         event: Value,
+        request: &BoundedObservationRequest,
+    ) -> Result<bool, ObservationFailure> {
+        let streamed = ObservationEventNotification::provider_event(event.clone(), self.epoch);
+        self.push(event, streamed, request)
+    }
+
+    /// Adds a resync marker, from a stale epoch, a hub reset or a lagging reader. The history
+    /// must be attached again, so it streams with no cursor, numbered or not.
+    fn append_resync_marker(
+        &mut self,
+        marker: Value,
+        request: &BoundedObservationRequest,
+    ) -> Result<bool, ObservationFailure> {
+        let streamed = ObservationEventNotification::resync_marker(marker.clone());
+        self.push(marker, streamed, request)
+    }
+
+    fn push(
+        &mut self,
+        event: Value,
+        streamed: ObservationEventNotification,
         request: &BoundedObservationRequest,
     ) -> Result<bool, ObservationFailure> {
         let encoded = serde_json::to_vec(&event).map_err(|_| ObservationFailure::Unavailable)?;
@@ -163,26 +205,28 @@ impl CollectedEvents {
             return Ok(false);
         }
         self.bytes += encoded.len();
-        if let Some(observed) = &self.observed {
-            // A caller that stopped listening still gets every event in the result.
-            let _streamed = observed.send(ObservationEventNotification::provider_event(
-                event.clone(),
-                self.epoch,
-            ));
-        }
+        self.stream(streamed);
         self.events.push(event);
         Ok(true)
+    }
+
+    /// Hands one event to the caller's stream. A caller that stopped listening still gets
+    /// every event in the result.
+    fn stream(&self, notification: ObservationEventNotification) {
+        if let Some(observed) = &self.observed {
+            let _streamed = observed.send(notification);
+        }
     }
 }
 
 async fn attach(
     target: &SessionRef,
-    identity: &ServiceIdentity,
+    operations: &ObservationOperations,
 ) -> Result<(SessionEventAttachment, CodexGeneration), ObservationFailure> {
-    if target.endpoint.service_id != identity.service_id {
+    if target.endpoint.service_id != *operations.identity.service_id() {
         return Err(ObservationFailure::NotFound);
     }
-    let endpoint = identity
+    let endpoint = operations
         .directory
         .read_endpoint(&target.endpoint)
         .map_err(|_| ObservationFailure::Unavailable)?
@@ -200,7 +244,7 @@ async fn attach(
             ChannelDescription::ExternalProvider {
                 binding_generation, ..
             } => Some(CodexGeneration {
-                service_epoch: identity.service_epoch.clone(),
+                service_epoch: operations.identity.service_epoch().clone(),
                 generation: *binding_generation,
             }),
             _ => None,
@@ -210,7 +254,7 @@ async fn attach(
         serde_json::to_value(target).map_err(|_| ObservationFailure::InvalidField)?,
     )
     .map_err(|_| ObservationFailure::InvalidField)?;
-    let hub = identity
+    let hub = operations
         .provider_session_hub
         .as_ref()
         .ok_or(ObservationFailure::Unavailable)?;

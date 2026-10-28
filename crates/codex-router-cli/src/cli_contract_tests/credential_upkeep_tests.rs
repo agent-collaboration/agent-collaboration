@@ -11,6 +11,10 @@ struct RecordingUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &AccountId,
@@ -29,7 +33,7 @@ impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
         );
         self.observed_calls
             .send(call)
-            .expect("provider call should be observed");
+            .unwrap_or_else(|_| panic!("provider call should be observed"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             format!("replacement-access-{call}"),
             Some("rotated-refresh-canary".to_owned()),
@@ -98,7 +102,7 @@ fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_pro
     let worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
-            secrets,
+            secrets.into(),
             client,
             move || clock.load(Ordering::SeqCst),
         ),
@@ -147,6 +151,10 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         ))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_provider_credentials(
         &self,
         provider: Provider,
@@ -160,7 +168,7 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         );
         self.observed_account_ids
             .send(account_id.clone())
-            .expect("Claude refresh call should be observed");
+            .unwrap_or_else(|_| panic!("Claude refresh call should be observed"));
         CredentialBundle::new_claude(
             SecretString::new(format!("claude-access-{}", account_id.as_str())),
             SecretString::new(format!("claude-rotated-{}", account_id.as_str())),
@@ -230,7 +238,7 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     let worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
-            secrets.clone(),
+            secrets.clone().into(),
             RecordingClaudeUpkeepRefreshClient {
                 observed_account_ids: observed_sender,
             },
@@ -287,6 +295,10 @@ struct HeldUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,
@@ -295,12 +307,12 @@ impl CredentialRefreshClient for HeldUpkeepRefreshClient {
     {
         self.entered_sender
             .send(())
-            .expect("provider entry should report");
+            .unwrap_or_else(|_| panic!("provider entry should report"));
         self.release_receiver
             .lock()
-            .expect("release lock")
+            .unwrap_or_else(|_| panic!("release lock"))
             .recv_timeout(Duration::from_secs(2))
-            .expect("provider should be released");
+            .unwrap_or_else(|_| panic!("provider should be released"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             "replacement-access-canary",
             Some("replacement-refresh-canary".to_owned()),
@@ -350,7 +362,7 @@ fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     let worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
-            secrets,
+            secrets.into(),
             HeldUpkeepRefreshClient {
                 entered_sender,
                 release_receiver: Arc::new(Mutex::new(release_receiver)),
@@ -381,6 +393,10 @@ struct HeldQueuedUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &AccountId,
@@ -389,12 +405,12 @@ impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
     {
         self.entered_sender
             .send(account_id.clone())
-            .expect("provider entry should report account");
+            .unwrap_or_else(|_| panic!("provider entry should report account"));
         self.release_receiver
             .lock()
-            .expect("release lock")
+            .unwrap_or_else(|_| panic!("release lock"))
             .recv_timeout(Duration::from_secs(3))
-            .expect("claimed provider use should be released");
+            .unwrap_or_else(|_| panic!("claimed provider use should be released"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             "replacement-access-canary",
             Some("replacement-refresh-canary".to_owned()),
@@ -451,7 +467,7 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
     let worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
-            credential_store,
+            credential_store.into(),
             HeldQueuedUpkeepRefreshClient {
                 entered_sender,
                 release_receiver: Arc::new(Mutex::new(release_receiver)),

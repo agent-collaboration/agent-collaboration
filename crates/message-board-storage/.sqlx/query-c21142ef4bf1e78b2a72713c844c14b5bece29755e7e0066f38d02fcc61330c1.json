@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT r.kind AS \"kind!: String\", r.id AS \"id!: String\", r.payload AS \"payload!: String\" FROM json_each(?) k CROSS JOIN cached_fleet_records r ON r.kind = json_extract(k.value, '$[0]') AND r.id = json_extract(k.value, '$[1]') ORDER BY r.kind, r.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c21142ef4bf1e78b2a72713c844c14b5bece29755e7e0066f38d02fcc61330c1"
+}

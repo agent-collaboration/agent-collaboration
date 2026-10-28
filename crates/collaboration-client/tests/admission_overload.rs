@@ -2,6 +2,13 @@
 //! its own typed `overloaded` failure with "retry later", never as a protocol violation or an
 //! uncertain outcome. The served API runs one request at a time on its socket; a held wake
 //! wait takes that one, so every other call is shed.
+
+#[path = "../../collaboration-service/tests/support/native_registry.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
+mod native_registry;
 use automation_storage::AutomationStore;
 use collaboration_client::{
     AutomationInspectionClientError, BoardClientError, ClientError, CollaborationAccess,
@@ -10,6 +17,7 @@ use collaboration_client::{
     ScheduleClientError, WakeClientError, WakeWaitError, operation_failure_from_client_error,
     resolve_public_native,
 };
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::{
     AutomationInspectionFailureKind, ConfigurationFailureKind, ConfigurationNextAction, EndpointId,
@@ -17,9 +25,11 @@ use collaboration_protocol::{
     RunFailureKind, RunNextAction, ScheduleFailureKind, ScheduleNextAction, WakeFailureReason,
     WakeNextAction, WakeShowRequest,
 };
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use message_board::{BoardFailureKind, BoardNextAction};
-use message_board_storage::BoardStore;
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -28,6 +38,7 @@ const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 
 /// A served API that runs one request at a time, with that one held by a wake wait.
 struct SaturatedApi {
+    fleet_runtime: board_central_test_support::FleetTestRuntime,
     served: Arc<ServedCollaborationApi>,
     client: CollaborationClient,
     wakeup_id: Value,
@@ -43,23 +54,39 @@ impl SaturatedApi {
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in("/tmp")?;
-        let board = BoardStore::open(&directory.path().join("board.sqlite")).await?;
+        let origin = message_board::ActorOrigin {
+            installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())?,
+            machine: message_board::MachineLabel::try_from("overload proof".to_owned())?,
+        };
+        let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+            directory.path(),
+            Arc::new(native_registry::PendingRegistration),
+            &origin,
+        )
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            registry: native_registry::new_registry(directory.path())
+                .map_err(|error| std::io::Error::other(error.to_string()))?,
+            fleet: Arc::new(fleet),
+            identity: MachineIdentity::new(
+                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+                Some("overload proof"),
+            )?,
+        })?);
         let automation = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
-        let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+        let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
             .map_err(std::io::Error::other)?
-            .with_board_store(Arc::new(Mutex::new(board)))
+            .with_project_admission(admission)
             .with_automation_store(Arc::new(Mutex::new(automation)));
-        let served = Arc::new(
-            ServedCollaborationApi::start_with(
-                directory.path(),
-                CollaborationApplication::new(identity),
-                TestServeOptions {
-                    concurrent_requests: Some(1),
-                    ..TestServeOptions::default()
-                },
-            )
-            .await?,
-        );
+        let served = Arc::new(ServedCollaborationApi::start_with(
+            directory.path(),
+            (identity).build(),
+            TestServeOptions {
+                concurrent_requests: Some(1),
+                ..TestServeOptions::default()
+            },
+        )?);
         let client = served.client("overload-proof").await?;
         let wake = served.call("wake_send", wake_send_arguments()).await?;
         let wakeup_id = wake
@@ -95,6 +122,7 @@ impl SaturatedApi {
         .await
         .map_err(|_| "the wake wait never held the only request slot")??;
         Ok(Self {
+            fleet_runtime,
             served,
             client,
             wakeup_id,
@@ -109,6 +137,10 @@ impl SaturatedApi {
         if let Ok(served) = Arc::try_unwrap(self.served) {
             served.stop().await?;
         }
+        self.fleet_runtime
+            .shutdown()
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
         Ok(())
     }
 }
@@ -126,7 +158,7 @@ fn wake_send_arguments() -> Value {
             "generationGuard": null
         },
         "timing": {"kind": "after", "seconds": 600},
-        "expiry": {"kind": "none"}
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
     })
 }
 
@@ -139,8 +171,9 @@ async fn a_shed_board_call_is_a_typed_retryable_board_overload() {
     let api = SaturatedApi::start().await.expect("saturated API");
     let shed = api
         .client
-        .board_project_list(
-            from_json(json!({"repository": null, "page": {}})).expect("request JSON"),
+        .project_list(
+            from_json(json!({"boardId":message_board::BoardId::generate(), "page": {}}))
+                .expect("request JSON"),
         )
         .await;
     let Err(BoardClientError::Rejected(failure)) = shed else {
@@ -156,11 +189,11 @@ async fn a_shed_board_write_is_not_an_unknown_outcome() {
     let api = SaturatedApi::start().await.expect("saturated API");
     let shed = api
         .client
-        .board_project_create(
+        .project_create(
             from_json(json!({
                 "projectId": OperationId::generate(),
-                "name": "Shed",
-                "description": "",
+                "boardId":message_board::BoardId::generate(), "title": "Shed",
+                "requestId":message_board::RequestId::generate(), "protocolVersion":1,"actingFor":null,
                 "actor": {"kind": "human", "humanId": "owner"}
             }))
             .expect("request JSON"),

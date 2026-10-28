@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE fleet_cache_checkpoint SET position=? WHERE singleton=1",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "adb411132b8d3f956f504500d6d2bdfe5d654159ddc95ceb00dc29ba3872777e"
+}

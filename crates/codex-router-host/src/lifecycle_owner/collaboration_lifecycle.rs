@@ -1,16 +1,19 @@
 //! Join existing child lifecycle facts to the independent public collaboration runtime.
 use crate::{
     AppServerChild, BackendSchemaEvidence, CollaborationRuntime, CollaborationRuntimeInputs,
-    HostConfig, RemoteControlServerName,
+    HostConfig, HostInstance, RemoteControlServerName,
 };
 use std::{io, path::PathBuf};
 
 pub(super) struct CollaborationLifecycle {
     owner_human_id: Option<message_board::HumanId>,
     directory: PathBuf,
+    router_root: PathBuf,
     codex_home: PathBuf,
+    peer_registry_directory: Option<PathBuf>,
     backend_socket: PathBuf,
     mcp_bind: std::net::SocketAddr,
+    remote_access: Option<crate::RemoteAccess>,
     router_proxy_endpoint: std::net::SocketAddr,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
     provider_operation_retention_days: std::num::NonZeroU32,
@@ -24,6 +27,7 @@ pub(super) struct CollaborationLifecycle {
 impl CollaborationLifecycle {
     pub(super) async fn start(
         config: &HostConfig,
+        instance: &HostInstance,
         child: &AppServerChild,
         remote_control_server_name: Option<RemoteControlServerName>,
         router_executable_relation: tokio::sync::watch::Receiver<
@@ -44,12 +48,21 @@ impl CollaborationLifecycle {
         let mut owner = Self {
             owner_human_id: config.owner_human_id().cloned(),
             directory: directory.to_owned(),
+            router_root: config
+                .coordination_paths()
+                .router_root()
+                .ok_or_else(|| io::Error::other("fleet enrollment requires a Router root"))?
+                .to_owned(),
             codex_home: config
                 .collaboration_codex_home()
                 .ok_or_else(|| io::Error::other("collaboration requires explicit Codex home"))?
                 .to_owned(),
+            peer_registry_directory: config
+                .collaboration_peer_registry_directory()
+                .map(PathBuf::from),
             backend_socket: config.app_server_socket().to_owned(),
             mcp_bind: config.mcp_bind(),
+            remote_access: config.remote_access(),
             router_proxy_endpoint: config.router_endpoint(),
             external_provider_startups,
             provider_operation_retention_days: config.provider_operation_retention_days(),
@@ -59,10 +72,20 @@ impl CollaborationLifecycle {
             published_child: None,
             schema_digest: None,
         };
-        owner.synchronize(Some(child)).await?;
+        if let Err(error) = owner.synchronize(instance, Some(child)).await {
+            let cleanup = owner.shutdown().await;
+            return Err(match cleanup {
+                Ok(()) => error,
+                Err(cleanup) => io::Error::other(format!("{error}; startup cleanup: {cleanup}")),
+            });
+        }
         Ok(Some(owner))
     }
-    pub(super) async fn synchronize(&mut self, child: Option<&AppServerChild>) -> io::Result<()> {
+    pub(super) async fn synchronize(
+        &mut self,
+        instance: &HostInstance,
+        child: Option<&AppServerChild>,
+    ) -> io::Result<()> {
         let Some(child) = child else {
             if self.published_child.take().is_some()
                 && let Some(runtime) = &mut self.runtime
@@ -90,6 +113,12 @@ impl CollaborationLifecycle {
             self.shutdown().await?;
         }
         if self.runtime.is_none() {
+            let router_root = self.router_root.clone();
+            let board_session = tokio::task::spawn_blocking(move || {
+                crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
+            })
+            .await
+            .map_err(io::Error::other)??;
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
                 .mode(0o700)
@@ -99,27 +128,41 @@ impl CollaborationLifecycle {
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(error),
             }
+            instance
+                .clear_stale_endpoint_sockets(&self.directory)
+                .await?;
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
                     collaboration_runtime: CollaborationRuntimeInputs {
+                        board_session,
                         directory: self.directory.clone(),
                         codex_home: self.codex_home.clone(),
                         backend_socket: self.backend_socket.clone(),
                         mcp_bind: self.mcp_bind,
                         native_schema: export.clone(),
-                        peer_registry_directory: None,
+                        peer_registry_directory: self.peer_registry_directory.clone(),
                         remote_control_server_name: self.remote_control_server_name.clone(),
                         owner_human_id: self.owner_human_id.clone(),
                     },
                     router_proxy_endpoint: self.router_proxy_endpoint,
+                    remote_access: self.remote_access,
                 },
                 self.external_provider_startups.clone(),
                 self.router_executable_relation.clone(),
             )
             .await?;
-            runtime
+            if let Err(error) = runtime
                 .configure_provider_operation_retention(self.provider_operation_retention_days)
-                .await?;
+                .await
+            {
+                let cleanup = runtime.shutdown().await;
+                return Err(match cleanup {
+                    Ok(()) => error,
+                    Err(cleanup) => {
+                        io::Error::other(format!("{error}; startup cleanup: {cleanup}"))
+                    }
+                });
+            }
             self.runtime = Some(runtime);
             self.schema_digest = digest;
         }
@@ -139,7 +182,7 @@ impl CollaborationLifecycle {
         self.published_child = Some(child.process.process_id());
         Ok(())
     }
-    pub(super) async fn listener_failure(&mut self) -> io::Error {
+    pub(super) async fn listener_failure(&mut self) -> crate::CollaborationFailure {
         match &mut self.runtime {
             Some(runtime) => runtime.listener_failure().await,
             None => std::future::pending().await,
@@ -153,7 +196,9 @@ impl CollaborationLifecycle {
         Ok(())
     }
 }
-pub(super) async fn wait_failure(owner: &mut Option<CollaborationLifecycle>) -> io::Error {
+pub(super) async fn wait_failure(
+    owner: &mut Option<CollaborationLifecycle>,
+) -> crate::CollaborationFailure {
     match owner {
         Some(owner) => owner.listener_failure().await,
         None => std::future::pending().await,

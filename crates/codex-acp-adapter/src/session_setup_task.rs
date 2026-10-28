@@ -5,7 +5,7 @@ use crate::{
 };
 use codex_native_integration::{NativePayloadSchemas, NativeProtocolConnection};
 use collaboration_protocol::{CodexGeneration, OperationId, SessionId};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
 
 pub(crate) struct SetupTaskInputs {
@@ -40,7 +40,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             let outcome = session
                 .adopt_unmaterialized(&mut catalog, &inputs.generation, &inputs.params)
                 .await
-                .map(|()| (Vec::new(), json!({})));
+                .map(|()| (Vec::new(), session.setup_result()));
             return SetupTaskOutput {
                 binding: Some(session),
                 outcome,
@@ -78,7 +78,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
                     Ok(Vec::new())
                 };
                 history
-                    .map(|history| (history, json!({})))
+                    .map(|history| (history, session.setup_result()))
                     .map_err(|_| SessionSetupError::OutcomeUnknown)
             }
             Err(error) => Err(error),
@@ -148,7 +148,8 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
                 inputs.cancellation_barrier.as_ref(),
             )
             .await?;
-            Ok((session, history, json!({})))
+            let result = session.setup_result();
+            Ok((session, history, result))
         }
     }
     .await;
@@ -276,7 +277,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn aggregate_existing_binding_resume_skips_history_replay_capacity() {
+    async fn existing_binding_load_reports_permissions_and_skips_history_replay_capacity() {
         let schemas = native_schemas();
         let generation: CodexGeneration = serde_json::from_value(
             json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
@@ -320,7 +321,7 @@ mod tests {
             "mcpServers":[],
             "_meta":{"codex-router/replayHistory":false}
         });
-        let (binding, initial_history) = AcpSessionBinding::load_existing(
+        let (mut binding, initial_history) = AcpSessionBinding::load_existing(
             &mut catalog,
             SessionSetupInputs {
                 operation_id: None,
@@ -335,10 +336,44 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("initial load: {error}"));
         assert!(initial_history.is_empty());
+        let actor: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap();
+        // Fixture: this existing binding has a recorded Router profile; native omits it.
+        binding.access_route = Some(crate::ApprovalRoute {
+            thread_id: "thread-a".into(),
+            created_by: actor.clone(),
+            approver: actor,
+            access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+            scratch_path: "/recorded-scratch".into(),
+            root_message_id: None,
+        });
 
         let resumed = run_session_setup(SetupTaskInputs {
             known_session: Some(binding),
             adopt_unmaterialized: false,
+            backend_path: PathBuf::new(),
+            schemas: Arc::clone(&schemas),
+            generation: generation.clone(),
+            params: params.clone(),
+            create_new: false,
+            operation_id: None,
+            recorder: Arc::new(AcceptingRecorder),
+            cancellation_barrier: None,
+            approval_broker: Arc::new(RejectingApprovalBroker),
+        })
+        .await;
+        let (_history, result) = resumed
+            .outcome
+            .unwrap_or_else(|error| panic!("existing-binding resume: {error}"));
+        let expected = json!(["profile", "sandbox", "writableRoots", "network"]);
+        assert_eq!(
+            result["_meta"]["codexRouter"]["permissionDifferences"],
+            expected
+        );
+        let mut binding = resumed.binding.unwrap();
+        binding.materialized = false;
+        let adopted = run_session_setup(SetupTaskInputs {
+            known_session: Some(binding),
+            adopt_unmaterialized: true,
             backend_path: PathBuf::new(),
             schemas,
             generation,
@@ -350,10 +385,12 @@ mod tests {
             approval_broker: Arc::new(RejectingApprovalBroker),
         })
         .await;
-        let (_history, _) = resumed
-            .outcome
-            .unwrap_or_else(|error| panic!("existing-binding resume: {error}"));
-        assert!(resumed.binding.is_some());
+        let (_, result) = adopted.outcome.unwrap();
+        assert_eq!(
+            result["_meta"]["codexRouter"]["permissionDifferences"],
+            expected
+        );
+        assert!(adopted.binding.is_some());
         fixture.await.unwrap();
     }
 }

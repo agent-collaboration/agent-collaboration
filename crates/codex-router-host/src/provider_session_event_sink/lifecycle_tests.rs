@@ -2,67 +2,25 @@
 
 use crate::{ExternalProviderLaunch, ExternalProviderRuntime};
 use acp_client_runtime::{ProviderPersistenceTarget, ProviderSettingKind};
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, SessionEventHub,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
 use message_board::{EndpointId, ServiceId, SessionEndpointRef, SessionId, SessionRef};
 use session_event_model::{SessionEvent, SessionState};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
-const LIFECYCLE_FIXTURE: &str = r#"
-import json,sys
-mode=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
- 'agentCapabilities':{'loadSession':True,'sessionCapabilities':{'resume':{}}},
- 'agentInfo':{'name':'hub-lifecycle-fixture','version':'1'}}})
-request=read()
-if mode=='create':
- assert request['method']=='session/new',request
- send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-elif mode=='load':
- assert request['method']=='session/load',request
- for kind,text in [('user_message_chunk','Earlier input'),('agent_message_chunk','Earlier output')]:
-  send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':kind,'content':{'type':'text','text':text}}}})
- send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-elif mode=='resume':
- assert request['method']=='session/resume',request
- send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-else: raise AssertionError(mode)
-sys.stdin.read()
-"#;
+const LIFECYCLE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/host-hub-lifecycle-agent.ts"
+);
 
-const SETTINGS_UPDATES_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-current={'mode':'default','model':'a'}
-def option(id,values):
- return {'id':id,'name':id,'category':id,'type':'select','currentValue':current[id],
-  'options':[{'value':value,'name':value} for value in values]}
-def options(): return [option('mode',['default','ask']),option('model',['a','b','c'])]
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'hub-settings-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session','configOptions':options()}})
-for config_id,value in [('model','b'),('mode','ask')]:
- request=read()
- assert request['method']=='session/set_config_option' and request['params']['configId']==config_id,request
- current[config_id]=value
- send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':options()}})
-current['model']='c'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
- 'update':{'sessionUpdate':'config_option_update','configOptions':options()}}})
-sys.stdin.read()
-"#;
+const SETTINGS_UPDATES_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/host-hub-lifecycle-agent.ts"
+);
 
 type Fixture = (
     tempfile::TempDir,
@@ -96,13 +54,14 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
     let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
         ExternalProviderLaunch {
             persistence_target: ProviderPersistenceTarget::Unspecified,
-            executable: PathBuf::from("/usr/bin/python3"),
-            arguments: ["-u".to_owned(), "-c".to_owned(), script.to_owned()]
+            executable: PathBuf::from("node"),
+            arguments: [script.to_owned()]
                 .into_iter()
                 .chain(arguments.iter().map(|argument| (*argument).to_owned()))
                 .collect(),
             environment: Vec::new(),
         },
+        acp_client_runtime::ProviderModelPicker::Standard,
         "fixture",
         "http://127.0.0.1:1/mcp",
         Arc::clone(&hub),
@@ -223,7 +182,7 @@ async fn resume_invalidates_history_before_publishing_idle() {
 #[tokio::test]
 async fn create_setting_change_and_idle_update_refresh_hub_model() {
     let (root, store, hub, runtime, session) =
-        fixture_with_script(SETTINGS_UPDATES_FIXTURE, &[]).await;
+        fixture_with_script(SETTINGS_UPDATES_FIXTURE, &["settings"]).await;
     runtime
         .create_session(root.path().to_path_buf())
         .await

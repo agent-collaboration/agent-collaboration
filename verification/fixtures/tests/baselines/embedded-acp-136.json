@@ -1,0 +1,17 @@
+{
+  "original": "Composed Host integration#content-cancel",
+  "originalSHA256": "f8876cba981bf8132fda8134a94ef153961953a2f395b08dc600526858e4611b",
+  "target": "provider-content-command-agent.ts",
+  "arguments": ["cancel", "<RECEIPT>"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"cancel-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"cancelled\"}}\n",
+    "stderr": "",
+    "receipt": "prompt\ncancel\n",
+    "files": {
+      "receipt.json": "prompt\ncancel\n"
+    }
+  }
+}

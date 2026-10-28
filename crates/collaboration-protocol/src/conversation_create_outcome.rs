@@ -19,6 +19,8 @@ pub enum ConversationCreateOutcome {
         target: SessionRef,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         effective_settings: Option<EffectiveProviderSettings>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        permission_differences: Vec<crate::PermissionDifference>,
     },
     CreatedWithoutSettings {
         operation_id: OperationId,

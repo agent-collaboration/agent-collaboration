@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM cached_fleet_records WHERE kind = 'board' AND json_extract(payload, '$.record.envelope.scope.workspace') = ? AND id > ? AND (? OR json_extract(payload, '$.record.state') = 'open') ORDER BY id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e2f80f0fd628c2e27f8d1dce9ac4aee7d14584237740c09805ce74ba7a9178f4"
+}

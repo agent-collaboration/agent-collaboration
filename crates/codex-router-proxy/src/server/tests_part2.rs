@@ -1,5 +1,5 @@
-#![allow(unused_imports)]
 use super::*;
+use crate::server::protocol_handler::router_compatibility_response;
 
 #[test]
 pub(super) fn runtime_affinity_cache_uses_configured_session_pin_idle_ttl() {
@@ -177,6 +177,10 @@ pub(super) struct HeldProxySecretWriteStore {
 }
 
 impl SecretStore for HeldProxySecretWriteStore {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {
         if key.as_str().ends_with(".2") {
             self.entered_sender

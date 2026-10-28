@@ -1,6 +1,11 @@
 //! Host-internal typed prompt, steer, and queue admission.
 
-use super::*;
+use super::{
+    LoadPolicy, OperationId, ProviderAcpDeliveryRoute, ProviderConversationBackend,
+    ProviderIdentity, ProviderPromptContentsRequest, ProviderQueuedPrompt,
+    ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim, SessionRef,
+    ensure_provider_session_loaded,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProviderQueueAdmissionError {
@@ -55,7 +60,7 @@ impl ProviderAcpDeliveryRoute {
             .session_lock(&target)
             .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
         let _guard = session_lock.lock().await;
-        match self.claim.claim(&target).await {
+        match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere.into());
@@ -140,7 +145,7 @@ impl ProviderAcpDeliveryRoute {
             .session_lock(&target)
             .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
         let _guard = session_lock.lock().await;
-        match self.claim.claim(&target).await {
+        match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere.into());
@@ -207,7 +212,7 @@ impl ProviderAcpDeliveryRoute {
             .session_lock(&target)
             .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
         let _guard = session_lock.lock().await;
-        match self.claim.claim(&target).await {
+        match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere);

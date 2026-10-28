@@ -3,7 +3,7 @@
 //! Tools call `CollaborationApplication` in process. The conversation tools that open carrier
 //! sessions (create, load, prompt, cancel, create-and-prompt and bounded observation) run the
 //! carrier clients in the Host over the same application.
-use crate::collaboration_api_router::CollaborationApiConfig;
+use crate::collaboration_api_router::{CallAdmission, CollaborationApiConfig};
 use crate::native_schema_definitions::NativeSchemaDefinitions;
 use crate::tool_call_registry::CallEndedEarly;
 use collaboration_client::{
@@ -16,15 +16,16 @@ use collaboration_protocol::{
     AddressListParams, AddressPage, ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams,
     ApprovalListResponse, ConversationCloseRequest, ConversationCreateOutcome,
     ConversationOperationSubmission, ConversationResumeRequest, DeliveryOutcome, EndpointInventory,
-    JournalPage, JournalReadParams, JournalStatus, NativeInspectParams, NativeInspectResult,
-    NativeInterruptParams, NativeInterruptResult, NativeRenameParams, NativeRenameResult,
-    NativeSessionListParams, NativeSessionListResult, OperationId, ProviderInspectFailure,
-    ProviderSessionInspectRequest, ProviderSessionInspectResult, ProviderSessionListParams,
-    ProviderSessionListResult, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsResult, ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult,
-    PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, PushRecordShowParams,
-    PushRecordShowResult, RouterExecutableRelation, SessionMessageReplyResult,
-    ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult, router_build_warning,
+    InstallationIdentity, JournalPage, JournalReadParams, JournalStatus, MessageReplyResult,
+    MessageSendResult, NativeInspectParams, NativeInspectResult, NativeInterruptParams,
+    NativeInterruptResult, NativeRenameParams, NativeRenameResult, NativeSessionListParams,
+    NativeSessionListResult, OperationId, ProviderInspectFailure, ProviderSessionInspectRequest,
+    ProviderSessionInspectResult, ProviderSessionListParams, ProviderSessionListResult,
+    ProviderSettingsAcceptRequest, ProviderSettingsFailure, ProviderSettingsResult,
+    ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult, PushRecordHistoryParams,
+    PushRecordListParams, PushRecordListResult, RouterExecutableRelation,
+    SessionMessageReplyResult, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
+    router_build_warning,
 };
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_application::API_RESULT_BUDGET;
@@ -51,12 +52,16 @@ mod conversation_tool_requests;
 mod conversation_tool_results;
 mod interaction_tools;
 mod message_tools;
+mod project_tool_schemas;
 mod result_converters;
 mod schema_binding;
 mod session_tools;
 mod tool_output_contract;
 mod wait_tools;
-use application_tool_results::*;
+use application_tool_results::{
+    application_result, call_abandoned_at_shutdown, caller_cancelled, domain_result,
+    operation_failure_result, rejection_failure, success_result, typed_failure_result,
+};
 use catalog_descriptions::operation_description;
 use catalog_tools::{
     EmptyToolInput, register_automation_inspection_tools, register_automation_mutation_tools,
@@ -75,7 +80,11 @@ use conversation_tool_results::{
 #[cfg(test)]
 use message_tools::message_failure_result;
 pub(crate) use result_converters::structured_tool_error;
-use result_converters::*;
+use result_converters::{
+    failure, failure_naming, message_receipt_result, message_reply_receipt_result,
+    operation_error_result, structured_argument_refusal, structured_result,
+    thread_wait_outcome_unknown, validation_failure, wake_wait_failure,
+};
 use schema_binding::bind_native_schema_refs;
 use tool_output_contract::{McpToolError, McpToolOutput};
 
@@ -159,7 +168,7 @@ impl CollaborationMcpServer {
     #[cfg(test)]
     pub(crate) fn catalog_only() -> Self {
         Self::for_application(
-            CollaborationApplication::new(crate::api_test_harness::test_identity()),
+            (crate::api_test_harness::test_identity()).build(),
             std::env::temp_dir(),
         )
     }
@@ -312,10 +321,20 @@ impl ServerHandler for CollaborationMcpServer {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> Result<CallToolResponse, rmcp::ErrorData> {
         let caller = context.ct.clone();
+        let admission = context
+            .extensions
+            .get::<http::request::Parts>()
+            .and_then(|parts| parts.extensions.get::<CallAdmission>())
+            .cloned();
         let routed = self
             .surface
             .router
             .call(ToolCallContext::new(self, request, context));
+        let routed = async move {
+            // The listener's request slot belongs to the call until the call ends.
+            let _admitted = admission;
+            routed.await
+        };
         self.tool_calls
             .run(routed, caller, |ended| {
                 Ok(CallToolResponse::Complete(match ended {

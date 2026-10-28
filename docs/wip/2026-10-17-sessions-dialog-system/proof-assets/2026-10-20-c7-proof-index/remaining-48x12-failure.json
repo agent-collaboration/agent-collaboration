@@ -1,0 +1,118 @@
+{
+  "kind": "failed-capture-evidence-not-product-acceptance",
+  "execution": {
+    "start": "2026-10-20T02:23:34.405461+00:00",
+    "independent_intake_seconds": 1.4095198749564588,
+    "index": 0,
+    "grid": [
+      48,
+      12
+    ],
+    "plan": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/c7-current-phone-component-plan.json",
+    "plan_sha256": "375dff5c0a0b4405b6561b9458653af73f253f8d7212356e8dd394783cf367cf",
+    "command": [
+      "uv",
+      "run",
+      "--offline",
+      "--no-project",
+      "--with",
+      "pydantic==2.14.1",
+      "--python",
+      "3.13",
+      "python",
+      "-B",
+      "-m",
+      "scripts.verification.tui_component_capture",
+      "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/c7-current-phone-component-plan.json"
+    ],
+    "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/repository",
+    "output": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/phone-first-observation",
+    "budget": {
+      "preflightSeconds": 50,
+      "workSeconds": 1690,
+      "cleanupSeconds": 90,
+      "wholeSeconds": 1830
+    },
+    "timeout": false,
+    "V_stop_requested": false,
+    "V_signals": [],
+    "wrapper_pid": 61581,
+    "exit": 1,
+    "finish": "2026-10-20T02:24:30.532248+00:00",
+    "seconds": 56.12570779211819
+  },
+  "independent_cleanup": {
+    "at": "2026-10-20T02:27:33.467369+00:00",
+    "grid": [
+      48,
+      12
+    ],
+    "wrapper_exit": 1,
+    "driver_exit": 101,
+    "seconds": 56.12570779211819,
+    "recorded_pids": [
+      61581,
+      61589,
+      61595,
+      61622,
+      61624
+    ],
+    "remaining_owned_processes": [],
+    "private_profile": "/private/tmp/2026-10-tui-component-system/vhs-run-61589-0",
+    "profile_absent": true,
+    "cleanup_error_absent": true,
+    "Vsignals_orstop": false,
+    "child_exit": 0,
+    "component_process_exit": 0,
+    "durable_fixture_receipt_present": true,
+    "external_requests": 0,
+    "persisted_writes": 0,
+    "normal_receipt_exists": false,
+    "gallery_exists": false,
+    "retained_original_layer_pairs": 2164,
+    "all_layer_hashes_verified": true,
+    "last_original_layers": {
+      "text": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/phone-first-observation/quota-component-normal-48x12/diagnostic/frames/frame-text-02164.png",
+        "sha256": "92f7fae23059fca3f7de8e0de51524e11f9f8676f137de1a16e345fa04c089e7"
+      },
+      "cursor": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/phone-first-observation/quota-component-normal-48x12/diagnostic/frames/frame-cursor-02164.png",
+        "sha256": "4344d25b41da134dec80f84551f0de986113e43cbce783c0cfc5c37a2de3b238"
+      }
+    },
+    "checkpoint_original_PNGs": 0,
+    "screenshot_commands_visited": 38,
+    "source_original_archive2311_unchanged": true,
+    "later_outputs": [
+      {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/observation-40x24",
+        "absent": true
+      },
+      {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/observation-48x24",
+        "absent": true
+      },
+      {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/observation-76x30",
+        "absent": true
+      },
+      {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-choice-remaining-20261020T021908Z/observation-120x36",
+        "absent": true
+      }
+    ],
+    "failure": "File: quota.tape\nfailed to execute command: timeout waiting for \"Screen QUOTA_STORYBOARD_CHILD_EXIT=0\" to match QUOTA_STORYBOARD_CHILD_EXIT=0; last value was: \nrunning 1 test                                                                                                                                \ntest presentation::quota::quota_browse_presentat                                                                                              \nion_test::quota_storyboard_fixture_test::compile                                                                                              \nd_quota_component_storyboard_fixture ... QUOTA_C                                                                                              \nOMPONENT_FIXTURE_FINISHED scenario=Normal releas                                                                                              \ned=false external_requests=0 persisted_writes=0                                                                                               \nok                                                                                                                                            \n                                                                                                                                              \ntest result: ok. 1 passed; 0 failed; 0 ignored;                                                                                               \n0 measured; 544 filtered out; finished in 37.50s                                                                                              \n                                                                                                                                              \n",
+    "limits": [
+      "Raw layer diagnostic-only/uncomposited, nevercheckpointproof",
+      "Normalfixture/durable0effects observed, butVHSfinalmarkerfailed; noNormalimageproof/gallery",
+      "First32actualPASS remains; no same-target replay/latergrid started"
+    ]
+  },
+  "root_observation": "Opened final original raster; exact exit marker visible. Pinned VHS Screen reads stale absolute buffer rows. No composed checkpoint screenshots exported.",
+  "limits": [
+    "Failed run remains failed",
+    "No 48x12 visual acceptance",
+    "Later grids unstarted in this sequence"
+  ]
+}

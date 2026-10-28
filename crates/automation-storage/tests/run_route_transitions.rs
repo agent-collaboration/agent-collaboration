@@ -11,6 +11,9 @@ use automation_storage::{
 };
 use sqlx::Connection;
 
+#[path = "run_route_transitions/push_operations.rs"]
+mod push_operations;
+
 async fn admitted_run(store: &mut AutomationStore) -> Result<RunId, Box<dyn std::error::Error>> {
     let instruction = store
         .create_instruction(
@@ -614,6 +617,7 @@ async fn old_native_waiting_placeholder_prepares_as_codex_evidence()
     connection.close().await?;
     let mut store = AutomationStore::open(&path).await?;
     let initial = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("target".to_owned()),
         generation: Some("generation-1".to_owned()),
         client_user_message_id: None,

@@ -322,6 +322,10 @@ async fn deliver_pending_approval(
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn prompt_count(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<usize> {
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
@@ -349,6 +353,10 @@ fn prompt_count(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<u
     Ok(count)
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn read_prompt_text(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<String> {
     for line in std::fs::read_to_string(path)?.lines() {
         let frame: Value = serde_json::from_str(line)?;
@@ -459,13 +467,12 @@ async fn scripted_recipient_records_a_duplicate_after_its_last_expected_prompt()
     let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("workspace crates directory missing")?
-        .join("codex-router-host/src/external_provider_runtime/acp_scripted_fixture.py");
+        .join("../verification/fixtures/scripted-acp-agent.ts");
     let log = tempfile::NamedTempFile::new()?;
     let steps = json!([{"action":"expect_request","requestName":"last",
         "method":"session/prompt","params":{"sessionId":"matrix-acp-target"},
         "recordPath":log.path()}]);
-    let mut fixture_process = tokio::process::Command::new("python3")
-        .arg("-u")
+    let mut fixture_process = tokio::process::Command::new("node")
         .arg(fixture)
         .arg(steps.to_string())
         .stdin(Stdio::piped())

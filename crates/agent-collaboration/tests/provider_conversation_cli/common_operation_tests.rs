@@ -5,13 +5,19 @@ async fn common_provider_cancel_allocates_and_prints_omitted_operation_id() {
     let fixture = ProviderFixture::start(
         "common-cancel-generated-id",
         vec![ScriptedStep::responding("cancel", |request| {
-            let operation_id = request["operationId"].as_str().expect("generated operation ID");
-            let _: collaboration_client::protocol::OperationId = operation_id.to_owned().try_into().expect("UUIDv7 operation ID");
+            let operation_id = request["operationId"]
+                .as_str()
+                .expect("generated operation ID");
+            let _: collaboration_client::protocol::OperationId = operation_id
+                .to_owned()
+                .try_into()
+                .expect("UUIDv7 operation ID");
             assert_eq!(request["targetOperationId"], PROMPT_OPERATION);
-            ScriptedAnswer::Answer(json!({"admission":"admitted","operation":operation_snapshot(operation_id, "conversationCancel", Some(target()), "admitted", "none")}))
+            ScriptedAnswer::Answer(
+                json!({"admission":"admitted","operation":operation_snapshot(operation_id, "conversationCancel", Some(target()), "admitted", "none")}),
+            )
         })],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let output = run_cli(
         &root,
@@ -65,8 +71,7 @@ async fn common_new_prompt_composes_provider_create_then_prompt() {
         .into_iter()
         .flatten()
         .collect(),
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let output = run_cli(
         &root,
@@ -137,7 +142,7 @@ async fn common_load_settles_and_cancel_names_exact_operation() {
         },
         ScriptedAnswer::Answer(json!({"admission":"admitted","operation":operation_snapshot(CANCEL_OPERATION, "conversationCancel", Some(target()), "admitted", "none")})),
     ));
-    let fixture = ProviderFixture::start("common-load-cancel", steps).await;
+    let fixture = ProviderFixture::start("common-load-cancel", steps);
     let root = fixture.root().to_owned();
     let load = run_cli(
         &root,
@@ -230,19 +235,22 @@ async fn common_create_waits_for_provider_target_and_prints_operation_first() {
                         })
                     );
                 },
-                ScriptedAnswer::Answer(json!({"admission":"admitted","operation":operation_snapshot(CREATE_OPERATION, "conversationCreate", None, "admitted", "none")})),
+                ScriptedAnswer::Answer(
+                    json!({"admission":"admitted","operation":operation_snapshot(CREATE_OPERATION, "conversationCreate", None, "admitted", "none")}),
+                ),
             ),
             ScriptedStep::new(
                 "wait",
                 |wait| assert_eq!(wait["operationId"], CREATE_OPERATION),
-                ScriptedAnswer::Answer(json!({"operation":operation_snapshot(CREATE_OPERATION, "conversationCreate", Some(target()), "terminal", "applied"),
+                ScriptedAnswer::Answer(
+                    json!({"operation":operation_snapshot(CREATE_OPERATION, "conversationCreate", Some(target()), "terminal", "applied"),
                     "output":{"kind":"available","settlement":{"kind":"created","target":target(),
                         "effectiveSettings":{"requestedPolicy":{"access":"workspace-write"},"mappingStatus":"verified",
-                            "authentication":"authenticated","mode":"ask","model":"provider-model","effort":"high"}}}})),
+                            "authentication":"authenticated","mode":"ask","model":"provider-model","effort":"high"}}}}),
+                ),
             ),
         ],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let create = run_cli(
         &root,
@@ -322,8 +330,7 @@ async fn provider_settings_set_and_accept_use_immediate_settings_tools() {
                 ScriptedAnswer::Answer(settings_result()),
             ),
         ],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let target_json = target().to_string();
     let actor_json = actor();
@@ -391,15 +398,16 @@ async fn provider_session_inspect_shows_capabilities_and_last_settings() {
         vec![ScriptedStep::new(
             "inspectSession",
             |request| assert_eq!(request["target"], target()),
-            ScriptedAnswer::Answer(json!({"target":target(),"state":"idle","history":"available",
+            ScriptedAnswer::Answer(
+                json!({"target":target(),"state":"idle","history":"available",
                 "capabilities":{"load":true,"resume":true,"close":true,"list":true,"steer":false,
                     "queue":{"kind":"router","canCancel":true},"modes":true,"configOptions":true,
                     "elicitation":true,"usage":false,"promptContent":{"image":false,"audio":false,"embeddedContext":false},
                     "authStatus":{"kind":"account","label":"Signed in"}},
-                "settingsCatalog":{"currentMode":"ask","modes":[{"value":"ask","label":"Ask"}],"configOptions":[]}})),
+                "settingsCatalog":{"currentMode":"ask","modes":[{"value":"ask","label":"Ask"}],"configOptions":[]}}),
+            ),
         )],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let output = run_cli(
         &root,
@@ -497,8 +505,7 @@ async fn provider_resume_close_and_operation_reads_reach_the_scripted_provider()
                 )),
             ),
         ],
-    )
-    .await;
+    );
     let root = fixture.root().to_owned();
     let lifecycle = |command: &str, operation_id: &str| {
         let mut arguments = vec![

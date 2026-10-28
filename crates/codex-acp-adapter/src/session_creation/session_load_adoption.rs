@@ -1,5 +1,8 @@
 //! Attach held or persisted Codex sessions while preserving the original binding evidence.
-use super::*;
+use super::{
+    AcpSchemaCatalog, AcpSessionBinding, CodexGeneration, McpConfiguration, NativeOperation, Path,
+    RouterSessionProfile, SessionSetupError, Value, json, map_native_failure, normalized_directory,
+};
 
 impl AcpSessionBinding {
     pub async fn adopt_unmaterialized(
@@ -104,9 +107,9 @@ impl AcpSessionBinding {
                 return Err(SessionSetupError::ConfigurationMismatch);
             }
         }
-        if let Some(profile) = profile.as_ref() {
-            profile.validate_observed(&result)?;
-        }
+        self.permission_differences = profile
+            .as_ref()
+            .map_or_else(Vec::new, |profile| profile.observed_differences(&result));
         Ok(result)
     }
     /// Empty load configuration adds nothing; a nonempty load must match fresh-new evidence.

@@ -1,3 +1,10 @@
+#[cfg(test)]
+use crate::quota::quota_status_command::quota_status_view_model_loader;
+#[cfg(test)]
+use crate::quota::{
+    AccountId, AccountStatus, QuotaEvidenceFreshness, QuotaRefreshErrorClass, QuotaWindowStatus,
+    V1_SHORT_WINDOW_SECONDS,
+};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
@@ -260,6 +267,10 @@ struct CountingKeychainAccess {
 }
 
 impl KeychainAccess for CountingKeychainAccess {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn read_secret(
         &self,
         service: &str,
@@ -272,11 +283,15 @@ impl KeychainAccess for CountingKeychainAccess {
         Ok(self
             .items
             .lock()
-            .expect("Keychain items lock")
+            .unwrap_or_else(|_| panic!("Keychain items lock"))
             .get(&(service.to_owned(), account.to_owned()))
             .cloned())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn add_secret(
         &self,
         service: &str,
@@ -286,7 +301,10 @@ impl KeychainAccess for CountingKeychainAccess {
         if service != ROUTER_KEYCHAIN_SERVICE {
             return Err(KeychainAccessError::ServiceRejected);
         }
-        let mut items = self.items.lock().expect("Keychain items lock");
+        let mut items = self
+            .items
+            .lock()
+            .unwrap_or_else(|_| panic!("Keychain items lock"));
         if items.contains_key(&(service.to_owned(), account.to_owned())) {
             return Err(KeychainAccessError::Unavailable);
         }
@@ -321,7 +339,7 @@ async fn quota_status_reload_and_reset_session_reuse_the_process_credential_stor
     let adds_after_open = keychain.add_count.load(Ordering::SeqCst);
     assert!(reads_after_open > 0, "startup should read the Keychain key");
 
-    let credential_resources = QuotaCredentialResources::from_opened_store(credential_store);
+    let credential_resources = QuotaCredentialResources::from_opened_store(credential_store.into());
     let report = load_quota_status_report_with_availability_async(
         &router_root,
         false,

@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use codex_router_core::ids::AccountId;
-use crossterm::event::MouseButton;
 use futures_util::StreamExt;
+use iocraft::MouseButton;
 use iocraft::prelude::*;
 
 use super::quota_status_component::*;
@@ -114,11 +114,10 @@ async fn quota_browse_matches_canonical_responsive_goldens() {
     for (name, actual) in cases {
         assert_quota_golden(name, &actual);
     }
-
 }
 
 #[tokio::test]
-async fn quota_browse_footer_names_account_options() {
+async fn quota_browse_top_line_exposes_help_for_account_options() {
     let text = render_quota_capture_model_at(
         quota_view_model(),
         160,
@@ -130,7 +129,11 @@ async fn quota_browse_footer_names_account_options() {
     )
     .await;
 
-    assert!(text.contains("ctrl-r account options"), "{text}");
+    assert!(
+        text.lines()
+            .any(|line| line.contains("Quota status") && line.contains("Help")),
+        "{text}"
+    );
 }
 
 #[tokio::test]
@@ -238,8 +241,7 @@ fn acknowledged_account_options_events(
     impl futures_util::Stream<Item = TerminalEvent>,
     tokio::sync::mpsc::UnboundedSender<&'static str>,
 ) {
-    let (acknowledgement_sender, acknowledgement_receiver) =
-        tokio::sync::mpsc::unbounded_channel();
+    let (acknowledgement_sender, acknowledgement_receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(
         (ordered_events.into_iter(), acknowledgement_receiver, None),
         |(mut pending_events, mut acknowledgement_receiver, expected_frame)| async move {
@@ -288,21 +290,30 @@ async fn quota_browse_empty_and_error_states_are_structurally_explicit() {
         KeyEventKind::Press,
         KeyCode::Esc,
     ))];
-    let empty = render_quota_capture_model_at(quota_empty_view_model(), 100, 24, exit.clone()).await;
+    let empty =
+        render_quota_capture_model_at(quota_empty_view_model(), 100, 24, exit.clone()).await;
     let error = render_quota_capture_model_at(quota_error_view_model(), 100, 24, exit).await;
 
-    assert!(empty.contains("responses -> none    [empty]"), "{empty}");
-    assert!(empty.contains("No selectable account"), "{empty}");
-    assert!(error.contains("responses -> unavailable    [error]"), "{error}");
-    assert!(error.contains("No selectable account"), "{error}");
+    assert!(
+        empty.contains("Pool details") && empty.contains("0/0"),
+        "{empty}"
+    );
+    assert!(empty.contains("No accounts match these filters"), "{empty}");
+    assert!(
+        error.contains("quota status unavailable")
+            && error.contains("Selection projection degraded"),
+        "{error}"
+    );
+    assert!(error.contains("No accounts match these filters"), "{error}");
 }
 
 #[tokio::test]
 async fn quota_status_reflows_when_terminal_width_changes() {
+    let terminal_width_reader: fn() -> Option<usize> = || None;
     let frames = element! {
         QuotaStatusComponent(
             view_model: quota_view_model(),
-            width: 0usize,
+            width: 0usize,terminal_width_reader:Some(terminal_width_reader),
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
@@ -327,7 +338,7 @@ async fn quota_status_reflows_when_terminal_width_changes() {
 }
 
 #[tokio::test]
-async fn quota_status_renders_minimum_height_from_short_resize() {
+async fn quota_status_honors_physical_height_from_short_resize() {
     let text = render_quota_capture_model_at(
         quota_view_model(),
         0,
@@ -340,9 +351,9 @@ async fn quota_status_renders_minimum_height_from_short_resize() {
     .await;
 
     assert_eq!(
-        meaningful_line_count(&text),
-        24,
-        "short terminals should still render the 24-row quota minimum:\n{text}"
+        text.lines().count(),
+        12,
+        "short terminals must honor the physical 12-row viewport:\n{text}"
     );
 }
 
@@ -379,34 +390,22 @@ async fn quota_status_uses_taller_height_for_account_rows() {
 
 #[tokio::test]
 async fn quota_status_keeps_focused_account_visible_when_height_clips_list() {
-    let text = render_quota_capture_model_at(
-        quota_many_account_view_model(),
-        160,
-        24,
-        vec![
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        ],
-    )
-    .await;
-
+    let events = (0..6)
+        .map(|_| TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)))
+        .collect();
+    let frames =
+        render_quota_navigation_until(quota_many_account_view_model(), 160, 24, events, "❯ acct06")
+            .await;
+    let text = frames.last().expect("focused account rendered");
+    assert!(text.contains("❯ acct06"), "{text}");
     assert!(
-        text.contains("❯ acct06"),
-        "focused quota account should stay visible when height clips the list:\n{text}"
-    );
-    assert!(
-        text.contains("more above"),
-        "clipped focused quota view should expose above-window context:\n{text}"
+        text.contains('┃'),
+        "measured scroll position remains visible: {text}"
     );
 }
 
 #[tokio::test]
-async fn quota_status_preserves_selected_panel_at_stacked_minimum_height() {
+async fn quota_status_vertical_browse_preserves_list_without_automatic_details() {
     let text = render_quota_capture_model_at(
         quota_many_account_view_model(),
         100,
@@ -419,8 +418,8 @@ async fn quota_status_preserves_selected_panel_at_stacked_minimum_height() {
     .await;
 
     assert!(
-        text.contains("Selected account"),
-        "stacked 100x24 quota view should preserve the selected panel:\n{text}"
+        !text.contains("Selected account") && text.contains("Pool details"),
+        "vertical 100x24 quota view should expose explicit details without consuming the list:\n{text}"
     );
     assert!(
         text.contains("❯ acct00"),
@@ -449,17 +448,17 @@ async fn quota_status_removes_panel_top_padding_and_dead_tail() {
         .get(sidecar_top_border_index + 1)
         .unwrap_or_else(|| panic!("quota panel content should follow top border:\n{text}"));
     assert!(
-        first_panel_content.contains("ssdev") && first_panel_content.contains("Selected account"),
-        "first account and selected header should sit directly below panel borders:\n{text}"
+        first_panel_content.contains("Account")
+            && first_panel_content.contains("Selected account")
+            && lines
+                .get(sidecar_top_border_index + 2)
+                .is_some_and(|line| line.contains("ssdev")),
+        "group headings and selected header follow borders; account follows headings without blank padding:\n{text}"
     );
+    // C5 keeps panels content-sized; the surface owns remaining empty space.
     assert!(
-        !lines
-            .iter()
-            .rev()
-            .skip(1)
-            .take(3)
-            .any(|line| line.trim_matches(['│', '╰', '╯', ' ', '─']).is_empty()),
-        "quota inner panels should not leave a dead blank tail near the bottom border:\n{text}"
+        text.contains("Extra") && text.contains("2 resets"),
+        "final account group stays visible: {text}"
     );
 }
 
@@ -490,7 +489,7 @@ fn quota_status_without_authoritative_selection_shows_focused_account_details() 
 
     assert!(text.contains("Selected account"), "{text}");
     assert!(
-        text.contains("ssdev    [blocked]    quota ineligible"),
+        text.contains("ssdev    blocked    quota ineligible"),
         "{text}"
     );
     assert!(
@@ -501,21 +500,37 @@ fn quota_status_without_authoritative_selection_shows_focused_account_details() 
 
 #[tokio::test]
 async fn quota_status_stacked_without_authoritative_selection_shows_focused_account_details() {
-    let text = render_quota_capture_model_at(
+    let frames = render_quota_filter_phases(
         quota_no_authoritative_selection_view_model(),
         100,
         24,
-        vec![TerminalEvent::Key(KeyEvent::new(
-            KeyEventKind::Press,
-            KeyCode::Esc,
-        ))],
+        vec![
+            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
+            (
+                "Account details",
+                vec![TerminalEvent::Key({
+                    let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('d'));
+                    key.modifiers = KeyModifiers::CONTROL;
+                    key
+                })],
+            ),
+        ],
+        None,
     )
     .await;
+    let text = frames
+        .iter()
+        .find(|frame| frame.contains("Account details"))
+        .expect("explicit details dialog");
 
-    assert!(text.contains("Selected account"), "{text}");
+    let dialog = quota_ux_clarity_test::actual_dialog_text(text, "Account details");
+    let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");
+    for fact in ["ssdev", "Status blocked", "Reason quota ineligible"] {
+        assert!(words.contains(fact), "{dialog}");
+    }
     assert!(
-        text.contains("ssdev    [blocked]    quota ineligible"),
-        "{text}"
+        !dialog.contains("Selected account"),
+        "one captured identity and task title: {dialog}"
     );
     assert!(
         !text.contains("No selectable account"),
@@ -543,30 +558,44 @@ fn quota_status_static_output_uses_natural_height_without_tui_padding() {
     );
     assert!(text.contains("Selected account"), "{text}");
     assert!(
-        text.contains("ssdev    [blocked]    quota ineligible"),
+        text.contains("ssdev    blocked    quota ineligible"),
         "{text}"
     );
 }
 
 #[tokio::test]
 async fn quota_status_narrow_rows_preserve_quota_windows_and_forecast() {
-    let text = render_quota_capture_model_at(
+    let frames = render_quota_filter_phases(
         quota_view_model(),
         48,
         48,
-        vec![TerminalEvent::Key(KeyEvent::new(
-            KeyEventKind::Press,
-            KeyCode::Esc,
-        ))],
+        vec![
+            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
+            (
+                "Account details",
+                vec![TerminalEvent::Key({
+                    let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('d'));
+                    key.modifiers = KeyModifiers::CONTROL;
+                    key
+                })],
+            ),
+        ],
+        None,
     )
     .await;
+    let text = frames
+        .iter()
+        .find(|frame| frame.contains("Account details"))
+        .expect("explicit narrow details dialog");
 
     assert!(text.contains("weekly"), "{text}");
     assert!(text.contains("5h"), "{text}");
     assert!(text.contains("□□□□□□□│"), "{text}");
     assert!(
-        text.contains("1 client") && text.contains("2 resets"),
-        "{text}"
+        frames.iter().any(|frame| !frame.contains("Account details")
+            && frame.contains("1 client")
+            && frame.contains("2 resets")),
+        "the narrow browse row must preserve client/reset counts before details: {frames:?}"
     );
 }
 
@@ -578,7 +607,7 @@ fn quota_status_static_narrow_rows_preserve_quota_windows_and_forecast() {
     assert!(text.contains("5h"), "{text}");
     assert!(text.contains("□□□□□□□│"), "{text}");
     assert!(
-        text.contains("1 client") && text.contains("2 resets"),
+        quota_column_words(&text, 21, 9).contains("1 client 2 resets"),
         "{text}"
     );
 }
@@ -618,10 +647,12 @@ fn quota_status_title_shows_serving_spinner_when_active_clients_exist() {
 fn quota_status_title_uses_row_freshness_when_all_accounts_are_exhausted() {
     let mut view_model = quota_view_model();
     view_model.pool_freshness_summary = "stale 1".to_owned();
-    view_model.route_line = "responses -> none    [blocked]".to_owned();
+    view_model.route_line = "responses -> none    blocked".to_owned();
     view_model.why_line = "why: no usable accounts".to_owned();
     view_model.rows[0].selected = false;
-    view_model.rows[0].status = "blocked".to_owned();
+    view_model.rows[0].status = super::quota_status_symbols::QuotaRowStatus::Account(
+        super::quota_status_symbols::QuotaAccountStatus::Blocked,
+    );
     view_model.selected = None;
 
     let text = render_quota_static_capture(view_model, 120, false);

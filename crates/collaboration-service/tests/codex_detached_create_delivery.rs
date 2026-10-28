@@ -3,16 +3,30 @@
 mod native_permission_echo;
 use codex_acp_adapter::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    BoardAvailability, CodexAppServerDeliveryRoute, CodexConversationOperationRecorder,
-    EndpointDirectory, MachineIdentity, NativeControlBackend, NativeGenerationGate,
-    ProviderOperationStore, ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe, UnmaterializedThreadHolder,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::BoardAvailability;
+
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ProviderOperationStore;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
+
+use collaboration_runtime::UnmaterializedThreadHolder;
 use futures_util::{SinkExt, StreamExt};
 use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
@@ -22,6 +36,13 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_tungstenite::tungstenite::Message;
+#[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -123,25 +144,39 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = delivery_router;
     let machine_identity = MachineIdentity::new(service_id.clone(), None)?;
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(SystemSubscriptionClock),
         });
     subscription_delivery.start().await?;
     let identity =
-        ServiceIdentity::new(&String::from(service_id.clone()), &String::from(service_id))?
+        ApplicationFixture::new(&String::from(service_id.clone()), &String::from(service_id))?
             .with_automation_store(Arc::clone(&automation_store))
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
             .with_provider_operation_store(Arc::clone(&store))
             .with_codex_conversation_recorder(Arc::clone(&recorder))
             .with_session_delivery(delivery)
-            .with_subscription_delivery_service(subscription_delivery.clone(), presence);
+            .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(SystemSubscriptionClock),
+        },
+    )?;
 
     let (native_started_tx, native_started_rx) = tokio::sync::oneshot::channel();
     let (release_native_tx, release_native_rx) = tokio::sync::oneshot::channel();
@@ -259,7 +294,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         .send(())
         .map_err(|_| "native response waiter closed")?;
 
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let waited = api_call(
         &served,
         "conversation_operation_wait",
@@ -292,6 +327,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     native.await??;
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
+    native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)
         .map_err(|_| io::Error::other("service retained automation store"))?
         .into_inner();
@@ -304,6 +340,9 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         "automation.sqlite",
         "automation.sqlite-wal",
         "automation.sqlite-shm",
+        "interaction.sqlite",
+        "interaction.sqlite-wal",
+        "interaction.sqlite-shm",
         "native.sock",
     ] {
         let file = root.join(name);

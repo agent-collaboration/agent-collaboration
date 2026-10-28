@@ -1,0 +1,15 @@
+{
+  "original": "Composed Host integration#metadata-True",
+  "originalSHA256": "a659f0f76d740ef4b2f7e73eb7f94b579b5ce086720f101e1b659cc251171dc0",
+  "target": "provider-metadata-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"metadata-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"available_commands_update\", \"availableCommands\": [{\"name\": \"compact\", \"description\": \"Compact context\", \"input\": {\"hint\": \"instructions\"}}], \"_meta\": {\"providerDetail\": \"retained\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"usage_update\", \"used\": 1234, \"size\": 200000, \"cost\": {\"amount\": 0.25, \"currency\": \"USD\"}, \"_meta\": {\"providerDetail\": \"usage-retained\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"current_mode_update\", \"currentModeId\": \"default\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"config_option_update\", \"configOptions\": []}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"session_info_update\", \"title\": \"Metadata example\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"Ordinary assistant reply\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"metadata-session\", \"update\": {\"sessionUpdate\": \"agent_thought_chunk\", \"content\": {\"type\": \"text\", \"text\": \"Useful reasoning\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

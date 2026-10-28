@@ -1,930 +1,624 @@
-use collaboration_client::BoardClientError;
-use collaboration_service::ServiceIdentity;
+//! Retained public SDK journeys on separate native project and fleet stores.
+use collaboration_client::board::RequestResult;
 use message_board::*;
-use message_board_storage::BoardStore;
-use std::sync::Arc;
-mod board_control_support;
-use board_control_support::served_api;
+use serde_json::json;
+#[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+pub mod board_fixture;
+#[path = "board_control_support/validation.rs"]
+mod validation;
+use board_fixture::TestError;
 
-fn maximum_escape_heavy_session(index: usize) -> Result<Identity, Box<dyn std::error::Error>> {
-    let prefix = format!("{index:04}");
-    Ok(Identity::Session {
-        session: SessionRef {
-            endpoint: SessionEndpointRef {
-                service_id: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
-                endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
-            },
-            session_id: SessionId::try_from(format!(
-                "{prefix}{}",
-                "\u{1}".repeat(4_096 - prefix.len())
-            ))?,
-        },
-    })
-}
+#[path = "board_control_support/fixture_setup.rs"]
+mod fixture_setup;
+use fixture_setup::{
+    accepted, acknowledge, cursor, inbox_request, post, refused, request, session, start,
+};
 
 #[tokio::test]
-async fn board_control_roundtrip_preserves_root_thread_and_actor()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "board-control-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
+async fn board_control_roundtrip_preserves_root_thread_and_actor() -> Result<(), TestError> {
+    let (fixture, client, project) = start().await?;
+    let actor: Identity = serde_json::from_value(fixture.actor.clone())?;
+    let root = post(
+        &fixture,
+        &client,
+        &actor,
+        Placement::Project {
+            project_id: project.clone(),
+        },
+        "Main",
+        vec![],
     )
-    .map_err(std::io::Error::other)?
-    .with_board_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
-    let client = served.client("board-test").await?;
-    let actor = Identity::Human {
-        human_id: HumanId::try_from("reader-one".to_owned())?,
-    };
-    let project_id = ProjectId::generate();
-    client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
-            name: ResourceName::try_from("Project".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: actor.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let board_id = BoardId::generate();
-    client
-        .board_create(BoardCreateRequest {
-            board_id: board_id.clone(),
-            project_id,
-            name: ResourceName::try_from("Board".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: actor.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let topic_id = TopicId::generate();
-    client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
-            board_id,
-            name: ResourceName::try_from("Topic".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: actor.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let root = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic { topic_id },
-            actor: actor.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Main".to_owned())?,
-            references: vec![].try_into()?,
-        })
-        .await?;
-    if root.watch_status.watching {
-        return Err("topic post unexpectedly changed Watch state".into());
-    }
-    let reply = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root.message.message_id.clone(),
+    .await?;
+    let thread = ThreadId::from(root.post_id.clone());
+    let shown = client
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: (thread.clone()).into(),
+            reader: ReadActor::Identified {
+                reader: actor.clone(),
             },
-            actor: actor.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Thread".to_owned())?,
-            references: vec![ReferenceTarget::Message {
-                message_id: root.message.message_id.clone(),
-            }]
-            .try_into()?,
         })
         .await?;
-    if reply.message.actor != actor {
-        return Err("thread actor was not preserved".into());
-    }
+    assert!(
+        !shown
+            .watch_status
+            .as_ref()
+            .ok_or("watch status missing")?
+            .watching
+    );
+    let reply = post(
+        &fixture,
+        &client,
+        &actor,
+        Placement::Thread {
+            thread_id: thread.clone(),
+        },
+        "Thread",
+        vec![ReferenceTarget::Post {
+            post_id: root.post_id.clone(),
+        }],
+    )
+    .await?;
+    assert_eq!(reply.actor, actor);
     let latest = client
-        .board_inbox_fetch(InboxFetchRequest {
-            scope: InboxScope::Topic {
-                topic_id: root.message.topic_id.clone(),
-            },
-            reader: actor.clone(),
-            read_mode: InboxReadMode::Latest,
-            page: PageRequest::default(),
-        })
+        .inbox_fetch(inbox_request(&actor, &project, InboxReadMode::Latest)?)
         .await?
         .page;
-    if latest.read_mode != InboxReadMode::Latest
-        || latest.ordering != MessageOrdering::NewestFirst
-        || latest.records.len() != 1
-        || !matches!(
-            latest.initialization,
-            InboxInitializationStatus::NotApplicable
-        )
-        || !matches!(&latest.records[0], InboxActivity::MessageCreated { message, .. } if message.message_id == root.message.message_id)
-    {
-        return Err(
-            "scoped latest Control read lost mode, order, or watched-thread context".into(),
-        );
-    }
+    assert_eq!(latest.read_mode, InboxReadMode::Latest);
+    assert_eq!(latest.ordering, PostOrdering::NewestFirst);
+    assert!(latest.initializations.is_empty());
+    assert_eq!(
+        latest.records.len(),
+        1,
+        "latest retains unwatched thread context"
+    );
+    assert!(
+        matches!(&latest.records[0],InboxActivity::PostCreated { post, .. } if post.post_id == root.post_id)
+    );
     let discovery = client
-        .board_discovery_search(DiscoverySearchRequest {
-            query: SearchQuery::try_from("topic".to_owned())?,
+        .discovery_search(DiscoverySearchRequest {
+            query: SearchQuery::try_from("project".to_owned())?,
             scope: DiscoveryScope::Board {
-                board_id: root.message.board_id.clone(),
+                board_id: fixture.board.clone(),
             },
-            kind: DiscoveryKind::Topic,
+            kind: DiscoveryKind::ProjectDirectoryEntry,
             include_archived: false,
             page: PageRequest::default(),
         })
         .await?;
-    if discovery.page.records.len() != 1 {
-        return Err("Control discovery search did not find topic metadata".into());
-    }
+    assert_eq!(discovery.page.records.len(), 1);
     let search = client
-        .board_message_search(MessageSearchRequest {
+        .post_search(PostSearchRequest {
             query: SearchQuery::try_from("THREAD".to_owned())?,
-            scope: MessageListScope::Thread {
-                root_message_id: root.message.message_id.clone(),
+            scope: PostListScope::Thread {
+                thread: (thread.clone()).into(),
             },
-            kind: SearchMessageKind::Thread,
+            kind: SearchPostKind::Thread,
             include_archived: false,
             page: PageRequest::default(),
         })
         .await?;
-    if search.page.records.len() != 1
-        || search.page.records[0].message.message_id != reply.message.message_id
-    {
-        return Err("Control message search did not find actual thread content".into());
-    }
-    let thread = client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: root.message.message_id,
-            reader: None,
-        })
-        .await?;
-    if thread.thread.state != ThreadState::Unresolved {
-        return Err("new thread was not unresolved".into());
-    }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    assert_eq!(search.page.records.len(), 1);
+    assert_eq!(search.page.records[0].post.post_id, reply.post_id);
+    assert_eq!(
+        client
+            .thread_show(ThreadShowRequest {
+                include_redacted: false,
+                thread: (thread).into(),
+                reader: ReadActor::Anonymous {}
+            })
+            .await?
+            .thread
+            .state,
+        ThreadState::Open
+    );
+    fixture.stop().await
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "board-control-thread-list-frame-budget-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let mut seed = BoardStore::open(&path).await?;
-    let owner = Identity::Human {
-        human_id: HumanId::try_from("owner".to_owned())?,
-    };
-    let project_id = ProjectId::generate();
-    seed.create_project(ProjectCreateRequest {
-        project_id: project_id.clone(),
-        name: ResourceName::try_from("Project".to_owned())?,
-        description: Description::try_from(String::new())?,
-        actor: owner.clone(),
-        acting_for: None,
-    })
-    .await?;
-    let board_id = BoardId::generate();
-    seed.create_board(BoardCreateRequest {
-        board_id: board_id.clone(),
-        project_id: project_id.clone(),
-        name: ResourceName::try_from("Board".to_owned())?,
-        description: Description::try_from(String::new())?,
-        actor: owner.clone(),
-        acting_for: None,
-    })
-    .await?;
-    let topic_id = TopicId::generate();
-    seed.create_topic(TopicCreateRequest {
-        topic_id: topic_id.clone(),
-        board_id,
-        name: ResourceName::try_from("Topic".to_owned())?,
-        description: Description::try_from(String::new())?,
-        actor: owner.clone(),
-        acting_for: None,
-    })
-    .await?;
-    let mut expected_roots = Vec::new();
+-> Result<(), TestError> {
+    let (fixture, client, project) = start().await?;
+    let owner: Identity = serde_json::from_value(fixture.actor.clone())?;
+    // The subject stays fixed while holder identities and admitted writes vary.
+    let discussion_subject = fixture.discussion_subject(&project).await?;
+    let mut expected = Vec::new();
+    let mut write_latencies = Vec::new();
+    let creation_started = std::time::Instant::now();
     for index in 0..100 {
-        let created = seed
-            .create_thread(
-                ThreadCreateRequest {
-                    message_id: MessageId::generate(),
-                    topic_id: topic_id.clone(),
-                    actor: maximum_escape_heavy_session(index)?,
-                    acting_for: None,
-                    text: MessageText::try_from("Root".to_owned())?,
-                    references: MessageReferences::try_from(Vec::new())?,
-                    role: Some(ParticipantRole::Orchestrator),
-                    watch: false,
-                },
-                chrono::Utc::now(),
-            )
-            .await?;
-        expected_roots.push(created.message.message_id);
+        let prefix = format!("{index:04}");
+        let actor = session(format!("{prefix}{}", "\u{1}".repeat(4_096 - prefix.len())))?;
+        let post_id = PostId::generate();
+        let write_started = std::time::Instant::now();
+        accepted(&client.thread_create(request(&actor,json!({"postId":post_id,"projectId":project,"about":discussion_subject,"text":"Root","references":[],"addressees":[],"role":"orchestrator","watch":false}))?).await?);
+        write_latencies.push(write_started.elapsed().as_micros());
+        expected.push(ThreadId::from(post_id));
     }
-    expected_roots.sort();
-    seed.close().await?;
-
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_board_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
-    let client = served.client("thread-list-frame-budget").await?;
-    let mut cursor = None;
-    let mut observed_roots = Vec::new();
+    let creation_elapsed = creation_started.elapsed();
+    write_latencies.sort_unstable();
+    eprintln!(
+        "100 maximum escaped-holder admitted writes: p50={}us; p95={}us; max={}us",
+        write_latencies.get(49).ok_or("p50")?,
+        write_latencies.get(94).ok_or("p95")?,
+        write_latencies.last().ok_or("max")?
+    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            *write_latencies.get(94).ok_or("p95")? < 50_000,
+            "release maximum-identity admitted write p95 must stay below 50ms"
+        );
+    }
+    expected.sort();
+    let mut next_cursor = None;
+    let mut observed = Vec::new();
+    let traversal_started = std::time::Instant::now();
     loop {
         let result = client
-            .board_thread_list(ThreadListRequest {
-                project_id: project_id.clone(),
+            .thread_list(ThreadListRequest {
+                workspace_id: fixture.workspace.clone(),
                 reader: owner.clone(),
                 watched_only: false,
                 page: PageRequest {
                     limit: PageLimit::try_from(100)?,
-                    cursor,
+                    cursor: next_cursor,
                 },
             })
             .await?;
-        let response = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "thread-list-frame-budget",
-            "result": result,
-        });
-        if serde_json::to_vec(&response)?.len() >= collaboration_protocol::MAX_CONTROL_FRAME_BYTES {
-            return Err("Control Thread list exceeded its frame budget".into());
-        }
+        let response = json!({"jsonrpc":"2.0","id":"thread-list-frame-budget","result":result});
+        assert!(
+            serde_json::to_vec(&response)?.len() < collaboration_protocol::MAX_CONTROL_FRAME_BYTES
+        );
         let result: ThreadListResult = serde_json::from_value(response["result"].clone())?;
-        if result
-            .page
-            .records
-            .iter()
-            .any(|thread| thread.orchestrator.is_none())
-        {
-            return Err("Control Thread list dropped a holder projection".into());
-        }
-        observed_roots.extend(
+        assert!(
+            result
+                .page
+                .records
+                .iter()
+                .all(|thread| thread.thread.orchestrator.is_some())
+        );
+        observed.extend(
             result
                 .page
                 .records
                 .into_iter()
-                .map(|thread| thread.root_message_id),
+                .map(|thread| thread.thread.thread_id),
         );
-        let Some(next_cursor) = result.page.next_cursor else {
+        next_cursor = result.page.next_cursor;
+        if next_cursor.is_none() {
             break;
-        };
-        cursor = Some(next_cursor);
+        }
     }
-    if observed_roots != expected_roots {
-        return Err("Control Thread list cursor traversal skipped or repeated a Thread".into());
+    assert_eq!(
+        observed, expected,
+        "thread cursor traversal skipped or repeated a holder"
+    );
+    let traversal_elapsed = traversal_started.elapsed();
+    if !cfg!(debug_assertions) {
+        assert!(
+            traversal_elapsed <= std::time::Duration::from_secs(1),
+            "release complete 100-holder traversal must stay within 1s; observed {traversal_elapsed:?}"
+        );
     }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
+    let shutdown_started = std::time::Instant::now();
+    fixture.stop().await?;
+    eprintln!(
+        "100 escape-heavy holders: public creation={}us; complete traversal={}us; joined shutdown={}us",
+        creation_elapsed.as_micros(),
+        traversal_elapsed.as_micros(),
+        shutdown_started.elapsed().as_micros()
+    );
     Ok(())
 }
 
 #[tokio::test]
-async fn malformed_board_requests_return_safe_specific_failures()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "board-control-validation-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_board_store(store.clone());
-    let valid_id = MessageId::generate();
-    let actor = serde_json::json!({"kind":"human","humanId":"reader"});
-    let private_value = "PRIVATE_REQUEST_VALUE_MUST_NOT_ECHO";
-    let responses = board_control_support::send_raw_board_requests(
-        identity,
-        vec![
-            serde_json::json!({"jsonrpc":"2.0","id":"missingScopeFresh","method":"board/inboxFetch","params":{
-                "reader":actor,"readMode":"unread","page":{}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"missingScopeContinuation","method":"board/inboxFetch","params":{
-                "reader":actor,"readMode":"latest","page":{"cursor":"opaque-continuation"}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"actor","method":"board/projectCreate","params":{
-                "projectId":valid_id,"name":"Project","description":"","actor":{"kind":"futureSecret","private":private_value}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"reader","method":"board/inboxFetch","params":{
-                "projectId":valid_id,"reader":null,"page":{"limit":50,"cursor":null}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"actingFor","method":"board/projectCreate","params":{
-                "projectId":valid_id,"name":"Project","description":"","actor":actor,
-                "actingFor":{"kind":"session","session":{"private":private_value}}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"topicName","method":"board/topicCreate","params":{
-                "topicId":valid_id,"boardId":valid_id,"name":"   ","description":"","actor":actor
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"uuid","method":"board/projectShow","params":{"projectId":"not-a-uuid"}}),
-            serde_json::json!({"jsonrpc":"2.0","id":"description","method":"board/projectCreate","params":{
-                "projectId":valid_id,"name":"Project","description":"x".repeat(16_385),"actor":actor
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"name","method":"board/projectCreate","params":{
-                "projectId":valid_id,"name":"n".repeat(257),"description":"","actor":actor
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"text","method":"board/messagePost","params":{
-                "messageId":valid_id,"placement":{"kind":"topic","topicId":valid_id},
-                "actor":actor,"text":"t".repeat(65_537),"references":[]
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"page","method":"board/projectList","params":{
-                "repository":null,"page":{"limit":101,"cursor":null}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"position","method":"board/messageList","params":{
-                "scope":{"kind":"topic","topicId":valid_id},
-                "selection":{"kind":"afterPosition","afterActivitySequence":9_223_372_036_854_775_808_u64},
-                "page":{"limit":50,"cursor":null}
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"placement","method":"board/messagePost","params":{
-                "messageId":valid_id,"placement":{"kind":"privateKind","private":private_value},
-                "actor":actor,"text":"message","references":[]
-            }}),
-            serde_json::json!({"jsonrpc":"2.0","id":"extra","method":"board/projectShow","params":{
-                "projectId":valid_id,"privateField":private_value
-            }}),
-        ],
-    )
-    .await?;
-    let expected = [
-        ("invalidField", "scope", "required"),
-        ("invalidField", "scope", "required"),
-        ("invalidIdentity", "actor", "4096"),
-        ("invalidIdentity", "reader", "4096"),
-        ("invalidIdentity", "actingFor", "4096"),
-        ("invalidTopicName", "name", "256"),
-        ("invalidField", "projectId", "UUIDv7"),
-        ("invalidField", "description", "16384"),
-        ("invalidField", "name", "256"),
-        ("invalidField", "text", "65536"),
-        ("invalidField", "page.limit", "100"),
-        (
-            "invalidField",
-            "selection.afterActivitySequence",
-            "9223372036854775807",
-        ),
-        ("invalidField", "placement", "topic or thread"),
-        ("invalidField", "request", "camelCase"),
-    ];
-    if responses.len() != expected.len() {
-        return Err("validation response count changed".into());
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Measure normal UUID identities separately; the permanent maximum-identity frame proof remains unchanged."
+)]
+async fn control_uuid_holder_writes_report_scope_growth_latency() -> Result<(), TestError> {
+    let (fixture, client, project) = start().await?;
+    let owner: Identity = serde_json::from_value(fixture.actor.clone())?;
+    let mut expected = Vec::new();
+    let mut write_latencies = Vec::new();
+    for _ in 0..100 {
+        let actor = session(PostId::generate().as_str().to_owned())?;
+        let post = PostId::generate();
+        let started = std::time::Instant::now();
+        accepted(&client.thread_create(request(&actor, json!({"postId":post,"projectId":project,"about":fixture.discussion_subject(&project).await?,"text":"Root","references":[],"addressees":[],"role":"orchestrator","watch":false}))?).await?);
+        write_latencies.push(started.elapsed().as_micros());
+        expected.push(ThreadId::from(post));
     }
-    for (response, (kind, field, requirement)) in responses.iter().zip(expected) {
-        if response
-            .pointer("/error/data/kind")
-            .and_then(serde_json::Value::as_str)
-            != Some(kind)
-            || response
-                .pointer("/error/data/details/field")
-                .and_then(serde_json::Value::as_str)
-                != Some(field)
-            || !response
-                .pointer("/error/data/details/requirement")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|value| value.contains(requirement))
-        {
-            return Err(format!("unexpected classified board failure: {response}").into());
-        }
-        let encoded = response.to_string();
-        if encoded.contains(private_value)
-            || encoded.contains("privateField")
-            || encoded.contains("privateKind")
-        {
-            return Err(
-                "validation response echoed a supplied value, unknown key, or private variant"
-                    .into(),
-            );
-        }
-    }
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    let started = std::time::Instant::now();
+    let threads = client
+        .thread_list(ThreadListRequest {
+            workspace_id: fixture.workspace.clone(),
+            reader: owner,
+            watched_only: false,
+            page: PageRequest {
+                limit: PageLimit::try_from(100)?,
+                cursor: None,
+            },
+        })
+        .await?;
+    assert_eq!(threads.page.records.len(), 100);
+    assert!(threads.page.next_cursor.is_none());
+    assert!(
+        threads
+            .page
+            .records
+            .iter()
+            .all(|thread| thread.thread.orchestrator.is_some())
+    );
+    expected.sort();
+    assert_eq!(
+        threads
+            .page
+            .records
+            .into_iter()
+            .map(|thread| thread.thread.thread_id)
+            .collect::<Vec<_>>(),
+        expected
+    );
+    write_latencies.sort_unstable();
+    eprintln!(
+        "100 UUID holders: admitted write p50={}us; p95={}us; max={}us; traversal={}us",
+        write_latencies.get(49).ok_or("p50")?,
+        write_latencies.get(94).ok_or("p95")?,
+        write_latencies.last().ok_or("max")?,
+        started.elapsed().as_micros()
+    );
+    fixture.stop().await
 }
 
 #[tokio::test]
-async fn control_board_failures_pagination_and_inbox_use_the_public_path()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "board-control-behavior-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_board_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
-    let client = served.client("board-behavior-test").await?;
-    // Each call is its own request; a rejection leaves the client usable.
-    macro_rules! rejected_call {
-        ($method:ident, $request:expr) => {{ rejected_error(client.$method($request).await)? }};
-    }
-    let alice = Identity::Human {
-        human_id: HumanId::try_from("alice".to_owned())?,
-    };
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
+async fn control_board_failures_pagination_and_inbox_use_the_public_path() -> Result<(), TestError>
+{
+    let (fixture, client, project) = start().await?;
+    let alice: Identity = serde_json::from_value(fixture.actor.clone())?;
     let bob = Identity::Human {
         human_id: HumanId::try_from("bob".to_owned())?,
     };
-    let project_id = ProjectId::generate();
-    let project_request = ProjectCreateRequest {
-        project_id: project_id.clone(),
-        name: ResourceName::try_from("Project".to_owned())?,
-        description: Description::try_from(String::new())?,
-        actor: alice.clone(),
-        acting_for: None,
-    };
-    client.board_project_create(project_request.clone()).await?;
-    if rejected_call!(board_project_create, project_request).kind
-        != BoardFailureKind::ResourceAlreadyExists
-    {
-        return Err("duplicate project did not return resourceAlreadyExists".into());
-    }
-    let board_id = BoardId::generate();
-    client
-        .board_create(BoardCreateRequest {
-            board_id: board_id.clone(),
-            project_id: project_id.clone(),
-            name: ResourceName::try_from("Board".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: alice.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let topic_id = TopicId::generate();
-    client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
-            board_id: board_id.clone(),
-            name: ResourceName::try_from("Topic".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: alice.clone(),
-            acting_for: None,
-        })
-        .await?;
-    if rejected_call!(
-        board_topic_create,
-        TopicCreateRequest {
-            topic_id: TopicId::generate(),
-            board_id: board_id.clone(),
-            name: ResourceName::try_from("Topic".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: alice.clone(),
-            acting_for: None,
-        }
-    )
-    .kind
-        != BoardFailureKind::InvalidTopicName
-    {
-        return Err("duplicate topic name did not return invalidTopicName".into());
-    }
-    client
-        .board_inbox_fetch(InboxFetchRequest {
-            scope: message_board::InboxScope::Project {
-                project_id: project_id.clone(),
+    for (duplicate_project, refusal) in [
+        (
+            project.clone(),
+            Refusal::AlreadyExists(project.clone().into()),
+        ),
+        (
+            ProjectId::generate(),
+            Refusal::NameConflict {
+                name: ResourceName::try_from("Project".to_owned())?,
+                existing: project.clone().into(),
             },
-            read_mode: message_board::InboxReadMode::Unread,
-            reader: bob.clone(),
-            page: PageRequest::default(),
-        })
-        .await?;
-    let root = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic {
-                topic_id: topic_id.clone(),
-            },
-            actor: alice.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Root".to_owned())?,
-            references: vec![].try_into()?,
-        })
-        .await?;
-    let cooldown = rejected_call!(
-        board_message_post,
-        MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic {
-                topic_id: topic_id.clone(),
-            },
-            actor: alice.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Too soon".to_owned())?,
-            references: vec![].try_into()?,
-        }
-    );
-    if cooldown.kind != BoardFailureKind::TopLevelMessageCooldown
-        || !matches!(cooldown.details, BoardErrorDetails::Cooldown { retry_after_seconds } if (1..=60).contains(&retry_after_seconds))
-    {
-        return Err("Control cooldown failure omitted its actionable remaining duration".into());
-    }
-    client
-        .board_thread_watch(ThreadWatchRequest {
-            root_message_id: root.message.message_id.clone(),
-            actor: bob.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let reply = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root.message.message_id.clone(),
-            },
-            actor: alice.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Reply".to_owned())?,
-            references: vec![ReferenceTarget::Message {
-                message_id: root.message.message_id.clone(),
-            }]
-            .try_into()?,
-        })
-        .await?;
-    let inbox = client
-        .board_inbox_fetch(InboxFetchRequest {
-            scope: message_board::InboxScope::Project {
-                project_id: project_id.clone(),
-            },
-            read_mode: message_board::InboxReadMode::Unread,
-            reader: bob.clone(),
-            page: PageRequest::default(),
-        })
-        .await?;
-    if !inbox.page.records.iter().any(|activity| matches!(activity, InboxActivity::MessageCreated { message, .. } if message.message_id == reply.message.message_id)) {
-        return Err("Control inbox did not expose the watched thread reply".into());
-    }
-    let acknowledgement = client
-        .board_inbox_acknowledge(InboxAcknowledgeRequest {
-            actor: bob.clone(),
-            acting_for: None,
-            scope: ReadScope::Thread {
-                root_message_id: root.message.message_id.clone(),
-            },
-            through_activity_sequence: reply.message.activity_sequence,
-        })
-        .await?;
-    if !acknowledgement.project_unread_summary.has_unread {
-        return Err(
-            "Thread acknowledgement incorrectly cleared the independent topic scope".into(),
-        );
-    }
-    let topic_acknowledgement = client
-        .board_inbox_acknowledge(InboxAcknowledgeRequest {
-            actor: bob.clone(),
-            acting_for: None,
-            scope: ReadScope::Topic {
-                topic_id: topic_id.clone(),
-            },
-            through_activity_sequence: root.message.activity_sequence,
-        })
-        .await?;
-    if topic_acknowledgement.project_unread_summary.has_unread {
-        return Err("Control acknowledgements did not clear both processed scopes".into());
-    }
-    client
-        .board_thread_resolve(ThreadResolveRequest {
-            root_message_id: root.message.message_id.clone(),
-            actor: alice.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let resolved = rejected_call!(
-        board_message_post,
-        MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root.message.message_id.clone(),
-            },
-            actor: bob.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Blocked".to_owned())?,
-            references: vec![].try_into()?,
-        }
-    );
-    if resolved.kind != BoardFailureKind::ThreadResolved
-        || resolved.message
-            != "This thread is resolved. Mark it unresolved before adding a thread message."
-    {
-        return Err("Control resolved-thread failure mapping changed".into());
-    }
-    client
-        .board_thread_unresolve(ThreadUnresolveRequest {
-            root_message_id: root.message.message_id.clone(),
-            actor: alice.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let escaped_body = "\\\"".repeat(32_768);
-    for _index in 0..9 {
-        client
-            .board_message_post(MessagePostRequest {
-                message_id: MessageId::generate(),
-                placement: Placement::Thread {
-                    root_message_id: root.message.message_id.clone(),
-                },
-                actor: alice.clone(),
-                acting_for: None,
-                text: MessageText::try_from(escaped_body.clone())?,
-                references: vec![].try_into()?,
+        ),
+    ] {
+        let create: ProjectCreateRequest = request(
+            &alice,
+            json!({"projectId":duplicate_project,"boardId":fixture.board,"title":"Project"}),
+        )?;
+        // The connected central decides the collision; the SDK must preserve
+        // that exact refusal on both the initial call and keyed replay.
+        let rejected = client.project_create(create.clone()).await?;
+        assert_eq!(
+            rejected.result,
+            RequestResult::ScopeUnavailable(ScopeRefusal::ProjectRejected {
+                project: duplicate_project,
+                reason: ProjectRejection::Directory { refusal },
             })
-            .await?;
+        );
+        assert_eq!(client.project_create(create).await?.result, rejected.result);
     }
-    let mut cursor = None;
-    let mut observed_messages = 0;
+    let mut initialize = inbox_request(&bob, &project, InboxReadMode::Unread)?;
+    initialize = InboxFetchRequest::new(InboxFetchRequestProps {
+        initializations: vec![ReadInitializationEntry {
+            project_id: project.clone(),
+            request_id: RequestId::generate(),
+        }],
+        ..initialize.into()
+    })?;
+    let initialized = client.inbox_fetch(initialize).await?;
+    let ProjectWriteCallResult::Replied { reply } = &initialized.page.initializations[0].outcome
+    else {
+        return Err("initializer failed".into());
+    };
+    accepted(reply);
+    let root = post(
+        &fixture,
+        &client,
+        &alice,
+        Placement::Project {
+            project_id: project.clone(),
+        },
+        "Root",
+        vec![],
+    )
+    .await?;
+    let thread = ThreadId::from(root.post_id.clone());
+    accepted(
+        &client
+            .thread_watch(request(&bob, json!({"thread":{"thread":thread}}))?)
+            .await?,
+    );
+    let reply = post(
+        &fixture,
+        &client,
+        &alice,
+        Placement::Thread {
+            thread_id: thread.clone(),
+        },
+        "Reply",
+        vec![ReferenceTarget::Post {
+            post_id: root.post_id.clone(),
+        }],
+    )
+    .await?;
+    let inbox = client
+        .inbox_fetch(inbox_request(&bob, &project, InboxReadMode::Unread)?)
+        .await?
+        .page;
+    assert!(inbox.records.iter().any(|activity|matches!(activity,InboxActivity::PostCreated { post,.. } if post.post_id==reply.post_id)));
+    acknowledge(
+        &client,
+        &bob,
+        ReadScope::Thread {
+            thread_id: thread.clone(),
+        },
+        cursor(&reply)?,
+    )
+    .await?;
+    assert!(
+        !client
+            .inbox_fetch(inbox_request(&bob, &project, InboxReadMode::Unread)?)
+            .await?
+            .page
+            .records
+            .is_empty(),
+        "thread ack cleared independent project root"
+    );
+    acknowledge(
+        &client,
+        &bob,
+        ReadScope::Project {
+            project_id: project.clone(),
+        },
+        cursor(&root)?,
+    )
+    .await?;
+    assert!(
+        client
+            .inbox_fetch(inbox_request(&bob, &project, InboxReadMode::Unread)?)
+            .await?
+            .page
+            .records
+            .is_empty()
+    );
+    accepted(
+        &client
+            .thread_resolve(request(
+                &alice,
+                json!({"thread":{"thread":thread},"reason":"conversation complete"}),
+            )?)
+            .await?,
+    );
+    let resolved=client.thread_post(request(&bob,json!({"postId":PostId::generate(),"placement":{"kind":"thread","thread":{"thread":thread}},"text":"Blocked","references":[],"addressees":[]}))?).await?;
+    assert!(refused(&resolved)?.iter().any(|reason|matches!(reason,Refusal::Closed { subject } if subject==&RecordRef::from(thread.clone()))));
+    accepted(
+        &client
+            .thread_unresolve(request(&alice, json!({"thread":{"thread":thread}}))?)
+            .await?,
+    );
+    let escaped_body = "\\\"".repeat(32_768);
+    for _ in 0..9 {
+        post(
+            &fixture,
+            &client,
+            &alice,
+            Placement::Thread {
+                thread_id: thread.clone(),
+            },
+            &escaped_body,
+            vec![],
+        )
+        .await?;
+    }
+    let mut next_cursor = None;
+    let mut observed = 0;
     let mut pages = 0;
     loop {
         let result = client
-            .board_message_list(MessageListRequest {
-                scope: MessageListScope::Board {
-                    board_id: board_id.clone(),
+            .post_list(PostListRequest {
+                scope: PostListScope::Board {
+                    board_id: fixture.board.clone(),
                 },
-                selection: MessageSelection::Latest,
+                selection: PostSelection::Latest,
                 page: PageRequest {
-                    limit: 100.try_into()?,
-                    cursor,
+                    limit: PageLimit::try_from(100)?,
+                    cursor: next_cursor,
                 },
             })
             .await?;
-        if serde_json::to_vec(&result)?.len() >= collaboration_protocol::MAX_CONTROL_FRAME_BYTES {
-            return Err("Control message page exceeded its frame budget".into());
-        }
-        observed_messages += result.page.records.len();
+        assert!(
+            serde_json::to_vec(&result)?.len() < collaboration_protocol::MAX_CONTROL_FRAME_BYTES,
+            "post page exceeded frame budget"
+        );
+        observed += result.page.records.len();
         pages += 1;
-        cursor = result.page.next_cursor;
-        if cursor.is_none() {
+        next_cursor = result.page.next_cursor;
+        if next_cursor.is_none() {
             break;
         }
     }
-    if observed_messages != 11 || pages < 2 {
-        return Err("Control pagination skipped messages or ignored its byte budget".into());
-    }
-    client
-        .board_archive(BoardArchiveRequest {
-            board_id,
-            actor: alice.clone(),
-            acting_for: None,
-        })
-        .await?;
-    if rejected_call!(
-        board_message_post,
-        MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root.message.message_id,
-            },
-            actor: alice,
-            acting_for: None,
-            text: MessageText::try_from("Archived".to_owned())?,
-            references: vec![].try_into()?,
-        }
-    )
-    .kind
-        != BoardFailureKind::ArchivedBoard
-    {
-        return Err("archived board post did not return archivedBoard".into());
-    }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
-}
-
-fn rejected_error<TValue>(
-    result: Result<TValue, BoardClientError>,
-) -> Result<BoardError, Box<dyn std::error::Error>> {
-    match result {
-        Err(BoardClientError::Rejected(error)) => Ok(*error),
-        Err(error) => Err(error.into()),
-        Ok(_) => Err("board operation unexpectedly succeeded".into()),
-    }
+    assert_eq!(observed, 11);
+    assert!(pages >= 2, "byte budget did not split escaped content");
+    accepted(
+        &client
+            .board_archive(request(&alice, json!({"boardId":fixture.board}))?)
+            .await?,
+    );
+    let archived=client.thread_post(request(&alice,json!({"postId":PostId::generate(),"placement":{"kind":"thread","thread":{"thread":thread}},"text":"Archived","references":[],"addressees":[]}))?).await?;
+    assert!(
+        refused(&archived)?
+            .iter()
+            .any(|reason| matches!(reason, Refusal::Archived))
+    );
+    fixture.stop().await
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn control_participant_operations_preserve_typed_state_and_authorization()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "board-control-participants-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_board_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
-    let client = served.client("participant-control-test").await?;
-    // Each call is its own request; a rejection leaves the client usable.
-    macro_rules! rejected_call {
-        ($method:ident, $request:expr) => {{ rejected_error(client.$method($request).await)? }};
-    }
-    let owner = Identity::Human {
-        human_id: HumanId::try_from("owner".to_owned())?,
-    };
-    let session = |session_id: &str| -> Result<Identity, Box<dyn std::error::Error>> {
-        Ok(Identity::Session {
-            session: SessionRef {
-                endpoint: SessionEndpointRef {
-                    service_id: ServiceId::try_from(
-                        "00000000-0000-4000-8000-000000000001".to_owned(),
-                    )?,
-                    endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
-                },
-                session_id: SessionId::try_from(session_id.to_owned())?,
-            },
-        })
-    };
-    let orchestrator = session("orchestrator")?;
-    let reviewer = session("reviewer")?;
-    let unjoined = session("unjoined")?;
-    let project_id = ProjectId::generate();
-    client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
-            name: ResourceName::try_from("Project".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let board_id = BoardId::generate();
-    client
-        .board_create(BoardCreateRequest {
-            board_id: board_id.clone(),
-            project_id,
-            name: ResourceName::try_from("Board".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await?;
-    let topic_id = TopicId::generate();
-    client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
-            board_id,
-            name: ResourceName::try_from("Topic".to_owned())?,
-            description: Description::try_from(String::new())?,
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await?;
-
-    let created = client
-        .board_thread_create(ThreadCreateRequest {
-            message_id: MessageId::generate(),
-            topic_id,
-            actor: orchestrator.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Root".to_owned())?,
-            references: MessageReferences::try_from(Vec::new())?,
-            role: Some(ParticipantRole::Orchestrator),
-            watch: true,
-        })
-        .await?;
-    let root_message_id = created.message.message_id.clone();
-    if created.orchestrator.as_ref().map(|holder| &holder.identity) != Some(&orchestrator) {
-        return Err("Control Thread Create did not return the Orchestrator holder".into());
-    }
-    let joined = client
-        .board_thread_join(ThreadJoinRequest {
-            mode: None,
-            when_idle: None,
-            root_message_id: root_message_id.clone(),
-            actor: reviewer.clone(),
-            role: ParticipantRole::Reviewer,
-            watch: true,
-            replace: None,
-            note: Some(ParticipantNote::try_from("Control reviewer".to_owned())?),
-        })
-        .await?;
-    if joined.participant.identity != reviewer || !joined.watch_status.watching {
-        return Err(
-            "Control Thread Join did not preserve participant identity and Watch choice".into(),
-        );
-    }
+-> Result<(), TestError> {
+    let (fixture, client, project) = start().await?;
+    let owner: Identity = serde_json::from_value(fixture.actor.clone())?;
+    let orchestrator = session("orchestrator".to_owned())?;
+    let reviewer = session("reviewer".to_owned())?;
+    let unjoined = session("unjoined".to_owned())?;
+    let post_id = PostId::generate();
+    let thread = ThreadId::from(post_id.clone());
+    accepted(&client.thread_create(request(&orchestrator,json!({"postId":post_id,"projectId":project,"about":fixture.discussion_subject(&project).await?,"text":"Root","references":[],"addressees":[],"role":"orchestrator","watch":true}))?).await?);
+    assert_eq!(
+        client
+            .thread_show(ThreadShowRequest {
+                include_redacted: false,
+                thread: (thread.clone()).into(),
+                reader: ReadActor::Anonymous {}
+            })
+            .await?
+            .thread
+            .orchestrator
+            .as_ref()
+            .map(|holder| &holder.identity),
+        Some(&orchestrator)
+    );
+    let mut join = serde_json::to_value(request::<ThreadJoinRequest>(
+        &reviewer,
+        json!({"thread":{"thread":thread},"role":"reviewer","watch":true,"replace":null,"note":"Control reviewer"}),
+    )?)?;
+    join.as_object_mut().ok_or("join")?.remove("actingFor");
+    accepted(&client.thread_join(serde_json::from_value(join)?).await?);
     let listed = client
-        .board_thread_participant_list(ThreadParticipantListRequest {
-            root_message_id: root_message_id.clone(),
+        .thread_participant_list(ThreadParticipantListRequest {
+            thread: (thread.clone()).into(),
             page: PageRequest::default(),
         })
         .await?;
-    if listed.page.records.len() != 2
-        || listed.orchestrator.as_ref().map(|holder| &holder.identity) != Some(&orchestrator)
-    {
-        return Err("Control participant list did not return both Participants and holder".into());
-    }
-
-    let unjoined_post = rejected_call!(
-        board_message_post,
-        MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root_message_id.clone(),
-            },
-            actor: unjoined.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Blocked".to_owned())?,
-            references: MessageReferences::try_from(Vec::new())?,
-        }
+    assert_eq!(listed.page.records.len(), 2);
+    assert!(
+        listed
+            .page
+            .records
+            .iter()
+            .any(|participant| participant.identity == reviewer && participant.is_open())
     );
-    if unjoined_post.kind != BoardFailureKind::ParticipantRequired
-        || unjoined_post.next_action != BoardNextAction::JoinThread
-        || !matches!(
-            unjoined_post.details,
-            BoardErrorDetails::ParticipantRefusal { refusal }
-                if refusal.root_message_id == root_message_id && refusal.actor == unjoined
-        )
-    {
-        return Err("Control session refusal lost flattened Participant details".into());
-    }
-    let session_resolve = rejected_call!(
-        board_thread_resolve,
-        ThreadResolveRequest {
-            root_message_id: root_message_id.clone(),
-            actor: reviewer.clone(),
-            acting_for: None,
-        }
+    assert_eq!(
+        listed.orchestrator.as_ref().map(|holder| &holder.identity),
+        Some(&orchestrator)
     );
-    if session_resolve.kind != BoardFailureKind::OrchestratorRequired
-        || session_resolve.next_action != BoardNextAction::InspectParticipants
-        || !matches!(
-            session_resolve.details,
-            BoardErrorDetails::ParticipantRefusal { refusal }
-                if refusal.root_message_id == root_message_id
-                    && refusal.actor == reviewer
-                    && refusal.holder == Some(orchestrator.clone())
-        )
-    {
-        return Err("Control Orchestrator refusal lost flattened holder details".into());
-    }
-    if client
-        .board_thread_participant_list(ThreadParticipantListRequest {
-            root_message_id: root_message_id.clone(),
+    assert!(
+        client
+            .thread_show(ThreadShowRequest {
+                include_redacted: false,
+                thread: (thread.clone()).into(),
+                reader: ReadActor::Identified {
+                    reader: reviewer.clone()
+                }
+            })
+            .await?
+            .watch_status
+            .ok_or("watch status")?
+            .watching
+    );
+    let unjoined_post=client.thread_post(request(&unjoined,json!({"postId":PostId::generate(),"placement":{"kind":"thread","thread":{"thread":thread}},"text":"Blocked","references":[],"addressees":[]}))?).await?;
+    assert!(refused(&unjoined_post)?.iter().any(|reason|matches!(reason,Refusal::Thread(refusal) if matches!(refusal.as_ref(),ThreadRefusal::ParticipantRequired { thread_id,actor } if thread_id==&thread&&actor==&unjoined))));
+    let session_resolve = client
+        .thread_resolve(request(
+            &reviewer,
+            json!({"thread":{"thread":thread},"reason":"cannot close"}),
+        )?)
+        .await?;
+    assert!(refused(&session_resolve)?.iter().any(|reason|matches!(reason,Refusal::Thread(refusal) if matches!(refusal.as_ref(),ThreadRefusal::OrchestratorRequired { thread_id,actor,holder,last_seen } if thread_id==&thread&&actor==&reviewer&&holder.as_ref()==Some(&orchestrator)&&last_seen.is_some()))));
+    assert_eq!(
+        client
+            .thread_participant_list(ThreadParticipantListRequest {
+                thread: (thread.clone()).into(),
+                page: PageRequest::default()
+            })
+            .await?
+            .page
+            .records
+            .len(),
+        2
+    );
+    post(
+        &fixture,
+        &client,
+        &owner,
+        Placement::Thread {
+            thread_id: thread.clone(),
+        },
+        "Human is exempt",
+        vec![],
+    )
+    .await?;
+    accepted(
+        &client
+            .thread_leave(request(
+                &reviewer,
+                json!({"thread":{"thread":thread},"afterLeave":null}),
+            )?)
+            .await?,
+    );
+    let listed = client
+        .thread_participant_list(ThreadParticipantListRequest {
+            thread: (thread.clone()).into(),
             page: PageRequest::default(),
         })
-        .await?
-        .page
-        .records
-        .len()
-        != 2
-    {
-        return Err("Control refusal mutated Participant state".into());
-    }
-    client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: root_message_id.clone(),
-            },
-            actor: owner.clone(),
-            acting_for: None,
-            text: MessageText::try_from("Human is exempt".to_owned())?,
-            references: MessageReferences::try_from(Vec::new())?,
-        })
         .await?;
-    let left = client
-        .board_thread_leave(ThreadLeaveRequest {
-            root_message_id: root_message_id.clone(),
-            actor: reviewer.clone(),
-            to: None,
-            resolve: false,
-        })
-        .await?;
-    if left.participant.closed_reason != Some(ParticipantClosedReason::Left)
-        || left.watch_status.watching
-    {
-        return Err("Control Thread Leave did not close the Participant and unwatch".into());
-    }
-    client
-        .board_thread_resolve(ThreadResolveRequest {
-            root_message_id,
-            actor: owner,
-            acting_for: None,
-        })
-        .await?;
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    assert!(
+        listed
+            .page
+            .records
+            .iter()
+            .any(|participant| participant.identity == reviewer
+                && participant.closed_reason == Some(ParticipantClosedReason::Left))
+    );
+    assert!(
+        !client
+            .thread_show(ThreadShowRequest {
+                include_redacted: false,
+                thread: (thread.clone()).into(),
+                reader: ReadActor::Identified { reader: reviewer }
+            })
+            .await?
+            .watch_status
+            .ok_or("watch status")?
+            .watching
+    );
+    accepted(
+        &client
+            .thread_resolve(request(
+                &owner,
+                json!({"thread":{"thread":thread},"reason":"owner closes"}),
+            )?)
+            .await?,
+    );
+    fixture.stop().await
 }

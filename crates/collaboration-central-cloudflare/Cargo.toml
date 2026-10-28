@@ -1,0 +1,46 @@
+[package]
+name = "collaboration-central-cloudflare"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+conformance = [ "dep:collaboration-central-conformance", "collaboration-central-core/conformance"]
+conformance-faults = ["conformance", "durable-steps/test-support"]
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["json"] }
+http = "1.4.1"
+tower-service = "0.3.3"
+base64 = "0.22.1"
+message-board = { version = "0.1.96", path = "../message-board" }
+sqlx-core = { version = "0.9.0", default-features = false }
+fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false, features = ["durable-object"] }
+runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false, features = ["durable-object"] }
+sqlx-durable-object = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", default-features = false, optional = true }
+worker = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3", features = ["http", "axum"] }
+worker-sys = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3" }
+worker-macros = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3" }
+chrono = { version = "=0.4.45", features = ["serde"] }
+futures-util = "0.3.34"
+futures-channel = "0.3.34"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+serde-wasm-bindgen = "0.6.5"
+sha2 = "0.10.9"
+thiserror = "2.0.18"
+uuid = { version = "=1.26.0", features = ["v7", "js"] }
+web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "SubtleCrypto", "CryptoKey"] }
+js-sys = "=0.3.106"

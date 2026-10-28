@@ -186,6 +186,10 @@ struct HeldLoginRaceRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldLoginRaceRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,
@@ -195,12 +199,12 @@ impl CredentialRefreshClient for HeldLoginRaceRefreshClient {
         assert_eq!(refresh_token.expose_secret(), "old-refresh-canary");
         self.entered_sender
             .send(())
-            .expect("provider should report entry");
+            .unwrap_or_else(|_| panic!("provider should report entry"));
         self.release_receiver
             .lock()
-            .expect("release lock")
+            .unwrap_or_else(|_| panic!("release lock"))
             .recv_timeout(Duration::from_secs(2))
-            .expect("provider should be released");
+            .unwrap_or_else(|_| panic!("provider should be released"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             "rotated-access-canary",
             Some("rotated-refresh-canary".to_owned()),

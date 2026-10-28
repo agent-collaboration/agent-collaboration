@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT revision_id AS \"id!: String\" FROM plan_revisions WHERE superseded_by IS NULL ORDER BY revision DESC, revision_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ff0f447d7ae153b2090d84a9950e24063152a810604c48e69f61b3557e2faf71"
+}

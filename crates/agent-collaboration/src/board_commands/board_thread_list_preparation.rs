@@ -2,7 +2,7 @@ use super::board_arguments::ThreadListArguments;
 use super::board_preparation::PreparedBoardCommand;
 use super::board_value_parsing::{parse_identity, parse_uuid_v7, prepare_page_request};
 use collaboration_client::BoardRepositoryLocation;
-use collaboration_client::board::*;
+use collaboration_client::board::{PageRequest, ThreadListRequest};
 use std::path::Path;
 
 pub(super) fn prepare_thread_list(
@@ -17,14 +17,14 @@ fn prepare_thread_list_at(
     arguments: &ThreadListArguments,
     working_directory: &Path,
 ) -> Result<PreparedBoardCommand, String> {
-    match (&arguments.project_id, &arguments.repository_path) {
-        (Some(project_id), None) => Ok(PreparedBoardCommand::ThreadList(ThreadListRequest {
-            project_id: parse_uuid_v7(project_id.clone(), "--project-id")?,
+    match (&arguments.workspace_id, &arguments.repository_path) {
+        (Some(workspace_id), None) => Ok(PreparedBoardCommand::ThreadList(ThreadListRequest {
+            workspace_id: parse_uuid_v7(workspace_id.clone(), "--workspace-id")?,
             reader: parse_identity(
                 arguments
                     .reader
                     .as_deref()
-                    .ok_or("--reader is required with --project-id")?,
+                    .ok_or("--reader is required with --workspace-id")?,
                 "--reader",
             )?,
             watched_only: arguments.watched_only,
@@ -66,7 +66,7 @@ fn prepare_page(arguments: &ThreadListArguments) -> Result<PageRequest, String> 
 }
 
 fn thread_list_selector_error() -> String {
-    "Choose exactly one of --project-id or --repository-path. Example: agent-collaboration board thread list --repository-path '<path-in-repository>' (or --project-id <project-id>); --watched-only requires --project-id".to_owned()
+    "Choose exactly one of --workspace-id or --repository-path. Example: agent-collaboration thread list --repository-path '<path-in-repository>' (or --workspace-id <workspace-id>); --watched-only requires --workspace-id".to_owned()
 }
 
 #[cfg(test)]
@@ -93,14 +93,14 @@ mod tests {
             Err(error) => error,
             Ok(_) => panic!("a temp directory must not select a repository"),
         };
-        assert!(error.contains("agent-collaboration board thread list"));
+        assert!(error.contains("agent-collaboration thread list"));
         assert!(error.contains("--repository-path '<path-in-repository>'"));
-        assert!(error.contains("--project-id <project-id>"));
+        assert!(error.contains("--workspace-id <workspace-id>"));
     }
 
     fn thread_list_arguments() -> ThreadListArguments {
         ThreadListArguments {
-            project_id: None,
+            workspace_id: None,
             repository_path: None,
             reader: None,
             watched_only: false,

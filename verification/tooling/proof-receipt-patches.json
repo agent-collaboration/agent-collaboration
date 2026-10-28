@@ -1,0 +1,133 @@
+{
+  "S-02": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Hardening smoke/tests passed: missing local token does not reach upstream, forbidden carriers reject before selection, stale WebSocket generation closes on rotation, and WebSocket token smuggling is rejected.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-test-support/src/installed_codex.rs",
+      "crates/codex-router-proxy/src/lib.rs",
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/websocket.rs"
+    ]
+  },
+  "I-17b": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Focused async WebSocket slow-recorder integration test passed; side-effect persistence is spawned after local frame forwarding.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/websocket.rs",
+      "crates/codex-router-proxy/src/lib.rs"
+    ]
+  },
+  "I-05a": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Old-failure equivalent reproducer passed: a single-lane accept loop leaves the second client without application progress until the first handler is released.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/lib.rs"
+    ]
+  },
+  "I-05b": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Async comparison fixtures passed: blocked first WebSocket does not block survivor, served runtime drains active sessions on shutdown, and active duplex pumps cancel cleanly.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/websocket.rs",
+      "crates/codex-router-proxy/src/lib.rs"
+    ]
+  },
+  "I-18": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Real served-router WebSocket fixture traversed actual listener, Hyper upgrade, persisted quota selection during blocked refresh, upstream forwarding, and registry shutdown cleanup.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-cli/src/lib.rs",
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/websocket.rs"
+    ]
+  },
+  "I-19": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Focused pump cleanup family passed: active duplex pumps cancel on shutdown, pre-duplex routing/connect phases cancel on shutdown, serve shutdown drains active sessions, and reset/idle-close handling does not leak failed turns.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/websocket.rs",
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/lib.rs"
+    ]
+  },
+  "I-20": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Focused exact-forwarding tests passed: first response.create frame and direct response payload route once and reach upstream unchanged, including async tunnel forwarding.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/websocket.rs",
+      "crates/codex-router-proxy/src/lib.rs"
+    ]
+  },
+  "I-21": {
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "Release HTTP/SSE request prep uses SQLx-backed AsyncSqliteStateStore, async selector, and async credential state access; served-router startup/nonblocking HTTP quota regression passed.",
+    "result": "pass",
+    "status_after": "[x] passed",
+    "touched_targets": [
+      "crates/codex-router-proxy/src/server.rs",
+      "crates/codex-router-proxy/src/http_sse.rs",
+      "crates/codex-router-cli/src/lib.rs"
+    ]
+  },
+  "G-21": {
+    "artifact_paths": [
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-01.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-02.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-03.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-04.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-05.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-06.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-07.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-08.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-09.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-10.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-11.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-12.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-13.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-14.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-15.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-16.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-17.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-18.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-19.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-20.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-22.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-23.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-24.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-25.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-26.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-27.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-28.json",
+      "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-29.json"
+    ],
+    "exit_code": 0,
+    "freshness_check": "guarded_source_paths_clean_at_git_head",
+    "notes": "T6 aggregate guardrail row passed through proof-matrix.",
+    "result": "pass",
+    "status_after": "[x] passed"
+  }
+}

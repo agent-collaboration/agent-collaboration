@@ -3,10 +3,14 @@
 //! board. Each decodes its typed request, calls one application operation and presents the
 //! typed result or rejection.
 use super::board_argument_classification::decode_board_arguments;
-use super::*;
+use super::{
+    API_RESULT_BUDGET, CallToolResponse, CollaborationMcpServer, Deserialize, McpToolOutput, Tool,
+    ToolCallContext, ToolRoute, ToolRouter, domain_result, operation_description, schemars,
+    validation_failure,
+};
 use collaboration_protocol::{
-    ThreadSubscribeRequest, ThreadSubscriptionView, ThreadSubscriptionsRequest,
-    ThreadSubscriptionsResult, ThreadUnsubscribeRequest,
+    ThreadSubscribeRequest, ThreadSubscriptionsRequest, ThreadSubscriptionsResult,
+    ThreadUnsubscribeRequest,
 };
 
 /// Registers one tool: `$name` takes `$request` and answers `$result`; `$call` runs with the
@@ -68,7 +72,7 @@ macro_rules! board_tool {
             Tool::new(
                 $name,
                 operation_description($name),
-                rmcp::handler::server::tool::schema_for_type::<$request>(),
+                super::project_tool_schemas::board_input_schema::<$request>($name),
             )
             .with_raw_output_schema(rmcp::handler::server::tool::schema_for_type::<
                 McpToolOutput<$result>,
@@ -99,7 +103,15 @@ macro_rules! board_tool {
 }
 
 pub(super) fn register_automation_mutation_tools(router: &mut ToolRouter<CollaborationMcpServer>) {
-    use collaboration_protocol::*;
+    use collaboration_protocol::{
+        AutomationConfiguration, AutomationConfigureRequest, AutomationPage, AutomationPageRequest,
+        DeliveryInspection, DeliveryShowRequest, InstructionCreateParams, InstructionShowParams,
+        InstructionSnapshot, InstructionUpdateParams, RunRecoveryRequest, RunShowRequest,
+        RunSnapshot, ScheduleCreateRequest, ScheduleEnableRequest, ScheduleExportResult,
+        ScheduleImportRequest, SchedulePrepareRequest, ScheduleShowRequest, ScheduleSnapshot,
+        ScheduleUpdateRequest, WakeMutationRequest, WakeMutationResult, WakeSendRequest,
+        WakeShowRequest, WakeSnapshot,
+    };
     domain_tool!(router, "instruction_create", InstructionCreateParams => InstructionSnapshot, automation.instruction_create, true);
     domain_tool!(router, "instruction_update", InstructionUpdateParams => InstructionSnapshot, automation.instruction_update, true);
     domain_tool!(router, "instruction_show", InstructionShowParams => InstructionSnapshot, automation.instruction_show, false);
@@ -127,7 +139,13 @@ pub(super) fn register_automation_mutation_tools(router: &mut ToolRouter<Collabo
 pub(super) fn register_automation_inspection_tools(
     router: &mut ToolRouter<CollaborationMcpServer>,
 ) {
-    use collaboration_protocol::*;
+    use collaboration_protocol::{
+        AttemptHistoryPage, AttemptInspection, AutomationEventsPage, AutomationEventsRequest,
+        AutomationPage, AutomationPageRequest, DeliveryAttemptsRequest, DeliveryInspection,
+        DeliveryListRequest, DeliveryShowRequest, InstructionSnapshot, OperationShowRequest,
+        OperationSnapshot, RevisionListRequest, RevisionRecord, RunListRequest, RunShowRequest,
+        RunSnapshot, RunSummariesRequest, ScheduleSnapshot, SummaryInspection,
+    };
     domain_tool!(router, "run_reconcile", RunShowRequest => RunSnapshot, automation.run_reconcile(budget), false);
     domain_tool!(router, "delivery_reconcile", DeliveryShowRequest => DeliveryInspection, automation.delivery_reconcile(budget), false);
     domain_tool!(router, "operation_show", OperationShowRequest => OperationSnapshot, automation.operation_show(budget), false);
@@ -143,45 +161,125 @@ pub(super) fn register_automation_inspection_tools(
 }
 
 pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServer>) {
-    use message_board::*;
-    board_tool!(router, "board_discovery_search", DiscoverySearchRequest => DiscoverySearchResult, discovery_search, false);
-    board_tool!(router, "board_message_search", MessageSearchRequest => MessageSearchResult, message_search, false);
-    board_tool!(router, "board_project_create", ProjectCreateRequest => ProjectCreateResult, project_create, true);
-    board_tool!(router, "board_project_update", ProjectUpdateRequest => ProjectUpdateResult, project_update, true);
-    board_tool!(router, "board_project_show", ProjectShowRequest => ProjectShowResult, project_show, false);
-    board_tool!(router, "board_project_list", ProjectListRequest => ProjectListResult, project_list, false);
-    board_tool!(router, "board_repository_attach", RepositoryAttachRequest => RepositoryAttachResult, repository_attach, true);
-    board_tool!(router, "board_repository_detach", RepositoryDetachRequest => RepositoryDetachResult, repository_detach, true);
-    board_tool!(router, "board_repository_list", RepositoryListRequest => RepositoryListResult, repository_list, false);
-    board_tool!(router, "board_create", BoardCreateRequest => BoardCreateResult, board_create, true);
-    board_tool!(router, "board_update", BoardUpdateRequest => BoardUpdateResult, board_update, true);
+    use message_board::public_replies::{RequestEffectsRead, RequestEffectsRequest, WriteReply};
+    use message_board::{
+        AdrCreateRequest, AdrTransitionRequest, BoardArchiveRequest, BoardCloseRequest,
+        BoardCreateRequest, BoardListRequest, BoardListResult, BoardReadReply, BoardShowRequest,
+        BoardShowResult, BoardUpdateRequest, ContinuationCard, ContinuationCardRequest,
+        DiscoverySearchRequest, DiscoverySearchResult, FeedRead, FeedReadRequest,
+        FleetRecordListRequest, FleetRecordShowRequest, InboxAcknowledgeReply,
+        InboxAcknowledgeRequest, InboxFetchRequest, InboxFetchResult, InboxWorkspacesRequest,
+        InboxWorkspacesResult, LeadLoad, LeadLoadRequest, OwnerView, OwnerViewRequest,
+        PostListRequest, PostListResult, PostSearchRequest, PostSearchResult, PostShowRequest,
+        PostShowResult, ProjectCreateRequest, ProjectListRequest, ProjectListResult,
+        ProjectRecordListRequest, ProjectRecordShowRequest, ProjectRequest, ProjectShowRequest,
+        ProjectShowResult, ProjectUpdateRequest, ProjectViewRequest, ProjectWatchRequest, Record,
+        RecordListResult, RepositoryAttachRequest, RepositoryDetachRequest, RepositoryListRequest,
+        RepositoryListResult, SessionContext, SessionContextRequest, SubtaskListRequest,
+        ThreadCreateRequest, ThreadJoinRequest, ThreadLeaveRequest, ThreadListRequest,
+        ThreadListResult, ThreadParticipantListRequest, ThreadParticipantListResult,
+        ThreadPostRequest, ThreadRefileRequest, ThreadRenewRequest, ThreadResolveRequest,
+        ThreadShowRequest, ThreadShowResult, ThreadUnresolveRequest, ThreadUnwatchRequest,
+        ThreadWatchRequest, WorkTrailReadResult, WorkTrailShowRequest, WorkView,
+        WorkspaceArchiveRequest, WorkspaceCreateRequest, WorkspaceListRequest, WorkspaceListResult,
+        WorkspaceShowRequest, WorkspaceShowResult, WorkspaceUpdateRequest,
+    };
+    board_tool!(router, "request_effects", RequestEffectsRequest => RequestEffectsRead, request_effects, false);
+    board_tool!(router, "workstream_create", ProjectRequest => WriteReply, workstream_create, true);
+    board_tool!(router, "workstream_rename", ProjectRequest => WriteReply, workstream_rename, true);
+    board_tool!(router, "workstream_close", ProjectRequest => WriteReply, workstream_close, true);
+    board_tool!(router, "task_create", ProjectRequest => WriteReply, task_create, true);
+    board_tool!(router, "task_update", ProjectRequest => WriteReply, task_update, true);
+    board_tool!(router, "task_move_workstream", ProjectRequest => WriteReply, task_move_workstream, true);
+    board_tool!(router, "task_set_status", ProjectRequest => WriteReply, task_set_status, true);
+    board_tool!(router, "task_link", ProjectRequest => WriteReply, task_link, true);
+    board_tool!(router, "task_unlink", ProjectRequest => WriteReply, task_unlink, true);
+    board_tool!(router, "task_duplicate", ProjectRequest => WriteReply, task_duplicate, true);
+    board_tool!(router, "task_replace", ProjectRequest => WriteReply, task_replace, true);
+    board_tool!(router, "subtask_add", ProjectRequest => WriteReply, subtask_add, true);
+    board_tool!(router, "subtask_check", ProjectRequest => WriteReply, subtask_check, true);
+    board_tool!(router, "subtask_uncheck", ProjectRequest => WriteReply, subtask_uncheck, true);
+    board_tool!(router, "subtask_move", ProjectRequest => WriteReply, subtask_move, true);
+    board_tool!(router, "subtask_remove", ProjectRequest => WriteReply, subtask_remove, true);
+    board_tool!(router, "work_trail_add", ProjectRequest => WriteReply, work_trail_add, true);
+    board_tool!(router, "work_trail_redact", ProjectRequest => WriteReply, work_trail_redact, true);
+    board_tool!(router, "role_grant", ProjectRequest => WriteReply, role_grant, true);
+    board_tool!(router, "role_release", ProjectRequest => WriteReply, role_release, true);
+    board_tool!(router, "owner_grant_record", ProjectRequest => WriteReply, owner_grant_record, true);
+    board_tool!(router, "role_replace_lead", ProjectRequest => WriteReply, role_replace_lead, true);
+    board_tool!(router, "role_acknowledge_current", ProjectRequest => WriteReply, role_acknowledge_current, true);
+    board_tool!(router, "project_publish_plan", ProjectRequest => WriteReply, project_publish_plan, true);
+    board_tool!(router, "project_close", ProjectRequest => WriteReply, project_close, true);
+    board_tool!(router, "project_describe", ProjectRequest => WriteReply, project_describe, true);
+    board_tool!(router, "fact_record", ProjectRequest => WriteReply, fact_record, true);
+    board_tool!(router, "thread_renew", ThreadRenewRequest => WriteReply, thread_renew, true);
+    board_tool!(router, "workstream_show", ProjectRecordShowRequest => Record, workstream_show, false);
+    board_tool!(router, "workstream_list", ProjectRecordListRequest => RecordListResult, workstream_list, false);
+    board_tool!(router, "task_show", ProjectRecordShowRequest => Record, task_show, false);
+    board_tool!(router, "task_list", ProjectRecordListRequest => RecordListResult, task_list, false);
+    board_tool!(router, "subtask_show", ProjectRecordShowRequest => Record, subtask_show, false);
+    board_tool!(router, "subtask_list", SubtaskListRequest => RecordListResult, subtask_list, false);
+    board_tool!(router, "role_show", ProjectRecordShowRequest => Record, role_show, false);
+    board_tool!(router, "role_list", ProjectRecordListRequest => RecordListResult, role_list, false);
+    board_tool!(router, "fact_show", ProjectRecordShowRequest => Record, fact_show, false);
+    board_tool!(router, "fact_list", ProjectRecordListRequest => RecordListResult, fact_list, false);
+    board_tool!(router, "intent_show", ProjectRecordShowRequest => Record, intent_show, false);
+    board_tool!(router, "intent_list", ProjectRecordListRequest => RecordListResult, intent_list, false);
+    board_tool!(router,"adr_create",AdrCreateRequest => WriteReply,adr_create,true);
+    board_tool!(router,"adr_transition",AdrTransitionRequest => WriteReply,adr_transition,true);
+    board_tool!(router,"adr_show",FleetRecordShowRequest => Record,adr_show,false);
+    board_tool!(router,"adr_list",FleetRecordListRequest => RecordListResult,adr_list,false);
+    board_tool!(router, "feed_read", FeedReadRequest => BoardReadReply<FeedRead>, feed_read, true);
+    board_tool!(router, "view_work", ProjectViewRequest => WorkView, view_work, false);
+    board_tool!(router, "view_card", ContinuationCardRequest => ContinuationCard, view_card, false);
+    board_tool!(router, "view_session_context", SessionContextRequest => SessionContext, view_session_context, false);
+    board_tool!(router, "view_owner", OwnerViewRequest => OwnerView, view_owner, false);
+    board_tool!(router, "view_lead_load", LeadLoadRequest => LeadLoad, view_lead_load, false);
+    board_tool!(router, "work_trail_show", WorkTrailShowRequest => BoardReadReply<WorkTrailReadResult>, work_trail_show, true);
+    board_tool!(router, "discovery_search", DiscoverySearchRequest => DiscoverySearchResult, discovery_search, false);
+    board_tool!(router, "post_search", PostSearchRequest => PostSearchResult, post_search, false);
+    board_tool!(router, "workspace_create", WorkspaceCreateRequest => WriteReply, workspace_create, true);
+    board_tool!(router, "workspace_archive", WorkspaceArchiveRequest => WriteReply, workspace_archive, true);
+    board_tool!(router, "workspace_update", WorkspaceUpdateRequest => WriteReply, workspace_update, true);
+    board_tool!(router, "workspace_show", WorkspaceShowRequest => WorkspaceShowResult, workspace_show, false);
+    board_tool!(router, "workspace_list", WorkspaceListRequest => WorkspaceListResult, workspace_list, false);
+    board_tool!(router, "repository_attach", RepositoryAttachRequest => WriteReply, repository_attach, true);
+    board_tool!(router, "repository_detach", RepositoryDetachRequest => WriteReply, repository_detach, true);
+    board_tool!(router, "repository_list", RepositoryListRequest => RepositoryListResult, repository_list, false);
+    board_tool!(router, "board_create", BoardCreateRequest => WriteReply, board_create, true);
+    board_tool!(router, "board_update", BoardUpdateRequest => WriteReply, board_update, true);
     board_tool!(router, "board_show", BoardShowRequest => BoardShowResult, board_show, false);
     board_tool!(router, "board_list", BoardListRequest => BoardListResult, board_list, false);
-    board_tool!(router, "board_archive", BoardArchiveRequest => BoardArchiveResult, board_archive, true);
-    board_tool!(router, "board_topic_create", TopicCreateRequest => TopicCreateResult, topic_create, true);
-    board_tool!(router, "board_topic_update", TopicUpdateRequest => TopicUpdateResult, topic_update, true);
-    board_tool!(router, "board_topic_list", TopicListRequest => TopicListResult, topic_list, false);
-    board_tool!(router, "board_message_post", MessagePostRequest => MessagePostResult, message_post, true);
-    board_tool!(router, "board_message_show", MessageShowRequest => MessageShowResult, message_show, false);
-    board_tool!(router, "board_message_list", MessageListRequest => MessageListResult, message_list, false);
-    board_tool!(router, "board_thread_show", ThreadShowRequest => ThreadShowResult, thread_show, false);
-    board_tool!(router, "board_thread_resolve", ThreadResolveRequest => ThreadResolveResult, thread_resolve, true);
-    board_tool!(router, "board_thread_unresolve", ThreadUnresolveRequest => ThreadUnresolveResult, thread_unresolve, true);
-    board_tool!(router, "board_thread_watch", ThreadWatchRequest => ThreadWatchResult, thread_watch, true);
-    board_tool!(router, "board_thread_unwatch", ThreadUnwatchRequest => ThreadUnwatchResult, thread_unwatch, true);
-    board_tool!(router, "board_topic_watch", TopicWatchRequest => TopicWatchResult, topic_watch, true);
-    board_tool!(router, "board_topic_unwatch", TopicWatchRequest => TopicWatchResult, topic_unwatch, true);
-    board_tool!(router, "board_thread_list", ThreadListRequest => ThreadListResult, thread_list, false);
-    board_tool!(router, "board_thread_create", ThreadCreateRequest => ThreadCreateResult, thread_create, true);
-    board_tool!(router, "board_thread_join", ThreadJoinRequest => ThreadJoinResult, thread_join, true);
-    board_tool!(router, "board_thread_leave", ThreadLeaveRequest => ThreadLeaveResult, thread_leave, true);
-    board_tool!(router, "board_thread_participant_list", ThreadParticipantListRequest => ThreadParticipantListResult, thread_participant_list, false);
-    board_tool!(router, "board_thread_subscribe", ThreadSubscribeRequest => ThreadSubscriptionView, thread_subscribe, true);
-    board_tool!(router, "board_thread_unsubscribe", ThreadUnsubscribeRequest => ThreadSubscriptionView, thread_unsubscribe, true);
-    board_tool!(router, "board_thread_subscriptions", ThreadSubscriptionsRequest => ThreadSubscriptionsResult, thread_subscriptions, false);
-    board_tool!(router, "board_inbox_fetch", InboxFetchRequest => InboxFetchResult, inbox_fetch, true);
-    board_tool!(router, "board_inbox_acknowledge", InboxAcknowledgeRequest => InboxAcknowledgeResult, inbox_acknowledge, true);
-    board_tool!(router, "board_inbox_projects", InboxProjectsRequest => InboxProjectsResult, inbox_projects, false);
+    board_tool!(router, "board_close", BoardCloseRequest => WriteReply, board_close, true);
+    board_tool!(router, "board_archive", BoardArchiveRequest => WriteReply, board_archive, true);
+    board_tool!(router, "project_claim", board_sync_protocol::ProjectClaimRequest => board_sync_protocol::ProjectClaimReply, project_claim, true);
+    board_tool!(router, "project_create", ProjectCreateRequest => WriteReply, project_create, true);
+    board_tool!(router, "project_update", ProjectUpdateRequest => WriteReply, project_update, true);
+    board_tool!(router, "project_notification_cancel", ProjectRequest => collaboration_protocol::RequestedCancelResult, project_notification_cancel, true);
+    board_tool!(router, "project_list", ProjectListRequest => ProjectListResult, project_list, false);
+    board_tool!(router, "project_show", ProjectShowRequest => ProjectShowResult, project_show, false);
+    board_tool!(router, "thread_post", ThreadPostRequest => WriteReply, thread_post, true);
+    board_tool!(router, "post_show", PostShowRequest => PostShowResult, post_show, false);
+    board_tool!(router, "post_list", PostListRequest => PostListResult, post_list, false);
+    board_tool!(router, "thread_show", ThreadShowRequest => ThreadShowResult, thread_show, false);
+    board_tool!(router, "thread_resolve", ThreadResolveRequest => WriteReply, thread_resolve, true);
+    board_tool!(router, "thread_unresolve", ThreadUnresolveRequest => WriteReply, thread_unresolve, true);
+    board_tool!(router, "thread_watch", ThreadWatchRequest => WriteReply, thread_watch, true);
+    board_tool!(router, "thread_unwatch", ThreadUnwatchRequest => WriteReply, thread_unwatch, true);
+    board_tool!(router, "project_watch", ProjectWatchRequest => WriteReply, project_watch, true);
+    board_tool!(router, "project_unwatch", ProjectWatchRequest => WriteReply, project_unwatch, true);
+    board_tool!(router, "thread_list", ThreadListRequest => ThreadListResult, thread_list, false);
+    board_tool!(router, "thread_create", ThreadCreateRequest => WriteReply, thread_create, true);
+    board_tool!(router, "thread_refile", ThreadRefileRequest => WriteReply, thread_refile, true);
+    board_tool!(router, "thread_join", ThreadJoinRequest => WriteReply, thread_join, true);
+    board_tool!(router, "thread_leave", ThreadLeaveRequest => WriteReply, thread_leave, true);
+    board_tool!(router, "thread_participant_list", ThreadParticipantListRequest => ThreadParticipantListResult, thread_participant_list, false);
+    board_tool!(router, "thread_subscribe", ThreadSubscribeRequest => WriteReply, thread_subscribe, true);
+    board_tool!(router, "thread_unsubscribe", ThreadUnsubscribeRequest => WriteReply, thread_unsubscribe, true);
+    board_tool!(router, "thread_subscriptions", ThreadSubscriptionsRequest => ThreadSubscriptionsResult, thread_subscriptions, false);
+    board_tool!(router, "inbox_fetch", InboxFetchRequest => InboxFetchResult, inbox_fetch, true);
+    board_tool!(router, "inbox_acknowledge", InboxAcknowledgeRequest => InboxAcknowledgeReply, inbox_acknowledge, true);
+    board_tool!(router, "inbox_workspaces", InboxWorkspacesRequest => InboxWorkspacesResult, inbox_workspaces, false);
 }
 
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]

@@ -1,0 +1,18 @@
+{
+  "function": "parse_manifest_mcp",
+  "args": [
+    {
+      "version": 3,
+      "mcp": {
+        "transport": "streamableHttp",
+        "url": "http://127.0.0.1:8788/mcp"
+      }
+    }
+  ],
+  "expected": {
+    "result": {
+      "url": "http://127.0.0.1:8788/mcp",
+      "transport": "streamableHttp"
+    }
+  }
+}

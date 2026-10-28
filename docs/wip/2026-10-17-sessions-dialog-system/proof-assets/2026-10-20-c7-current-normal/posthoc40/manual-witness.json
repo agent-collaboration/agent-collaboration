@@ -1,0 +1,86 @@
+{
+  "authority": "Rootd6 manual full identity alternative, no automatic gate waiver",
+  "created": "2026-10-20T05:53:51.157137+00:00",
+  "status": "MANUAL WITNESS ONLY; composite report pending actual strict posthoc checks",
+  "target": {
+    "name": "東京 OpenAI Research Account Alpha Long Name",
+    "tag": "alpha-tag",
+    "projection": "full_label preserves captured name and complete tag wrapped in brackets",
+    "source_hashes": {
+      "crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs": "7ef6f68d368869904270fb0ebef89763ff3a208ad98c7bce2639ad00c72349b2",
+      "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "1964bed78369d7514c782f1a55d51d0493b7b4cb2145bbff5965d34bb9ede0d5",
+      "crates/codex-router-cli/src/presentation/quota/quota_dialog_context.rs": "d55a9ad0651909e4c5f476a4e84470e89d8fb336d18408302a4d19b927643239"
+    }
+  },
+  "images": [
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+      "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+      "pixels": [
+        432,
+        484
+      ],
+      "viewport_cells": [
+        40,
+        24
+      ],
+      "manual_witness": "SAME paired Verifier personally reopened exact original on 2026-10-20 in current turn",
+      "account_field_name_lines": [
+        "東京 OpenAI",
+        "Research Account",
+        "Alpha Long Name"
+      ],
+      "account_field_tag": "[alpha-tag]",
+      "complete_name": "東京 OpenAI Research Account Alpha Long Name",
+      "tag_value": "alpha-tag",
+      "leading_delimiter": "[",
+      "trailing_delimiter": "]",
+      "manual_wrong_target_comparison": {
+        "lalpha-tag": "REJECT: actual first tag value character a, no leading l",
+        "alpha-tagl": "REJECT: actual last tag value character g, no trailing l",
+        "alpha-tax": "REJECT: actual last tag value character g, not x"
+      },
+      "automatic_full_identity": "UNSUPPORTED; strict rejection retained. Posthoc per-property strict outcomes pending qualifier, not inferred."
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-identity.png",
+      "sha256": "29b9057f605467f014878695f1c33e77e6ad11d1b55ca343c119853c1411c7a9",
+      "pixels": [
+        432,
+        484
+      ],
+      "viewport_cells": [
+        40,
+        24
+      ],
+      "manual_witness": "SAME paired Verifier personally reopened exact original on 2026-10-20 in current turn",
+      "account_field_name_lines": [
+        "東京 OpenAI",
+        "Research Account",
+        "Alpha Long Name"
+      ],
+      "account_field_tag": "[alpha-tag]",
+      "complete_name": "東京 OpenAI Research Account Alpha Long Name",
+      "tag_value": "alpha-tag",
+      "leading_delimiter": "[",
+      "trailing_delimiter": "]",
+      "manual_wrong_target_comparison": {
+        "lalpha-tag": "REJECT: actual first tag value character a, no leading l",
+        "alpha-tagl": "REJECT: actual last tag value character g, no trailing l",
+        "alpha-tax": "REJECT: actual last tag value character g, not x"
+      },
+      "automatic_full_identity": "UNSUPPORTED; strict rejection retained. Posthoc per-property strict outcomes pending qualifier, not inferred."
+    }
+  ],
+  "failed_runtime_preserved": true,
+  "normal_receipt": false,
+  "automatic_42_11_pass": false,
+  "limits": [
+    "Two original images of compiled synthetic Quota fixture, not public Host/provider integration",
+    "Manual comparison reads full name/tag value/delimiters; no pixel reconstruction or OCR rewriting",
+    "Historical failed runtime remains failed, no fresh40 UI rerun",
+    "Root owns requirement acceptance and proof HTML"
+  ]
+}

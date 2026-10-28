@@ -1,221 +1,228 @@
 //! Control router/show expands a stored subscription range without acknowledging it.
 use super::*;
 use chrono::Utc;
+use collaboration_contracts::MachineIdentity;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use message_board::{
-    BoardCreateRequest, BoardId, Description, Identity, InboxActivity, InboxFetchRequest,
-    InboxReadMode, InboxScope, Message, MessageId, MessagePostRequest, MessageReferences,
-    MessageText, ParticipantRole, Placement, ProjectCreateRequest, ProjectId, ResourceName,
-    ServiceId, SessionEndpointRef, SessionId as BoardSessionId, SessionRef as BoardSessionRef,
-    SubscriptionMode, ThreadCreateRequest, ThreadJoinRequest, TopicCreateRequest, TopicId,
-    WhenIdle,
+    FeedCursor, Identity, InboxActivity, Post, PostId, ProjectId, ServiceId, SessionEndpointRef,
+    SessionId as BoardSessionId, SessionRef as BoardSessionRef, ThreadId,
 };
-use message_board_storage::BoardStore;
-
 struct SubscriptionExpansionFixture {
+    _fleet_runtime: board_central_test_support::FleetTestRuntime,
     _directory: tempfile::TempDir,
-    board: Arc<TokioMutex<BoardStore>>,
-    pushes: Arc<TokioMutex<AutomationStore>>,
+    registry: Arc<ProjectStoreRegistry>,
+    pushes: Arc<interaction_storage::InteractionStore>,
     control: ControlHarness,
     project_id: ProjectId,
-    root_message_id: MessageId,
+    thread_id: ThreadId,
     target: SessionRef,
     board_reader: Identity,
+    initialization: message_board::RequestId,
 }
-
+fn header(actor: &Identity) -> Value {
+    json!({"requestId":message_board::RequestId::generate(),"protocolVersion":1,"actor":actor,"actingFor":null})
+}
 impl SubscriptionExpansionFixture {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn start() -> Self {
-        let directory = tempfile::tempdir().expect("isolated push and board databases");
-        let board_path = directory.path().join("board.sqlite");
-        let board = Arc::new(TokioMutex::new(
-            BoardStore::open(&board_path)
-                .await
-                .expect("real SQLite board store"),
-        ));
-        let pushes = Arc::new(TokioMutex::new(
-            AutomationStore::open(&directory.path().join("automation.sqlite"))
-                .await
-                .expect("real SQLite automation store"),
-        ));
+        let directory = tempfile::tempdir().expect("native databases");
+        let registry = board_fixture::native_registry::new_registry(directory.path())
+            .expect("fixture enrollment");
+        let origin = message_board::ActorOrigin {
+            installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
+                .expect("fixture service"),
+            machine: message_board::MachineLabel::try_from("range proof".to_owned())
+                .expect("fixture machine"),
+        };
+        let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+            directory.path(),
+            Arc::new(board_fixture::native_registry::PendingRegistration),
+            &origin,
+        )
+        .await
+        .expect("real central fixture");
+        let fleet = Arc::new(fleet);
+        let admission = Arc::new(
+            ProjectAdmission::new(ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: fleet.clone(),
+                identity: MachineIdentity::new(
+                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service"),
+                    Some("range proof"),
+                )
+                .expect("identity"),
+            })
+            .expect("admission"),
+        );
+        let pushes = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("native messages"),
+        );
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
+            .expect("identity")
+            .with_project_admission(admission)
+            .with_interaction_store(pushes.clone());
+        let control = ControlHarness::start(identity);
         let target = session("claude-local", "subscription-range-reader");
         let board_reader = board_session_identity(&target);
         let writer = Identity::Human {
             human_id: "subscription-range-writer"
                 .to_owned()
                 .try_into()
-                .expect("writer identity"),
+                .expect("writer"),
         };
+        let workspace = message_board::WorkspaceId::generate();
+        let board = message_board::BoardId::generate();
         let project_id = ProjectId::generate();
-        let board_id = BoardId::generate();
-        let topic_id = TopicId::generate();
-        let root_message_id = MessageId::generate();
-        let now = Utc::now();
-        {
-            let mut board_store = board.lock().await;
-            board_store
-                .create_project(ProjectCreateRequest {
-                    project_id: project_id.clone(),
-                    name: ResourceName::try_from("Push expansion project".to_owned())
-                        .expect("project name"),
-                    description: Description::try_from(String::new()).expect("project description"),
-                    actor: writer.clone(),
-                    acting_for: None,
-                })
-                .await
-                .expect("create Board project");
-            board_store
-                .create_board(BoardCreateRequest {
-                    board_id: board_id.clone(),
-                    project_id: project_id.clone(),
-                    name: ResourceName::try_from("Push expansion board".to_owned())
-                        .expect("board name"),
-                    description: Description::try_from(String::new()).expect("board description"),
-                    actor: writer.clone(),
-                    acting_for: None,
-                })
-                .await
-                .expect("create Board");
-            board_store
-                .create_topic(TopicCreateRequest {
-                    topic_id: topic_id.clone(),
-                    board_id,
-                    name: ResourceName::try_from("Subscription activity".to_owned())
-                        .expect("topic name"),
-                    description: Description::try_from(String::new()).expect("topic description"),
-                    actor: writer.clone(),
-                    acting_for: None,
-                })
-                .await
-                .expect("create Board topic");
-            board_store
-                .create_thread(
-                    ThreadCreateRequest {
-                        message_id: root_message_id.clone(),
-                        topic_id,
-                        actor: writer,
-                        acting_for: None,
-                        text: MessageText::try_from("Root title outside activity range".to_owned())
-                            .expect("root text"),
-                        references: MessageReferences::try_from(Vec::new())
-                            .expect("root references"),
-                        role: None,
-                        watch: false,
-                    },
-                    now,
+        let post = PostId::generate();
+        let thread_id = ThreadId::from(post.clone());
+        for (tool, fields) in [
+            (
+                "workspace_create",
+                json!({"workspaceId":workspace,"name":"workspace","description":""}),
+            ),
+            (
+                "board_create",
+                json!({"workspaceId":workspace,"boardId":board,"name":"board","description":"","kind":{"kind":"area"}}),
+            ),
+            (
+                "project_create",
+                json!({"projectId":project_id,"boardId":board,"title":"project"}),
+            ),
+            (
+                "role_grant",
+                json!({"projectId":project_id,"operation":{"kind":"roleGrant","subject":{"kind":"project","subject":project_id},"role":"lead","holder":writer,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}}),
+            ),
+            (
+                "thread_create",
+                json!({"postId":post,"projectId":project_id,"about":{"kind":"project","subject":{"line":"Subscription range"}},"text":"Root title outside activity range","references":[],"addressees":[],"role":null,"watch":false}),
+            ),
+        ] {
+            let mut input = header(&writer);
+            input
+                .as_object_mut()
+                .expect("header")
+                .extend(fields.as_object().expect("fields").clone());
+            if tool == "project_create" {
+                board_fixture::registered_project::prepare_registered_creation(
+                    &fleet,
+                    &registry,
+                    &serde_json::from_value(input.clone()).expect("typed creation input"),
+                    &origin,
+                    &runtime_primitives::SystemClock,
                 )
                 .await
-                .expect("create Board thread");
-            board_store
-                .join_thread(
-                    ThreadJoinRequest {
-                        root_message_id: root_message_id.clone(),
-                        actor: board_reader.clone(),
-                        role: ParticipantRole::Participant,
-                        watch: true,
-                        mode: Some(SubscriptionMode::Deliver),
-                        when_idle: Some(WhenIdle::Hold),
-                        replace: None,
-                        note: None,
-                    },
-                    now,
-                )
+                .expect("registered project fixture");
+            }
+            let response = control
+                .served
+                .call(tool, input)
                 .await
-                .expect("watch thread as the target session");
+                .expect("native setup");
+            assert_eq!(
+                response.pointer("/result/result/decision/kind"),
+                Some(&json!("accepted")),
+                "{tool}: {response:?}"
+            );
         }
-
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
-            .expect("service identity")
-            .with_board_store(Arc::clone(&board))
-            .with_automation_store(Arc::clone(&pushes));
-        let control = ControlHarness::start(identity).await;
-
+        let mut join = header(&board_reader);
+        join.as_object_mut().expect("header").remove("actingFor");
+        join.as_object_mut().expect("header").extend(json!({"thread":{"thread":thread_id},"role":"participant","watch":true,"mode":"deliver","whenIdle":"hold","replace":null,"note":null}).as_object().expect("join").clone());
+        assert_eq!(
+            control
+                .served
+                .call("thread_join", join)
+                .await
+                .expect("join")
+                .pointer("/result/result/decision/kind"),
+            Some(&json!("accepted"))
+        );
         Self {
+            _fleet_runtime: fleet_runtime,
             _directory: directory,
-            board,
+            registry,
             pushes,
             control,
             project_id,
-            root_message_id,
+            thread_id,
             target,
             board_reader,
+            initialization: message_board::RequestId::generate(),
         }
     }
-
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn close(self) {
-        let Self {
-            _directory,
-            board,
-            pushes,
-            control,
-            ..
-        } = self;
-        control.close().await;
-        Arc::try_unwrap(board)
+        self.control.close().await;
+        self._fleet_runtime
+            .shutdown()
+            .await
+            .expect("stop real central fixture");
+        Arc::try_unwrap(self.pushes)
             .ok()
-            .expect("Control releases Board storage")
-            .into_inner()
+            .expect("release native push owner")
             .close()
             .await
-            .expect("close Board database");
-        Arc::try_unwrap(pushes)
-            .ok()
-            .expect("Control releases automation storage")
-            .into_inner()
-            .close()
-            .await
-            .expect("close automation database");
-        drop(_directory);
+            .expect("close");
     }
-
-    async fn post_thread_message(&self, body: &str) -> Message {
-        self.board
-            .lock()
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    async fn post_thread_message(&self, body: &str) -> Post {
+        let writer = Identity::Human {
+            human_id: "subscription-range-writer"
+                .to_owned()
+                .try_into()
+                .expect("writer"),
+        };
+        let post_id = PostId::generate();
+        let mut input = header(&writer);
+        input.as_object_mut().expect("header").extend(json!({"postId":post_id,"placement":{"kind":"thread","thread":{"thread":self.thread_id}},"text":body,"references":[],"addressees":[]}).as_object().expect("post").clone());
+        assert_eq!(
+            self.control
+                .served
+                .call("thread_post", input)
+                .await
+                .expect("post")
+                .pointer("/result/result/decision/kind"),
+            Some(&json!("accepted"))
+        );
+        let store = self
+            .registry
+            .existing_project(&self.project_id)
             .await
-            .post_message(
-                MessagePostRequest {
-                    message_id: MessageId::generate(),
-                    placement: Placement::Thread {
-                        root_message_id: self.root_message_id.clone(),
-                    },
-                    actor: Identity::Human {
-                        human_id: "subscription-range-writer"
-                            .to_owned()
-                            .try_into()
-                            .expect("writer identity"),
-                    },
-                    acting_for: None,
-                    text: MessageText::try_from(body.to_owned()).expect("posted body"),
-                    references: MessageReferences::try_from(Vec::new()).expect("posted references"),
-                },
-                Utc::now(),
-            )
+            .expect("registry")
+            .expect("store");
+        let mut read = store.snapshot().await.expect("snapshot");
+        let record = read
+            .record(&post_id.into())
             .await
-            .expect("post real Board message")
-            .message
+            .expect("record")
+            .expect("post");
+        read.finish().await.expect("finish");
+        match record {
+            message_board::Record::Post(post) => Some(post),
+            _ => None,
+        }
+        .expect("stored post")
     }
-
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "Fixed test vectors define these indices."
+    )]
     async fn unread_project_activity(&self) -> Vec<InboxActivity> {
-        self.board
-            .lock()
-            .await
-            .fetch_inbox(InboxFetchRequest {
-                scope: InboxScope::Project {
-                    project_id: self.project_id.clone(),
-                },
-                reader: self.board_reader.clone(),
-                read_mode: InboxReadMode::Unread,
-                page: message_board::PageRequest::default(),
-            })
-            .await
-            .expect("read target's real Board inbox")
-            .page
-            .records
+        let result=self.control.served.call("inbox_fetch",json!({"protocolVersion":1,"actingFor":null,"scope":{"kind":"project","projectId":self.project_id},"reader":self.board_reader,"readMode":"unread","initializations":[{"projectId":self.project_id,"requestId":self.initialization}],"page":{}})).await.expect("inbox");
+        serde_json::from_value(result["result"]["page"]["records"].clone()).expect("activity")
     }
-
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn insert_subscription_push(
         &self,
         push_id: PushId,
-        from_activity_sequence: message_board::ActivitySequence,
-        through_activity_sequence: message_board::ActivitySequence,
+        from: FeedCursor,
+        through: FeedCursor,
         message_count: u64,
     ) {
         let origin = RouterOriginRef::SubscriptionActivity {
@@ -223,17 +230,11 @@ impl SubscriptionExpansionFixture {
             batch_id: message_board::BatchId::generate(),
         };
         self.pushes
-            .lock()
-            .await
             .insert_push_record(PushRecordDraft {
                 push_id,
                 kind: PushKind::SubscriptionActivity,
                 origin: PushOrigin::Router(PushKind::SubscriptionActivity),
-                origin_router_ref: Some(
-                    origin
-                        .canonical_string()
-                        .expect("canonical subscription batch origin"),
-                ),
+                origin_router_ref: Some(origin.canonical_string().expect("origin")),
                 target: self.target.clone(),
                 reply_to_push_id: None,
                 header_facts: PushHeaderFacts::SubscriptionActivity {
@@ -245,9 +246,10 @@ impl SubscriptionExpansionFixture {
                 body: None,
                 activity: Some(PushActivitySnapshot {
                     ranges: vec![PushActivityRange {
-                        root_message_id: self.root_message_id.clone(),
-                        from_activity_sequence,
-                        through_activity_sequence,
+                        thread_id: self.thread_id.clone(),
+                        project_id: self.project_id.clone(),
+                        from,
+                        through,
                     }],
                     held: false,
                     draining: false,
@@ -257,10 +259,11 @@ impl SubscriptionExpansionFixture {
                 created_at: Utc::now(),
             })
             .await
-            .expect("persist subscription push in real SQLite");
+            .expect("push");
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn board_session_identity(target: &SessionRef) -> Identity {
     Identity::Session {
         session: BoardSessionRef {
@@ -293,19 +296,90 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
     let first_in_range = fixture
         .post_thread_message("inside-first: return this body")
         .await;
+    let native = fixture
+        .registry
+        .existing_project(&fixture.project_id)
+        .await
+        .expect("native project")
+        .expect("store");
+    let mut read = native.snapshot().await.expect("snapshot");
+    let template = read
+        .record(&fixture.project_id.clone().into())
+        .await
+        .expect("project read")
+        .expect("project");
+    read.finish().await.expect("finish");
+    let unrelated = message_board::WorkstreamId::generate();
+    let mut write = native
+        .begin_admission(message_board::ActorOrigin {
+            installation: SERVICE_ID.to_owned().try_into().expect("service"),
+            machine: "range proof".to_owned().try_into().expect("machine"),
+        })
+        .await
+        .expect("native write");
+    let unrelated_position = write
+        .append_record(message_board::Record::Workstream(
+            message_board::Workstream {
+                envelope: message_board::RecordEnvelope {
+                    id: unrelated.clone().into(),
+                    request: None,
+                    ..template.envelope().clone()
+                },
+                workstream_id: unrelated,
+                project_id: fixture.project_id.clone(),
+                name: "unrelated in-range work"
+                    .to_owned()
+                    .try_into()
+                    .expect("name"),
+                goal: String::new(),
+                state: message_board::WorkstreamState::Open {},
+                revision: message_board::SubjectRevision::INITIAL,
+            },
+        ))
+        .await
+        .expect("append unrelated workstream");
+    write.commit().await.expect("commit");
     let second_in_range = fixture
         .post_thread_message("inside-second: return this body")
         .await;
     let after_range = fixture
         .post_thread_message("outside-after: do not return")
         .await;
+    use sqlx::{ConnectOptions, Connection};
+    let mut observer = sqlx_turso::TursoConnectOptions::new()
+        .filename(native.path())
+        .connect()
+        .await
+        .expect("observer");
+    let changed = sqlx::query("UPDATE project_feed SET content = json_set(content, '$.record.record.name', '') WHERE position = ?")
+        .bind(i64::try_from(unrelated_position.position.get()).expect("position"))
+        .execute(&mut observer).await.expect("corrupt unrelated body");
+    assert_eq!(changed.rows_affected(), 1);
+    observer.close().await.expect("close");
+    let mut read = native.snapshot().await.expect("snapshot");
+    let before_unrelated = message_board::FeedCursor {
+        epoch: unrelated_position.epoch,
+        position: message_board::FeedPosition::try_from(unrelated_position.position.get() - 1)
+            .expect("before position"),
+    };
+    assert!(
+        read.feed_after(before_unrelated, 1, false).await.is_err(),
+        "direct content still rejects the unrelated corrupt body"
+    );
+    read.finish().await.expect("finish");
 
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push id");
     fixture
         .insert_subscription_push(
             push_id.clone(),
-            first_in_range.activity_sequence,
-            second_in_range.activity_sequence,
+            first_in_range
+                .position
+                .project_cursor()
+                .expect("first project cursor"),
+            second_in_range
+                .position
+                .project_cursor()
+                .expect("second project cursor"),
             2,
         )
         .await;
@@ -337,23 +411,24 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
     assert_eq!(
         range_read["range"],
         json!({
-            "rootMessageId":fixture.root_message_id.clone(),
-            "fromActivitySequence":first_in_range.activity_sequence,
-            "throughActivitySequence":second_in_range.activity_sequence
+            "threadId":fixture.thread_id.clone(),
+            "projectId":fixture.project_id.clone(),
+            "from":first_in_range.position.project_cursor().expect("first project cursor"),
+            "through":second_in_range.position.project_cursor().expect("second project cursor")
         })
     );
-    let expanded_messages = range_read["messages"]
+    let expanded_messages = range_read["posts"]
         .as_array()
         .expect("Control returned expanded Board messages");
     assert_eq!(expanded_messages.len(), 2);
     assert_eq!(
         expanded_messages
             .iter()
-            .map(|message| message["messageId"].as_str().expect("message id"))
+            .map(|message| message["postId"].as_str().expect("message id"))
             .collect::<Vec<_>>(),
         vec![
-            first_in_range.message_id.as_str(),
-            second_in_range.message_id.as_str()
+            first_in_range.post_id.as_str(),
+            second_in_range.post_id.as_str()
         ]
     );
     assert_eq!(
@@ -365,9 +440,10 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
         "inside-second: return this body"
     );
     assert!(
-        expanded_messages.iter().all(|message| message["messageId"]
-            != before_range.message_id.as_str()
-            && message["messageId"] != after_range.message_id.as_str()),
+        expanded_messages
+            .iter()
+            .all(|message| message["postId"] != before_range.post_id.as_str()
+                && message["postId"] != after_range.post_id.as_str()),
         "the stored activity range excludes surrounding Board messages"
     );
 
@@ -377,8 +453,6 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
     );
     let stored_after_show = fixture
         .pushes
-        .lock()
-        .await
         .get_push_record(&push_id)
         .await
         .expect("read stored subscription push")
@@ -391,8 +465,8 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
     let unread_message_ids = unread_after_show
         .iter()
         .filter_map(|activity| match activity {
-            InboxActivity::MessageCreated { message, .. } => {
-                Some(message.message_id.as_str().to_owned())
+            InboxActivity::PostCreated { post: message, .. } => {
+                Some(message.post_id.as_str().to_owned())
             }
             InboxActivity::ThreadStateChanged { .. } => None,
         })
@@ -400,10 +474,10 @@ async fn router_show_expands_only_stored_subscription_range_without_read_acknowl
     assert_eq!(
         unread_message_ids,
         vec![
-            before_range.message_id.as_str().to_owned(),
-            first_in_range.message_id.as_str().to_owned(),
-            second_in_range.message_id.as_str().to_owned(),
-            after_range.message_id.as_str().to_owned()
+            before_range.post_id.as_str().to_owned(),
+            first_in_range.post_id.as_str().to_owned(),
+            second_in_range.post_id.as_str().to_owned(),
+            after_range.post_id.as_str().to_owned()
         ],
         "range expansion reads the Board but leaves the target inbox unacknowledged"
     );

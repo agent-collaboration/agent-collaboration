@@ -1,0 +1,1 @@
+SELECT notice_id, CAST(position AS TEXT) AS position, typeof(position) AS position_class, kind, CAST(created_at AS TEXT) AS created_at, typeof(created_at) AS created_class, CAST(expires_at AS TEXT) AS expires_at, typeof(expires_at) AS expiry_class FROM machine_notices WHERE position>CAST(? AS INTEGER) ORDER BY position;

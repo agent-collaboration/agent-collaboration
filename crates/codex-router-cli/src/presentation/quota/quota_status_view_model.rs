@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::quota::CreditUsageStatus;
 use codex_router_core::ids::AccountId;
+use codex_router_core::provider::Provider;
 
 pub(crate) type QuotaStatusViewModelLoader =
     Arc<dyn Fn() -> QuotaStatusViewModelLoadFuture + Send + Sync>;
@@ -14,6 +15,7 @@ pub(crate) type QuotaStatusViewModelLoadFuture =
 pub(crate) struct QuotaStatusViewModel {
     pub(crate) width: usize,
     pub(crate) route_line: String,
+    pub(crate) header: super::quota_status_symbols::QuotaHeaderFacts,
     pub(crate) why_line: String,
     pub(crate) pool_freshness_summary: String,
     pub(crate) selection_projection_degraded: bool,
@@ -24,19 +26,22 @@ pub(crate) struct QuotaStatusViewModel {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct QuotaStatusAccountViewModel {
+    pub(crate) provider: Provider,
     pub(crate) account_id: AccountId,
     pub(crate) account_tag: String,
     pub(crate) active_credential_generation: Option<u64>,
     pub(crate) enabled: bool,
     pub(crate) selected: bool,
     pub(crate) account: String,
-    pub(crate) status: String,
+    pub(crate) status: super::quota_status_symbols::QuotaRowStatus,
     pub(crate) active_clients: String,
     pub(crate) reset_credits: String,
     pub(crate) credit_usage_summary: String,
     pub(crate) credit_usage: CreditUsageStatus,
     pub(crate) reason: String,
     pub(crate) weekly_window: String,
+    pub(crate) display_weekly: QuotaDisplayWindow,
+    pub(crate) display_short: QuotaDisplayWindow,
     pub(crate) short_window: String,
     pub(crate) burn_meter: String,
     pub(crate) sample_metadata: SampleMetadata,
@@ -139,4 +144,16 @@ pub(crate) struct QuotaSelectedAccountViewModel {
     pub(crate) guards: String,
     pub(crate) reset: String,
     pub(crate) note: String,
+}
+
+/// Included quota facts, kept separate from the preserved static display strings.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) enum QuotaDisplayWindow {
+    #[default]
+    Unknown,
+    Known {
+        remaining_percent: u32,
+        reset_in_seconds: Option<u64>,
+        stale: bool,
+    },
 }

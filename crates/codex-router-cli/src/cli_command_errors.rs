@@ -14,6 +14,8 @@ use thiserror::Error;
 /// CLI execution failure.
 #[derive(Debug, Error)]
 pub enum CliError {
+    #[error(transparent)]
+    Central(#[from] crate::central_command::CentralCommandError),
     /// Background OAuth upkeep could not start.
     #[error(transparent)]
     CredentialUpkeep(#[from] CredentialUpkeepStartError),
@@ -153,6 +155,10 @@ pub enum CliError {
         /// Clap-rendered parse error.
         message: String,
     },
+
+    /// Fleet enrollment or local inspection failed.
+    #[error(transparent)]
+    Fleet(#[from] crate::fleet_command::FleetCommandError),
 
     /// Shared host command failed.
     #[error(transparent)]

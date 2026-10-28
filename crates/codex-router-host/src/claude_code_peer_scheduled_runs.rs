@@ -2,19 +2,36 @@
 use crate::claude_code_peer_delivery_route::ClaudeCodePeerDeliveryRoute;
 use agent_automation::{PeerWriteEffect, RouteEffectEvidence};
 use claude_code_peer_messaging::{PeerSessionLookup, PeerSocketWriteOutcome};
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::FreshSessionRequest;
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::PreparedTarget;
+use collaboration_contracts::RunAcceptance;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::RunSummarySource;
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationFailure;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunExecution;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunRoute;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::SettlementEvidence;
+use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
     DeliveryRejection, DeliveryRejectionReason, RouterLink, RunExecution, ScheduleFailureKind,
     SessionRef,
-};
-use collaboration_service::{
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, FreshSessionRequest,
-    PreparationEvidenceSink, PreparedTarget, RunAcceptance, RunEvidenceDisposition,
-    RunEvidenceSink, RunObservationContext, RunReconciliation, RunSettlement, RunSubmission,
-    RunSummarySource, ScheduleCapability, ScheduleDestination, SchedulePreparationFailure,
-    SchedulePreparationOutcome, SchedulePreparationRequest, ScheduleSupport, ScheduledRunExecution,
-    ScheduledRunPayload, ScheduledRunRoute, ScheduledRunSubmission, SettlementEvidence,
-    StopRequestOutcome,
 };
 
 impl ClaudeCodePeerDeliveryRoute {
@@ -25,7 +42,7 @@ impl ClaudeCodePeerDeliveryRoute {
         if !self.serves(target) {
             return Err(DeliveryContractError::ClientOperation);
         }
-        let PeerSessionLookup::Writable(peer) = self.lookup(target).await else {
+        let Ok(PeerSessionLookup::Writable(peer)) = self.lookup(target).await else {
             return Err(DeliveryContractError::ClientOperation);
         };
         Self::evidence(&peer, PeerWriteEffect::NotDispatched)
@@ -181,15 +198,20 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
                 ));
             }
             let peer = match self.lookup(&run.target).await {
-                PeerSessionLookup::Writable(peer) if peer.process_id == recorded.process_id => peer,
-                PeerSessionLookup::LiveUnsupported { .. } | PeerSessionLookup::Ambiguous { .. } => {
+                Ok(PeerSessionLookup::Writable(peer)) if peer.process_id == recorded.process_id => {
+                    peer
+                }
+                Err(_)
+                | Ok(
+                    PeerSessionLookup::LiveUnsupported { .. } | PeerSessionLookup::Ambiguous { .. },
+                ) => {
                     return Ok(rejected(
                         DeliveryRejectionReason::LiveElsewhere,
                         DeliveryNextAction::InspectTarget,
                         "Claude Code session is live but not writable",
                     ));
                 }
-                PeerSessionLookup::Absent | PeerSessionLookup::Writable(_) => {
+                Ok(PeerSessionLookup::Absent | PeerSessionLookup::Writable(_)) => {
                     return Ok(rejected(
                         DeliveryRejectionReason::EndpointUnavailable,
                         DeliveryNextAction::RetryLater,
@@ -228,7 +250,7 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
                         })),
                     )
                 }
-                PeerSocketWriteOutcome::NotSubmitted { reason } => (
+                PeerSocketWriteOutcome::NotSubmitted { reason, .. } => (
                     PeerWriteEffect::NotDispatched,
                     rejected(
                         DeliveryRejectionReason::EndpointUnavailable,
@@ -304,7 +326,7 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
 }
 
 fn prepared_push_link_matches_id(
-    prepared: &collaboration_service::layer_zero::PreparedPush,
+    prepared: &collaboration_contracts::layer_zero::PreparedPush,
 ) -> bool {
     prepared
         .line
@@ -326,5 +348,6 @@ fn rejected(
         client_code: None,
         detail: Some(detail.to_owned()),
         claims: None,
+        native_failure: None,
     })
 }

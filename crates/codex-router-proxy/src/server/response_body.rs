@@ -1,4 +1,14 @@
-use super::*;
+use super::{
+    AccountId, AffinitySourceTransport, Arc, AsyncHttpAffinityOwnerRecorder, AsyncHttpBodyError,
+    AsyncProviderErrorObserver, BodyExt, BoxBody, Bytes, Empty, Frame,
+    HTTP_RESPONSE_AFFINITY_SCAN_MAX_BYTES, HTTP_RESPONSE_AFFINITY_SCAN_MAX_EVENTS,
+    HeaderCollection, HeadroomTimestamp, HttpMethod, HttpProxyError, HttpResponse, Infallible,
+    LoopbackRouterRuntimeError, Method, PreviousResponseAffinityOwnerRecord,
+    ProviderErrorClassification, RouteBand, SelectionHoldReason, StatusCode, StreamBody,
+    StreamingHttpProxyCompletion, TaskTracker, UnavailableReason, box_body_from_bytes,
+    classify_provider_error_envelope, current_unix_seconds, extract_response_id_from_body,
+    hash_previous_response_id, safe_account_label, stream,
+};
 
 pub(crate) fn method_from_hyper(method: &HttpMethod) -> Method {
     match *method {
@@ -272,6 +282,18 @@ pub(crate) fn http_error_response(
 ) -> HttpResponse<BoxBody<Bytes, AsyncHttpBodyError>> {
     match error {
         HttpProxyError::LocalAuth { .. } => empty_response(StatusCode::UNAUTHORIZED),
+        HttpProxyError::Selection {
+            reason:
+                crate::account_selection::QuotaAwareAccountSelectorError::NoConfiguredOpenaiAccounts,
+        } => HttpResponse::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body(box_body_from_bytes(
+                crate::websocket::ROUTER_NO_OPENAI_ACCOUNTS_SIGNAL
+                    .as_bytes()
+                    .to_vec(),
+            ))
+            .unwrap_or_else(|_error| HttpResponse::new(empty_body())),
         HttpProxyError::Selection {
             reason: crate::account_selection::QuotaAwareAccountSelectorError::NoEligibleAccounts,
         } => all_accounts_exhausted_response(),

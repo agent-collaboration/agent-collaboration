@@ -4,7 +4,8 @@ use collaboration_protocol::{
     GenerationNumber, NativeCarrier, NonEmptyText, ObservationTimestamp, SchemaDigest,
     UuidIdentity,
 };
-use collaboration_service::{EndpointDirectory, NativeGenerationGate};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeGenerationGate;
 use std::io;
 use std::path::PathBuf;
 
@@ -51,7 +52,7 @@ impl BackendPublication {
     }
     pub fn with_acp_listener(mut self) -> io::Result<Self> {
         self.acp_schema = Some(
-            format!("sha256:{}", collaboration_service::ACP_SCHEMA_DIGEST)
+            format!("sha256:{}", codex_acp_adapter::ACP_SCHEMA_DIGEST)
                 .try_into()
                 .map_err(io::Error::other)?,
         );

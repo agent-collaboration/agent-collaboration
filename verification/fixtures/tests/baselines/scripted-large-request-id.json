@@ -1,0 +1,26 @@
+{
+  "name": "large-request-id",
+  "steps": [
+    {
+      "action": "expect_request",
+      "requestName": "large",
+      "method": "initialize",
+      "params": {}
+    },
+    {
+      "action": "respond",
+      "requestName": "large",
+      "result": {
+        "ok": true
+      }
+    }
+  ],
+  "input": "{\"jsonrpc\":\"2.0\",\"id\":18446744073709551615,\"method\":\"initialize\",\"params\":{}}\n",
+  "expected": {
+    "status": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 18446744073709551615, \"result\": {\"ok\": true}}\n",
+    "stderr": "",
+    "receipt": null,
+    "marker": false
+  }
+}

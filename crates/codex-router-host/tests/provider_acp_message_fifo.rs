@@ -1,15 +1,18 @@
-#![allow(clippy::expect_used)]
 //! Queue draining and inspectable provider queue operation behavior.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{
     DeliveryOutcome, MessageContent, MessageDelivery, MessageText, ProviderOperationKind,
     ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord, SessionDeliveryRoute};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
@@ -73,7 +76,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         store,
         Arc::new(NoLivePeer),
     );
-    let first = collaboration_service::ProviderConversationBackend::prompt(
+    let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
             input_id: None,
@@ -145,7 +148,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
     assert_eq!(route.queue_list(&target)[0].input_id, queued.input_id);
 
     first_event.write_all(b"x").await.expect("release first");
-    collaboration_service::ProviderConversationBackend::wait(
+    collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: first.operation.operation_id,
@@ -224,7 +227,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     );
 
     let first_operation_id = collaboration_protocol::OperationId::generate();
-    let first = collaboration_service::ProviderConversationBackend::prompt(
+    let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
             input_id: None,
@@ -270,8 +273,11 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         .deliver(queued_request, &evidence)
         .await
         .expect("queued delivery");
-    assert!(matches!(queued.outcome, DeliveryOutcome::Queued));
-    let queued_snapshot = collaboration_service::ProviderConversationBackend::show(
+    assert!(matches!(
+        queued.receipt().outcome.clone(),
+        DeliveryOutcome::Queued
+    ));
+    let queued_snapshot = collaboration_contracts::ProviderConversationBackend::show(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationShowRequest {
             operation_id: queued_operation_id.clone(),
@@ -293,7 +299,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     {
         let mut provider_store = store.lock().await;
         provider_store
-            .admit(collaboration_service::ProviderOperationAdmission {
+            .admit(collaboration_runtime::ProviderOperationAdmission {
                 operation_id: blocker_id.clone(),
                 operation_kind: ProviderOperationKind::ConversationPrompt,
                 binding: collaboration_protocol::ConversationBindingIdentity::ExternalProvider {
@@ -313,7 +319,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         .write_all(b"x")
         .await
         .expect("release first prompt");
-    let first_settlement = collaboration_service::ProviderConversationBackend::wait(
+    let first_settlement = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: first.operation.operation_id,
@@ -351,7 +357,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         .expect("second bytes");
     assert_eq!(first_bytes, *b"first");
     assert_eq!(second_bytes, *b"second");
-    let submitted_snapshot = collaboration_service::ProviderConversationBackend::show(
+    let submitted_snapshot = collaboration_contracts::ProviderConversationBackend::show(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationShowRequest {
             operation_id: queued_operation_id.clone(),
@@ -372,7 +378,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         .write_all(b"x")
         .await
         .expect("release second prompt");
-    let completed = collaboration_service::ProviderConversationBackend::wait(
+    let completed = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: queued_operation_id,
@@ -467,7 +473,9 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             .deliver(first_request, &evidence)
             .await
             .expect("first queue")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
     assert!(matches!(
@@ -475,13 +483,15 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             .deliver(second_request, &evidence)
             .await
             .expect("second queue")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
 
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            let first = collaboration_service::ProviderConversationBackend::show(
+            let first = collaboration_contracts::ProviderConversationBackend::show(
                 supervisor.as_ref(),
                 collaboration_protocol::ConversationOperationShowRequest {
                     operation_id: first_id.clone(),
@@ -489,7 +499,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             )
             .await
             .expect("first queued state");
-            let second = collaboration_service::ProviderConversationBackend::show(
+            let second = collaboration_contracts::ProviderConversationBackend::show(
                 supervisor.as_ref(),
                 collaboration_protocol::ConversationOperationShowRequest {
                     operation_id: second_id.clone(),
@@ -571,7 +581,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         )
         .expect("supervisor"),
     );
-    let active_prompt = collaboration_service::ProviderConversationBackend::prompt(
+    let active_prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
             input_id: None,
@@ -622,7 +632,9 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
                 .deliver(queued_request, &evidence)
                 .await
                 .expect("queued delivery")
-                .outcome,
+                .receipt()
+                .outcome
+                .clone(),
             DeliveryOutcome::Queued
         ));
     }
@@ -632,7 +644,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         .expect("release active prompt");
     let event_result = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await;
     if event_result.is_err() {
-        let first_state = collaboration_service::ProviderConversationBackend::show(
+        let first_state = collaboration_contracts::ProviderConversationBackend::show(
             supervisor.as_ref(),
             collaboration_protocol::ConversationOperationShowRequest {
                 operation_id: first_id.clone(),
@@ -640,7 +652,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         )
         .await
         .expect("first operation diagnostic");
-        let second_state = collaboration_service::ProviderConversationBackend::show(
+        let second_state = collaboration_contracts::ProviderConversationBackend::show(
             supervisor.as_ref(),
             collaboration_protocol::ConversationOperationShowRequest {
                 operation_id: second_id.clone(),
@@ -658,7 +670,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
     let mut received = [0_u8; 6];
     event.read_exact(&mut received).await.expect("event bytes");
     assert_eq!(&received, b"second");
-    let second_settlement = collaboration_service::ProviderConversationBackend::wait(
+    let second_settlement = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: second_id.clone(),
@@ -672,7 +684,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         second_settlement.output,
         collaboration_protocol::ConversationOperationWaitOutput::Available { .. }
     ));
-    let first = collaboration_service::ProviderConversationBackend::show(
+    let first = collaboration_contracts::ProviderConversationBackend::show(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationShowRequest {
             operation_id: first_id,
@@ -688,7 +700,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         first.effect,
         collaboration_protocol::ProviderOperationEffect::None
     );
-    let second = collaboration_service::ProviderConversationBackend::show(
+    let second = collaboration_contracts::ProviderConversationBackend::show(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationShowRequest {
             operation_id: second_id,
@@ -704,7 +716,7 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         second.effect,
         collaboration_protocol::ProviderOperationEffect::Applied
     );
-    let active_settlement = collaboration_service::ProviderConversationBackend::wait(
+    let active_settlement = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: active_prompt.operation.operation_id,
@@ -775,7 +787,7 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         store,
         Arc::new(NoLivePeer),
     );
-    let first = collaboration_service::ProviderConversationBackend::prompt(
+    let first = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
             input_id: None,
@@ -805,7 +817,9 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             .deliver(queued_request, &evidence)
             .await
             .expect("queued delivery")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
     let second_queued_request = request(target, "also drop on retirement");
@@ -818,13 +832,15 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             .deliver(second_queued_request, &evidence)
             .await
             .expect("second queued delivery")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
 
     supervisor.shutdown().await.expect("provider retires");
     for operation_id in [queued_id, second_queued_id] {
-        let snapshot = collaboration_service::ProviderConversationBackend::show(
+        let snapshot = collaboration_contracts::ProviderConversationBackend::show(
             supervisor.as_ref(),
             collaboration_protocol::ConversationOperationShowRequest { operation_id },
         )

@@ -1,0 +1,60 @@
+{
+  "function": "require_advertised_settings",
+  "name": "test_unqualified_catalog_only_plan_cannot_submit_model_input",
+  "args": [
+    {
+      "settingsCatalog": {
+        "currentMode": "manual-mode",
+        "modes": [
+          {
+            "value": "manual-mode",
+            "label": "Manual"
+          }
+        ],
+        "configOptions": [
+          {
+            "id": "model",
+            "category": "model",
+            "currentValue": {
+              "kind": "select",
+              "value": "provider-model"
+            },
+            "choices": [
+              {
+                "value": "provider-model",
+                "label": "Actual provider model"
+              }
+            ]
+          },
+          {
+            "id": "effort",
+            "category": "effort",
+            "currentValue": {
+              "kind": "select",
+              "value": "low"
+            },
+            "choices": [
+              {
+                "value": "low",
+                "label": "Low"
+              }
+            ]
+          },
+          {
+            "id": "thinking",
+            "category": null,
+            "currentValue": {
+              "kind": "boolean",
+              "value": true
+            },
+            "choices": []
+          }
+        ]
+      }
+    },
+    {}
+  ],
+  "expected": {
+    "error": "settings not qualified; inspect the actual catalog before model input"
+  }
+}

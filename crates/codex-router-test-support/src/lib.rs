@@ -1,13 +1,20 @@
 //! Test support helpers for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
+pub mod global_claude_fixture;
 pub mod installed_codex;
 pub mod mock_upstream;
 pub mod native_app_server;
+pub mod node_fixture;
+pub mod owned_cli_process;
+pub mod owned_peer_fixture;
 pub mod route_native;
 pub mod router_health;
+pub mod scenario_finalization;
 pub mod signal_recording;
 pub mod transcript;
+
+/// Shared error boundary for owned process and peer test fixtures.
+pub type FixtureResult<Value = ()> = Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Returns this crate's package name.
 #[must_use]

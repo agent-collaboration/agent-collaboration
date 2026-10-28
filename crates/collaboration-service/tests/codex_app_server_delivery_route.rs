@@ -4,18 +4,28 @@ use agent_automation::{
 };
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
+use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageInputKind, MessageRepresentation, MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    CodexAppServerDeliveryRoute, DeliveryClientReceipt, DeliveryContractError, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, ScheduledRunPayload, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::SessionDeliveryRouter;
 use futures_util::{SinkExt, StreamExt};
 use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
@@ -29,6 +39,13 @@ use std::{
     time::Duration,
 };
 use tokio_tungstenite::tungstenite::Message;
+#[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -86,7 +103,7 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
             .0
             .lock()
             .map(|mut records| records.push(evidence))
-            .map_err(|_| collaboration_service::DeliveryContractError::EvidencePersistence);
+            .map_err(|_| collaboration_contracts::DeliveryContractError::EvidencePersistence);
         Box::pin(async move { result })
     }
 }
@@ -233,7 +250,7 @@ async fn exercise_held_empty_thread(
         socket_path.clone(),
         Some(Arc::clone(&schemas)),
     )?;
-    let holder = Arc::new(collaboration_service::UnmaterializedThreadHolder::new());
+    let holder = Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
     let backend_config = NativeControlBackend {
         endpoint: target.endpoint.clone(),
         gate,
@@ -250,6 +267,7 @@ async fn exercise_held_empty_thread(
     let run_id = agent_automation::RunId::generate();
     let scheduled_push_id = PushId::try_from(uuid::Uuid::now_v7().to_string())?;
     let expected_scheduled_push_id = scheduled_push_id.clone();
+    let (delivery_prepared, mut delivery_ready) = tokio::sync::oneshot::channel();
     let backend = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut wire = tokio_tungstenite::accept_async(stream).await?;
@@ -271,6 +289,11 @@ async fn exercise_held_empty_thread(
             ],
         };
         for &method in methods {
+            if method == "turn/start" && scenario.is_none() {
+                // Real app-server connections remain idle during local store
+                // setup. Start the RPC deadline when the caller can send it.
+                tokio::time::timeout(Duration::from_secs(30), &mut delivery_ready).await??;
+            }
             let frame = tokio::time::timeout(Duration::from_secs(3), wire.next())
                 .await?
                 .ok_or("native connection closed")??;
@@ -380,9 +403,10 @@ async fn exercise_held_empty_thread(
         return Err("closing session/new did not hold its empty native thread".into());
     }
     if let Some(scenario) = scenario {
-        use collaboration_service::{
-            RunEvidenceDisposition, RunEvidenceSink, RunSubmission, ScheduledRunExecution,
-        };
+        use collaboration_contracts::RunEvidenceDisposition;
+        use collaboration_contracts::RunEvidenceSink;
+        use collaboration_contracts::RunSubmission;
+        use collaboration_contracts::ScheduledRunExecution;
         struct ScheduledEvidenceSink {
             records: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
             refuse_dispatch: bool,
@@ -400,7 +424,7 @@ async fn exercise_held_empty_thread(
                     .is_err()
                 {
                     return Box::pin(async {
-                        Err(collaboration_service::DeliveryContractError::EvidencePersistence)
+                        Err(collaboration_contracts::DeliveryContractError::EvidencePersistence)
                     });
                 }
                 if dispatching && self.refuse_dispatch {
@@ -423,7 +447,7 @@ async fn exercise_held_empty_thread(
             "executionConfiguration":{"destination":{"kind":"ownedThread","target":target,"cwd":"/work"},
                 "executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}
         }))?;
-        let route = collaboration_service::CodexAppServerScheduledRuns::new(
+        let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
             backend_config.clone(),
             Arc::clone(&holder),
         );
@@ -456,7 +480,7 @@ async fn exercise_held_empty_thread(
         };
         let submission = route
             .submit_run(
-                collaboration_service::ScheduledRunSubmission {
+                collaboration_contracts::ScheduledRunSubmission {
                     run_id,
                     target: target.clone(),
                     payload: ScheduledRunPayload::Existing {
@@ -529,41 +553,50 @@ async fn exercise_held_empty_thread(
     let steer = route
         .deliver(make_request(MessageDelivery::Steer)?, evidence.as_ref())
         .await?;
-    if !matches!(steer.outcome, DeliveryOutcome::NotSubmitted { .. })
-        || !holder.contains("empty-thread")
+    if !matches!(
+        steer.receipt().outcome.clone(),
+        DeliveryOutcome::NotSubmitted { .. }
+    ) || !holder.contains("empty-thread")
     {
         return Err("steer consumed the unmaterialized binding".into());
     }
     let queued = route
         .deliver(make_request(MessageDelivery::Queue)?, evidence.as_ref())
         .await?;
-    if !matches!(queued.outcome, DeliveryOutcome::Queued) || !holder.contains("empty-thread") {
+    if !matches!(queued.receipt().outcome.clone(), DeliveryOutcome::Queued)
+        || !holder.contains("empty-thread")
+    {
         return Err("queue did not use and retain the held native connection".into());
     }
     let routed: Arc<dyn SessionDeliveryRoute> = route;
-    let delivery_router = Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
+    let delivery_router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
         routed,
     ]));
-    let delivery: Arc<dyn collaboration_service::SessionMessageDelivery> = delivery_router.clone();
-    let presence: Arc<dyn collaboration_service::TargetPresenceProbe> = delivery_router;
+    let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> =
+        delivery_router.clone();
+    let presence: Arc<dyn collaboration_contracts::TargetPresenceProbe> = delivery_router;
     let automation_store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
+    let machine_identity = collaboration_contracts::MachineIdentity::new(
+        service_id.clone(),
+        Some("held-thread-route-test"),
+    )?;
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity: collaboration_service::MachineIdentity::new(
-                service_id.clone(),
-                Some("held-thread-route-test"),
-            )?,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(collaboration_service::SystemSubscriptionClock),
         },
     );
     subscription_delivery.start().await?;
-    let identity = collaboration_service::ServiceIdentity::new(
+    let identity = collaboration_service::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001",
     )
@@ -572,11 +605,26 @@ async fn exercise_held_empty_thread(
     .with_endpoints(vec![description])
     .map_err(std::io::Error::other)?
     .with_session_delivery(delivery)
-    .with_subscription_delivery_service(subscription_delivery.clone(), presence);
-    let served = served_api::ServedApi::start(identity).await?;
+    .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+        },
+    )?;
+    let served = served_api::ServedApi::start(identity)?;
     let control = served.client("held-thread-message").await?;
+    delivery_prepared
+        .send(())
+        .map_err(|_| "native fixture stopped before delivery setup")?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             message: collaboration_client::PublicMessageContent::HumanUser {
                 text: "hello".to_owned().try_into()?,
@@ -585,6 +633,9 @@ async fn exercise_held_empty_thread(
             generation_guard: None,
         })
         .await?;
+    let collaboration_protocol::MessageSendResult::Local(started) = started else {
+        return Err("local held connection returned remote custody".into());
+    };
     if !matches!(started.receipt.outcome, DeliveryOutcome::Started)
         || !matches!(
             started.receipt.client,
@@ -598,11 +649,22 @@ async fn exercise_held_empty_thread(
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
     backend.await??;
+    native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)
         .map_err(|_| std::io::Error::other("service retained automation store"))?
         .into_inner();
     automation_store.close().await?;
     std::fs::remove_file(root.join("automation.sqlite"))?;
+    for name in [
+        "interaction.sqlite",
+        "interaction.sqlite-wal",
+        "interaction.sqlite-shm",
+    ] {
+        let path = root.join(name);
+        if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+    }
     std::fs::remove_file(socket_path)?;
     std::fs::remove_dir(scratch)?;
     std::fs::remove_dir(scratch_parent)?;

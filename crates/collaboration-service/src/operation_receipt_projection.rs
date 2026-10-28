@@ -25,7 +25,7 @@ pub(crate) fn snapshot(
         operation_id: record.operation_id,
         method,
         resource_id: record.resource_id,
-        admitted_at: crate::wakeup_projection::timestamp(record.admitted_at_ms)
+        admitted_at: collaboration_runtime::observation_timestamp::timestamp(record.admitted_at_ms)
             .map_err(|_| StorageError::InvalidRecord)?,
         state,
     };
@@ -38,7 +38,9 @@ fn project_effects(method: Method, effects: Value) -> Result<OperationEffects, S
     if method == Method::SchedulePrepare {
         Ok(OperationEffects::Route {
             evidence: Box::new(
-                crate::schedule_preparation_evidence_sink::project_stored_evidence(effects)?,
+                collaboration_runtime::schedule_preparation_evidence_sink::project_stored_evidence(
+                    effects,
+                )?,
             ),
         })
     } else {
@@ -54,7 +56,9 @@ fn project_failure(
     match method {
         Method::SchedulePrepare => {
             let error: collaboration_protocol::ScheduleFailure = decode(
-                crate::schedule_preparation_evidence_sink::upgrade_stored_failure(failure)?,
+                collaboration_runtime::schedule_preparation_evidence_sink::upgrade_stored_failure(
+                    failure,
+                )?,
             )?;
             Ok(OperationFailure {
                 kind: token(error.kind)?,
@@ -122,7 +126,10 @@ fn success(
             })
         }
         Method::WakeSend => {
-            let record: agent_automation::WakeRecord<SavedMessage> = decode(result)?;
+            let record: agent_automation::WakeRecord<
+                SavedMessage,
+                collaboration_protocol::WakeCreator,
+            > = decode(result)?;
             let observed = record.definition.created_at_ms;
             Ok(OperationSuccess::WakeCreated {
                 method: decode(method_value)?,
@@ -144,9 +151,9 @@ fn success(
         Method::SummaryRetry | Method::SummarySkip => Ok(OperationSuccess::RunRecovery {
             method: decode(method_value)?,
             result: Box::new(
-                crate::run_projection::snapshot::<crate::stored_run_receipt::StoredRunReceipt>(
-                    decode(result)?,
-                )
+                crate::run_projection::snapshot::<
+                    collaboration_runtime::stored_run_receipt::StoredRunReceipt,
+                >(decode(result)?)
                 .map_err(|_| StorageError::InvalidRecord)?,
             ),
         }),

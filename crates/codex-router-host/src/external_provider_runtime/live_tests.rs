@@ -4,9 +4,10 @@ use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, EndpointDescription, EndpointId, EndpointRef,
     GenerationNumber, OperationId, RouterOriginRef, SessionId, UuidIdentity,
 };
-use collaboration_service::{
-    EndpointDirectory, NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -131,21 +132,10 @@ fn provider_output_classifier_reports_only_bounded_uuid_metadata() {
 }
 
 fn owned_host_endpoint_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'owned-result-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["owned".to_owned()],
+    )
 }
 
 fn session_ref(
@@ -228,15 +218,15 @@ async fn approval_broker_fixture(
         root.path().join("approval-routes.json"),
     )
     .await?;
-    let route: Arc<dyn collaboration_service::SessionDeliveryRoute> =
-        Arc::new(collaboration_service::CodexAppServerDeliveryRoute::new(
+    let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+        Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
             service_id.clone(),
             endpoints,
             native_backend,
-            Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
         ));
     broker.install_session_delivery(Arc::new(
-        collaboration_service::SessionDeliveryRouter::new(vec![route]),
+        collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
     ))?;
     let push_fixture =
         approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
@@ -330,62 +320,17 @@ async fn approval_broker_fixture(
 }
 
 fn fixture_acp_permission_request_agent(provider_name: &str) -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-provider=sys.argv[1]
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':provider+'-permission-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-'+provider+'-session'}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'fixture-'+provider+'-session','toolCall':{'toolCallId':'echo-command','title':'Run echo cursor-ok','kind':'execute'},'options':[{'optionId':'allow','name':'Allow once','kind':'allow_once'}]}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='allow'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-'+provider+'-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'cursor-ok'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            fixture.to_owned(),
-            provider_name.to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["approve".to_owned(), provider_name.to_owned()],
+    )
 }
 
 fn fixture_acp_permission_without_allow_agent() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-refusal-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-refusal-session'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':92,'method':'session/request_permission','params':{'sessionId':'fixture-refusal-session','toolCall':{'toolCallId':'refused-command','title':'Run an unapproved command','kind':'execute'},'options':[{'optionId':'reject','name':'Reject once','kind':'reject_once'}]}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==92
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='reject'
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["reject".to_owned()],
+    )
 }
 
 #[cfg(unix)]
@@ -606,6 +551,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
     }
     let host_runtime = crate::CollaborationRuntime::start_with_external_providers(
         crate::CollaborationRuntimeInputs {
+            board_session: None,
             directory: host_directory.clone(),
             codex_home,
             backend_socket: root.path().join("backend.sock"),
@@ -615,12 +561,17 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
             remote_control_server_name: None,
             owner_human_id: None,
         },
-        vec![crate::ExternalProviderStartup::Launch(
-            crate::ExternalProviderLaunchBinding::claude(
+        vec![crate::ExternalProviderStartup::Launch({
+            let mut binding = crate::ExternalProviderLaunchBinding::claude(
                 owned_host_endpoint_fixture().executable,
                 owned_host_endpoint_fixture().arguments,
-            )?,
-        )],
+            )?;
+            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                root.path(),
+                &mut binding.launch.environment,
+            )?;
+            binding
+        })],
     )
     .await?;
     let manifest: collaboration_protocol::ServiceManifest =
@@ -650,6 +601,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
             arguments,
             environment: Vec::new(),
         },
+        acp_client_runtime::ProviderModelPicker::CursorParameterized,
         "router-collaboration",
         manifest.mcp.url,
     )

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO installation_peer_directory(peer_id,service_id) VALUES (?,?) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2953d4c494fb29edde6a296ed3c17c78e09f132eb1bea80db7e01fd6c168c787"
+}

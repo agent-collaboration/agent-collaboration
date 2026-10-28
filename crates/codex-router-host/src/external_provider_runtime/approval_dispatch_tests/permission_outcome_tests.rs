@@ -1,6 +1,10 @@
 use super::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn provider_option_sets_keep_order_scope_and_selected_id() -> TestResult {
     // PR 1 baseline: survey-cursor.md:54 and claude-adapter-and-sdk.md:153-155
     // describe these agent-offered choices. Extraction preserves their order,
@@ -130,6 +134,10 @@ async fn provider_option_sets_keep_order_scope_and_selected_id() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn output_limit_cancels_pending_permission() -> TestResult {
     let root = tempfile::tempdir()?;
     let event_socket = root.path().join("output-limit-event.sock");
@@ -186,6 +194,10 @@ async fn output_limit_cancels_pending_permission() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn provider_exit_cancels_pending_permission_as_provider_retired() -> TestResult {
     // ACP v1 prompt-turn.mdx:365-367 ends a Turn only at the agent's prompt
     // result. Specification R5 projects connection loss as providerRetired.

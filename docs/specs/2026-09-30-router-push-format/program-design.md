@@ -51,11 +51,11 @@ flowchart TB
 | `collaboration-protocol` · `message_content.rs` | `MessageContent` stays the **send input**; the Agent and Router envelope renderers and parsers are deleted | cutover |
 | `automation-storage` · migration + `push_records.rs` | `router_pushes` table; insert, settle, hold, list-by-target, inbox and history for DMs, prune; drops `latest_agent_senders` | new |
 | `automation-storage` · retention | 30-day prune, in bounded batches with each prune independent, of: `router_pushes`; whole `mailbox_deliveries` rows that are settled, over 30 days old and not referenced by any `wakeup_definitions` pending pointer; whole `operation_receipts` rows older than 30 days. This makes the idempotency window explicitly 30 days; the replay comparison over exact canonical bytes (`local_operation_receipts.rs:21-25`, `external_operation_receipts.rs:44-49`) is unchanged for retained rows, and a later replay of a pruned id is admitted as a new operation | extend |
-| `interaction_history.rs` | add `created_at` to each entry; entries without one are stamped with the upgrade time on first load; prune entries over 30 days | extend |
+| `collaboration-service` · typed interaction history | SQLite-only history with immutable creation instants; prune entries over 30 days under the [SQLite cutover contract](../2026-10-04-interaction-sqlite/specification.md). Do not read or import old typed JSON history; separate legacy approval history keeps its existing storage contract | cutover |
 | `collaboration-service` · `push_record_resolver.rs` | `router/show`: load the record, apply R10, mark read per R11, expand subscription ranges through the existing board range read | new |
 | `collaboration-service` · `machine_identity.rs` | machine id = service id; label from the Remote Control name, else the host name (escaped, bounded); written to `service.json` | new |
 | producers | `session_message_dispatch` / `session_message_reply_dispatch` (DM, reply by id, owner DMs); `wakeup_delivery_sender` (one record per firing, existing delivery mode); `scheduled_native_dispatch`, `provider_acp_run_dispatch` and `provider_delivery_submission` (existing-session runs become pushes; fresh runs keep task input); `interaction_broker`; the subscription owner (batch and expiry records) | cutover |
-| `ReaderDeliveryOwner` (subscriptions) | started for a target with **either** active or draining subscriptions **or** pending or held DM records. On restore it scans both; it ends when both are empty. Commands add `DmQueued(push_id)`. DM holds use `LoadedOnly`; one push in flight per target across DMs and subscription batches | extend |
+| `ReaderDeliveryOwner` (subscriptions) | started for a target with **either** active or draining subscriptions **or** pending or held DM records. On restore it scans both; it ends when both are empty. Commands add `DmQueued(push_id)`. New unguarded pending Auto DMs use `MayLoad`; Queue and previously held DMs use `LoadedOnly`. Already-held messages wait for the target's next load. One push in flight per target across DMs and subscription batches | extend |
 | `codex_queue_reconciliation.rs` | matches by `clientUserMessageId == push_id` + target + route; drops content comparison | cutover |
 | `session_display_text.rs` (agent-collaboration), `session_inventory_dispatch`, client `session_catalog` | titles from `parse_push_line_header`, never the preview; fall back to an endpoint label | cutover |
 | peer route, `provider_prompt_contents.rs`, client `acp_conversation.rs` | deliver `PreparedPush.line`; no rendering or guidance text | cutover |
@@ -99,8 +99,11 @@ DROP TABLE latest_agent_senders;
 
 ## 4. The line (R1–R3)
 
-- **Preview, in this order:** take the first 100 scalars of the body, escape them, then append `(+N)`
-  counting the body scalars not shown.
+- **Preview, in this order:** take up to the first 100 source scalars, escape them, add `…` before the
+  closing quote whenever body text is omitted, then append ` (+N) 📖 Load full message → ` followed by the
+  complete Router link. N counts omitted original
+  source scalars before escaping; the added display marker is excluded. Intact bodies have no added marker
+  or count suffix.
 - **Budget:** assemble the line; while it is over 1024 bytes, trim the machine label, then the name, then the
   schedule name, then the preview (each to a shorter form ending in `…`). The link and the kind emoji are
   never trimmed.
@@ -122,7 +125,7 @@ sequenceDiagram
   D->>DB: INSERT router_pushes (pending)
   D->>O: DmQueued(push_id)  (spawn the owner if absent)
   O->>DB: state = attempted
-  O->>R: deliver PreparedPush (LoadedOnly, correlation = push_id)
+  O->>R: deliver PreparedPush (new Auto: MayLoad; otherwise LoadedOnly; correlation = push_id)
   alt accepted
     R->>T: ✉️ … · "preview" · router://…/push/id
     O->>DB: delivered (retry the write on failure; never re-push)

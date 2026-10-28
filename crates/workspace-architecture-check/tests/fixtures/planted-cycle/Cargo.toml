@@ -1,0 +1,8 @@
+[package]
+name = "architecture-planted-cycle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Standalone fixture, deliberately outside the repository workspace.
+[workspace]

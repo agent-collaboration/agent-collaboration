@@ -4,6 +4,7 @@ use crate::presentation::session_picker::picker_actions::SessionsPickerOutcome;
 use crate::presentation::session_picker::picker_model::SessionsPickerModel;
 use crate::presentation::session_picker::picker_model::SessionsPickerRuntimeView;
 use crate::presentation::session_picker::test_support::observed_records;
+use crate::presentation::session_picker::test_support::picker_action_selection;
 use crate::presentation::session_picker::test_support::picker_record;
 use crate::presentation::session_picker::test_support::picker_request;
 use crate::sessions::SessionPickerIdentity;
@@ -22,13 +23,16 @@ fn hosted_picker_keeps_equal_codex_and_provider_ids_distinct_and_provider_read_o
         "origin":"hostedProvider",
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-a"},
         "workingDirectory":"/repo/project-a","updatedAt":3,
-        "state":"unloaded",
+        "state":"unloaded","requestedPolicy":{"access":"write-restricted"},
         "approver":{"kind":"human","humanId":"owner"},
         "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     }))
     .expect("provider row");
     let mut codex = request.records.remove(0);
     codex.identity = SessionPickerIdentity::HostedCodex(codex_target.clone());
+    codex.source_context =
+        Some(crate::presentation::session_picker::PickerSourceContext::DefaultHosted);
+    let codex_selection = crate::sessions::SessionActionSelection::from_picker_record(&codex);
     request.records = vec![
         codex,
         crate::sessions::SessionPickerRecord::from_provider_summary(&provider, "Claude fixture"),
@@ -46,11 +50,13 @@ fn hosted_picker_keeps_equal_codex_and_provider_ids_distinct_and_provider_read_o
     assert!(model.focus_visible_identity(&SessionPickerIdentity::HostedCodex(codex_target)));
     assert_eq!(
         model.activation_outcome_for_focus(),
-        Some(SessionsPickerOutcome::ResumeSession("thread-a".to_owned()))
+        Some(SessionsPickerOutcome::ResumeSession(
+            codex_selection.clone()
+        ))
     );
     assert_eq!(
         model.fork_outcome_for_focus(),
-        Some(SessionsPickerOutcome::ForkSession("thread-a".to_owned()))
+        Some(SessionsPickerOutcome::ForkSession(codex_selection))
     );
 
     request.source = crate::sessions::SessionsSource::Subagents;
@@ -111,7 +117,7 @@ fn sessions_picker_model_shows_and_switches_scope_view_and_sort() {
     assert!(!initial.contains("type search"));
     assert!(!initial.contains("enter resume"));
     assert!(!initial.contains("esc exit"));
-    assert!(initial.contains("Start new session"));
+    assert!(initial.contains("New Codex session"));
     assert!(initial.contains("Feature design session"));
     assert!(!initial.contains("Subagent planning"));
 
@@ -370,18 +376,29 @@ fn unavailable_runtime_is_explained_even_when_every_row_was_already_unknown() {
 
 #[test]
 fn sessions_picker_help_is_compact_by_default_and_expands_on_demand() {
-    let mut model = SessionsPickerModel::new(picker_request(), 120);
+    let mut request = picker_request();
+    request.root = crate::presentation::session_picker::picker_request::SessionsPickerRoot::Any;
+    request.source = crate::sessions::SessionsSource::All;
+    let mut model = SessionsPickerModel::new(request, 120);
+    let identity = model.visible_record_at(1).unwrap().identity.clone();
+    assert!(model.focus_visible_identity_in_window(&identity, Some(1)));
+    assert_eq!(model.focused_window_start(2), 1);
 
     let compact = model.render_snapshot();
     assert!(compact.contains("ctrl-/ Help"));
     assert!(!compact.contains("ctrl-r refresh"));
 
     model.handle_key(SessionsPickerKey::ToggleHelp);
+    assert_eq!(model.focused_window_start(2), 1);
+    assert_eq!(model.focused_identity(), Some(&identity));
     let expanded = model.render_snapshot();
     assert!(expanded.contains("Search: id:<id> | b:<branch> | repo:<name>"));
     assert!(expanded.contains("ctrl-t view"));
     assert!(expanded.contains("ctrl-r refresh"));
     assert!(expanded.contains("F1 close help"));
+    model.handle_key(SessionsPickerKey::ToggleHelp);
+    assert_eq!(model.focused_window_start(2), 1);
+    assert_eq!(model.focused_identity(), Some(&identity));
 }
 
 #[test]
@@ -453,7 +470,7 @@ fn sessions_picker_model_keeps_start_new_choice_with_existing_sessions() {
     let mut model = SessionsPickerModel::new(request, 120);
 
     let initial = model.render_snapshot();
-    assert!(initial.contains("Start new session"));
+    assert!(initial.contains("New Codex session"));
     assert!(initial.contains("args: --yolo --model gpt-5-codex"));
     assert_eq!(model.focused_session_id(), Some("thread-a"));
 
@@ -472,7 +489,7 @@ fn sessions_picker_empty_filter_offers_start_new_session() {
 
     let snapshot = model.render_snapshot();
 
-    assert!(snapshot.contains("Start new session"));
+    assert!(snapshot.contains("New Codex session"));
     assert!(!snapshot.contains("No sessions match these filters"));
     assert_eq!(
         model.activation_outcome_for_focus(),
@@ -491,7 +508,9 @@ fn sessions_picker_pointer_focus_resolves_stable_visible_session_identity() {
     assert_eq!(model.focused_session_id(), Some("thread-b"));
     assert_eq!(
         model.activation_outcome_for_focus(),
-        Some(SessionsPickerOutcome::ResumeSession("thread-b".to_owned()))
+        Some(SessionsPickerOutcome::ResumeSession(
+            picker_action_selection("thread-b")
+        ))
     );
 
     let mut replacement_records = model.request.records.clone();

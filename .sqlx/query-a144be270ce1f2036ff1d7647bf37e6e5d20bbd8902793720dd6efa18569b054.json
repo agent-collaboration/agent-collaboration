@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM owed_push_operations WHERE operation_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a144be270ce1f2036ff1d7647bf37e6e5d20bbd8902793720dd6efa18569b054"
+}

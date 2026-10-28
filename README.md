@@ -35,16 +35,22 @@ router root. Use `--router-root <path>` only for tests or an alternate local
 router home.
 
 ```shell
-cargo run -p codex-router-cli -- account login --label primary --device-auth --allow-plaintext-file-secrets
+cargo run -p codex-router-cli -- account login --provider openai --label primary
 cargo run -p codex-router-cli -- account list
 cargo run -p codex-router-cli -- quota refresh
 cargo run -p codex-router-cli -- quota status --all-limits
 ```
 
-`account login --device-auth` delegates the browser/device-code OAuth step to
-the installed `codex` binary in a temporary owner-only `CODEX_HOME`, then imports
-the resulting OAuth `auth.json` into router-owned account state. Use
-`--codex-bin <path>` to point at a specific Codex binary.
+`account login --provider openai` runs the native OpenAI device-code flow and
+stores credentials in the encrypted Router store. `--provider claude` uses the
+native Claude callback flow.
+
+For debug builds, `--allow-plaintext-file-secrets` explicitly initializes a
+fresh isolated plaintext credential root without Keychain access. `serve`
+requires `--require-debug-isolation`, `--state-db` and `--secret-root`;
+`account login` requires `--router-root`. The root remembers the storage mode
+for subsequent account, quota and serve commands. Release builds reject the
+flag and declared plaintext roots. See the [debug storage procedure](docs/testing/live-oauth-quota.md#debug-plaintext-credentials).
 
 The Router keeps enabled accounts' renewable credentials current while it runs,
 including when an account is idle or its quota is exhausted. A disabled account
@@ -107,8 +113,11 @@ together.
 Waits and observations are single bounded calls that return the cursor to resume
 from. `events_observe` also streams each event while its call is open, as a
 `notifications/codexRouter/observationEvent` notification carrying `{event,
-cursor}` (the call is then answered as SSE); its result still lists every event,
-so a client that ignores the notification loses nothing. `agent-collaboration
+cursor}` (the call is then answered as SSE). Notifications are delivered only
+within the call's bound, so a reader that stops reading cannot keep the call or
+its request slot; the result still lists every event, so a client that ignores
+or misses a notification loses nothing. A resync marker's cursor is null: attach
+again from the result's epoch. `agent-collaboration
 events observe --stream` prints each streamed event as an `observationEvent`
 line before the result.
 

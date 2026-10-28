@@ -1,18 +1,25 @@
-#![allow(clippy::expect_used)]
 //! Target presence and load-policy behavior through the session delivery routes.
 
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, CodexAppServerDeliveryRoute, DeliveryContractError, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::SessionDeliveryRouter;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -98,7 +105,7 @@ fn codex_route_fixture(
             gate,
             codex_home: root.path().to_owned(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     Ok(CodexRouteFixture {
         _root: root,
@@ -184,7 +191,10 @@ async fn serve_thread_read_statuses(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn codex_presence_reads_status_and_never_mutates_the_thread()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
@@ -225,7 +235,10 @@ async fn codex_presence_reads_status_and_never_mutates_the_thread()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn codex_presence_reports_unreachable_when_the_backend_gate_is_down()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(false)?;
@@ -237,7 +250,10 @@ async fn codex_presence_reports_unreachable_when_the_backend_gate_is_down()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
@@ -294,7 +310,7 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
         .await?;
     server.await??;
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,
@@ -304,7 +320,10 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
@@ -375,6 +394,9 @@ async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
         )
         .await?;
     server.await??;
-    assert!(matches!(receipt.outcome, DeliveryOutcome::StartedOrSteered));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::StartedOrSteered
+    ));
     Ok(())
 }

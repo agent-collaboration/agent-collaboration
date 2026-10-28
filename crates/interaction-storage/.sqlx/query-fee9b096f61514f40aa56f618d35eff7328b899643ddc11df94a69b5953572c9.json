@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE retention='creationAge' AND delivery_state='attempted' AND last_outcome_json IS NULL AND kind IN (?, ?, ?, ?, ?, ?) ORDER BY push_id LIMIT 128",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fee9b096f61514f40aa56f618d35eff7328b899643ddc11df94a69b5953572c9"
+}

@@ -1,0 +1,482 @@
+{
+  "sourceCommit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7",
+  "formulaCases": [
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-session\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "formula is missing required Apple Silicon requirement"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: bad\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "formula contains malformed source commit provenance"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "v0.1",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "version must use major.minor.patch syntax"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "1.2.3\n",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "version must use major.minor.patch syntax"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "01.02.003",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v01.02.003/codex-router-v01.02.003-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.103",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.103/codex-router-v0.1.103-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "BAD",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "SHA-256 must be 64 lowercase hexadecimal characters"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "SHA-256 must be 64 lowercase hexadecimal characters"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "cccccccccccccccccccccccccccccccccccccccc"
+      },
+      "expected": {
+        "result": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: cccccccccccccccccccccccccccccccccccccccc\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\n  desc \"Local account and quota router for Codex CLI\"\n  homepage \"https://github.com/ShravanSunder/codex-router\"\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\n  license any_of: [\"MIT\", \"Apache-2.0\"]\n\n  depends_on arch: :arm64\n  depends_on :macos\n\n  def install\n    bin.install \"codex-router\"\n    bin.install \"agent-collaboration\"\n    bin.install \"agent-sessions\"\n    bin.install \"codex-router-board-upgrade\"\n  end\n\n  test do\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\n  end\nend\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "cccccccccccccccccccccccccccccccccccccccc\n"
+      },
+      "expected": {
+        "error": "source commit must be 40 lowercase hexadecimal characters"
+      }
+    },
+    {
+      "formula": "class CodexRouter < Formula\r\n  desc \"Local account and quota router for Codex CLI\"\r\n  homepage \"https://github.com/ShravanSunder/codex-router\"\r\n  # Source commit: be7e61e8bca32ebac172eb743e8064d2c7d6ffe7\r\n  url \"https://github.com/ShravanSunder/codex-router/releases/download/v0.1.102/codex-router-v0.1.102-aarch64-apple-darwin.tar.gz\"\r\n  sha256 \"54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517\"\r\n  license any_of: [\"MIT\", \"Apache-2.0\"]\r\n\r\n  depends_on arch: :arm64\r\n  depends_on :macos\r\n\r\n  def install\r\n    bin.install \"codex-router\"\r\n    bin.install \"agent-collaboration\"\r\n    bin.install \"agent-sessions\"\r\n    bin.install \"codex-router-board-upgrade\"\r\n  end\r\n\r\n  test do\r\n    assert_match \"codex-router #{version}\", shell_output(\"#{bin}/codex-router --version\")\r\n  end\r\nend\r\n",
+      "release": {
+        "version": "0.1.102",
+        "sha256": "54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517",
+        "source_commit": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7"
+      },
+      "expected": {
+        "error": "expected exactly one release URL field, found 0"
+      }
+    }
+  ],
+  "wrappers": [
+    {
+      "kind": "package",
+      "environment": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      },
+      "expected": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "true",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      }
+    },
+    {
+      "kind": "package",
+      "environment": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "SQLX_OFFLINE_DIR": "/fixture/metadata"
+      },
+      "expected": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "true",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      }
+    },
+    {
+      "kind": "package",
+      "environment": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      },
+      "expected": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "DATABASE_URL": "sqlite:///fixture/schema.db",
+        "SQLX_OFFLINE_DIR": "/fixture/generated"
+      }
+    },
+    {
+      "kind": "package",
+      "environment": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "SQLX_OFFLINE_DIR": "/fixture/metadata"
+      },
+      "expected": {
+        "SQLX_PREPARE_PACKAGE": "owner",
+        "SQLX_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "DATABASE_URL": "sqlite:///fixture/schema.db",
+        "SQLX_OFFLINE_DIR": "/fixture/generated"
+      }
+    },
+    {
+      "kind": "sqlite",
+      "environment": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      },
+      "expected": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "true",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      }
+    },
+    {
+      "kind": "sqlite",
+      "environment": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "SQLX_OFFLINE_DIR": "/fixture/metadata"
+      },
+      "expected": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "dependency",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "true",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      }
+    },
+    {
+      "kind": "sqlite",
+      "environment": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value"
+      },
+      "expected": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "DATABASE_URL": "sqlite:///fixture/schema.db"
+      }
+    },
+    {
+      "kind": "sqlite",
+      "environment": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "DATABASE_URL": "stale",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "SQLX_OFFLINE_DIR": "/fixture/metadata"
+      },
+      "expected": {
+        "SQLITE_PREPARE_PACKAGE": "owner",
+        "SQLITE_PREPARE_MANIFEST_DIR": "/fixture/owner",
+        "SQLITE_PREPARE_DATABASE_URL": "sqlite:///fixture/schema.db",
+        "CARGO_PKG_NAME": "owner",
+        "CARGO_MANIFEST_DIR": "/fixture/owner",
+        "SQLX_OFFLINE": "false",
+        "SQLX_PREPARE_METADATA_DIR": "/fixture/generated",
+        "KEEP": "literal value",
+        "DATABASE_URL": "sqlite:///fixture/schema.db",
+        "SQLX_OFFLINE_DIR": "/fixture/metadata"
+      }
+    }
+  ],
+  "lineCases": [
+    {
+      "hex": "",
+      "expected": 0
+    },
+    {
+      "hex": "61",
+      "expected": 1
+    },
+    {
+      "hex": "0a",
+      "expected": 1
+    },
+    {
+      "hex": "610a",
+      "expected": 1
+    },
+    {
+      "hex": "610d0a62",
+      "expected": 2
+    },
+    {
+      "hex": "ff0a",
+      "expected": 1
+    },
+    {
+      "hex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "expected": 1000
+    },
+    {
+      "hex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a78",
+      "expected": 1001
+    },
+    {
+      "hex": "61e280a862",
+      "expected": 1
+    }
+  ],
+  "assetCases": [
+    {
+      "release": {},
+      "name": "asset",
+      "expected": {
+        "error": "release response has no assets"
+      }
+    },
+    {
+      "release": {
+        "assets": []
+      },
+      "name": "asset",
+      "expected": {
+        "error": "release has no asset named asset"
+      }
+    },
+    {
+      "release": {
+        "assets": [
+          null,
+          {
+            "name": "asset",
+            "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "name": "asset",
+      "expected": {
+        "result": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "release": {
+        "assets": [
+          {
+            "name": "asset",
+            "digest": "md5:abc"
+          }
+        ]
+      },
+      "name": "asset",
+      "expected": {
+        "error": "asset has no sha256 digest"
+      }
+    }
+  ],
+  "installCases": [
+    {
+      "installed": "",
+      "version": "0.1.102",
+      "expected": "install"
+    },
+    {
+      "installed": "codex-router 0.1.101",
+      "version": "0.1.102",
+      "expected": "upgrade"
+    },
+    {
+      "installed": "codex-router 0.1.102",
+      "version": "0.1.102",
+      "expected": "reinstall"
+    },
+    {
+      "installed": "codex-router 0.1.101 0.1.102",
+      "version": "0.1.102",
+      "expected": "reinstall"
+    }
+  ]
+}

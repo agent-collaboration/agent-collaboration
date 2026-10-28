@@ -1,8 +1,12 @@
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    HubEvent, NativeControlBackend, NativeGenerationGate, RouterSessionAppServerContext,
-    RouterSessionAppServerListener, ServiceInteractionBroker, SessionCommandPort, SessionEventHub,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::RouterSessionAppServerContext;
+use collaboration_runtime::RouterSessionAppServerListener;
+use collaboration_runtime::ServiceInteractionBroker;
 use futures_util::{SinkExt, StreamExt};
 use message_board::Identity;
 use serde_json::{Value, json};
@@ -18,7 +22,10 @@ use acp_provider_backend::ScriptedProviderBackend;
 /// A client-level JSON-RPC error means the TUI cannot render a server request.
 /// The broker question remains for another front door, with no request loop.
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn std::error::Error>>
 {
     let directory = tempfile::tempdir()?;
@@ -35,7 +42,7 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("interaction-history.json"),
+        directory.path().join("approval-routes.json"),
     )
     .await?;
     let socket = directory.path().join("provider.sock");
@@ -146,7 +153,10 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
 /// A decision already made by another front door does not become a terminal
 /// TUI error while the provider Turn is still settling.
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn stale_question_answer_does_not_emit_nonretry_error()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -163,7 +173,7 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("interaction-history.json"),
+        directory.path().join("approval-routes.json"),
     )
     .await?;
     let socket = directory.path().join("provider.sock");

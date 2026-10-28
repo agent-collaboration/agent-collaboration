@@ -7,6 +7,10 @@ use agent_automation::{PeerSessionReference, PeerWriteEffect};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Captured provider reconciliation context, separate from a public delivery receipt.
+pub type ProviderAcpRouteEvidence =
+    agent_automation::ProviderAcpEffectEvidence<SessionRef, CodexGeneration>;
+
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(
     tag = "kind",

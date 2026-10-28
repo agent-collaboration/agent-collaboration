@@ -1,0 +1,672 @@
+{
+  "kind": "wide-visual-checkpoint-before-confirmation-choice-color-repair",
+  "archiveHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+  "productHead": "d7bb5ce8eef6950b4a57ca66066338eca842ccfe",
+  "sourceBindingSha256": "6942ebd4247e45ed81e98474f9fba417946e45b194bfc03179ec251b64050be1",
+  "componentSha256": "73d6e84b0f4c4ac0c82ee2d90ebe84c5465b46482065e60e75e1d2c42552f14a",
+  "captureDriverSha256": "d647c04a29bbd9879a5fb6118125ec34db3a0542536ebba382c2f88979dd58f0",
+  "imageCheckerSha256": "36928b2359579c5aa77f0a63bf0045e327b20254d7d7be68369727573b49b91f",
+  "run": {
+    "exit": 101,
+    "pid": 86621,
+    "started_at": "2026-10-19T16:30:20.679359+00:00",
+    "observed_at": "2026-10-19T16:31:02.487642+00:00",
+    "work_seconds": 1300.0,
+    "cleanup_seconds": 90.0,
+    "work_deadline": "2026-10-19T16:52:00.679359+00:00",
+    "whole_deadline": "2026-10-19T16:53:30.679359+00:00",
+    "deadline_reached": false,
+    "driver_settled": true,
+    "stop_error": null
+  },
+  "inspection": "Verifier and Lead each personally opened all30 original PNGs.",
+  "dataAndEffects": "Actual compiled iocraft component/input/PTY; synthetic account records and external effect ports. In-memory save/cancel/reopen observations do not prove persisted account writes.",
+  "completion": "QUOTA_COMPONENT_FIXTURE_FINISHED scenario=Normal released=false external_requests=0 persisted_writes=0",
+  "oracleFailure": "HelpTop incorrectly forbids Ctrl+,F3,F4 that contextual Help intentionally displays. No current run pass.",
+  "confirmedProductFinding": {
+    "reference": "SpecificationR4/U5",
+    "images": [
+      "component-quota-confirm-no.png",
+      "component-quota-confirm-yes.png"
+    ],
+    "observation": "Both No and Yes are yellow in either selection state. Unselected ordinary choices must be white; disabled choices distinct.",
+    "status": "Open; paired Implementer is repairing typed selection colors with a causal rendered-cell test. Fresh component images required."
+  },
+  "limits": [
+    "Only120\u00d736 normal fixture; othergrids,actualresize,pending/error states,Sessionsandactualprovidersremainopen.",
+    "Help/Details finalbodycontent is visibly present but fresh final-marker/wrong-top qualification is still required.",
+    "No whole-run, product-color or PR readiness acceptance. HTML browser rendering remains unverified."
+  ],
+  "images": [
+    {
+      "file": "component-quota-browse.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Full CJK/long OpenAI name wraps cleanly; aligned columns and selection.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-next-account.png",
+      "sha256": "1471948cf8e41742bf56e91aa8615bc0e390cab59f1666258b73bb13d019fe4e",
+      "bytes": 140880,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "next-account",
+      "journey": "component-quota-next-account",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Claude selection changes visibly; complete name readable.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-restored-account.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "restored-account",
+      "journey": "component-quota-restored-account",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "OpenAI selection restored.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-details-top.png",
+      "sha256": "9cdb32b32aa4a87479e9ab8854dddb22302fd1c9be249ac7d5d806bf9d278996",
+      "bytes": 169646,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "details-top",
+      "journey": "component-quota-details-top",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Complete selected CJK identity and upper details readable; body scroll visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-details-bottom.png",
+      "sha256": "166cba20013f54779a430bf8989d554ee2864f1c44e0a7cf925329aa4572bc42",
+      "bytes": 161238,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "details-bottom",
+      "journey": "component-quota-details-bottom",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Final activity clients/guards/reset/note visible; Close and header retained.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-help-top.png",
+      "sha256": "4115ef703bc9afa75907087ad50e882079559da7861d9c1a2b2b294f4bc2a135",
+      "bytes": 180342,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "help-top",
+      "journey": "component-quota-help-top",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Help browse shortcut legend readable; legitimate Ctrl/F3/F4 caused oracle rejection.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-help-bottom.png",
+      "sha256": "811a97a08cdf525e9d7e1584f2a7a4e9ebbcc9ef05db5580a5ab3441dd54ba22",
+      "bytes": 188322,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "help-bottom",
+      "journey": "component-quota-help-bottom",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Final forced-exit instruction visible; header and Close retained.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-floor-original.png",
+      "sha256": "92585357b6069792a60757da27b63921a6423077207729b465e0e05546b75d6f",
+      "bytes": 119184,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "floor-original",
+      "journey": "component-quota-floor-original",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Current disabled0%, editableFloor0%, CancelSave visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-floor-draft.png",
+      "sha256": "f7ea07202d26986e2d4a51f88e32e117f97e0dc47de19830ac01a2665429d5f1",
+      "bytes": 119094,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "floor-draft",
+      "journey": "component-quota-floor-draft",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "DraftFloor1% visible while Current remains0%.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-floor-cancelled.png",
+      "sha256": "92585357b6069792a60757da27b63921a6423077207729b465e0e05546b75d6f",
+      "bytes": 119184,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "floor-cancelled",
+      "journey": "component-quota-floor-cancelled",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Reopened cancelledFloor0% visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-floor-saved.png",
+      "sha256": "5c4200c380a3aca69856fbd817f3533e3ce2300fadc2ed63d1d9274ff8b53358",
+      "bytes": 116718,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "floor-saved",
+      "journey": "component-quota-floor-saved",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Reopened saved Current1% and Floor1% visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-options-identity.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "options-identity",
+      "journey": "component-quota-options-identity",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Complete account identity/tag and Resets selected.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-reset-inventory.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "reset-inventory",
+      "journey": "component-quota-reset-inventory",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Live eligibility5%, credits7, voucher1, discrepancy notice visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-reset-last-page.png",
+      "sha256": "e7025b9a19f5d6f84a0008fb8028d9919986509ae94c0b2ab8c1edae725299f5",
+      "bytes": 162576,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "reset-last-page",
+      "journey": "component-quota-reset-last-page",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Last page voucher7 and7\u20137of7 visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-credits-identity.png",
+      "sha256": "754f444b7e919761aee82552a922dd53c8fee8273b581b5689575f29303285e4",
+      "bytes": 163998,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "credits-identity",
+      "journey": "component-quota-credits-identity",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Complete account identity, Credits selected, available62,500.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-credits-balance.png",
+      "sha256": "e9c3ddf5e2edaac69c0ea64e847acbc3db24759390f2085a49b6df6b16b87216",
+      "bytes": 163818,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "credits-balance",
+      "journey": "component-quota-credits-balance",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Body scrolled; available62,500/fresh/UsageDisallow/floorwarning/actions visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-original.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-original",
+      "journey": "component-quota-policy-original",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Collapsed UsageDisallow field with Save.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-choice.png",
+      "sha256": "b3aaf929b67382dc8f63b526aff1203d371d16decbad422ddb0ae2196f7e9b64",
+      "bytes": 141052,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-choice",
+      "journey": "component-quota-policy-choice",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Expanded actual Search field; Allow focused, Disallow visible, Select action.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-no-match.png",
+      "sha256": "be48112c2c5d0d9d2df23e4b545a8a66e29f025f947cc906988245090c42a464",
+      "bytes": 151441,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-no-match",
+      "journey": "component-quota-policy-no-match",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Queryzznomatchzz and No matching choices visible.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-choice-returned.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-choice-returned",
+      "journey": "component-quota-policy-choice-returned",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "EmptyEnter+Escape retains collapsed UsageDisallow.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-draft.png",
+      "sha256": "98198aac29fab926a94df15ecd87b23e7234c29ac04d9ae1fa07a82fc790f72f",
+      "bytes": 158237,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-draft",
+      "journey": "component-quota-policy-draft",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Draft collapsed UsageAllow with Save.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-cancelled.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-cancelled",
+      "journey": "component-quota-policy-cancelled",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Reopened cancelled UsageDisallow.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-policy-saved.png",
+      "sha256": "98198aac29fab926a94df15ecd87b23e7234c29ac04d9ae1fa07a82fc790f72f",
+      "bytes": 158237,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "policy-saved",
+      "journey": "component-quota-policy-saved",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Reopened saved UsageAllow.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-refresh-result.png",
+      "sha256": "d3bf39b91b98a1b839c4304f2d7d81f90235fa39dd4a559e94e91bbe8187710a",
+      "bytes": 171195,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "refresh-result",
+      "journey": "component-quota-refresh-result",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Actual Credit balance refreshed completion notice; no claim provider value changed.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-reset-review.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "reset-review",
+      "journey": "component-quota-reset-review",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "InspectedResets Review with live eligibility and voucher1.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-confirm-no.png",
+      "sha256": "cdeb0a16392dd350722065c8a133e8e12e74a74554e1953999c85f7182d8c34d",
+      "bytes": 160121,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "confirm-no",
+      "journey": "component-quota-confirm-no",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Confirm reset with selected[No] and irreversible-consumption warning. DEFECT: unselected choice also yellow; selection-color distinction violates R4/U5.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-confirm-no-returned.png",
+      "sha256": "c66b391caea5172c3267c40aeb97279a4efcda978428fe594ccb872f0be19924",
+      "bytes": 133687,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "confirm-no-returned",
+      "journey": "component-quota-confirm-no-returned",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "No returns Browse-owned Resets with Inspect, no Confirm overlay.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-confirm-yes.png",
+      "sha256": "ce42679a17e28e4b40482f2d9c2d94a73aeba0d074ff0341b09c9cd9b1b35078",
+      "bytes": 160145,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "confirm-yes",
+      "journey": "component-quota-confirm-yes",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Reinspected Confirm reset with selected[Yes]. DEFECT: unselected choice also yellow; selection-color distinction violates R4/U5.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-reset-result.png",
+      "sha256": "db7f615c924b9101c07e65acd9b3c4b77c4eb9e429f2e78ce50f6bcc89ab0b1b",
+      "bytes": 159643,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "reset-result",
+      "journey": "component-quota-reset-result",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Success/reset completed and one consumed reset; synthetic port result only.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    },
+    {
+      "file": "component-quota-returned.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota status",
+      "dialog": "returned",
+      "journey": "component-quota-returned",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "visualReview": "Browse restored with no dialog overlay; selection retained.",
+      "result": "Original personally inspected. Whole run failed the Help oracle; later image/effect checks were not reached. Confirmation choice colors are a confirmed product defect.",
+      "limits": "In-memory component fixture, synthetic external ports; no real provider, storage, public entry, narrower grids, pending or resize proof."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "function": "require_serve_restored",
+  "args": [
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        }
+      }
+    },
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        }
+      }
+    }
+  ],
+  "expected": {
+    "result": null
+  }
+}

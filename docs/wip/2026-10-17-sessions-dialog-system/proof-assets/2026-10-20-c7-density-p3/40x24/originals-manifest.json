@@ -1,0 +1,1261 @@
+{
+  "kind": "All42personallyviewedcurrent40originals;failedstrictFlooractionanchor",
+  "at": "2026-10-20T08:35:58.900859+00:00",
+  "packet": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/c7-current-phone-producer-handoff.json",
+  "packet_sha256": "0e749003e44606c33b5045108b0de45ac611098ac1a0c2ace6e0f247a61f919e",
+  "source": {
+    "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/repository",
+    "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+    "index_entries": 3923,
+    "immutable_archive": true
+  },
+  "build": {
+    "component": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+    "driver": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+    "checker": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+    "embedded_harness": "14f5881ba3fc47a40b3729e8bb8c8cdc311017228543108af943719990a49df2"
+  },
+  "execution": "tmp/tui-verification/c7-density-p3-all-six-normal-job-3-execution.json",
+  "independent_cleanup": "tmp/tui-verification/c7-density-p3-all-six-normal-job-3-cleanup.json",
+  "result": "FAILED12nativepositivePASS thenFloor1%strictanchorunsupported due mergedCancelSave;29positive+12wrongUNRUN/noNormal",
+  "effects": {
+    "child_exit": 0,
+    "external_requests": 0,
+    "persisted_writes": 0,
+    "Normal_released": false
+  },
+  "personal_view_count": 42,
+  "all_originals_personally_reviewed": true,
+  "blocking_findings": [],
+  "cold_ux_notes": [
+    "Current40unitgrouping/unknownpaceplainlabelreadable,realquota barsremain.",
+    "Exactwhole[alpha-tag]/yellowFloor1%/Current0%/guidance0%15%/CancelSave+fullcompanionHelpname/tagpersonallyviewed; automaticactionsegmentationunsupported.",
+    "ExistingNo-cancelblankOptionsbodypreservedunresolvedoldnote."
+  ],
+  "recorded_pid_count": 18,
+  "limits": [
+    "Current40FAILED/noNormal; manualappearancedoesnotpromoteautomaticresult",
+    "Root73classification/continuationconditionsmustbeappliedexplicitly; noreaderrelaxorUIscreenshotretry",
+    "Live/Filters/intermediate/public/provider/deviceacceptanceopen"
+  ],
+  "images": [
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-credit-window.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "browse-credit-window",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "browse-credit-window",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-heading.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "browse-pace-heading",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "browse-pace-heading",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-value.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "browse-pace-value",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "browse-pace-value",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-page-returned.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "browse-page-returned",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "browse-page-returned",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-browse.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "browse",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "browse",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-identity.png",
+      "sha256": "846fff88fed99a17985a55c435e1c98ea1b682b7d1487e4a5d36cf89a509caa7",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-help-identity",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-help-identity",
+      "personal_original_view": true,
+      "personal_review": "FullHelpAccount\u6771\u4eac OpenAI Research Account Alpha Long Name [alpha-tag] inmeasuredfield, literalwholecase/brackets; Close.",
+      "observation": "FullHelpAccount\u6771\u4eac OpenAI Research Account Alpha Long Name [alpha-tag] inmeasuredfield, literalwholecase/brackets; Close.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-returned.png",
+      "sha256": "40db232fb115bb011f3e55486b637a5f487d52d9799321762a47643b57cc2da2",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-help-returned",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-help-returned",
+      "personal_original_view": true,
+      "personal_review": "HelpclosedtothecapturedConfirmreset; Yesremainsyellowunderlined, correctrisk/tag/actions.",
+      "observation": "HelpclosedtothecapturedConfirmreset; Yesremainsyellowunderlined, correctrisk/tag/actions.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+      "sha256": "4ca68865b6637fca8bef878d5b24651a40eeabe97c887c10c0eb5921b5534fa6",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-help-top",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-help-top",
+      "personal_original_view": true,
+      "personal_review": "FullHelpAccount\u6771\u4eac OpenAI Research Account Alpha Long Name [alpha-tag] inmeasuredfield, literalwholecase/brackets; Poolcontinuation/Close.",
+      "observation": "FullHelpAccount\u6771\u4eac OpenAI Research Account Alpha Long Name [alpha-tag] inmeasuredfield, literalwholecase/brackets; Poolcontinuation/Close.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no-returned.png",
+      "sha256": "a0e39f28b771367b1c2de798cee5909aed90664e05ca838369ba37ebd2a4304c",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-no-returned",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-no-returned",
+      "personal_original_view": true,
+      "personal_review": "OptionsResets/tag/CloseCreditsInspectwithblankbody; sameoldunresolvedvisualnote.",
+      "observation": "OptionsResets/tag/CloseCreditsInspectwithblankbody; sameoldunresolvedvisualnote.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no.png",
+      "sha256": "366930696a57cd05d361cfc10f23721f5b83b4f7b3c06fc39779c31b0823c12e",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-no",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-no",
+      "personal_original_view": true,
+      "personal_review": "Confirmreset/tag; voucher1/do esnotexpire,onecreditcannotundo; onlyNoisyellowunderlined, Yeswhite. CancelConfirmactions.",
+      "observation": "Confirmreset/tag; voucher1/do esnotexpire,onecreditcannotundo; onlyNoisyellowunderlined, Yeswhite. CancelConfirmactions.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-yes.png",
+      "sha256": "40db232fb115bb011f3e55486b637a5f487d52d9799321762a47643b57cc2da2",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "confirm-yes",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "confirm-yes",
+      "personal_original_view": true,
+      "personal_review": "Confirmreset/tag/risk/context; onlyYesyellowunderlined, Nowhite.",
+      "observation": "Confirmreset/tag/risk/context; onlyYesyellowunderlined, Nowhite.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-balance.png",
+      "sha256": "a5a9f5e15eaa43e8046f9d694b5aa699014c19312ccfc3cb40b18222367516ae",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-balance",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-balance",
+      "personal_original_view": true,
+      "personal_review": "ExactcreditbalanceAvailable62,500/Fresh/checked0sago; fixedactions andtag.",
+      "observation": "ExactcreditbalanceAvailable62,500/Fresh/checked0sago; fixedactions andtag.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-identity.png",
+      "sha256": "ac7856d0f88d5abd9a1595ba9bc6999125cd73e0798bafc2b874b34312de7561",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-identity",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-identity",
+      "personal_original_view": true,
+      "personal_review": "CapturedCredits/Fresh/Observationchecked0sago/UsecreditsDisallow beforemanualscroll; actionsvisible.",
+      "observation": "CapturedCredits/Fresh/Observationchecked0sago/UsecreditsDisallow beforemanualscroll; actionsvisible.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-policy-boundary.png",
+      "sha256": "72c337b7306c07868830412a9ba6ab8fa721a5fb6f74dc266f59441109362f4b",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-policy-boundary",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-policy-boundary",
+      "personal_original_view": true,
+      "personal_review": "Credits63,000/Fresh/checked0sago andCreditusageheadingatbodyedge; selectedpolicyvalueisnotshowninthisboundaryframe.",
+      "observation": "Credits63,000/Fresh/checked0sago andCreditusageheadingatbodyedge; selectedpolicyvalueisnotshowninthisboundaryframe.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-balance.png",
+      "sha256": "a5769710bfdafb14d16531a5007d8c480435c2285cccc2a89c859f3c354ec203",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-refreshed-balance",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-refreshed-balance",
+      "personal_original_view": true,
+      "personal_review": "ExactAvailable63,000differentfrom62,500, Fresh andObservationchecked0sago inCreditspanel.",
+      "observation": "ExactAvailable63,000differentfrom62,500, Fresh andObservationchecked0sago inCreditspanel.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-freshness.png",
+      "sha256": "a5769710bfdafb14d16531a5007d8c480435c2285cccc2a89c859f3c354ec203",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-refreshed-freshness",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-refreshed-freshness",
+      "personal_original_view": true,
+      "personal_review": "GreenFreshbeneathFreshnessinCreditspanel;63,000andchecked0sago context.",
+      "observation": "GreenFreshbeneathFreshnessinCreditspanel;63,000andchecked0sago context.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-observation.png",
+      "sha256": "a5769710bfdafb14d16531a5007d8c480435c2285cccc2a89c859f3c354ec203",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "credits-refreshed-observation",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "credits-refreshed-observation",
+      "personal_original_view": true,
+      "personal_review": "Observationchecked0sago beneathlabelinCreditspanel;63,000andFresh context.",
+      "observation": "Observationchecked0sago beneathlabelinCreditspanel;63,000andFresh context.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-details-bottom.png",
+      "sha256": "7489ce25e9c61e3aeba69eb7ed76b16de3c04c5130faa16da9a6fb76ca1c32c9",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "details-bottom",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "details-bottom",
+      "personal_original_view": true,
+      "personal_review": "Activityclients1client,guards5h0%/weekly8%,reset2available,notealpha detail; Close visible.",
+      "observation": "Activityclients1client,guards5h0%/weekly8%,reset2available,notealpha detail; Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-details-top.png",
+      "sha256": "2351e7d292e8831de3ec0f8d4d832ccf65ed5731dd3a645e27c0d559621f00a3",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "details-top",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "details-top",
+      "personal_original_view": true,
+      "personal_review": "Account details cyan title; capturedalpha-tag; Statusavailable/Reasonalpha detail, realweekly/5hmeters and exactpercentage/resetnotes. Close visible.",
+      "observation": "Account details cyan title; capturedalpha-tag; Statusavailable/Reasonalpha detail, realweekly/5hmeters and exactpercentage/resetnotes. Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-cancelled.png",
+      "sha256": "7ac0f36ae452eee9e4b6882ba4b8c628dd0221df359c7c4033ad4594110ea951",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "floor-cancelled",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "floor-cancelled",
+      "personal_original_view": true,
+      "personal_review": "Floor0%andCurrentdisabled0%afterCancel, correcttag/guidance/CancelSave.",
+      "observation": "Floor0%andCurrentdisabled0%afterCancel, correcttag/guidance/CancelSave.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-draft.png",
+      "sha256": "36d31072c8a7c606c037fe0667d0ab77c222056af3cdfd4e2aaa833e9e457f63",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "floor-draft",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "floor-draft",
+      "personal_original_view": true,
+      "personal_review": "Wholeactual[alpha-tag], Currentdisabled0%, activeyellowFloor1%betweenarrows, separate0%/maximum15%guidance. CancelandSavevisuallydistinct; nativecombinesCancelSaveintooneregionsoautomaticassociationunsupported.",
+      "observation": "Wholeactual[alpha-tag], Currentdisabled0%, activeyellowFloor1%betweenarrows, separate0%/maximum15%guidance. CancelandSavevisuallydistinct; nativecombinesCancelSaveintooneregionsoautomaticassociationunsupported.",
+      "automatic_image_oracle": "REJECTED/UNSUPPORTEDmergedactionanchors:1%",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-original.png",
+      "sha256": "7ac0f36ae452eee9e4b6882ba4b8c628dd0221df359c7c4033ad4594110ea951",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "floor-original",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "floor-original",
+      "personal_original_view": true,
+      "personal_review": "Wholeactual[alpha-tag], Currentdisabled0%separate, yellowFloor0%, separate0%/maximum15%guidance, visibleCancelSave.",
+      "observation": "Wholeactual[alpha-tag], Currentdisabled0%separate, yellowFloor0%, separate0%/maximum15%guidance, visibleCancelSave.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-saved.png",
+      "sha256": "33a15f3783b8ece8db739632eecbbcbe238d25b174ae184cffa7c356d8325a1d",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "floor-saved",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "floor-saved",
+      "personal_original_view": true,
+      "personal_review": "Current1%andFloor1%distinctafterSave, correcttag/guidance/actions.",
+      "observation": "Current1%andFloor1%distinctafterSave, correcttag/guidance/actions.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-help-bottom.png",
+      "sha256": "f9854e7ff3941b5e71d03b5af71b7451c48e8e31939ade1d60022146bf07679c",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "help-bottom",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "help-bottom",
+      "personal_original_view": true,
+      "personal_review": "CompleteCtrl+C/Ctrl+D ExitQuota unless a reset is being applied is readable onwrappedlines; fixedClose.",
+      "observation": "CompleteCtrl+C/Ctrl+D ExitQuota unless a reset is being applied is readable onwrappedlines; fixedClose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-help-top.png",
+      "sha256": "fb5ab79a0d65b3a01f5c7e31ead4c7ed8bd52e58f07b3b1b5708bc0fde259303",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "help-top",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "help-top",
+      "personal_original_view": true,
+      "personal_review": "Currentquota pool/data census readable withinbody; fixedtitle/Close; intermediatelegendcontent remains separate coverage.",
+      "observation": "Currentquota pool/data census readable withinbody; fixedtitle/Close; intermediatelegendcontent remains separate coverage.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-next-account.png",
+      "sha256": "6cf546acc11d163610d3bfcbbb802dc3076218a3257dc059298386b98c63e569",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "next-account",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "next-account",
+      "personal_original_view": true,
+      "personal_review": "CompleteyellowClaudeResearchAccountBetaFullName/gutter,75%/70%+reset6d/reset4h,Betaownfacts; Alphaunselectedtailmayremainabove.",
+      "observation": "CompleteyellowClaudeResearchAccountBetaFullName/gutter,75%/70%+reset6d/reset4h,Betaownfacts; Alphaunselectedtailmayremainabove.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-options-identity.png",
+      "sha256": "e6fa75ab608cf9ed23694d39f433f700df00d87e66a2b8dc12afe8a5b4a07823",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "options-identity",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "options-identity",
+      "personal_original_view": true,
+      "personal_review": "OptionsResets/title/wholealpha-tag, Resetcreditslive1-1of7/nextvoucher1/completevoucher1availabledoesnotexpire/6morebelow; savedcountdiffnoticecontinues; Review.",
+      "observation": "OptionsResets/title/wholealpha-tag, Resetcreditslive1-1of7/nextvoucher1/completevoucher1availabledoesnotexpire/6morebelow; savedcountdiffnoticecontinues; Review.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-cancelled.png",
+      "sha256": "e3549c369cca1372afeab3c4ee131e273fab97535c5b4e4edae511ac916588e6",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-cancelled",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-cancelled",
+      "personal_original_view": true,
+      "personal_review": "ReopenedDisallowaftercancellingAllowdraft; correcttag/warning/actions.",
+      "observation": "ReopenedDisallowaftercancellingAllowdraft; correcttag/warning/actions.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice-returned.png",
+      "sha256": "e3549c369cca1372afeab3c4ee131e273fab97535c5b4e4edae511ac916588e6",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-choice-returned",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-choice-returned",
+      "personal_original_view": true,
+      "personal_review": "No-matchCancelreturnsclosedDisallowdraft, correcttag/actions/warning.",
+      "observation": "No-matchCancelreturnsclosedDisallowdraft, correcttag/actions/warning.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice.png",
+      "sha256": "564e95d952e1380d7a321a631716c25089ba56b8687e8f439d8872479b1f9c57",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-choice",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-choice",
+      "personal_original_view": true,
+      "personal_review": "ExpandedUsecredits choicesDisallow/Allow, Allowyellowgutter; CancelSelect fixed, warningpreserved.",
+      "observation": "ExpandedUsecredits choicesDisallow/Allow, Allowyellowgutter; CancelSelect fixed, warningpreserved.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-draft.png",
+      "sha256": "299db86f0b89ff4e251c5a11e904904320065813c7ebf9a2a78a0893a7c1d298",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-draft",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-draft",
+      "personal_original_view": true,
+      "personal_review": "ClosedAllowyellowdraft, balance/warning/CancelSave visible.",
+      "observation": "ClosedAllowyellowdraft, balance/warning/CancelSave visible.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-no-match.png",
+      "sha256": "7f9962b5f0370f74d2dd87ec1a5f91a45c6e0b8b7cdaf1ce297e14326079c87f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-no-match",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-no-match",
+      "personal_original_view": true,
+      "personal_review": "Usecreditszznomatchzz/No matchingchoices visible; Selectgrey/Cancelvisible; thisstilldoesnotaloneprovepointerinertness.",
+      "observation": "Usecreditszznomatchzz/No matchingchoices visible; Selectgrey/Cancelvisible; thisstilldoesnotaloneprovepointerinertness.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-original.png",
+      "sha256": "e3549c369cca1372afeab3c4ee131e273fab97535c5b4e4edae511ac916588e6",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-original",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-original",
+      "personal_original_view": true,
+      "personal_review": "Creditusage/title/tag,Available62,500,UsecreditsDisallowyellow, Weeklyfloor1%blockscreditroutingwarning; CancelSave.",
+      "observation": "Creditusage/title/tag,Available62,500,UsecreditsDisallowyellow, Weeklyfloor1%blockscreditroutingwarning; CancelSave.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-saved.png",
+      "sha256": "299db86f0b89ff4e251c5a11e904904320065813c7ebf9a2a78a0893a7c1d298",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "policy-saved",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "policy-saved",
+      "personal_original_view": true,
+      "personal_review": "ReopenedAllowafterSave; correcttag/warning/actions. Appearanceonlydoesnotproveexternalwrite.",
+      "observation": "ReopenedAllowafterSave; correcttag/warning/actions. Appearanceonlydoesnotproveexternalwrite.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-refresh-result.png",
+      "sha256": "0558fd671a0c2f0ee073045f3ca48b3f4244ec33ff98978ec099e2b44b429780",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "refresh-result",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "refresh-result",
+      "personal_original_view": true,
+      "personal_review": "GreenCredit balance refreshed, correctOptions\u00b7Credits/tag andfixedactions; warningretained.",
+      "observation": "GreenCredit balance refreshed, correctOptions\u00b7Credits/tag andfixedactions; warningretained.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-inventory.png",
+      "sha256": "eee795e704f61f26cecfadc0112b5620413e5cc9772a80e2f2b897ba62df5e92",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "reset-inventory",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "reset-inventory",
+      "personal_original_view": true,
+      "personal_review": "CapturedResets/voucher1liveandcompleteSavedcountdiffers2resetssaved7live notice; Review.",
+      "observation": "CapturedResets/voucher1liveandcompleteSavedcountdiffers2resetssaved7live notice; Review.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-last-page.png",
+      "sha256": "09c770260b6fac5add85132692d442bb312fdbab683dbdf1a697eefdded990b1",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "reset-last-page",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "reset-last-page",
+      "personal_original_view": true,
+      "personal_review": "CapturedResets/usablecredits7/live7-7of7/voucher7/completeSyntheticresetvoucher7title; Review.",
+      "observation": "CapturedResets/usablecredits7/live7-7of7/voucher7/completeSyntheticresetvoucher7title; Review.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result-bottom.png",
+      "sha256": "0f1fefa6e3bbe52f287bfcedf6de68815222817f1bde2169fa1f45453192ad8e",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "reset-result-bottom",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "reset-result-bottom",
+      "personal_original_view": true,
+      "personal_review": "Providerconfirmed1quotawindowresetcontinuation/onecreditconsumed/completeSavedquotamayremainstaleuntilnormalquotarefreshupdatesit/Returntoquotastatus; Close/tag.",
+      "observation": "Providerconfirmed1quotawindowresetcontinuation/onecreditconsumed/completeSavedquotamayremainstaleuntilnormalquotarefreshupdatesit/Returntoquotastatus; Close/tag.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result.png",
+      "sha256": "70bac778307b5fc2537828848b45f347d8f7b2deb1e3f41ce6fc990f9cc7117e",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "reset-result",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "reset-result",
+      "personal_original_view": true,
+      "personal_review": "GreenSuccess\u2014resetcompleted; providerconfirmed1quotawindowreset/onecreditconsumed; caption/tag/Close. Staleguidancecontinuesbelow.",
+      "observation": "GreenSuccess\u2014resetcompleted; providerconfirmed1quotawindowreset/onecreditconsumed; caption/tag/Close. Staleguidancecontinuesbelow.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-review.png",
+      "sha256": "eee795e704f61f26cecfadc0112b5620413e5cc9772a80e2f2b897ba62df5e92",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "reset-review",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "reset-review",
+      "personal_original_view": true,
+      "personal_review": "ReturnedResetslivevoucher1andcapturedalpha/savedcountnotice withReview.",
+      "observation": "ReturnedResetslivevoucher1andcapturedalpha/savedcountnotice withReview.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-restored-account.png",
+      "sha256": "0094600aa0df93ef63c61812e1e944946979e6ab98295a8a74d31b4ae400000f",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "restored-account",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "restored-account",
+      "personal_original_view": true,
+      "personal_review": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "observation": "Completeyellow\u6771\u4eac OpenAI Research Account Alpha Long Name/gutter;2resets/62.5kfresh/83%left/reset7d/99%left/reset5h,Weeklypace/burnunavailablewholeword,realmetersremain. Noobservedframeoverflow. SameinitialPage0propertypose.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-40x24/quota-component-normal-40x24/component-quota-returned.png",
+      "sha256": "347feaac47679b7329627c0a0dbe82897880f2dcc5f1d5f888a98d06784cf223",
+      "width": 432,
+      "height": 484,
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "returned",
+      "source_build": "e873 component, cda300 driver,0cce checker,14f embeddedharness; exactsource/buildbindingsinmanifest",
+      "journey": "returned",
+      "personal_original_view": true,
+      "personal_review": "CompleteyellowAlpha/gutterwith63kfresh,readableunitgroups/realquota bars/plainburnunavailable; samecapturedidentity.",
+      "observation": "CompleteyellowAlpha/gutterwith63kfresh,readableunitgroups/realquota bars/plainburnunavailable; samecapturedidentity.",
+      "automatic_image_oracle": "UNRUN afterFloorrejection",
+      "result": "Personaloriginalappearanceonly; actual40runFAILED/noNormal",
+      "limits": "Syntheticfixtureonly; later29positive+12wrongUNRUN, noautomaticpassinference. Flooractionsegmentationunsupported; completefieldmanualwitnessdistinctfromdispatch/effects."
+    }
+  ]
+}

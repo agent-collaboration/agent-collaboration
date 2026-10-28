@@ -874,7 +874,7 @@ fn ceil_div_u128(numerator: u128, denominator: u128) -> u128 {
 }
 
 fn clamp_u128_to_u32(value: u128) -> u32 {
-    value.min(u128::from(u32::MAX)) as u32
+    u32::try_from(value).unwrap_or(u32::MAX)
 }
 
 fn projected_exhaustion_unix_seconds(
@@ -889,7 +889,10 @@ fn projected_exhaustion_unix_seconds(
     let seconds_until_exhaustion = remaining_basis_points
         .saturating_mul(3_600)
         .checked_div(u128::from(burn_rate_basis_points_per_hour))?;
-    Some(now_unix_seconds.saturating_add(seconds_until_exhaustion.min(u128::from(u64::MAX)) as u64))
+    Some(
+        now_unix_seconds
+            .saturating_add(u64::try_from(seconds_until_exhaustion).unwrap_or(u64::MAX)),
+    )
 }
 
 #[cfg(test)]

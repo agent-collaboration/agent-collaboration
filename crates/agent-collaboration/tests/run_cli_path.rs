@@ -58,6 +58,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
         .await?;
     let mut effects = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some(target.clone()),
         generation: Some(generation.clone()),
         client_user_message_id: Some(run.as_str().into()),
@@ -112,7 +113,8 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         )
         .await?;
     store.close().await?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("absent.sock"),
@@ -121,7 +123,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .env_remove("CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET")

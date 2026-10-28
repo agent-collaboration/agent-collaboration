@@ -1,0 +1,15 @@
+{
+  "kind": "static artifact check, not rendered browser verification",
+  "gallery_count": 1,
+  "image_count": 29,
+  "sessions_originals": 20,
+  "retained_quota_originals": 9,
+  "exact_original_hashes_verified": 29,
+  "journey_targets": 10,
+  "local_references_checked": 70,
+  "missing_references": [],
+  "duplicate_ids": [],
+  "selected": "sessions-browse-120x36",
+  "browser_rendered": false,
+  "gallery_sha256": "89bf363f7a78afd580fe457fd046186cdfb93c150dc51ea9fd37d24ab21722de"
+}

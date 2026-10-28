@@ -1,9 +1,9 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fake socket assertions at the peer wire boundary.
 
 use agent_automation::PeerProcessId;
 use claude_code_peer_messaging::{
-    ClaudeCodePeerSocket, PeerSessionRecord, PeerSessionStatus, PeerSocketWriteOutcome,
+    ClaudeCodePeerSocket, PeerSessionRecord, PeerSessionStatus, PeerSocketUnsentCause,
+    PeerSocketWriteOutcome,
 };
 use collaboration_protocol::SessionId;
 use serde_json::{Value, json};
@@ -11,6 +11,10 @@ use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path};
 use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn fixture_record(root: &Path) -> PeerSessionRecord {
     PeerSessionRecord {
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session ID"),
@@ -21,6 +25,10 @@ fn fixture_record(root: &Path) -> PeerSessionRecord {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn publish_fixture_key(root: &Path, record: &PeerSessionRecord) {
     let digest = Sha256::digest(record.socket_path.to_str().expect("socket path").as_bytes());
     let pid = u32::from(record.process_id);
@@ -78,7 +86,10 @@ async fn refused_peer_socket_is_known_not_submitted() {
 
     assert!(matches!(
         outcome,
-        PeerSocketWriteOutcome::NotSubmitted { .. }
+        PeerSocketWriteOutcome::NotSubmitted {
+            cause: PeerSocketUnsentCause::ConnectFailed,
+            ..
+        }
     ));
 }
 
@@ -92,7 +103,7 @@ async fn missing_published_key_is_known_not_submitted() {
         .await;
 
     assert!(
-        matches!(outcome, PeerSocketWriteOutcome::NotSubmitted { reason } if reason.contains("authentication key"))
+        matches!(outcome, PeerSocketWriteOutcome::NotSubmitted { reason, cause: PeerSocketUnsentCause::AuthenticationUnavailable } if reason.contains("authentication key"))
     );
 }
 

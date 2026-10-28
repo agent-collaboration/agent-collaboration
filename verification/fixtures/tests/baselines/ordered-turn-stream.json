@@ -1,0 +1,10 @@
+{
+  "exit": 0,
+  "stdout": {
+    "sha256": "8c2db7fdbf5560e4fbb7706e946672a28700f142044e6f976a81a10a409c98fc",
+    "bytes": 802
+  },
+  "stderr": "",
+  "receipt": { "promptCount": 2, "promptTexts": ["FIRST_REQUEST", "SECOND_REQUEST"] },
+  "acknowledgements": ["d"]
+}

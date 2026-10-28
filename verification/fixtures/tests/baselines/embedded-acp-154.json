@@ -1,0 +1,17 @@
+{
+  "original": "crates/agent-collaboration/tests/provider_source_actions.rs#<ROOT>/log",
+  "originalSHA256": "ff69eea6e8bd511767bd1f27a2f13be3f435819efda7a57f13a6f1c847755bfc",
+  "target": "source-policy-agent.ts",
+  "arguments": ["<ROOT>/log"],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/load\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session/resume\",\"params\":{}}\n",
+  "configuration": null,
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"resume\": {}}}, \"agentInfo\": {\"name\": \"source-policy-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"created-by-source\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "log": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/load\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/resume\", \"params\": {}}\n"
+    }
+  }
+}

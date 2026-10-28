@@ -1,0 +1,365 @@
+[
+  {
+    "input": {
+      "name": "native version and identity receipt",
+      "executable": "native",
+      "arguments": ["--version"],
+      "input": "",
+      "environment": {
+        "GLOBAL_HARNESS_FIXTURE_NATIVE_RECEIPT": "<ROOT>/native-receipt.json"
+      },
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "global-claude-native-agent.ts",
+          "configuration": {
+            "identity": "globalHarness",
+            "version": "9.9.1-global-fixture"
+          }
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "9.9.1-global-fixture\n",
+      "stderr": "",
+      "files": {
+        "native-receipt.json": "{\"invoked_executable\": \"<ROOT>/native\", \"identity\": \"globalHarness\", \"version\": \"9.9.1-global-fixture\"}"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "adapter dispatch under restricted PATH",
+      "executable": "adapter",
+      "arguments": ["<ROOT>/native"],
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n",
+      "environment": {
+        "GLOBAL_HARNESS_FIXTURE_NATIVE_RECEIPT": "<ROOT>/native-receipt.json",
+        "GLOBAL_HARNESS_FIXTURE_ADAPTER_RECEIPT": "<ROOT>/dispatch.json",
+        "CLAUDE_CODE_EXECUTABLE": "<ROOT>/native"
+      },
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "global-claude-native-agent.ts",
+          "configuration": {
+            "identity": "globalHarness",
+            "version": "9.9.1-global-fixture"
+          }
+        },
+        "adapter": {
+          "module": "global-claude-adapter-agent.ts",
+          "configuration": null
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"global-harness-selection-fixture\", \"version\": \"1\"}}}\n",
+      "stderr": "",
+      "files": {
+        "dispatch.json": "{\"selected_executable\": \"<ROOT>/native\", \"version_stdout\": \"9.9.1-global-fixture\"}",
+        "native-receipt.json": "{\"invoked_executable\": \"<ROOT>/native\", \"identity\": \"globalHarness\", \"version\": \"9.9.1-global-fixture\"}"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "background ordinary",
+      "executable": "native",
+      "arguments": ["--print", "synthetic exact input", "--model", "fixture-model"],
+      "input": "",
+      "environment": {
+        "CLAUDE_FIXTURE_COUNT": "<ROOT>/count.txt",
+        "CLAUDE_FIXTURE_RECORD": "<ROOT>/record.json",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
+        "ANTHROPIC_AUTH_TOKEN": "synthetic-fixture-token"
+      },
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-claude-background-agent.ts",
+          "configuration": null
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "bg-fixture-receipt-001\n",
+      "stderr": "",
+      "files": {
+        "count.txt": "launch\n",
+        "record.json": "{\"arguments\": [\"--print\", \"synthetic exact input\", \"--model\", \"fixture-model\"], \"working_directory\": \"<ROOT>\", \"base_url\": \"http://127.0.0.1:1\", \"auth_token\": \"synthetic-fixture-token\"}"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "background missing receipt",
+      "executable": "native",
+      "arguments": ["--print", "synthetic exact input", "--model", "fixture-model"],
+      "input": "",
+      "environment": {
+        "CLAUDE_FIXTURE_COUNT": "<ROOT>/count.txt",
+        "CLAUDE_FIXTURE_RECORD": "<ROOT>/record.json",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
+        "ANTHROPIC_AUTH_TOKEN": "synthetic-fixture-token",
+        "CLAUDE_FIXTURE_NO_RECEIPT": "1"
+      },
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-claude-background-agent.ts",
+          "configuration": null
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "files": {
+        "count.txt": "launch\n",
+        "record.json": "{\"arguments\": [\"--print\", \"synthetic exact input\", \"--model\", \"fixture-model\"], \"working_directory\": \"<ROOT>\", \"base_url\": \"http://127.0.0.1:1\", \"auth_token\": \"synthetic-fixture-token\"}"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "background stderr and nonzero",
+      "executable": "native",
+      "arguments": ["--print", "synthetic exact input", "--model", "fixture-model"],
+      "input": "",
+      "environment": {
+        "CLAUDE_FIXTURE_COUNT": "<ROOT>/count.txt",
+        "CLAUDE_FIXTURE_RECORD": "<ROOT>/record.json",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
+        "ANTHROPIC_AUTH_TOKEN": "synthetic-fixture-token",
+        "CLAUDE_FIXTURE_STDERR": "synthetic private fixture diagnostic",
+        "CLAUDE_FIXTURE_EXIT": "7"
+      },
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-claude-background-agent.ts",
+          "configuration": null
+        }
+      }
+    },
+    "expected": {
+      "exit": 7,
+      "stdout": "bg-fixture-receipt-001\n",
+      "stderr": "synthetic private fixture diagnostic\n",
+      "files": {
+        "count.txt": "launch\n",
+        "record.json": "{\"arguments\": [\"--print\", \"synthetic exact input\", \"--model\", \"fixture-model\"], \"working_directory\": \"<ROOT>\", \"base_url\": \"http://127.0.0.1:1\", \"auth_token\": \"synthetic-fixture-token\"}"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "catalogue text",
+      "executable": "native",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "text",
+            "text": "[{\"kind\":\"background\",\"id\":\"synthetic-job\"}]"
+          }
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[{\"kind\":\"background\",\"id\":\"synthetic-job\"}]\n",
+      "stderr": "",
+      "files": {}
+    }
+  },
+  {
+    "input": {
+      "name": "catalogue failure",
+      "executable": "native",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "failure",
+            "stderr": "PRIVATE_JOB_DIAGNOSTIC",
+            "exit": 7
+          }
+        }
+      }
+    },
+    "expected": {
+      "exit": 7,
+      "stdout": "",
+      "stderr": "PRIVATE_JOB_DIAGNOSTIC",
+      "files": {}
+    }
+  },
+  {
+    "input": {
+      "name": "catalogue stderr bound",
+      "executable": "native",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "overflow",
+            "stream": "stderr",
+            "bytes": 256
+          }
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "files": {}
+    }
+  },
+  {
+    "input": {
+      "name": "catalogue stdout bound",
+      "executable": "native",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {},
+      "programs": {
+        "native": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "overflow",
+            "stream": "stdout",
+            "bytes": 256
+          }
+        }
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n",
+      "stderr": "",
+      "files": {}
+    }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-file",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            }
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]"
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": "",
+      "files": {
+        "output": "[]"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-count-0",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            },
+            "failAfterFirstCount": "<ROOT>/count"
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]",
+        "count": "0"
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": "",
+      "files": {
+        "count": "1",
+        "output": "[]"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-count-1",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            },
+            "failAfterFirstCount": "<ROOT>/count"
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]",
+        "count": "1"
+      }
+    },
+    "expected": {
+      "exit": 7,
+      "stdout": "",
+      "stderr": "",
+      "files": {
+        "count": "2",
+        "output": "[]"
+      }
+    }
+  }
+]

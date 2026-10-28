@@ -265,7 +265,10 @@ async fn async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_record
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn blocking_websocket_tunnel_records_top_level_response_owner() {
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -393,7 +396,10 @@ fn blocking_websocket_tunnel_records_top_level_response_owner() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn blocking_websocket_tunnel_pins_one_upstream_account_for_multiple_turns() {
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,

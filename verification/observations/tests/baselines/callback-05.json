@@ -1,0 +1,8 @@
+{
+  "function": "decode_rpc_body",
+  "name": "test_wrong_response_cannot_be_used_as_observation",
+  "args": ["data: {\"id\":2,\"result\":{}}\n\n"],
+  "expected": {
+    "error": "missing or ambiguous correlated RPC response"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "function": "validate_ports",
+  "args": [
+    43127,
+    8443
+  ],
+  "expected": {
+    "refused": true
+  }
+}

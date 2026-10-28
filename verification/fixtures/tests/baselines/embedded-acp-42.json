@@ -1,0 +1,17 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_lifecycle.rs#LIFECYCLE_FIXTURE",
+  "originalSHA256": "0d5da0c07a48c0988f3ae49bab2899752589b55f6170b8e5b9e14d97e89e63a8",
+  "target": "provider-lifecycle-agent.ts",
+  "arguments": ["normal", "<ROOT>/workspace", "<RECEIPT>"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/list\", \"params\": {\"cwd\": \"<ROOT>/workspace\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/resume\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 6, \"method\": \"session/close\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"sessionCapabilities\": {\"list\": {}, \"resume\": {}, \"close\": {}}}, \"agentInfo\": {\"name\": \"lifecycle-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessions\": [{\"sessionId\": \"fixture-session\", \"cwd\": \"<ROOT>/workspace\", \"title\": \"Fixture session\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 6, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": "[\"list\", \"resume\", \"prompt\", \"close\"]",
+    "files": {
+      "receipt.json": "[\"list\", \"resume\", \"prompt\", \"close\"]"
+    }
+  }
+}

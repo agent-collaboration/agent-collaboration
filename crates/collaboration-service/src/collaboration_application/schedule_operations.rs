@@ -1,8 +1,8 @@
 //! Schedules: local administration and portable packages, plus the explicit preparation that
 //! allocates a native destination. Only preparation reaches a native route.
-use super::{
-    AutomationOperations, CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
-    ResultByteBudget,
+use super::{AutomationOperations, ResultByteBudget};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 use automation_storage::{
     AutomationStore, ScheduleCreate, ScheduleEdit, ScheduleInspection, ScheduleMutation,
@@ -21,11 +21,12 @@ use tokio::sync::Mutex;
 
 type ScheduleResult<TResult> = Result<TResult, ScheduleOperationFailure>;
 
-impl<'service> AutomationOperations<'service> {
+impl AutomationOperations {
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     fn schedule_store(
         &self,
         context: &ScheduleFailureContext,
-    ) -> ScheduleResult<&'service Arc<Mutex<AutomationStore>>> {
+    ) -> ScheduleResult<&Arc<Mutex<AutomationStore>>> {
         self.store().ok_or_else(|| {
             ScheduleOperationFailure::Operation(schedule_failure(
                 context.clone(),
@@ -37,6 +38,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Creates a schedule once its activation is admitted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_create(
         &self,
         request: ScheduleCreateRequest,
@@ -69,6 +71,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Shows one schedule with its active and waiting Runs.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_show(
         &self,
         request: ScheduleShowRequest,
@@ -84,6 +87,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Replaces a schedule's definition when its current change is the expected one.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_update(
         &self,
         request: ScheduleUpdateRequest,
@@ -123,6 +127,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Enables a schedule once its activation is admitted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_enable(
         &self,
         request: ScheduleEnableRequest,
@@ -131,6 +136,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Disables a schedule; Runs already handed to a native thread are not stopped.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_disable(
         &self,
         request: ScheduleEnableRequest,
@@ -138,6 +144,7 @@ impl<'service> AutomationOperations<'service> {
         self.set_schedule_enabled(request, false).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn set_schedule_enabled(
         &self,
         request: ScheduleEnableRequest,
@@ -179,6 +186,7 @@ impl<'service> AutomationOperations<'service> {
         project_schedule(store, mutated, context, ScheduleAccess::Mutate).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn validate_activation(
         &self,
         store: &Arc<Mutex<AutomationStore>>,
@@ -193,8 +201,8 @@ impl<'service> AutomationOperations<'service> {
                 definition,
                 schedule_id,
                 operation_id,
-                service_id: &self.identity.service_id,
-                execution: self.identity.scheduled_run_execution.as_ref(),
+                service_id: self.identity.service_id(),
+                execution: self.scheduled_run_execution.as_ref(),
             },
         )
         .await
@@ -212,6 +220,7 @@ impl<'service> AutomationOperations<'service> {
     ///
     /// The package must be importable again, so both this response and the largest request
     /// that would import it must fit `budget`'s response limit.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_export(
         &self,
         request: ScheduleShowRequest,
@@ -261,6 +270,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Imports a portable package; an existing schedule identity needs explicit overwrite.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_import(
         &self,
         request: ScheduleImportRequest,
@@ -300,11 +310,19 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Prepares the schedule's reuse-thread destination; a retry returns the retained outcome.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_prepare(
         &self,
         request: SchedulePrepareRequest,
     ) -> ScheduleResult<ScheduleSnapshot> {
-        crate::schedule_preparation::prepare_schedule(self.identity, request).await
+        crate::schedule_preparation::prepare_schedule(
+            &self.configuration,
+            self.identity.service_id(),
+            self.scheduled_run_execution.as_ref(),
+            self.automation.as_ref(),
+            request,
+        )
+        .await
     }
 }
 
@@ -314,6 +332,7 @@ enum ScheduleAccess {
     Mutate,
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn project_schedule(
     store: &Arc<Mutex<AutomationStore>>,
     result: Result<ScheduleInspection<SessionRef, EndpointRef>, StorageError>,

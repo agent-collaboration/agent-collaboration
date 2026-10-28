@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT post_id AS \"id!: String\", router_time AS \"router_time?: String\", time_basis AS \"time_basis!: String\" FROM posts WHERE actor_id=? AND placement_kind='project' ORDER BY post_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "time_basis!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f1926724902d7b8c5e143ede4f42a090a6e0e9c8a747f3908fe3308dd8c59a35"
+}

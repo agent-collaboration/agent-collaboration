@@ -1,4 +1,16 @@
-use super::*;
+use super::{
+    ACTIVE_CLIENT_LEASE_MAX_AGE_SECONDS, AccountRecord, AccountStatus,
+    AsyncProviderCredentialResolver, AsyncSqliteStateStore, CreditRefreshAttempt,
+    DEFAULT_ROUTE_BANDS, HashMap, Path, PathBuf, PersistedQuotaSnapshot,
+    PersistedSelectorQuotaWindow, QuotaCommandError, QuotaRefreshErrorClass, QuotaRefreshProvider,
+    QuotaRefreshProviderRequest, QuotaSnapshotSource, RouteBand, SelectorQuotaWindowStatus,
+    StateStoreError, USER_QUOTA_ROUTE_BAND, V1_WEEKLY_WINDOW_SECONDS, WebSocketQuotaFloorNotifier,
+    Write, append_failure_quota_history_observations, append_success_quota_history_observation,
+    current_unix_seconds, failure_quota_history_observations, purge_old_quota_history,
+    record_claude_usage_auth_rejected_after_renewal, record_quota_refresh_metric,
+    safe_account_label, stale_after_unix_seconds, success_quota_history_observation,
+    telemetry_hash, weekly_quota_switch_at_basis_points,
+};
 use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
 use codex_router_core::route_profile::WindowKind;
@@ -210,6 +222,22 @@ where
         } else {
             DEFAULT_ROUTE_BANDS
         };
+        let mut initial_responses_refresh_attempt = if account.provider() == Provider::Openai {
+            match begin_responses_refresh_attempt_before_resolution(
+                &quota_history_state,
+                account.account_id(),
+            )
+            .await?
+            {
+                Some(attempt) => Some(attempt),
+                None => {
+                    record_superseded_account_refresh(&mut *stdout, account, &mut failed_count)?;
+                    continue 'accounts;
+                }
+            }
+        } else {
+            None
+        };
         let credential_resolution_started_at = if account.provider() == Provider::Claude {
             Some(current_unix_seconds())
         } else {
@@ -222,34 +250,11 @@ where
             Ok(resolved) => resolved,
             Err(error) => {
                 failed_count = failed_count.saturating_add(route_bands.len() as u64);
-                let current_account = if account.provider() == Provider::Openai {
-                    quota_history_state
-                        .list_accounts()
-                        .await?
-                        .into_iter()
-                        .find(|current| current.account_id() == account.account_id())
-                } else {
-                    None
-                };
-                let responses_credit_attempt = match current_account
-                    .as_ref()
-                    .and_then(AccountRecord::active_credential_generation)
-                {
-                    Some(generation) => {
-                        begin_credit_refresh_attempt_for_current_generation(
-                            &quota_history_state,
-                            account.account_id(),
-                            generation,
-                        )
-                        .await?
-                    }
-                    None => None,
-                };
                 let failure_status_attempt_unix_seconds =
                     credential_resolution_started_at.unwrap_or(observed_unix_seconds);
                 for route_band in route_bands {
                     if *route_band == USER_QUOTA_ROUTE_BAND {
-                        if let Some(attempt) = responses_credit_attempt.as_ref() {
+                        if let Some(attempt) = initial_responses_refresh_attempt.as_ref() {
                             quota_history_state
                                 .record_responses_refresh_failure(
                                     attempt,
@@ -263,23 +268,6 @@ where
                                     ),
                                 )
                                 .await?;
-                        } else if current_account.is_some() {
-                            quota_history_state
-                                .record_refresh_failure_preserving_selector_windows(
-                                    account.account_id(),
-                                    route_band,
-                                    observed_unix_seconds,
-                                    QuotaRefreshErrorClass::AuthError,
-                                )
-                                .await?;
-                            append_failure_quota_history_observations(
-                                &quota_history_state,
-                                account,
-                                route_band,
-                                observed_unix_seconds,
-                                QuotaRefreshErrorClass::AuthError,
-                            )
-                            .await?;
                         }
                     } else {
                         quota_history_state
@@ -475,9 +463,15 @@ where
         }
         for route_band in route_bands {
             let mut credit_refresh_attempt = if *route_band == USER_QUOTA_ROUTE_BAND {
-                match begin_credit_refresh_attempt_for_current_generation(
+                let initial_attempt =
+                    initial_responses_refresh_attempt.take().ok_or_else(|| {
+                        QuotaCommandError::ProviderResponse {
+                            message: "Responses refresh attempt was not allocated".to_owned(),
+                        }
+                    })?;
+                match responses_refresh_attempt_for_resolved_generation(
                     &quota_history_state,
-                    account.account_id(),
+                    initial_attempt,
                     resolved.credential_generation(),
                 )
                 .await?
@@ -925,4 +919,10 @@ where
 }
 
 mod quota_refresh_helpers;
-use quota_refresh_helpers::*;
+use quota_refresh_helpers::{
+    SupersededResponsesFloorRead, begin_credit_refresh_attempt_for_current_generation,
+    begin_responses_refresh_attempt_before_resolution,
+    notify_weekly_floor_from_latest_committed_responses, quota_refresh_diagnostic_account_label,
+    quota_refresh_error_class, record_superseded_account_refresh,
+    responses_refresh_attempt_for_resolved_generation, weekly_quota_floor_intent,
+};

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO stand_down_acknowledgements(acknowledgement_id, actor_id, request_id, epoch, position, router_time, time_basis, assignment_id, through_epoch, through_position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e267866d1f000d18764797f443f10809e53f509a743f4c0988a3fbbce3ffba74"
+}

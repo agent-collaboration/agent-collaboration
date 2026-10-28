@@ -1,0 +1,16 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_event_overflow.rs#OUTPUT_LIMIT_FIXTURE",
+  "originalSHA256": "6997f6fe7c8245682082593338f3eb4995f8361fa38b5381e63b2b23e3ef0e56",
+  "target": "provider-output-limit-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "043b8c1bee2d8e0460801c73b977a83a4e1c4ab69af0e4448d13cb2002e5fc23",
+      "bytes": 1049049
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}

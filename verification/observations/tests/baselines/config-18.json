@@ -1,0 +1,78 @@
+{
+  "name": "desktop.panels",
+  "before": "[[desktop.panels]]\nname = \"first\"\n[desktop.panels.details]\nvalue = \"PRIVATE_VALUE_CANARY\"\n[[desktop.panels]]\nname = \"second\"\n",
+  "after": "[[desktop.panels]]\nname = \"first\"\n[[desktop.panels]]\nname = \"second\"\n[desktop.panels.details]\nvalue = \"PRIVATE_VALUE_CANARY\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[desktop.panels]]",
+        "table": ["desktop", "panels"],
+        "occurrence": 0,
+        "sha256": "91a70ab484cb8b7618d3f4cc2c741b18e1090bb459cfa1061c1d654a5e385963",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.panels.details]",
+        "table": ["desktop", "panels", "details"],
+        "occurrence": 0,
+        "sha256": "ffb1e49111705b152b5d9380e5ecb18f3355d3a41575753bef758ed81cb23dcf",
+        "names_run": false
+      },
+      {
+        "header": "[[desktop.panels]]",
+        "table": ["desktop", "panels"],
+        "occurrence": 1,
+        "sha256": "4808e5d1398b9c8295835640e0b86b5ab7cc3b6e87887d9b2435679ad7c0cf7c",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[desktop.panels]]",
+        "table": ["desktop", "panels"],
+        "occurrence": 0,
+        "sha256": "91a70ab484cb8b7618d3f4cc2c741b18e1090bb459cfa1061c1d654a5e385963",
+        "names_run": false
+      },
+      {
+        "header": "[[desktop.panels]]",
+        "table": ["desktop", "panels"],
+        "occurrence": 1,
+        "sha256": "4808e5d1398b9c8295835640e0b86b5ab7cc3b6e87887d9b2435679ad7c0cf7c",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.panels.details]",
+        "table": ["desktop", "panels", "details"],
+        "occurrence": 0,
+        "sha256": "ffb1e49111705b152b5d9380e5ecb18f3355d3a41575753bef758ed81cb23dcf",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[desktop.panels.details]",
+        "occurrence": 0,
+        "before_sha256": "ffb1e49111705b152b5d9380e5ecb18f3355d3a41575753bef758ed81cb23dcf",
+        "after_sha256": "ffb1e49111705b152b5d9380e5ecb18f3355d3a41575753bef758ed81cb23dcf",
+        "classification": "externalDesktopSection"
+      }
+    ],
+    "allowed": true
+  }
+}

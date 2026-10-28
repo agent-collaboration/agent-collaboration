@@ -1,6 +1,12 @@
 //! SQLite sync accounts responsibilities.
 use super::account_store::CREDENTIAL_MUTATION_INVALIDATED_ROUTE_BANDS;
-use super::*;
+use super::{
+    AccountId, AccountRecord, AccountStateRepository, AccountStatus, Connection,
+    DEFAULT_SELECTOR_LIMIT_WINDOW_SECONDS, OptionalExtension, Path, Provider, QuotaSnapshotSource,
+    SelectorQuotaWindowStatus, SqliteStateStore, StateStoreError,
+    invalidate_credential_mutation_quota_sync, params, parse_account_row, selector_route_band,
+    sqlite_error, u64_to_i64,
+};
 
 impl SqliteStateStore {
     /// Opens a SQLite state database and applies migrations.

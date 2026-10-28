@@ -1,15 +1,20 @@
 //! A missing Codex thread has no replayable native input and no persisted holder identity.
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, CodexAppServerDeliveryRoute, DeliveryFuture, DeliveryPrecondition,
-    EndpointDirectory, NativeControlBackend, NativeGenerationGate, SessionDeliveryRoute,
-    UnmaterializedThreadHolder,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::UnmaterializedThreadHolder;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -116,7 +121,7 @@ async fn missing_thread_without_holder_is_known_not_submitted()
                 payload: PreparedPush {
                     push_id,
                     line,
-                    load_policy: collaboration_service::LoadPolicy::MayLoad,
+                    load_policy: collaboration_contracts::LoadPolicy::MayLoad,
                 },
                 target,
                 mode: MessageDelivery::Auto,
@@ -127,10 +132,14 @@ async fn missing_thread_without_holder_is_known_not_submitted()
             &DiscardEvidence,
         )
         .await?;
-    if !matches!(receipt.outcome, DeliveryOutcome::NotSubmitted { retryable: false, ref reason }
+    if !matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::NotSubmitted { retryable: false, ref reason }
         if reason == "thread not found or never started; if it was created without a first message, it was lost when the Host restarted — create it again")
     {
-        return Err(format!("missing thread outcome: {:?}", receipt.outcome).into());
+        return Err(format!(
+            "missing thread outcome: {:?}",
+            receipt.receipt().outcome.clone()
+        )
+        .into());
     }
     backend.await??;
     std::fs::remove_file(socket)?;

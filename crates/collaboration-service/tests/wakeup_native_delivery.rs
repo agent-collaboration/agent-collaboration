@@ -1,17 +1,22 @@
 //! Real SQLite and WebSocket protocol fixture; this does not invoke Codex or a model.
 use agent_automation::{ExpiryRule, TimingRule};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, OperationId, PushId, RouterOriginRef, SavedMessage,
     SessionRef,
 };
-use collaboration_service::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-    SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
-use sqlx::Connection;
+use sqlx::{ConnectOptions as _, Connection as _};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/served_api.rs"]
@@ -64,6 +69,9 @@ async fn exercise_delivery(
     let store = Arc::new(tokio::sync::Mutex::new(
         AutomationStore::open(&database).await?,
     ));
+    let interaction_database = root.join("interaction.sqlite");
+    let interactions =
+        Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
     let path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&path)?;
     let service_id = "00000000-0000-4000-8000-000000000001";
@@ -107,15 +115,18 @@ async fn exercise_delivery(
     let message: SavedMessage = serde_json::from_value(
         json!({"target":target,"content":{"kind":"agent","sender":target,"text":"A durable finding"},"delivery":"queue","generationGuard":null}),
     )?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 5_000;
     let wake = store
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },
             expiry: ExpiryRule::None,
-            now_ms: 0,
+            now_ms: anchor_ms,
         })
         .await?;
     let (fire, delivery_id) = match store
@@ -123,7 +134,7 @@ async fn exercise_delivery(
         .await
         .evaluate_wakeup::<SavedMessage>(
             &wake.definition.wakeup_id,
-            5_000,
+            anchor_ms + 5_000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -137,19 +148,36 @@ async fn exercise_delivery(
         wakeup_id: fire.wakeup_id.clone(),
         occurrence_id: fire.occurrence_id.clone(),
     };
-    let committed_push = store
-        .lock()
-        .await
+    let mut handoff = collaboration_runtime::PushHandoffWorker::new(
+        Arc::clone(&store),
+        Arc::clone(&interactions),
+    );
+    if handoff.apply_pending().await? != 1 {
+        return Err("wake firing did not hand off exactly one owed push".into());
+    }
+    drop(handoff);
+    let committed_push = interactions
         .get_push_record_by_origin_reference(&origin)
         .await?
         .ok_or("wake push missing before restart")?;
     let expected_push_id: PushId = committed_push.push_id.clone();
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "wake interaction owner remained shared before restart")?
+        .close()
+        .await?;
     let owned_store = Arc::try_unwrap(store)
         .map_err(|_| std::io::Error::other("wake store remained shared before restart"))?;
     owned_store.into_inner().close().await?;
     let store = Arc::new(tokio::sync::Mutex::new(
         AutomationStore::open(&database).await?,
     ));
+    let interactions =
+        Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
+    if serde_json::to_value(interactions.get_push_record(&expected_push_id).await?)?
+        != serde_json::to_value(Some(committed_push))?
+    {
+        return Err("wake push changed across physical owner reopen".into());
+    }
     let recovered_delivery_ids = store
         .lock()
         .await
@@ -158,15 +186,16 @@ async fn exercise_delivery(
     if !recovered_delivery_ids.contains(&delivery_id) {
         return Err("restart did not expose the committed wake for dispatch".into());
     }
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
+        .with_interaction_store(interactions.clone())
         .with_native_backend(native_backend.clone())?;
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
@@ -179,6 +208,7 @@ async fn exercise_delivery(
             .run(shutdown.clone()),
     );
     let backend_database = database.clone();
+    let backend_interaction_database = interaction_database.clone();
     let (queue_sender, queue_receiver) = tokio::sync::oneshot::channel();
     let backend = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
@@ -217,14 +247,19 @@ async fn exercise_delivery(
             &sqlx::sqlite::SqliteConnectOptions::new().filename(&backend_database),
         )
         .await?;
+        let mut push_observer = sqlx_turso::TursoConnectOptions::new()
+            .filename(&backend_interaction_database)
+            .connect()
+            .await?;
         let stored_push: Option<(String, Option<String>)> = sqlx::query_as(
             "SELECT push_id,body FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=?",
         )
         .bind(service_id)
         .bind("codex-local")
         .bind("fixture-new-target")
-        .fetch_optional(&mut evidence_connection)
+        .fetch_optional(&mut push_observer)
         .await?;
+        push_observer.close().await?;
         let Some((push_id, Some(body))) = stored_push else {
             return Err("old wake firing reached native delivery without a stored push".into());
         };
@@ -415,7 +450,7 @@ async fn exercise_delivery(
             | NativeOutcome::ReconcileAbsent
             | NativeOutcome::ReconcileWrongPushId
     ) {
-        let served = served_api::ServedApi::start(identity).await?;
+        let served = served_api::ServedApi::start(identity)?;
         let client = served.client("reconcile-fixture").await?;
         let result = client
             .reconcile_delivery(collaboration_protocol::DeliveryShowRequest {
@@ -448,12 +483,22 @@ async fn exercise_delivery(
             return Err("absence or content mismatch was treated as a definite outcome".into());
         }
         served.stop().await?;
+    } else {
+        drop(identity);
     }
     tokio::time::timeout(Duration::from_secs(2), backend).await???;
     shutdown.cancel();
     worker.await?;
     connection.close().await?;
-    drop(store);
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "wake interaction owner remained shared after shutdown")?
+        .close()
+        .await?;
+    Arc::try_unwrap(store)
+        .map_err(|_| "wake automation owner remained shared after shutdown")?
+        .into_inner()
+        .close()
+        .await?;
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         std::fs::remove_file(entry.path())?;

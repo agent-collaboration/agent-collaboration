@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO subscription_memberships(membership_id, actor_id, request_id, epoch, position, router_time, time_basis, reader_actor, scope_kind, scope_id, policy, renewed_at, expires_at, generation, activated_epoch, activated_position, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "90d321756dce1063e5f6743ccc9cf1fdab8b75ee2305231b05b459cd926b9731"
+}

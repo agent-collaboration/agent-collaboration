@@ -1,7 +1,8 @@
 //! Provider ACP scheduled-run policy over recorded provider operations.
 use crate::{ExternalProviderSupervisor, LiveSessionOwnershipCheck};
+use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::{LoadPolicy, ProviderOperationStore};
+use collaboration_runtime::ProviderOperationStore;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -39,17 +40,33 @@ use agent_automation::{
     AttemptId, ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     RouteEffectEvidence, SubmissionEffect,
 };
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::FreshSessionRequest;
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::PreparedTarget;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::RunSummarySource;
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationFailure;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunExecution;
+use collaboration_contracts::ScheduledRunRoute;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::SettlementEvidence;
+use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     CodexGeneration, DestinationPreparation, EndpointRef, ProviderCapabilityName,
     ProviderCapabilityStatus, ScheduleFailureKind, SessionRef,
-};
-use collaboration_service::{
-    DeliveryContractError, DeliveryFuture, FreshSessionRequest, PreparationEvidenceSink,
-    PreparedTarget, ProviderConversationBackend, RunEvidenceDisposition, RunEvidenceSink,
-    RunObservationContext, RunReconciliation, RunSettlement, RunSubmission, RunSummarySource,
-    ScheduleCapability, ScheduleDestination, SchedulePreparationFailure,
-    SchedulePreparationOutcome, SchedulePreparationRequest, ScheduleSupport, ScheduledRunExecution,
-    ScheduledRunRoute, ScheduledRunSubmission, SettlementEvidence, StopRequestOutcome,
 };
 
 impl ProviderAcpScheduledRuns {
