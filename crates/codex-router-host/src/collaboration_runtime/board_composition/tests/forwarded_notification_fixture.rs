@@ -31,6 +31,12 @@ pub(super) struct HolderNotifications {
     mail: NativeMailOwner,
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum MailWorkerStart {
+    Immediate,
+    Deferred,
+}
+
 impl HolderNotifications {
     pub async fn hold_progress_writer(
         &self,
@@ -69,6 +75,15 @@ impl HolderNotifications {
         root: &Path,
         machine: MachineIdentity,
     ) -> TestResultOwner {
+        Self::prepare_with_worker(board, root, machine, MailWorkerStart::Immediate).await
+    }
+
+    pub async fn prepare_with_worker(
+        board: &mut BoardComposition,
+        root: &Path,
+        machine: MachineIdentity,
+        worker_start: MailWorkerStart,
+    ) -> TestResultOwner {
         let session = board.mail_session().ok_or("holder mail session")?;
         let peer = session.peer;
         let owner =
@@ -94,7 +109,11 @@ impl HolderNotifications {
         .with_project_admission(board.admission.clone())
         .with_project_replication(board.replication.clone().ok_or("holder replication")?)
         .with_subscription_delivery_service(actors.clone(), carrier.clone());
-        let (identity, mail) = NativeMailOwner::start_with_session(
+        let start_mail = match worker_start {
+            MailWorkerStart::Immediate => NativeMailOwner::start_with_session,
+            MailWorkerStart::Deferred => NativeMailOwner::start_deferred_with_session,
+        };
+        let (identity, mail) = start_mail(
             identity,
             peer,
             MailPushDeliveryProps {
@@ -122,6 +141,10 @@ impl HolderNotifications {
             actors,
             mail,
         })
+    }
+
+    pub fn start_mail_worker(&mut self) -> TestResult {
+        self.mail.start_worker()
     }
 
     // Read only through the runtime's physical owner; this observer executes no task.
