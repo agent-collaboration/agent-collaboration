@@ -19,6 +19,31 @@ Host does not exit within the existing operator deadline, it reports failure
 and sends no forced termination signal. After a successful stop, `host status`
 reports that no Host is running; a second `host stop` succeeds again.
 
+## ChatGPT token rotation
+
+The Host watches the active Codex home directory for `auth.json` changes,
+including atomic replacement, and debounces bursts. It asks the managed
+app-server to run `account/read` with `refreshToken: true` for changed tokens;
+it never restarts that process in response to authentication changes. Codex
+continues to own OAuth refresh and auth-file writes. Verified post-refresh file
+revisions are deduplicated to prevent Codex's own writes from creating a refresh loop.
+
+`host status` reports `last_login_reload`, also recorded in Host logs. A
+successful RPC alone does not establish reload: the Host verifies the resulting
+cached access token in memory without logging it. First login and a different
+account are refused by upstream's guarded reload; logout cannot clear its
+cache this way. Run `codex-router host app-server restart` explicitly for those
+cases, accepting that managed Codex sessions are unloaded. Failed/refused file
+revisions are not automatically retried.
+
+`cargo nextest run -p codex-router-host --test auth_file_reload` checks burst
+deduplication, repeated atomic replacement and different-account refusal through
+the real Host and native protocol with a synthetic upstream. Real-Codex proof
+must additionally use a private `CODEX_HOME`, signed isolated debug Host and
+dedicated `CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET`. Rewrite only fixture credentials
+from outside; compare the remote client's account, app-server PID and Host status
+before and after rotation. Never write normal Codex authentication or configuration.
+
 ## First activation and failure recovery
 
 A Host that predates the whole-Host restart request needs one manual activation:

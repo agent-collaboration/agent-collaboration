@@ -226,6 +226,9 @@ pub(crate) fn render_update_result<W: Write>(
 }
 
 fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io::Result<()> {
+    if let Some(outcome) = snapshot.last_login_reload() {
+        writeln!(stdout, "last_login_reload: {}", outcome.description())?;
+    }
     writeln!(
         stdout,
         "readiness: {}",

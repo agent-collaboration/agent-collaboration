@@ -53,12 +53,13 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.110"
+version = "0.1.114"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+notify = "8.2.0"
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
 fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }

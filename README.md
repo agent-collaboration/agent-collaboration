@@ -148,6 +148,16 @@ command never force-kills the Host. Use `--router-root PATH` to select another
 Router root, as with the other Host commands.
 
 `host app-server restart` restarts only managed Codex without updating it.
+The Host watches the active Codex home's `auth.json` with filesystem events.
+Same-account ChatGPT token rotations request Codex's guarded authentication
+reload after a short debounce, without restarting the app-server or unloading
+sessions. `host status` and Host logs report the last login reload result.
+File revisions written during a refresh are deduplicated after cache verification
+so they do not start a refresh loop. Different accounts, first login and logout need
+an explicit `codex-router host app-server restart`; that command unloads managed
+Codex sessions. Refused or failed reloads are reported once per changed file
+revision, with no automatic restart or timer retry.
+
 `host app-server update` runs the managed Codex updater. If executable content
 changes, the foreground Host stops its children and re-execs itself; otherwise
 the running app-server and connected clients are left untouched. `host update`
