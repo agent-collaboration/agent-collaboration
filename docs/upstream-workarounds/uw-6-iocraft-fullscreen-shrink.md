@@ -2,8 +2,8 @@
 
 **Status:** in place, 2026-10-25
 **Dependency:** iocraft 0.9.2, pinned fork revision `829ebd86bd07fe2100c096ec6d785875ec2e0c79`
-**Upstream:** not yet reported. ccbrown/iocraft 0.9.3 and `main` still lack the guard;
-no issue or pull request has been filed.
+**Upstream:** reported as [ccbrown/iocraft#309](https://github.com/ccbrown/iocraft/issues/309), fix in
+[ccbrown/iocraft#310](https://github.com/ccbrown/iocraft/pull/310) (open, 2026-10-28).
 
 ## Lives in
 
