@@ -175,7 +175,11 @@ pub(super) async fn mcp_send(
         proof.service_directory.join("service.json"),
     )?)?;
     let url = manifest["mcp"]["url"].as_str().ok_or("MCP URL missing")?;
-    if !url.starts_with("http://127.0.0.1:") || url.contains(":8788/") || url.contains(":19742/") {
+    if !url.starts_with("http://127.0.0.1:")
+        || url.contains(":8788/")
+        || url.contains(":19742/")
+        || url.contains(":19743/")
+    {
         return Err("MCP proof URL was not isolated loopback".into());
     }
     let client = reqwest::Client::new();
