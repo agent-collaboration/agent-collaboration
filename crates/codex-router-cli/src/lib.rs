@@ -333,16 +333,8 @@ fn base_serve_runtime_config(
     let isolated_debug = command.require_debug_isolation;
     #[cfg(not(debug_assertions))]
     let isolated_debug = false;
-    let ports = codex_router_host::resolve_host_ports(
-        router_root,
-        isolated_debug,
-        codex_router_host::HostPortOverrides {
-            router: command.port,
-            ..codex_router_host::HostPortOverrides::default()
-        },
-    )?;
-    let bind_address =
-        LoopbackBindAddress::new(&command.listen_host, ports.selection().router.port)?;
+    let port = codex_router_host::resolve_router_port(router_root, isolated_debug, command.port)?;
+    let bind_address = LoopbackBindAddress::new(&command.listen_host, port.port)?;
     let upstream_endpoint = UpstreamEndpoint::new(command.upstream_base_url.clone())?;
     let runtime_config = LoopbackRouterRuntimeConfig::new_tokenless(
         bind_address,

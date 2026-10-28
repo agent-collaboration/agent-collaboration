@@ -9,6 +9,7 @@ use std::path::PathBuf;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionCase {
     Malformed,
+    MalformedRouterOnly,
     OccupiedRouter,
     OccupiedMcp,
     OccupiedHttps,
@@ -22,6 +23,7 @@ enum AdmissionCase {
 async fn malformed_restart_ports_preserve_the_admitted_host_state() {
     for scenario in [
         AdmissionCase::Malformed,
+        AdmissionCase::MalformedRouterOnly,
         AdmissionCase::OccupiedRouter,
         AdmissionCase::OccupiedHttps,
         AdmissionCase::InactiveHttps,
@@ -46,6 +48,7 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     let refuses = matches!(
         scenario,
         AdmissionCase::Malformed
+            | AdmissionCase::MalformedRouterOnly
             | AdmissionCase::OccupiedRouter
             | AdmissionCase::OccupiedMcp
             | AdmissionCase::OccupiedHttps
@@ -69,7 +72,10 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
         drop(competing_listener);
     }
     let path = root.path().join("ports.json");
-    let file = if scenario == AdmissionCase::Malformed {
+    let file = if matches!(
+        scenario,
+        AdmissionCase::Malformed | AdmissionCase::MalformedRouterOnly
+    ) {
         "{".to_owned()
     } else {
         let next_router = if scenario == AdmissionCase::OccupiedRouter {
@@ -133,7 +139,7 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
         .await
         .expect("identity");
     let plans = ManagedChildLaunchPlans::new(
-        None,
+        Some(ChildCommandSpec::new(executable.clone())),
         crate::AppServerLaunchPlan::new(
             ChildCommandSpec::new(executable.clone()),
             identity,
@@ -143,7 +149,11 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     let updates = ManagedUpdateInputs::production()
         .with_replacement_command(ChildCommandSpec::new(executable.clone()));
     let mut state = RuntimeState::ready(
-        RouterCondition::ExternalReachable,
+        if scenario == AdmissionCase::MalformedRouterOnly {
+            RouterCondition::OwnedReachable
+        } else {
+            RouterCondition::ExternalReachable
+        },
         crate::AppServerReadiness::Ready {
             running_version: "test".to_owned(),
             remote_control_server_name: None,
@@ -161,8 +171,12 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     let (_ack, reexecuting_ack) = tokio::sync::oneshot::channel();
     handle_operator_work(
         OperatorWork {
-            request: OperatorRequest::RestartHost {
-                executable: executable.clone(),
+            request: if scenario == AdmissionCase::MalformedRouterOnly {
+                OperatorRequest::RestartRouter
+            } else {
+                OperatorRequest::RestartHost {
+                    executable: executable.clone(),
+                }
             },
             response: sender,
             reexecuting_ack,
@@ -211,7 +225,10 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
         "{}",
         response.message()
     );
-    if scenario != AdmissionCase::Malformed {
+    if !matches!(
+        scenario,
+        AdmissionCase::Malformed | AdmissionCase::MalformedRouterOnly
+    ) {
         assert!(
             response.message().contains(&competing.port().to_string()),
             "{}",
@@ -221,6 +238,10 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     assert!(
         active_host_replacement.is_none(),
         "teardown must not be scheduled"
+    );
+    assert!(
+        active_router_restart.is_none(),
+        "Router teardown must not be scheduled"
     );
     assert_eq!(
         state.snapshot(),

@@ -53,7 +53,7 @@ pub use host_port_selection::{HostPortSelection, HostPortSource, SelectedHostPor
 mod port_configuration;
 pub use port_configuration::{
     HostPortOverrides, PortConfigurationError, ResolvedHostPorts, default_mcp_bind,
-    parse_loopback_mcp_bind, resolve_host_ports,
+    parse_loopback_mcp_bind, resolve_host_ports, resolve_router_port,
 };
 mod host_replacement_activation;
 mod host_restart_preflight;

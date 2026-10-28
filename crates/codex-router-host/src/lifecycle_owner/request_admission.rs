@@ -356,6 +356,18 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
             );
         }
         OperatorRequest::RestartRouter => {
+            if let Err(error) =
+                crate::host_restart_preflight::preflight_router_restart(context.config).await
+            {
+                send_terminal_response(
+                    work.response,
+                    work.request,
+                    TerminalClassification::Failed,
+                    snapshot,
+                    error.to_string(),
+                );
+                return;
+            }
             send_progress(
                 &work.response,
                 crate::operator_messages::HostProgress::PreparingRouter,

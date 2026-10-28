@@ -49,6 +49,26 @@ pub(crate) async fn preflight_restart_ports(
     .map_err(|source| RestartPortPreflightError::Worker { path, source })?
 }
 
+pub(crate) async fn preflight_router_restart(
+    config: &HostConfig,
+) -> Result<(), RestartPortPreflightError> {
+    let root = config
+        .coordination_paths()
+        .router_root()
+        .ok_or_else(|| PortConfigurationError::Invalid {
+            path: config.coordination_paths().instance_lock().to_owned(),
+            message: "the Host coordination path has no Router root".to_owned(),
+        })?
+        .to_owned();
+    let path = root.join("ports.json");
+    let isolated = config.isolated_debug_ports();
+    let port = config.router_endpoint().port();
+    tokio::task::spawn_blocking(move || crate::resolve_router_port(&root, isolated, Some(port)))
+        .await
+        .map_err(|source| RestartPortPreflightError::Worker { path, source })??;
+    Ok(())
+}
+
 fn check_replacement_ports(
     root: &Path,
     config: &HostConfig,

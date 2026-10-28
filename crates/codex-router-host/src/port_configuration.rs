@@ -82,6 +82,22 @@ pub fn resolve_host_ports(
     ResolvedHostPorts::new(&path, isolated_debug, overrides, file)
 }
 
+/// Resolves the Router endpoint through the same file loader and Router selector.
+/// Standalone Serve does not launch MCP or Tailscale endpoints.
+pub fn resolve_router_port(
+    router_root: &Path,
+    isolated_debug: bool,
+    flag: Option<u16>,
+) -> Result<SelectedHostPort, PortConfigurationError> {
+    let path = router_root.join("ports.json");
+    let file = PortConfigurationFile::load(&path)?;
+    let router = select_router_port(flag, file.router, isolated_debug);
+    if isolated_debug {
+        validate_debug_port(&path, "Router", router.port)?;
+    }
+    Ok(router)
+}
+
 impl ResolvedHostPorts {
     pub const fn selection(self) -> HostPortSelection {
         self.selection
@@ -101,15 +117,7 @@ impl ResolvedHostPorts {
         overrides: HostPortOverrides,
         file: PortConfigurationFile,
     ) -> Result<Self, PortConfigurationError> {
-        let router = select_port(
-            overrides.router,
-            file.router,
-            if isolated_debug {
-                18787
-            } else {
-                codex_native_integration::DEFAULT_ROUTER_PORT
-            },
-        );
+        let router = select_router_port(overrides.router, file.router, isolated_debug);
         let mcp = select_port(
             overrides.mcp_bind.map(|bind| bind.port()),
             file.mcp,
@@ -152,15 +160,7 @@ impl ResolvedHostPorts {
                 ("MCP", mcp),
                 ("Tailscale HTTPS", tailscale_https),
             ] {
-                if [8787, 8788, 19741, 19742, 19743, 43127].contains(&selected.port) {
-                    return Err(PortConfigurationError::Invalid {
-                        path: path.to_owned(),
-                        message: format!(
-                            "isolated debug {endpoint} cannot use protected port {}",
-                            selected.port
-                        ),
-                    });
-                }
+                validate_debug_port(path, endpoint, selected.port)?;
             }
         }
         Ok(Self {
@@ -173,6 +173,36 @@ impl ResolvedHostPorts {
             tailscale_https_port,
         })
     }
+}
+
+fn select_router_port(
+    flag: Option<u16>,
+    file: Option<NonZeroU16>,
+    isolated_debug: bool,
+) -> SelectedHostPort {
+    select_port(
+        flag,
+        file,
+        if isolated_debug {
+            18787
+        } else {
+            codex_native_integration::DEFAULT_ROUTER_PORT
+        },
+    )
+}
+
+fn validate_debug_port(
+    path: &Path,
+    endpoint: &str,
+    port: u16,
+) -> Result<(), PortConfigurationError> {
+    if [8787, 8788, 19741, 19742, 19743, 43127].contains(&port) {
+        return Err(PortConfigurationError::Invalid {
+            path: path.to_owned(),
+            message: format!("isolated debug {endpoint} cannot use protected port {port}"),
+        });
+    }
+    Ok(())
 }
 
 fn select_port(flag: Option<u16>, file: Option<NonZeroU16>, default_port: u16) -> SelectedHostPort {

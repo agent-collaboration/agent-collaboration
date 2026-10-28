@@ -24,6 +24,12 @@ fn standalone_serve_selects_the_file_port_unless_explicitly_overridden() {
         (None, vec![], 19741),
         (Some(r#"{"router":28741}"#), vec![], 28741),
         (Some(r#"{"router":28741}"#), vec!["--port", "29741"], 29741),
+        // A Router-only child keeps its captured flag, regardless of the file's future MCP port.
+        (
+            Some(r#"{"router":28741,"mcp":29741}"#),
+            vec!["--port", "29741"],
+            29741,
+        ),
     ] {
         if let Some(file) = file {
             std::fs::write(root.path().join("ports.json"), file).expect("file");
