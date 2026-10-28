@@ -85,34 +85,8 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
             &json!(1),
             "the burst must cause one refresh",
         )?;
-        // Watching the parent must survive replacement of the first inode.
-        write_auth(&home, "account-x", "x3")?;
-        wait_for_email(&mut client, "x3@example.invalid").await?;
-        let account = client
-            .request("account/read", json!({"refreshToken":false}))
-            .await?;
-        check_equal(
-            &account["refreshCount"],
-            &json!(2),
-            "watch must survive the first atomic rename",
-        )?;
-        // A refresh token can rotate while the current access token stays valid.
-        let mut document: Value = serde_json::from_slice(&std::fs::read(home.join("auth.json"))?)?;
-        document["tokens"]["refresh_token"] = json!("refresh-only-revision");
-        std::fs::write(home.join("auth.next"), serde_json::to_vec(&document)?)?;
-        std::fs::rename(home.join("auth.next"), home.join("auth.json"))?;
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let account = client
-                    .request("account/read", json!({"refreshToken":false}))
-                    .await?;
-                if account["refreshCount"] == 3 {
-                    return Ok::<_, Box<dyn std::error::Error>>(());
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await??;
+        // Alternate observable outcomes so every file write waits for the Host's
+        // completed verification, rather than an upstream cache change mid-RPC.
         write_auth(&home, "account-y", "y1")?;
         wait_for_reload(coordination.operator_socket(), "refused_different_account").await?;
         let account = client
@@ -120,13 +94,69 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
             .await?;
         check_equal(
             &account["account"]["email"],
-            &json!("x3@example.invalid"),
+            &json!("x2@example.invalid"),
             "different account must not replace the cache",
         )?;
         check_equal(
             &account["refreshCount"],
+            &json!(2),
+            &format!(
+                "different-account revision must be attempted once; observed {}",
+                account["refreshCount"]
+            ),
+        )?;
+
+        // The directory subscription must survive replacement of auth.json again.
+        write_auth(&home, "account-x", "x3")?;
+        wait_for_reload(coordination.operator_socket(), "reloaded").await?;
+        let account = client
+            .request("account/read", json!({"refreshToken":false}))
+            .await?;
+        check_equal(
+            &account["account"]["email"],
+            &json!("x3@example.invalid"),
+            "later rotation must be adopted",
+        )?;
+        check_equal(
+            &account["refreshCount"],
+            &json!(3),
+            "watch must survive atomic replacement",
+        )?;
+        let mut matching_account_document: Value =
+            serde_json::from_slice(&std::fs::read(home.join("auth.json"))?)?;
+
+        // Account switches may reuse an access token; account identity still wins.
+        write_auth(&home, "account-y", "x3")?;
+        wait_for_reload(coordination.operator_socket(), "refused_different_account").await?;
+        let account = client
+            .request("account/read", json!({"refreshToken":false}))
+            .await?;
+        check_equal(
+            &account["refreshCount"],
             &json!(4),
-            "different-account revision must be attempted once",
+            "shared-token account switch must be attempted once",
+        )?;
+        check_equal(
+            &account["account"]["email"],
+            &json!("x3@example.invalid"),
+            "shared-token account switch must keep the old cache",
+        )?;
+
+        // Restore the same account by changing only its refresh token. This
+        // in-place write also proves the current inode remains watched.
+        matching_account_document["tokens"]["refresh_token"] = json!("refresh-only-revision");
+        std::fs::write(
+            home.join("auth.json"),
+            serde_json::to_vec(&matching_account_document)?,
+        )?;
+        wait_for_reload(coordination.operator_socket(), "reloaded").await?;
+        let account = client
+            .request("account/read", json!({"refreshToken":false}))
+            .await?;
+        check_equal(
+            &account["refreshCount"],
+            &json!(5),
+            "refresh-token-only revision must request one guarded reload",
         )?;
         check_equal(
             &std::fs::read_to_string(&process_log)?,
@@ -185,24 +215,6 @@ async fn wait_for_reload(socket: &Path, expected: &str) -> Result<(), Box<dyn st
     .map_err(|_| {
         format!("Host did not report login reload: {expected}; last snapshot: {last_snapshot}")
     })?
-}
-
-async fn wait_for_email(
-    client: &mut NativeProtocolConnection,
-    expected: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let account = client
-                .request("account/read", json!({"refreshToken":false}))
-                .await?;
-            if account.pointer("/account/email").and_then(Value::as_str) == Some(expected) {
-                return Ok::<_, Box<dyn std::error::Error>>(());
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?
 }
 
 fn write_auth(home: &Path, account: &str, revision: &str) -> std::io::Result<()> {

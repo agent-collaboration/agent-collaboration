@@ -4,7 +4,6 @@
 //! observer requests its existing guarded reload and retains no credentials.
 use std::{convert::Infallible, future::Future, path::Path, pin::Pin, time::Duration};
 
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::watch;
@@ -12,6 +11,7 @@ use tokio::sync::watch;
 use crate::login_reload_outcome::LoginReloadOutcome;
 
 mod native_auth_reload;
+mod native_file_events;
 
 const AUTH_EVENT_DEBOUNCE: Duration = Duration::from_millis(250);
 const RELOAD_DEADLINE: Duration = Duration::from_secs(10);
@@ -29,14 +29,16 @@ pub(crate) async fn prepare(
         return (observed, Box::pin(std::future::pending()));
     };
     let home = home.to_owned();
-    let watcher = tokio::task::spawn_blocking(move || subscribe(&home)).await;
-    let Ok(Ok((watcher, mut events, auth_path))) = watcher else {
+    let watcher =
+        tokio::task::spawn_blocking(move || native_file_events::AuthFileEvents::open(&home)).await;
+    let Ok(Ok(mut events)) = watcher else {
         publish(
             &status,
             LoginReloadOutcome::failed("failed: auth-file watcher unavailable"),
         );
         return (observed, Box::pin(std::future::pending()));
     };
+    let auth_path = events.auth_path().to_owned();
     let mut last_revision = read_revision(&auth_path)
         .await
         .ok()
@@ -44,23 +46,16 @@ pub(crate) async fn prepare(
     let socket = socket.to_owned();
     let future = Box::pin(async move {
         // Kept inside the lifecycle-owner future, so shutdown/re-exec drops the
-        // OS watch and any in-flight native exchange with no detached task.
-        let _watcher = watcher;
+        // OS watch thread (joined on drop) and any in-flight native exchange.
         loop {
-            if events.changed().await.is_err() {
+            if events.wait_for_change().await.is_err()
+                || debounce_auth_events(&mut events).await.is_err()
+            {
                 publish(
                     &status,
-                    LoginReloadOutcome::failed("failed: auth-file watcher closed"),
+                    LoginReloadOutcome::failed("failed: native auth-file watcher unavailable"),
                 );
                 std::future::pending::<()>().await;
-            }
-            debounce(&mut events).await;
-            if *events.borrow_and_update() == FileEvent::Failed {
-                publish(
-                    &status,
-                    LoginReloadOutcome::failed("failed: auth-file watcher event error"),
-                );
-                continue;
             }
             let auth = match read_revision(&auth_path).await {
                 Ok(auth) => auth,
@@ -129,56 +124,14 @@ fn publish(status: &watch::Sender<Option<LoginReloadOutcome>>, outcome: LoginRel
     status.send_replace(Some(outcome));
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum FileEvent {
-    Changed,
-    Failed,
-}
-
-type Subscription = (
-    RecommendedWatcher,
-    watch::Receiver<FileEvent>,
-    std::path::PathBuf,
-);
-
-fn subscribe(home: &Path) -> notify::Result<Subscription> {
-    if RecommendedWatcher::kind() == notify::WatcherKind::PollWatcher {
-        return Err(notify::Error::generic(
-            "native filesystem events unavailable",
-        ));
-    }
-    let home = home.canonicalize().map_err(notify::Error::io)?;
-    let auth_path = home.join("auth.json");
-    let watched_path = auth_path.clone();
-    let watched_home = home.clone();
-    let (events, receiver) = watch::channel(FileEvent::Changed);
-    let mut watcher =
-        notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-            Ok(event)
-                if !matches!(event.kind, EventKind::Access(_))
-                    && (event.need_rescan()
-                        || event
-                            .paths
-                            .iter()
-                            .any(|path| path == &watched_path || path == &watched_home)) =>
-            {
-                events.send_replace(FileEvent::Changed);
-            }
-            Err(_) => {
-                events.send_replace(FileEvent::Failed);
-            }
-            Ok(_) => {}
-        })?;
-    // Watching the directory, rather than the auth inode, survives atomic rename.
-    watcher.watch(&home, RecursiveMode::NonRecursive)?;
-    Ok((watcher, receiver, auth_path))
-}
-
-async fn debounce(events: &mut watch::Receiver<FileEvent>) {
+async fn debounce_auth_events(
+    events: &mut native_file_events::AuthFileEvents,
+) -> std::io::Result<()> {
     loop {
-        match tokio::time::timeout(AUTH_EVENT_DEBOUNCE, events.changed()).await {
+        match tokio::time::timeout(AUTH_EVENT_DEBOUNCE, events.wait_for_change()).await {
             Ok(Ok(())) => {}
-            Ok(Err(_)) | Err(_) => return,
+            Ok(Err(error)) => return Err(error),
+            Err(_) => return Ok(()),
         }
     }
 }

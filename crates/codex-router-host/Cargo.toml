@@ -26,7 +26,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
-notify.workspace = true
+nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
@@ -64,7 +64,7 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 httparse.workspace = true
 opentelemetry.workspace = true
 reqwest.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["event"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
