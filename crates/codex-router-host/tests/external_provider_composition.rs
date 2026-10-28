@@ -27,7 +27,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
     let provider = root.path().join("provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &provider,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"composition"}),
@@ -192,7 +192,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     let provider = root.path().join("exit-provider.ts");
     let barrier_path = root.path().join("exit-barrier.sock");
     let barrier = tokio::net::UnixListener::bind(&barrier_path).expect("provider exit barrier");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &provider,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"exit"}),

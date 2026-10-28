@@ -378,7 +378,7 @@ fn timed_out_codex_output_suppresses_captured_stdout_stderr() {
 fn run_with_timeout_drains_child_stderr_while_waiting() {
     let mut command = std::process::Command::new("node");
     command
-        .arg(crate::node_fixture::fixture_program(
+        .arg(node_test_fixture::fixture_program(
             "stderr-pressure-agent.ts",
         ))
         .stdout(std::process::Stdio::piped())

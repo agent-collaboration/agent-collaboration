@@ -252,7 +252,7 @@ fn serve_command_defaults_to_live_runtime_clock_with_quota_freshness_margin() {
     );
     assert!(
         command.quota_refresh_interval_seconds
-            < crate::quota::DEFAULT_REFRESH_STALE_AFTER_GRACE_SECONDS,
+            < codex_router_quota_service::quota::DEFAULT_REFRESH_STALE_AFTER_GRACE_SECONDS,
         "background refresh must run before persisted selector evidence becomes stale"
     );
 }

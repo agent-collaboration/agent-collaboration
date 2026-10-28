@@ -255,8 +255,10 @@ fn owner_c8_shared_field_values_keep_their_gutter_and_subdued_search_helpers() {
             let mut state = SearchSelectState::Closed;
             state.open(selected);
             let canvas = element!(View(width:60) {
-                FormField(label:"Client".to_owned(),label_width:14u16,stacked) {
+                crate::FormFields(stacked) {
+                FormField(label:"Client".to_owned()) {
                     SearchSelect<u32>(state,options:vec![ChoiceOption::available(10,"Local"),ChoiceOption::available(20,"Remote")])
+                }
                 }
             }).render(None);
             let frame = canvas.to_string();
@@ -273,7 +275,7 @@ fn owner_c8_shared_field_values_keep_their_gutter_and_subdued_search_helpers() {
                 .count();
             positions.push(column);
             assert!(
-                column >= if stacked { 2 } else { 16 },
+                column == if stacked { 6 } else { 14 },
                 "value column contains selector gutter: {frame}"
             );
             assert_eq!(

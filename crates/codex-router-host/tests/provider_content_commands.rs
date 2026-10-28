@@ -24,9 +24,7 @@ mod support;
 use support::{NoLivePeer, available_directory, provider_binding, target};
 
 fn two_block_fixture() -> ExternalProviderLaunch {
-    let script = codex_router_test_support::node_fixture::fixture_program(
-        "provider-content-command-agent.ts",
-    );
+    let script = node_test_fixture::fixture_program("provider-content-command-agent.ts");
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         executable: PathBuf::from("node"),
@@ -142,9 +140,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
 }
 
 fn cancellable_prompt_fixture(dispatch_log: &std::path::Path) -> ExternalProviderLaunch {
-    let script = codex_router_test_support::node_fixture::fixture_program(
-        "provider-content-command-agent.ts",
-    );
+    let script = node_test_fixture::fixture_program("provider-content-command-agent.ts");
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         executable: PathBuf::from("node"),

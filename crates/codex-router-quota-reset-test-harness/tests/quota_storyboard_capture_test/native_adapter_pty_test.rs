@@ -10,7 +10,7 @@ use fixture_support::{
     NativeAdapter, NativeFixture, TIMEOUT, observe_process, process_group, require_condition,
     require_equal, require_process_absent, run_command,
 };
-const COMPONENT_ARGUMENTS: &str = "presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture\n--exact\n--ignored\n--nocapture\n--test-threads=1";
+const COMPONENT_ARGUMENTS: &str = "quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture\n--exact\n--ignored\n--nocapture\n--test-threads=1";
 
 #[test]
 fn component_adapter_selects_exact_fixture_and_requires_its_receipt() -> TestResult<()> {

@@ -16,7 +16,7 @@ const SESSION: &str = "00000000-0000-4000-8000-000000000042";
 async fn host_composes_job_discovery_when_canonical_claude_has_no_acp_channel() {
     let root = tempfile::tempdir().unwrap();
     let binary = root.path().join("claude");
-    codex_router_test_support::node_fixture::write_node_fixture(&binary, "native-cli-catalogue-agent.ts", &json!({"kind":"file","output":{"kind":"environment","name":"NATIVE_CATALOGUE_OUTPUT"},"readLog":{"kind":"environment","name":"NATIVE_CATALOGUE_READS"}})).unwrap();
+    node_test_fixture::write_node_fixture(&binary, "native-cli-catalogue-agent.ts", &json!({"kind":"file","output":{"kind":"environment","name":"NATIVE_CATALOGUE_OUTPUT"},"readLog":{"kind":"environment","name":"NATIVE_CATALOGUE_READS"}})).unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
     let output = tokio::time::timeout(
         Duration::from_secs(15),

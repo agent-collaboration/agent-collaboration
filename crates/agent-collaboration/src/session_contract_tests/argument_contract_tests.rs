@@ -7,12 +7,27 @@ fn sessions_picker_defaults_to_cwd_scope_like_noninteractive_commands() {
         Err(error) => panic!("sessions command should parse: {error}"),
     };
 
-    assert_eq!(command.root, crate::sessions::SessionsRoot::Cwd);
-    assert_eq!(command.provider, crate::sessions::SessionsProvider::Any);
-    assert_eq!(command.source, crate::sessions::SessionsSource::Interactive);
-    assert_eq!(command.sort, crate::sessions::SessionsSort::Updated);
+    assert_eq!(
+        command.root,
+        agent_session_inventory::sessions::SessionsRoot::Cwd
+    );
+    assert_eq!(
+        command.provider,
+        agent_session_inventory::sessions::SessionsProvider::Any
+    );
+    assert_eq!(
+        command.source,
+        agent_session_inventory::sessions::SessionsSource::Interactive
+    );
+    assert_eq!(
+        command.sort,
+        agent_session_inventory::sessions::SessionsSort::Updated
+    );
     assert!(!command.list);
-    assert_eq!(command.format, crate::sessions::SessionsFormat::Table);
+    assert_eq!(
+        command.format,
+        agent_session_inventory::sessions::SessionsFormat::Table
+    );
     assert!(!command.last);
     assert!(command.id.is_none());
     assert!(!command.new);
@@ -25,8 +40,14 @@ fn sessions_picker_defaults_to_cwd_scope_like_noninteractive_commands() {
 #[test]
 fn noninteractive_list_keeps_cwd_scope_and_explicit_source_filter() {
     let command = parse_session_arguments([OsString::from("--list")]).unwrap();
-    assert_eq!(command.root, crate::sessions::SessionsRoot::Cwd);
-    assert_eq!(command.source, crate::sessions::SessionsSource::Interactive);
+    assert_eq!(
+        command.root,
+        agent_session_inventory::sessions::SessionsRoot::Cwd
+    );
+    assert_eq!(
+        command.source,
+        agent_session_inventory::sessions::SessionsSource::Interactive
+    );
 }
 
 #[test]
@@ -328,9 +349,12 @@ fn sessions_command_parses_checkout_and_repo_roots() {
 
     assert_eq!(
         checkout_command.root,
-        crate::sessions::SessionsRoot::Checkout
+        agent_session_inventory::sessions::SessionsRoot::Checkout
     );
-    assert_eq!(repo_command.root, crate::sessions::SessionsRoot::Repo);
+    assert_eq!(
+        repo_command.root,
+        agent_session_inventory::sessions::SessionsRoot::Repo
+    );
 
     let checkout_error = parse_session_arguments([OsString::from("--checkout")])
         .expect_err("interactive checkout should be rejected");

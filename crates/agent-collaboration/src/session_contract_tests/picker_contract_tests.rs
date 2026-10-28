@@ -361,11 +361,11 @@ fn sessions_picker_loader_pages_until_full_persisted_search_field_matches() {
         &rows,
     );
     let command = must_ok(parse_session_arguments([OsString::from("--repo")]));
-    let query = crate::presentation::session_picker::SessionsPickerDataQuery {
-        root: crate::presentation::session_picker::SessionsPickerRoot::Any,
-        provider: crate::sessions::SessionsProvider::Any,
-        source: crate::sessions::SessionsSource::All,
-        sort: crate::sessions::SessionsSort::Updated,
+    let query = agent_session_inventory::picker_data_query::SessionsPickerDataQuery {
+        root: agent_session_inventory::picker_data_query::SessionsPickerRoot::Any,
+        provider: agent_session_inventory::sessions::SessionsProvider::Any,
+        source: agent_session_inventory::sessions::SessionsSource::All,
+        sort: agent_session_inventory::sessions::SessionsSort::Updated,
         search: "deep-marker".to_owned(),
         include_empty_sessions: false,
     };

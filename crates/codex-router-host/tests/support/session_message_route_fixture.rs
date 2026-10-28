@@ -13,7 +13,7 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path};
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_fixture(path: &Path) {
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         path,
         "session-message-route-agent.ts",
         &serde_json::json!(null),

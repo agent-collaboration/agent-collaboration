@@ -9,11 +9,7 @@ use std::os::unix::fs::PermissionsExt;
 const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const SERVICE_EPOCH: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod fake_api_support;
+use agent_session_inventory::test_support::fake_api_support;
 
 #[tokio::test]
 async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
