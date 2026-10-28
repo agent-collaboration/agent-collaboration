@@ -124,15 +124,23 @@ async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Resu
     release
         .send(())
         .map_err(|_| io::Error::other("held copy closed"))?;
-    let remote_after_ack = tokio::time::timeout(
-        Duration::from_secs(10),
+    let remote_after_ack = tokio::time::timeout(Duration::from_secs(10), async {
         fixture
             .harness
-            .central
-            .notifications
-            .wait_submission(remote),
-    )
-    .await;
+            .projects
+            .replicate_project_for_test(&fixture.project)
+            .await?;
+        Ok::<_, TestError>(
+            fixture
+                .harness
+                .central
+                .notifications
+                .wait_submission(remote)
+                .await,
+        )
+    })
+    .await
+    .map_err(|_| io::Error::other("R was not published after acknowledgement"));
     // A later prompt must skip L's consumed version even though R held the
     // contiguous cursor below it during the earlier pass.
     fixture
@@ -166,6 +174,7 @@ async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Resu
     let final_push = fixture.show_local_push(&push).await?;
     let final_outcome = fixture.harness.mail.local_outcome(peer, local).await?;
     let fixture_project = fixture.project.clone();
+    let fixture_epoch = fixture.seed_epoch;
     fixture.close().await?;
     assert!(
         local_before_ack.is_ok(),
@@ -197,9 +206,9 @@ async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Resu
         local_consumed_while_held,
         "L was not recorded independently of the prefix"
     );
-    assert!(
-        remote_after_ack.is_ok(),
-        "R was not published after acknowledgement"
+    assert_eq!(
+        remote_after_ack??,
+        Some(fleet_sync_protocol::Epoch::new(fixture_epoch.get())?)
     );
     assert_eq!(local_rows, 1, "L allocated duplicate native inbox custody");
     assert_eq!(

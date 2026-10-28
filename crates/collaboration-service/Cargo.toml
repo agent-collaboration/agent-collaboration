@@ -64,7 +64,7 @@ fleet-sync-receiver.workspace = true
 tracing-subscriber.workspace = true
 turso_parser = { workspace = true, features = ["serde"] }
 proptest.workspace = true
-sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 tempfile = "3.27.0"
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }

@@ -165,13 +165,21 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         let addressed:message_board::SessionRef=to.clone().try_into()?;
         let thread=message_board::ThreadCreateRequest{
             request_id:message_board::RequestId::generate(),protocol_version:message_board::ProtocolVersion::CURRENT,
-            post_id:message_board::PostId::generate(),project_id:project.project.project_id,
+            post_id:message_board::PostId::generate(),project_id:project.project.project_id.clone(),
             about:message_board::ThreadSubject::Project{line:"connected notification".to_owned().try_into()?},role:None,watch:false,
             actor:project.project.actor,acting_for:None,text:"connected notification".to_owned().try_into()?,
             references:Vec::new().try_into()?,addressees:vec![message_board::NotifyTarget::Actor(message_board::Identity::Session{session:addressed})],
         };
         registered_route_project::assert_board_accepted(&sender.thread_create(thread).await?);
-        let (_,notification)=tokio::time::timeout(BOUND,peer_received.recv()).await.map_err(|_|"connected recipient did not receive a project notification")?.ok_or("peer stopped")?;
+        let (_,notification)=tokio::time::timeout(BOUND,async {
+            loop {
+                source.runtime_test_replicate_project(&project.project.project_id).await?;
+                tokio::select! {
+                    received = peer_received.recv() => return received.ok_or_else(||std::io::Error::other("peer stopped")),
+                    () = tokio::task::yield_now() => {}
+                }
+            }
+        }).await.map_err(|_|"connected recipient did not receive a project notification")??;
         let notification=peer_record(&receiving,&to,&notification.ok_or("missing notification")?).await?;
         assert_eq!(notification.kind,collaboration_protocol::PushKind::BoardNotification);
         assert_eq!(enrolled.duplicated_mail_notices(),1,"actual incoming hint was not duplicated");

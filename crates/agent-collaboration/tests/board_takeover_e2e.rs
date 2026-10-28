@@ -23,6 +23,8 @@ mod fixture_inputs;
 mod follow_fixture;
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
+#[path = "board_e2e/owned_host_startup_proofs.rs"]
+mod owned_host_startup_proofs;
 #[expect(
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"
@@ -84,7 +86,12 @@ async fn held_local_follow_stays_prevented_when_takeover_discards_its_subscripti
 #[tokio::test]
 async fn unreplicated_subscription_end_cannot_cancel_the_successor_follow() -> FixtureResult {
     central_pair::scenario(async |fixture, second| {
-        takeover_cancels::remote(fixture, second, takeover_controls::EndPrefix::Discarded).await
+        takeover_cancels::remote(
+            fixture,
+            second,
+            takeover_cancels::RemoteEndPrefix::Discarded,
+        )
+        .await
     })
     .await
 }
@@ -93,7 +100,26 @@ async fn unreplicated_subscription_end_cannot_cancel_the_successor_follow() -> F
 async fn replicated_subscription_end_reuses_its_original_cancel_and_starts_no_wake() -> FixtureResult
 {
     central_pair::scenario(async |fixture, second| {
-        takeover_cancels::remote(fixture, second, takeover_controls::EndPrefix::Retained).await
+        takeover_cancels::remote(
+            fixture,
+            second,
+            takeover_cancels::RemoteEndPrefix::Retained(takeover_cancels::FrontierCut::Unsettled),
+        )
+        .await
+    })
+    .await
+}
+
+#[tokio::test]
+async fn settled_subscription_end_keeps_its_frozen_cancel_without_local_replay_or_a_wake()
+-> FixtureResult {
+    central_pair::scenario(async |fixture, second| {
+        takeover_cancels::remote(
+            fixture,
+            second,
+            takeover_cancels::RemoteEndPrefix::Retained(takeover_cancels::FrontierCut::Settled),
+        )
+        .await
     })
     .await
 }
@@ -102,7 +128,12 @@ async fn replicated_subscription_end_reuses_its_original_cancel_and_starts_no_wa
 async fn lost_cancel_receipt_replays_the_same_cancel_after_takeover_without_a_recipient_effect()
 -> FixtureResult {
     central_pair::scenario(async |fixture, second| {
-        takeover_cancels::remote(fixture, second, takeover_controls::EndPrefix::LostReceipt).await
+        takeover_cancels::remote(
+            fixture,
+            second,
+            takeover_cancels::RemoteEndPrefix::LostReceipt,
+        )
+        .await
     })
     .await
 }

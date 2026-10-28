@@ -10,11 +10,14 @@ use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessio
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderError, SenderOptions};
 use message_board::ProjectId;
 use message_board_storage::ProjectStorageError;
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, OnceCell, mpsc, watch},
     task::JoinSet,
 };
+
+// Retry failed copies after 500 ms; idle copies wait on commit events.
+const REPLICATION_ERROR_RETRY_AFTER: Duration = Duration::from_millis(500);
 
 type BoardWriterRuntime = NativeWriterRuntime<BoardProjectSchema, BoardConsumerProtocol>;
 type BoardReplicationSender = ReplicationSender<
@@ -40,6 +43,10 @@ pub(super) struct ProjectWriter {
     tasks: Mutex<WriterTasks>,
     authority_changes: watch::Receiver<()>,
     lifecycle_signals: mpsc::UnboundedSender<ProjectLifecycleSignal>,
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    replication_events: watch::Sender<
+        Option<mpsc::Sender<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>>,
+    >,
 }
 
 impl ProjectWriter {
@@ -91,7 +98,10 @@ impl ProjectWriter {
             Arc::new(BoardPieceAnnotation),
             Arc::new(BoardCaptureBookkeeping),
             runtime.transport(),
-            SenderOptions::default(),
+            SenderOptions {
+                retry_after: REPLICATION_ERROR_RETRY_AFTER,
+                ..SenderOptions::default()
+            },
         ));
         Ok(Self {
             runtime,
@@ -103,6 +113,8 @@ impl ProjectWriter {
             tasks: Mutex::new(WriterTasks::Prepared),
             authority_changes,
             lifecycle_signals,
+            #[cfg(any(test, feature = "runtime-test-support"))]
+            replication_events: watch::channel(None).0,
         })
     }
 
@@ -142,6 +154,8 @@ impl ProjectWriter {
         let sender_stopped = self.stop.subscribe();
         let (events, mut received) =
             mpsc::channel::<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>(128);
+        #[cfg(any(test, feature = "runtime-test-support"))]
+        self.replication_events.send_replace(Some(events.clone()));
         let project = project.clone();
         let mut stopped = self.stop.subscribe();
         let mut authority = self.authority_changes.clone();
@@ -215,6 +229,41 @@ impl ProjectWriter {
         });
         *owned = WriterTasks::Running(tasks);
         Ok(())
+    }
+
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    pub(super) async fn replicate_available_for_test(
+        &self,
+        receiver: ReceiverId,
+    ) -> io::Result<()> {
+        let output = self
+            .replication_events
+            .subscribe()
+            .wait_for(Option::is_some)
+            .await
+            .map_err(io::Error::other)?
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| io::Error::other("project replication observer closed"))?;
+        loop {
+            // Share the background sender's per-copy lock and deliver its real
+            // events to the same observer. The test never fabricates an ACK or
+            // replaces the ACK-to-publisher wiring it is exercising.
+            let events = self
+                .sender
+                .replicate_once(receiver)
+                .await
+                .map_err(io::Error::other)?;
+            let acknowledged = events
+                .iter()
+                .any(|event| matches!(event, ReplicationEvents::Acknowledged { .. }));
+            for event in events {
+                output.send(Ok(event)).await.map_err(io::Error::other)?;
+            }
+            if !acknowledged {
+                return Ok(());
+            }
+        }
     }
 
     #[cfg(all(test, feature = "runtime-test-support"))]

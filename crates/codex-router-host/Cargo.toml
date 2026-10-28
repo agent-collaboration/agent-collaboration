@@ -75,10 +75,11 @@ tracing-subscriber.workspace = true
 [dev-dependencies]
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
+codex-router-host = { path = ".", features = ["runtime-test-support"] }
 reqwest-websocket = "=0.5.1"
 board-legacy-upgrade = { version = "0.1.100", path = "../board-legacy-upgrade" }
 collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }
-sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false, features = ["runtime-tokio"] }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false, features = ["runtime-tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-writer = { workspace = true, features = ["test-support"] }
