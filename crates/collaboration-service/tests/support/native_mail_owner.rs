@@ -67,7 +67,7 @@ impl NativeMailOwner {
         peer: PeerId,
         interactions: Arc<InteractionStore>,
         mail: Arc<MailDeliveryRuntime>,
-        start: Option<(
+        deferred_start: Option<(
             tokio::sync::oneshot::Sender<()>,
             tokio::sync::oneshot::Receiver<()>,
         )>,
@@ -81,7 +81,7 @@ impl NativeMailOwner {
         let shutdown = CancellationToken::new();
         let worker_mail = mail.clone();
         let worker_shutdown = shutdown.clone();
-        let (pending_start, waiting) = match start {
+        let (pending_start, waiting) = match deferred_start {
             Some((release, waiting)) => (Some(release), Some(waiting)),
             None => (None, None),
         };
