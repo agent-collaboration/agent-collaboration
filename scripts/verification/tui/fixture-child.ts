@@ -36,7 +36,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 export const COMPONENT_TEST =
-	'presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
+	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 
 export const COMPONENT_SCENARIOS = {
 	normal: 'Normal',

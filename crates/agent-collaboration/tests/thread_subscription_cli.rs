@@ -27,11 +27,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod fake_api_support;
 #[path = "thread_subscription_cli/wait_uncertainty.rs"]
 mod wait_uncertainty;
 

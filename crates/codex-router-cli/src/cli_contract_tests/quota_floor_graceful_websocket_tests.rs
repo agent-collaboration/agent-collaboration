@@ -184,7 +184,7 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         );
     }
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_100);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_100);
     let provider = JoinedFloorCrossingProvider { floor_account_id };
     let mut output = Vec::new();
     must_ok(refresh_quota_store_paths_with_floor_observer(
@@ -196,7 +196,7 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         &provider,
         QuotaRefreshObservationContext {
             observed_unix_seconds: 1_200,
-            schedule: crate::quota::QuotaRefreshSchedule::Manual,
+            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
             weekly_floor_observer: Some(&floor_notifier),
         },
     ));

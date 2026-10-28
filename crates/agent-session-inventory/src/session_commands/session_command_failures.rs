@@ -1,0 +1,149 @@
+//! Explicit parsing, catalog, picker and native-launch failures.
+use thiserror::Error;
+
+/// Sessions command failures.
+#[derive(Debug, Error)]
+pub enum SessionsCommandError {
+    /// Reusable stored-session catalog failure.
+    #[error(transparent)]
+    SessionCatalog(collaboration_client::session_catalog::SessionCatalogError),
+    /// Current provider could not be resolved for the CLI filter.
+    #[error(
+        "sessions --provider current could not find model_provider in CODEX_HOME/codex-router.config.toml or CODEX_HOME/config.toml"
+    )]
+    CurrentProviderUnavailable,
+    /// Checkout scope is intentionally list-only.
+    #[error(
+        "--checkout requires --list because the interactive picker supports cwd, repo, and all"
+    )]
+    InteractiveCheckoutUnsupported,
+    /// Interactive picker has not landed yet.
+    #[error("sessions interactive picker is not implemented yet; use --list --format json")]
+    InteractivePickerNotImplemented,
+    /// No matching session was found.
+    #[error("no Codex sessions matched the requested filters")]
+    NoSessionsMatch,
+    /// Interactive picker was canceled.
+    #[error("sessions picker canceled")]
+    PickerCanceled,
+    /// Interactive picker failed.
+    #[error("sessions picker failed: {0}")]
+    Picker(std::io::Error),
+    /// Interactive picker cannot run without a terminal.
+    #[error("sessions interactive picker requires a terminal; use --list or --last")]
+    InteractiveRequiresTerminal,
+    /// Interactive picker cannot render inside the current terminal width.
+    #[error("sessions interactive picker requires a wider terminal")]
+    TerminalTooNarrow,
+    /// The selected configured source has no qualified native attachment/policy route.
+    #[error("selected machine execution route needs verification")]
+    SessionSourceUnqualified,
+    /// The selected source has no native route in this launch context.
+    #[error("selected session source is unavailable in this launch context")]
+    SessionSourceUnavailable,
+    /// Configured actions permit no caller override of identity, directory or policy.
+    #[error("configured launch accepts only model, effort and terminal display options")]
+    ConfiguredArgumentsUnsupported,
+    /// The source SSH process could not be started; no source handoff occurred.
+    #[error("could not start source SSH: {0}")]
+    SourceSshSpawn(std::io::Error),
+    /// A started SSH process cannot prove that a native action had no effect.
+    #[error(
+        "source SSH exited with {status}; session effect may be unknown; inspect the selected source before trying again"
+    )]
+    SourceHandoffUnknown {
+        /// SSH exit status, with no source-supplied diagnostic payload.
+        status: String,
+    },
+    /// The caller stopped waiting after admitting a client action.
+    #[error("{description}")]
+    ClientActionUnknown {
+        /// Captured source/action and the existing managed recovery ID, if any.
+        description: String,
+    },
+    /// Codex failed to launch.
+    #[error("failed to launch codex resume command: {0}")]
+    CodexLaunch(std::io::Error),
+    /// The selected profile sets permission keys, so Codex would refuse the remote
+    /// resume or fork.
+    #[error(
+        "{} sets {}; Codex refuses to reopen or fork a Router session while its profile sets a permission key, because the session keeps its saved permissions. Remove those keys from that file (`codex-router profile --approve-codex-home-write` rewrites the Router profile without them) and keep permission defaults in CODEX_HOME/config.toml",
+        profile_path.display(),
+        keys.join(", ")
+    )]
+    ProfileBlocksRemoteResume {
+        /// Profile file Codex loads for the Router profile.
+        profile_path: std::path::PathBuf,
+        /// Permission keys the profile sets.
+        keys: Vec<&'static str>,
+    },
+    /// Codex exited unsuccessfully.
+    #[error("codex resume command exited with {status}")]
+    CodexExit {
+        /// Exit status string.
+        status: String,
+    },
+    /// Router-backed Claude Code launch or inventory failed.
+    #[error("{0}")]
+    ClaudeLaunch(String),
+    /// Claude Code exited unsuccessfully.
+    #[error("Claude Code exited with {status}")]
+    ClaudeExit {
+        /// Exit status string.
+        status: String,
+    },
+    /// CODEX_HOME and HOME were both unavailable.
+    #[error("could not locate Codex home; set CODEX_HOME or HOME")]
+    CodexHomeUnavailable,
+    /// Debug app-server socket override is unsafe or ambiguous.
+    #[error("invalid debug app-server socket: {0}")]
+    AppServerSocket(String),
+    /// Failed to initialize async runtime.
+    #[error("failed to initialize sessions runtime: {0}")]
+    Runtime(std::io::Error),
+    /// Session id from Codex state is unsafe to pass to resume.
+    #[error("unsafe Codex session id in state database")]
+    UnsafeSessionId,
+    /// Direct resume ids must be complete UUIDs.
+    #[error("--id requires a complete UUID")]
+    InvalidResumeSessionId,
+    /// JSON rendering failed.
+    #[error("failed to render sessions JSON: {0}")]
+    Json(serde_json::Error),
+    /// stdout write failed.
+    #[error("failed to write stdout: {0}")]
+    Stdout(std::io::Error),
+}
+
+impl From<collaboration_client::session_catalog::SessionCatalogError> for SessionsCommandError {
+    fn from(error: collaboration_client::session_catalog::SessionCatalogError) -> Self {
+        match error {
+            collaboration_client::session_catalog::SessionCatalogError::CurrentProviderUnavailable => {
+                Self::CurrentProviderUnavailable
+            }
+            error => Self::SessionCatalog(error),
+        }
+    }
+}
+
+impl SessionsCommandError {
+    pub fn permission_diagnostic(
+        &self,
+    ) -> Option<&collaboration_client::protocol::PermissionDiagnostic> {
+        self.launch_discovery_failure()?.permission_diagnostic()
+    }
+
+    /// The overload's message when the API shed the launch's endpoint discovery.
+    pub fn overload_message(&self) -> Option<&str> {
+        self.launch_discovery_failure()?.overload_message()
+    }
+
+    fn launch_discovery_failure(&self) -> Option<&collaboration_client::NativeTransportError> {
+        let Self::CodexLaunch(error) = self else {
+            return None;
+        };
+        error
+            .get_ref()?
+            .downcast_ref::<collaboration_client::NativeTransportError>()
+    }
+}

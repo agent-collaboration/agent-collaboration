@@ -78,7 +78,7 @@ impl HarnessSelectionFixture {
         }
         Self::write_native_executable(&bundled_executable, "bundledHarness", BUNDLED_VERSION);
         let adapter_executable = private_root.path().join("claude-agent-acp.ts");
-        codex_router_test_support::node_fixture::write_node_fixture(
+        node_test_fixture::write_node_fixture(
             &adapter_executable,
             "global-claude-adapter-agent.ts",
             &serde_json::Value::Null,
@@ -100,7 +100,7 @@ impl HarnessSelectionFixture {
 
     #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     fn write_native_executable(executable: &Path, identity: &str, version: &str) {
-        codex_router_test_support::node_fixture::write_node_fixture(
+        node_test_fixture::write_node_fixture(
             executable,
             "global-claude-native-agent.ts",
             &serde_json::json!({"identity":identity,"version":version}),

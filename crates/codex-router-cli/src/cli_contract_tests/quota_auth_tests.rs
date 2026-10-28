@@ -1,5 +1,5 @@
 use super::*;
-use crate::quota::QuotaWindowHeadroom;
+use codex_router_quota_service::quota::QuotaWindowHeadroom;
 
 struct FirstUnauthorizedQuotaProvider {
     seen_tokens: Mutex<Vec<String>>,
@@ -10,13 +10,16 @@ impl QuotaRefreshProvider for FirstUnauthorizedQuotaProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, crate::quota::QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         let mut tokens = lock_test_mutex(&self.seen_tokens, "quota 401 token record");
         tokens.push(request.access_token().expose_secret().to_owned());
         let call = tokens.len();
         drop(tokens);
         if call == 1 || (self.reject_retry && call == 2) {
-            return Err(crate::quota::QuotaCommandError::ProviderStatus { status: 401 });
+            return Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderStatus { status: 401 });
         }
         Ok(QuotaRefreshProviderResponse {
             windows: vec![QuotaRefreshProviderWindow {
@@ -129,7 +132,10 @@ impl QuotaRefreshProvider for ConcurrentGenerationQuotaProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, crate::quota::QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         let call = {
             let mut seen_tokens = lock_test_mutex(&self.seen_tokens, "quota generation race");
             seen_tokens.push(request.access_token().expose_secret().to_owned());
@@ -159,7 +165,7 @@ impl QuotaRefreshProvider for ConcurrentGenerationQuotaProvider {
                 )
                 .with_active_credential_generation(2),
             ));
-            return Err(crate::quota::QuotaCommandError::ProviderStatus { status: 401 });
+            return Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderStatus { status: 401 });
         }
         Ok(QuotaRefreshProviderResponse {
             windows: vec![QuotaRefreshProviderWindow {
@@ -436,7 +442,7 @@ fn quota_refresh_resolver_refreshes_expired_access_token_before_provider_egress(
         )
         .with_expires_unix_seconds(2_000),
     );
-    let resolver = RouterCredentialResolver::new(&state, &secrets, refresh_client.clone(), 1_000);
+    let resolver = contract_credential_resolver(&state, &secrets, refresh_client.clone(), 1_000);
     let provider = RecordingQuotaRefreshProvider::new(33);
     let mut stdout = Vec::new();
 
@@ -600,7 +606,7 @@ fn quota_refresh_missing_refresh_token_fails_closed_before_provider_egress() {
         ),
     );
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = RecordingQuotaRefreshProvider::new(44);
     let mut stdout = Vec::new();
 
@@ -730,7 +736,7 @@ fn quota_refresh_continues_after_one_account_provider_failure() {
         );
     }
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = AccountFailingQuotaRefreshProvider::new("failing", 429, 69);
     let mut stdout = Vec::new();
 
@@ -823,7 +829,7 @@ fn quota_refresh_preserves_enabled_account_when_401_recovery_is_unavailable() {
             );
         }
         let resolver =
-            RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+            contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
         let provider = AccountFailingQuotaRefreshProvider::new("rejected", provider_status, 73);
         let mut stdout = Vec::new();
 

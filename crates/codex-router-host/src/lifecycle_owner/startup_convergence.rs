@@ -300,14 +300,14 @@ mod tests {
                     }),
                 )
                 .launch();
-        let fixture_executable = codex_router_test_support::node_fixture::node_executable()
+        let fixture_executable = node_test_fixture::node_executable()
             .expect("absolute Node fixture executable")
             .to_string_lossy()
             .into_owned();
         let fixture_arguments = fake_acp_launch.arguments;
         claude_binding.launch.executable = fake_acp_launch.executable;
         claude_binding.launch.arguments = vec![
-            codex_router_test_support::node_fixture::fixture_program("token-observed-exec.ts")
+            node_test_fixture::fixture_program("token-observed-exec.ts")
                 .to_string_lossy()
                 .into_owned(),
             claude_token_observation_path.to_string_lossy().into_owned(),

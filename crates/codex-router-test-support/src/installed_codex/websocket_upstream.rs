@@ -278,7 +278,7 @@ pub(super) fn start_quota_reconnect_sqlite_pressure(
         .spawn(move || {
             let mut child = Command::new("node");
             child
-                .arg(crate::node_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
+                .arg(node_test_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
                 .arg(&config.state_path)
                 .arg(format!("{}", config.hold_duration.as_secs_f64()))
                 .stdout(Stdio::piped())
@@ -367,7 +367,7 @@ pub(super) fn start_s8_overlap_quota_sqlite_pressure(
         .spawn(move || {
             let mut child = Command::new("node");
             child
-                .arg(crate::node_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
+                .arg(node_test_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
                 .arg(&config.state_path)
                 .arg(format!("{}", config.hold_duration.as_secs_f64()))
                 .stdout(Stdio::piped())

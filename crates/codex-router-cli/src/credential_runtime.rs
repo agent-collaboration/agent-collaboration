@@ -50,23 +50,7 @@ where
     refresh_leases: AsyncRefreshLeaseRegistry,
 }
 
-/// Async credential resolution used by native-async quota commands.
-pub(crate) trait AsyncProviderCredentialResolver {
-    async fn resolve_provider_credentials_async(
-        &self,
-        account_id: &AccountId,
-        expected_provider: codex_router_core::provider::Provider,
-    ) -> Result<ResolvedProviderCredential, CredentialResolverError>;
-
-    async fn recover_unauthorized_credentials_async(
-        &self,
-        _account_id: &AccountId,
-        _expected_provider: codex_router_core::provider::Provider,
-        _rejected_generation: u64,
-    ) -> Result<(ResolvedProviderCredential, bool), CredentialResolverError> {
-        Err(CredentialResolverError::RefreshUnavailable)
-    }
-}
+use codex_router_quota_service::credential_resolution::AsyncProviderCredentialResolver;
 
 impl CliCredentialResolver<ProviderCredentialRefreshClients> {
     /// Opens resolver state while reusing the serving process's encrypted-store handle.

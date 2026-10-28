@@ -122,8 +122,7 @@ fn working_directory() -> TestResult<ProviderWorkingDirectory> {
 }
 
 fn launch(arguments: Vec<String>) -> ExternalProviderLaunch {
-    let script =
-        codex_router_test_support::node_fixture::fixture_program("provider-recovery-agent.ts");
+    let script = node_test_fixture::fixture_program("provider-recovery-agent.ts");
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         executable: PathBuf::from("node"),

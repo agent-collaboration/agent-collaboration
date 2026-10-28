@@ -106,9 +106,9 @@ impl SessionsPicker for SealedCatalogTerminalPicker {
         _request: SessionsPickerRequest,
         _record_loader: Option<SessionsPickerRecordLoader>,
     ) -> Result<Option<SessionsPickerOutcome>, SessionsCommandError> {
-        let mut request = crate::session_picker::terminal_fixture_request();
-        request.root = crate::session_picker::SessionsPickerRoot::Any;
-        request.source = super::SessionsSource::All;
+        let mut request = agent_session_picker::session_picker::terminal_fixture_request();
+        request.root = agent_session_inventory::picker_data_query::SessionsPickerRoot::Any;
+        request.source = agent_session_inventory::sessions::SessionsSource::All;
         let record = request
             .records
             .iter_mut()
@@ -131,7 +131,7 @@ impl SessionsCommandRunner for NoLaunchMarkerRunner {
     fn run_prepared_source(
         &mut self,
         _arguments: &[OsString],
-        _selection: &super::source_ssh_protocol::PreparedSourceSession,
+        _selection: &agent_session_inventory::sessions::source_ssh_protocol::PreparedSourceSession,
     ) -> Result<(), SessionsCommandError> {
         Err(SessionsCommandError::SessionSourceUnqualified)
     }
