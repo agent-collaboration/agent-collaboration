@@ -6,129 +6,24 @@ use std::{
 };
 
 use crate::CliContext;
-use crate::presentation::session_picker::SessionsPickerDataQuery;
-use crate::presentation::session_picker::SessionsPickerOutcome;
-use crate::presentation::session_picker::SessionsPickerRecordLoader;
-use crate::presentation::session_picker::SessionsPickerRequest;
-use crate::presentation::session_picker::SessionsPickerRoot;
-use crate::presentation::session_picker::run_sessions_picker;
-
-#[path = "session_commands/session_launch_selection.rs"]
-mod session_launch_selection;
-use session_launch_selection::SessionsLaunchTarget;
-#[cfg(test)]
-use session_launch_selection::session_profile_for_environment;
-use session_launch_selection::sessions_launch_target;
-#[path = "session_commands/claude_launch_target.rs"]
-mod claude_launch_target;
-#[path = "session_commands/claude_session_commands.rs"]
-mod claude_session_commands;
-use claude_session_commands::run_claude_sessions_command;
-
-pub(crate) use collaboration_client::session_catalog::SessionSearchExpression;
-
-#[path = "session_commands/session_command_options.rs"]
-mod session_command_options;
-use session_command_options::validate_exact_uuid_session_id;
-pub(crate) use session_command_options::{
-    SessionsCommand, SessionsFormat, SessionsProvider, SessionsRoot, SessionsSort, SessionsSource,
-    command_help,
+use crate::session_environment::{codex_home, current_provider_for_picker, sessions_launch_target};
+use agent_session_inventory::picker_data_query::SessionsPickerRoot;
+use agent_session_inventory::sessions::{
+    ProcessSessionsCommandRunner, RouterRegistryRead, SessionActionSelection, SessionPickerRecord,
+    SessionRecord, SessionRecordQuery, SessionsCommand, SessionsCommandError,
+    SessionsCommandRunner, SessionsFormat, SessionsLaunchTarget, discover_repository_identity,
+    human_session_row, load_session_records, load_session_records_for_query_with_identity,
+    normalize_path, run_claude_sessions_command, validate_exact_uuid_session_id,
 };
-#[path = "session_commands/session_command_failures.rs"]
-mod session_command_failures;
-pub(crate) use collaboration_client::session_catalog::{
-    RepositoryIdentity, normalized_paths_resolve_to_same_location,
-    repository_contains_session as session_belongs_to_repository,
+use agent_session_inventory::{
+    session_picker_record_loader::session_picker_record_loader,
+    sessions::router_connection_registry,
 };
-use collaboration_client::session_catalog::{discover_repository_identity, normalize_path};
-pub use session_command_failures::SessionsCommandError;
-#[path = "session_commands/session_display_text.rs"]
-mod session_display_text;
-#[cfg(test)]
-use session_display_text::format_duration_ms;
-#[cfg(test)]
-use session_display_text::session_model_choice;
-use session_display_text::{
-    display_title_from_session_fields, format_recency_at_ms, human_session_row,
-    session_context_from_cwd, truncate_end,
-};
-#[path = "session_commands/session_catalog_records.rs"]
-mod session_catalog_records;
-use session_catalog_records::SessionRecord;
-pub(crate) use session_catalog_records::{
-    SessionConversationPreview, SessionConversationSource, SessionPickerIdentity,
-    SessionPickerRecord, SessionRowProvenance,
-};
-#[path = "session_commands/session_action_selection.rs"]
-mod session_action_selection;
-pub(crate) use session_action_selection::SessionActionSelection;
-#[path = "session_commands/session_catalog_query.rs"]
-mod session_catalog_query;
+use agent_session_picker::session_picker::SessionsPickerOutcome;
+use agent_session_picker::session_picker::SessionsPickerRecordLoader;
+use agent_session_picker::session_picker::SessionsPickerRequest;
+use agent_session_picker::session_picker::run_sessions_picker;
 use codex_native_integration::ResumeModelChoice;
-#[cfg(test)]
-use session_catalog_query::codex_home_from_environment;
-use session_catalog_query::{
-    SessionRecordQuery, codex_home, current_provider_for_picker, load_session_records,
-    load_session_records_for_query_with_identity,
-};
-
-#[path = "session_commands/router_connection_registry.rs"]
-pub(crate) mod router_connection_registry;
-pub(crate) use router_connection_registry::{RouterRegistryError, RouterRegistryRead};
-
-#[path = "session_commands/picker_runtime_inventory.rs"]
-mod picker_runtime_inventory;
-
-#[cfg(test)]
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "../tests/fake_api_support/mod.rs"]
-pub(crate) mod fake_api_support;
-
-#[path = "session_commands/configured_inventory_loader.rs"]
-pub(crate) mod configured_inventory_loader;
-#[path = "session_commands/configured_inventory_query.rs"]
-mod configured_inventory_query;
-#[path = "session_commands/configured_inventory_transport.rs"]
-mod configured_inventory_transport;
-#[path = "session_commands/source_inventory_failure.rs"]
-mod source_inventory_failure;
-
-#[path = "session_commands/source_native_carrier.rs"]
-mod source_native_carrier;
-#[path = "session_commands/source_native_options.rs"]
-mod source_native_options;
-#[path = "session_commands/source_ssh_executor.rs"]
-pub(crate) mod source_ssh_executor;
-#[path = "session_commands/source_ssh_protocol.rs"]
-pub(crate) mod source_ssh_protocol;
-#[path = "session_commands/source_ssh_transport.rs"]
-pub(crate) mod source_ssh_transport;
-
-#[path = "session_commands/source_action_transport.rs"]
-pub(crate) mod source_action_transport;
-#[path = "session_commands/source_client_action.rs"]
-pub(crate) mod source_client_action;
-
-#[cfg(test)]
-#[path = "../tests/integration/configured_inventory_faults.rs"]
-pub(crate) mod configured_inventory_fault_tests;
-#[cfg(test)]
-#[path = "../tests/integration/configured_inventory_read.rs"]
-pub(crate) mod configured_inventory_read_tests;
-
-#[path = "session_commands/native_process_runner.rs"]
-mod native_process_runner;
-use native_process_runner::ProcessSessionsCommandRunner;
-pub(crate) use native_process_runner::SessionsCommandRunner;
-
-const SESSION_TITLE_MAX_CHARS: usize = 96;
-const SESSION_CONTEXT_MAX_CHARS: usize = 32;
-const SESSION_MODEL_CHOICE_MAX_CHARS: usize = 32;
-const SESSION_CONVERSATION_SNIPPET_MAX_CHARS: usize = 180;
-const DEFAULT_SESSION_RECORD_LIMIT: usize = 100;
 
 /// Runs the sessions command.
 pub fn run_sessions_command<W: Write>(
@@ -137,7 +32,12 @@ pub fn run_sessions_command<W: Write>(
     context: &CliContext,
 ) -> Result<(), SessionsCommandError> {
     if command.provider.is_claude_code() {
-        return run_claude_sessions_command(stdout, command, context);
+        return run_claude_sessions_command(
+            stdout,
+            command,
+            crate::session_environment::collaboration_service_directory(context)?,
+            context.env_var("HOME").map(std::path::Path::new),
+        );
     }
     if command.list {
         return run_session_listing(stdout, command, context);
@@ -157,7 +57,12 @@ pub(crate) fn run_sessions_command_with_dependencies<W: Write>(
     picker: &mut impl SessionsPicker,
 ) -> Result<(), SessionsCommandError> {
     if command.provider.is_claude_code() {
-        return run_claude_sessions_command(stdout, command, context);
+        return run_claude_sessions_command(
+            stdout,
+            command,
+            crate::session_environment::collaboration_service_directory(context)?,
+            context.env_var("HOME").map(std::path::Path::new),
+        );
     }
     if command.list {
         return run_session_listing(stdout, command, context);
@@ -231,9 +136,13 @@ fn stored_model_choice_for_session(context: &CliContext, session_id: &str) -> Re
     else {
         return ResumeModelChoice::default();
     };
+    let Ok(codex_home) = codex_home(context) else {
+        return ResumeModelChoice::default();
+    };
     let records = runtime.block_on(load_session_records_for_query_with_identity(
         SessionRecordQuery::for_session_id(session_id),
-        context,
+        &codex_home,
+        context.current_dir(),
         None,
     ));
     let Ok(records) = records else {
@@ -245,20 +154,6 @@ fn stored_model_choice_for_session(context: &CliContext, session_id: &str) -> Re
         .map_or_else(ResumeModelChoice::default, stored_model_choice_from_record)
 }
 
-/// Projects one catalog record into the launch-time model choice, warning once when a
-/// stored value cannot be quoted as a TOML basic string.
-fn stored_model_choice_from_record(record: &SessionRecord) -> ResumeModelChoice {
-    let model = record.model.as_deref();
-    let reasoning_effort = record.reasoning_effort.as_deref();
-    if ResumeModelChoice::rejects_stored_value(model, reasoning_effort) {
-        eprintln!(
-            "agent-sessions: stored model or reasoning effort for session {} contains characters that cannot be passed to Codex; resuming without it",
-            record.session_id
-        );
-    }
-    ResumeModelChoice::from_stored_values(model, reasoning_effort)
-}
-
 fn write_sessions_json<W: Write>(
     stdout: &mut W,
     command: SessionsCommand,
@@ -268,7 +163,11 @@ fn write_sessions_json<W: Write>(
         .enable_all()
         .build()
         .map_err(SessionsCommandError::Runtime)?;
-    let records = runtime.block_on(load_session_records(command, context))?;
+    let records = runtime.block_on(load_session_records(
+        command,
+        &codex_home(context)?,
+        context.current_dir(),
+    ))?;
     serde_json::to_writer(&mut *stdout, &records).map_err(SessionsCommandError::Json)?;
     writeln!(stdout).map_err(SessionsCommandError::Stdout)?;
     Ok(())
@@ -283,7 +182,11 @@ fn write_sessions_table<W: Write>(
         .enable_all()
         .build()
         .map_err(SessionsCommandError::Runtime)?;
-    let records = runtime.block_on(load_session_records(command, context))?;
+    let records = runtime.block_on(load_session_records(
+        command,
+        &codex_home(context)?,
+        context.current_dir(),
+    ))?;
     for (index, record) in records.iter().enumerate() {
         if index > 0 {
             writeln!(stdout).map_err(SessionsCommandError::Stdout)?;
@@ -312,7 +215,8 @@ fn run_interactive_session(
     let repository_identity = discover_repository_identity(context.current_dir());
     let records = runtime.block_on(load_session_records_for_query_with_identity(
         SessionRecordQuery::from_command(&command),
-        context,
+        &codex_home(context)?,
+        context.current_dir(),
         Some(repository_identity.clone()),
     ))?;
     drop(runtime);
@@ -338,10 +242,10 @@ fn run_interactive_session(
         },
         machine_mode: match launch_target {
             SessionsLaunchTarget::Hosted { .. } => {
-                crate::presentation::session_picker::PickerMachineSourceMode::HostedDefault
+                agent_session_picker::session_picker::PickerMachineSourceMode::HostedDefault
             }
             SessionsLaunchTarget::Local { .. } => {
-                crate::presentation::session_picker::PickerMachineSourceMode::LocalCodex
+                agent_session_picker::session_picker::PickerMachineSourceMode::LocalCodex
             }
         },
         records: records
@@ -355,8 +259,12 @@ fn run_interactive_session(
         } => Some(service_directory.clone()),
         SessionsLaunchTarget::Local { .. } => None,
     };
-    let record_loader =
-        session_picker_record_loader(context.clone(), repository_identity, service_directory);
+    let record_loader = session_picker_record_loader(
+        codex_home(context).ok(),
+        context.current_dir().to_path_buf(),
+        repository_identity,
+        service_directory,
+    );
     let Some(outcome) = picker.select_session(request, Some(record_loader))? else {
         return Err(SessionsCommandError::PickerCanceled);
     };
@@ -384,81 +292,6 @@ fn run_interactive_session(
     }
 }
 
-pub(crate) fn session_picker_record_loader(
-    context: CliContext,
-    repository_identity: RepositoryIdentity,
-    service_directory: Option<std::path::PathBuf>,
-) -> SessionsPickerRecordLoader {
-    let runtime_inventory = std::sync::Arc::new(tokio::sync::Mutex::new(
-        picker_runtime_inventory::PickerRuntimeInventory::default(),
-    ));
-    let expected_source = if service_directory.is_some() {
-        crate::presentation::session_picker::PickerSourceContext::DefaultHosted
-    } else {
-        crate::presentation::session_picker::PickerSourceContext::LocalCodex
-    };
-    std::sync::Arc::new(move |request| {
-        let context = context.clone();
-        let repository_identity = repository_identity.clone();
-        let service_directory = service_directory.clone();
-        let runtime_inventory = std::sync::Arc::clone(&runtime_inventory);
-        let expected_source = expected_source.clone();
-        Box::pin(async move {
-            use crate::presentation::session_picker::{
-                PickerSourceContext, SourceInventoryRejection, SourceInventoryResult,
-            };
-            if matches!(
-                request.source_context,
-                PickerSourceContext::ConfiguredHosted(_)
-            ) {
-                return configured_inventory_loader::load(request).await;
-            }
-            if request.source_context != expected_source {
-                return SourceInventoryResult::Rejected {
-                    request,
-                    reason: SourceInventoryRejection::InvalidInventory,
-                };
-            }
-            let query = request.query.clone();
-            let include_empty_sessions = query.include_empty_sessions;
-            let record_query = SessionRecordQuery::from_picker_query(query);
-            let records = match load_session_records_for_query_with_identity(
-                record_query,
-                &context,
-                Some(repository_identity),
-            )
-            .await
-            {
-                Ok(records) => records,
-                Err(_) => {
-                    return SourceInventoryResult::Rejected {
-                        request,
-                        reason: SourceInventoryRejection::SourceUnavailable,
-                    };
-                }
-            };
-            let stored = records
-                .iter()
-                .map(SessionPickerRecord::from_record)
-                .collect();
-            let mut inventory = runtime_inventory.lock().await;
-            let snapshot = match inventory
-                .refresh(service_directory.as_deref(), stored, include_empty_sessions)
-                .await
-            {
-                Ok(snapshot) => snapshot,
-                Err(reason) => return SourceInventoryResult::Rejected { request, reason },
-            };
-            SourceInventoryResult::Ready {
-                progress: crate::presentation::session_picker::InventoryPageProgress::Complete,
-                binding: None,
-                request,
-                snapshot,
-            }
-        })
-    })
-}
-
 fn run_last_session<W: Write>(
     stdout: &mut W,
     command: SessionsCommand,
@@ -472,7 +305,11 @@ fn run_last_session<W: Write>(
         .enable_all()
         .build()
         .map_err(SessionsCommandError::Runtime)?;
-    let mut records = runtime.block_on(load_session_records(command, context))?;
+    let mut records = runtime.block_on(load_session_records(
+        command,
+        &codex_home(context)?,
+        context.current_dir(),
+    ))?;
     let Some(record) = records.drain(..).next() else {
         return Err(SessionsCommandError::NoSessionsMatch);
     };
@@ -606,12 +443,32 @@ impl SessionsPicker for TerminalSessionsPicker {
         run_sessions_picker(
             request,
             record_loader,
-            Some(
-                crate::presentation::session_picker::production_client_ports(self.context.clone()),
-            ),
+            Some(crate::session_client_composition::production_ports(
+                self.context.clone(),
+            )),
         )
         .map_err(SessionsCommandError::Picker)
     }
+}
+
+#[cfg(feature = "quota-reset-test-harness")]
+#[path = "session_commands/stored_model_terminal_fixture.rs"]
+mod stored_model_terminal_fixture;
+#[cfg(feature = "quota-reset-test-harness")]
+pub(crate) use stored_model_terminal_fixture::run_stored_model_terminal_fixture;
+
+/// Projects one catalog record into the launch-time model choice, warning once when a
+/// stored value cannot be quoted as a TOML basic string.
+fn stored_model_choice_from_record(record: &SessionRecord) -> ResumeModelChoice {
+    let model = record.model.as_deref();
+    let reasoning_effort = record.reasoning_effort.as_deref();
+    if ResumeModelChoice::rejects_stored_value(model, reasoning_effort) {
+        eprintln!(
+            "agent-sessions: stored model or reasoning effort for session {} contains characters that cannot be passed to Codex; resuming without it",
+            record.session_id
+        );
+    }
+    ResumeModelChoice::from_stored_values(model, reasoning_effort)
 }
 
 fn validate_resume_session_id(session_id: &str) -> Result<(), SessionsCommandError> {
@@ -627,13 +484,3 @@ fn validate_resume_session_id(session_id: &str) -> Result<(), SessionsCommandErr
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "session_commands/session_projection_tests.rs"]
-mod tests;
-
-#[cfg(feature = "quota-reset-test-harness")]
-#[path = "session_commands/stored_model_terminal_fixture.rs"]
-mod stored_model_terminal_fixture;
-#[cfg(feature = "quota-reset-test-harness")]
-pub(crate) use stored_model_terminal_fixture::run_stored_model_terminal_fixture;

@@ -1,0 +1,33 @@
+[package]
+name = "codex-router-quota-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+default = []
+quota-reset-test-harness = ["codex-router-quota-service/quota-reset-test-harness"]
+
+[dependencies]
+chrono.workspace = true
+codex-router-core.workspace = true
+crossterm.workspace = true
+iocraft.workspace = true
+codex-router-tui.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+unicode-width.workspace = true
+codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service" }
+
+[dev-dependencies]
+codex-router-selection = { path = "../codex-router-selection", version = "0.1.4" }
+serde.workspace = true
+serde_json.workspace = true
+futures-util.workspace = true
+codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["test-util"] }

@@ -14,12 +14,7 @@ use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt as _, time::Duration};
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "integration/configured_inventory_read/recorded_api_listener.rs"]
-mod recorded_api_listener;
+use agent_session_inventory::test_support::recorded_api_listener;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -41,7 +36,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
         let root_path = std::fs::canonicalize(root.path())?;
         let provider = root_path.join("cursor-fixture.ts");
         let provider_log = root_path.join("provider-input.jsonl");
-        codex_router_test_support::node_fixture::write_node_fixture(&provider, "source-policy-agent.ts", &json!(null))?;
+        node_test_fixture::write_node_fixture(&provider, "source-policy-agent.ts", &json!(null))?;
         std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))?;
         let saved_directory = root_path.join("saved-restricted-project");
         let invoking_directory = root_path.join("different-new-default-project");

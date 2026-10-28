@@ -96,13 +96,11 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         },
         vec![ExternalProviderStartup::Launch(
             ExternalProviderLaunchBinding::cursor(
-                codex_router_test_support::node_fixture::node_executable().expect("Node"),
+                node_test_fixture::node_executable().expect("Node"),
                 vec![
-                    codex_router_test_support::node_fixture::fixture_program(
-                        "provider-load-error-agent.ts",
-                    )
-                    .to_string_lossy()
-                    .into_owned(),
+                    node_test_fixture::fixture_program("provider-load-error-agent.ts")
+                        .to_string_lossy()
+                        .into_owned(),
                     PRIVATE_PROVIDER_MARKER.to_owned(),
                 ],
             )

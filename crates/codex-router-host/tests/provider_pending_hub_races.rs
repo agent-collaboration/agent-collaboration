@@ -32,7 +32,7 @@ use provider_conversation_submission::{
 async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
     let provider = root.join("pending-hub-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &provider,
         "pending-hub-provider-agent.ts",
         &serde_json::Value::Null,

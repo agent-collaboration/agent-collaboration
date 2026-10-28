@@ -100,7 +100,7 @@ impl ClaudeProcessFixture {
             }
         });
         let executable = root.path().join("bin/claude");
-        codex_router_test_support::node_fixture::write_node_fixture(
+        node_test_fixture::write_node_fixture(
             &executable,
             "native-claude-background-agent.ts",
             &serde_json::Value::Null,

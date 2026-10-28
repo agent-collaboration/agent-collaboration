@@ -23,11 +23,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
     let root = tempfile::tempdir()?;
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
     let provider_path = root.path().join("human-approver-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
-        &provider_path,
-        "human-approver-agent.ts",
-        &json!(null),
-    )?;
+    node_test_fixture::write_node_fixture(&provider_path, "human-approver-agent.ts", &json!(null))?;
     std::fs::set_permissions(&provider_path, std::fs::Permissions::from_mode(0o700))?;
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {

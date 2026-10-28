@@ -4,7 +4,6 @@ pub mod global_claude_fixture;
 pub mod installed_codex;
 pub mod mock_upstream;
 pub mod native_app_server;
-pub mod node_fixture;
 pub mod owned_cli_process;
 pub mod owned_peer_fixture;
 pub mod route_native;

@@ -67,21 +67,26 @@ impl RunArgumentsFailure {
 
 pub fn run_arguments(arguments: Vec<OsString>) -> Result<(), RunArgumentsFailure> {
     if arguments.first().is_some_and(|argument| {
-        argument == crate::sessions::source_ssh_protocol::SOURCE_REQUEST_SWITCH
+        argument == agent_session_inventory::sessions::source_ssh_protocol::SOURCE_REQUEST_SWITCH
     }) {
         let context = CliContext::new(std::env::vars().collect());
-        return crate::sessions::source_ssh_executor::run_source_entry(&arguments, &context)
-            .map_err(|error| RunArgumentsFailure {
-                message: error.to_string(),
-                exit_code: error.exit_code(),
-            });
+        return agent_session_inventory::sessions::source_ssh_executor::run_source_entry(
+            &arguments,
+            codex_home(&context).ok().as_deref(),
+            context.env_var("HOME").map(Path::new),
+            context.env_var("PATH"),
+        )
+        .map_err(|error| RunArgumentsFailure {
+            message: error.to_string(),
+            exit_code: error.exit_code(),
+        });
     }
-    let command = crate::sessions::SessionsCommand::parse(arguments).map_err(|message| {
-        RunArgumentsFailure {
+    let command = agent_session_inventory::sessions::SessionsCommand::parse(arguments).map_err(
+        |message| RunArgumentsFailure {
             message,
             exit_code: 2,
-        }
-    })?;
+        },
+    )?;
     let context = CliContext::new(std::env::vars().collect());
     crate::sessions::run_sessions_command(&mut std::io::stdout(), command, &context).map_err(
         |error| {
@@ -106,3 +111,108 @@ pub fn run_arguments(arguments: Vec<OsString>) -> Result<(), RunArgumentsFailure
         },
     )
 }
+
+use agent_session_inventory::sessions::{
+    SessionsCommand, SessionsCommandError, SessionsLaunchTarget,
+};
+use collaboration_client::session_catalog::normalize_path;
+
+pub(crate) fn sessions_launch_target(
+    command: &SessionsCommand,
+    context: &CliContext,
+) -> Result<SessionsLaunchTarget, SessionsCommandError> {
+    let invoking_cwd = normalize_path(context.current_dir());
+    let profile = session_profile_for_environment(
+        cfg!(all(debug_assertions, not(test))),
+        context.env_var("CODEX_ROUTER_USE_HOME_DEFAULT").is_some(),
+    );
+    if command.local {
+        return Ok(SessionsLaunchTarget::Local {
+            invoking_cwd,
+            profile,
+        });
+    }
+    let codex_home = codex_home(context)?;
+    let codex_paths = codex_native_integration::CodexPaths::from_codex_home(codex_home.clone());
+    let _validated_backend = crate::app_server_socket_or_default(context, &codex_paths)
+        .map_err(|message| SessionsCommandError::AppServerSocket(message.to_owned()))?;
+    let service_directory = collaboration_service_directory(context)?;
+    let app_server_socket = service_directory.join("codex-native.sock");
+    Ok(SessionsLaunchTarget::Hosted {
+        app_server_socket,
+        service_directory,
+        codex_home,
+        invoking_cwd,
+        profile,
+    })
+}
+
+pub(crate) fn collaboration_service_directory(
+    context: &CliContext,
+) -> Result<PathBuf, SessionsCommandError> {
+    collaboration_client::resolve_service_directory(collaboration_client::ServiceDirectoryOptions {
+        explicit_directory: None,
+        debug_defaults: cfg!(all(debug_assertions, not(test))),
+        use_home_default: context.env_var("CODEX_ROUTER_USE_HOME_DEFAULT").is_some(),
+        debug_router_root: context
+            .env_var("CODEX_ROUTER_DEBUG_ROUTER_ROOT")
+            .map(Into::into),
+        home_directory: context.env_var("HOME").map(Into::into),
+    })
+    .map_err(|error| {
+        let message = match error {
+            collaboration_client::ServiceDirectoryError::AbsoluteHomeRequired
+                if context.env_var("HOME").is_none() =>
+            {
+                "HOME required for communication discovery".to_owned()
+            }
+            collaboration_client::ServiceDirectoryError::AbsoluteHomeRequired
+            | collaboration_client::ServiceDirectoryError::RelativeDebugRouterRoot => {
+                "Router root must be absolute".to_owned()
+            }
+            other @ collaboration_client::ServiceDirectoryError::RelativeExplicitDirectory => {
+                other.to_string()
+            }
+        };
+        SessionsCommandError::AppServerSocket(message)
+    })
+}
+
+pub(crate) fn session_profile_for_environment(
+    debug_defaults: bool,
+    use_home_default: bool,
+) -> codex_native_integration::SessionProfile {
+    if debug_defaults && !use_home_default {
+        codex_native_integration::SessionProfile::RouterDebug
+    } else {
+        codex_native_integration::SessionProfile::Router
+    }
+}
+
+pub(crate) fn codex_home(context: &CliContext) -> Result<PathBuf, SessionsCommandError> {
+    codex_home_from_environment(
+        context.env_var("CODEX_HOME").map(PathBuf::from),
+        context.env_var("HOME").map(PathBuf::from),
+    )
+}
+
+pub(crate) fn codex_home_from_environment(
+    codex_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> Result<PathBuf, SessionsCommandError> {
+    if let Some(codex_home) = codex_home {
+        return Ok(codex_home);
+    }
+    home.map(|home| home.join(".codex"))
+        .ok_or(SessionsCommandError::CodexHomeUnavailable)
+}
+
+pub(crate) fn current_provider_for_picker(context: &CliContext) -> Option<String> {
+    codex_home(context).ok().and_then(|codex_home| {
+        collaboration_client::session_catalog::current_session_provider(&codex_home).ok()
+    })
+}
+
+#[cfg(test)]
+#[path = "session_environment_tests.rs"]
+mod tests;
