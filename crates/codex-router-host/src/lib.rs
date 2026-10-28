@@ -50,7 +50,13 @@ pub use fleet_enrollment_file::{
 mod host_configuration;
 mod host_port_selection;
 pub use host_port_selection::{HostPortSelection, HostPortSource, SelectedHostPort};
+mod port_configuration;
+pub use port_configuration::{
+    HostPortOverrides, PortConfigurationError, ResolvedHostPorts, default_mcp_bind,
+    parse_loopback_mcp_bind, resolve_host_ports,
+};
 mod host_replacement_activation;
+mod host_restart_preflight;
 mod host_singleton_authority;
 mod lifecycle_owner;
 mod lifecycle_state;

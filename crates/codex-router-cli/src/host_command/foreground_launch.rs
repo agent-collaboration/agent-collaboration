@@ -26,7 +26,7 @@ use codex_router_host::ManagedUpdateInputs;
 use codex_router_host::PreExecTelemetry;
 
 use super::HostCommandError;
-use super::port_configuration::{HostPortOverrides, ResolvedHostPorts};
+use codex_router_host::{HostPortOverrides, ResolvedHostPorts};
 mod debug_profile_loader;
 mod router_child_command;
 
@@ -173,6 +173,7 @@ pub(super) async fn run_foreground_host(
         deadlines: HostDeadlines::production(),
     })
     .with_port_selection(ports.selection())
+    .with_debug_port_isolation(isolated_debug)
     .with_provider_operation_retention_days(provider_operation_retention_days)
     .with_collaboration_directory(collaboration_directory, codex_home);
     if let Some(remote_access) = remote_access {

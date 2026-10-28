@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::io::Write;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::path::{Component, Path};
 use std::time::Duration;
@@ -14,12 +14,11 @@ use codex_router_host::OperatorRequest;
 use thiserror::Error;
 
 use crate::CliContext;
+use codex_router_host::{HostPortOverrides, parse_loopback_mcp_bind, resolve_host_ports};
 use operator_client::OperatorClientError;
-use port_configuration::{HostPortOverrides, resolve_host_ports};
 
 mod foreground_launch;
 pub(crate) mod operator_client;
-mod port_configuration;
 #[cfg(test)]
 mod port_configuration_tests;
 mod provider_launch_configuration;
@@ -185,11 +184,6 @@ struct ClapHostCommand {
     #[arg(long, global = true, hide = true)]
     require_debug_isolation: bool,
 }
-
-const DEFAULT_TAILSCALE_HTTPS_PORT: std::num::NonZeroU16 =
-    std::num::NonZeroU16::new(19743).expect("positive Tailscale HTTPS default");
-const DEBUG_TAILSCALE_HTTPS_PORT: std::num::NonZeroU16 =
-    std::num::NonZeroU16::new(18789).expect("positive debug Tailscale HTTPS default");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
 enum RemoteAccessMode {
@@ -386,26 +380,6 @@ fn validate_router_root(router_root: &Path) -> Result<(), HostCommandError> {
     Ok(())
 }
 
-pub(crate) const fn default_mcp_bind(isolated_debug: bool) -> SocketAddr {
-    if isolated_debug {
-        SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 18788)
-    } else {
-        SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 19742)
-    }
-}
-
-fn parse_loopback_mcp_bind(value: &str) -> Result<SocketAddr, String> {
-    let address: SocketAddr = value
-        .parse()
-        .map_err(|_| "--mcp-bind requires HOST:PORT".to_owned())?;
-    if !matches!(address.ip(), IpAddr::V4(ip) if ip.is_loopback())
-        && !matches!(address.ip(), IpAddr::V6(ip) if ip.is_loopback())
-    {
-        return Err("--mcp-bind requires a loopback address".to_owned());
-    }
-    Ok(address)
-}
-
 const fn operator_request_deadline(action: HostAction) -> Duration {
     match action {
         HostAction::Status => STATUS_REQUEST_DEADLINE,
@@ -425,7 +399,7 @@ const fn operator_request_deadline(action: HostAction) -> Duration {
 #[derive(Debug, Error)]
 pub enum HostCommandError {
     #[error(transparent)]
-    PortConfiguration(#[from] port_configuration::PortConfigurationError),
+    PortConfiguration(#[from] codex_router_host::PortConfigurationError),
     #[error("Host restart failed: {0}")]
     RestartFailed(String),
     #[error("Host operation failed: {0}")]

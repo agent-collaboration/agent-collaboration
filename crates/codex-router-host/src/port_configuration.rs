@@ -6,18 +6,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use codex_router_host::{HostPortSelection, HostPortSource, SelectedHostPort};
+use crate::{HostPortSelection, HostPortSource, SelectedHostPort};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct HostPortOverrides {
+pub struct HostPortOverrides {
     pub router: Option<u16>,
     pub mcp_bind: Option<SocketAddr>,
     pub tailscale_https: Option<NonZeroU16>,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct ResolvedHostPorts {
+pub struct ResolvedHostPorts {
     selection: HostPortSelection,
     mcp_bind: SocketAddr,
     tailscale_https_port: NonZeroU16,
@@ -72,7 +72,7 @@ impl PortConfigurationFile {
     }
 }
 
-pub(super) fn resolve_host_ports(
+pub fn resolve_host_ports(
     router_root: &Path,
     isolated_debug: bool,
     overrides: HostPortOverrides,
@@ -83,15 +83,15 @@ pub(super) fn resolve_host_ports(
 }
 
 impl ResolvedHostPorts {
-    pub(super) const fn selection(self) -> HostPortSelection {
+    pub const fn selection(self) -> HostPortSelection {
         self.selection
     }
 
-    pub(super) const fn mcp_bind(self) -> SocketAddr {
+    pub const fn mcp_bind(self) -> SocketAddr {
         self.mcp_bind
     }
 
-    pub(super) const fn tailscale_https_port(self) -> NonZeroU16 {
+    pub const fn tailscale_https_port(self) -> NonZeroU16 {
         self.tailscale_https_port
     }
 
@@ -113,12 +113,12 @@ impl ResolvedHostPorts {
         let mcp = select_port(
             overrides.mcp_bind.map(|bind| bind.port()),
             file.mcp,
-            super::default_mcp_bind(isolated_debug).port(),
+            default_mcp_bind(isolated_debug).port(),
         );
         let mcp_bind = overrides
             .mcp_bind
             .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], mcp.port)));
-        super::parse_loopback_mcp_bind(&mcp_bind.to_string()).map_err(|message| {
+        parse_loopback_mcp_bind(&mcp_bind.to_string()).map_err(|message| {
             PortConfigurationError::Invalid {
                 path: path.to_owned(),
                 message,
@@ -133,9 +133,9 @@ impl ResolvedHostPorts {
             });
         }
         let https_default = if isolated_debug {
-            super::DEBUG_TAILSCALE_HTTPS_PORT
+            DEBUG_TAILSCALE_HTTPS_PORT
         } else {
-            super::DEFAULT_TAILSCALE_HTTPS_PORT
+            DEFAULT_TAILSCALE_HTTPS_PORT
         };
         let tailscale_https_port = overrides
             .tailscale_https
@@ -146,6 +146,23 @@ impl ResolvedHostPorts {
             file.tailscale_https,
             https_default.get(),
         );
+        if isolated_debug {
+            for (endpoint, selected) in [
+                ("Router", router),
+                ("MCP", mcp),
+                ("Tailscale HTTPS", tailscale_https),
+            ] {
+                if [8787, 8788, 19741, 19742, 19743, 43127].contains(&selected.port) {
+                    return Err(PortConfigurationError::Invalid {
+                        path: path.to_owned(),
+                        message: format!(
+                            "isolated debug {endpoint} cannot use protected port {}",
+                            selected.port
+                        ),
+                    });
+                }
+            }
+        }
         Ok(Self {
             selection: HostPortSelection {
                 router,
@@ -173,4 +190,29 @@ fn select_port(flag: Option<u16>, file: Option<NonZeroU16>, default_port: u16) -
             source: HostPortSource::Default,
         },
     }
+}
+
+const DEFAULT_TAILSCALE_HTTPS_PORT: NonZeroU16 =
+    NonZeroU16::new(19743).expect("positive Tailscale HTTPS default");
+const DEBUG_TAILSCALE_HTTPS_PORT: NonZeroU16 =
+    NonZeroU16::new(18789).expect("positive debug Tailscale HTTPS default");
+
+/// Returns the MCP default for the selected Host isolation policy.
+#[must_use]
+pub const fn default_mcp_bind(isolated_debug: bool) -> SocketAddr {
+    SocketAddr::new(
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        if isolated_debug { 18788 } else { 19742 },
+    )
+}
+
+/// Parses the existing loopback-only MCP CLI input, including an explicit ephemeral port.
+pub fn parse_loopback_mcp_bind(value: &str) -> Result<SocketAddr, String> {
+    let address: SocketAddr = value
+        .parse()
+        .map_err(|_| "--mcp-bind requires HOST:PORT".to_owned())?;
+    if !address.ip().is_loopback() {
+        return Err("--mcp-bind requires a loopback address".to_owned());
+    }
+    Ok(address)
 }

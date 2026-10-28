@@ -49,11 +49,19 @@ the file; omitted fields use built-in defaults. Normal defaults are Router
 `65535`, Router and MCP ports must differ, and unknown fields or invalid/unreadable
 files fail startup with the file path. A missing file uses defaults. MCP binds
 only to loopback; the file's MCP port uses `127.0.0.1`.
+Isolated Hosts refuse protected production ports for all three fields, whether
+selected by a flag or the file. Standalone `serve` uses the same resolution for
+its Router port, reading `ports.json` beside the selected `--state-db` (the
+Router root by default); `--port` overrides the file.
 
 `codex-router host status` reports the running Host's selected ports and each
 source (`flag`, `ports.json`, or `default`). A whole-Host `host restart` retains
 explicit launch flags and rereads the file, so file edits apply at the next
 whole-Host restart. Router-only `host router restart` retains launch-time ports.
+Before stopping children, the Host validates the replacement's current port file
+and checks availability of selected ports it does not already hold. A failed
+check reports the file or unavailable port and its reason, leaving the old Host
+serving. Bind-and-release checks do not reserve a port against a later race.
 Hosts started before 0.1.109 saved their resolved ports as explicit flags;
 those persist across replacements until a fresh Host start lets the file apply.
 

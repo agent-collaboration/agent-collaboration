@@ -3,14 +3,71 @@
 use super::foreground_launch::{
     HostLaunchMode, HostReplacementCommandInputs, host_replacement_command,
 };
-use super::port_configuration::{HostPortOverrides, resolve_host_ports};
 use super::{HostCommand, run_host_command};
 use crate::CliContext;
 use codex_router_host::{ChildCommandSpec, HostPortSource, RemoteAccess};
+use codex_router_host::{HostPortOverrides, resolve_host_ports};
 use std::{ffi::OsString, net::SocketAddr, num::NonZeroU16, path::PathBuf};
 
 fn parse_host(flags: &[&str]) -> HostCommand {
     HostCommand::parse(flags.iter().map(OsString::from).collect()).expect("Host command")
+}
+
+#[test]
+fn isolated_ports_refuse_every_protected_flag() {
+    assert_protected_ports_refused(false);
+}
+
+#[test]
+fn isolated_ports_refuse_every_protected_file_field() {
+    assert_protected_ports_refused(true);
+}
+
+#[derive(Clone, Copy)]
+enum PortField {
+    Router,
+    Mcp,
+    TailscaleHttps,
+}
+
+fn assert_protected_ports_refused(from_file: bool) {
+    let root = tempfile::tempdir().expect("root");
+    for (field, file_key) in [
+        (PortField::Router, "router"),
+        (PortField::Mcp, "mcp"),
+        (PortField::TailscaleHttps, "tailscaleHttps"),
+    ] {
+        for port in [19741, 19742, 19743] {
+            let mut overrides = HostPortOverrides {
+                router: Some(28741),
+                mcp_bind: Some("127.0.0.1:28742".parse().expect("loopback")),
+                tailscale_https: NonZeroU16::new(28743),
+            };
+            if from_file {
+                std::fs::write(
+                    root.path().join("ports.json"),
+                    format!("{{\"{file_key}\":{port}}}"),
+                )
+                .expect("file");
+                match field {
+                    PortField::Router => overrides.router = None,
+                    PortField::Mcp => overrides.mcp_bind = None,
+                    PortField::TailscaleHttps => overrides.tailscale_https = None,
+                }
+            } else {
+                match field {
+                    PortField::Router => overrides.router = Some(port),
+                    PortField::Mcp => overrides.mcp_bind = Some(([127, 0, 0, 1], port).into()),
+                    PortField::TailscaleHttps => overrides.tailscale_https = NonZeroU16::new(port),
+                }
+            }
+            let error = resolve_host_ports(root.path(), true, overrides)
+                .expect_err("isolated resolution must reject the production port before bind");
+            let message = error.to_string();
+            assert!(message.contains(&port.to_string()), "{file_key}: {message}");
+            assert!(message.contains("ports.json"), "{file_key}: {message}");
+        }
+    }
 }
 
 #[test]
