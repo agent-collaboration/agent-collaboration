@@ -140,6 +140,14 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
         Some(&json!("notPermitted")),
         "{hidden}"
     );
+    // Queued describes the original seed's SDK custody. The preceding lead
+    // grant also emitted an intent: claiming it appends its HandedOff version,
+    // Request ledger row and frozen handoff. Finish that publisher work before
+    // attributing any project change to the requested controls below.
+    fixture
+        .publisher
+        .wait_project_idle_for_test(&fixture.project)
+        .await;
     let mut snapshot = writer.store.snapshot().await?;
     let before = (
         snapshot.high_water(),

@@ -37,6 +37,11 @@ sort -u "$output_directory/tests.tsv" | sort -nr > "$output_directory/tests-sort
   printf '\n## Slowest tests\n\n| Seconds | Result | Job | Test |\n| ---: | --- | --- | --- |\n'
   head -20 "$output_directory/tests-sorted.tsv" | awk -F '\t' '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}'
   printf '\nFull step and test inventories are in the timing artifact. Test rows include nextest, unittest, optimized transport and timed workerd example invocations; skipped tests have no execution duration. Workerd example wall time includes Cargo startup and any compilation. Overlapping step durations must not be added.\n'
+  if jq -e '[.[].jobs[] | select(.name == "Test Rust workspace") | .steps[]? |
+      select(.name == "Report skipped quota-reset stage" and .conclusion == "success")] | length > 0' \
+      "$output_directory/jobs.json" > /dev/null; then
+    printf '\nquota-reset stage skipped: no quota changes\n'
+  fi
 } > "$output_directory/summary.md"
 cat "$output_directory/summary.md"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then

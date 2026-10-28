@@ -74,6 +74,17 @@ pub(super) struct ProjectWriters {
 }
 
 impl ProjectWriters {
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
+        &self,
+        project: &ProjectId,
+    ) -> io::Result<()> {
+        self.ensure(project)
+            .await?
+            .replicate_available_for_test(self.receiver)
+            .await
+    }
+
     pub fn new(
         directory: &std::path::Path,
         peer: fleet_sync_protocol::PeerId,

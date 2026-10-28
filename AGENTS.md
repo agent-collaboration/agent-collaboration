@@ -55,15 +55,20 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   `APPLE_CERTIFICATE_PASSWORD` secrets and fails without them; it does not
   notarize, because Homebrew installs the tarball without quarantine.
 - Local Apple Silicon `cargo run` and `cargo test`, in any profile, go
-  through `scripts/cargo_debug_signing_runner.sh`, which signs `codex-router`,
-  `agent-collaboration` and `agent-sessions` with the same certificate under
-  `dev.shravansunder.<executable>.debug`, without a secure timestamp so it
-  works offline. Debug and released builds are different code identities on
+  through `scripts/cargo_debug_signing_runner.sh`, which signs every
+  executable it runs with the same certificate, without a secure timestamp so
+  it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`,
+  `codex-router-board-upgrade` and `board-debug-runtime` under
+  `dev.shravansunder.<executable>.debug`, and test, example and helper
+  binaries under `dev.shravansunder.test.<name>`. Never execute a freshly
+  built binary unsigned: macOS verifies each new ad-hoc-signed executable,
+  and nextest launches every test binary. Debug and released builds are different code identities on
   purpose: the debug Router keeps its own Keychain item, and approvals given
   to one never apply to the other. A debug build another process starts
   directly, such as the `--router-binary` a debug-host example launches,
   bypasses the runner; sign it first with
-  `scripts/cargo_debug_signing_runner.sh --sign-only target/debug/codex-router`.
+  `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
+  built executable).
   When signing cannot happen (no certificate in the login keychain, a locked
   keychain) the runner runs the build linker-signed and says so.
 - Keep release publication separate from production process replacement.

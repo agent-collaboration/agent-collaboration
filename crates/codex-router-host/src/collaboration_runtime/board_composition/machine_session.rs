@@ -77,7 +77,7 @@ pub(super) struct PreparedMachineSession {
 pub(crate) struct RunningMachineSession {
     stop: watch::Sender<bool>,
     task: JoinSet<io::Result<()>>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "runtime-test-support"))]
     pub(super) projects: Weak<ProjectWriters>,
 }
 
@@ -164,14 +164,14 @@ impl PreparedMachineSession {
         publisher: Weak<NotificationPublisher>,
     ) -> RunningMachineSession {
         let stop = self.stop.clone();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "runtime-test-support"))]
         let projects = Arc::downgrade(&self.projects);
         let mut task = JoinSet::new();
         task.spawn(self.run(admission, fleet, mail, publisher));
         RunningMachineSession {
             stop,
             task,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "runtime-test-support"))]
             projects,
         }
     }
@@ -240,6 +240,18 @@ impl PreparedMachineSession {
 }
 
 impl RunningMachineSession {
+    #[cfg(feature = "runtime-test-support")]
+    pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
+        &self,
+        project: &message_board::ProjectId,
+    ) -> io::Result<()> {
+        self.projects
+            .upgrade()
+            .ok_or_else(|| io::Error::other("test project runtime is unavailable"))?
+            .replicate_project_for_test(project)
+            .await
+    }
+
     pub async fn shutdown(mut self) -> io::Result<()> {
         self.stop.send_replace(true);
         match self.task.join_next().await {

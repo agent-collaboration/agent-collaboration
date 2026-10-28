@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -51,6 +52,33 @@ fn cleanup_fixture(root: &Path, driver: &mut Child) -> TestResult {
         let pid =
             rustix::process::Pid::from_raw(recorded.pid).ok_or("invalid recorded fixture PID")?;
         let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
+    }
+    Ok(())
+}
+
+fn await_fixture_ready(child: &mut Child) -> Result<(), DriverError> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(DriverError::Runtime("signal fixture output absent"))?;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let reader = std::thread::spawn(move || {
+        let mut line = String::new();
+        let result = BufReader::new(stdout).read_line(&mut line).map(|_| line);
+        let _ = sender.send(result);
+    });
+    // Node sets its Linux comm before READY; capture ownership only afterward.
+    let ready = receiver.recv_timeout(Duration::from_secs(5));
+    if !matches!(&ready, Ok(Ok(line)) if line == "READY\n") {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    reader
+        .join()
+        .map_err(|_| DriverError::Runtime("signal fixture reader failed"))?;
+    let line = ready.map_err(|_| DriverError::Runtime("signal fixture READY unavailable"))??;
+    if line != "READY\n" {
+        return Err(DriverError::Runtime("signal fixture READY record invalid"));
     }
     Ok(())
 }
@@ -134,8 +162,9 @@ fn interrupted_profile_owner_fixture() -> TestResult {
                 .args(["--graceful", "--hold-until-signalled"])
                 .process_group(0)
                 .stdin(Stdio::null())
-                .stdout(Stdio::null())
+                .stdout(Stdio::piped())
                 .spawn()?;
+            await_fixture_ready(&mut child)?;
             with_owned_child(&mut child, &root, |child, known| {
                 let pid = i32::try_from(child.id())
                     .map_err(|_| DriverError::Runtime("fixture PID overflow"))?;

@@ -16,14 +16,35 @@ use codex_router_tailnet_verification_host::profile_projection::ProfileProjectio
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn harmless_child() -> Result<Child, Box<dyn std::error::Error>> {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../verification/fixtures/harmless-owned-child.ts");
-    Ok(Command::new("node")
+    let mut child = Command::new("node")
         .arg(fixture)
         .process_group(0)
         .stdin(Stdio::piped())
-        .spawn()?)
+        .stdout(Stdio::piped())
+        .spawn()?;
+    let stdout = child.stdout.take().ok_or("fixture output absent")?;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let reader = std::thread::spawn(move || {
+        let mut line = String::new();
+        let result = BufReader::new(stdout).read_line(&mut line).map(|_| line);
+        let _ = sender.send(result);
+    });
+    // Node sets its Linux comm during startup; record ownership only after READY.
+    let ready = receiver.recv_timeout(Duration::from_secs(5));
+    if !matches!(&ready, Ok(Ok(line)) if line == "READY\n") {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    reader.join().map_err(|_| "fixture reader failed")?;
+    assert_eq!(ready??, "READY\n");
+    Ok(child)
 }
 
 #[expect(
