@@ -237,11 +237,11 @@ pub(crate) async fn run_host_command<W: Write + Send>(
     );
     let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
     if command.action == Some(HostAction::Stop) {
-        let outcome = host_stop::stop_host(
-            &coordination_paths,
-            operator_request_deadline(HostAction::Stop),
-        )
-        .await?;
+        let deadline =
+            host_stop::HostStopDeadline::new(operator_request_deadline(HostAction::Stop));
+        #[cfg(test)]
+        let deadline = deadline.with_process_exit_at(context.test_stop_exit_deadline);
+        let outcome = host_stop::stop_host(&coordination_paths, deadline).await?;
         writeln!(stdout, "{}", outcome.message())?;
         return Ok(());
     }

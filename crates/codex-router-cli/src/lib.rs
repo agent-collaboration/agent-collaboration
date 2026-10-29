@@ -755,6 +755,8 @@ pub const fn package_name() -> &'static str {
 pub struct CliContext {
     env: Vec<(String, String)>,
     current_dir: PathBuf,
+    #[cfg(test)]
+    test_stop_exit_deadline: Option<std::time::Instant>,
 }
 
 impl CliContext {
@@ -764,6 +766,8 @@ impl CliContext {
         Self {
             env,
             current_dir: current_dir_or_dot(),
+            #[cfg(test)]
+            test_stop_exit_deadline: None,
         }
     }
 
@@ -773,6 +777,8 @@ impl CliContext {
         Self {
             env: std::env::vars().collect(),
             current_dir: current_dir_or_dot(),
+            #[cfg(test)]
+            test_stop_exit_deadline: None,
         }
     }
 
@@ -780,6 +786,12 @@ impl CliContext {
     #[must_use]
     pub fn with_current_dir(mut self, current_dir: PathBuf) -> Self {
         self.current_dir = current_dir;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_stop_exit_deadline_for_test(mut self, at: std::time::Instant) -> Self {
+        self.test_stop_exit_deadline = Some(at);
         self
     }
 

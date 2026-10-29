@@ -105,7 +105,7 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
         panic!("background refresh should start and block in provider: {error}");
     }
 
-    let http_response = send_loopback_request_with_retry(
+    let http_response = send_loopback_request(
         router_port,
         local_token.token().expose_secret(),
         br#"{"model":"gpt-5","served_http":true}"#,
@@ -263,7 +263,7 @@ fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_bloc
         panic!("background refresh should start and block in provider: {error}");
     }
 
-    let mut client = connect_websocket_with_retry(router_port, local_token.token().expose_secret());
+    let mut client = connect_loopback_websocket(router_port, local_token.token().expose_secret());
     let first_frame = r#"{"type":"response.create","served_ws":true}"#;
     if let Err(error) = client.send(Message::text(first_frame)) {
         panic!("local WebSocket client should send first frame: {error}");

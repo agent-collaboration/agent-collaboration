@@ -73,9 +73,11 @@ async fn stop_times_out_without_claiming_success_or_signalling_an_unresponsive_p
         directory.path().as_os_str().to_owned(),
     ])
     .expect("stop command");
+    let context =
+        CliContext::new(vec![]).with_stop_exit_deadline_for_test(std::time::Instant::now());
     let operation = tokio::spawn(async move {
         let mut output = Vec::new();
-        let result = run_host_command(&mut output, command, &CliContext::new(vec![]), None).await;
+        let result = run_host_command(&mut output, command, &context, None).await;
         (result, output)
     });
     let (mut connection, _) = listener.accept().await.expect("stop connection");
@@ -85,9 +87,14 @@ async fn stop_times_out_without_claiming_success_or_signalling_an_unresponsive_p
         .await
         .expect("complete stop request");
     assert!(!request.is_empty());
-    // The fixture has received the request but deliberately keeps its process alive.
+    // The real peer remains alive. Only its absolute exit deadline is already
+    // expired when the actual kernel observer begins waiting after this request.
     let (result, output) = operation.await.expect("command task");
     let error = result.expect_err("peer did not exit");
     assert!(error.to_string().contains("did not exit"), "{error}");
     assert!(output.is_empty());
+    assert!(matches!(
+        HostInstanceLock::acquire(&paths),
+        Err(InstanceAcquireError::AlreadyRunning)
+    ));
 }

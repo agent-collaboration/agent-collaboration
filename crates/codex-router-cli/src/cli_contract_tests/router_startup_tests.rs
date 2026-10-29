@@ -57,14 +57,13 @@ fn serve_provisions_local_token_and_keeps_codex_optional() {
     let router_port = reserve_loopback_port();
     let router_port_text = router_port.to_string();
     let upstream_base_url = format!("http://{upstream_address}/v1");
+    let (bound, observed_bind) = mpsc::channel();
     let client_thread = thread::spawn(move || {
-        send_tokenless_loopback_request_with_retry(
-            router_port,
-            br#"{"model":"gpt-5","serve":true}"#,
-        )
+        await_serve_bind(&observed_bind, router_port);
+        send_tokenless_loopback_request(router_port, br#"{"model":"gpt-5","serve":true}"#)
     });
 
-    let output = run_cli(
+    let output = run_cli_observing_serve_bind(
         [
             "codex-router",
             "serve",
@@ -87,6 +86,7 @@ fn serve_provisions_local_token_and_keeps_codex_optional() {
             "1",
         ],
         CliContext::new(Vec::new()),
+        bound,
     );
 
     assert!(
@@ -194,21 +194,20 @@ fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
         let CliCommand::Serve(command) = command else {
             panic!("serve command should parse");
         };
+        let (bound, observed_bind) = mpsc::channel();
         let client_thread = thread::spawn(move || {
-            send_tokenless_loopback_request_with_retry(
-                router_port,
-                br#"{"model":"gpt-5","serve":true}"#,
-            )
+            await_serve_bind(&observed_bind, router_port);
+            send_tokenless_loopback_request(router_port, br#"{"model":"gpt-5","serve":true}"#)
         });
         let serve_thread = thread::spawn(move || {
-            let mut stdout = Vec::new();
+            let mut stdout = ServeReadinessOutput::new(bound);
             let result = run_serve_command_with_upkeep_start(
                 &mut stdout,
                 command,
                 credential_store.into(),
                 credential_upkeep_worker::start_background_credential_upkeep_worker,
             );
-            (result, stdout)
+            (result, stdout.into_bytes())
         });
 
         let response = must_ok(client_thread.join().map_err(|_| "client thread failed"));
@@ -385,8 +384,10 @@ fn serve_command_dispatches_websocket_upgrade_through_runtime() {
     let router_port = reserve_loopback_port();
     let router_port_text = router_port.to_string();
     let upstream_base_url = format!("http://{upstream_address}/v1");
+    let (bound, observed_bind) = mpsc::channel();
     let client_thread = thread::spawn(move || {
-        let mut client = connect_tokenless_websocket_with_retry(router_port);
+        await_serve_bind(&observed_bind, router_port);
+        let mut client = connect_tokenless_loopback_websocket(router_port);
         let first_frame = r#"{"type":"response.create","cli":true}"#;
         if let Err(error) = client.send(Message::text(first_frame)) {
             panic!("local websocket client should send first frame: {error}");
@@ -397,7 +398,7 @@ fn serve_command_dispatches_websocket_upgrade_through_runtime() {
         }
     });
 
-    let output = run_cli(
+    let output = run_cli_observing_serve_bind(
         [
             "codex-router",
             "serve",
@@ -420,6 +421,7 @@ fn serve_command_dispatches_websocket_upgrade_through_runtime() {
             "1",
         ],
         CliContext::new(Vec::new()),
+        bound,
     );
 
     assert!(

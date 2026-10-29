@@ -101,6 +101,10 @@ use codex_router_quota_service::quota::start_background_quota_refresh_worker_wit
 
 static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+#[path = "cli_contract_tests/serve_readiness_output.rs"]
+mod serve_readiness_output;
+use serve_readiness_output::*;
+
 #[path = "cli_contract_tests/cli_test_support.rs"]
 mod cli_test_support;
 use cli_test_support::*;

@@ -6,8 +6,8 @@ pub(super) fn reserve_loopback_port() -> u16 {
     address.port()
 }
 
-pub(super) fn send_loopback_request_with_retry(port: u16, token: &str, body: &[u8]) -> String {
-    let mut client = connect_with_retry(port);
+pub(super) fn send_loopback_request(port: u16, token: &str, body: &[u8]) -> String {
+    let mut client = connect_loopback(port);
     let request = format!(
         "POST /v1/responses HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nX-Codex-Router-Token: {token}\r\nContent-Length: {}\r\n\r\n{}",
         body.len(),
@@ -27,8 +27,8 @@ pub(super) fn send_loopback_request_with_retry(port: u16, token: &str, body: &[u
     response
 }
 
-pub(super) fn send_tokenless_loopback_request_with_retry(port: u16, body: &[u8]) -> String {
-    let mut client = connect_with_retry(port);
+pub(super) fn send_tokenless_loopback_request(port: u16, body: &[u8]) -> String {
+    let mut client = connect_loopback(port);
     let request = format!(
         "POST /v1/responses HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
         body.len(),
@@ -96,73 +96,36 @@ pub(super) fn http_message_has_complete_body(message: &[u8]) -> bool {
     message.len() >= header_end + "\r\n\r\n".len() + content_length
 }
 
-pub(super) fn connect_with_retry(port: u16) -> TcpStream {
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    let mut last_error = None;
-    while std::time::Instant::now() < deadline {
-        match TcpStream::connect(("127.0.0.1", port)) {
-            Ok(stream) => return stream,
-            Err(error) => {
-                last_error = Some(error);
-                thread::sleep(Duration::from_millis(5));
-            }
-        }
-    }
-
-    panic!("client should connect to CLI serve listener: {last_error:?}");
+pub(super) fn connect_loopback(port: u16) -> TcpStream {
+    TcpStream::connect(("127.0.0.1", port))
+        .expect("client must connect to the observed bound listener")
 }
 
-pub(super) fn connect_websocket_with_retry(
+pub(super) fn connect_loopback_websocket(
     port: u16,
     local_token: &str,
 ) -> tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<TcpStream>> {
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    let mut last_error = None;
-    while std::time::Instant::now() < deadline {
-        let mut request = match format!("ws://127.0.0.1:{port}/v1/responses").into_client_request()
-        {
-            Ok(request) => request,
-            Err(error) => panic!("local websocket request should build: {error}"),
-        };
-        let header_value = match HeaderValue::from_str(local_token) {
-            Ok(value) => value,
-            Err(error) => panic!("local websocket token header should build: {error}"),
-        };
-        request
-            .headers_mut()
-            .insert("X-Codex-Router-Token", header_value);
-        match connect(request) {
-            Ok((client, _response)) => return client,
-            Err(error) => {
-                last_error = Some(error);
-                thread::sleep(Duration::from_millis(5));
-            }
-        }
-    }
-
-    panic!("local websocket client should connect to CLI serve listener: {last_error:?}");
+    let mut request = format!("ws://127.0.0.1:{port}/v1/responses")
+        .into_client_request()
+        .expect("local websocket request");
+    request.headers_mut().insert(
+        "X-Codex-Router-Token",
+        HeaderValue::from_str(local_token).expect("local token header"),
+    );
+    connect(request)
+        .expect("websocket must connect to observed bound listener")
+        .0
 }
 
-pub(super) fn connect_tokenless_websocket_with_retry(
+pub(super) fn connect_tokenless_loopback_websocket(
     port: u16,
 ) -> tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<TcpStream>> {
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    let mut last_error = None;
-    while std::time::Instant::now() < deadline {
-        let request = match format!("ws://127.0.0.1:{port}/v1/responses").into_client_request() {
-            Ok(request) => request,
-            Err(error) => panic!("local websocket request should build: {error}"),
-        };
-        match connect(request) {
-            Ok((client, _response)) => return client,
-            Err(error) => {
-                last_error = Some(error);
-                thread::sleep(Duration::from_millis(5));
-            }
-        }
-    }
-
-    panic!("local websocket client should connect to CLI serve listener: {last_error:?}");
+    let request = format!("ws://127.0.0.1:{port}/v1/responses")
+        .into_client_request()
+        .expect("local websocket request");
+    connect(request)
+        .expect("websocket must connect to observed bound listener")
+        .0
 }
 
 pub(super) async fn assert_preserved_account_routes_through_cli_serve(
@@ -199,12 +162,14 @@ pub(super) async fn assert_preserved_account_routes_through_cli_serve(
     });
     let serve = tokio::task::spawn_blocking(move || {
         let router_port = reserve_loopback_port();
+        let (bound, observed_bind) = mpsc::channel();
         let client = thread::spawn(move || {
-            send_tokenless_loopback_request_with_retry(router_port, br#"{"input":"fixture"}"#)
+            await_serve_bind(&observed_bind, router_port);
+            send_tokenless_loopback_request(router_port, br#"{"input":"fixture"}"#)
         });
         let router_port_text = router_port.to_string();
         let upstream_base_url = format!("http://{upstream_address}/v1");
-        let output = run_cli(
+        let output = run_cli_observing_serve_bind(
             [
                 "codex-router",
                 "serve",
@@ -227,6 +192,7 @@ pub(super) async fn assert_preserved_account_routes_through_cli_serve(
                 "1",
             ],
             CliContext::new(Vec::new()),
+            bound,
         );
         assert!(output.stderr.is_empty(), "serve stderr: {}", output.stderr);
         assert!(

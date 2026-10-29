@@ -207,7 +207,7 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
     let floor_notifier = router.websocket_quota_floor_notifier();
     let router_thread = thread::spawn(move || router.serve_protocol_connections(2));
 
-    let mut first_client = connect_tokenless_websocket_with_retry(router_port);
+    let mut first_client = connect_tokenless_loopback_websocket(router_port);
     match first_client.get_mut() {
         tungstenite::stream::MaybeTlsStream::Plain(stream) => {
             must_ok(stream.set_read_timeout(Some(Duration::from_secs(2))));
@@ -427,7 +427,7 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
     must_ok(active_floor_turn_close_receiver.recv_timeout(Duration::from_secs(2)));
     drop(first_client);
 
-    let mut second_client = connect_tokenless_websocket_with_retry(router_port);
+    let mut second_client = connect_tokenless_loopback_websocket(router_port);
     must_ok(second_client.send(Message::text(r#"{"type":"response.create","turn":4}"#)));
     assert_eq!(
         second_client

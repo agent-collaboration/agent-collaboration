@@ -165,7 +165,7 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         router.serve_protocol_connections(if with_healthy_peer { 2 } else { 1 })
     });
 
-    let mut first_client = connect_tokenless_websocket_with_retry(router_port);
+    let mut first_client = connect_tokenless_loopback_websocket(router_port);
     must_ok(first_client.send(Message::text(r#"{"type":"response.create","turn":1}"#)));
     assert_eq!(
         must_ok(first_client.read()).to_string(),
@@ -214,7 +214,7 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         );
         drop(first_client);
 
-        let mut second_client = connect_tokenless_websocket_with_retry(router_port);
+        let mut second_client = connect_tokenless_loopback_websocket(router_port);
         must_ok(second_client.send(Message::text(r#"{"type":"response.create","turn":2}"#)));
         assert_eq!(
             must_ok(second_client.read()).to_string(),

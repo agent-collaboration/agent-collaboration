@@ -135,6 +135,31 @@ pub(super) fn run_cli<const ARGUMENT_COUNT: usize>(
     context: CliContext,
 ) -> CliRunOutput {
     let mut stdout = Vec::new();
+    let stderr = run_cli_capturing_stderr(args, context, &mut stdout);
+    CliRunOutput {
+        stdout: must_ok(String::from_utf8(stdout)),
+        stderr,
+    }
+}
+
+pub(super) fn run_cli_observing_serve_bind<const ARGUMENT_COUNT: usize>(
+    args: [&str; ARGUMENT_COUNT],
+    context: CliContext,
+    bound: mpsc::Sender<std::net::SocketAddr>,
+) -> CliRunOutput {
+    let mut stdout = ServeReadinessOutput::new(bound);
+    let stderr = run_cli_capturing_stderr(args, context, &mut stdout);
+    CliRunOutput {
+        stdout: must_ok(String::from_utf8(stdout.into_bytes())),
+        stderr,
+    }
+}
+
+fn run_cli_capturing_stderr<const ARGUMENT_COUNT: usize>(
+    args: [&str; ARGUMENT_COUNT],
+    context: CliContext,
+    stdout: &mut (impl Write + Send),
+) -> String {
     let mut stderr = Vec::new();
     let arguments = args.into_iter().map(Into::into).collect::<Vec<_>>();
     if matches!(
@@ -144,17 +169,14 @@ pub(super) fn run_cli<const ARGUMENT_COUNT: usize>(
         must_ok(test_async_runtime().block_on(run_with_io_async(
             arguments,
             &context,
-            &mut stdout,
+            stdout,
             &mut stderr,
         )));
     } else {
-        must_ok(run_with_io(arguments, &context, &mut stdout, &mut stderr));
+        must_ok(run_with_io(arguments, &context, stdout, &mut stderr));
     }
 
-    CliRunOutput {
-        stdout: must_ok(String::from_utf8(stdout)),
-        stderr: must_ok(String::from_utf8(stderr)),
-    }
+    must_ok(String::from_utf8(stderr))
 }
 
 pub(super) fn ensure_async_state_schema(router_root: &Path) {

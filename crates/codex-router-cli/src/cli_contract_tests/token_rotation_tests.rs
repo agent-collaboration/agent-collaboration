@@ -170,10 +170,8 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
         Some(token_b.token().expose_secret()),
         "rotated-token request after reload",
     );
-    let codex_response = send_tokenless_loopback_request_with_retry(
-        router_port,
-        br#"{"model":"gpt-5","serve":true}"#,
-    );
+    let codex_response =
+        send_tokenless_loopback_request(router_port, br#"{"model":"gpt-5","serve":true}"#);
     let upstream_request = match upstream_receiver.recv_timeout(Duration::from_secs(2)) {
         Ok(request) => Some(request),
         Err(_error) => {
@@ -312,8 +310,9 @@ fn serve_command_reloads_token_rotation_without_restart() {
     let upstream_base_url = format!("http://{upstream_address}/v1");
     let state_arg = state_path;
     let secret_arg = secret_root.clone();
+    let (bound, observed_bind) = mpsc::channel();
     let serve_thread = thread::spawn(move || {
-        run_cli(
+        run_cli_observing_serve_bind(
             [
                 "codex-router",
                 "serve",
@@ -337,10 +336,12 @@ fn serve_command_reloads_token_rotation_without_restart() {
                 "3",
             ],
             CliContext::new(Vec::new()),
+            bound,
         )
     });
 
-    let mut client = connect_websocket_with_retry(router_port, "token-a");
+    await_serve_bind(&observed_bind, router_port);
+    let mut client = connect_loopback_websocket(router_port, "token-a");
     if let Err(error) = client.send(Message::text(r#"{"type":"response.create"}"#)) {
         panic!("local websocket client should send first frame: {error}");
     }
@@ -391,11 +392,10 @@ fn serve_command_reloads_token_rotation_without_restart() {
         Err(error) => panic!("old websocket client thread panicked: {error:?}"),
     }
 
-    let old_token_response =
-        send_loopback_request_with_retry(router_port, "token-a", br#"{"old":true}"#);
+    let old_token_response = send_loopback_request(router_port, "token-a", br#"{"old":true}"#);
     assert!(old_token_response.starts_with("HTTP/1.1 401 Unauthorized\r\n"));
 
-    let new_token_response = send_loopback_request_with_retry(
+    let new_token_response = send_loopback_request(
         router_port,
         token_b.token().expose_secret(),
         br#"{"new":true}"#,

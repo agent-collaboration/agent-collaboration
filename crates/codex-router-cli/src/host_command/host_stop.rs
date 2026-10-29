@@ -17,6 +17,28 @@ pub(super) enum HostStopOutcome {
     NotRunning,
 }
 
+pub(super) struct HostStopDeadline {
+    transport_wait: Duration,
+    process_exit_at: std::time::Instant,
+}
+
+impl HostStopDeadline {
+    pub(super) fn new(wait: Duration) -> Self {
+        Self {
+            transport_wait: wait,
+            process_exit_at: std::time::Instant::now() + wait,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_process_exit_at(mut self, at: Option<std::time::Instant>) -> Self {
+        if let Some(at) = at {
+            self.process_exit_at = at;
+        }
+        self
+    }
+}
+
 impl HostStopOutcome {
     pub(super) const fn message(&self) -> &'static str {
         match self {
@@ -44,10 +66,9 @@ pub enum HostStopError {
 
 pub(super) async fn stop_host(
     paths: &HostCoordinationPaths,
-    deadline: Duration,
+    deadline: HostStopDeadline,
 ) -> Result<HostStopOutcome, HostStopError> {
-    let deadline_at = std::time::Instant::now() + deadline;
-    let exit = tokio::time::timeout(deadline, async {
+    let exit = tokio::time::timeout(deadline.transport_wait, async {
         match require_released_lock(paths.instance_lock()) {
             Ok(()) => return Ok(None),
             Err(HostStopError::LockHeld) => {}
@@ -92,7 +113,7 @@ pub(super) async fn stop_host(
     let Some(exit) = exit else {
         return Ok(HostStopOutcome::NotRunning);
     };
-    exit.wait(deadline_at).await.map_err(|error| {
+    exit.wait(deadline.process_exit_at).await.map_err(|error| {
         if error.kind() == io::ErrorKind::TimedOut {
             HostStopError::Deadline
         } else {
