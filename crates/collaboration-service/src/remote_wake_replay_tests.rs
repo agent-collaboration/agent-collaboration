@@ -16,7 +16,7 @@ use fleet_sync_protocol::{
     DeliveryItem, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
 use serde_json::json;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 fn service(last: u8) -> collaboration_protocol::UuidIdentity {
     format!("00000000-0000-4000-8000-{last:012}")
@@ -129,10 +129,10 @@ async fn publish_recorded_status(
         .unwrap();
 }
 async fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
-    let remaining = (deadline - chrono::Utc::now()).to_std().unwrap_or_default();
-    tokio::time::sleep(remaining + Duration::from_millis(20)).await;
+    // The mail owner already reads this clock when deciding whether frozen
+    // custody has expired. Advance that boundary without waiting real time.
     runtime.fixture.host.clock.store(
-        chrono::Utc::now().timestamp_millis(),
+        (deadline + chrono::Duration::milliseconds(20)).timestamp_millis(),
         std::sync::atomic::Ordering::SeqCst,
     );
 }

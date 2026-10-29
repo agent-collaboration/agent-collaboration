@@ -28,6 +28,10 @@ pub(crate) struct ToolCallRegistry {
     /// Cancelled when the listener starts stopping. rmcp then cancels every request's token
     /// too, which is not a disconnect: the shutdown grace period owns the calls from there.
     listener_stopping: CancellationToken,
+    #[cfg(test)]
+    activity: tokio::sync::watch::Sender<()>,
+    #[cfg(test)]
+    shutdown_cancellation_observed: CancellationToken,
 }
 
 impl ToolCallRegistry {
@@ -36,6 +40,10 @@ impl ToolCallRegistry {
             calls: TaskTracker::new(),
             abort: CancellationToken::new(),
             listener_stopping,
+            #[cfg(test)]
+            activity: tokio::sync::watch::channel(()).0,
+            #[cfg(test)]
+            shutdown_cancellation_observed: CancellationToken::new(),
         }
     }
 
@@ -50,11 +58,15 @@ impl ToolCallRegistry {
     ) -> TOutput {
         let abort = self.abort.clone();
         let listener_stopping = self.listener_stopping.clone();
-        self.calls
+        #[cfg(test)]
+        let shutdown_cancellation_observed = self.shutdown_cancellation_observed.clone();
+        let tracked = self.calls
             .track_future(async move {
                 let caller_disconnected = async {
                     caller.cancelled().await;
                     if listener_stopping.is_cancelled() {
+                        #[cfg(test)]
+                        shutdown_cancellation_observed.cancel();
                         std::future::pending::<()>().await;
                     }
                 };
@@ -64,8 +76,13 @@ impl ToolCallRegistry {
                     () = caller_disconnected => ended_early(CallEndedEarly::CallerDisconnected),
                     output = call => output,
                 }
-            })
-            .await
+            });
+        #[cfg(test)]
+        self.activity.send_replace(());
+        let output = tracked.await;
+        #[cfg(test)]
+        self.activity.send_replace(());
+        output
     }
 
     /// Drops every running call and every call that starts from now on.
@@ -77,6 +94,18 @@ impl ToolCallRegistry {
     #[cfg(test)]
     pub(crate) fn running(&self) -> usize {
         self.calls.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn await_running(&self, expected: usize) {
+        let mut activity = self.activity.subscribe();
+        loop {
+            activity.borrow_and_update();
+            if self.running() == expected {
+                return;
+            }
+            activity.changed().await.expect("registry observation remains alive");
+        }
     }
 
     /// Resolves once no call is running. Calls that start later are still waited for.
@@ -106,7 +135,7 @@ mod tests {
         // Arrange: a call that never finishes on its own.
         let registry = ToolCallRegistry::new(CancellationToken::new());
         let running = never_finishes(&registry, &CancellationToken::new());
-        tokio::task::yield_now().await;
+        tokio::time::timeout(Duration::from_secs(1), registry.await_running(1)).await.unwrap();
 
         // Act
         registry.abort_all();
@@ -127,7 +156,7 @@ mod tests {
         let registry = ToolCallRegistry::new(CancellationToken::new());
         let caller = CancellationToken::new();
         let running = never_finishes(&registry, &caller);
-        tokio::task::yield_now().await;
+        tokio::time::timeout(Duration::from_secs(1), registry.await_running(1)).await.unwrap();
 
         // Act
         caller.cancel();
@@ -148,18 +177,21 @@ mod tests {
         let registry = ToolCallRegistry::new(listener_stopping.clone());
         let caller = CancellationToken::new();
         let running = never_finishes(&registry, &caller);
-        tokio::task::yield_now().await;
+        tokio::time::timeout(Duration::from_secs(1), registry.await_running(1)).await.unwrap();
 
         // Act
         listener_stopping.cancel();
         caller.cancel();
-        let during_grace = tokio::time::timeout(Duration::from_millis(100), registry.ended()).await;
+        tokio::time::timeout(Duration::from_secs(1), registry.shutdown_cancellation_observed.cancelled())
+            .await.expect("the running call observes listener shutdown before checking grace");
+        let mut during_grace = std::pin::pin!(registry.ended());
+        let still_running = futures_util::poll!(&mut during_grace).is_pending();
         registry.abort_all();
         let answer = tokio::time::timeout(Duration::from_secs(1), running).await;
 
         // Assert
         assert!(
-            during_grace.is_err(),
+            still_running,
             "the call ended before its grace period"
         );
         assert_eq!(

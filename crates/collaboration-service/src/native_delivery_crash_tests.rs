@@ -281,6 +281,7 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
             .ok_or("session delivery missing")?,
         identity.configuration.clone(),
         identity.machine_identity.clone(),
+        Arc::new(runtime_primitives::SystemClock),
     );
     tokio::time::timeout(
         Duration::from_secs(5),
@@ -504,6 +505,7 @@ async fn native_delivery_crash_child() -> TestResult<()> {
             .ok_or("session delivery missing")?,
         identity.configuration,
         identity.machine_identity,
+        Arc::new(runtime_primitives::SystemClock),
     );
     sender.dispatch(store, delivery_id).await?;
     Err("sender did not stop at selected checkpoint".into())

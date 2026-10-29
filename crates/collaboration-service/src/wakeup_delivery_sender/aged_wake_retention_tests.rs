@@ -215,6 +215,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
             .ok_or("composed wake delivery missing")?,
         collaboration_runtime::AutomationConfigurationHandle::default(),
         machine.clone(),
+        Arc::new(runtime_primitives::SystemClock),
     );
     let application = (identity.clone()).build();
 

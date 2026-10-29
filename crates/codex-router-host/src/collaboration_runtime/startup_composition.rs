@@ -406,6 +406,7 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 interactions.clone(),
+                std::sync::Arc::new(collaboration_service::SubscriptionRuntimeClock::new(subscription_clock.clone())),
             )
         });
         let push_handoff_worker = automation_store.as_ref().map(|store| {
