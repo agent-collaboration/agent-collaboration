@@ -15,6 +15,29 @@ pub struct ConformanceClient {
     access: AccessCredentials,
 }
 impl ConformanceClient {
+    /// Set the compile-time local Worker's existing edge clock; never use staging credentials.
+    pub async fn set_local_access_time(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> ConformanceResult<()> {
+        if self.staging_access().is_some() {
+            return Err("local Access clock controls are unavailable on staging".into());
+        }
+        let observed = self
+            .with_owner_access(self.client.post(format!(
+                "{}{}",
+                self.base_url,
+                crate::LOCAL_ACCESS_CLOCK_PATH,
+            )))?
+            .json(&now)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<chrono::DateTime<chrono::Utc>>()
+            .await?;
+        crate::scenario_assertions::equal(observed, now)
+    }
+
     pub fn new(base_url: &str) -> ConformanceResult<Self> {
         Ok(Self {
             client: reqwest::Client::builder()

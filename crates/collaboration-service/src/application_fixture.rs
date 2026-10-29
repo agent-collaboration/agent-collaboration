@@ -208,8 +208,19 @@ impl ApplicationFixture {
                     self.configuration.clone(),
                     self.machine_identity.clone(),
                     std::sync::Arc::clone(interactions),
+                    std::sync::Arc::new(crate::SubscriptionRuntimeClock::new(
+                        self.subscription_clock.clone(),
+                    )),
                 )
             })
+    }
+
+    pub fn with_subscription_clock(
+        mut self,
+        clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+    ) -> Self {
+        self.subscription_clock = clock;
+        self
     }
 
     pub fn with_automation_store(

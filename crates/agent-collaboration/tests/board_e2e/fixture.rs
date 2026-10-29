@@ -195,7 +195,13 @@ impl BoardFixture {
                     return Ok(reply);
                 }
                 // Preserve the exact request identity while its real seed/registration settles.
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                let project = reply
+                    .pointer("/result/project")
+                    .or_else(|| request.get("projectId"))
+                    .or_else(|| request.pointer("/thread/project"))
+                    .and_then(Value::as_str)
+                    .ok_or("pending board write has no project identity")?;
+                self.await_project_progress(project).await?;
             }
         })
         .await?
@@ -216,10 +222,25 @@ impl BoardFixture {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(record);
                 }
                 // Retry exactly the original argv and request identity while registration settles.
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                let project = record
+                    .pointer("/result/project")
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        arguments
+                            .windows(2)
+                            .find_map(|pair| (pair[0] == "--project-id").then_some(pair[1]))
+                    })
+                    .ok_or("pending CLI board write has no project identity")?;
+                self.await_project_progress(project).await?;
             }
         })
         .await?
+    }
+
+    pub async fn await_project_progress(&self, project: &str) -> FixtureResult {
+        let host = self.host()?;
+        host.replicate_project(project).await?;
+        host.drain_project_publisher(project).await
     }
 
     pub async fn paired_write(

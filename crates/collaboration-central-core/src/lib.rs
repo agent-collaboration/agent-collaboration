@@ -103,7 +103,7 @@ mod mailbox_submit_runtime;
 #[cfg(feature = "conformance")]
 pub use machine_enrollment::conformance_revocation::{
     LifecyclePauseObservation, RevocationControl, RevocationControlInput,
-    RevocationEnrollmentSnapshot, RevocationObservation,
+    RevocationEnrollmentSnapshot, RevocationObservation, RevocationWait,
 };
 pub use machine_enrollment::{
     AdmittedMachine, EnrollMachine, EnrollmentDecision, EnrollmentRefusal, RevocationDecision,

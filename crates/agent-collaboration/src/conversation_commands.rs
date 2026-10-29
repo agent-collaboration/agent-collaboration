@@ -297,7 +297,11 @@ fn run_prompt(args: PromptArguments) -> i32 {
     };
     runtime.block_on(async{
         let cancel=CancellationToken::new();let signal=cancel.clone();
-        let signal_task=tokio::spawn(async move{let _signal=tokio::signal::ctrl_c().await;signal.cancel();});
+        let interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt());
+        let signal_task=tokio::spawn(async move{
+            if let Ok(mut interrupt) = interrupt { let _signal = interrupt.recv().await; }
+            signal.cancel();
+        });
         let mut target=None;
         let mut stage="connect";
         let mut operation_failure=None;

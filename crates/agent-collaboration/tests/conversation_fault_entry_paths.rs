@@ -634,9 +634,7 @@ async fn compiled_cli_conversation_records_deserialize_for_success_errors_deadli
     interrupt_prompt_ready
         .await
         .expect("interrupt prompt observed");
-    // Let the compiled command's Ctrl-C listener register before delivering the
-    // native interrupt; the peer has already observed the real prompt dispatch.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // The command installs its interrupt listener before dispatching the prompt.
     let pid = child.id().expect("child PID").to_string();
     let signal = tokio::process::Command::new("/bin/kill")
         .args(["-INT", &pid])

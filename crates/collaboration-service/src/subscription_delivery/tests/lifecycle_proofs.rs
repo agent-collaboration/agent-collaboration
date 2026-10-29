@@ -176,12 +176,55 @@ async fn drop_then_push_leaves_both_messages_unread() {
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.native_runtime().await;
+    let (presence_entered, release_presence) = fixture.presence.hold_next_check();
     fixture.post(&fixture.root, "Skipped").await;
-    runtime
-        .wait_for_activity(&fixture.reader, |event| {
-            matches!(event, OwnerObservation::DueRoots(1))
-        })
-        .await;
+    tokio::time::timeout(std::time::Duration::from_secs(10), presence_entered)
+        .await
+        .expect("the native Drop policy reaches its presence check")
+        .unwrap();
+    let frozen = super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
+    let [skipped] = frozen.as_slice() else {
+        panic!("the held presence check must belong to exactly one frozen push");
+    };
+    let skipped =
+        collaboration_protocol::PushId::try_from(skipped.id().as_uuid().to_string()).unwrap();
+    {
+        let mut dropped = std::pin::pin!(async {
+            runtime
+                .wait_for_activity(&fixture.reader, |event| {
+                    matches!(event, OwnerObservation::DueRoots(1))
+                })
+                .await;
+            runtime
+                .publisher
+                .wait_project_idle_for_test(&fixture.project)
+                .await;
+        });
+        assert!(futures_util::poll!(dropped.as_mut()).is_pending());
+        runtime.owner_barrier(&fixture.reader).await;
+        let completed_before_drop = futures_util::poll!(dropped.as_mut()).is_ready();
+        release_presence.send(()).unwrap();
+        assert!(
+            !completed_before_drop,
+            "the Drop phase completed at an owner barrier before native policy ran"
+        );
+        dropped.await;
+    }
+    let skipped = fixture
+        .interactions
+        .get_push_record(&skipped)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(skipped.last_outcome,
+            Some(collaboration_protocol::DeliveryReceipt {
+                outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted { retryable: false, ref reason },
+                ..
+            }) if reason == "mail dropped by recipient policy"
+        ),
+        "the first native Drop outcome must commit before presence changes"
+    );
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.post(&fixture.root, "Pushed").await;

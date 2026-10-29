@@ -1,16 +1,18 @@
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::{Child, ChildStdout, Command, Stdio};
+use std::time::Duration;
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::with_projected_profile;
-use crate::bounded_command::{install_termination_handler, require_continuing, wait_for_child};
+use crate::bounded_command::{
+    install_termination_handler, require_continuing, wait_for_owned_command,
+};
 use crate::driver_error::DriverError;
 use crate::driver_records::save_record;
 use crate::owned_host::with_owned_child;
@@ -20,23 +22,65 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const FIXTURE_ROOT: &str = "TAILNET_SIGNAL_PROFILE_TEST_ROOT";
 const FIXTURE_TEST: &str = "host_lifecycle::interrupt_tests::interrupted_profile_owner_fixture";
 const ORIGINAL: &[u8] = b"base_url = \"http://127.0.0.1:18787/v1\"\r\n# original bytes\r\n";
+const OWNER_READY: &str = "TAILNET_PROFILE_OWNER_READY";
+
+struct ObservedSignalOwner {
+    identity: ProcessIdentity,
+    output_reader: std::thread::JoinHandle<std::io::Result<()>>,
+}
 
 fn await_owned_identity(
     root: &Path,
     driver: &mut Child,
-) -> Result<ProcessIdentity, Box<dyn std::error::Error>> {
-    let until = Instant::now() + Duration::from_secs(10);
-    loop {
-        if let Ok(bytes) = fs::read(root.join("ready.json"))
-            && let Ok(identity) = serde_json::from_slice(&bytes)
-        {
-            return Ok(identity);
+) -> Result<ObservedSignalOwner, Box<dyn std::error::Error>> {
+    let stdout = driver.stdout.take().ok_or("signal owner stdout missing")?;
+    let (ready, observed) = std::sync::mpsc::sync_channel(1);
+    let output = std::thread::spawn(move || drain_driver_output(stdout, ready));
+    let identity = (|| -> Result<ProcessIdentity, Box<dyn std::error::Error>> {
+        observed
+            .recv_timeout(Duration::from_secs(10))?
+            .map_err(std::io::Error::other)?;
+        Ok(serde_json::from_slice(&fs::read(root.join("ready.json"))?)?)
+    })();
+    match identity {
+        Ok(identity) => Ok(ObservedSignalOwner {
+            identity,
+            output_reader: output,
+        }),
+        Err(error) => {
+            let cleanup = cleanup_fixture(root, driver);
+            let drained = output.join();
+            cleanup?;
+            drained.map_err(|_| "signal owner output reader failed")??;
+            Err(error)
         }
-        if driver.try_wait()?.is_some() || Instant::now() >= until {
-            return Err("signal fixture exited or missed its readiness deadline".into());
-        }
-        std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+fn drain_driver_output(
+    stdout: ChildStdout,
+    ready: std::sync::mpsc::SyncSender<Result<(), String>>,
+) -> std::io::Result<()> {
+    let mut ready = Some(ready);
+    let mut output = BufReader::new(stdout);
+    let mut line = String::new();
+    let result = (|| {
+        loop {
+            line.clear();
+            if output.read_line(&mut line)? == 0 {
+                return Ok(());
+            }
+            if line.contains(OWNER_READY)
+                && let Some(ready) = ready.take()
+            {
+                let _observed = ready.send(Ok(()));
+            }
+        }
+    })();
+    if let Some(ready) = ready {
+        let _observed = ready.send(Err("signal owner ended before readiness".to_owned()));
+    }
+    result
 }
 
 fn cleanup_fixture(root: &Path, driver: &mut Child) -> TestResult {
@@ -104,18 +148,21 @@ fn sigint_reaps_owned_child_before_restoring_the_original_profile() -> TestResul
         ])
         .env(FIXTURE_ROOT, root.path())
         .process_group(0)
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()?;
+    let ObservedSignalOwner {
+        identity,
+        output_reader,
+    } = await_owned_identity(root.path(), &mut driver)?;
     let result = (|| -> TestResult {
-        let identity = await_owned_identity(root.path(), &mut driver)?;
         if fs::read(root.path().join("profile"))? == ORIGINAL {
             return Err("fixture never projected the disposable profile".into());
         }
         let driver_pid = rustix::process::Pid::from_raw(i32::try_from(driver.id())?)
             .ok_or("invalid driver PID")?;
         rustix::process::kill_process(driver_pid, rustix::process::Signal::INT)?;
-        let status = wait_for_child(&mut driver, Duration::from_secs(10))?
+        let status = wait_for_owned_command(&mut driver, Duration::from_secs(10))?
             .ok_or("signal owner did not finish settlement")?;
         let reaped = lookup_identity(identity.pid)?.is_none();
         let restored = fs::read(root.path().join("profile"))? == ORIGINAL;
@@ -136,8 +183,13 @@ fn sigint_reaps_owned_child_before_restoring_the_original_profile() -> TestResul
         Ok(())
     })();
     let cleanup = cleanup_fixture(root.path(), &mut driver);
+    let drained = output_reader
+        .join()
+        .map_err(|_| "signal owner output reader failed")?;
     result?;
-    cleanup
+    cleanup?;
+    drained?;
+    Ok(())
 }
 
 #[test]
@@ -150,6 +202,11 @@ fn interrupted_profile_owner_fixture() -> TestResult {
         return Err("fixture root must be a private directory".into());
     }
     install_termination_handler()?;
+    // The production flag handler runs before this later-registered wake action.
+    let mut signals = signal_hook::iterator::Signals::new([
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+    ])?;
     let result = with_projected_profile(
         &root.join("profile"),
         &format!("{:x}", Sha256::digest(ORIGINAL)),
@@ -172,10 +229,16 @@ fn interrupted_profile_owner_fixture() -> TestResult {
                     .get(&pid)
                     .ok_or(DriverError::Runtime("fixture identity absent"))?;
                 save_record(&root.join("ready.json"), identity)?;
-                loop {
-                    require_continuing()?;
-                    std::thread::sleep(Duration::from_millis(20));
-                }
+                println!("{OWNER_READY}");
+                std::io::stdout().flush()?;
+                signals
+                    .forever()
+                    .next()
+                    .ok_or(DriverError::Runtime("signal observer closed"))?;
+                require_continuing()?;
+                Err(DriverError::Runtime(
+                    "signal did not set the production interruption flag",
+                ))
             })
         },
     );

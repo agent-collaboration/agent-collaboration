@@ -150,14 +150,20 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
         .await
         .expect("session created");
     let first_operation = "019f0000-0000-7000-8000-000000002001";
-    let mut first = Box::pin(runtime.prompt_with_approval_context(
+    let (dispatch_sender, dispatch_receiver) = tokio::sync::oneshot::channel();
+    let mut first = Box::pin(runtime.prompt_contents_with_approval_dispatch_for_input(
         "fixture-session".to_owned(),
-        "hold".to_owned(),
+        session_event_model::InputId::generate(),
+        text_contents("hold".to_owned()).expect("fixture prompt"),
         approval_context(first_operation),
+        Some(dispatch_sender),
     ));
     tokio::select! {
         result = &mut first => panic!("first prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        dispatched = dispatch_receiver => assert_eq!(
+            dispatched.expect("first prompt dispatch receipt"),
+            ProviderPromptDispatchObservation::Submitted,
+        ),
     }
     let second = runtime
         .prompt_with_approval_context(
@@ -189,14 +195,20 @@ async fn shutdown_joins_runtime_and_settles_held_prompt() {
         .create_session(PathBuf::from("/tmp"))
         .await
         .expect("session created");
-    let mut prompt = Box::pin(runtime.prompt_with_approval_context(
+    let (dispatch_sender, dispatch_receiver) = tokio::sync::oneshot::channel();
+    let mut prompt = Box::pin(runtime.prompt_contents_with_approval_dispatch_for_input(
         "fixture-session".to_owned(),
-        "hold".to_owned(),
+        session_event_model::InputId::generate(),
+        text_contents("hold".to_owned()).expect("fixture prompt"),
         approval_context("019f0000-0000-7000-8000-000000002099"),
+        Some(dispatch_sender),
     ));
     tokio::select! {
         result = &mut prompt => panic!("held prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        dispatched = dispatch_receiver => assert_eq!(
+            dispatched.expect("held prompt dispatch receipt"),
+            ProviderPromptDispatchObservation::Submitted,
+        ),
     }
     runtime.shutdown().await;
     assert!(prompt.await.is_err());
@@ -375,14 +387,20 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
         .await
         .expect("first prompt");
     let second_id = "019f0000-0000-7000-8000-000000002102";
-    let mut second = Box::pin(runtime.prompt_with_approval_context(
+    let (dispatch_sender, dispatch_receiver) = tokio::sync::oneshot::channel();
+    let mut second = Box::pin(runtime.prompt_contents_with_approval_dispatch_for_input(
         "fixture-session".to_owned(),
-        "second".to_owned(),
+        session_event_model::InputId::generate(),
+        text_contents("second".to_owned()).expect("fixture prompt"),
         approval_context(second_id),
+        Some(dispatch_sender),
     ));
     tokio::select! {
         result = &mut second => panic!("successor settled too early: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        dispatched = dispatch_receiver => assert_eq!(
+            dispatched.expect("successor prompt dispatch receipt"),
+            ProviderPromptDispatchObservation::Submitted,
+        ),
     }
     let stale_cancel = runtime
         .cancel_prompt_operation(
@@ -537,15 +555,25 @@ async fn live_external_provider_explicit_cancel() {
         .expect("provider conversation created");
 
     {
-        let prompt = runtime.prompt(
+        let (dispatch_sender, dispatch_receiver) = tokio::sync::oneshot::channel();
+        let prompt = runtime.prompt_contents_with_approval_dispatch_for_input(
             provider_session_id.clone(),
-            "Without using tools, write the integers from 1 through 100000, one per line."
-                .to_owned(),
+            session_event_model::InputId::generate(),
+            text_contents(
+                "Without using tools, write the integers from 1 through 100000, one per line."
+                    .to_owned(),
+            )
+            .expect("live prompt"),
+            test_approval_context(&provider_session_id, None),
+            Some(dispatch_sender),
         );
         tokio::pin!(prompt);
         tokio::select! {
             result = &mut prompt => panic!("provider prompt settled before explicit cancel: {result:?}"),
-            () = tokio::time::sleep(Duration::from_millis(500)) => {}
+            dispatched = dispatch_receiver => assert_eq!(
+                dispatched.expect("live prompt dispatch receipt"),
+                ProviderPromptDispatchObservation::Submitted,
+            ),
         }
         runtime
             .cancel_active_prompt(provider_session_id.clone())

@@ -54,6 +54,7 @@ pub struct ServedCollaborationApi {
     directory: PathBuf,
     _socket_cleanup: SocketCleanup,
     _manifest: ManifestPublication,
+    tool_calls: crate::tool_call_registry::ToolCallRegistry,
 }
 
 impl ServedCollaborationApi {
@@ -100,6 +101,7 @@ impl ServedCollaborationApi {
             shutdown: shutdown.clone(),
         };
         let api = collaboration_api_router(&config, CollaborationApiListener::UnixSocket);
+        let tool_calls = api.tool_calls();
         let task = tokio::spawn(serve_collaboration_api(listener, api, shutdown.clone()));
         let manifest = ManifestPublication::publish(directory, &manifest)?;
         Ok(Self {
@@ -112,7 +114,13 @@ impl ServedCollaborationApi {
             directory: directory.to_owned(),
             _socket_cleanup: socket_cleanup,
             _manifest: manifest,
+            tool_calls,
         })
+    }
+
+    /// Observe real handler admission while its listener's request permit is held.
+    pub async fn await_running_calls(&self, expected: usize) {
+        self.tool_calls.await_running(expected).await;
     }
 
     /// The service directory holding the manifest and the socket.

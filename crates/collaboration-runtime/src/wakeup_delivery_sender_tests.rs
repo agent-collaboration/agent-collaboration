@@ -110,6 +110,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         .await
         .expect("wake push handoff");
     let sender = WakeDeliverySender {
+        clock: Arc::new(runtime_primitives::SystemClock),
         interactions,
         delivery: Arc::new(ProviderSessionNotFound),
         configuration: AutomationConfigurationHandle::default(),

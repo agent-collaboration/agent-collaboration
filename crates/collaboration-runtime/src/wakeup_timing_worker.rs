@@ -8,6 +8,8 @@ use tokio_util::sync::CancellationToken;
 pub struct WakeTimingWorker {
     store: Arc<Mutex<AutomationStore>>,
     native: crate::wakeup_delivery_sender::WakeDeliverySender,
+    #[cfg(feature = "test-support")]
+    passes: tokio::sync::watch::Sender<usize>,
 }
 impl WakeTimingWorker {
     pub fn new(
@@ -16,14 +18,26 @@ impl WakeTimingWorker {
         configuration: crate::AutomationConfigurationHandle,
         machine_identity: collaboration_contracts::MachineIdentity,
         interactions: Arc<interaction_storage::InteractionStore>,
+        clock: Arc<dyn runtime_primitives::Clock>,
     ) -> Self {
         let native = crate::wakeup_delivery_sender::WakeDeliverySender {
             delivery,
             configuration,
             machine_identity,
             interactions,
+            clock,
         };
-        Self { store, native }
+        Self {
+            store,
+            native,
+            #[cfg(feature = "test-support")]
+            passes: tokio::sync::watch::channel(0).0,
+        }
+    }
+    /// Observe completed owner passes and delivery joins without driving the worker.
+    #[cfg(feature = "test-support")]
+    pub fn observe_passes(&self) -> tokio::sync::watch::Receiver<usize> {
+        self.passes.subscribe()
     }
     /// Start only after the Host owns its listeners and previous workers have retired.
     pub async fn run(self, shutdown: CancellationToken) {
@@ -42,11 +56,13 @@ impl WakeTimingWorker {
                 },
                 completed=dispatches.join_next(), if !dispatches.is_empty()=>{
                     if !matches!(completed,Some(Ok(Ok(())))) {tracing::warn!("automation delivery task stopped; persisted attempt must be inspected before replay");}
+                    #[cfg(feature = "test-support")]
+                    self.passes.send_replace(dispatches.len());
                     continue;
                 }
                 _=interval.tick()=>{}
             }
-            let now = chrono::Utc::now().timestamp_millis();
+            let now = self.native.clock.now().unix_millis();
             let result = if recovered {
                 if self.native.configuration.current().await.is_none() {
                     continue;
@@ -81,6 +97,8 @@ impl WakeTimingWorker {
                     reported_failure = true;
                 }
             }
+            #[cfg(feature = "test-support")]
+            self.passes.send_replace(dispatches.len());
         }
     }
     async fn dispatch_pending(

@@ -108,6 +108,8 @@ where
         else {
             return Err(wrong_face());
         };
+        #[cfg(feature = "conformance")]
+        let _progress = shared_host.revocation_probe.notify_when_finished();
         let (admission, _) = StepDriver::new(host.clone())
             .run(RevokeStep {
                 installation,

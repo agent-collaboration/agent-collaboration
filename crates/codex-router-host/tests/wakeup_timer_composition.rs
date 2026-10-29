@@ -31,21 +31,23 @@ async fn host_records_firing_without_native_backend_acceptance()
     )?;
     let created = client.send_wakeup(request).await?;
     let id = created.definition.wakeup_id;
-    let observed = tokio::time::timeout(Duration::from_secs(3), async {
-        let mut interval = tokio::time::interval(Duration::from_millis(20));
-        loop {
-            interval.tick().await;
-            let current = client
-                .read_wakeup(WakeShowRequest {
-                    wakeup_id: id.clone(),
-                })
-                .await?;
-            if current.first_fire.is_some() {
-                return Ok::<_, collaboration_client::WakeClientError>(current);
-            }
-        }
+    let fired = tokio::time::timeout(Duration::from_secs(3), async {
+        client
+            .clone()
+            .subscribe_wakeup(WakeShowRequest {
+                wakeup_id: id.clone(),
+            })
+            .await?
+            .wait_until_first_fire()
+            .await
     })
     .await??;
+    if fired.wakeup_id != id {
+        return Err("first-fire receipt named a different wake".into());
+    }
+    let observed = client
+        .read_wakeup(WakeShowRequest { wakeup_id: id })
+        .await?;
     if observed.pending_delivery_id.is_none() {
         return Err("firing lost durable delivery identity".into());
     }

@@ -42,10 +42,16 @@ assertion; the shell does not store an admin secret.
 For local conformance, build the dev artifact with the current test controls:
 
 ```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
+worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults,local-access-clock
 node verification/tooling/check-central-worker-bundle.ts faults
 cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- runtime-controls node /path/to/miniflare/dist/src/index.js /absolute/fresh/persistence 8957
 ```
+
+`local-access-clock` drives only the local Access expiry scenario. Release
+profiles reject this feature at compile time. Its owner-authenticated route is
+under `/admin/v1/conformance/runtime`, which the production bundle check rejects.
+The production and deployed staging builds must omit `local-access-clock`;
+the normal production prebuild above disables all test features.
 
 The same process wrapper owns readiness, shutdown and physical restart for the
 retained examples. Supply a fresh persistence directory for each scenario.

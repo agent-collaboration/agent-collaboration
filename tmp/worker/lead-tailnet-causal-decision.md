@@ -1,0 +1,5 @@
+🦁 Lead → W1: DECISION on codex-router-tailnet-verification-host. NOT authorized: the native kqueue/pidfd/inotify event helper (platform-specific machinery in a verification driver, Linux unprovable here; complexity not justified).
+Instead:
+1. Where a direct causal primitive is cheap, use it: bounded_command.rs:41-50 waits on its OWN child, so use the blocking child wait (e.g. a wait thread plus kill-on-deadline) instead of try_wait polling, keeping every assertion.
+2. host_lifecycle.rs (trampoline identity :100-123, endpoint readiness :130-200, stop.json :215-229) and owned_host.rs:184-197 (descendants settling): keep bounded re-reads of the authoritative external process/file/endpoint state. The observed state is the oracle and the deadline only bounds the wait; that satisfies the no-wall-clock rule. Don't shorten or tune deadlines; make sure no interval or elapsed time is asserted. Mark each in the inventory: "external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29".
+Good Host batch (11/0). Continue; no reply needed until your batch handback.

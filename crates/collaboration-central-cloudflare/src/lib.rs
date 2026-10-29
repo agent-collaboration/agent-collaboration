@@ -1,10 +1,14 @@
 //! Cloudflare capabilities for the shared asynchronous application core.
 #![forbid(unsafe_code)]
+#[cfg(all(feature = "local-access-clock", not(debug_assertions)))]
+compile_error!("local-access-clock is forbidden in release artifacts");
 mod access_crypto;
 mod access_verification;
 mod binding_attachment;
 #[cfg(feature = "conformance")]
 mod composed_control;
+#[cfg(feature = "local-access-clock")]
+mod conformance_access_clock;
 #[cfg(feature = "conformance")]
 mod conformance_admission;
 #[cfg(feature = "conformance")]
@@ -39,6 +43,10 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
     // Retain headers, Cf, abort signal and upgrade parts while replacing only
     // the consumed network body with its bounded, completed bytes.
     let request = http::Request::from_parts(parts, body);
+    #[cfg(feature = "local-access-clock")]
+    if request.uri().path() == collaboration_central_conformance::LOCAL_ACCESS_CLOCK_PATH {
+        return conformance_access_clock::set_time(request.try_into()?, env).await;
+    }
     #[cfg(feature = "conformance")]
     if request.uri().path() == conformance_bootstrap::CONTROL_PATH {
         return conformance_bootstrap::forward(&env, request.try_into()?).await;

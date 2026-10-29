@@ -144,6 +144,8 @@ pub struct CollaborationRuntime {
     automation_task: Option<tokio::task::JoinHandle<()>>,
     schedule_task: Option<tokio::task::JoinHandle<()>>,
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(feature = "runtime-test-support")]
+    automation_maintenance_pass: Option<tokio::sync::watch::Receiver<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
@@ -151,6 +153,17 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_await_automation_retention_pass(&self) -> io::Result<()> {
+        self.automation_maintenance_pass
+            .as_ref()
+            .ok_or_else(|| io::Error::other("automation maintenance is unavailable"))?
+            .clone()
+            .changed()
+            .await
+            .map_err(io::Error::other)
+    }
+
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
     }

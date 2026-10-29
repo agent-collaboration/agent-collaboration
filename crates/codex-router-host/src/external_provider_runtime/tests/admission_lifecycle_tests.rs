@@ -356,19 +356,21 @@ async fn stdout_eof_after_initialize_retires_live_provider() {
     .expect("retired provider process must be reaped");
 }
 
-/// Blocks until the fixture has recorded its process id, bounded in real time.
+/// Re-read the fixture's process id only when the native watcher reports a change.
 #[cfg(unix)]
-fn wait_for_recorded_process_id(process_id_path: &std::path::Path) -> bool {
-    let real_deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while std::time::Instant::now() < real_deadline {
-        if std::fs::read_to_string(process_id_path)
+async fn wait_for_recorded_process_id(
+    mut events: crate::native_file_events::NativeFileEvents,
+) -> bool {
+    loop {
+        if std::fs::read_to_string(events.path())
             .is_ok_and(|value| value.trim().parse::<i32>().is_ok())
         {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(1));
+        if events.wait_for_change().await.is_err() {
+            return false;
+        }
     }
-    false
 }
 
 #[cfg(unix)]
@@ -376,6 +378,8 @@ fn wait_for_recorded_process_id(process_id_path: &std::path::Path) -> bool {
 async fn held_initialize_times_out_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
+    let process_id_events = crate::native_file_events::NativeFileEvents::open(&process_id_path)
+        .expect("watch fixture process id before launch");
     let fixture = acp_scripted_fixture::launch_fixture_agent(
         "host-failing-initialization-agent.ts",
         vec![
@@ -388,19 +392,27 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
     // fixture killed before it records its pid leaves nothing to prove reaped.
     // A running blocking task stops the paused clock from auto-advancing, so the
     // simulated timeout elapses only after the pid file exists.
-    let fixture_recorded_process_id = tokio::task::spawn_blocking({
-        let process_id_path = process_id_path.clone();
-        move || wait_for_recorded_process_id(&process_id_path)
+    let (recorded, observed) = std::sync::mpsc::channel();
+    let process_id_watcher = tokio::spawn(async move {
+        let _observed = recorded.send(wait_for_recorded_process_id(process_id_events).await);
+    });
+    let fixture_recorded_process_id = tokio::task::spawn_blocking(move || {
+        observed
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap_or(false)
     });
     let error =
         ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_millis(100))
             .await
             .expect_err("held initialize must time out");
 
+    let recorded_process_id = fixture_recorded_process_id
+        .await
+        .expect("process id watcher finished");
+    process_id_watcher.abort();
+    let _watcher_finished = process_id_watcher.await;
     assert!(
-        fixture_recorded_process_id
-            .await
-            .expect("process id watcher finished"),
+        recorded_process_id,
         "fixture recorded its process id before the timeout"
     );
     assert!(matches!(
@@ -499,12 +511,22 @@ async fn explicit_cancel_remains_responsive_while_prompt_is_active() {
         .expect("session created");
 
     {
-        let prompt = runtime.prompt("fixture-session".to_owned(), "hold".to_owned());
+        let (submitted, observed) = tokio::sync::oneshot::channel();
+        let prompt = runtime.prompt_contents_with_approval_dispatch_for_input(
+            "fixture-session".to_owned(),
+            session_event_model::InputId::generate(),
+            text_contents("hold".to_owned()).expect("fixture text"),
+            test_approval_context("fixture-session", None),
+            Some(submitted),
+        );
         tokio::pin!(prompt);
         tokio::select! {
             biased;
             result = &mut prompt => panic!("prompt settled before cancellation: {result:?}"),
-            () = tokio::time::sleep(Duration::from_millis(25)) => {}
+            dispatch = observed => assert_eq!(
+                dispatch.expect("prompt dispatch observed"),
+                ProviderPromptDispatchObservation::Submitted,
+            ),
         }
         runtime
             .cancel_active_prompt("fixture-session".to_owned())

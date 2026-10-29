@@ -12,6 +12,8 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 
 ## Verification Tooling
 
+Tests must not depend on wall-clock time: wait on a causal signal or an injected clock; a timeout may only bound a causal wait.
+
 - Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
   Run `check`, `lint`, `format:check`, and `test` through that package.
 - The isolated Tailnet Host driver is a verification-only Rust executable:

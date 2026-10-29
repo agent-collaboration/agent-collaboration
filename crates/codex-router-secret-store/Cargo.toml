@@ -34,3 +34,4 @@ security-framework.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+tokio.workspace = true

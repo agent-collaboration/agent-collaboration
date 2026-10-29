@@ -78,7 +78,7 @@ pub struct CollaborationApiRouter {
 
 impl CollaborationApiRouter {
     /// The tool calls this copy runs, to count them.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn tool_calls(&self) -> ToolCallRegistry {
         self.tool_calls.clone()
     }

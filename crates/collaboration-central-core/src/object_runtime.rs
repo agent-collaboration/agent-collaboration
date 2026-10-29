@@ -109,6 +109,8 @@ where
                 host,
                 ..
             } => {
+                #[cfg(feature = "conformance")]
+                let _progress = shared_host.revocation_probe.notify_when_finished();
                 let driven: Result<DriveReport, StoreError> = async {
                     let report = engine.drive_due().await?;
                     shared_host.repair_lease_publications().await?;
