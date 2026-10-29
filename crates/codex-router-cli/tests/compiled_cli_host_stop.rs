@@ -21,7 +21,7 @@ async fn stop_absent_host_with_overlong_socket_path_succeeds() {
         }
 
         // Act through the compiled CLI, including its exit-code mapping.
-        let output = run_stop(&root).await;
+        let output = run_stop(&root).await.expect("compiled CLI stop");
 
         // Assert: absence is independent of socket address representability.
         assert_eq!(output.status.code(), Some(0), "{output:?}");
@@ -43,7 +43,7 @@ async fn stop_locked_host_with_overlong_socket_path_reports_named_error() {
     assert!(std::os::unix::net::SocketAddr::from_pathname(paths.operator_socket()).is_err());
 
     // Act.
-    let output = run_stop(&root).await;
+    let output = run_stop(&root).await.expect("compiled CLI stop");
 
     // Assert: the error names the actual path and leaves ownership untouched.
     assert_eq!(output.status.code(), Some(2), "{output:?}");
@@ -63,8 +63,8 @@ async fn stop_locked_host_with_overlong_socket_path_reports_named_error() {
     ));
 }
 
-async fn run_stop(root: &Path) -> Output {
-    tokio::time::timeout(
+async fn run_stop(root: &Path) -> Result<Output, Box<dyn std::error::Error>> {
+    Ok(tokio::time::timeout(
         Duration::from_secs(10),
         tokio::process::Command::new(env!("CARGO_BIN_EXE_codex-router"))
             .args(["host", "stop", "--router-root"])
@@ -75,7 +75,5 @@ async fn run_stop(root: &Path) -> Output {
             .kill_on_drop(true)
             .output(),
     )
-    .await
-    .expect("stop command deadline")
-    .expect("compiled CLI output")
+    .await??)
 }
