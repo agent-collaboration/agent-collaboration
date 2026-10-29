@@ -222,9 +222,26 @@
   },
   "measurement": {
     "script": "tmp/worker/run-native-package-gate.sh",
-    "scriptSha256": "3023810a360e83d781e0bbbf627f5c845613da643bc156116c95250cdb11f274",
+    "scriptSha256": "66ceee7ecbfa1f8f9e82a8848e24ac3027487cbe0c57a407cd6371dda887a7f0",
     "packageListSha256": "1f68ee9a627407f452a418010e39f9682a491e34c42dc55d39ec89bbbd70a5da",
-    "method": "commit all scoped work, detach exact base in same worktree/same target; matching board example at each head; identical script/PATH/jobs2/features/threads2; record real counts and suite versus compile time; switch back and verify HEAD"
+    "method": "commit all scoped work, detach exact base in same worktree/same target; matching board example at each head; identical script/PATH/jobs2/features/threads2; record real counts and suite versus compile time; switch back and verify HEAD",
+    "environment": {
+      "cargoBuildJobs": 2,
+      "profile": "ci",
+      "testThreads": 2,
+      "devDebugInfo": 0,
+      "testDebugInfo": 0,
+      "incremental": 0,
+      "debugAssertions": "unchanged default dev/test enabled"
+    },
+    "cleanup": "Repository workspace dev clean before EACH measured head, only after exact-target consumer check; same target directory and third-party cache retained. Compile time reported separately from suite time.",
+    "cleanupBeforeBaseline": {
+      "removedFiles": 12262,
+      "logicalGiB": 63.5,
+      "observedFreeBeforeGiB": 103,
+      "observedFreeAfterGiB": 114,
+      "consumers": 0
+    }
   },
   "unverified": [
     "final0.1.118 full native suite, Clippy/release/module-cycle gates",
