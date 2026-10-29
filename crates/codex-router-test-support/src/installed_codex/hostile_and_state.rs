@@ -1,7 +1,7 @@
 use super::{
     AccountCredentialBundle, AccountRecord, AccountStateRepository, AccountStatus, CliContext,
-    Command, Duration, EncryptedCredentialStore, LocalRouterTokenService, MockNoConnectionUpstream,
-    OsString, Path, PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotRepository,
+    Command, EncryptedCredentialStore, LocalRouterTokenService, MockNoConnectionUpstream, OsString,
+    Path, PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotRepository,
     QuotaSnapshotSource, SecretStore, SecretString, SelectorQuotaRepository,
     SelectorQuotaWindowStatus, Shell, SmokeTempRoot, SqliteStateStore, Value, account_id,
     export_token_assignment, fs, openai_account_credential_bundle_key,
@@ -23,7 +23,7 @@ pub fn run_hostile_no_token_smoke() -> Result<(), String> {
         )
     })?;
 
-    let upstream = MockNoConnectionUpstream::start(Duration::from_secs(3))?;
+    let upstream = MockNoConnectionUpstream::start()?;
     let seed = seed_router_state(&state_path, &secret_root)?;
     let router_port = reserve_loopback_port()?;
     let audit_path = router_root.join("audit").join("events.jsonl");
@@ -169,7 +169,7 @@ pub(super) fn seed_router_state(
         seed_smoke_account(&state, &secrets, *fixture)?;
     }
 
-    let quota_status = capture_quota_status(state_path)?;
+    let quota_status = migrate_fixture_state_and_capture_quota_status(state_path)?;
     let selected_account = selected_account_from_status_json(&quota_status.json)?;
     let selected_fixture = SMOKE_ACCOUNT_FIXTURES
         .iter()
@@ -239,7 +239,7 @@ pub(super) fn seed_s8_overlap_quota_router_state(
         Shell::Posix,
     );
     let exported_token = parse_posix_token_assignment(&local_token_assignment)?;
-    let quota_status = capture_quota_status(state_path)?;
+    let quota_status = migrate_fixture_state_and_capture_quota_status(state_path)?;
     let selected_account = selected_account_from_status_json(&quota_status.json)?;
 
     Ok(SmokeSeed {
@@ -404,7 +404,9 @@ pub(super) fn seed_smoke_account(
     Ok(())
 }
 
-pub(super) fn capture_quota_status(state_path: &Path) -> Result<SmokeQuotaStatus, String> {
+pub(super) fn migrate_fixture_state_and_capture_quota_status(
+    state_path: &Path,
+) -> Result<SmokeQuotaStatus, String> {
     let router_root = state_path
         .parent()
         .ok_or_else(|| "state path had no router root parent".to_owned())?;
@@ -412,6 +414,14 @@ pub(super) fn capture_quota_status(state_path: &Path) -> Result<SmokeQuotaStatus
         .enable_all()
         .build()
         .map_err(|error| format!("quota status runtime unavailable: {error}"))?;
+    // The synchronous fixture writer preserves its legacy schema. Prepare this
+    // owned fixture through the real writable boundary before read-only views.
+    runtime
+        .block_on(async {
+            let state = codex_router_state::sqlite::AsyncSqliteStateStore::open(state_path).await?;
+            state.close().await
+        })
+        .map_err(|error| format!("failed to migrate owned quota fixture: {error}"))?;
     Ok(SmokeQuotaStatus {
         table: run_quota_status(&runtime, router_root, "table")?,
         plain: run_quota_status(&runtime, router_root, "plain")?,

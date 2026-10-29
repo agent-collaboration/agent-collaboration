@@ -2,8 +2,8 @@ use super::{
     AccountId, Arc, AtomicBool, Command, Duration, ErrorKind, Instant, IntoClientRequest,
     MaybeTlsStream, Message, MockHttpSseTranscript, MockWebSocketTranscript, Mutex, Ordering,
     Output, Path, PathBuf, RETAIN_SMOKE_ROOT_ENV, Read, Request, Response, SMOKE_EXPECTED_TEXT,
-    SMOKE_PROMPT, SMOKE_TARGET_MODEL, Shutdown, SmokeSeed, Stdio, TcpListener, Value, Write,
-    accept_hdr, connect, fs, thread,
+    SMOKE_PROMPT, SMOKE_TARGET_MODEL, SmokeSeed, Stdio, TcpListener, Value, Write, accept_hdr,
+    connect, fs, thread,
 };
 
 pub(super) fn record_http_sse_only_transcript(
@@ -25,28 +25,6 @@ pub(super) fn record_http_sse_only_transcript(
     Ok(())
 }
 
-pub(super) fn run_no_connection_upstream(
-    listener: TcpListener,
-    timeout: Duration,
-) -> Result<usize, String> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match listener.accept() {
-            Ok((stream, _peer)) => {
-                let _ = stream.shutdown(Shutdown::Both);
-                return Ok(1);
-            }
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    return Ok(0);
-                }
-                thread::sleep(Duration::from_millis(20));
-            }
-            Err(error) => return Err(format!("no-connection upstream accept failed: {error}")),
-        }
-    }
-}
-
 pub(super) fn accept_with_deadline(
     listener: &TcpListener,
     shutdown: &AtomicBool,
@@ -54,34 +32,24 @@ pub(super) fn accept_with_deadline(
     http_probe_count: usize,
     http_sse_count: usize,
 ) -> Result<std::net::TcpStream, String> {
-    loop {
-        if shutdown.load(Ordering::SeqCst) {
-            return Err("mock upstream shut down before expected request arrived".to_owned());
-        }
-        match listener.accept() {
-            Ok((stream, _peer)) => {
-                if shutdown.load(Ordering::SeqCst) {
-                    let _ = stream.shutdown(Shutdown::Both);
-                    return Err(
-                        "mock upstream shut down before expected request arrived".to_owned()
-                    );
-                }
-                stream.set_nonblocking(false).map_err(|error| {
-                    format!("failed to restore accepted stream blocking mode: {error}")
-                })?;
-                return Ok(stream);
-            }
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    return Err(format!(
-                        "mock upstream timed out waiting for websocket (http_probe_count={http_probe_count}, http_sse_count={http_sse_count})"
-                    ));
-                }
-                thread::sleep(Duration::from_millis(20));
-            }
-            Err(error) => return Err(format!("mock upstream accept failed: {error}")),
-        }
+    if shutdown.load(Ordering::SeqCst) {
+        return Err("mock upstream shut down before expected request arrived".to_owned());
     }
+    super::socket_readiness::wait_for_listener(listener, deadline).map_err(|error| {
+        if error.kind() == ErrorKind::TimedOut {
+            format!("mock upstream timed out waiting for websocket (http_probe_count={http_probe_count}, http_sse_count={http_sse_count})")
+        } else { format!("mock upstream socket readiness failed: {error}") }
+    })?;
+    if shutdown.load(Ordering::SeqCst) {
+        return Err("mock upstream shut down before expected request arrived".to_owned());
+    }
+    let (stream, _peer) = listener
+        .accept()
+        .map_err(|error| format!("mock upstream accept failed: {error}"))?;
+    stream
+        .set_nonblocking(false)
+        .map_err(|error| format!("failed to restore accepted stream blocking mode: {error}"))?;
+    Ok(stream)
 }
 
 pub(super) fn redacted_command_text(bytes: &[u8], seed: &SmokeSeed) -> String {

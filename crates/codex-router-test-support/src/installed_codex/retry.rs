@@ -270,7 +270,12 @@ fn run_retry_upstream(
     shutdown: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(70);
-    while Instant::now() < deadline && !shutdown.load(Ordering::SeqCst) {
+    while !shutdown.load(Ordering::SeqCst) {
+        super::socket_readiness::wait_for_listener(&listener, deadline)
+            .map_err(|error| format!("retry upstream did not receive its next request: {error}"))?;
+        if shutdown.load(Ordering::SeqCst) {
+            return Ok(());
+        }
         match listener.accept() {
             Ok((stream, _)) => {
                 stream.set_nonblocking(false).map_err(|error| {
@@ -288,9 +293,6 @@ fn run_retry_upstream(
                 {
                     return Ok(());
                 }
-            }
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(10))
             }
             Err(error) => return Err(format!("retry upstream accept failed: {error}")),
         }

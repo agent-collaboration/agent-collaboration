@@ -93,6 +93,12 @@ pub(super) fn run_quota_reconnect_mock_upstream(
         if Instant::now() >= deadline {
             return Err("quota reconnect upstream timed out before completion".to_owned());
         }
+        super::socket_readiness::wait_for_listener(&listener, deadline).map_err(|error| {
+            format!("quota reconnect upstream socket readiness failed: {error}")
+        })?;
+        if shutdown.load(Ordering::SeqCst) {
+            return Err("quota reconnect upstream shut down before completion".to_owned());
+        }
         match listener.accept() {
             Ok((stream, _peer)) => {
                 stream.set_nonblocking(false).map_err(|error| {
@@ -112,9 +118,6 @@ pub(super) fn run_quota_reconnect_mock_upstream(
                     sqlite_pressure.clone(),
                     Arc::clone(&pressure_handles),
                 )?;
-            }
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(10));
             }
             Err(error) => return Err(format!("quota reconnect upstream accept failed: {error}")),
         }

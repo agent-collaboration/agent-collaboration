@@ -3,8 +3,8 @@ use super::{
     Instant, Mutex, Ordering, PathBuf, PressureHandles, QUOTA_RECONNECT_SQLITE_PRESSURE_HOLD,
     RouterProcessObservation, TcpListener, UpstreamClientSessionObservation, Value, join_result,
     overlap_duration_ms, quota_reconnect_label_from_upstream_token, real_overlap_duration_ms,
-    run_concurrent_mock_upstream, run_mock_upstream, run_no_connection_upstream,
-    run_quota_reconnect_mock_upstream, thread, wake_mock_upstream_accept,
+    run_concurrent_mock_upstream, run_mock_upstream, run_quota_reconnect_mock_upstream, thread,
+    wake_mock_upstream_accept,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -239,11 +239,6 @@ pub(super) struct RouterSocketCleanupObservation {
     pub(super) raw_state_counts: Vec<(String, usize)>,
 }
 
-pub(super) struct MockNoConnectionUpstream {
-    pub(super) address: String,
-    pub(super) handle: Option<thread::JoinHandle<Result<usize, String>>>,
-}
-
 pub(super) struct RouterProcessGuard {
     pub(super) child: Option<Child>,
     pub(super) stdout_handle: Option<thread::JoinHandle<Vec<String>>>,
@@ -354,49 +349,6 @@ pub(super) fn join_router_output_reader(
     handle
         .join()
         .map_err(|_| format!("{label} {stream_name} reader panicked"))
-}
-
-impl MockNoConnectionUpstream {
-    pub(super) fn start(timeout: Duration) -> Result<Self, String> {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|error| format!("failed to bind no-connection upstream: {error}"))?;
-        listener.set_nonblocking(true).map_err(|error| {
-            format!("failed to configure no-connection upstream nonblocking: {error}")
-        })?;
-        let address = listener
-            .local_addr()
-            .map_err(|error| format!("failed to read no-connection upstream address: {error}"))?
-            .to_string();
-        let handle = thread::Builder::new()
-            .name("codex-router-hostile-no-token-upstream".to_owned())
-            .spawn(move || run_no_connection_upstream(listener, timeout))
-            .map_err(|error| format!("failed to spawn no-connection upstream thread: {error}"))?;
-
-        Ok(Self {
-            address,
-            handle: Some(handle),
-        })
-    }
-
-    pub(super) fn address(&self) -> &str {
-        &self.address
-    }
-
-    pub(super) fn join(mut self) -> Result<usize, String> {
-        let handle = self
-            .handle
-            .take()
-            .ok_or_else(|| "no-connection upstream was already joined".to_owned())?;
-        join_result(handle, "no-connection upstream")
-    }
-}
-
-impl Drop for MockNoConnectionUpstream {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            let _ = join_result(handle, "no-connection upstream cleanup");
-        }
-    }
 }
 
 impl MockWebSocketUpstream {

@@ -117,8 +117,15 @@ mod http_probe;
 #[path = "installed_codex/child_output_capture.rs"]
 mod child_output_capture;
 #[cfg(test)]
+#[path = "installed_codex/fixture_schema_tests.rs"]
+mod fixture_schema_tests;
+#[path = "installed_codex/no_connection_upstream.rs"]
+mod no_connection_upstream;
+#[cfg(test)]
 #[path = "installed_codex/owned_process_tests.rs"]
 mod owned_process_tests;
+#[path = "installed_codex/socket_readiness.rs"]
+mod socket_readiness;
 
 #[path = "installed_codex/process_runtime.rs"]
 mod process_runtime;
@@ -166,10 +173,11 @@ use http_probe::{
     http_sse_transcript_summary, is_non_prewarm_response_create_frame, is_prewarm_request_frame,
     join_result, looks_like_websocket_upgrade, output_status_text, parse_posix_token_assignment,
     record_http_sse_only_transcript, redacted_optional_command_text, reserve_loopback_port,
-    respond_to_http_request, run_mock_websocket, run_no_connection_upstream,
-    run_s8_overlap_quota_local_probe, send_hostile_no_token_websocket, smoke_prewarm_events,
-    smoke_response_events, timestamp_millis, timestamp_seconds,
+    respond_to_http_request, run_mock_websocket, run_s8_overlap_quota_local_probe,
+    send_hostile_no_token_websocket, smoke_prewarm_events, smoke_response_events, timestamp_millis,
+    timestamp_seconds,
 };
+use no_connection_upstream::MockNoConnectionUpstream;
 use process_runtime::{
     CodexChildEnvironment, CodexTransportMode, RouterProcessStartOptions, SmokeContractAssertion,
     assert_codex_visible_output, run_codex_exec, run_codex_exec_with_timeout,
@@ -207,11 +215,10 @@ use transcript_observation::{
 };
 use websocket_models::{
     ConcurrentUpstreamSharedState, ConcurrentUpstreamState, ConcurrentWebSocketTranscript,
-    MockConcurrentWebSocketUpstream, MockHttpSseTranscript, MockNoConnectionUpstream,
-    MockQuotaReconnectWebSocketUpstream, MockWebSocketTranscript, MockWebSocketUpstream,
-    QuotaReconnectSqlitePressureConfig, QuotaReconnectUpstreamState,
-    QuotaReconnectWebSocketTranscript, RouterProcessGuard, RouterSocketCleanupObservation,
-    S8OverlapQuotaErrorContext,
+    MockConcurrentWebSocketUpstream, MockHttpSseTranscript, MockQuotaReconnectWebSocketUpstream,
+    MockWebSocketTranscript, MockWebSocketUpstream, QuotaReconnectSqlitePressureConfig,
+    QuotaReconnectUpstreamState, QuotaReconnectWebSocketTranscript, RouterProcessGuard,
+    RouterSocketCleanupObservation, S8OverlapQuotaErrorContext,
 };
 use websocket_upstream::{
     run_mock_upstream, run_quota_reconnect_mock_upstream, start_s8_overlap_quota_sqlite_pressure,

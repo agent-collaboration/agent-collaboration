@@ -5,7 +5,6 @@ use std::net::TcpListener;
 use std::net::TcpStream;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 use std::time::Instant;
 
 use serde_json::Value;
@@ -143,14 +142,11 @@ fn accept_real_request(
         if Instant::now() >= deadline {
             return Err("floor upstream timed out waiting for a real Codex request".to_owned());
         }
-        let stream = match listener.accept() {
-            Ok((stream, _)) => stream,
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(10));
-                continue;
-            }
-            Err(error) => return Err(format!("floor upstream accept failed: {error}")),
-        };
+        super::super::socket_readiness::wait_for_listener(listener, deadline)
+            .map_err(|error| format!("floor upstream socket readiness failed: {error}"))?;
+        let (stream, _peer) = listener
+            .accept()
+            .map_err(|error| format!("floor upstream accept failed: {error}"))?;
         stream
             .set_nonblocking(false)
             .map_err(|error| format!("floor upstream blocking mode failed: {error}"))?;
