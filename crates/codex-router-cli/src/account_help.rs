@@ -6,6 +6,7 @@ codex-router account
 commands:
   disable --account <name>  Stop routing to an account while retaining its credentials
   enable --account <name>   Resume routing to an account
+  remove --account <name>   Delete a disabled account and its stored credentials
   login --provider <openai|claude> --label <name>  Add a provider OAuth account
   list                  Show configured router accounts
   set-weekly-floor      Set or disable one account's weekly quota floor
@@ -60,6 +61,15 @@ pub(super) const ACCOUNT_DISABLE_HELP_TEXT: &str = "\
 codex-router account disable --account <label>
 
 Changes one account's routing status without removing its credentials, quota, or history.
+To delete it permanently afterwards, use account remove --account <label>.
+";
+
+pub(super) const ACCOUNT_REMOVE_HELP_TEXT: &str = "\
+codex-router account remove --account <label>
+
+Permanently removes a disabled account, all its stored credential generations,
+quota history, routing policies and session/affinity pins. Disable it first with
+account disable --account <label>. The same label can be added again with account login.
 ";
 
 pub(super) const ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT: &str = "\

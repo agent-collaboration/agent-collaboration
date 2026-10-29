@@ -40,6 +40,21 @@ impl From<EncryptedCredentialStore> for RuntimeCredentialStore {
 }
 
 impl RuntimeCredentialStore {
+    /// Deletes all credential generations for a disabled account under its caller-held lock.
+    pub fn remove_account_credentials(
+        &self,
+        provider: Provider,
+        account_id: &AccountId,
+    ) -> Result<(), SecretStoreError> {
+        match self {
+            Self::Encrypted(store) => store.remove_account_credentials(provider, account_id),
+            #[cfg(debug_assertions)]
+            Self::DebugPlaintext(store) => {
+                store.remove_plaintext_account_credentials(provider, account_id)
+            }
+        }
+    }
+
     /// Reports the selected backend's initialization state without reopening it.
     pub fn status(&self) -> RuntimeCredentialStoreStatus {
         match self {
