@@ -538,6 +538,7 @@ fn login_with_openai_device_auth(
             activation_request,
         ))
         .map_err(map_credential_activation_error)?;
+    runtime.block_on(state.close())?;
 
     writeln!(stdout, "logged in account: {label}").map_err(AccountCommandError::Stdout)?;
     writeln!(stdout, "account_id: {}", account_id.as_str()).map_err(AccountCommandError::Stdout)?;
@@ -641,6 +642,7 @@ fn login_with_claude_oauth(
             activation_request,
         ))
         .map_err(map_credential_activation_error)?;
+    runtime.block_on(state.close())?;
 
     writeln!(stdout, "logged in Claude account: {label}").map_err(AccountCommandError::Stdout)?;
     writeln!(stdout, "account_id: {}", account_id.as_str()).map_err(AccountCommandError::Stdout)?;
