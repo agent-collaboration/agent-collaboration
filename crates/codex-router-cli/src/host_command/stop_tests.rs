@@ -63,6 +63,8 @@ async fn stop_times_out_without_claiming_success_or_signalling_an_unresponsive_p
     use tokio::io::AsyncReadExt;
 
     let directory = tempfile::tempdir().expect("fixture");
+    let paths = HostCoordinationPaths::for_router_root(directory.path());
+    let _owner = HostInstanceLock::acquire(&paths).expect("retained owner");
     let listener = tokio::net::UnixListener::bind(directory.path().join("host.sock"))
         .expect("operator fixture");
     let command = HostCommand::parse(vec![

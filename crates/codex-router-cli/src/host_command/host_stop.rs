@@ -2,7 +2,7 @@
 
 use std::fs::{OpenOptions, TryLockError};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use codex_router_host::{HostCoordinationPaths, OperatorRequest, encode_operator_request};
@@ -34,6 +34,8 @@ pub enum HostStopError {
     LockHeld,
     #[error("Host operator peer has no verifiable same-owner process identity")]
     PeerIdentity,
+    #[error("Host operator socket path is too long for a Unix socket: {}", .path.display())]
+    SocketPathTooLong { path: PathBuf },
     #[error("Host stop failed: {0}")]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -46,6 +48,16 @@ pub(super) async fn stop_host(
 ) -> Result<HostStopOutcome, HostStopError> {
     let deadline_at = std::time::Instant::now() + deadline;
     let exit = tokio::time::timeout(deadline, async {
+        match require_released_lock(paths.instance_lock()) {
+            Ok(()) => return Ok(None),
+            Err(HostStopError::LockHeld) => {}
+            Err(error) => return Err(error),
+        }
+        std::os::unix::net::SocketAddr::from_pathname(paths.operator_socket()).map_err(|_| {
+            HostStopError::SocketPathTooLong {
+                path: paths.operator_socket().to_owned(),
+            }
+        })?;
         let mut stream = match UnixStream::connect(paths.operator_socket()).await {
             Ok(stream) => stream,
             Err(error)
