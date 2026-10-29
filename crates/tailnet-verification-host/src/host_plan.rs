@@ -81,7 +81,7 @@ pub struct HostPlan {
 }
 
 const fn default_https_port() -> u16 {
-    8443
+    19743
 }
 pub fn require_deadline(deadline: &DateTime<FixedOffset>) -> DriverResult<()> {
     if *deadline <= Utc::now() {
@@ -98,7 +98,11 @@ fn lowercase_hex(value: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 pub fn validate_ports(port: u16, https_port: u16) -> DriverResult<()> {
-    if port == 0 || https_port == 0 || [19741, 18787, 43127].contains(&port) || port == https_port {
+    if port == 0
+        || https_port == 0
+        || [19741, 19742, 19743, 18787, 43127].contains(&port)
+        || port == https_port
+    {
         return Err(DriverError::Invalid("unsafe or conflicting selected ports"));
     }
     Ok(())

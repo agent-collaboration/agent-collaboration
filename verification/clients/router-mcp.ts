@@ -33,7 +33,7 @@ export class RouterMcp {
       this.endpoint.protocol !== "http:" ||
       this.endpoint.username !== "" ||
       this.endpoint.password !== "" ||
-      [8787, 8788, 43127].includes(Number(this.endpoint.port))
+      [8787, 8788, 19741, 19742, 19743, 43127].includes(Number(this.endpoint.port))
     )
       throw new Error("isolated loopback MCP endpoint required");
   }

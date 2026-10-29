@@ -11,7 +11,6 @@ use std::sync::Arc;
 use codex_native_integration::AppServerCommandSpec;
 use codex_native_integration::CodexPaths;
 use codex_native_integration::CodexRouterProfile;
-use codex_native_integration::DEFAULT_ROUTER_PORT;
 use codex_native_integration::DesktopLaunchPolicyCommand;
 use codex_router_host::AppServerLaunchPlan;
 use codex_router_host::ChildCommandSpec;
@@ -27,6 +26,7 @@ use codex_router_host::ManagedUpdateInputs;
 use codex_router_host::PreExecTelemetry;
 
 use super::HostCommandError;
+use codex_router_host::{HostPortOverrides, ResolvedHostPorts};
 mod debug_profile_loader;
 mod router_child_command;
 
@@ -48,8 +48,8 @@ pub(super) struct ForegroundHostInputs {
     pub router_root: PathBuf,
     pub launch_mode: HostLaunchMode,
     pub owner_home: Option<PathBuf>,
-    pub port: u16,
-    pub mcp_bind: SocketAddr,
+    pub ports: ResolvedHostPorts,
+    pub port_overrides: HostPortOverrides,
     pub remote_access: Option<codex_router_host::RemoteAccess>,
     pub provider_operation_retention_days: std::num::NonZeroU32,
     pub coordination_paths: HostCoordinationPaths,
@@ -66,13 +66,15 @@ pub(super) async fn run_foreground_host(
         router_root,
         launch_mode,
         owner_home,
-        port,
-        mcp_bind,
+        ports,
+        port_overrides,
         remote_access,
         provider_operation_retention_days,
         coordination_paths,
         external_provider_launches,
     } = inputs;
+    let port = ports.selection().router.port;
+    let mcp_bind = ports.mcp_bind();
     let launch_started_at = std::time::Instant::now();
     let codex_home = resolve_codex_home(context)?;
     let isolated_debug = launch_mode.is_isolated();
@@ -151,8 +153,7 @@ pub(super) async fn run_foreground_host(
     let replacement_command = host_replacement_command(HostReplacementCommandInputs {
         executable: current_executable,
         router_root: router_root.clone(),
-        port,
-        mcp_bind,
+        port_overrides,
         remote_access,
         provider_operation_retention_days,
         owner_human_id: owner_human_id.as_ref(),
@@ -171,6 +172,8 @@ pub(super) async fn run_foreground_host(
         managed_executable: codex_paths.managed_executable(),
         deadlines: HostDeadlines::production(),
     })
+    .with_port_selection(ports.selection())
+    .with_debug_port_isolation(isolated_debug)
     .with_provider_operation_retention_days(provider_operation_retention_days)
     .with_collaboration_directory(collaboration_directory, codex_home);
     if let Some(remote_access) = remote_access {
@@ -232,13 +235,6 @@ impl HostLaunchMode {
     pub(super) const fn is_isolated(self) -> bool {
         matches!(self, Self::IsolatedDebug)
     }
-
-    pub(super) const fn default_port(self) -> u16 {
-        match self {
-            Self::OwnerProduction => DEFAULT_ROUTER_PORT,
-            Self::IsolatedDebug => 18787,
-        }
-    }
 }
 
 fn normalized_path(path: &Path) -> PathBuf {
@@ -262,24 +258,24 @@ fn normalized_path(path: &Path) -> PathBuf {
     normalized
 }
 
-struct HostReplacementCommandInputs<'a> {
-    executable: PathBuf,
-    router_root: PathBuf,
-    port: u16,
-    mcp_bind: SocketAddr,
-    remote_access: Option<codex_router_host::RemoteAccess>,
-    provider_operation_retention_days: std::num::NonZeroU32,
-    owner_human_id: Option<&'a message_board::HumanId>,
-    external_provider_launches: &'a [codex_router_host::ExternalProviderLaunchBinding],
-    launch_mode: HostLaunchMode,
+pub(super) struct HostReplacementCommandInputs<'a> {
+    pub(super) executable: PathBuf,
+    pub(super) router_root: PathBuf,
+    pub(super) port_overrides: HostPortOverrides,
+    pub(super) remote_access: Option<codex_router_host::RemoteAccess>,
+    pub(super) provider_operation_retention_days: std::num::NonZeroU32,
+    pub(super) owner_human_id: Option<&'a message_board::HumanId>,
+    pub(super) external_provider_launches: &'a [codex_router_host::ExternalProviderLaunchBinding],
+    pub(super) launch_mode: HostLaunchMode,
 }
 
-fn host_replacement_command(inputs: HostReplacementCommandInputs<'_>) -> ChildCommandSpec {
+pub(super) fn host_replacement_command(
+    inputs: HostReplacementCommandInputs<'_>,
+) -> ChildCommandSpec {
     let HostReplacementCommandInputs {
         executable,
         router_root,
-        port,
-        mcp_bind,
+        port_overrides,
         remote_access,
         provider_operation_retention_days,
         owner_human_id,
@@ -290,20 +286,31 @@ fn host_replacement_command(inputs: HostReplacementCommandInputs<'_>) -> ChildCo
         OsString::from("host"),
         OsString::from("--router-root"),
         router_root.into_os_string(),
-        OsString::from("--port"),
-        OsString::from(port.to_string()),
-        OsString::from("--mcp-bind"),
-        OsString::from(mcp_bind.to_string()),
+    ];
+    if let Some(port) = port_overrides.router {
+        arguments.extend([OsString::from("--port"), OsString::from(port.to_string())]);
+    }
+    if let Some(bind) = port_overrides.mcp_bind {
+        arguments.extend([
+            OsString::from("--mcp-bind"),
+            OsString::from(bind.to_string()),
+        ]);
+    }
+    arguments.extend([
         OsString::from("--provider-operation-retention-days"),
         OsString::from(provider_operation_retention_days.to_string()),
-    ];
-    if let Some(codex_router_host::RemoteAccess::Tailscale { https_port }) = remote_access {
+    ]);
+    if let Some(codex_router_host::RemoteAccess::Tailscale { .. }) = remote_access {
         arguments.extend([
             OsString::from("--remote-access"),
             OsString::from("tailscale"),
-            OsString::from("--tailscale-https-port"),
-            OsString::from(https_port.to_string()),
         ]);
+        if let Some(https_port) = port_overrides.tailscale_https {
+            arguments.extend([
+                OsString::from("--tailscale-https-port"),
+                OsString::from(https_port.to_string()),
+            ]);
+        }
     }
     if let Some(owner_human_id) = owner_human_id {
         arguments.push(OsString::from("--owner-human-id"));
@@ -366,6 +373,7 @@ fn resolve_codex_home(context: &CliContext) -> Result<PathBuf, HostCommandError>
 
 #[cfg(test)]
 mod tests {
+    use super::HostPortOverrides;
     use super::{
         HostLaunchMode, HostReplacementCommandInputs, apply_launch_policy, host_replacement_command,
     };
@@ -411,8 +419,6 @@ mod tests {
             HostLaunchMode::resolve(&owner_root, &owner_context, false, Some(&owner_home)),
             HostLaunchMode::OwnerProduction,
         );
-        assert_eq!(HostLaunchMode::OwnerProduction.default_port(), 19741);
-        assert_eq!(HostLaunchMode::IsolatedDebug.default_port(), 18787);
     }
 
     #[tokio::test]
@@ -448,8 +454,11 @@ mod tests {
             host_replacement_command(HostReplacementCommandInputs {
                 executable: executable.clone(),
                 router_root: router_root.clone(),
-                port: 19087,
-                mcp_bind,
+                port_overrides: HostPortOverrides {
+                    router: Some(19087),
+                    mcp_bind: Some(mcp_bind),
+                    tailscale_https: None
+                },
                 remote_access: None,
                 provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
                 owner_human_id: None,
@@ -483,8 +492,11 @@ mod tests {
         let command = host_replacement_command(HostReplacementCommandInputs {
             executable: executable.clone(),
             router_root: router_root.clone(),
-            port: 19087,
-            mcp_bind,
+            port_overrides: HostPortOverrides {
+                router: Some(19087),
+                mcp_bind: Some(mcp_bind),
+                tailscale_https: None,
+            },
             remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: None,
@@ -520,8 +532,11 @@ mod tests {
         let command = host_replacement_command(HostReplacementCommandInputs {
             executable: executable.clone(),
             router_root: router_root.clone(),
-            port: 19087,
-            mcp_bind: SocketAddr::from(([127, 0, 0, 1], 19088)),
+            port_overrides: HostPortOverrides {
+                router: Some(19087),
+                mcp_bind: Some(SocketAddr::from(([127, 0, 0, 1], 19088))),
+                tailscale_https: None,
+            },
             remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: Some(&owner),
@@ -551,8 +566,11 @@ mod tests {
         let command = host_replacement_command(HostReplacementCommandInputs {
             executable: PathBuf::from("/tmp/codex-router"),
             router_root: PathBuf::from("/tmp/private-router"),
-            port: 18787,
-            mcp_bind: SocketAddr::from(([127, 0, 0, 1], 18788)),
+            port_overrides: HostPortOverrides {
+                router: Some(18787),
+                mcp_bind: Some(SocketAddr::from(([127, 0, 0, 1], 18788))),
+                tailscale_https: None,
+            },
             remote_access: None,
             provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
             owner_human_id: None,

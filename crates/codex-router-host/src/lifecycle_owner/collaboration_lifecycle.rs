@@ -210,6 +210,12 @@ impl CollaborationLifecycle {
             None => std::future::pending().await,
         }
     }
+    pub(super) fn mcp_listen_address(&self) -> Option<std::net::SocketAddr> {
+        self.runtime
+            .as_ref()
+            .map(CollaborationRuntime::mcp_listen_address)
+    }
+
     pub(super) async fn shutdown(&mut self) -> io::Result<()> {
         self.published_child = None;
         if let Some(runtime) = self.runtime.take() {

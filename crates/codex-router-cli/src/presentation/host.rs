@@ -236,6 +236,25 @@ fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io
     )?;
     writeln!(stdout, "phase: {}", phase_label(snapshot.phase()))?;
     writeln!(stdout, "router: {}", router_label(snapshot.router()))?;
+    if let Some(ports) = snapshot.port_selection() {
+        for (name, selected) in [
+            ("router_port", ports.router),
+            ("mcp_port", ports.mcp),
+            ("tailscale_https_port", ports.tailscale_https),
+        ] {
+            writeln!(
+                stdout,
+                "{name}: {} ({})",
+                selected.port,
+                selected.source.label()
+            )?;
+        }
+    } else {
+        writeln!(
+            stdout,
+            "ports: unavailable (Host did not report startup selections)"
+        )?;
+    }
     writeln!(
         stdout,
         "app_server: {}",
@@ -621,5 +640,38 @@ mod tests {
             recovery_budget: RecoveryBudget::Available,
             last_lifecycle_outcome: None,
         })
+    }
+
+    #[test]
+    fn status_renders_the_hosts_startup_port_values_and_sources() {
+        use codex_router_host::{HostPortSelection, HostPortSource, SelectedHostPort};
+        let selected = HostPortSelection {
+            router: SelectedHostPort {
+                port: 28741,
+                source: HostPortSource::PortsFile,
+            },
+            mcp: SelectedHostPort {
+                port: 28743,
+                source: HostPortSource::Flag,
+            },
+            tailscale_https: SelectedHostPort {
+                port: 18789,
+                source: HostPortSource::Default,
+            },
+        };
+        let snapshot = ready_snapshot().with_port_selection(Some(selected));
+        let mut output = Vec::new();
+        render_snapshot(&mut output, &snapshot).expect("rendered status");
+        let rendered = String::from_utf8(output).expect("UTF-8 status");
+        for line in [
+            "router_port: 28741 (ports.json)",
+            "mcp_port: 28743 (flag)",
+            "tailscale_https_port: 18789 (default)",
+        ] {
+            assert!(rendered.contains(line), "{rendered}");
+        }
+        let encoded = serde_json::to_vec(&snapshot).expect("encoded snapshot");
+        let decoded: HostSnapshot = serde_json::from_slice(&encoded).expect("decoded snapshot");
+        assert_eq!(decoded.port_selection(), Some(selected));
     }
 }

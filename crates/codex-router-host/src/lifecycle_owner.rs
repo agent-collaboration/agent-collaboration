@@ -41,6 +41,8 @@ use crate::probe_router;
 use crate::require_unowned_app_server_endpoint;
 
 mod collaboration_lifecycle;
+#[cfg(test)]
+mod host_restart_admission_tests;
 mod lifecycle_convergence;
 mod request_admission;
 mod retained_lifecycle;
@@ -486,6 +488,7 @@ impl HostRuntime {
                         app_server: &mut app_server,
                         router_child: &mut router_child,
                         config: &config,
+                        mcp_listen_address: collaboration.as_ref().and_then(|owner| owner.mcp_listen_address()),
                         child_launch_plans: &child_launch_plans,
                         update_inputs: &update_inputs,
                         active_app_server_restart: &mut active_restart,
@@ -495,7 +498,7 @@ impl HostRuntime {
                         active_status: &mut active_status,
                         update_drain_active,
                         router_executable_observer: std::sync::Arc::clone(&router_executable_observer),
-                    });
+                    }).await;
                 }
                 _ = router_executable_check.tick() => {
                     let relation = router_executable_observer.lock().await.observe().await;
@@ -645,7 +648,9 @@ impl HostRuntime {
                     };
                     state.executable_relation = status_observation.executable_relation();
                     state.observe_router_executable(status_observation.router_executable_relation());
-                    let (snapshot, status_identity) = status_observation.snapshot(&state);
+                    let mcp_listen_address = collaboration.as_ref()
+                        .and_then(|owner| owner.mcp_listen_address());
+                    let (snapshot, status_identity) = status_observation.snapshot(&state, mcp_listen_address);
                     if pending_identity.is_none() {
                         pending_identity = status_identity;
                     }

@@ -328,7 +328,13 @@ fn run_serve_command_with_upkeep_start_and_token_reload_observer(
 fn base_serve_runtime_config(
     command: &cli_argument_parsing::ServeCommand,
 ) -> Result<LoopbackRouterRuntimeConfig, CliError> {
-    let bind_address = LoopbackBindAddress::new(&command.listen_host, command.port)?;
+    let router_root = command.state_db.parent().unwrap_or_else(|| Path::new("."));
+    #[cfg(debug_assertions)]
+    let isolated_debug = command.require_debug_isolation;
+    #[cfg(not(debug_assertions))]
+    let isolated_debug = false;
+    let port = codex_router_host::resolve_router_port(router_root, isolated_debug, command.port)?;
+    let bind_address = LoopbackBindAddress::new(&command.listen_host, port.port)?;
     let upstream_endpoint = UpstreamEndpoint::new(command.upstream_base_url.clone())?;
     let runtime_config = LoopbackRouterRuntimeConfig::new_tokenless(
         bind_address,
@@ -368,6 +374,15 @@ mod session_pin_idle_ttl_tests {
     use super::*;
     use std::ffi::OsString;
 
+    fn isolate_command(
+        mut command: cli_argument_parsing::ServeCommand,
+    ) -> (tempfile::TempDir, cli_argument_parsing::ServeCommand) {
+        let root = tempfile::tempdir().expect("root");
+        command.state_db = root.path().join("state.sqlite");
+        command.secret_root = root.path().join("secrets");
+        (root, command)
+    }
+
     #[test]
     fn serve_flag_reaches_runtime_configuration() {
         let command = match CliCommand::parse([
@@ -379,10 +394,11 @@ mod session_pin_idle_ttl_tests {
             Ok(_) => panic!("serve arguments should parse as a serve command"),
             Err(error) => panic!("serve arguments should parse: {error}"),
         };
+        let (_root, command) = isolate_command(command);
         let runtime_config = base_serve_runtime_config(&command)
             .unwrap_or_else(|error| panic!("serve runtime config should build: {error}"));
         let expected_config = LoopbackRouterRuntimeConfig::new_tokenless(
-            LoopbackBindAddress::new(&command.listen_host, command.port)
+            LoopbackBindAddress::new(&command.listen_host, 19741)
                 .expect("serve bind address should be valid"),
             UpstreamEndpoint::new(command.upstream_base_url.clone())
                 .expect("serve upstream endpoint should be valid"),
@@ -406,6 +422,7 @@ mod session_pin_idle_ttl_tests {
             Ok(_) => panic!("serve arguments should parse as a serve command"),
             Err(error) => panic!("serve arguments should parse: {error}"),
         };
+        let (_root, command) = isolate_command(command);
         let base_config = base_serve_runtime_config(&command)
             .unwrap_or_else(|error| panic!("serve runtime config should build: {error}"));
         let local_token = LocalRouterTokenRecord::new(
@@ -416,7 +433,7 @@ mod session_pin_idle_ttl_tests {
             configure_serve_claude_edge_runtime(base_config, &command, local_token.clone());
         assert_eq!(quota_refresh_interval, Duration::from_secs(400));
         let expected_config = LoopbackRouterRuntimeConfig::new_tokenless(
-            LoopbackBindAddress::new(&command.listen_host, command.port)
+            LoopbackBindAddress::new(&command.listen_host, 19741)
                 .expect("serve bind address should be valid"),
             UpstreamEndpoint::new(command.upstream_base_url.clone())
                 .expect("serve upstream endpoint should be valid"),
@@ -441,11 +458,12 @@ mod session_pin_idle_ttl_tests {
             Ok(_) => panic!("serve arguments should parse as a serve command"),
             Err(error) => panic!("serve arguments should parse: {error}"),
         };
+        let (_root, command) = isolate_command(command);
 
         let runtime_config = base_serve_runtime_config(&command)
             .unwrap_or_else(|error| panic!("serve runtime config should build: {error}"));
         let expected_config = LoopbackRouterRuntimeConfig::new_tokenless(
-            LoopbackBindAddress::new(&command.listen_host, command.port)
+            LoopbackBindAddress::new(&command.listen_host, 19741)
                 .expect("serve bind address should be valid"),
             UpstreamEndpoint::new(command.upstream_base_url.clone())
                 .expect("serve upstream endpoint should be valid"),
@@ -473,10 +491,11 @@ mod session_pin_idle_ttl_tests {
             Ok(_) => panic!("serve arguments should parse as a serve command"),
             Err(error) => panic!("serve arguments should parse: {error}"),
         };
+        let (_root, command) = isolate_command(command);
         let runtime_config = base_serve_runtime_config(&command)
             .unwrap_or_else(|error| panic!("debug serve runtime config should build: {error}"));
         let expected_config = LoopbackRouterRuntimeConfig::new_tokenless(
-            LoopbackBindAddress::new(&command.listen_host, command.port)
+            LoopbackBindAddress::new(&command.listen_host, 18787)
                 .expect("serve bind address should be valid"),
             UpstreamEndpoint::new("https://codex.example/v1")
                 .expect("Codex upstream should remain independently configured"),
@@ -507,6 +526,7 @@ mod session_pin_idle_ttl_tests {
             Ok(_) => panic!("serve arguments should parse as a serve command"),
             Err(error) => panic!("serve arguments should parse: {error}"),
         };
+        let (_root, command) = isolate_command(command);
         let error = base_serve_runtime_config(&command)
             .expect_err("query string must not be accepted in a debug Claude base URL");
         let message = error.to_string();
@@ -835,3 +855,6 @@ Collaboration: run agent-collaboration --help.
 #[cfg(test)]
 #[path = "cli_contract_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod serve_port_configuration_tests;

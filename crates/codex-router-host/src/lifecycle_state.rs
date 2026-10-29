@@ -195,6 +195,8 @@ pub struct LifecycleOutcome {
 /// Orthogonal live status returned through the operator boundary.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HostSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    port_selection: Option<crate::HostPortSelection>,
     phase: HostPhase,
     router: RouterCondition,
     app_server: AppServerCondition,
@@ -236,6 +238,7 @@ impl HostSnapshot {
     #[must_use]
     pub fn new(dimensions: HostSnapshotDimensions) -> Self {
         Self {
+            port_selection: None,
             phase: dimensions.phase,
             router: dimensions.router,
             app_server: dimensions.app_server,
@@ -247,6 +250,21 @@ impl HostSnapshot {
             last_lifecycle_outcome: dimensions.last_lifecycle_outcome,
             last_login_reload: None,
         }
+    }
+
+    /// Attaches the startup selections reported by the owning Host.
+    #[must_use]
+    pub const fn with_port_selection(
+        mut self,
+        selection: Option<crate::HostPortSelection>,
+    ) -> Self {
+        self.port_selection = selection;
+        self
+    }
+
+    #[must_use]
+    pub const fn port_selection(&self) -> Option<crate::HostPortSelection> {
+        self.port_selection
     }
 
     /// Derives overall usability without mutating any component dimension.

@@ -50,6 +50,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
         relay: inputs.relay,
         receiver: inputs.receiver,
     };
+    eprintln!("RECEIVING_RESTART_STAGE phase={phase} stage=runtime-starting");
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         directory: inputs.root.clone(),
         codex_home: std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME")?)
@@ -63,12 +64,14 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
         remote_control_server_name: Some("board session fixture".to_owned().try_into()?),
     })
     .await?;
+    eprintln!("RECEIVING_RESTART_STAGE phase={phase} stage=runtime-started");
     let projects = runtime
         .board_session
         .as_ref()
         .and_then(|session| session.projects.upgrade())
         .ok_or("Host project owner")?;
     wait_welcome(projects.welcomed.clone()).await?;
+    eprintln!("RECEIVING_RESTART_STAGE phase={phase} stage=welcomed");
     if before_ready {
         stop_held_install(&inputs, projects, runtime).await
     } else {
@@ -227,6 +230,7 @@ async fn resume_and_post(
         grant.epoch.value(),
     )
     .await?;
+    eprintln!("RECEIVING_RESTART_STAGE phase=receive-graceful-resume stage=project-ready");
     let database = registry.database(project).await?;
     let receipt = database
         .installed_snapshot()
@@ -365,6 +369,13 @@ pub(super) async fn observe_restart_renewal(
                 return Err("restart Registry dispatch was not held".into());
             };
             let invocation: serde_json::Value = serde_json::from_slice(&request)?;
+            eprintln!(
+                "RECEIVING_RESTART_HELD kind={}",
+                invocation
+                    .get("kind")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("missing")
+            );
             // Welcome and schema reporting also call Registry. The existing
             // atomic resume-and-hold gate observes each call without a gap.
             if invocation.get("kind").and_then(serde_json::Value::as_str)

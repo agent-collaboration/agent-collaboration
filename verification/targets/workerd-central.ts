@@ -99,7 +99,10 @@ export class WorkerdCentral implements CentralTarget {
     );
     try {
       const ready = await runtime.ready;
-      if (ready.hostname !== "127.0.0.1" || [8787, 8788, 43127].includes(Number(ready.port)))
+      if (
+        ready.hostname !== "127.0.0.1" ||
+        [8787, 8788, 19741, 19742, 19743, 43127].includes(Number(ready.port))
+      )
         throw new Error("workerd did not bind permitted loopback");
       const assertion = (await readFile(target.assertionFile, "utf8")).trim();
       return new WorkerdCentral(

@@ -15,6 +15,8 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
+    PortConfiguration(#[from] codex_router_host::PortConfigurationError),
+    #[error(transparent)]
     Central(#[from] crate::central_command::CentralCommandError),
     /// Background OAuth upkeep could not start.
     #[error(transparent)]
