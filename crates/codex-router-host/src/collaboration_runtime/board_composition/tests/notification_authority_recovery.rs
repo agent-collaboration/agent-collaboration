@@ -350,7 +350,7 @@ async fn assert_recovery() -> Result<(), TestError> {
     ));
     // Deliberately cross the retry boundary, rather than racing it in the count.
     // The fixture rejects project authority before it ever calls Delivery::Submit.
-    tokio::time::timeout(
+    let retry_envelopes = tokio::time::timeout(
         BOUND,
         fixture
             .harness
@@ -371,7 +371,9 @@ async fn assert_recovery() -> Result<(), TestError> {
         envelopes.iter().map(|(item, _)| item).collect::<Vec<_>>()
     );
     assert!(
-        envelopes.windows(2).all(|pair| pair.first() == pair.get(1)),
+        retry_envelopes
+            .windows(2)
+            .all(|pair| pair.first() == pair.get(1)),
         "NotWriter retry changed the frozen envelope"
     );
     assert!(
