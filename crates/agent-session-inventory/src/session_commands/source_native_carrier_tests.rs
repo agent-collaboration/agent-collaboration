@@ -4,12 +4,14 @@ use super::*;
 use collaboration_client::protocol::EndpointRef;
 use serde_json::json;
 use std::path::PathBuf;
+use tokio::io::AsyncReadExt;
 
 const CLIENT_PROBE: &str = "sessions::source_native_carrier::tests::source_carrier_client_probe";
 const SUPERVISOR_PROBE: &str =
     "sessions::source_native_carrier::tests::source_carrier_supervisor_probe";
 const INITIALIZE: &str = "{\"id\":\"carrier-proof\",\"method\":\"initialize\"}";
 const REPLY: &str = "{\"id\":\"carrier-proof\",\"result\":{}}";
+const DRAIN_PAYLOAD_BYTE: u8 = 0x5a;
 
 fn prepared_launch(directory: &Path, action: &str) -> PreparedSourceLaunch {
     let directory = std::fs::canonicalize(directory).unwrap_or_else(|_| directory.to_owned());
@@ -154,6 +156,7 @@ async fn source_carrier_child_exit_before_connect_reaps_process_and_removes_priv
             &SourceNativeOptions::default(),
             connection,
             |arguments| client_probe_command(arguments, "exit-before-connect", &record),
+            source_settlement_limit,
         ),
     )
     .await
@@ -178,9 +181,13 @@ async fn source_carrier_forwards_native_child_messages_once_and_cleans_up_after_
     let options = SourceNativeOptions::default();
     let (result, frames) = tokio::time::timeout(Duration::from_secs(3), async {
         tokio::join!(
-            run_source_client_with_command(&prepared, &options, connection, |arguments| {
-                client_probe_command(arguments, "exchange", &record)
-            }),
+            run_source_client_with_command(
+                &prepared,
+                &options,
+                connection,
+                |arguments| { client_probe_command(arguments, "exchange", &record) },
+                source_settlement_limit
+            ),
             async {
                 let initialize = backend.next().await.unwrap().unwrap();
                 assert_eq!(initialize, Message::Text(INITIALIZE.into()));
@@ -204,17 +211,81 @@ async fn source_carrier_forwards_native_child_messages_once_and_cleans_up_after_
 }
 
 #[tokio::test]
+async fn source_carrier_drains_buffered_frames_after_actual_child_exit() {
+    let root = tempfile::Builder::new()
+        .prefix("carrier-drain-")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let prepared = prepared_launch(root.path(), "resume");
+    let record = root.path().join("child.json");
+    let exit_socket = root.path().join("exit.sock");
+    let exit_listener = UnixListener::bind(&exit_socket).unwrap();
+    let (connection, mut backend) = native_connection_pair(prepared.endpoint.clone()).await;
+    let payload_bytes = {
+        let socket = socket2::SockRef::from(connection.stream.get_ref());
+        socket.set_send_buffer_size(4096).unwrap();
+        socket
+            .send_buffer_size()
+            .unwrap()
+            .saturating_mul(16)
+            .max(65_536)
+    };
+    assert!(payload_bytes < NATIVE_WEBSOCKET_FRAME_LIMIT);
+    let options = SourceNativeOptions::default();
+    let (result, frames) = tokio::time::timeout(Duration::from_secs(3), async {
+        tokio::join!(
+            run_source_client_with_command(&prepared, &options, connection, |arguments| {
+                let mut command = client_probe_command(arguments, "buffered-exit", &record);
+                command.env("SOURCE_CARRIER_EXIT_SOCKET", &exit_socket)
+                    .env("SOURCE_CARRIER_PAYLOAD_BYTES", payload_bytes.to_string());
+                command
+            }, source_settlement_limit),
+            async {
+                assert_eq!(backend.next().await.unwrap().unwrap(), Message::Text(INITIALIZE.into()));
+                backend.send(Message::Text(REPLY.into())).await.unwrap();
+                let (mut exit_control, _) = exit_listener.accept().await.unwrap();
+                let mut control_bytes = Vec::new();
+                // The child never closes this descriptor in Rust. Its EOF is
+                // the kernel's process-exit event, before the backend drains.
+                exit_control.read_to_end(&mut control_bytes).await.unwrap();
+                assert!(control_bytes.is_empty());
+                let payload = backend.next().await.expect("buffered frame after child exit")
+                    .expect("child exit must not cancel an in-flight backend write");
+                assert!(matches!(payload, Message::Binary(ref bytes)
+                    if bytes.len() == payload_bytes && bytes.iter().all(|byte| *byte == DRAIN_PAYLOAD_BYTE)),
+                    "buffered payload must preserve every byte");
+                assert_eq!(backend.next().await.unwrap().unwrap(), Message::Binary(vec![0, 255, 1, 17].into()));
+                assert!(matches!(backend.next().await, None | Some(Err(_)) | Some(Ok(Message::Close(_)))));
+                3
+            },
+        )
+    }).await.expect("real child exit and forwarding must settle");
+    assert_eq!(result, Ok(0));
+    assert_eq!(frames, 3);
+    assert_private_frontend_removed(&record);
+}
+
+#[tokio::test]
 async fn source_carrier_backend_loss_settles_its_child_and_never_reconnects() {
     let root = tempfile::tempdir().unwrap();
     let prepared = prepared_launch(root.path(), "new");
     let record = root.path().join("child.json");
     let (connection, mut backend) = native_connection_pair(prepared.endpoint.clone()).await;
     let options = SourceNativeOptions::default();
+    let (limit_started, limit_observed) = tokio::sync::oneshot::channel();
+    let (expire_limit, limit_expired) = tokio::sync::oneshot::channel();
     let (result, ()) = tokio::time::timeout(Duration::from_secs(4), async {
         tokio::join!(
-            run_source_client_with_command(&prepared, &options, connection, |arguments| {
-                client_probe_command(arguments, "hold-until-loss", &record)
-            }),
+            run_source_client_with_command(
+                &prepared,
+                &options,
+                connection,
+                |arguments| { client_probe_command(arguments, "hold-until-loss", &record) },
+                || async {
+                    limit_started.send(()).unwrap();
+                    limit_expired.await.unwrap();
+                }
+            ),
             async {
                 assert_eq!(
                     backend.next().await.unwrap().unwrap(),
@@ -226,6 +297,21 @@ async fn source_carrier_backend_loss_settles_its_child_and_never_reconnects() {
                     Message::Binary(vec![0, 255, 1, 17].into())
                 );
                 drop(backend);
+                limit_observed
+                    .await
+                    .expect("backend loss must arm child settlement");
+                let observation: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+                let pid = observation["pid"].as_u64().unwrap();
+                assert!(
+                    std::process::Command::new("/bin/kill")
+                        .args(["-0", &pid.to_string()])
+                        .status()
+                        .unwrap()
+                        .success(),
+                    "stalled child must remain owned before the settlement limit"
+                );
+                expire_limit.send(()).unwrap();
             },
         )
     })
@@ -337,6 +423,16 @@ fn source_carrier_client_probe() {
     if mode == "exit-before-connect" {
         return;
     }
+    let exit_control = if mode == "buffered-exit" {
+        Some(
+            std::os::unix::net::UnixStream::connect(
+                std::env::var_os("SOURCE_CARRIER_EXIT_SOCKET").expect("owned exit socket"),
+            )
+            .unwrap(),
+        )
+    } else {
+        None
+    };
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -351,6 +447,19 @@ fn source_carrier_client_probe() {
                 stream.next().await.unwrap().unwrap(),
                 Message::Text(REPLY.into())
             );
+            if mode == "buffered-exit" {
+                let payload_bytes: usize = std::env::var("SOURCE_CARRIER_PAYLOAD_BYTES")
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                assert!(payload_bytes > 0 && payload_bytes < NATIVE_WEBSOCKET_FRAME_LIMIT);
+                stream
+                    .send(Message::Binary(
+                        vec![DRAIN_PAYLOAD_BYTE; payload_bytes].into(),
+                    ))
+                    .await
+                    .unwrap();
+            }
             stream
                 .send(Message::Binary(vec![0, 255, 1, 17].into()))
                 .await
@@ -363,6 +472,10 @@ fn source_carrier_client_probe() {
                 stream.close(None).await.unwrap();
             }
         });
+    if mode == "buffered-exit" {
+        std::hint::black_box(&exit_control);
+        std::process::exit(0);
+    }
 }
 
 #[test]
@@ -389,6 +502,7 @@ fn source_carrier_supervisor_probe() {
                     stream,
                 },
                 |arguments| client_probe_command(arguments, "hold-until-loss", &record),
+                source_settlement_limit,
             )
             .await
         });

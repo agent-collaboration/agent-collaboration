@@ -65,10 +65,12 @@ async fn http_source_redirect_cannot_upgrade_or_contact_https_destination() {
         matches!(result, Err(ClientError::Rejected { code: 302, .. })),
         "redirect must be returned as source rejection"
     );
+    // The real client has finished its rejection. A forbidden connect would
+    // already be queued in the kernel; Tokio's readiness cache is not evidence.
+    let destination = destination.into_std().unwrap();
     assert!(
-        tokio::time::timeout(Duration::from_millis(25), destination.accept())
-            .await
-            .is_err(),
+        matches!(destination.accept(), Err(error)
+        if error.kind() == std::io::ErrorKind::WouldBlock),
         "redirect contacted the HTTPS destination"
     );
     server.abort();

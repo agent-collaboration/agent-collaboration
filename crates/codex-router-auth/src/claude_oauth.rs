@@ -243,6 +243,38 @@ pub struct ClaudeOAuthRefreshClient {
     request_timeout: Duration,
 }
 
+enum RefreshExchangeFailure {
+    ConnectionNotEstablished,
+    SentThenTimedOut,
+    OtherTransportFailure,
+}
+
+impl RefreshExchangeFailure {
+    fn from_request_error(error: &reqwest::Error) -> Self {
+        if error.is_connect() {
+            Self::ConnectionNotEstablished
+        } else if error.is_timeout() {
+            Self::SentThenTimedOut
+        } else {
+            Self::OtherTransportFailure
+        }
+    }
+
+    fn credential_failure(self) -> CredentialRefreshFailure {
+        match self {
+            Self::ConnectionNotEstablished => CredentialRefreshFailure::confirmed_unspent(
+                CredentialFailureClass::TransportUnspent,
+                None,
+            ),
+            Self::SentThenTimedOut | Self::OtherTransportFailure => {
+                CredentialRefreshFailure::ambiguous(
+                    CredentialFailureClass::ProviderOutcomeAmbiguous,
+                )
+            }
+        }
+    }
+}
+
 impl ClaudeOAuthRefreshClient {
     /// Creates a refresh client using Claude Code's public OAuth client identifier.
     #[must_use]
@@ -260,6 +292,20 @@ impl ClaudeOAuthRefreshClient {
         &self,
         _account_id: &AccountId,
         refresh_token: &SecretString,
+    ) -> Result<CredentialBundle, CredentialRefreshFailure> {
+        self.refresh_with_exchange(refresh_token, |request| {
+            request
+                .send()
+                .map_err(|error| RefreshExchangeFailure::from_request_error(&error))
+        })
+    }
+
+    fn refresh_with_exchange(
+        &self,
+        refresh_token: &SecretString,
+        exchange: impl FnOnce(
+            reqwest::blocking::RequestBuilder,
+        ) -> Result<reqwest::blocking::Response, RefreshExchangeFailure>,
     ) -> Result<CredentialBundle, CredentialRefreshFailure> {
         // Wire shape and omitted-token rotation fallback verified against
         // claude-oss-proxy-source-audit.md §1.2 (Better CCflare provider.ts L218–250).
@@ -283,23 +329,11 @@ impl ClaudeOAuthRefreshClient {
                     None,
                 )
             })?;
-        let response = client
+        let request = client
             .post(&self.token_endpoint)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(request_bytes)
-            .send()
-            .map_err(|error| {
-                if error.is_connect() {
-                    CredentialRefreshFailure::confirmed_unspent(
-                        CredentialFailureClass::TransportUnspent,
-                        None,
-                    )
-                } else {
-                    CredentialRefreshFailure::ambiguous(
-                        CredentialFailureClass::ProviderOutcomeAmbiguous,
-                    )
-                }
-            })?;
+            .body(request_bytes);
+        let response = exchange(request).map_err(RefreshExchangeFailure::credential_failure)?;
         let retry_after_seconds = response
             .headers()
             .get(reqwest::header::RETRY_AFTER)
@@ -480,6 +514,7 @@ mod tests {
     use crate::claude_oauth::CredentialFailureClass;
     use crate::claude_oauth::CredentialRefreshFailure;
     use crate::claude_oauth::LoginFlowError;
+    use crate::claude_oauth::RefreshExchangeFailure;
 
     #[test]
     fn authorization_url_uses_hosted_callback_public_client_and_s256_pkce() {
@@ -720,42 +755,26 @@ mod tests {
 
     #[test]
     fn refresh_timeout_is_ambiguous_and_never_returns_the_old_token() {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
-        let endpoint = format!(
-            "http://{}/oauth/token",
-            listener.local_addr().expect("listener address")
-        );
-        let (request_sender, request_receiver) = mpsc::channel();
-        let server_thread = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept token request");
-            stream
-                .set_read_timeout(Some(Duration::from_secs(4)))
-                .expect("bounded refresh fixture read");
-            let request = read_http_request(&mut stream);
-            request_sender
-                .send(request)
-                .expect("test should receive the request");
-            let mut byte = [0_u8; 1];
-            loop {
-                match stream.read(&mut byte) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {}
-                }
-            }
-        });
+        // This receipt server exercises the complete real POST. The transport
+        // seam injects timeout only after that receipt; reqwest's independent
+        // blocking-runtime timeout mapping remains source-reviewed, not executed.
+        let (endpoint, request_receiver, server_thread) = one_response_server(200, "{}");
         let client = ClaudeOAuthRefreshClient::new_with_endpoint_and_timeout_for_test(
             endpoint,
             "test-claude-client",
-            // This blocking client owns its runtime; allow real HTTP setup, then
-            // prove actual expiry after the peer accepts the complete refresh.
             Duration::from_secs(2),
         );
-        let account_id = AccountId::new("acct_claude_timeout").expect("account id should be valid");
 
         assert_eq!(
-            client.refresh_credentials(
-                &account_id,
-                &SecretString::new("possibly-consumed-refresh-canary")
+            client.refresh_with_exchange(
+                &SecretString::new("possibly-consumed-refresh-canary"),
+                |request| {
+                    let response = request
+                        .send()
+                        .expect("real complete refresh POST and receipt");
+                    assert!(response.status().is_success());
+                    Err(RefreshExchangeFailure::SentThenTimedOut)
+                },
             ),
             Err(CredentialRefreshFailure::ambiguous(
                 CredentialFailureClass::ProviderOutcomeAmbiguous
@@ -763,7 +782,7 @@ mod tests {
         );
         let request = request_receiver
             .recv_timeout(Duration::from_secs(4))
-            .expect("fake server should receive the refresh before timing out");
+            .expect("fake server must receive the refresh before injected timeout");
         assert_eq!(
             request_body_json(&request)
                 .get("refresh_token")
@@ -772,7 +791,25 @@ mod tests {
         );
         server_thread
             .join()
-            .expect("fake OAuth server should observe the timeout close");
+            .expect("fake OAuth receipt server should finish");
+    }
+
+    #[test]
+    fn refused_refresh_connection_is_confirmed_unspent() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("reserve unused local address");
+        let endpoint = format!("http://{}/oauth/token", listener.local_addr().unwrap());
+        drop(listener);
+        let client = ClaudeOAuthRefreshClient::with_test_issuer(endpoint, "test-claude-client");
+        assert_eq!(
+            client.refresh_credentials(
+                &AccountId::new("acct_claude_connect_refused").unwrap(),
+                &SecretString::new("unspent-refresh-canary"),
+            ),
+            Err(CredentialRefreshFailure::confirmed_unspent(
+                CredentialFailureClass::TransportUnspent,
+                None,
+            ))
+        );
     }
 
     fn one_response_server(

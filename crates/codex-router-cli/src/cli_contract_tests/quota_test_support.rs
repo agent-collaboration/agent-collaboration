@@ -377,37 +377,6 @@ impl QuotaRefreshProvider for StaticQuotaRefreshProvider {
     }
 }
 
-pub(super) struct SlowQuotaRefreshProvider {
-    pub(super) delay: Duration,
-    pub(super) remaining_headroom: u32,
-}
-
-impl SlowQuotaRefreshProvider {
-    pub(super) fn new(delay: Duration, remaining_headroom: u32) -> Self {
-        Self {
-            delay,
-            remaining_headroom,
-        }
-    }
-}
-
-impl QuotaRefreshProvider for SlowQuotaRefreshProvider {
-    async fn fetch_quota(
-        &self,
-        _request: QuotaRefreshProviderRequest,
-    ) -> Result<
-        QuotaRefreshProviderResponse,
-        codex_router_quota_service::quota_service_error::QuotaServiceError,
-    > {
-        thread::sleep(self.delay);
-        Ok(QuotaRefreshProviderResponse {
-            windows: verified_quota_windows(self.remaining_headroom),
-            reset_credits_available: None,
-            ..Default::default()
-        })
-    }
-}
-
 pub(super) struct BlockingQuotaRefreshProvider {
     pub(super) remaining_headroom: u32,
     pub(super) blocked_once: AtomicBool,

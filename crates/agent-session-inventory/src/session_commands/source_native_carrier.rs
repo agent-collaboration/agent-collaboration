@@ -7,6 +7,7 @@ use collaboration_client::{NATIVE_WEBSOCKET_FRAME_LIMIT, NativeTransportConnecti
 use futures_util::{SinkExt, StreamExt};
 use std::{
     ffi::OsString,
+    future::Future,
     io,
     os::unix::{fs::PermissionsExt, process::ExitStatusExt},
     path::Path,
@@ -23,26 +24,35 @@ use tokio_tungstenite::{
     tungstenite::{Message, protocol::WebSocketConfig},
 };
 
+const SOURCE_CLIENT_SETTLEMENT_LIMIT: Duration = Duration::from_secs(2);
+
 pub async fn run_source_client(
     prepared: &PreparedSourceLaunch,
     options: &SourceNativeOptions,
     connection: NativeTransportConnection,
 ) -> Result<i32, SourceRejection> {
-    run_source_client_with_command(prepared, options, connection, |arguments| {
-        let mut command = tokio::process::Command::new("codex");
-        command.args(arguments);
-        command
-    })
+    run_source_client_with_command(
+        prepared,
+        options,
+        connection,
+        |arguments| {
+            let mut command = tokio::process::Command::new("codex");
+            command.args(arguments);
+            command
+        },
+        source_settlement_limit,
+    )
     .await
 }
 
 // Process construction is the external native-client boundary. The supervisor,
 // private socket, stream forwarding and cleanup remain identical for every caller.
-async fn run_source_client_with_command(
+async fn run_source_client_with_command<LimitFuture: Future<Output = ()>>(
     prepared: &PreparedSourceLaunch,
     options: &SourceNativeOptions,
     connection: NativeTransportConnection,
     command_for_arguments: impl FnOnce(&[OsString]) -> tokio::process::Command,
+    settlement_limit: impl FnOnce() -> LimitFuture,
 ) -> Result<i32, SourceRejection> {
     options.validate()?;
     let directory = tokio::task::spawn_blocking(|| {
@@ -75,6 +85,7 @@ async fn run_source_client_with_command(
         .kill_on_drop(true)
         .spawn()
         .map_err(|_| SourceRejection::SourceUnavailable)?;
+    let (frontend_ready_sender, mut frontend_ready_receiver) = tokio::sync::oneshot::channel();
     let mut forwarding = Box::pin(async move {
         let (frontend, _) = tokio::time::timeout(Duration::from_secs(30), listener.accept())
             .await
@@ -96,14 +107,27 @@ async fn run_source_client_with_command(
         .await
         .map_err(|_| io::Error::other("source frontend upgrade timed out"))?
         .map_err(|_| io::Error::other("source frontend upgrade failed"))?;
+        let _attached = frontend_ready_sender.send(());
         forward_native_streams(frontend, connection.stream).await
     });
     let result = tokio::select! {
-        status = child.wait() => status.map(exit_code).map_err(|_| SourceRejection::SourceUnavailable),
+        status = child.wait() => {
+            let status = status.map(exit_code).map_err(|_| SourceRejection::SourceUnavailable);
+            if status.is_ok() && frontend_ready_receiver.try_recv().is_ok() {
+                // Process exit closes the producer, not its queued frames. Keep
+                // the attached stream alive until those bytes reach the backend.
+                match before_settlement_limit(&mut forwarding, settlement_limit()).await {
+                    Some(Ok(())) => status,
+                    _ => Err(SourceRejection::SourceUnavailable),
+                }
+            } else {
+                status
+            }
+        },
         result = &mut forwarding => {
             // A normal TUI close precedes process teardown. Let that actual exit
             // settle before forced cleanup; do not sleep or reopen its carrier.
-            match settle_child(&mut child).await {
+            match settle_child(&mut child, settlement_limit()).await {
                 Some(status) if result.is_ok() => Ok(exit_code(status)),
                 _ => Err(SourceRejection::SourceUnavailable),
             }
@@ -175,9 +199,24 @@ fn exit_code(status: ExitStatus) -> i32 {
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
 }
 
-async fn settle_child(child: &mut Child) -> Option<ExitStatus> {
-    match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
-        Ok(Ok(status)) => Some(status),
+fn source_settlement_limit() -> tokio::time::Sleep {
+    tokio::time::sleep(SOURCE_CLIENT_SETTLEMENT_LIMIT)
+}
+
+async fn before_settlement_limit<Outcome>(
+    operation: impl Future<Output = Outcome>,
+    limit: impl Future<Output = ()>,
+) -> Option<Outcome> {
+    tokio::select! {
+        biased;
+        result = operation => Some(result),
+        () = limit => None,
+    }
+}
+
+async fn settle_child(child: &mut Child, limit: impl Future<Output = ()>) -> Option<ExitStatus> {
+    match before_settlement_limit(child.wait(), limit).await {
+        Some(Ok(status)) => Some(status),
         _ => {
             stop_child(child).await;
             None

@@ -48,6 +48,7 @@ claude-code-peer-messaging = { path = "../claude-code-peer-messaging", version =
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"], optional = true }
 
 [dev-dependencies]
+socket2 = "0.6"
 sqlx = { workspace = true, features = ["sqlite"] }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 axum = { workspace = true, features = ["http1", "tokio", "json"] }

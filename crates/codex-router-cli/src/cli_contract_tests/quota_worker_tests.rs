@@ -102,23 +102,30 @@ fn background_quota_refresh_worker_start_does_not_wait_for_slow_provider() {
         &secret_root,
         NoopCredentialRefreshClient,
     ));
-    let provider = SlowQuotaRefreshProvider::new(Duration::from_millis(500), 72);
-
-    let start = Instant::now();
-    let worker = start_background_quota_refresh_worker_with_dependencies(
-        state_path,
-        secret_root,
-        "https://chatgpt.com/backend-api".to_owned(),
-        resolver,
-        provider,
-        Duration::from_secs(0),
-    );
-    let elapsed = start.elapsed();
-
-    assert!(
-        elapsed < Duration::from_millis(250),
-        "background worker startup waited for provider: {elapsed:?}"
-    );
+    let (provider_entered, observe_provider) = mpsc::channel();
+    let (release_provider, provider_release) = mpsc::channel();
+    let provider = BlockingQuotaRefreshProvider::new(72, provider_entered, provider_release);
+    let (startup_returned, observe_startup) = mpsc::channel();
+    let startup = thread::spawn(move || {
+        let worker = start_background_quota_refresh_worker_with_dependencies(
+            state_path,
+            secret_root,
+            "https://chatgpt.com/backend-api".to_owned(),
+            resolver,
+            provider,
+            Duration::ZERO,
+        );
+        if startup_returned.send(worker).is_err() {
+            panic!("test must retain the returned worker");
+        }
+    });
+    let provider_started = observe_provider.recv_timeout(Duration::from_secs(2));
+    let worker = observe_startup.recv_timeout(Duration::from_secs(2));
+    // Release and join even when startup incorrectly blocks on the provider.
+    must_ok(release_provider.send(()));
+    startup.join().expect("startup thread must settle");
+    provider_started.expect("the real provider must enter its held fetch");
+    let worker = worker.expect("worker startup must return while its provider is held");
     drop(worker);
 }
 
@@ -163,21 +170,43 @@ fn background_quota_refresh_worker_uses_fresh_time_for_each_cycle() {
     let provider = SignalingQuotaRefreshProvider::new(64, refresh_sender);
     let clock = Arc::new(AtomicU64::new(1_300));
     let worker_clock = Arc::clone(&clock);
+    let (cycle_completed, observe_cycle) = mpsc::channel();
+    let (cycle_permit, next_cycle) = mpsc::channel();
 
-    let worker = start_background_quota_refresh_worker_with_clock(
+    let worker = start_background_quota_refresh_worker_with_reporter(
         state_path,
         secret_root,
         "https://chatgpt.com/backend-api".to_owned(),
         resolver,
         provider,
-        move || worker_clock.fetch_add(5, Ordering::SeqCst),
-        Duration::from_millis(1),
+        BackgroundQuotaRefreshRuntime::new(
+            move || worker_clock.fetch_add(5, Ordering::SeqCst),
+            |_diagnostic| {},
+            Duration::from_secs(1),
+        )
+        .with_cycle_waiter_for_test(move |delay| {
+            cycle_completed
+                .send(delay)
+                .expect("cycle completion must be observed");
+            next_cycle
+                .recv_timeout(Duration::from_secs(2))
+                .expect("test must explicitly permit or stop each completed cycle")
+        }),
     );
 
-    for _call_index in 0..4 {
-        if let Err(error) = refresh_receiver.recv_timeout(Duration::from_secs(2)) {
-            panic!("background refresh should run multiple cycles: {error}");
+    for cycle_index in 0..4 {
+        let delay = observe_cycle
+            .recv_timeout(Duration::from_secs(2))
+            .expect("real refresh cycle must commit before its next permit");
+        assert!(delay <= Duration::from_secs(1));
+        for _route_band in 0..2 {
+            refresh_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("each real cycle must fetch both route bands");
         }
+        cycle_permit
+            .send(cycle_index < 3)
+            .expect("worker must consume four explicit cycle permits");
     }
     drop(worker);
     let snapshot = must_ok(QuotaSnapshotRepository::load_snapshot_for_route_band(

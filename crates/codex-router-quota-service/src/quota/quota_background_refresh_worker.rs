@@ -18,6 +18,8 @@ pub struct BackgroundQuotaRefreshRuntime<C, D> {
     diagnostic_reporter: D,
     interval: Duration,
     quota_floor_notifier: Option<Arc<dyn WeeklyQuotaFloorIntentObserver>>,
+    #[cfg(any(test, feature = "test-support"))]
+    cycle_waiter: Option<Box<dyn FnMut(Duration) -> bool + Send>>,
 }
 
 impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
@@ -27,6 +29,8 @@ impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
             diagnostic_reporter,
             interval,
             quota_floor_notifier: None,
+            #[cfg(any(test, feature = "test-support"))]
+            cycle_waiter: None,
         }
     }
 
@@ -35,6 +39,17 @@ impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
         quota_floor_notifier: WebSocketQuotaFloorNotifier,
     ) -> Self {
         self.quota_floor_notifier = Some(Arc::new(quota_floor_notifier));
+        self
+    }
+
+    /// Supplies cycle permits at the existing timer boundary, retaining the
+    /// actual worker, refresh transaction, observed clock and diagnostics.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn with_cycle_waiter_for_test(
+        mut self,
+        waiter: impl FnMut(Duration) -> bool + Send + 'static,
+    ) -> Self {
+        self.cycle_waiter = Some(Box::new(waiter));
         self
     }
 }
@@ -116,6 +131,8 @@ where
         mut diagnostic_reporter,
         interval,
         quota_floor_notifier,
+        #[cfg(any(test, feature = "test-support"))]
+        mut cycle_waiter,
     } = runtime;
     let stop = Arc::new(AtomicBool::new(false));
     let stop_for_thread = Arc::clone(&stop);
@@ -158,7 +175,17 @@ where
                 diagnostic_reporter(format!("background quota refresh failed: {error}"));
             }
             let delay = refresh_cycle_delay(interval, cycle_started_at.elapsed());
-            if interval.is_zero() || !sleep_interruptibly(&stop_for_thread, delay) {
+            if interval.is_zero() {
+                break;
+            }
+            #[cfg(any(test, feature = "test-support"))]
+            if let Some(waiter) = cycle_waiter.as_mut() {
+                if stop_for_thread.load(Ordering::SeqCst) || !waiter(delay) {
+                    break;
+                }
+                continue;
+            }
+            if !sleep_interruptibly(&stop_for_thread, delay) {
                 break;
             }
         }

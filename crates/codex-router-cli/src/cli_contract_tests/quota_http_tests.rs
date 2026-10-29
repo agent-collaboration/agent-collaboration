@@ -952,43 +952,8 @@ fn loopback_quota_401_retries_with_a_concurrently_committed_generation() {
     assert_eq!(must_ok(String::from_utf8(output)), "refreshed: 2\n");
 }
 
-#[test]
-fn quota_refresh_http_provider_times_out_hanging_usage_endpoint() {
-    let listener = must_ok(TcpListener::bind("127.0.0.1:0"));
-    let address = must_ok(listener.local_addr());
-    let server_thread = thread::spawn(move || {
-        let (mut stream, _peer_address) = match listener.accept() {
-            Ok(connection) => connection,
-            Err(error) => panic!("quota mock should accept: {error}"),
-        };
-        let mut buffer = [0_u8; 1024];
-        let _bytes_read = stream.read(&mut buffer);
-        thread::sleep(Duration::from_millis(200));
-    });
-    let provider = must_ok(HttpQuotaRefreshProvider::new_with_timeout(
-        Duration::from_millis(10),
-    ));
-
-    let error =
-        match test_async_runtime().block_on(provider.fetch_quota(QuotaRefreshProviderRequest::new(
-            account_id("acct_timeout"),
-            "timeout",
-            "responses",
-            format!("http://{address}"),
-            SecretString::new("timeout-token-canary"),
-            None,
-        ))) {
-            Ok(response) => panic!("hanging quota endpoint should time out: {response:?}"),
-            Err(error) => error,
-        };
-
-    assert!(error.to_string().contains("quota refresh request failed"));
-    assert!(!error.to_string().contains("timeout-token-canary"));
-    match server_thread.join() {
-        Ok(()) => {}
-        Err(error) => panic!("quota mock thread panicked: {error:?}"),
-    }
-}
+#[path = "quota_http_timeout_tests.rs"]
+mod quota_http_timeout_tests;
 
 #[path = "quota_http_claude_tests.rs"]
 mod quota_http_claude_tests;
