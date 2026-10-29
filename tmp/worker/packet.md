@@ -51,3 +51,17 @@ The remote source path runs `ssh -tt … exec <agent-sessions> --source-request 
 - "Details": it opens the selected session's details (details_dialog_state.rs). Make that obvious: label it for what it does (e.g. "Session details"), show it as an action of the selected row (also on Enter/→ or its shortcut), disabled with a reason when no row is selected. If you think it should be removed or merged instead, report with a screenshot and reasoning; don't remove it on your own.
 - Help: opens by keyboard (its shortcut + focus+Enter) and mouse; the Help dialog scrolls with arrows/PageUp/PageDown, Esc closes, and it lists the real current shortcuts (generated from the same key map, so it can't drift).
 - Same standards as all dialogs (keyboard+mouse, Ctrl+Enter, Esc, arrows). Proof: keyboard-only and mouse-only journeys through list → New → Details → Help on the signed debug build on Sunclaw, with captures.
+
+## DESIGN (Lead + owner, 2026-10-29) — supersedes conflicting lines above
+Diagnosis (Lead, source-read at main 881f778c7): picker_input.rs:148-411 routes keys through one if-chain over ~10 independent flags (no focus hierarchy); header actions/filters aren't focus targets (only hidden shortcuts F1/F2/F3/F4/Ctrl+N…); every dialog has its own key map; Help swallows all keys but Esc (no scroll, :173-177); Esc on the main view quits (:404); mouse is a separate system (interactive_row.rs, dialog_interaction.rs); no row selected on open; dialog frame doesn't occlude the list. "No keys at all" is NOT explained by the routing source (list arrows :333-338 are wired) — reproduce first (step 1 below).
+
+Focus model (build once in codex-router-tui): a FocusStack is the ONLY receiver of keys and mouse. Layers: Screen → Dialog → Dropdown; the top layer owns input; each layer declares ordered focus targets and its actions; a click focuses+activates the same targets. Picker and quota screens declare targets/actions only — no screen-level key-handling chains.
+Key rules (owner decisions):
+- MAIN VIEW (not a dialog): Enter opens the selected session; Details is its own action (button + key); arrows/Tab/mouse move across header actions, filters and rows; first row selected on open; Esc clears search, then filters — Esc NEVER quits; **Ctrl+C quits the app** (everywhere).
+- DIALOGS only: Ctrl+Enter = main action; Esc closes the dialog (or an open dropdown first); arrows move between fields/options; Enter keeps its in-field meaning; Tab/Shift+Tab move.
+- Help is a normal scrollable dialog generated from the same key map.
+
+Sequence for this branch:
+1. Reproduce "keyboard doesn't work at all" in a recorded PTY on Sunclaw (installed 0.1.116 and main): local picker; after a Client action runs a native child; after a remote (ssh carrier, source_native_carrier.rs:72 inherits the TTY) launch returns. Find the cause; if it's terminal-state restore, fix it as its own first commit with a test.
+2. FocusStack + key rules + mouse, migrating every screen/dialog onto it (delete the old if-chain).
+3. Claude attach behaviour, Client action text, untrusted workspace, dialog painting/sizing, Details/Help clarity, remote terminal env — on top of 2.
