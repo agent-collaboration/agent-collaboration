@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { z } from 'zod';
 
+import { FixtureControlSocket } from '../../../verification/fixtures/fixture-control-socket.ts';
 import { isMain, reportCliFailure } from './cli-arguments.ts';
 import { captureArtifact } from './source-binding.ts';
 
@@ -61,7 +62,7 @@ export function prepareNativeAdapterFixture(root: string, mode: string, node: st
 	const binary = join(root, "controlled ' public entry.mjs");
 	writeFileSync(
 		binary,
-		`#!${control.node}\nimport {nativeAdapterFixtureMain} from ${JSON.stringify(import.meta.url)};\nnativeAdapterFixtureMain(['child',${JSON.stringify(control.root)},...process.argv.slice(2)]);\n`,
+		`#!${control.node}\nimport {nativeAdapterFixtureMain} from ${JSON.stringify(import.meta.url)};\nawait nativeAdapterFixtureMain(['child',${JSON.stringify(control.root)},...process.argv.slice(2)]);\n`,
 		{ flag: 'wx', mode: 0o700 },
 	);
 	chmodSync(binary, 0o700);
@@ -115,23 +116,32 @@ export function prepareNativeAdapterFixture(root: string, mode: string, node: st
 	save(join(root, 'configuration.json'), configuration);
 }
 
-function waitForNativeFixtureRelease(
-	release: string,
-	expected: string,
-	onRelease: () => void,
-): void {
-	// The native test's existing outer deadline bounds this wait. Observe the
-	// file state directly: filesystem notifications can miss startup writes.
-	const checkRelease = (): void => {
-		if (!existsSync(release) || readFileSync(release, 'utf8') !== expected) return;
-		clearInterval(releaseTimer);
-		onRelease();
-	};
-	const releaseTimer = setInterval(checkRelease, 20);
-	checkRelease();
+interface NativeFixtureReleaseProps {
+	readonly root: string;
+	readonly release: string;
+	readonly expected: string;
+	readonly role: 'R' | 'B';
+	readonly onRelease: () => void;
 }
 
-function runControlledChild(root: string, argumentsList: readonly string[]): void {
+async function waitForNativeFixtureRelease(props: NativeFixtureReleaseProps): Promise<void> {
+	const control = new FixtureControlSocket(join(props.root, 'ctl'), 8000);
+	try {
+		await control.connected();
+		control.send(props.role);
+		if (props.role === 'R') process.stdout.write('NATIVE_ADAPTER_READY\n');
+		await control.expect('X');
+		if (!existsSync(props.release) || readFileSync(props.release, 'utf8') !== props.expected)
+			throw new Error('native fixture release does not match its acknowledged bytes');
+		props.onRelease();
+		control.send('D');
+		await control.expect('A');
+	} finally {
+		control.close();
+	}
+}
+
+async function runControlledChild(root: string, argumentsList: readonly string[]): Promise<void> {
 	const raw: unknown = JSON.parse(readFileSync(join(root, 'control.json'), 'utf8'));
 	const control = controlSchema.parse(raw);
 	const output = join(root, 'output');
@@ -190,15 +200,16 @@ function runControlledChild(root: string, argumentsList: readonly string[]): voi
 			control.mode === 'pending-valid'
 				? join(output, 'fixture-release')
 				: join(root, 'release-child');
-		waitForNativeFixtureRelease(
+		await waitForNativeFixtureRelease({
+			root,
 			release,
-			control.mode === 'pending-valid' ? 'settle\n' : 'release\n',
-			finish,
-		);
-		process.stdout.write('NATIVE_ADAPTER_READY\n');
+			expected: control.mode === 'pending-valid' ? 'settle\n' : 'release\n',
+			role: 'R',
+			onRelease: finish,
+		});
 	} else finish();
 }
-export function nativeAdapterFixtureMain(args: readonly string[]): void {
+export async function nativeAdapterFixtureMain(args: readonly string[]): Promise<void> {
 	const [operation, root, mode, node, ...extra] = args;
 	if (
 		operation === 'prepare' &&
@@ -217,19 +228,25 @@ export function nativeAdapterFixtureMain(args: readonly string[]): void {
 		process.on('SIGHUP', () => {
 			writeFileSync(join(root, 'output/bystander-hangup'), 'SIGHUP\n');
 		});
-		waitForNativeFixtureRelease(join(root, 'release-bystander'), 'release\n', () => undefined);
 		writeFileSync(join(root, 'output/bystander.pid'), String(process.pid));
+		await waitForNativeFixtureRelease({
+			root,
+			release: join(root, 'release-bystander'),
+			expected: 'release\n',
+			role: 'B',
+			onRelease: () => undefined,
+		});
 		return;
 	}
 	if (operation === 'child' && root !== undefined) {
-		runControlledChild(root, args.slice(2));
+		await runControlledChild(root, args.slice(2));
 		return;
 	}
 	throw new Error('native-adapter-fixture.ts prepare ROOT MODE NODE | child ROOT [declared argv]');
 }
 if (isMain(import.meta.url)) {
 	try {
-		nativeAdapterFixtureMain(process.argv.slice(2));
+		await nativeAdapterFixtureMain(process.argv.slice(2));
 	} catch (error) {
 		reportCliFailure(error);
 	}

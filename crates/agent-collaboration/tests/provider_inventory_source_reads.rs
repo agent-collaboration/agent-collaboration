@@ -40,12 +40,9 @@ async fn fixed_source_provider_read_preserves_availability_vs_invalid_without_pr
     ] {
         let mut api = FakeCollaborationApi::new(service, epoch).unwrap();
         let directory = api.directory().to_owned();
-        let serving = api.serve_then_watch(
-            vec![FakeReply::Error(
-                json!({"code":code,"message":sentinel,"data":data}),
-            )],
-            Duration::from_millis(25),
-        );
+        let (client_done, serving) = api.serve_then_watch(vec![FakeReply::Error(
+            json!({"code":code,"message":sentinel,"data":data}),
+        )]);
         let peer = tokio::spawn(serving);
         let request = json!({"serviceDirectory":directory,"expectedService":service,"operation":{"kind":"providerSessions","params":{
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"view":"loaded","scope":{"kind":"any"},"source":"interactive","query":null,"pageSize":100,"cursor":null
@@ -60,6 +57,7 @@ async fn fixed_source_provider_read_preserves_availability_vs_invalid_without_pr
         .await
         .unwrap()
         .unwrap();
+        let _completed = client_done.send(());
         let observed = tokio::time::timeout(Duration::from_secs(5), peer)
             .await
             .expect("fixed source must reach scripted API")

@@ -77,7 +77,9 @@ test('public timeout preserves unsettled exact child without signaling', async (
 	const waiting = expect(
 		waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 0.03 }),
 	).rejects.toThrow('cleanup unsettled');
-	await vi.advanceTimersByTimeAsync(60);
+	await vi.advanceTimersToNextTimerAsync();
+	expect(readFileSync(join(root, 'cua-sessions/cua-stop'), 'utf8')).toBe('stop\n');
+	await vi.advanceTimersToNextTimerAsync();
 	await waiting;
 	expect(child.process.exitCode).toBeNull();
 	expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({

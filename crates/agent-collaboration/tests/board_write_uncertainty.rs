@@ -92,11 +92,8 @@ async fn run_lost_project_create(
 ) -> TestResult<LostWriteProof> {
     let mut fixture = FakeCollaborationApi::new(SERVICE_ID, SERVICE_EPOCH)?;
     // The stand-in reads the complete write, then closes without answering: only the
-    // response is uncertain. It keeps listening briefly to prove the CLI does not replay it.
-    let served = fixture.serve_then_watch(
-        vec![FakeReply::Disconnect],
-        std::time::Duration::from_millis(500),
-    );
+    // response is uncertain. Observe through the CLI's exit to reject any replay.
+    let (client_done, served) = fixture.serve_then_watch(vec![FakeReply::Disconnect]);
 
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
     command.args([
@@ -119,6 +116,7 @@ async fn run_lost_project_create(
     }
     let output =
         tokio::time::timeout(std::time::Duration::from_secs(3), command.output()).await??;
+    let _completed = client_done.send(());
     let watched = served.await??;
     let write = watched.calls.first().ok_or("the CLI made no write")?;
     assert_eq!(

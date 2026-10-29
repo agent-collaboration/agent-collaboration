@@ -124,7 +124,8 @@ async fn token_expiring_during_secret_read_cannot_be_emitted() {
             )
             .await,
     );
-    let expiry = must_ok(crate::resolver::current_unix_seconds()).saturating_add(3);
+    let clock = Arc::new(std::sync::atomic::AtomicU64::new(1_000));
+    let expiry = 1_003;
     let active_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
         file_secrets.write_secret(
@@ -145,7 +146,8 @@ async fn token_expiring_during_secret_read_cannot_be_emitted() {
         held_once: Arc::new(AtomicBool::new(false)),
     };
     let resolver =
-        AsyncRouterCredentialResolver::new(state, secrets, NoopCredentialRefreshClient, None);
+        AsyncRouterCredentialResolver::new(state, secrets, NoopCredentialRefreshClient, None)
+            .with_test_clock(Arc::clone(&clock));
     let resolved_account = account_id.clone();
     let resolution = tokio::spawn(async move {
         resolver
@@ -161,17 +163,14 @@ async fn token_expiring_during_secret_read_cannot_be_emitted() {
     )
     .expect("active secret read should begin");
     assert!(
-        must_ok(crate::resolver::current_unix_seconds()) < expiry,
+        clock.load(Ordering::SeqCst) < expiry,
         "fixture must enter the read before the known expiry"
     );
-    let deadline = std::time::Instant::now() + Duration::from_secs(4);
-    while must_ok(crate::resolver::current_unix_seconds()) < expiry {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "expiry did not arrive"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    clock.store(expiry, Ordering::SeqCst);
+    assert!(
+        clock.load(Ordering::SeqCst) >= expiry,
+        "expiry did not arrive"
+    );
     must_ok(release_sender.send(()));
     assert_eq!(
         must_ok(must_ok(
@@ -204,7 +203,8 @@ async fn replacement_expiring_during_held_refresh_cannot_be_emitted() {
             )
             .await,
     );
-    let now = must_ok(crate::resolver::current_unix_seconds());
+    let now = 1_000u64;
+    let clock = Arc::new(std::sync::atomic::AtomicU64::new(now));
     let replacement_expiry = now.saturating_add(3);
     let active_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
@@ -229,7 +229,8 @@ async fn replacement_expiring_during_held_refresh_cannot_be_emitted() {
         response_expiry_unix_seconds: replacement_expiry,
     };
     let resolver =
-        AsyncRouterCredentialResolver::new(state.clone(), secrets, refresh_client.clone(), None);
+        AsyncRouterCredentialResolver::new(state.clone(), secrets, refresh_client.clone(), None)
+            .with_test_clock(Arc::clone(&clock));
     let resolved_account = account_id.clone();
     let resolution = tokio::spawn(async move {
         resolver
@@ -245,17 +246,14 @@ async fn replacement_expiring_during_held_refresh_cannot_be_emitted() {
     )
     .expect("refresh should begin");
     assert!(
-        must_ok(crate::resolver::current_unix_seconds()) < replacement_expiry,
+        clock.load(Ordering::SeqCst) < replacement_expiry,
         "fixture must enter refresh before replacement expiry"
     );
-    let deadline = std::time::Instant::now() + Duration::from_secs(4);
-    while must_ok(crate::resolver::current_unix_seconds()) < replacement_expiry {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "expiry did not arrive"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    clock.store(replacement_expiry, Ordering::SeqCst);
+    assert!(
+        clock.load(Ordering::SeqCst) >= replacement_expiry,
+        "expiry did not arrive"
+    );
     must_ok(release_sender.send(()));
     assert_eq!(
         must_ok(must_ok(

@@ -7,12 +7,9 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
 
     let mut fixture = FakeCollaborationApi::new(SERVICE_ID, SERVICE_EPOCH)?;
     // The wait answers with a result the CLI cannot decode; no other call may follow it.
-    let fixture_task = fixture.serve_then_watch(
-        vec![FakeReply::Result(
-            serde_json::json!({"batch":{"kind":"invalid"}}),
-        )],
-        Duration::from_secs(3),
-    );
+    let (client_done, fixture_task) = fixture.serve_then_watch(vec![FakeReply::Result(
+        serde_json::json!({"batch":{"kind":"invalid"}}),
+    )]);
 
     let renewal_id = RequestId::generate();
     let renewal = json!({"requestId":renewal_id,"scope":{"kind":"thread","thread":{"thread":ROOT_MESSAGE_ID}}}).to_string();
@@ -32,6 +29,7 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
         ],
     )
     .await?;
+    let _completed = client_done.send(());
     let mut watched = fixture_task.await??;
     ensure(
         watched.further_call.is_none(),

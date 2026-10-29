@@ -19,7 +19,7 @@ async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
             "createdBy":{"endpoint":endpoint(),"sessionId":"creator"}
         }],"nextCursor":null
     });
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory_with_provider()),
         ("provider_sessions_list", provider_page),
         (
@@ -36,6 +36,7 @@ async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
     let (native_endpoint, rows, _) = load_provider_records(&mut client)
         .await
         .expect("provider rows");
+    let _completed = client_done.send(());
     let requests = peer.await.expect("peer");
     assert_eq!(
         native_endpoint.expect("native endpoint"),
@@ -65,7 +66,7 @@ async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed
         json!({"endpoint":target["endpoint"],
         "observedAt":"2026-09-07T00:00:00Z","sessions":sessions,"nextCursor":null})
     };
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory_with_provider()),
         (
             "provider_sessions_list",
@@ -98,6 +99,7 @@ async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed
         |row| matches!(row.identity, SessionPickerIdentity::NativeClaude(_))
             && row.cwd.as_deref() == Some("/native")
     ));
+    let _completed = client_done.send(());
     let requests = peer.await.unwrap();
     assert_eq!(requests[1]["arguments"]["view"], "stored");
     assert_eq!(requests[2]["arguments"]["view"], "stored");
@@ -255,20 +257,18 @@ async fn local_native_availability_keeps_stored_when_final_probe_is_unavailable_
         } else {
             json!({"code":-32602,"message":"PRIVATE_LOCAL_SENTINEL","data":{"private":"PRIVATE_LOCAL_SENTINEL"}})
         };
-        let peer = api.serve_then_watch(
-            vec![
-                FakeReply::Result(inventory_with_provider()),
-                FakeReply::Result(stored.clone()),
-                FakeReply::Error(unavailable.clone()),
-                FakeReply::Error(unavailable.clone()),
-                FakeReply::Error(final_reply),
-            ],
-            std::time::Duration::from_millis(25),
-        );
+        let (client_done, peer) = api.serve_then_watch(vec![
+            FakeReply::Result(inventory_with_provider()),
+            FakeReply::Result(stored.clone()),
+            FakeReply::Error(unavailable.clone()),
+            FakeReply::Error(unavailable.clone()),
+            FakeReply::Error(final_reply),
+        ]);
         let mut client = CollaborationClient::connect(api.directory(), "local-partial-proof", "1")
             .await
             .unwrap();
         let result = load_provider_records(&mut client).await;
+        let _completed = client_done.send(());
         let transcript = tokio::time::timeout(std::time::Duration::from_secs(5), peer)
             .await
             .unwrap()

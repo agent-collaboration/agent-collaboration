@@ -4,30 +4,70 @@ use iocraft::Canvas;
 use iocraft::prelude::ElementExt;
 use std::{io, pin::Pin};
 
+pub(crate) enum FrameJourneyStep {
+    Painted {
+        ready: fn(&str) -> bool,
+        events: Vec<iocraft::prelude::TerminalEvent>,
+    },
+    Completed {
+        signals: tokio::sync::mpsc::UnboundedReceiver<()>,
+        count: usize,
+        event: iocraft::prelude::TerminalEvent,
+    },
+}
+
 /// Sends each key only after the current paint acknowledges its prerequisite.
 pub(crate) async fn render_frame_journey(
     mut component: iocraft::AnyElement<'static>,
-    steps: Vec<(fn(&str) -> bool, iocraft::prelude::TerminalEvent)>,
+    steps: Vec<FrameJourneyStep>,
 ) -> Vec<String> {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let frames = component.mock_terminal_render_loop(
-        iocraft::MockTerminalConfig::with_events(events),
-    );
+    let frames =
+        component.mock_terminal_render_loop(iocraft::MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let mut observed = Vec::new();
-    for (ready, event) in steps {
-        let canvas = next_matching_frame(
-            frames.as_mut(),
-            std::time::Duration::from_secs(2),
-            |canvas| ready(&canvas.to_string()),
-        )
-        .await
-        .expect("event prerequisite must be painted");
-        observed.push(canvas.to_string());
-        sender.send(event).expect("journey input must remain open");
+    for (step_index, step) in steps.into_iter().enumerate() {
+        let events = match step {
+            FrameJourneyStep::Painted { ready, events } => {
+                let canvas = next_matching_frame(
+                    frames.as_mut(),
+                    std::time::Duration::from_secs(2),
+                    |canvas| ready(&canvas.to_string()),
+                )
+                .await
+                .unwrap_or_else(|error| panic!("journey step {step_index} prerequisite: {error}; prior acknowledged frame: {:?}", observed.last()));
+                observed.push(canvas.to_string());
+                events
+            }
+            FrameJourneyStep::Completed {
+                mut signals,
+                count,
+                event,
+            } => {
+                assert!(count > 0, "completion step requires a producer fact");
+                tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                    let mut completed = 0;
+                    while completed < count {
+                        tokio::select! {
+                            signal = signals.recv() => {
+                                signal.expect("completion producer ended before its fact");
+                                completed += 1;
+                            }
+                            canvas = frames.next() => {
+                                observed.push(canvas.expect("render loop ended before producer completion").to_string());
+                            }
+                        }
+                    }
+                }).await.expect("actual saver or loader must complete before the next key");
+                vec![event]
+            }
+        };
+        for event in events {
+            sender.send(event).expect("journey input must remain open");
+        }
     }
     tokio::time::timeout(std::time::Duration::from_secs(2), async {
         while let Some(canvas) = frames.next().await {

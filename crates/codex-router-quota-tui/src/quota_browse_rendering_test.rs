@@ -174,11 +174,12 @@ async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
             unknown: 2,
             excluded: 2,
         };
-        view_model.header.freshness = codex_router_quota_service::quota_display_facts::QuotaFreshnessCensus {
-            fresh: 4,
-            stale: 4,
-            unknown: 2,
-        };
+        view_model.header.freshness =
+            codex_router_quota_service::quota_display_facts::QuotaFreshnessCensus {
+                fresh: 4,
+                stale: 4,
+                unknown: 2,
+            };
         view_model.header.observed_clients = Some(12);
         for row in &mut view_model.rows {
             row.selected = false;
@@ -304,10 +305,9 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
     let mut phase = 0;
     let mut last = String::new();
     let result = tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(canvas) =
-            crate::quota_frame_observation::next_current_frame(frames.as_mut())
-                .await
-                .expect("bounded current Quota pointer canvas")
+        while let Some(canvas) = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+            .await
+            .expect("bounded current Quota pointer canvas")
         {
             let text = canvas.to_string();
             match phase {
@@ -401,11 +401,12 @@ async fn quota_status_reloads_view_model_on_timer() {
                 let mut view_model = quota_view_model();
                 view_model.route_line = "responses -> beta    [preferred]".to_owned();
                 view_model.pool_freshness_summary = "stale 1".to_owned();
-                view_model.header.freshness = codex_router_quota_service::quota_display_facts::QuotaFreshnessCensus {
-                    fresh: 0,
-                    stale: 1,
-                    unknown: 0,
-                };
+                view_model.header.freshness =
+                    codex_router_quota_service::quota_display_facts::QuotaFreshnessCensus {
+                        fresh: 0,
+                        stale: 1,
+                        unknown: 0,
+                    };
                 let stale_sample = SampleMetadata {
                     confidence: SampleConfidence::Stale,
                     age_label: "15m 1s".to_owned(),
@@ -430,14 +431,19 @@ async fn quota_status_reloads_view_model_on_timer() {
             reload_interval: Duration::from_millis(10),
             spinner_interval: Duration::from_secs(60),
         )
-    }.into_any();
+    }
+    .into_any();
     let frames = crate::quota_frame_observation::render_frame_journey(
         component,
-        vec![(
-            |frame| frame.contains("❯ beta"),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        )],
-    ).await;
+        vec![crate::quota_frame_observation::FrameJourneyStep::Painted {
+            ready: |frame| frame.contains("❯ beta"),
+            events: vec![TerminalEvent::Key(KeyEvent::new(
+                KeyEventKind::Press,
+                KeyCode::Esc,
+            ))],
+        }],
+    )
+    .await;
 
     assert!(
         reload_count.load(Ordering::SeqCst) > 0,
@@ -553,16 +559,18 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: codex_router_quota_service::quota::CreditUsageStatus::default(),
             reason: "safest quota".to_owned(),
-            display_weekly: codex_router_quota_service::quota_display_model::QuotaDisplayWindow::Known {
-                remaining_percent: 83,
-                reset_in_seconds: Some(604800),
-                stale: false,
-            },
-            display_short: codex_router_quota_service::quota_display_model::QuotaDisplayWindow::Known {
-                remaining_percent: 99,
-                reset_in_seconds: Some(18000),
-                stale: false,
-            },
+            display_weekly:
+                codex_router_quota_service::quota_display_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 83,
+                    reset_in_seconds: Some(604800),
+                    stale: false,
+                },
+            display_short:
+                codex_router_quota_service::quota_display_model::QuotaDisplayWindow::Known {
+                    remaining_percent: 99,
+                    reset_in_seconds: Some(18000),
+                    stale: false,
+                },
             weekly_window: "█████ 83%".to_owned(),
             short_window: "█████ 99%".to_owned(),
             burn_meter: "legacy-meter-sentinel".to_owned(),

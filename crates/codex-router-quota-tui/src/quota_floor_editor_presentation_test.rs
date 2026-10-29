@@ -6,7 +6,6 @@ use futures_util::StreamExt;
 use iocraft::prelude::*;
 
 use super::quota_browse_presentation_test::quota_two_account_view_model;
-use super::quota_frame_observation::render_frame_journey;
 use super::quota_floor_editor::WeeklyFloorEditorPhase;
 use super::quota_floor_editor::WeeklyFloorEditorState;
 use super::quota_floor_editor::WeeklyFloorStep;
@@ -15,9 +14,12 @@ use super::quota_floor_editor::WeeklyQuotaFloorSaver;
 use super::quota_floor_editor::render_weekly_floor_editor;
 use super::quota_floor_editor::step_weekly_floor_percent;
 use super::quota_floor_editor::weekly_floor_editor_key_command;
+use super::quota_frame_observation::{FrameJourneyStep, render_frame_journey};
 use super::quota_reset_component_input::forced_quota_exit_key;
 use super::quota_status_component::QuotaStatusComponent;
 use crate::quota_status_view_model::QuotaStatusViewModelLoader;
+
+type PaintedKeyStep = (fn(&str) -> bool, TerminalEvent);
 
 #[test]
 fn weekly_floor_stepper_clamps_to_zero_and_fifteen() {
@@ -88,12 +90,27 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
         let reloaded_view_model = reloaded_view_model.clone();
         Box::pin(async move { Some(reloaded_view_model) })
     });
-    let steps: Vec<(fn(&str) -> bool, TerminalEvent)> = vec![
-        (|_| true, TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down))),
-        (|frame| frame.contains("❯ duplicate"), TerminalEvent::Key(control_key('e'))),
-        (|frame| frame.contains("Weekly floor") && frame.contains("10%"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right))),
-        (|frame| frame.contains("Weekly floor") && frame.contains("11%"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))),
-        (|frame| !frame.contains("Weekly floor") && frame.contains("Filters"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc))),
+    let steps: Vec<PaintedKeyStep> = vec![
+        (
+            |_| true,
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
+        ),
+        (
+            |frame| frame.contains("❯ duplicate"),
+            TerminalEvent::Key(control_key('e')),
+        ),
+        (
+            |frame| frame.contains("Weekly floor") && frame.contains("10%"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+        ),
+        (
+            |frame| frame.contains("Weekly floor") && frame.contains("11%"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ),
+        (
+            |frame| !frame.contains("Weekly floor") && frame.contains("Filters"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+        ),
     ];
     let component = element! {
         QuotaStatusComponent(
@@ -103,8 +120,19 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
             reload_view_model: Some(loader),
             weekly_floor_saver: Some(saver),
         )
-    }.into_any();
-    let frames = render_frame_journey(component, steps).await;
+    }
+    .into_any();
+    let frames = render_frame_journey(
+        component,
+        steps
+            .into_iter()
+            .map(|(ready, event)| FrameJourneyStep::Painted {
+                ready,
+                events: vec![event],
+            })
+            .collect(),
+    )
+    .await;
 
     assert_eq!(
         *recorded_saves
@@ -174,16 +202,31 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
             Box::pin(async { Ok(()) })
         })
     };
-    let loader: QuotaStatusViewModelLoader = Arc::new(|| Box::pin(async { None }));
-    let events = vec![
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(control_key('c')),
+    let (reload_completed, reload_completions) = tokio::sync::mpsc::unbounded_channel();
+    let loader: QuotaStatusViewModelLoader = Arc::new(move || {
+        let completed = reload_completed.clone();
+        Box::pin(async move {
+            let _observed = completed.send(());
+            None
+        })
+    });
+    let steps: Vec<PaintedKeyStep> = vec![
+        (|_| true, TerminalEvent::Key(control_key('e'))),
+        (
+            |frame| frame.contains("Weekly floor"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+        ),
+        (
+            |frame| frame.contains("Current") && frame.contains("1%"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ),
+        (
+            |frame| frame.contains("saved; refresh failed"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ),
     ];
 
-    let frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
             width: 120usize,
@@ -192,15 +235,20 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
             weekly_floor_saver: Some(saver),
         )
     }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
+    .into_any();
+    let mut steps: Vec<_> = steps
+        .into_iter()
+        .map(|(ready, event)| FrameJourneyStep::Painted {
+            ready,
+            events: vec![event],
+        })
+        .collect();
+    steps.push(FrameJourneyStep::Completed {
+        signals: reload_completions,
+        count: 2,
+        event: TerminalEvent::Key(control_key('d')),
+    });
+    let frames = render_frame_journey(component, steps).await;
 
     assert_eq!(
         *save_count
@@ -224,25 +272,34 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
 #[tokio::test]
 async fn mutation_failure_remains_visible_and_enter_retries_without_losing_the_draft() {
     let save_count = Arc::new(Mutex::new(0usize));
+    let (save_completed, save_completions) = tokio::sync::mpsc::unbounded_channel();
     let saver: WeeklyQuotaFloorSaver = {
         let save_count = Arc::clone(&save_count);
         Arc::new(move |_account_id, _percent| {
             *save_count
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
+            let _observed = save_completed.send(());
             Box::pin(async { Err(WeeklyQuotaFloorSaveError::DatabaseBusy) })
         })
     };
-    let events = vec![
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+    let steps: Vec<PaintedKeyStep> = vec![
+        (|_| true, TerminalEvent::Key(control_key('e'))),
+        (
+            |frame| frame.contains("Weekly floor"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+        ),
+        (
+            |frame| frame.contains("1%"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ),
+        (
+            |frame| frame.contains("database busy; retry save"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ),
     ];
 
-    let frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
             width: 120usize,
@@ -250,15 +307,27 @@ async fn mutation_failure_remains_visible_and_enter_retries_without_losing_the_d
             weekly_floor_saver: Some(saver),
         )
     }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
+    .into_any();
+    let mut steps: Vec<_> = steps
+        .into_iter()
+        .map(|(ready, event)| FrameJourneyStep::Painted {
+            ready,
+            events: vec![event],
+        })
+        .collect();
+    steps.push(FrameJourneyStep::Completed {
+        signals: save_completions,
+        count: 2,
+        event: TerminalEvent::Key(control_key('e')),
+    });
+    steps.push(FrameJourneyStep::Painted {
+        ready: |frame| !frame.contains("Weekly floor") && frame.contains("Filters"),
+        events: vec![TerminalEvent::Key(KeyEvent::new(
+            KeyEventKind::Press,
+            KeyCode::Esc,
+        ))],
+    });
+    let frames = render_frame_journey(component, steps).await;
 
     assert_eq!(
         *save_count

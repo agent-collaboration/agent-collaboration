@@ -181,7 +181,9 @@ test('static_deadline_reports_unsettled_child_without_signalling_it', async () =
 			);
 		}),
 	).rejects.toThrow('cleanup unsettled');
-	await vi.advanceTimersByTimeAsync(60);
+	await vi.advanceTimersToNextTimerAsync();
+	expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n');
+	await vi.advanceTimersToNextTimerAsync();
 	await waiting;
 	expect(child.process.exitCode).toBeNull();
 	expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({

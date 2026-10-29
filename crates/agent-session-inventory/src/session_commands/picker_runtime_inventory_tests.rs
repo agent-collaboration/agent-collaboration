@@ -80,7 +80,7 @@ fn page(id: &str, status: Value, cursor: Value) -> Value {
 async fn malformed_runtime_continuation_is_rejected_before_another_read() {
     let mut malformed = page("first", json!({"type":"idle"}), json!(""));
     malformed["sessions"] = json!([]);
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory()),
         ("sessions_list", malformed),
     ])
@@ -93,6 +93,7 @@ async fn malformed_runtime_continuation_is_rejected_before_another_read() {
         ),
         "malformed continuation cannot issue a second read: {result:?}"
     );
+    let _completed = client_done.send(());
     assert_eq!(peer.await.unwrap().len(), 2);
 }
 fn inspected(id: &str) -> Value {
@@ -110,13 +111,17 @@ mod native_inventory_binding_client_tests;
 /// calls as `{"tool", "arguments"}` once every step was answered and no further call came.
 async fn connect_fixture(
     steps: Vec<(&'static str, Value)>,
-) -> (CollaborationClient, tokio::task::JoinHandle<Vec<Value>>) {
+) -> (
+    CollaborationClient,
+    tokio::sync::oneshot::Sender<()>,
+    tokio::task::JoinHandle<Vec<Value>>,
+) {
     let mut api = FakeCollaborationApi::new(SERVICE, EPOCH).unwrap();
     let (tools, replies): (Vec<&'static str>, Vec<FakeReply>) = steps
         .into_iter()
         .map(|(tool, result)| (tool, FakeReply::Result(result)))
         .unzip();
-    let served = api.serve_then_watch(replies, std::time::Duration::from_millis(200));
+    let (client_done, served) = api.serve_then_watch(replies);
     let client = CollaborationClient::connect(api.directory(), "picker-proof", "1")
         .await
         .unwrap();
@@ -136,7 +141,7 @@ async fn connect_fixture(
         );
         watched.calls
     });
-    (client, task)
+    (client, client_done, task)
 }
 
 #[tokio::test]
@@ -160,9 +165,10 @@ async fn paged_runtime_only_threads_include_metadata_and_blocked_status_without_
         ("session_inspect", inspected("second")),
         ("endpoints_list", inventory()),
     ];
-    let (mut client, peer) = connect_fixture(steps).await;
+    let (mut client, client_done, peer) = connect_fixture(steps).await;
     // Act
     let (_, rows) = load_runtime_records(&mut client, &[], false).await.unwrap();
+    let _completed = client_done.send(());
     let requests = peer.await.unwrap();
     // Assert
     assert_eq!(rows.len(), 2);
@@ -185,7 +191,7 @@ async fn paged_runtime_only_threads_include_metadata_and_blocked_status_without_
 
 #[tokio::test]
 async fn runtime_picker_passes_the_empty_session_opt_in_to_inventory() {
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory()),
         (
             "sessions_list",
@@ -199,6 +205,7 @@ async fn runtime_picker_passes_the_empty_session_opt_in_to_inventory() {
     let (_, records) = load_runtime_records(&mut client, &[], true)
         .await
         .expect("explicitly opted-in inventory");
+    let _completed = client_done.send(());
     let requests = peer.await.unwrap();
 
     assert_eq!(records.len(), 1);
@@ -211,7 +218,7 @@ async fn replacement_during_refresh_discards_the_entire_runtime_result() {
     // Arrange: the endpoint changes generation after its rows are read.
     let mut replacement = inventory();
     replacement["endpoints"][0]["channels"][0]["generation"]["generation"] = json!(2);
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory()),
         (
             "sessions_list",
@@ -223,6 +230,7 @@ async fn replacement_during_refresh_discards_the_entire_runtime_result() {
     .await;
     // Act / Assert: no mixture of generations may become live picker state.
     assert!(load_runtime_records(&mut client, &[], false).await.is_err());
+    let _completed = client_done.send(());
     peer.await.unwrap();
 }
 
@@ -231,9 +239,11 @@ async fn unavailable_endpoint_does_not_attempt_to_load_or_inspect_threads() {
     // Arrange: a reachable service whose backend is unavailable.
     let mut unavailable = inventory();
     unavailable["endpoints"][0]["availability"] = json!({"state":"unprobed"});
-    let (mut client, peer) = connect_fixture(vec![("endpoints_list", unavailable)]).await;
+    let (mut client, client_done, peer) =
+        connect_fixture(vec![("endpoints_list", unavailable)]).await;
     // Act / Assert
     assert!(load_runtime_records(&mut client, &[], false).await.is_err());
+    let _completed = client_done.send(());
     assert_eq!(peer.await.unwrap().len(), 1);
 }
 
@@ -247,7 +257,7 @@ async fn stored_metadata_is_preserved_while_runtime_status_is_refreshed() {
         &json!({"name":"Stored title","model":"gpt-6.1-sol","reasoningEffort":"low"}),
     );
     stored.conversation.snippets = vec!["Retained preview".into()];
-    let (mut client, peer) = connect_fixture(vec![
+    let (mut client, client_done, peer) = connect_fixture(vec![
         ("endpoints_list", inventory()),
         (
             "sessions_list",
@@ -264,6 +274,7 @@ async fn stored_metadata_is_preserved_while_runtime_status_is_refreshed() {
     let (_, rows) = load_runtime_records(&mut client, &[stored], false)
         .await
         .unwrap();
+    let _completed = client_done.send(());
     peer.await.unwrap();
     // Assert
     assert_eq!(rows[0].title, "Stored title");

@@ -23,6 +23,8 @@ where
     secret_store: S,
     refresh_client: C,
     fixed_now_unix_seconds: Option<u64>,
+    #[cfg(test)]
+    test_now_unix_seconds: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     refresh_leases: AsyncRefreshLeaseRegistry,
     refresh_tasks: CredentialRefreshTaskSupervisor,
 }
@@ -93,6 +95,8 @@ where
             secret_store,
             refresh_client,
             fixed_now_unix_seconds,
+            #[cfg(test)]
+            test_now_unix_seconds: None,
             refresh_leases: AsyncRefreshLeaseRegistry::new(),
             refresh_tasks: CredentialRefreshTaskSupervisor::new(),
         }
@@ -112,6 +116,8 @@ where
             secret_store,
             refresh_client,
             fixed_now_unix_seconds,
+            #[cfg(test)]
+            test_now_unix_seconds: None,
             refresh_leases,
             refresh_tasks: CredentialRefreshTaskSupervisor::new(),
         }
@@ -275,9 +281,22 @@ where
     }
 
     fn observed_now_unix_seconds(&self) -> Result<u64, CredentialResolverError> {
+        #[cfg(test)]
+        if let Some(clock) = &self.test_now_unix_seconds {
+            return Ok(clock.load(std::sync::atomic::Ordering::SeqCst));
+        }
         self.fixed_now_unix_seconds.map(Ok).unwrap_or_else(|| {
             current_unix_seconds().map_err(|_| CredentialResolverError::RefreshUnavailable)
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_clock(
+        mut self,
+        now_unix_seconds: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
+        self.test_now_unix_seconds = Some(now_unix_seconds);
+        self
     }
 
     async fn renew_credentials(

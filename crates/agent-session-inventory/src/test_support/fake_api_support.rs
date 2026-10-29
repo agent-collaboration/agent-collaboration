@@ -8,10 +8,11 @@
 
 use collaboration_runtime::ManifestPublication;
 use serde_json::{Value, json};
-use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
+use std::{os::unix::fs::PermissionsExt, path::Path};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{UnixListener, UnixStream},
+    sync::oneshot,
     task::JoinHandle,
 };
 
@@ -73,30 +74,61 @@ impl FakeCollaborationApi {
         })
     }
 
-    /// Like `serve`, then keeps listening for `quiet` and reports any further call, such
-    /// as a replay the CLI must never make.
+    /// Records further calls until the owner acknowledges its client operation ended.
+    /// Check the listener's kernel queue after that acknowledgement as well.
     pub fn serve_then_watch(
         &mut self,
         replies: Vec<FakeReply>,
-        quiet: Duration,
-    ) -> JoinHandle<FakeResult<WatchedCalls>> {
+    ) -> (oneshot::Sender<()>, JoinHandle<FakeResult<WatchedCalls>>) {
         let listener = self.listener.take();
-        tokio::spawn(async move {
+        let (completed, mut completion) = oneshot::channel();
+        let task = tokio::spawn(async move {
             let listener = listener.ok_or("the stand-in API serves once")?;
             let mut calls = Vec::new();
             for reply in replies {
                 calls.push(answer_next_call(&listener, reply).await?);
             }
-            let further_call = match tokio::time::timeout(quiet, next_request(&listener)).await {
-                Err(_) => None,
-                Ok(Ok((_, _, call))) => Some(call),
-                Ok(Err(error)) => return Err(error),
+            let further_call = loop {
+                let mut stream = tokio::select! {
+                    biased;
+                    accepted = listener.accept() => accepted?.0,
+                    result = &mut completion => {
+                        result.map_err(|_| "client operation ended without acknowledging completion")?;
+                        break None;
+                    }
+                };
+                if let Some((_, call)) = read_tool_call(&mut stream).await? {
+                    break Some(call);
+                }
+            };
+            let further_call = if further_call.is_none() {
+                // The completed client cannot send more bytes. Inspect the actual
+                // accept queue rather than waiting for Tokio readiness or a quiet period.
+                let listener = listener.into_std()?;
+                let mut queued_call = None;
+                loop {
+                    let stream = match listener.accept() {
+                        Ok((stream, _)) => stream,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(error) => return Err(error.into()),
+                    };
+                    stream.set_nonblocking(true)?;
+                    let mut stream = UnixStream::from_std(stream)?;
+                    if let Some((_, call)) = read_tool_call(&mut stream).await? {
+                        queued_call = Some(call);
+                        break;
+                    }
+                }
+                queued_call
+            } else {
+                further_call
             };
             Ok(WatchedCalls {
                 calls,
                 further_call,
             })
-        })
+        });
+        (completed, task)
     }
 }
 
@@ -212,19 +244,25 @@ async fn answer_next_call(listener: &UnixListener, reply: FakeReply) -> FakeResu
 async fn next_request(listener: &UnixListener) -> FakeResult<(UnixStream, Value, RecordedCall)> {
     loop {
         let (mut stream, _) = listener.accept().await?;
-        let Some(body) = read_http_body(&mut stream).await? else {
-            continue;
-        };
-        let request: Value = serde_json::from_slice(&body)?;
-        if request.get("method").and_then(Value::as_str) != Some("tools/call") {
-            return Err(format!("the CLI sent a non-tool request: {request}").into());
+        if let Some((request, call)) = read_tool_call(&mut stream).await? {
+            return Ok((stream, request, call));
         }
-        let call = json!({
-            "tool": request.pointer("/params/name").cloned().unwrap_or(Value::Null),
-            "arguments": request.pointer("/params/arguments").cloned().unwrap_or(Value::Null),
-        });
-        return Ok((stream, request, call));
     }
+}
+
+async fn read_tool_call(stream: &mut UnixStream) -> FakeResult<Option<(Value, RecordedCall)>> {
+    let Some(body) = read_http_body(stream).await? else {
+        return Ok(None);
+    };
+    let request: Value = serde_json::from_slice(&body)?;
+    if request.get("method").and_then(Value::as_str) != Some("tools/call") {
+        return Err(format!("the CLI sent a non-tool request: {request}").into());
+    }
+    let call = json!({
+        "tool": request.pointer("/params/name").cloned().unwrap_or(Value::Null),
+        "arguments": request.pointer("/params/arguments").cloned().unwrap_or(Value::Null),
+    });
+    Ok(Some((request, call)))
 }
 
 /// The request body, or `None` when the peer closed without sending a request.
@@ -264,4 +302,60 @@ async fn read_http_body(stream: &mut UnixStream) -> FakeResult<Option<Vec<u8>>> 
         body.extend_from_slice(chunk.get(..count).ok_or("read past the buffer")?);
     }
     Ok(Some(body))
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+    use std::io::Write;
+
+    const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+    const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+
+    #[tokio::test]
+    async fn explicit_client_completion_ends_observation_without_a_quiet_period() -> FakeResult<()>
+    {
+        let mut api = FakeCollaborationApi::new(SERVICE, EPOCH)?;
+        let (completed, task) = api.serve_then_watch(Vec::new());
+        completed
+            .send(())
+            .map_err(|_| "observer ended before client")?;
+        let observed = tokio::time::timeout(std::time::Duration::from_secs(2), task).await???;
+        if !observed.calls.is_empty() {
+            return Err("empty fixture recorded an expected call".into());
+        }
+        if observed.further_call.is_some() {
+            return Err("completed client invented a further call".into());
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn completed_client_cannot_hide_a_call_queued_before_the_observer_was_polled()
+    -> FakeResult<()> {
+        let mut api = FakeCollaborationApi::new(SERVICE, EPOCH)?;
+        let (completed, task) = api.serve_then_watch(Vec::new());
+        // This runtime has one thread. Synchronous writes and the completion
+        // acknowledgement reach the kernel before the observer's first poll.
+        let mut client =
+            std::os::unix::net::UnixStream::connect(api.directory().join("control.sock"))?;
+        let body = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"forbidden-replay","arguments":{}}}).to_string();
+        write!(
+            client,
+            "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )?;
+        client.shutdown(std::net::Shutdown::Write)?;
+        completed
+            .send(())
+            .map_err(|_| "observer ended before client")?;
+        let observed = tokio::time::timeout(std::time::Duration::from_secs(2), task).await???;
+        if !observed.calls.is_empty() {
+            return Err("queued-call fixture recorded an expected call".into());
+        }
+        if observed.further_call != Some(json!({"tool":"forbidden-replay","arguments":{}})) {
+            return Err("client completion hid its queued forbidden replay".into());
+        }
+        Ok(())
+    }
 }

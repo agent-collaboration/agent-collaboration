@@ -490,3 +490,18 @@ Approved but unimplemented:
 - 01a18727-fc72-7b31-92ac-0e23889ee717: crate-private Claude refresh exchange seam; preserve blocking reqwest timeout/current categories. Inject consumed-request timeout outcome after full request receipt. Retain assertions. Dependency timeout mapping requiring elapsed time may be reviewed-only X; connect-refused mapping proof must not wait.
 - 01a1872a-30ee-7653-834a-3945122546cf: test-support-only clock-taking TokioServer launch using existing Clock; real OS children at T0 and T1 past expiry; no post-restart SetTime; shipping constructors unchanged. Prove feature exclusion and startup-reconstruction sensitivity.
 - 01a18724-01de-7b91-855d-423d8a3285ab: W1 owns local access-expiry helper. Update two W2 callers after Lead supplies the entry point. Real Cloudflare edge expiry is staging-only X, never local CI.
+
+## Sunclaw incremental conversion evidence (2026-10-29)
+
+This section supersedes the WIP stop only where current evidence is named. The inventory is still incomplete; no all-A/B completion claim.
+
+- `scripts/verification/tui/{driver-lifecycle,public-lifecycle}.test.ts`: virtual work/cleanup deadlines, actual child readiness/exit; no sleep-based oracle. Full TUI package now 154/154 pass, exit 0; typecheck/lint/format checks pass.
+- `scripts/verification/tui/native-adapter-fixture.ts`: replaced 20ms file polling and the failed directory-watch candidate with the existing connected/byte fixture protocol. Exact release-file bytes remain mandatory. Node v26.12.1 libuv `uv__fsevents_init` returns after queuing stream registration; EventIdSinceNow can exclude the immediate write. Root-cause evidence retained in `tmp/worker/node-fsevents.c`. Unit socket controls 2/2 and real Rust PTY receipt/resize/cleanup journeys 3/3 pass. Remaining native Rust support polling is still open.
+- `codex-router-quota-tui`: all five remaining floor/reset delayed input streams now wait for current paint or actual saver/loader completion. No-effect key groups use FIFO input; Ctrl-D gives component-owned teardown because the mock intercepts Ctrl-C before delivering queued keys (production entry uses ignore_ctrl_c). Scoped 48 cases passed, final disabled-confirm Cancel/Shutdown correction passed separately, exit 0. No actual product-appearance or Ctrl-C mock proof claimed.
+- `codex-router-auth` held secret-read and held refresh expiry cases: cfg(test)-only mutable clock at existing read boundary; actual entered/release signals remain real. Both scoped cases pass. No shipping API/time default/data format changed. Auth retries, old delayed concurrency fixture and blocking timeout cases remain open.
+- `agent-session-inventory` fake API `serve_then_watch`: quiet duration removed. Explicit client completion via oneshot, then direct kernel accept-queue inspection; preserved call/transcript assertions. Permanent queued-before-first-poll control passed. All direct and indirect inventory callers cut over. The three Lead-granted agent-collaboration callers are in their real CLI gate now.
+- CI18: unchanged focused test passed once (0.870s, exit 0); race cause, deterministic reproduction and repair remain open.
+- STG-H1–H4: Lead removed from W2 via 01a18894-77eb-79a1-98e0-341605f28ac9; they belong to an unpushed pressure harness and are deferred to its landing.
+- W1 helper/callers: W1 owns the helper and both access_carryover/session_scope_workerd mechanical edits. Preserve after its main merge; W1-reported native/example results are not W2 proof.
+
+No mutation controls, final all-package gates, release check, complete before/after comparison, version bump, main merge, PR or CI have completed yet.

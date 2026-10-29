@@ -92,6 +92,7 @@ fn component_pending_receipt_requires_exact_release_and_fresh_paths() -> TestRes
         if mode == "pending-valid" {
             adapter.wait_ready()?;
             fs::write(fixture.output("fixture-release"), "settle\n")?;
+            fixture.notify_release(b'R')?;
         }
         let (exit, transcript) = adapter.finish()?;
         if mode == "pending-valid" {
@@ -265,6 +266,7 @@ fn controlled_bystander_survives_terminal_hangup_but_not_termination() -> TestRe
     )?;
     require_process_absent(&bystander_pid)?;
     fs::write(fixture.root.join("release-child"), "release\n")?;
+    fixture.notify_release(b'R')?;
     let (exit, transcript) = adapter.finish()?;
     require_equal(exit, 0, &transcript)?;
     fixture.cleanup()
@@ -336,8 +338,10 @@ fn wrapper_reaps_only_its_retained_public_child() -> TestResult<()> {
         "same-group bystander was signaled",
     )?;
     fs::write(fixture.root.join("release-bystander"), "release\n")?;
+    fixture.notify_release(b'B')?;
     require_process_absent(&sibling_pid)?;
     fs::write(other.root.join("release-child"), "release\n")?;
+    other.notify_release(b'R')?;
     require_equal(bystander.finish()?.0, 0, "native assertion")?;
     require_process_absent(&other.read("quota-child.pid")?)?;
     fixture.cleanup()?;
@@ -366,6 +370,7 @@ fn same_child_kernel_resize_and_restore_reach_real_pty_eof() -> TestResult<()> {
     )?;
     require_equal(observe_process(&child_pid)?, before, "native assertion")?;
     fs::write(fixture.output("fixture-release"), "settle\n")?;
+    fixture.notify_release(b'R')?;
     let (exit, transcript) = adapter.finish()?;
     require_equal(exit, 0, &transcript)?;
     require_equal(

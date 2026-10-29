@@ -1,6 +1,12 @@
 //! Test-owned PTY, process and fixture support; no product appearance claim.
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::os::unix::{
+    fs::PermissionsExt,
+    net::{UnixListener, UnixStream},
+};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,6 +24,7 @@ pub(super) struct NativeFixture {
     pub(super) root: PathBuf,
     pub(super) node: PathBuf,
     wrapper: PathBuf,
+    control: NativeReleaseControl,
 }
 impl NativeFixture {
     pub(super) fn prepare(mode: &str) -> TestResult<Self> {
@@ -28,6 +35,8 @@ impl NativeFixture {
         ));
         fs::create_dir(&root)?;
         let root = root.canonicalize()?;
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
+        let control = NativeReleaseControl::start(root.join("ctl"))?;
         let node = match std::env::var_os("QUOTA_STORYBOARD_NODE") {
             Some(path) => PathBuf::from(path),
             None => std::env::split_paths(&std::env::var_os("PATH").ok_or("Node PATH missing")?)
@@ -57,6 +66,7 @@ impl NativeFixture {
             root,
             node,
             wrapper: package.join("fixture-child.ts"),
+            control,
         })
     }
     pub(super) fn output(&self, name: &str) -> PathBuf {
@@ -65,7 +75,11 @@ impl NativeFixture {
     pub(super) fn read(&self, name: &str) -> TestResult<String> {
         Ok(fs::read_to_string(self.output(name))?)
     }
-    pub(super) fn cleanup(self) -> TestResult<()> {
+    pub(super) fn notify_release(&self, role: u8) -> TestResult<()> {
+        self.control.release(role)
+    }
+    pub(super) fn cleanup(mut self) -> TestResult<()> {
+        self.control.stop()?;
         fs::remove_dir_all(&self.root)?;
         Ok(())
     }
@@ -76,6 +90,92 @@ impl Drop for NativeFixture {
         for name in ["release-child", "release-bystander"] {
             let _ = fs::write(self.root.join(name), "release\n");
         }
+    }
+}
+
+struct NativeControlConnections {
+    receiver: Receiver<(u8, UnixStream)>,
+    pending: BTreeMap<u8, UnixStream>,
+}
+
+struct NativeReleaseControl {
+    socket: PathBuf,
+    connections: RefCell<NativeControlConnections>,
+    task: Option<JoinHandle<std::io::Result<()>>>,
+}
+
+impl NativeReleaseControl {
+    fn start(socket: PathBuf) -> TestResult<Self> {
+        let listener = UnixListener::bind(&socket)?;
+        let (sender, receiver) = mpsc::channel();
+        let task = thread::spawn(move || {
+            loop {
+                let (mut stream, _) = listener.accept()?;
+                stream.set_read_timeout(Some(TIMEOUT))?;
+                stream.set_write_timeout(Some(TIMEOUT))?;
+                let mut role = [0u8];
+                stream.read_exact(&mut role)?;
+                if role == *b"S" {
+                    return Ok(());
+                }
+                if !matches!(role, [b'R'] | [b'B']) {
+                    return Err(std::io::Error::other("invalid native control role"));
+                }
+                sender
+                    .send((role[0], stream))
+                    .map_err(|_| std::io::Error::other("native control owner ended"))?;
+            }
+        });
+        Ok(Self {
+            socket,
+            connections: RefCell::new(NativeControlConnections {
+                receiver,
+                pending: BTreeMap::new(),
+            }),
+            task: Some(task),
+        })
+    }
+
+    fn release(&self, role: u8) -> TestResult<()> {
+        let mut connections = self.connections.borrow_mut();
+        let mut stream = loop {
+            if let Some(stream) = connections.pending.remove(&role) {
+                break stream;
+            }
+            let (ready_role, stream) = connections.receiver.recv_timeout(TIMEOUT)?;
+            if ready_role == role {
+                break stream;
+            }
+            if connections.pending.insert(ready_role, stream).is_some() {
+                return Err("duplicate native control role".into());
+            }
+        };
+        stream.write_all(b"X")?;
+        let mut completed = [0u8];
+        stream.read_exact(&mut completed)?;
+        if completed != *b"D" {
+            return Err("native fixture did not acknowledge release consumption".into());
+        }
+        stream.write_all(b"A")?;
+        Ok(())
+    }
+
+    fn stop(&mut self) -> TestResult<()> {
+        let Some(task) = self.task.take() else {
+            return Ok(());
+        };
+        let mut shutdown = UnixStream::connect(&self.socket)?;
+        shutdown.write_all(b"S")?;
+        task.join()
+            .map_err(|_| "native control listener panicked")??;
+        fs::remove_file(&self.socket)?;
+        Ok(())
+    }
+}
+
+impl Drop for NativeReleaseControl {
+    fn drop(&mut self) {
+        let _stopped = self.stop();
     }
 }
 

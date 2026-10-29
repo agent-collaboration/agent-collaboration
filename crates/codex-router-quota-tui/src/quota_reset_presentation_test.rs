@@ -25,6 +25,7 @@ use codex_router_quota_service::quota_reset::reset_workflow_reducer::WorkflowAct
 use super::quota_browse_presentation_test::assert_quota_golden;
 use super::quota_browse_presentation_test::quota_two_account_view_model;
 use super::quota_floor_editor::WeeklyQuotaFloorSaver;
+use super::quota_frame_observation::{FrameJourneyStep, render_frame_journey};
 use super::quota_reset_detail_rendering::render_reset_panel;
 use super::quota_reset_keyboard_interaction::ResetKeyAction;
 use super::quota_reset_keyboard_interaction::reset_key_action;
@@ -98,13 +99,21 @@ async fn ctrl_e_cannot_open_floor_editor_after_reset_target_is_pinned() {
     let snapshot = test_snapshot(WorkflowPhase::Browse);
     let (ports, mut intent_receiver, _snapshot_sender) = ResetSessionPorts::test_channels(snapshot);
     let saver: WeeklyQuotaFloorSaver = Arc::new(|_account_id, _percent| Box::pin(async { Ok(()) }));
-    let events = vec![
-        TerminalEvent::Key(control_key('r')),
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(control_key('c')),
+    let steps = vec![
+        FrameJourneyStep::Painted {
+            ready: |_| true,
+            events: vec![TerminalEvent::Key(control_key('r'))],
+        },
+        FrameJourneyStep::Painted {
+            ready: |frame| frame.contains("Inspect"),
+            events: vec![
+                TerminalEvent::Key(control_key('e')),
+                TerminalEvent::Key(control_key('d')),
+            ],
+        },
     ];
 
-    let frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
             width: 120usize,
@@ -114,15 +123,8 @@ async fn ctrl_e_cannot_open_floor_editor_after_reset_target_is_pinned() {
             weekly_floor_saver: Some(saver),
         )
     }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(1)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
+    .into_any();
+    let frames = render_frame_journey(component, steps).await;
 
     assert!(matches!(
         intent_receiver.recv().await,
@@ -135,13 +137,32 @@ async fn ctrl_e_cannot_open_floor_editor_after_reset_target_is_pinned() {
 async fn disabled_yes_cannot_receive_focus_and_enter_cancels_from_default_no() {
     let snapshot = test_snapshot(WorkflowPhase::Confirming);
     let (ports, mut intent_receiver, _snapshot_sender) = ResetSessionPorts::test_channels(snapshot);
-    let events = vec![
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(control_key('c')),
+    let (cancel_observed, cancel_observations) = tokio::sync::mpsc::unbounded_channel();
+    let observe_intents = async move {
+        let cancelled = intent_receiver.recv().await;
+        let no_further_action = intent_receiver.try_recv().is_err();
+        cancel_observed
+            .send(())
+            .expect("journey must observe the actual cancel");
+        let shutdown = intent_receiver.recv().await;
+        (cancelled, no_further_action, shutdown)
+    };
+    let steps = vec![
+        FrameJourneyStep::Painted {
+            ready: |_| true,
+            events: vec![
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+            ],
+        },
+        FrameJourneyStep::Completed {
+            signals: cancel_observations,
+            count: 1,
+            event: TerminalEvent::Key(control_key('d')),
+        },
     ];
 
-    let _frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
             width: 120usize,
@@ -150,20 +171,13 @@ async fn disabled_yes_cannot_receive_focus_and_enter_cancels_from_default_no() {
             reset_snapshot_receiver: Some(ports.snapshot_receiver),
         )
     }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(1)).await;
-            event
-        }),
-    ))
-    .collect::<Vec<_>>()
-    .await;
+    .into_any();
+    let (_frames, (cancelled, no_further_action, shutdown)) =
+        tokio::join!(render_frame_journey(component, steps), observe_intents);
 
-    assert_eq!(
-        intent_receiver.recv().await,
-        Some(ResetSessionIntent::Cancel)
-    );
-    assert!(intent_receiver.try_recv().is_err());
+    assert_eq!(cancelled, Some(ResetSessionIntent::Cancel));
+    assert!(no_further_action);
+    assert_eq!(shutdown, Some(ResetSessionIntent::Shutdown));
 }
 
 #[tokio::test]
@@ -176,12 +190,15 @@ async fn precommit_cancel_is_not_lost_behind_queued_intents() {
             .send_now(ResetSessionIntent::SelectNo)
             .expect("test queue should accept queued intents");
     }
-    let events = vec![
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        TerminalEvent::Key(control_key('c')),
-    ];
+    let steps = vec![FrameJourneyStep::Painted {
+        ready: |_| true,
+        events: vec![
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(control_key('d')),
+        ],
+    }];
 
-    let _frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
             width: 120usize,
@@ -190,14 +207,8 @@ async fn precommit_cancel_is_not_lost_behind_queued_intents() {
             reset_snapshot_receiver: Some(ports.snapshot_receiver),
         )
     }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(1)).await;
-            event
-        }),
-    ))
-    .collect::<Vec<_>>()
-    .await;
+    .into_any();
+    let _frames = render_frame_journey(component, steps).await;
 
     let mut observed_cancel = false;
     while let Ok(intent) = intent_receiver.try_recv() {
