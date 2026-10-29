@@ -20,7 +20,8 @@ export class Link {
     receipt: Receipt;
     repository: string;
   }): Promise<Link> {
-    if ([8787, 8788, 43127].includes(input.port)) throw new Error("protected tunnel port");
+    if ([8787, 8788, 19741, 19742, 19743, 43127].includes(input.port))
+      throw new Error("protected tunnel port");
     if ((await input.remote.listenerAddresses(input.port)).length !== 0)
       throw new Error("remote reverse-forward port collision");
     const process = new OwnedProcess({

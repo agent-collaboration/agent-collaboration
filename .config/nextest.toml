@@ -31,6 +31,13 @@ filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (t
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
+# in the existing process-runtime window, apart from unrelated fixture load.
+[[profile.ci.overrides]]
+filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
 # protocol proof observes both firings; its own receive deadlines remain bounded.
 [[profile.ci.overrides]]

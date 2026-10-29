@@ -40,7 +40,7 @@ const machineBase = z.object({
     .int()
     .min(1024)
     .max(65535)
-    .refine((value): boolean => ![8787, 8788, 43127].includes(value)),
+    .refine((value): boolean => ![8787, 8788, 19741, 19742, 19743, 43127].includes(value)),
   router: artifactSchema,
   cli: artifactSchema,
   enrollment: z

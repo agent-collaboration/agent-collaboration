@@ -35,7 +35,7 @@ export class FixtureEdge {
     if (
       address === null ||
       typeof address === "string" ||
-      [8787, 8788, 43127].includes(address.port)
+      [8787, 8788, 19741, 19742, 19743, 43127].includes(address.port)
     ) {
       server.close();
       throw new Error("fixture edge bind invalid");

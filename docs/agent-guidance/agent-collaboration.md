@@ -34,11 +34,50 @@ registration; they do not prove a live server call or agent behavior. If the
 selected current manifest is absent or has no `mcp.url`, report missing setup.
 Do not restart or replace the production Router to manufacture a manifest.
 
-Normal and debug Host defaults are `http://127.0.0.1:8788/mcp` and
-`http://127.0.0.1:18788/mcp`, respectively, but they are documentation fallbacks
-only: an explicit bind and the current manifest win. The current release accepts
-only loopback, unauthenticated plain HTTP and does not support remote exposure,
-authentication, or TLS. The running server's tool descriptions and input/output
+The Host CLI reads `<router-root>/ports.json`, beside `providers.json`. Normal
+Router state lives in `~/.codex-router`; debug state defaults to
+`~/.codex-router-debug`. Every field is optional:
+
+```json
+{"router": 19741, "mcp": 19742, "tailscaleHttps": 19743}
+```
+
+Explicit launch flags (`--port`, `--mcp-bind`, `--tailscale-https-port`) override
+the file; omitted fields use built-in defaults. Normal defaults are Router
+`19741`, MCP `19742`, and Tailscale HTTPS `19743`; isolated debug defaults are
+`18787`, `18788`, and `18789`. File ports must be nonzero integers through
+`65535`, Router and MCP ports must differ, and unknown fields or invalid/unreadable
+files fail startup with the file path. A missing file uses defaults. MCP binds
+only to loopback; the file's MCP port uses `127.0.0.1`.
+Isolated Hosts refuse protected production ports for all three fields, whether
+selected by a flag or the file. Standalone `serve` uses the same resolution for
+its Router port, reading `ports.json` beside the selected `--state-db` (the
+Router root by default); `--port` overrides the file.
+
+`codex-router host status` reports the running Host's selected ports and each
+source (`flag`, `ports.json`, or `default`). A whole-Host `host restart` retains
+explicit launch flags and rereads the file, so file edits apply at the next
+whole-Host restart. Router-only `host router restart` retains launch-time ports.
+Before stopping children, the Host validates the replacement's current port file
+and checks availability of selected ports it does not already hold. A failed
+check reports the file or unavailable port and its reason, leaving the old Host
+serving. Bind-and-release checks do not reserve a port against a later race.
+Hosts started before 0.1.114 saved their resolved ports as explicit flags;
+those persist across replacements until a fresh Host start lets the file apply.
+
+An explicit `--mcp-bind 127.0.0.1:0` selects an ephemeral listener for disposable
+runs. Status reports its actual assigned port with source `flag`; a replacement
+retains the ephemeral choice and may receive a different port.
+
+Read the actual MCP URL from the current manifest. With defaults it is
+`http://127.0.0.1:19742/mcp` (debug `http://127.0.0.1:18788/mcp`). The MCP backend
+stays on loopback HTTP. For private tailnet access, the owner can start the Host
+with `--remote-access tailscale`; the Host manages a
+Tailscale Serve HTTPS proxy to that backend and retains Origin checks. This does
+not expose the service publicly through Funnel. Use the advertised private URL
+from the current Host rather than deriving one from a machine name. Configuration
+or installation does not authorize replacing a running production process.
+The running server's tool descriptions and input/output
 schemas are authoritative; do not copy a static tool catalog. Tool approval is
 a policy decision, not proof of OS or filesystem confinement. Use supported
 typed operations and never read, tail, parse, copy, or store provider session

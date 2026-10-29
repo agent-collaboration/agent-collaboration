@@ -83,6 +83,8 @@ pub struct HostConfig {
     router_endpoint: SocketAddr,
     mcp_bind: SocketAddr,
     remote_access: Option<crate::RemoteAccess>,
+    port_selection: Option<crate::HostPortSelection>,
+    isolated_debug_ports: bool,
     app_server_socket: PathBuf,
     managed_executable: PathBuf,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
@@ -118,6 +120,8 @@ impl HostConfig {
             router_endpoint: inputs.router_endpoint,
             mcp_bind: inputs.mcp_bind,
             remote_access: None,
+            port_selection: None,
+            isolated_debug_ports: false,
             app_server_socket: inputs.app_server_socket,
             managed_executable: inputs.managed_executable,
             external_provider_startups: Vec::new(),
@@ -208,6 +212,29 @@ impl HostConfig {
     #[must_use]
     pub const fn remote_access(&self) -> Option<crate::RemoteAccess> {
         self.remote_access
+    }
+
+    /// Captures port authority for status and replacement admission.
+    #[must_use]
+    pub const fn with_port_selection(mut self, selection: crate::HostPortSelection) -> Self {
+        self.port_selection = Some(selection);
+        self
+    }
+
+    #[must_use]
+    pub const fn port_selection(&self) -> Option<crate::HostPortSelection> {
+        self.port_selection
+    }
+
+    /// Carries the CLI's debug port policy into replacement admission.
+    #[must_use]
+    pub const fn with_debug_port_isolation(mut self, isolated: bool) -> Self {
+        self.isolated_debug_ports = isolated;
+        self
+    }
+
+    pub(crate) const fn isolated_debug_ports(&self) -> bool {
+        self.isolated_debug_ports
     }
 
     /// Returns the conventional socket derived from normal Codex home.

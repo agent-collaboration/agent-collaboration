@@ -263,6 +263,7 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
         second_owner = Some(second);
         let second = second_owner.as_mut().ok_or("reopened claim child")?;
         if graceful {
+            eprintln!("RECEIVING_RESTART_SECOND_CHILD pid={:?}", second.id());
             snapshot_install_graceful::observe_restart_renewal(&central, &config).await?;
         }
         if !graceful {

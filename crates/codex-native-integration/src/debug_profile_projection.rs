@@ -77,7 +77,7 @@ impl DebugCodexProfile {
         }
         validate_network_experiment_configuration(&table)?;
         if port == 0
-            || port == DEFAULT_ROUTER_PORT
+            || [DEFAULT_ROUTER_PORT, 19742, 19743].contains(&port)
             || table.get("model_provider").and_then(toml::Value::as_str)
                 != Some("codex-router-debug")
         {

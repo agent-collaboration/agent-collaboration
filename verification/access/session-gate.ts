@@ -23,7 +23,7 @@ export class SessionGate {
       upstream.search !== "" ||
       upstream.hash !== "" ||
       upstream.pathname !== "/v1/session" ||
-      [8787, 8788, 43127].includes(Number(upstream.port))
+      [8787, 8788, 19741, 19742, 19743, 43127].includes(Number(upstream.port))
     )
       throw new Error("invalid declared Session upstream");
     const server = createServer();
@@ -35,7 +35,7 @@ export class SessionGate {
     if (
       address === null ||
       typeof address === "string" ||
-      [8787, 8788, 43127].includes(address.port)
+      [8787, 8788, 19741, 19742, 19743, 43127].includes(address.port)
     ) {
       server.close();
       throw new Error("invalid gate bind");
