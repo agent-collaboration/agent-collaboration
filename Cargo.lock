@@ -1642,6 +1642,7 @@ version = "0.1.116"
 dependencies = [
  "futures-util",
  "iocraft",
+ "taffy",
  "tokio",
  "unicode-width 0.2.2",
 ]
