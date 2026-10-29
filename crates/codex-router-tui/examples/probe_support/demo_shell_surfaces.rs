@@ -1,5 +1,6 @@
 use super::demo_shell_state::{
-    DemoOverlay, DialogFocus, MachineChoice, SessionSort, overlay_rectangle,
+    ClientChoice, DemoOverlay, DialogChoice, DialogFocus, DirectoryChoice, MachineChoice,
+    SessionSort, overlay_rectangle,
 };
 use iocraft::prelude::*;
 
@@ -36,6 +37,10 @@ pub struct OverlaySurfaceProps {
     pub machine: MachineChoice,
     #[iocraft(required)]
     pub sort: SessionSort,
+    #[iocraft(required)]
+    pub client: ClientChoice,
+    #[iocraft(required)]
+    pub directory: DirectoryChoice,
     pub dimmed: bool,
 }
 #[component]
@@ -57,29 +62,24 @@ pub fn OverlaySurface(props: &OverlaySurfaceProps) -> impl Into<AnyElement<'stat
         DemoOverlay::NewSession { focus } => element! {
             View(flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 2) {
                 #(Some(shell_text("New session", dimmed)))
-                #(Some(shell_text("Choose a machine for this fake session.", dimmed)))
-                #(Some(shell_text("Machine", dimmed)))
-                View(height: 1, background_color: (*focus == DialogFocus::Machine).then_some(Color::DarkBlue)) {
-                    #(Some(shell_text(format!("{} ▾", props.machine.label()), dimmed)))
-                }
-                #(Some(shell_text("Enter opens the machine list", dimmed)))
-                View(height: 3) {}
+                #(Some(shell_text("Choose client, machine and directory.", dimmed)))
+                DialogFieldRow(label: "Client", value: DialogChoice::Client(props.client).label(), focused: *focus == DialogFocus::Client, dimmed)
+                DialogFieldRow(label: "Machine", value: props.machine.label(), focused: *focus == DialogFocus::Machine, dimmed)
+                DialogFieldRow(label: "Directory", value: DialogChoice::Directory(props.directory).label(), focused: *focus == DialogFocus::Directory, dimmed)
+                #(Some(shell_text("Enter opens the focused choice list", dimmed)))
+                View(height: 2) {}
                 View(height: 1, flex_direction: FlexDirection::Row, gap: 3) {
-                    View(width: 22, background_color: (*focus == DialogFocus::Cancel).then_some(Color::DarkBlue)) {
-                        #(Some(shell_text("[ Cancel ]", dimmed)))
-                    }
-                    View(flex_grow: 1.0_f32, background_color: (*focus == DialogFocus::Start).then_some(Color::DarkBlue)) {
-                        #(Some(shell_text("[ Start ]", dimmed)))
-                    }
+                    View(width: 22, background_color: (*focus == DialogFocus::Cancel && !dimmed).then_some(Color::DarkBlue)) { #(Some(shell_text("[ Cancel ]", dimmed))) }
+                    View(flex_grow: 1.0_f32, background_color: (*focus == DialogFocus::Start && !dimmed).then_some(Color::DarkBlue)) { #(Some(shell_text("[ Start ]", dimmed))) }
                 }
-                #(Some(shell_text("Tab move · Ctrl+Enter start · Esc cancel", dimmed)))
+                #(Some(shell_text("↑↓ or Tab move · Ctrl+Enter start · Esc cancel", dimmed)))
             }
         }.into_any(),
-        DemoOverlay::MachinePicker { query, selected } => {
-            let options = super::demo_shell_state::DemoShellState::matching_machines(query);
+        DemoOverlay::ChoicePicker { query, selected } => {
+            let options = selected.matching(query);
             element! {
                 View(flex_direction: FlexDirection::Column, padding_left: 1, padding_right: 1) {
-                    #(Some(shell_text("Machine", dimmed)))
+                    #(Some(shell_text(selected.field_label(), dimmed)))
                     #(Some(shell_text(format!("Filter: {query}▏"), dimmed)))
                     #((options.iter()).map(|machine| element! {
                         View(height: 1, background_color: (*machine == *selected).then_some(Color::DarkBlue)) {
@@ -92,13 +92,6 @@ pub fn OverlaySurface(props: &OverlaySurfaceProps) -> impl Into<AnyElement<'stat
                 }
             }.into_any()
         }
-        DemoOverlay::Filter { query } => element! {
-            View(flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 2, gap: 1) {
-                #(Some(shell_text("Filter sessions", dimmed)))
-                #(Some(shell_text(format!("{query}▏"), dimmed)))
-                #(Some(shell_text("Enter apply · Esc cancel", dimmed)))
-            }
-        }.into_any(),
         DemoOverlay::Help => element! {
             View(flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 2, gap: 1) {
                 #(Some(shell_text("Picker shell · fake data", dimmed)))
@@ -122,6 +115,23 @@ pub fn OverlaySurface(props: &OverlaySurfaceProps) -> impl Into<AnyElement<'stat
                 border_color: if dimmed { Color::DarkGrey } else { Color::Cyan }) {
                 #(Some(contents))
             }
+        }
+    }
+}
+
+#[derive(Props)]
+struct DialogFieldRowProps {
+    label: String,
+    value: String,
+    focused: bool,
+    dimmed: bool,
+}
+#[component]
+fn DialogFieldRow(props: &DialogFieldRowProps) -> impl Into<AnyElement<'static>> {
+    element! {
+        View(height: 1, flex_direction: FlexDirection::Row, background_color: (props.focused && !props.dimmed).then_some(Color::DarkBlue)) {
+            View(width: 12, flex_shrink: 0.0_f32) { #(Some(shell_text(props.label.clone(), props.dimmed))) }
+            #(Some(shell_text(format!("{} ▾", props.value), props.dimmed)))
         }
     }
 }

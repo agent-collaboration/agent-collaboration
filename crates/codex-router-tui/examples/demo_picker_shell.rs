@@ -1,10 +1,14 @@
 //! Isolated fake picker. One event owner; children render and never subscribe.
+#[path = "probe_support/demo_shell_dialog_input.rs"]
+mod demo_shell_dialog_input;
+#[path = "probe_support/demo_shell_input.rs"]
+mod demo_shell_input;
 #[path = "probe_support/demo_shell_state.rs"]
 mod demo_shell_state;
 #[path = "probe_support/demo_shell_surfaces.rs"]
 mod demo_shell_surfaces;
 
-use demo_shell_state::DemoShellState;
+use demo_shell_state::{DemoShellState, ShellFocus};
 use demo_shell_surfaces::{OverlaySurface, shell_text};
 use iocraft::prelude::*;
 
@@ -36,10 +40,10 @@ fn DemoPickerShell(
     element! {
         View(width: u32::from(state.width), height: u32::from(state.height), flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
             View(height: 1, flex_shrink: 0.0_f32, padding_left: 2, padding_right: 2, flex_direction: FlexDirection::Row, gap: 1) {
-                View(width: 8, flex_shrink: 0.0_f32) { #(Some(shell_text("☰ Menu", dimmed))) }
-                View(width: 9, flex_shrink: 0.0_f32) { #(Some(shell_text("[ + New ]", dimmed))) }
-                View(width: 13, flex_shrink: 0.0_f32) { #(Some(shell_text("[ / Filter… ]", dimmed))) }
-                View(width: 23, flex_shrink: 0.0_f32) { #(Some(shell_text(if state.this_folder { "[ This folder | all ]" } else { "[ this folder | All ]" }, dimmed))) }
+                View(width: 8, flex_shrink: 0.0_f32, background_color: (!dimmed && state.focus == ShellFocus::Menu).then_some(Color::DarkBlue)) { #(Some(shell_text("☰ Menu", dimmed))) }
+                View(width: 9, flex_shrink: 0.0_f32, background_color: (!dimmed && state.focus == ShellFocus::New).then_some(Color::DarkBlue)) { #(Some(shell_text("[ + New ]", dimmed))) }
+                View(width: 13, flex_shrink: 0.0_f32, overflow: Overflow::Hidden, background_color: (!dimmed && state.focus == ShellFocus::Filter).then_some(Color::DarkBlue)) { #(Some(shell_text(if state.focus == ShellFocus::Filter && !dimmed { format!("[ {}▏ ]", state.filter_query) } else if state.filter_query.is_empty() { "[ / Filter… ]".to_owned() } else { format!("[ {} ]", state.filter_query) }, dimmed))) }
+                View(width: 23, flex_shrink: 0.0_f32, background_color: (!dimmed && state.focus == ShellFocus::Scope).then_some(Color::DarkBlue)) { #(Some(shell_text(if state.this_folder { "[ This folder | all ]" } else { "[ this folder | All ]" }, dimmed))) }
                 View(flex_grow: 1.0_f32) {}
                 #(Some(shell_text(format!("Sessions · {}/6", sessions.len()), dimmed)))
             }
@@ -67,7 +71,7 @@ fn DemoPickerShell(
                 #(Some(shell_text("↑↓ move · Enter open · / filter · Ctrl+N new · F10 menu · F1 help · Ctrl+C quit", dimmed)))
             }
             #((state.overlays.into_iter().enumerate()).map(|(index, overlay)| element! {
-                OverlaySurface(overlay, machine: state.selected_machine, sort: state.sort, dimmed: index + 1 < overlay_count)
+                OverlaySurface(overlay, machine: state.selected_machine, client: state.selected_client, directory: state.selected_directory, sort: state.sort, dimmed: index + 1 < overlay_count)
             }))
         }
     }.into_any()
