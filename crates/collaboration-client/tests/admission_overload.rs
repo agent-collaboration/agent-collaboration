@@ -94,33 +94,38 @@ impl SaturatedApi {
             .filter(|wakeup_id| wakeup_id.is_string())
             .cloned()
             .ok_or_else(|| format!("wake send failed: {wake}"))?;
-        // The wait holds the only request slot once a probe sent after it is shed. A probe
-        // that wins the slot first would shed the wait instead, so the wait is started again.
-        let held = tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let holder = Arc::clone(&served);
-                let held_wakeup = wakeup_id.clone();
-                let held = tokio::spawn(async move {
-                    let _answer = holder
-                        .call(
-                            "wake_wait_until_first_fire",
-                            json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                        )
-                        .await;
-                });
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if held.is_finished() {
-                    continue;
-                }
-                let probe = served.call("automation_status", json!({})).await?;
-                if probe.pointer("/error/data/kind") == Some(&json!("overloaded")) {
-                    break Ok::<_, std::io::Error>(held);
-                }
-                held.abort();
+        let holder = Arc::clone(&served);
+        let held_wakeup = wakeup_id.clone();
+        let held = tokio::spawn(async move {
+            let _answer = holder
+                .call(
+                    "wake_wait_until_first_fire",
+                    json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
+                )
+                .await;
+        });
+        let ready = match tokio::time::timeout(Duration::from_secs(10), async {
+            served.await_running_calls(1).await;
+            let probe = served.call("automation_status", json!({})).await?;
+            if probe.pointer("/error/data/kind") != Some(&json!("overloaded")) {
+                return Err(std::io::Error::other(format!(
+                    "admitted wake wait did not hold the only request slot: {probe}"
+                )));
             }
+            Ok::<_, std::io::Error>(())
         })
         .await
-        .map_err(|_| "the wake wait never held the only request slot")??;
+        {
+            Ok(ready) => ready,
+            Err(_) => Err(std::io::Error::other(
+                "the wake wait never held the only request slot",
+            )),
+        };
+        if let Err(error) = ready {
+            held.abort();
+            let _ended = held.await;
+            return Err(error.into());
+        }
         Ok(Self {
             fleet_runtime,
             served,

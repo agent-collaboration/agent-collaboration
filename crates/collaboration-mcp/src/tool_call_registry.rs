@@ -113,10 +113,10 @@ impl ToolCallRegistry {
             if self.running() == expected {
                 return;
             }
-            activity
-                .changed()
-                .await
-                .expect("registry observation remains alive");
+            assert!(
+                activity.changed().await.is_ok(),
+                "registry observation remains alive"
+            );
         }
     }
 
