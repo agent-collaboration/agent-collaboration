@@ -8,8 +8,11 @@ fn replacement_command_preserves_private_tailnet_mode_and_selected_port() {
     let command = host_replacement_command(HostReplacementCommandInputs {
         executable: executable.clone(),
         router_root: PathBuf::from("/tmp/private Router"),
-        port: 18787,
-        mcp_bind: "127.0.0.1:18788".parse().expect("loopback"),
+        port_overrides: super::HostPortOverrides {
+            router: Some(18787),
+            mcp_bind: Some("127.0.0.1:18788".parse().expect("loopback")),
+            tailscale_https: NonZeroU16::new(9443),
+        },
         remote_access: Some(RemoteAccess::tailscale(
             NonZeroU16::new(9443).expect("port"),
         )),

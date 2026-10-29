@@ -1,4 +1,4 @@
-//! Bounded connection tasks and synchronous lifecycle-request admission.
+//! Bounded connection tasks and lifecycle admission before destructive effects.
 
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
@@ -106,6 +106,7 @@ pub(super) struct OperatorRuntimeContext<'a> {
     pub(super) app_server: &'a mut Option<AppServerChild>,
     pub(super) router_child: &'a mut Option<RouterChild>,
     pub(super) config: &'a HostConfig,
+    pub(super) mcp_listen_address: Option<std::net::SocketAddr>,
     pub(super) child_launch_plans: &'a ManagedChildLaunchPlans,
     pub(super) update_inputs: &'a ManagedUpdateInputs,
     pub(super) active_app_server_restart: &'a mut Option<ActiveAppServerRestart>,
@@ -179,7 +180,7 @@ pub(super) fn spawn_operator_connection(
     });
 }
 
-pub(super) fn handle_operator_work(work: OperatorWork, context: OperatorRuntimeContext<'_>) {
+pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRuntimeContext<'_>) {
     let snapshot = context.state.snapshot();
     let phase_mutation = match &context.state.phase {
         HostPhase::Mutating { operation, .. } => Some(*operation),
@@ -241,6 +242,25 @@ pub(super) fn handle_operator_work(work: OperatorWork, context: OperatorRuntimeC
                 );
                 return;
             };
+            let held_router = (context.router_child.is_some()
+                || context.state.router == RouterCondition::ExternalReachable)
+                .then_some(context.config.router_endpoint());
+            if let Err(error) = crate::host_restart_preflight::preflight_restart_ports(
+                context.config,
+                held_router,
+                context.mcp_listen_address,
+            )
+            .await
+            {
+                send_terminal_response(
+                    work.response,
+                    request,
+                    TerminalClassification::Failed,
+                    snapshot,
+                    error.to_string(),
+                );
+                return;
+            }
             let _progress_result = work.response.try_send(OperatorFrame::Progress(
                 crate::operator_messages::HostProgress::ReplacementStarting,
             ));
@@ -336,6 +356,18 @@ pub(super) fn handle_operator_work(work: OperatorWork, context: OperatorRuntimeC
             );
         }
         OperatorRequest::RestartRouter => {
+            if let Err(error) =
+                crate::host_restart_preflight::preflight_router_restart(context.config).await
+            {
+                send_terminal_response(
+                    work.response,
+                    work.request,
+                    TerminalClassification::Failed,
+                    snapshot,
+                    error.to_string(),
+                );
+                return;
+            }
             send_progress(
                 &work.response,
                 crate::operator_messages::HostProgress::PreparingRouter,
@@ -413,9 +445,9 @@ pub(super) fn send_terminal_response(
     request: OperatorRequest,
     classification: TerminalClassification,
     snapshot: HostSnapshot,
-    message: &'static str,
+    message: impl Into<String>,
 ) {
-    let response = HostTerminalResponse::new(request, classification, snapshot, message.to_owned());
+    let response = HostTerminalResponse::new(request, classification, snapshot, message.into());
     let _send_result = response_sender.try_send(OperatorFrame::terminal(response));
 }
 

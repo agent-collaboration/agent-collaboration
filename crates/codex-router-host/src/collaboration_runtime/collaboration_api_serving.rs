@@ -83,6 +83,7 @@ impl BoundCollaborationApi {
             cleanup = Some(socket_cleanup);
         }
         ServedCollaborationApi {
+            local_address: self.local_address,
             tasks,
             _socket_cleanup: cleanup,
         }
@@ -91,11 +92,16 @@ impl BoundCollaborationApi {
 
 /// The serving tasks; they end only when shutdown is cancelled or a listener fails.
 pub(super) struct ServedCollaborationApi {
+    local_address: SocketAddr,
     tasks: Vec<JoinHandle<io::Result<()>>>,
     _socket_cleanup: Option<SocketCleanup>,
 }
 
 impl ServedCollaborationApi {
+    pub(super) const fn local_address(&self) -> SocketAddr {
+        self.local_address
+    }
+
     /// Resolves only when a listener stops on its own.
     pub(super) async fn failure(&mut self) -> io::Error {
         if self.tasks.is_empty() {
@@ -138,6 +144,7 @@ mod tests {
         let shutdown = CancellationToken::new();
         let serving = shutdown.clone();
         let mut served = ServedCollaborationApi {
+            local_address: ([127, 0, 0, 1], 0).into(),
             tasks: vec![
                 tokio::spawn(async { Err(io::Error::other("listener failed")) }),
                 tokio::spawn(async move {

@@ -49,7 +49,7 @@ export class TokioCentral implements CentralTarget {
       if (
         ready.pid !== BigInt(process.pid) ||
         url.hostname !== "127.0.0.1" ||
-        [8787, 8788, 43127].includes(Number(url.port))
+        [8787, 8788, 19741, 19742, 19743, 43127].includes(Number(url.port))
       )
         throw new Error("Tokio readiness does not name owned loopback process");
       const assertion = (await readFile(target.assertionFile, "utf8")).trim();
