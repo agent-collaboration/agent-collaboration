@@ -1,5 +1,8 @@
 //! Observe actual consumer submissions and pause an actual receiver commit.
-use fleet_sync_protocol::{Epoch, ItemId, ReplicatedTransaction, RowChange};
+use board_sync_protocol::BoardDeliveryTypes;
+use fleet_sync_protocol::{
+    DeliveryEnvelope, DeliveryItem, Epoch, ItemId, ReplicatedTransaction, RowChange,
+};
 use fleet_sync_receiver::{AppliedPiece, HookError};
 use std::io;
 use tokio::sync::{Mutex, Notify, oneshot};
@@ -25,7 +28,7 @@ pub(in crate::collaboration_runtime::board_composition) struct NotificationProbe
     piece: Mutex<Option<PieceGate>>,
     frontier: Mutex<Option<PieceGate>>,
     submissions: Mutex<Vec<(ItemId, Option<Epoch>)>>,
-    envelopes: Mutex<Vec<(ItemId, Vec<u8>)>>,
+    envelopes: Mutex<Vec<(DeliveryEnvelope<BoardDeliveryTypes>, Vec<u8>)>>,
     submitted: Notify,
 }
 
@@ -92,7 +95,8 @@ impl NotificationProbe {
         epoch: Option<Epoch>,
     ) -> Result<(), serde_json::Error> {
         let encoded = serde_json::to_vec(item)?;
-        self.envelopes.lock().await.push((item.id(), encoded));
+        let observed = serde_json::from_slice(&encoded)?;
+        self.envelopes.lock().await.push((observed, encoded));
         self.submissions.lock().await.push((item.id(), epoch));
         self.submitted.notify_waiters();
         Ok(())
@@ -103,9 +107,41 @@ impl NotificationProbe {
             .lock()
             .await
             .iter()
-            .filter(|(id, _)| *id == item)
+            .filter(|(envelope, _)| envelope.id() == item)
             .map(|(_, encoded)| encoded.clone())
             .collect()
+    }
+
+    pub async fn submitted_notification_envelopes(
+        &self,
+        frozen: &DeliveryItem<BoardDeliveryTypes>,
+    ) -> Vec<(ItemId, Vec<u8>)> {
+        self.envelopes
+            .lock()
+            .await
+            .iter()
+            .filter_map(|(envelope, encoded)| match envelope {
+                DeliveryEnvelope::Item(item)
+                    if item.sender() == frozen.sender()
+                        && item.recipient() == frozen.recipient()
+                        && item.body() == frozen.body() =>
+                {
+                    Some((item.id(), encoded.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub async fn wait_submission_count(&self, item: ItemId, count: usize) -> Vec<Vec<u8>> {
+        loop {
+            let changed = self.submitted.notified();
+            let envelopes = self.submitted_envelopes(item).await;
+            if envelopes.len() >= count {
+                return envelopes;
+            }
+            changed.await;
+        }
     }
 
     pub async fn wait_submission(&self, item: ItemId) -> Option<Epoch> {
