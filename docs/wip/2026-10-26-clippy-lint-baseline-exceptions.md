@@ -306,8 +306,6 @@ Test builds and the approved workerd verification harness only. Each include exp
 - `crates/agent-collaboration/tests/messaging_rules_e2e.rs:34` — `records_reopen`
 - `crates/agent-collaboration/tests/messaging_skill_dx.rs:5` — `proof_context`
 - `crates/agent-collaboration/tests/native_control_commands.rs:3` — `fake_api_support`
-- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:2` — `board_fixture`
-- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:21` — `local_mail_surfaces`
 - `crates/agent-collaboration/tests/provider_conversation_cli.rs:9` — `fake_api_support`
 - `crates/agent-collaboration/tests/provider_inventory_source_reads.rs:6` — `fake_api_support`
 - `crates/agent-collaboration/tests/provider_source_actions.rs:16` — `recorded_api_listener`
@@ -316,7 +314,6 @@ Test builds and the approved workerd verification harness only. Each include exp
 - `crates/agent-collaboration/tests/push_message_cli.rs:5` — `fake_api_support`
 - `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:3` — `local_mail_surfaces`
 - `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:16` — `native_sql`
-- `crates/agent-collaboration/tests/requested_cancel_cli_mcp.rs:3` — `local_mail_surfaces`
 - `crates/agent-collaboration/tests/thread_subscription_cli.rs:31` — `fake_api_support`
 - `crates/agent-collaboration/tests/whoami_machine_identity.rs:10` — `fake_api_support`
 - `crates/board-fleet-sync/tests/project_conversation_storage.rs:3` — `project_storage_support`
@@ -433,11 +430,8 @@ Temporary expectations cover `clippy::allow_attributes` and/or `clippy::allow_at
 - `crates/agent-collaboration/tests/m2b_surface_parity.rs:4` — `board_fixture`
 - `crates/agent-collaboration/tests/project_creation_reply_cli.rs:5` — `board_fixture`
 - `crates/agent-collaboration/tests/project_description_cli.rs:5` — `board_fixture`
-- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:2` — `board_fixture`
-- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:13` — `board_read_setup`
 - `crates/agent-collaboration/tests/push_delivery_matrix.rs:14` — `native_registry`
 - `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:9` — `native_mail_owner`
-- `crates/agent-collaboration/tests/requested_cancel_cli_mcp.rs:9` — `native_mail_owner`
 - `crates/agent-collaboration/tests/thread_subscription_cli.rs:1` — `native_registry`
 - `crates/agent-collaboration/tests/thread_subscription_cli.rs:9` — `native_mail_owner`
 - `crates/collaboration-client/tests/admission_overload.rs:5` — `native_registry`

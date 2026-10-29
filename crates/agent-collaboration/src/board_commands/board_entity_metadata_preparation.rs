@@ -132,9 +132,6 @@ pub(super) fn file_write(
     let valid = matches!(
         (kind, &request.operation),
         (
-            ProjectWriteKind::ProjectNotificationCancel,
-            BoardOperation::NotificationCancel { .. }
-        ) | (
             ProjectWriteKind::RoleGrant,
             BoardOperation::RoleGrant { .. }
         ) | (

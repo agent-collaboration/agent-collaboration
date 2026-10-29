@@ -134,7 +134,12 @@ enable_request_compression = false
             assert_eq!(std::fs::read(&profile_path).unwrap(), invalid.as_bytes());
         }
         std::fs::write(&profile_path, SAVED_PROFILE).unwrap();
-        for port in [0, codex_native_integration::DEFAULT_ROUTER_PORT] {
+        for port in [
+            0,
+            codex_native_integration::DEFAULT_ROUTER_PORT,
+            19742,
+            19743,
+        ] {
             assert!(
                 load_debug_profile(directory.path(), HostLaunchMode::IsolatedDebug, port).is_err()
             );

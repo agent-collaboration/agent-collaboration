@@ -122,9 +122,12 @@ async fn check_metadata_projection(replay: bool) {
     .expect("provider operation deadline");
     client.shutdown().await;
     let mut items = Vec::new();
+    let mut completed_items = Vec::new();
     while let Ok(event) = received.try_recv() {
-        if let SessionEvent::ItemStarted { item } = event {
-            items.push(item);
+        match event {
+            SessionEvent::ItemStarted { item } => items.push(item),
+            SessionEvent::ItemCompleted { item_id } => completed_items.push(item_id),
+            _ => {}
         }
     }
 
@@ -149,7 +152,31 @@ async fn check_metadata_projection(replay: bool) {
         json!({"availableCommands":[{"name":"compact","description":"Compact context",
             "input":{"hint":"instructions"}}],"_meta":{"providerDetail":"retained"}})
     );
-    assert_eq!(items.len(), 7);
+    assert_eq!(items.len(), if replay { 7 } else { 8 });
+    let submitted = items
+        .iter()
+        .filter(|item| item.kind == SessionItemKind::UserMessage)
+        .collect::<Vec<_>>();
+    assert_eq!(submitted.len(), usize::from(!replay));
+    let mut expected_items = Vec::new();
+    if let Some(submitted) = submitted.first() {
+        assert_eq!(submitted.text.as_deref(), Some("Reply"));
+        assert_eq!(
+            uuid::Uuid::parse_str(&submitted.item_id)
+                .expect("submitted UUID")
+                .get_version_num(),
+            7
+        );
+        assert_eq!(
+            completed_items
+                .iter()
+                .filter(|item_id| *item_id == &submitted.item_id)
+                .count(),
+            1
+        );
+        expected_items.push(json!({"type":"userMessage","id":submitted.item_id,
+            "content":[{"type":"text","text":"Reply"}]}));
+    }
     let assistant_id = items
         .iter()
         .find(|item| item.kind == SessionItemKind::AgentMessage)
@@ -172,13 +199,11 @@ async fn check_metadata_projection(replay: bool) {
             local_cause: None,
         },
     });
-    assert_eq!(
-        rendered.get("items"),
-        Some(&json!([
-            {"type":"agentMessage","id":assistant_id,"text":"Ordinary assistant reply"},
-            {"type":"reasoning","id":thought_id,"summary":["Useful reasoning"],"content":[]}
-        ]))
-    );
+    expected_items.extend([
+        json!({"type":"agentMessage","id":assistant_id,"text":"Ordinary assistant reply"}),
+        json!({"type":"reasoning","id":thought_id,"summary":["Useful reasoning"],"content":[]}),
+    ]);
+    assert_eq!(rendered.get("items"), Some(&Value::Array(expected_items)));
 }
 
 #[tokio::test]

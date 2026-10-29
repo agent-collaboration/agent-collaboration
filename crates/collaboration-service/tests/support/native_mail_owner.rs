@@ -14,6 +14,7 @@ pub struct NativeMailOwner {
     mail: Arc<MailDeliveryRuntime>,
     shutdown: CancellationToken,
     running: JoinHandle<Result<(), durable_steps::StoreError>>,
+    pending_start: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl NativeMailOwner {
@@ -46,6 +47,31 @@ impl NativeMailOwner {
         interactions: Arc<InteractionStore>,
         mail: Arc<MailDeliveryRuntime>,
     ) -> Result<(ApplicationFixture, Self), FixtureError> {
+        Self::start_prepared_after(identity, peer, interactions, mail, None)
+    }
+
+    pub fn start_deferred_with_session(
+        identity: ApplicationFixture,
+        peer: PeerId,
+        props: MailPushDeliveryProps,
+        session: Option<collaboration_runtime::MailDeliverySession>,
+    ) -> Result<(ApplicationFixture, Self), FixtureError> {
+        let interactions = props.interactions.clone();
+        let mail = Arc::new(MailDeliveryRuntime::new(peer, props, session)?);
+        let (release, waiting) = tokio::sync::oneshot::channel();
+        Self::start_prepared_after(identity, peer, interactions, mail, Some((release, waiting)))
+    }
+
+    fn start_prepared_after(
+        identity: ApplicationFixture,
+        peer: PeerId,
+        interactions: Arc<InteractionStore>,
+        mail: Arc<MailDeliveryRuntime>,
+        deferred_start: Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    ) -> Result<(ApplicationFixture, Self), FixtureError> {
         let identity = identity
             .with_interaction_store(interactions.clone())
             .with_installation_peer(peer)
@@ -55,7 +81,19 @@ impl NativeMailOwner {
         let shutdown = CancellationToken::new();
         let worker_mail = mail.clone();
         let worker_shutdown = shutdown.clone();
-        let running = tokio::spawn(async move { worker_mail.run(worker_shutdown).await });
+        let (pending_start, waiting) = match deferred_start {
+            Some((release, waiting)) => (Some(release), Some(waiting)),
+            None => (None, None),
+        };
+        let running = tokio::spawn(async move {
+            if let Some(waiting) = waiting {
+                tokio::select! {
+                    () = worker_shutdown.cancelled() => return Ok(()),
+                    started = waiting => if started.is_err() { return Ok(()); },
+                }
+            }
+            worker_mail.run(worker_shutdown).await
+        });
         Ok((
             identity,
             Self {
@@ -63,8 +101,18 @@ impl NativeMailOwner {
                 mail,
                 shutdown,
                 running,
+                pending_start,
             },
         ))
+    }
+
+    pub fn start_worker(&mut self) -> Result<(), FixtureError> {
+        self.pending_start
+            .take()
+            .ok_or_else(|| io::Error::other("mail worker was not deferred"))?
+            .send(())
+            .map_err(|_| io::Error::other("deferred mail worker stopped"))?;
+        Ok(())
     }
 
     // Only lifecycle proofs inspect SDK custody through its owning runtime.
@@ -94,6 +142,7 @@ impl NativeMailOwner {
             mail,
             shutdown,
             running,
+            pending_start: _,
         } = self;
         shutdown.cancel();
         let joined = tokio::time::timeout(Duration::from_secs(10), running).await?;
@@ -109,6 +158,7 @@ impl NativeMailOwner {
             mail,
             shutdown,
             running,
+            pending_start: _,
         } = self;
         running.abort();
         match running.await {

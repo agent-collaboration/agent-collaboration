@@ -345,7 +345,7 @@ async fn compiled_router_forwards_overload_and_keeps_explicit_requests_on_same_s
     assert_eq!(
         upstream_request_counts.iter().sum::<usize>(),
         explicit_client_request_count,
-        "the fake upstream must receive each explicit client request exactly once"
+        "the fake upstream must receive each explicit client request exactly once: {observations:#?}"
     );
     assert_eq!(
         registry_report

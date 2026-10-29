@@ -138,6 +138,7 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
             .get_version_num()
             == 7
     );
+    assert_submitted_user_item(&mut events, "First").await;
 
     let steering = client
         .steer_contents_with_input(
@@ -313,6 +314,7 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         panic!("expected TurnStarted, got {started:?}");
     };
     assert_eq!(observed_input, input_id);
+    assert_submitted_user_item(&mut events, "Hello").await;
     assert!(
         matches!(events.recv().await, Some(SessionEvent::TurnEnded { turn_id: ended_id,
         outcome: session_event_model::TurnOutcome::Ended { stop_reason: session_event_model::StopReason::EndTurn, .. }
@@ -369,6 +371,20 @@ async fn text_and_thought_chunks_publish_ordered_items() {
                 | SessionEvent::ItemCompleted { .. }
         )
     });
+    let Some(SessionEvent::ItemStarted { item: submitted }) = items.next() else {
+        panic!("submitted user message not started: {observed:?}")
+    };
+    assert_eq!(
+        submitted.kind,
+        session_event_model::SessionItemKind::UserMessage
+    );
+    assert_eq!(submitted.text.as_deref(), Some("Begin"));
+    assert_eq!(
+        items.next(),
+        Some(&SessionEvent::ItemCompleted {
+            item_id: submitted.item_id.clone()
+        })
+    );
     let Some(SessionEvent::ItemStarted { item: message }) = items.next() else {
         panic!("agent message not started: {observed:?}")
     };
@@ -489,4 +505,33 @@ async fn text_and_thought_chunks_publish_ordered_items() {
             state: session_event_model::SessionState::Unloaded
         })
     ));
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "This test assertion must fail when a submitted history item is missing or malformed."
+)]
+async fn assert_submitted_user_item(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
+    text: &str,
+) {
+    let submitted = tokio::time::timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("submitted item deadline")
+        .expect("submitted item");
+    let SessionEvent::ItemStarted { item } = submitted else {
+        panic!("expected submitted UserMessage, got {submitted:?}");
+    };
+    assert_eq!(item.kind, session_event_model::SessionItemKind::UserMessage);
+    assert_eq!(item.text.as_deref(), Some(text));
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("submitted completion deadline")
+            .expect("submitted completion"),
+        SessionEvent::ItemCompleted {
+            item_id: item.item_id
+        }
+    );
 }

@@ -1,0 +1,347 @@
+use crossterm::terminal;
+use iocraft::prelude::*;
+
+use super::quota_provider_filters::QuotaInteractionMode;
+use super::quota_status_component::MIN_QUOTA_WIDTH;
+use super::quota_status_component::QUOTA_STATUS_SPINNER_TICKS;
+use codex_router_quota_service::quota_display_model::QuotaStatusAccountViewModel;
+use codex_router_quota_service::quota_display_model::QuotaStatusViewModel;
+
+pub(crate) fn quota_title_row(
+    view_model: &QuotaStatusViewModel,
+    width: usize,
+    spinner_tick: usize,
+) -> AnyElement<'static> {
+    let status = truncate_quota_header_text(
+        &quota_title_status(view_model, spinner_tick),
+        width.saturating_sub("Quota status".chars().count()),
+    );
+    element! {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX), flex_direction: FlexDirection::Row) {
+            Text(content: "Quota status", color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+            View(flex_grow: 1.0_f32) {}
+            Text(content: status, color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+        }
+    }
+    .into_any()
+}
+
+pub(crate) fn quota_title_status(view_model: &QuotaStatusViewModel, spinner_tick: usize) -> String {
+    let spinner = quota_spinner_tick(spinner_tick);
+    let freshness = &view_model.pool_freshness_summary;
+    if let Some(serving_clients) = view_model.serving_clients.filter(|clients| *clients > 0) {
+        return format!(
+            "{spinner} serving {} · {freshness}",
+            serving_client_count_label(serving_clients)
+        );
+    }
+    format!("{spinner} {freshness}")
+}
+
+pub(crate) fn truncate_quota_header_text(value: &str, width: usize) -> String {
+    let line = value.replace('\n', " ");
+    if line.chars().count() <= width {
+        return line;
+    }
+    if width == 0 {
+        return String::new();
+    }
+    if width == 1 {
+        return "…".to_owned();
+    }
+    format!("{}…", line.chars().take(width - 1).collect::<String>())
+}
+
+fn serving_client_count_label(serving_clients: u32) -> String {
+    if serving_clients == 1 {
+        "1 client".to_owned()
+    } else {
+        format!("{serving_clients} clients")
+    }
+}
+
+pub(crate) fn quota_spinner_tick(tick: usize) -> &'static str {
+    QUOTA_STATUS_SPINNER_TICKS
+        .get(tick % QUOTA_STATUS_SPINNER_TICKS.len())
+        .copied()
+        .unwrap_or("⠋")
+}
+
+pub(crate) fn quota_status_height(height: usize) -> usize {
+    height.max(1)
+}
+
+pub(crate) fn quota_body_budget(height: usize) -> usize {
+    height.max(1).saturating_sub(5)
+}
+
+pub(crate) fn quota_account_list_height(
+    row_count: usize,
+    focused_row_index: Option<usize>,
+    visible_rows: usize,
+) -> usize {
+    let visible_rows = visible_rows.min(row_count);
+    let window_start = visible_account_window_start(focused_row_index, row_count, visible_rows);
+    let visible_count = row_count.saturating_sub(window_start).min(visible_rows);
+    let remaining = row_count.saturating_sub(window_start + visible_rows);
+    let row_height = visible_count * 4;
+    let row_gap_height = visible_count.saturating_sub(1);
+    let more_above_height = if window_start > 0 { 2 } else { 0 };
+    let more_below_height = if remaining > 0 { 2 } else { 0 };
+    2 + more_above_height + row_height + row_gap_height + more_below_height
+}
+
+pub(crate) fn selected_detail_height(
+    has_selected_details: bool,
+    mode: QuotaInteractionMode,
+) -> usize {
+    if !has_selected_details {
+        return 3;
+    }
+    match mode {
+        // Separate labelled status/reason add two rows to the interactive facts.
+        QuotaInteractionMode::Interactive => 23,
+        QuotaInteractionMode::Static => 21,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct QuotaBodyLayout {
+    pub(crate) details_height: usize,
+    pub(crate) visible_account_budget: usize,
+    pub(crate) list_height: usize,
+    pub(crate) stacked_details_height: usize,
+    pub(crate) show_stacked_details: bool,
+    pub(crate) body_height: usize,
+}
+
+impl QuotaBodyLayout {
+    pub(crate) const fn detail_viewport_height(self, sidecar: bool) -> usize {
+        if sidecar {
+            self.details_height
+        } else if self.show_stacked_details {
+            self.stacked_details_height
+        } else {
+            0
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum QuotaBodyLayoutMode {
+    Inline,
+    Sidecar,
+    Stacked {
+        fill_available_height: bool,
+        prioritize_details: bool,
+    },
+}
+
+pub(crate) fn quota_body_layout(
+    body_budget: usize,
+    mode: QuotaBodyLayoutMode,
+    row_count: usize,
+    focused_row_index: Option<usize>,
+    details_content_height: usize,
+) -> QuotaBodyLayout {
+    let sidecar = mode == QuotaBodyLayoutMode::Sidecar;
+    let (stacked_details, stacked_detail_fills_available_height, prioritize_stacked_details) =
+        match mode {
+            QuotaBodyLayoutMode::Inline | QuotaBodyLayoutMode::Sidecar => (false, false, false),
+            QuotaBodyLayoutMode::Stacked {
+                fill_available_height,
+                prioritize_details,
+            } => (true, fill_available_height, prioritize_details),
+        };
+    let details_height = details_content_height.min(body_budget);
+    let list_budget = if sidecar {
+        body_budget
+    } else if stacked_details {
+        let minimum_list_height = if row_count == 0 {
+            quota_account_list_height(row_count, None, 0)
+        } else {
+            quota_account_list_height(row_count, focused_row_index, 1)
+        };
+        if prioritize_stacked_details {
+            body_budget.saturating_sub(details_content_height.min(body_budget))
+        } else if minimum_list_height + details_content_height <= body_budget {
+            body_budget.saturating_sub(details_content_height)
+        } else {
+            minimum_list_height.min(body_budget)
+        }
+    } else {
+        body_budget
+    };
+    let minimum_list_height = if row_count == 0 {
+        quota_account_list_height(row_count, None, 0)
+    } else {
+        quota_account_list_height(row_count, focused_row_index, 1)
+    };
+    let visible_account_budget = if prioritize_stacked_details
+        && stacked_details
+        && row_count > 0
+        && list_budget < minimum_list_height
+    {
+        0
+    } else {
+        quota_visible_account_budget(row_count, focused_row_index, list_budget)
+    };
+    let list_height =
+        if prioritize_stacked_details && stacked_details && visible_account_budget == 0 {
+            0
+        } else {
+            quota_account_list_height(row_count, focused_row_index, visible_account_budget)
+                .min(body_budget)
+        };
+    let stacked_details_height = if stacked_details {
+        let available_height = body_budget.saturating_sub(list_height);
+        if stacked_detail_fills_available_height {
+            available_height
+        } else {
+            details_content_height.min(available_height)
+        }
+    } else {
+        0
+    };
+    let show_stacked_details = stacked_details && stacked_details_height > 0;
+    let body_height = if sidecar {
+        list_height.max(details_height)
+    } else if show_stacked_details {
+        list_height + stacked_details_height
+    } else {
+        list_height
+    };
+    QuotaBodyLayout {
+        details_height,
+        visible_account_budget,
+        list_height,
+        stacked_details_height,
+        show_stacked_details,
+        body_height,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum QuotaFocusMove {
+    Previous,
+    Next,
+}
+
+pub(crate) fn focused_row_index_for_account(
+    rows: &[QuotaStatusAccountViewModel],
+    focused_account_id: Option<&codex_router_core::ids::AccountId>,
+) -> Option<usize> {
+    let focused_account_id = focused_account_id?;
+    rows.iter()
+        .position(|row| &row.account_id == focused_account_id)
+}
+
+pub(crate) fn moved_quota_focus_index(
+    current_index: Option<usize>,
+    row_count: usize,
+    movement: QuotaFocusMove,
+) -> Option<usize> {
+    if row_count == 0 {
+        return None;
+    }
+    let Some(current_index) = current_index else {
+        return Some(match movement {
+            QuotaFocusMove::Previous => row_count - 1,
+            QuotaFocusMove::Next => 0,
+        });
+    };
+    let next_index = match movement {
+        QuotaFocusMove::Previous => current_index.saturating_sub(1),
+        QuotaFocusMove::Next => (current_index + 1).min(row_count - 1),
+    };
+    (next_index != current_index).then_some(next_index)
+}
+
+pub(crate) fn quota_visible_account_budget(
+    row_count: usize,
+    focused_row_index: Option<usize>,
+    available_height: usize,
+) -> usize {
+    if row_count == 0 {
+        return 0;
+    }
+    (1..=row_count)
+        .rev()
+        .find(|candidate| {
+            quota_account_list_height(row_count, focused_row_index, *candidate) <= available_height
+        })
+        .unwrap_or(1)
+}
+
+pub(crate) fn visible_account_window_start(
+    focused_row_index: Option<usize>,
+    row_count: usize,
+    visible_rows: usize,
+) -> usize {
+    if row_count == 0 || visible_rows == 0 || row_count <= visible_rows {
+        return 0;
+    }
+    focused_row_index
+        .unwrap_or(0)
+        .min(row_count - 1)
+        .saturating_add(1)
+        .saturating_sub(visible_rows)
+        .min(row_count.saturating_sub(visible_rows))
+}
+
+pub(crate) fn current_terminal_width() -> Option<usize> {
+    terminal::size().ok().map(|(width, _)| usize::from(width))
+}
+
+pub(crate) fn apply_live_terminal_width_sample(
+    observed_width: &mut usize,
+    terminal_width: Option<usize>,
+) -> bool {
+    let Some(terminal_width) = terminal_width else {
+        return false;
+    };
+    let terminal_width = terminal_width.max(MIN_QUOTA_WIDTH);
+    if *observed_width == terminal_width {
+        return false;
+    }
+    *observed_width = terminal_width;
+    true
+}
+
+/// Keep runtime repaint scheduling separate from screen composition.
+pub(crate) fn use_quota_status_spinner(
+    hooks: &mut Hooks,
+    mut tick: State<usize>,
+    interval: std::time::Duration,
+) {
+    hooks.use_future(async move {
+        let mut interval = tokio::time::interval(interval);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            tick += 1;
+        }
+    });
+}
+
+pub(crate) fn use_live_terminal_width(
+    hooks: &mut Hooks,
+    enabled: bool,
+    mut observed_width: State<usize>,
+    read_terminal_width: fn() -> Option<usize>,
+) {
+    hooks.use_future(async move {
+        if !enabled {
+            return;
+        }
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(80));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let mut width = observed_width.get();
+            if apply_live_terminal_width_sample(&mut width, read_terminal_width()) {
+                observed_width.set(width);
+            }
+        }
+    });
+}

@@ -95,6 +95,13 @@ impl ProviderPromptContent {
         self.blocks
     }
 
+    pub(crate) fn single_text(&self) -> Option<&str> {
+        match self.blocks.as_slice() {
+            [ContentBlock::Text(text)] => Some(&text.text),
+            _ => None,
+        }
+    }
+
     #[cfg(feature = "test-observation")]
     pub fn new_for_test(
         blocks: Vec<ContentBlock>,

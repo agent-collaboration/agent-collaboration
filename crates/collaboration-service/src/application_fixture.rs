@@ -474,7 +474,6 @@ impl ApplicationFixture {
             self.subscription_presence.clone(),
             self.subscription_clock.clone(),
             self.interaction_store.clone(),
-            self.mail_delivery.clone(),
             self.project_replication.clone(),
             session_context,
             self.project_admission

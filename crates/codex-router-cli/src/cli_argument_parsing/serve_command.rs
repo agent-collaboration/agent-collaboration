@@ -3,8 +3,6 @@
 use super::super::CliError;
 use super::super::DEFAULT_CHATGPT_BACKEND_BASE_URL;
 use super::super::DEFAULT_MAX_SNAPSHOT_AGE_SECONDS;
-use super::super::DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS;
-use super::super::DEFAULT_ROUTER_PORT;
 use super::super::DEFAULT_SESSION_PIN_IDLE_TTL_SECONDS;
 use super::super::default_router_root;
 use super::ArgumentParser;
@@ -14,13 +12,14 @@ use super::parse_u64_option;
 use super::parse_usize_option;
 use codex_router_core::route_profile::ClaudeFiveHourReservePercent;
 use codex_router_core::route_profile::DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT;
+use codex_router_quota_service::quota::quota_refresh_service::DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ServeCommand {
     pub(crate) listen_host: String,
-    pub(crate) port: u16,
+    pub(crate) port: Option<u16>,
     pub(crate) state_db: PathBuf,
     pub(crate) secret_root: PathBuf,
     pub(crate) upstream_base_url: String,
@@ -73,7 +72,7 @@ impl ServeCommand {
         let listen_host = options
             .listen_host
             .unwrap_or_else(|| "127.0.0.1".to_owned());
-        let port = options.port.unwrap_or(DEFAULT_ROUTER_PORT);
+        let port = options.port;
         let router_root = default_router_root()?;
         let state_db = options
             .state_db

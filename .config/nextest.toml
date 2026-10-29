@@ -31,11 +31,25 @@ filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (t
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
+# in the existing process-runtime window, apart from unrelated fixture load.
+[[profile.ci.overrides]]
+filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
 # protocol proof observes both firings; its own receive deadlines remain bounded.
 [[profile.ci.overrides]]
 filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
 slow-timeout = { period = "60s", terminate-after = 6 }
+
+# The real ACP child emits FIFO receipts over a Unix socket within two seconds.
+# Give it the existing process reservation while keeping that deadline intact.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=external_provider_supervisor::tests::router_queue_drains_provider_prompts_in_fifo_order)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
 
 # These cases deliberately fill the real production queue or construct 260
 # maximum descriptions / 31,000 historical effects. Keep those inputs and
@@ -63,6 +77,13 @@ threads-required = "num-test-threads"
 # of the other crash/restart cases. Keep their one-second storage fence intact.
 [[profile.ci.overrides]]
 filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
+# Snapshot-install restart journeys own parent/child processes and real receivers.
+# Reserve their scheduling window without changing any step deadline.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(collaboration_runtime::board_composition::tests::claim_restart::)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 

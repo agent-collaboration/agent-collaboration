@@ -54,8 +54,8 @@ impl TestRoot {
 }
 pub(super) fn parse_session_arguments(
     arguments: impl IntoIterator<Item = OsString>,
-) -> Result<crate::sessions::SessionsCommand, String> {
-    crate::sessions::SessionsCommand::parse(arguments.into_iter().collect())
+) -> Result<agent_session_inventory::sessions::SessionsCommand, String> {
+    agent_session_inventory::sessions::SessionsCommand::parse(arguments.into_iter().collect())
 }
 pub(super) fn run_session_cli(
     arguments: impl IntoIterator<Item = OsString>,
@@ -198,7 +198,7 @@ impl CodexStateThreadFixture {
 pub(super) struct FakeSessionsCommandRunner {
     pub(super) new_codex_args: Vec<Vec<OsString>>,
     pub(super) prepared_source_sessions:
-        Vec<crate::sessions::source_ssh_protocol::PreparedSourceSession>,
+        Vec<agent_session_inventory::sessions::source_ssh_protocol::PreparedSourceSession>,
     pub(super) prepared_source_args: Vec<Vec<OsString>>,
     pub(super) resumed_session_ids: Vec<String>,
     pub(super) resume_codex_args: Vec<Vec<OsString>>,
@@ -208,12 +208,12 @@ pub(super) struct FakeSessionsCommandRunner {
     pub(super) fork_model_choices: Vec<codex_native_integration::ResumeModelChoice>,
 }
 
-impl crate::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
+impl agent_session_inventory::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
     fn run_prepared_source(
         &mut self,
         arguments: &[OsString],
-        selection: &crate::sessions::source_ssh_protocol::PreparedSourceSession,
-    ) -> Result<(), crate::sessions::SessionsCommandError> {
+        selection: &agent_session_inventory::sessions::source_ssh_protocol::PreparedSourceSession,
+    ) -> Result<(), agent_session_inventory::sessions::SessionsCommandError> {
         self.prepared_source_sessions.push(selection.clone());
         self.prepared_source_args.push(arguments.to_vec());
         Ok(())
@@ -222,7 +222,7 @@ impl crate::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
     fn run_codex_new(
         &mut self,
         codex_args: &[OsString],
-    ) -> Result<(), crate::sessions::SessionsCommandError> {
+    ) -> Result<(), agent_session_inventory::sessions::SessionsCommandError> {
         self.new_codex_args.push(codex_args.to_vec());
         Ok(())
     }
@@ -230,8 +230,8 @@ impl crate::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
     fn run_codex_resume(
         &mut self,
         codex_args: &[OsString],
-        selection: &crate::sessions::SessionActionSelection,
-    ) -> Result<(), crate::sessions::SessionsCommandError> {
+        selection: &agent_session_inventory::sessions::SessionActionSelection,
+    ) -> Result<(), agent_session_inventory::sessions::SessionsCommandError> {
         self.resume_codex_args.push(codex_args.to_vec());
         self.resumed_session_ids.push(selection.session_id());
         self.resume_model_choices
@@ -242,8 +242,8 @@ impl crate::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
     fn run_codex_fork(
         &mut self,
         codex_args: &[OsString],
-        selection: &crate::sessions::SessionActionSelection,
-    ) -> Result<(), crate::sessions::SessionsCommandError> {
+        selection: &agent_session_inventory::sessions::SessionActionSelection,
+    ) -> Result<(), agent_session_inventory::sessions::SessionsCommandError> {
         self.fork_codex_args.push(codex_args.to_vec());
         self.forked_session_ids.push(selection.session_id());
         self.fork_model_choices.push(selection.model_choice.clone());
@@ -252,11 +252,12 @@ impl crate::sessions::SessionsCommandRunner for FakeSessionsCommandRunner {
 }
 
 pub(super) struct FakeSessionsPicker {
-    pub(super) selected_outcome: crate::presentation::session_picker::SessionsPickerOutcome,
+    pub(super) selected_outcome: agent_session_picker::session_picker::SessionsPickerOutcome,
     pub(super) offered_session_ids: Vec<String>,
     pub(super) offered_labels: Vec<String>,
     pub(super) new_session_args_display: Option<String>,
-    pub(super) loader_queries: Vec<crate::presentation::session_picker::SessionsPickerDataQuery>,
+    pub(super) loader_queries:
+        Vec<agent_session_inventory::picker_data_query::SessionsPickerDataQuery>,
     pub(super) loaded_session_ids: Vec<Vec<String>>,
 }
 
@@ -264,8 +265,8 @@ impl FakeSessionsPicker {
     pub(super) fn new(selected_session_id: &str) -> Self {
         Self {
             selected_outcome:
-                crate::presentation::session_picker::SessionsPickerOutcome::ResumeSession(
-                    crate::sessions::SessionActionSelection::default_catalog(
+                agent_session_picker::session_picker::SessionsPickerOutcome::ResumeSession(
+                    agent_session_inventory::sessions::SessionActionSelection::default_catalog(
                         selected_session_id.to_owned(),
                         codex_native_integration::ResumeModelChoice::default(),
                     ),
@@ -281,7 +282,7 @@ impl FakeSessionsPicker {
     pub(super) fn new_start_new() -> Self {
         Self {
             selected_outcome:
-                crate::presentation::session_picker::SessionsPickerOutcome::StartNewSession,
+                agent_session_picker::session_picker::SessionsPickerOutcome::StartNewSession,
             offered_session_ids: Vec::new(),
             offered_labels: Vec::new(),
             new_session_args_display: None,
@@ -293,8 +294,8 @@ impl FakeSessionsPicker {
     pub(super) fn new_fork(session_id: &str) -> Self {
         Self {
             selected_outcome:
-                crate::presentation::session_picker::SessionsPickerOutcome::ForkSession(
-                    crate::sessions::SessionActionSelection::default_catalog(
+                agent_session_picker::session_picker::SessionsPickerOutcome::ForkSession(
+                    agent_session_inventory::sessions::SessionActionSelection::default_catalog(
                         session_id.to_owned(),
                         codex_native_integration::ResumeModelChoice::default(),
                     ),
@@ -307,8 +308,11 @@ impl FakeSessionsPicker {
         }
     }
 
-    fn capture_selected_record(&mut self, records: &[crate::sessions::SessionPickerRecord]) {
-        use crate::presentation::session_picker::SessionsPickerOutcome;
+    fn capture_selected_record(
+        &mut self,
+        records: &[agent_session_inventory::sessions::SessionPickerRecord],
+    ) {
+        use agent_session_picker::session_picker::SessionsPickerOutcome;
         let selected_id = match &self.selected_outcome {
             SessionsPickerOutcome::ResumeSession(selection)
             | SessionsPickerOutcome::ForkSession(selection) => selection.session_id(),
@@ -320,7 +324,8 @@ impl FakeSessionsPicker {
         else {
             return;
         };
-        let selection = crate::sessions::SessionActionSelection::from_picker_record(record);
+        let selection =
+            agent_session_inventory::sessions::SessionActionSelection::from_picker_record(record);
         self.selected_outcome = match &self.selected_outcome {
             SessionsPickerOutcome::ForkSession(_) => SessionsPickerOutcome::ForkSession(selection),
             _ => SessionsPickerOutcome::ResumeSession(selection),
@@ -329,7 +334,7 @@ impl FakeSessionsPicker {
 
     pub(super) fn with_loader_query(
         mut self,
-        query: crate::presentation::session_picker::SessionsPickerDataQuery,
+        query: agent_session_inventory::picker_data_query::SessionsPickerDataQuery,
     ) -> Self {
         self.loader_queries.push(query);
         self
@@ -339,11 +344,11 @@ impl FakeSessionsPicker {
 impl crate::sessions::SessionsPicker for FakeSessionsPicker {
     fn select_session(
         &mut self,
-        request: crate::presentation::session_picker::SessionsPickerRequest,
-        record_loader: Option<crate::presentation::session_picker::SessionsPickerRecordLoader>,
+        request: agent_session_picker::session_picker::SessionsPickerRequest,
+        record_loader: Option<agent_session_picker::session_picker::SessionsPickerRecordLoader>,
     ) -> Result<
-        Option<crate::presentation::session_picker::SessionsPickerOutcome>,
-        crate::sessions::SessionsCommandError,
+        Option<agent_session_picker::session_picker::SessionsPickerOutcome>,
+        agent_session_inventory::sessions::SessionsCommandError,
     > {
         self.capture_selected_record(&request.records);
         self.new_session_args_display = Some(request.new_session_args_display.clone());
@@ -362,14 +367,14 @@ impl crate::sessions::SessionsPicker for FakeSessionsPicker {
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
-                    .map_err(crate::sessions::SessionsCommandError::Runtime)?;
-                let records = runtime.block_on(record_loader(crate::presentation::session_picker::SourceInventoryRequest {
+                    .map_err(agent_session_inventory::sessions::SessionsCommandError::Runtime)?;
+                let records = runtime.block_on(record_loader(agent_session_inventory::source_inventory_request::SourceInventoryRequest {
                     source_context: match request.machine_mode {
-                        crate::presentation::session_picker::PickerMachineSourceMode::HostedDefault => crate::presentation::session_picker::PickerSourceContext::DefaultHosted,
-                        crate::presentation::session_picker::PickerMachineSourceMode::LocalCodex => crate::presentation::session_picker::PickerSourceContext::LocalCodex,
+                        agent_session_picker::session_picker::PickerMachineSourceMode::HostedDefault => agent_session_inventory::source_inventory_request::PickerSourceContext::DefaultHosted,
+                        agent_session_picker::session_picker::PickerMachineSourceMode::LocalCodex => agent_session_inventory::source_inventory_request::PickerSourceContext::LocalCodex,
                     }, query, request_generation: 0, continuation: None,
                 })).into_snapshot().map_err(|error| {
-                    crate::sessions::SessionsCommandError::Picker(std::io::Error::other(error))
+                    agent_session_inventory::sessions::SessionsCommandError::Picker(std::io::Error::other(error))
                 })?;
                 self.capture_selected_record(&records.records);
                 self.loaded_session_ids.push(

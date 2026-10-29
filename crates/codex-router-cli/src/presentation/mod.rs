@@ -3,7 +3,6 @@
 use iocraft::prelude::*;
 
 pub(crate) mod host;
-pub(crate) mod quota;
 
 /// Marker type for the CLI presentation layer's iocraft boundary.
 #[expect(
