@@ -153,6 +153,18 @@ impl DemoShellState {
         self.last_action = format!("Filtered: {}", self.filter_query);
     }
     fn background_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Esc {
+            if !self.filter_query.is_empty() {
+                self.filter_query.clear();
+                self.reconcile_selection();
+                self.last_action = "Filter cleared".to_owned();
+            } else if self.this_folder {
+                self.this_folder = false;
+                self.reconcile_selection();
+                self.last_action = "Filters reset".to_owned();
+            }
+            return;
+        }
         if matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
             self.focus = self.focus.advance(
                 key.code == KeyCode::BackTab || key.modifiers.contains(KeyModifiers::SHIFT),
@@ -181,17 +193,13 @@ impl DemoShellState {
                 self.open_dialog()
             }
             KeyCode::Char('/') if self.focus != ShellFocus::Filter => self.focus_filter(),
-            KeyCode::Esc if self.focus == ShellFocus::Filter => {
-                self.filter_query.clear();
-                self.reconcile_selection();
-                self.last_action = "Filter cleared".to_owned();
-            }
             KeyCode::Backspace if self.focus == ShellFocus::Filter => {
                 self.filter_query.pop();
                 self.reconcile_selection();
                 self.last_action = format!("Filtered: {}", self.filter_query);
             }
             KeyCode::Enter if self.focus == ShellFocus::Filter => {
+                self.open_session();
                 self.focus = ShellFocus::List;
             }
             KeyCode::Char(character)

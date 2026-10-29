@@ -70,7 +70,7 @@ fn toolbar_tab_arrows_and_activation_reach_controls_and_list() {
     ));
 }
 #[test]
-fn dialog_arrows_walk_all_fields_and_choice_enter_never_starts_under_combo() {
+fn dialog_arrows_walk_fields_and_plain_enter_picks_without_starting() {
     let mut state = DemoShellState::new(100, 30);
     state.handle_event(control(KeyCode::Char('n')));
     assert!(matches!(
@@ -94,7 +94,7 @@ fn dialog_arrows_walk_all_fields_and_choice_enter_never_starts_under_combo() {
     state.handle_event(press(KeyCode::Up));
     state.handle_event(press(KeyCode::Up));
     state.handle_event(press(KeyCode::Enter));
-    state.handle_event(control(KeyCode::Enter));
+    state.handle_event(press(KeyCode::Enter));
     assert_eq!(state.overlays.len(), 1);
     assert!(!state.last_action.starts_with("Started"));
     state.handle_event(press(KeyCode::Enter));
@@ -127,4 +127,35 @@ fn menu_shortcut_uses_the_right_edge_of_the_panel() {
     use crate::demo_shell_surfaces::OverlaySurface;
     let canvas = element!(View(width: 110, height: 30) { OverlaySurface(overlay: DemoOverlay::Menu { selected: 0 }, machine: MachineChoice::Sunclaw, client: ClientChoice::Codex, directory: DirectoryChoice::Atlas, sort: SessionSort::Updated) }).render(Some(110));
     assert_eq!(canvas.cell(33, 3).and_then(CanvasCell::text), Some("N"));
+}
+
+#[test]
+fn control_enter_on_dropdown_starts_without_committing_highlight() {
+    let mut state = DemoShellState::new(100, 30);
+    state.handle_event(control(KeyCode::Char('n')));
+    state.handle_event(press(KeyCode::Down));
+    state.handle_event(press(KeyCode::Enter));
+    state.handle_event(press(KeyCode::Down));
+    state.handle_event(control(KeyCode::Enter));
+    assert!(state.overlays.is_empty());
+    assert_eq!(state.selected_machine, MachineChoice::Sunclaw);
+    assert_eq!(state.last_action, "Started on Sunclaw");
+}
+
+#[test]
+fn filter_enter_opens_match_and_escape_clears_then_resets_without_quitting() {
+    let mut state = DemoShellState::new(100, 30);
+    state.handle_event(press(KeyCode::Char('/')));
+    state.handle_event(TerminalEvent::BracketedPaste("stor".to_owned()));
+    state.handle_event(press(KeyCode::Enter));
+    assert_eq!(state.last_action, "Opened Storage sketch");
+    state.focus = ShellFocus::List;
+    state.this_folder = true;
+    state.handle_event(press(KeyCode::Esc));
+    assert!(state.filter_query.is_empty());
+    assert!(state.this_folder);
+    state.handle_event(press(KeyCode::Esc));
+    assert!(!state.this_folder);
+    state.handle_event(press(KeyCode::Esc));
+    assert!(!state.quit_requested);
 }

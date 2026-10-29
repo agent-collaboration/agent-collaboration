@@ -68,6 +68,10 @@ impl DemoShellState {
                 _ => {}
             },
             DemoOverlay::ChoicePicker { query, selected } => match key.code {
+                KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.overlays.pop();
+                    self.start_session();
+                }
                 KeyCode::Esc => {
                     self.overlays.pop();
                     self.last_action = "Choice list closed".to_owned();
