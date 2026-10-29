@@ -140,6 +140,17 @@ async fn assert_recovery() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
+    let mut read = writer.store.snapshot().await?;
+    let mut handoffs = read.mail_handoff_page(HandoffSeq::ZERO, 100).await?;
+    read.finish().await?;
+    assert_eq!(handoffs.len(), 1, "fixture must freeze one notification");
+    let message_board_storage::MailHandoffItem::Delivery(envelope) = handoffs.remove(0).item else {
+        return Err("seeded handoff is not delivery".into());
+    };
+    let fleet_sync_protocol::DeliveryEnvelope::Item(frozen) = *envelope else {
+        return Err("seeded handoff is not a notification item".into());
+    };
+    assert_eq!(frozen.id(), fixture.seed_item);
     // Real replication makes the frozen item eligible. Discard only its returned
     // prompt while the actual Welcome is still held before the Host event loop.
     let acknowledgement = writer
@@ -239,25 +250,78 @@ async fn assert_recovery() -> Result<(), TestError> {
 
     // No board mutation, copy acknowledgement, explicit publisher prompt or
     // unrelated hint follows. This is the actual generic registry renewal reply.
+    let (submission_entered, release_submission) = fixture
+        .harness
+        .transport
+        .observer
+        .hold_next_mail_submit(fixture.seed_item);
     release_renewal
         .send(())
         .map_err(|_| io::Error::other("renewal gate closed"))?;
+    tokio::time::timeout(BOUND, submission_entered)
+        .await
+        .map_err(|_| {
+            io::Error::other(format!(
+                "publication after actual renewal; wire={:?}; diagnostics={:?}",
+                fixture.harness.transport.observer.events(),
+                events.lock().unwrap()
+            ))
+        })??;
+
+    // Count publication before NotWriter releases the SDK's ordinary retry.
+    // Rescan the frozen handoff while its first real reply is held: replay
+    // admission must not enqueue another submission, including after CI15.
     tokio::time::timeout(
         BOUND,
         fixture
-            .harness
-            .central
-            .notifications
-            .wait_submission(fixture.seed_item),
+            .publisher
+            .wait_project_idle_for_test(&fixture.project),
     )
-    .await
-    .map_err(|_| {
-        io::Error::other(format!(
-            "publication after actual renewal; wire={:?}; diagnostics={:?}",
-            fixture.harness.transport.observer.events(),
-            events.lock().unwrap()
-        ))
-    })?;
+    .await?;
+    fixture
+        .publisher
+        .queue_project(fixture.project.clone())
+        .await?;
+    tokio::time::timeout(
+        BOUND,
+        fixture
+            .publisher
+            .wait_project_idle_for_test(&fixture.project),
+    )
+    .await?;
+    // Publisher idle proves admission committed, not that the SDK dispatched.
+    // Observe every committed outgoing ID at MailSubmit before counting this
+    // notification by content; a fresh-ID duplicate must not escape the gate.
+    for row in fixture
+        .harness
+        .mail
+        .rows()
+        .await?
+        .into_iter()
+        .filter(|row| row.category == "outbox")
+    {
+        let item = fleet_sync_protocol::ItemId::new(row.identity.parse()?)?;
+        tokio::time::timeout(
+            BOUND,
+            fixture.harness.central.notifications.wait_submission(item),
+        )
+        .await?;
+    }
+    let submitted = fixture
+        .harness
+        .central
+        .notifications
+        .submitted_notification_envelopes(&frozen)
+        .await;
+    assert_eq!(
+        submitted.len(),
+        1,
+        "renewal duplicated the frozen publication: {:?}",
+        submitted.iter().map(|(item, _)| item).collect::<Vec<_>>()
+    );
+    release_submission
+        .send(())
+        .map_err(|_| io::Error::other("submission gate closed"))?;
     let confirmed = wait_diagnostic(
         &events,
         &changed,
@@ -284,8 +348,40 @@ async fn assert_recovery() -> Result<(), TestError> {
         writer.store.writer_state().await?,
         fleet_sync_lease::WriterState::Writing { .. }
     ));
-    let submitted=fixture.harness.transport.observer.events().into_iter().filter(|event|matches!(event,transport::WireEvent::MailSubmit(item) if *item==fixture.seed_item)).count();
-    assert_eq!(submitted, 1, "renewal duplicated the frozen publication");
+    // Deliberately cross the retry boundary, rather than racing it in the count.
+    // The fixture rejects project authority before it ever calls Delivery::Submit.
+    let retry_envelopes = tokio::time::timeout(
+        BOUND,
+        fixture
+            .harness
+            .central
+            .notifications
+            .wait_submission_count(fixture.seed_item, 2),
+    )
+    .await?;
+    let envelopes = fixture
+        .harness
+        .central
+        .notifications
+        .submitted_notification_envelopes(&frozen)
+        .await;
+    assert!(
+        envelopes.iter().all(|(item, _)| *item == frozen.id()),
+        "renewal submitted fresh identities for the frozen notification: {:?}",
+        envelopes.iter().map(|(item, _)| item).collect::<Vec<_>>()
+    );
+    assert!(
+        retry_envelopes
+            .windows(2)
+            .all(|pair| pair.first() == pair.get(1)),
+        "NotWriter retry changed the frozen envelope"
+    );
+    assert!(
+        !fixture.harness.transport.observer.events().iter().any(
+            |event| matches!(event, transport::WireEvent::GenericSubmit(item) if *item == fixture.seed_item)
+        ),
+        "NotWriter fixture unexpectedly forwarded delivery custody"
+    );
     let shown = fixture
         .application
         .messages()
