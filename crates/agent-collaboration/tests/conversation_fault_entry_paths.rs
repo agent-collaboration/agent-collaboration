@@ -782,15 +782,11 @@ async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::proces
                     .is_none(),
                 "a rejected load must not prompt or replay"
             );
+            None
         } else {
             drop(lines);
             drop(writer);
-            assert!(
-                tokio::time::timeout(std::time::Duration::from_millis(250), acp.accept())
-                    .await
-                    .is_err(),
-                "a lost load response must not trigger a second ACP connection or replay"
-            );
+            Some(acp)
         }
     });
     let output = tokio::time::timeout(
@@ -817,8 +813,20 @@ async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::proces
     .await
     .expect("CLI deadline")
     .expect("CLI output");
-    peer.await.expect("peer join");
+    let replacement_listener = peer.await.expect("peer join");
     served.stop().await.expect("collaboration API stops");
+    if let Some(replacement_listener) = replacement_listener {
+        // CLI exit and API shutdown have joined the only producers. A queued
+        // connection now proves a replay; no elapsed absence window is needed.
+        let replacement = replacement_listener
+            .into_std()
+            .expect("retained listener is nonblocking")
+            .accept();
+        assert!(
+            matches!(replacement, Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+            "a lost load response must not trigger a second ACP connection or replay"
+        );
+    }
     std::fs::remove_file(root.join("acp.sock")).expect("ACP cleanup");
     std::fs::remove_dir(&root).expect("fixture cleanup");
     output

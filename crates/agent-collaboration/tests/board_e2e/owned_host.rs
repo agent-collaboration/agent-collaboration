@@ -357,7 +357,7 @@ impl BoardHost {
             .ok_or_else(|| "owned Host seed frontier is absent".into())
     }
 
-    async fn query_project(&self, query: Value) -> FixtureResult<Value> {
+    pub(super) async fn query_project(&self, query: Value) -> FixtureResult<Value> {
         let mut request = serde_json::to_vec(&query)?;
         request.push(b'\n');
         let mut control = self.control.lock().await;

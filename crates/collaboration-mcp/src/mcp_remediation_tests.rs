@@ -14,6 +14,7 @@ async fn stateless_http_application_deadline_detaches_without_cancelling_turn() 
     let fixture = ConversationFixture::start("deadline-acp.sock").await;
     let acp_path = fixture.root.path().join("deadline-acp.sock");
     let acp = tokio::net::UnixListener::bind(&acp_path).expect("ACP listener");
+    let (prompt_seen, prompt_ready) = tokio::sync::oneshot::channel();
     let peer = tokio::spawn(async move {
         let (stream, _) = acp.accept().await.expect("ACP accept");
         let (reader, mut writer) = stream.into_split();
@@ -41,6 +42,7 @@ async fn stateless_http_application_deadline_detaches_without_cancelling_turn() 
             .expect("load response");
         let prompt = next_json_line(&mut lines, "prompt").await;
         assert_eq!(prompt["method"], "session/prompt");
+        prompt_seen.send(()).expect("actual prompt receipt");
         assert!(
             tokio::time::timeout(std::time::Duration::from_secs(3), lines.next_line())
                 .await
@@ -53,13 +55,29 @@ async fn stateless_http_application_deadline_detaches_without_cancelling_turn() 
     let client = reqwest::Client::new();
     let endpoint = json!({"serviceId":SERVICE_ID,"endpointId":"codex-local"});
     let caller = json!({"endpoint":endpoint,"sessionId":"deadline-caller"});
-    let response = client.post(fixture.listener.url()).header(CONTENT_TYPE,"application/json").header(ACCEPT,"application/json, text/event-stream").header("mcp-protocol-version","2025-11-25").json(&json!({
+    let body = {
+        let response = async {
+            let response = client.post(fixture.listener.url()).header(CONTENT_TYPE,"application/json").header(ACCEPT,"application/json, text/event-stream").header("mcp-protocol-version","2025-11-25").json(&json!({
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"conversation_create_and_prompt","arguments":{
             "create":{"operationId":collaboration_protocol::OperationId::generate(),"endpoint":endpoint,"workingDirectory":fixture.root.path(),"fork":null,"model":"gpt-5.6-luna","effort":"low","access":"workspace-write","createdBy":caller,"approver":caller,"rootMessageId":null},
             "message":{"kind":"humanUser","text":"deadline proof"},"promptEffort":"low","timeoutSeconds":1
         }}
     })).send().await.expect("deadline response");
-    let body = protocol_response_json(response).await;
+            protocol_response_json(response).await
+        };
+        tokio::pin!(response);
+        tokio::select! {
+            body = &mut response => panic!("application settled before actual prompt: {body}"),
+            ready = tokio::time::timeout(std::time::Duration::from_secs(3), prompt_ready) => {
+                ready.expect("actual prompt deadline").expect("actual prompt receipt");
+            }
+        }
+        assert!(futures_util::poll!(response.as_mut()).is_pending());
+        tokio::time::pause();
+        tokio::time::advance(std::time::Duration::from_millis(1001)).await;
+        tokio::time::resume();
+        response.await
+    };
     assert_eq!(body.pointer("/result/isError"), Some(&json!(false)));
     assert_eq!(
         body.pointer("/result/structuredContent/prompt/kind"),

@@ -12,6 +12,76 @@ pub(super) struct TuiOutput {
     reader: JoinHandle<io::Result<()>>,
 }
 
+impl TuiOutput {
+    pub(super) fn capture(mut output: ChildStdout) -> Self {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let captured = bytes.clone();
+        let (changed, observed) = watch::channel(());
+        let reader = tokio::spawn(async move {
+            let mut chunk = [0_u8; 4096];
+            loop {
+                let read = output.read(&mut chunk).await?;
+                if read == 0 {
+                    return Ok(());
+                }
+                captured
+                    .lock()
+                    .map_err(|_| io::Error::other("TUI output lock poisoned"))?
+                    .extend_from_slice(&chunk[..read]);
+                changed.send_replace(());
+            }
+        });
+        Self {
+            bytes,
+            changed: observed,
+            reader,
+        }
+    }
+
+    pub(super) async fn wait_for_text(
+        &mut self,
+        expected: &str,
+        bound: Duration,
+    ) -> io::Result<()> {
+        tokio::time::timeout(bound, async {
+            loop {
+                self.changed.borrow_and_update();
+                let found = {
+                    let bytes = self
+                        .bytes
+                        .lock()
+                        .map_err(|_| io::Error::other("TUI output lock poisoned"))?;
+                    let text = String::from_utf8_lossy(&bytes);
+                    // A word can arrive midway through a PTY read/render. The
+                    // pinned TUI closes each synchronized frame with this marker.
+                    text.find(expected)
+                        .and_then(|start| text.get(start + expected.len()..))
+                        .is_some_and(|remaining| remaining.contains("\x1b[?2026l"))
+                };
+                if found {
+                    return Ok(());
+                }
+                self.changed.changed().await.map_err(|_| {
+                    io::Error::other(format!("TUI exited before rendering {expected}"))
+                })?;
+            }
+        })
+        .await
+        .map_err(|_| io::Error::other(format!("TUI did not render {expected} before its bound")))?
+    }
+
+    pub(super) async fn finish(self) -> io::Result<String> {
+        self.reader.await.map_err(io::Error::other)??;
+        String::from_utf8(
+            self.bytes
+                .lock()
+                .map_err(|_| io::Error::other("TUI output lock poisoned"))?
+                .clone(),
+        )
+        .map_err(io::Error::other)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,74 +137,5 @@ mod tests {
                 .expect("drain frame producer")
                 .contains("Trust and continue")
         );
-    }
-}
-
-impl TuiOutput {
-    pub(super) fn capture(mut output: ChildStdout) -> Self {
-        let bytes = Arc::new(Mutex::new(Vec::new()));
-        let captured = bytes.clone();
-        let (changed, observed) = watch::channel(());
-        let reader = tokio::spawn(async move {
-            let mut chunk = [0_u8; 4096];
-            loop {
-                let read = output.read(&mut chunk).await?;
-                if read == 0 {
-                    return Ok(());
-                }
-                captured
-                    .lock()
-                    .map_err(|_| io::Error::other("TUI output lock poisoned"))?
-                    .extend_from_slice(&chunk[..read]);
-                changed.send_replace(());
-            }
-        });
-        Self {
-            bytes,
-            changed: observed,
-            reader,
-        }
-    }
-
-    pub(super) async fn wait_for_text(
-        &mut self,
-        expected: &str,
-        bound: Duration,
-    ) -> io::Result<()> {
-        tokio::time::timeout(bound, async {
-            loop {
-                self.changed.borrow_and_update();
-                let found = {
-                    let bytes = self
-                        .bytes
-                        .lock()
-                        .map_err(|_| io::Error::other("TUI output lock poisoned"))?;
-                    let text = String::from_utf8_lossy(&bytes);
-                    // A word can arrive midway through a PTY read/render. The
-                    // pinned TUI closes each synchronized frame with this marker.
-                    text.find(expected)
-                        .is_some_and(|start| text[start + expected.len()..].contains("\x1b[?2026l"))
-                };
-                if found {
-                    return Ok(());
-                }
-                self.changed.changed().await.map_err(|_| {
-                    io::Error::other(format!("TUI exited before rendering {expected}"))
-                })?;
-            }
-        })
-        .await
-        .map_err(|_| io::Error::other(format!("TUI did not render {expected} before its bound")))?
-    }
-
-    pub(super) async fn finish(self) -> io::Result<String> {
-        self.reader.await.map_err(io::Error::other)??;
-        String::from_utf8(
-            self.bytes
-                .lock()
-                .map_err(|_| io::Error::other("TUI output lock poisoned"))?
-                .clone(),
-        )
-        .map_err(io::Error::other)
     }
 }

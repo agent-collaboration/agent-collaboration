@@ -1,5 +1,6 @@
 //! Directory acceptance survives a delayed real Host registration without a false error.
 use super::*;
+use codex_router_test_support::FixtureResult;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
@@ -32,7 +33,12 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     .build();
     let api = ServedCollaborationApi::start(&api_root, application)?;
     let input = serde_json::to_value(&creation)?;
-    let queued = api.call("project_create", input.clone()).await?;
+    // The real session pump has not started, so only its existing request
+    // deadline can answer PendingUnreachable. Its local IO uses paused Tokio.
+    tokio::time::pause();
+    let queued = api.call("project_create", input.clone()).await;
+    tokio::time::resume();
+    let queued = queued?;
     assert_eq!(
         queued.pointer("/result/result/kind"),
         Some(&json!("pendingUnreachable")),
@@ -62,8 +68,14 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
         );
         reply
     } else {
-        // Real Welcome stays held past the bound. No fake timer or grant is used.
-        let pending = timeout(BOUND, api.call("project_create", input.clone())).await??;
+        // Keep the real Welcome held and drive only the existing caller deadline.
+        let pending = expire_registration_wait(
+            &api,
+            projects.subscribe_registration_waits(),
+            &input,
+            &creation.project_id,
+        )
+        .await?;
         assert_eq!(
             pending.pointer("/result/result/kind"),
             Some(&json!("projectCreationPending")),
@@ -75,7 +87,13 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
         );
         assert!(!project_file.exists());
         assert_eq!(
-            api.call("project_create", input.clone()).await?,
+            expire_registration_wait(
+                &api,
+                projects.subscribe_registration_waits(),
+                &input,
+                &creation.project_id,
+            )
+            .await?,
             pending,
             "same accepted pending request changed identity"
         );
@@ -119,6 +137,39 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
         .await?;
     central.stop().await?;
     Ok(())
+}
+
+async fn expire_registration_wait(
+    api: &ServedCollaborationApi,
+    mut waits: tokio::sync::broadcast::Receiver<ProjectId>,
+    input: &Value,
+    expected_project: &ProjectId,
+) -> FixtureResult<Value> {
+    let creating = api.call("project_create", input.clone());
+    tokio::pin!(creating);
+    let project = timeout(BOUND, async {
+        tokio::select! {
+            result = &mut creating => {
+                result?;
+                FixtureResult::<ProjectId>::Err("creation settled before its registration wait".into())
+            }
+            project = waits.recv() => Ok(project?),
+        }
+    })
+    .await??;
+    if &project != expected_project {
+        return Err("registration wait changed the exact project".into());
+    }
+    let pending_before_expiry = futures_util::poll!(creating.as_mut()).is_pending();
+    // wait_ready is polled inside the owner's existing two-second timeout.
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_millis(2001)).await;
+    tokio::time::resume();
+    let result = timeout(BOUND, creating).await??;
+    if !pending_before_expiry {
+        return Err("creation did not remain pending before controlled expiry".into());
+    }
+    Ok(result)
 }
 
 #[tokio::test]

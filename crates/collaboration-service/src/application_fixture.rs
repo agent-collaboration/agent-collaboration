@@ -525,9 +525,10 @@ impl ApplicationFixture {
         let interactions = crate::collaboration_application::InteractionOperations::new(
             self.approval_broker.clone(),
         );
-        let wakes = crate::collaboration_application::WakeOperations::new(
+        let wakes = crate::collaboration_application::WakeOperations::new_with_clock(
             &self.service_id.clone(),
             self.automation.clone().as_ref(),
+            self.subscription_clock.clone(),
         )
         .with_wait_capacity(&self.wake_wait_permits.clone())
         .with_remote(self.mail_delivery.as_ref());

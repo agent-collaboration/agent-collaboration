@@ -252,6 +252,7 @@ async fn exercise_held_empty_thread(
     let run_id = agent_automation::RunId::generate();
     let scheduled_push_id = PushId::try_from(uuid::Uuid::now_v7().to_string())?;
     let expected_scheduled_push_id = scheduled_push_id.clone();
+    let (route_completed, route_completion) = tokio::sync::oneshot::channel();
     let backend = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut wire = tokio_tungstenite::accept_async(stream).await?;
@@ -338,11 +339,10 @@ async fn exercise_held_empty_thread(
             wire.send(Message::Text(response.to_string().into()))
                 .await?;
         }
-        if tokio::time::timeout(Duration::from_millis(25), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("scheduled run opened a second native connection".into());
+        route_completion.await?;
+        match listener.into_std()?.accept() {
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            _ => return Err("scheduled run opened a second native connection".into()),
         }
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     });
@@ -419,6 +419,9 @@ async fn exercise_held_empty_thread(
             use codex_acp_adapter::UnmaterializedBindingStore;
             holder.restore(*binding);
         }
+        route_completed
+            .send(())
+            .map_err(|_| "native fixture ended before route completion")?;
         backend.await??;
         std::fs::remove_file(socket_path)?;
         std::fs::remove_dir(scratch)?;
@@ -589,6 +592,9 @@ async fn exercise_held_empty_thread(
             use codex_acp_adapter::UnmaterializedBindingStore;
             holder.restore(*binding);
         }
+        route_completed
+            .send(())
+            .map_err(|_| "native fixture ended before route completion")?;
         backend.await??;
         std::fs::remove_file(socket_path)?;
         std::fs::remove_dir(scratch)?;
@@ -721,6 +727,9 @@ async fn exercise_held_empty_thread(
     served.stop().await?;
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
+    route_completed
+        .send(())
+        .map_err(|_| "native fixture ended before route completion")?;
     backend.await??;
     native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)

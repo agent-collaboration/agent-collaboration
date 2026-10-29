@@ -1,0 +1,236 @@
+{
+  "stage": "in-progress; final0.1.118 full gates and before/after comparison pending",
+  "base": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
+  "workspaceVersion": "0.1.118",
+  "nativeGatePackages": [
+    "acp-client-runtime",
+    "agent-collaboration",
+    "board-legacy-upgrade",
+    "claude-code-peer-messaging",
+    "codex-router-host",
+    "codex-router-secret-store",
+    "codex-router-state",
+    "codex-router-tailnet-verification-host",
+    "collaboration-central-conformance",
+    "collaboration-central-core",
+    "collaboration-central-tokio",
+    "collaboration-mcp",
+    "collaboration-runtime",
+    "collaboration-service",
+    "interaction-storage",
+    "lifecycle-observation",
+    "codex-router-cli"
+  ],
+  "workerPackage": "collaboration-central-cloudflare",
+  "preVersionRuntimeReceipts": [
+    {
+      "run": "60df404e-8493-4740-ad2e-42cc9032e5eb",
+      "passed": 59,
+      "failed": 0,
+      "skipped": 1789,
+      "binaries": 28,
+      "suiteSeconds": 30.876,
+      "commandSeconds": 330.22,
+      "exit": 0,
+      "log": "latest-conversions-runtime.log"
+    },
+    {
+      "run": "d3417988-94bc-40ea-b99b-5c34152aa6aa",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 1766,
+      "suiteSeconds": 14.64,
+      "commandSeconds": 273.29,
+      "exit": 0,
+      "log": "owner-clock-runtime.log"
+    },
+    {
+      "run": "62105d5e-e2ce-4809-8c7a-0634a581576d",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 1099,
+      "suiteSeconds": 4.95,
+      "commandSeconds": 130.37,
+      "exit": 0,
+      "log": "process-clock-runtime.log"
+    }
+  ],
+  "preVersionQuality": [
+    {
+      "gate": "native all-target/all-feature Clippy -Dwarnings",
+      "exit": 0,
+      "seconds": 10.86,
+      "log": "scoped-clippy-12.log"
+    },
+    {
+      "gate": "Cloudflare wasm all-feature Clippy -Dwarnings",
+      "exit": 0,
+      "seconds": 37.94,
+      "log": "wasm-clippy-final.log"
+    },
+    {
+      "gate": "locked release bins CLI/agent-collaboration/board-legacy-upgrade",
+      "exit": 0,
+      "seconds": 283.67,
+      "log": "release-bins.log",
+      "limitation": "seven build-script rust-objcopy strip warnings; loader wrapper subsequently corrected"
+    },
+    {
+      "gate": "release Host/secret-store with test features",
+      "exit": 0,
+      "seconds": 120.78,
+      "log": "release-features.log"
+    },
+    {
+      "gate": "default debug Host/secret-store",
+      "exit": 0,
+      "seconds": 117.68,
+      "log": "debug-default.log"
+    }
+  ],
+  "exclusionProbes": [
+    {
+      "mode": "debug-default",
+      "artifactLog": "tmp/worker/debug-default.jsonl",
+      "positiveControlExit": 0,
+      "hostProbeExit": 1,
+      "hostMissing": [
+        "runtime_test_start_with_subscription_clock",
+        "runtime_test_observe_machine_progress",
+        "runtime_test_observe_mail_progress",
+        "runtime_test_observe_wake_progress",
+        "runtime_test_connect_operator"
+      ],
+      "lockProbeExit": 1,
+      "lockMissing": "acquire_with_contention_observer",
+      "sourceInput": "Rust source supplied on stdin; no temporary Rust test file"
+    },
+    {
+      "mode": "release-default",
+      "artifactLog": "tmp/worker/release-bins.jsonl",
+      "positiveControlExit": 0,
+      "hostProbeExit": 1,
+      "hostMissing": [
+        "runtime_test_start_with_subscription_clock",
+        "runtime_test_observe_machine_progress",
+        "runtime_test_observe_mail_progress",
+        "runtime_test_observe_wake_progress",
+        "runtime_test_connect_operator"
+      ],
+      "lockProbeExit": 1,
+      "lockMissing": "acquire_with_contention_observer",
+      "sourceInput": "Rust source supplied on stdin; no temporary Rust test file"
+    },
+    {
+      "mode": "release-test-features",
+      "artifactLog": "tmp/worker/release-features.jsonl",
+      "positiveControlExit": 0,
+      "hostProbeExit": 1,
+      "hostMissing": [
+        "runtime_test_start_with_subscription_clock",
+        "runtime_test_observe_machine_progress",
+        "runtime_test_observe_mail_progress",
+        "runtime_test_observe_wake_progress",
+        "runtime_test_connect_operator"
+      ],
+      "lockProbeExit": 1,
+      "lockMissing": "acquire_with_contention_observer",
+      "sourceInput": "Rust source supplied on stdin; no temporary Rust test file"
+    }
+  ],
+  "productControls": [
+    {
+      "sourcePath": "crates/acp-client-runtime/src/agent_session_client/approval_turn_cancellation.rs",
+      "beforeSha256": "9d46467b2c0810e7f32f85211457bb998686cc38ea10f653aa73e62d7d707455",
+      "mutatedSha256": "9408e92c66947f7571c9a99c2dd0e4971bc53ac8f7fd7ff1130570641eb8bd3b",
+      "wrongBehavior": "session cancellation bypasses the held interaction reply",
+      "mutationExit": 100,
+      "mutationCounts": {
+        "passed": 0,
+        "failed": 3
+      },
+      "intendedFailure": "cancel finished before the held interaction reply",
+      "restoredSha256": "9d46467b2c0810e7f32f85211457bb998686cc38ea10f653aa73e62d7d707455",
+      "restoredExactly": true
+    },
+    {
+      "sourcePath": "crates/collaboration-runtime/src/wakeup_timing_worker.rs",
+      "backup": "tmp/worker/mutations/wake-clock.before.rs",
+      "beforeSha256": "d73e05ac1588e76630737ed5f257976c5a5e23daaa24f394279ea856195b9aac",
+      "mutatedSha256": "57f90a7a80182c8bfd7591406b2d1a6af72078c47f8947565c338a2274a80354",
+      "wrongBehavior": "wake timing ignores the injected owner clock",
+      "mutationExit": 100,
+      "restoredSha256": "d73e05ac1588e76630737ed5f257976c5a5e23daaa24f394279ea856195b9aac",
+      "restoredExactly": true
+    },
+    {
+      "sourcePath": "crates/collaboration-central-core/src/access_rules.rs",
+      "backup": "tmp/worker/mutations/access-expiry.before.rs",
+      "beforeSha256": "6c3bc07bf710dd6e97dbeda6f4c2b4493ffb60858fefa80473b597346f7d84e8",
+      "mutatedSha256": "edd910ccc45cc0e5ddc32a2d332f2e0a71e3593bfc2b5e9a638b10b4638c7722",
+      "wrongBehavior": "Access silently adds a 60-second expiry grace",
+      "mutationExit": 100,
+      "restoredSha256": "6c3bc07bf710dd6e97dbeda6f4c2b4493ffb60858fefa80473b597346f7d84e8",
+      "restoredExactly": true
+    }
+  ],
+  "exactSourceRestoration": [
+    {
+      "control": "acp-wire-control.json",
+      "source": "crates/acp-client-runtime/src/agent_session_client/approval_turn_cancellation.rs",
+      "currentSha256": "9d46467b2c0810e7f32f85211457bb998686cc38ea10f653aa73e62d7d707455",
+      "restoredSha256": "9d46467b2c0810e7f32f85211457bb998686cc38ea10f653aa73e62d7d707455",
+      "matchesExactRestoration": true
+    },
+    {
+      "control": "wake-clock-control.json",
+      "source": "crates/collaboration-runtime/src/wakeup_timing_worker.rs",
+      "currentSha256": "d73e05ac1588e76630737ed5f257976c5a5e23daaa24f394279ea856195b9aac",
+      "restoredSha256": "d73e05ac1588e76630737ed5f257976c5a5e23daaa24f394279ea856195b9aac",
+      "matchesExactRestoration": true
+    },
+    {
+      "control": "access-expiry-control.json",
+      "source": "crates/collaboration-central-core/src/access_rules.rs",
+      "currentSha256": "6c3bc07bf710dd6e97dbeda6f4c2b4493ffb60858fefa80473b597346f7d84e8",
+      "restoredSha256": "6c3bc07bf710dd6e97dbeda6f4c2b4493ffb60858fefa80473b597346f7d84e8",
+      "matchesExactRestoration": true
+    }
+  ],
+  "worker": {
+    "productionBuildExit": 0,
+    "productionBuildSeconds": 188,
+    "productionLog": "worker-production-final-build-2.log",
+    "productionGuardExit": 0,
+    "guard": "30/30 conformance markers absent",
+    "releaseLocalClockRejectionExit": 101,
+    "releaseLocalClockRejectionMessage": "local-access-clock is forbidden in release artifacts",
+    "artifactHashes": [
+      "ddb1fe80ebd5ab47b441bdae9865e92cbee2101fe020ea62fed424dd463126af  crates/collaboration-central-cloudflare/build/index.js",
+      "f646daf50f984f4013f4f151ca8db784ecb85f4e8b5cd7a986471ae1d97b6f97  crates/collaboration-central-cloudflare/build/index_bg.wasm"
+    ],
+    "runtime": "earlier real workerd8/0 across4scenarios; each owned child reaped"
+  },
+  "sourceReview": {
+    "retainedBoundRows": 453,
+    "timestampOriginRows": 236,
+    "elapsedNegativeContexts": 177,
+    "fieldLevelConsumers": 25,
+    "currentLiteralSites": 80,
+    "testExampleCandidates": 41,
+    "pollingDebt": "separately deferred; neither converted nor compliant"
+  },
+  "measurement": {
+    "script": "tmp/worker/run-native-package-gate.sh",
+    "scriptSha256": "3023810a360e83d781e0bbbf627f5c845613da643bc156116c95250cdb11f274",
+    "packageListSha256": "1f68ee9a627407f452a418010e39f9682a491e34c42dc55d39ec89bbbd70a5da",
+    "method": "commit all scoped work, detach exact base in same worktree/same target; matching board example at each head; identical script/PATH/jobs2/features/threads2; record real counts and suite versus compile time; switch back and verify HEAD"
+  },
+  "unverified": [
+    "final0.1.118 full native suite, Clippy/release/module-cycle gates",
+    "exact same-worktree baseline/after comparison",
+    "ignored/manual disposable Host matrix journey",
+    "staging/live provider/cross-machine and production replacement",
+    "PR/CI and Lead independent review"
+  ]
+}

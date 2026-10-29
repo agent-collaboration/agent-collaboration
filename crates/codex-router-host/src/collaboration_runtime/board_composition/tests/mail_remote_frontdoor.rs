@@ -167,6 +167,8 @@ impl RecipientRuntime {
             requests,
             MachineNoticeReactions::open(root).await?,
             MachineSessionEventOwners {
+                #[cfg(feature = "runtime-test-support")]
+                progress: Default::default(),
                 projects: projects.clone(),
                 admission: Weak::new(),
                 fleet: Weak::new(),

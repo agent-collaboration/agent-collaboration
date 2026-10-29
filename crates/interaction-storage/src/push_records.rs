@@ -51,6 +51,12 @@ impl InteractionStore {
                     if remaining <= PUSH_CONNECTION_BUSY_TIMEOUT {
                         return Err(error);
                     }
+                    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+                    tracing::debug!(
+                        target: "interaction_storage::runtime_test_push_insert_busy",
+                        push_id = record.push_id.as_str(),
+                        "push-insert-native-busy-before-retry-backoff"
+                    );
                     tokio::time::sleep(backoff.min(remaining)).await;
                     backoff = (backoff * 2).min(PUSH_INSERT_MAX_BACKOFF);
                 }

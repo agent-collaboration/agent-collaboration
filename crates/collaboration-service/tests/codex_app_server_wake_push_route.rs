@@ -188,7 +188,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
                 .ok_or("native app-server connection closed early")??;
             let request: Value = serde_json::from_str(frame.to_text()?)?;
             if request.get("method").and_then(Value::as_str) != Some(expected_method) {
-                return Err::<(), Box<dyn std::error::Error + Send + Sync>>(
+                return Err::<tokio::net::UnixListener, Box<dyn std::error::Error + Send + Sync>>(
                     format!(
                         "expected native method {expected_method}, received {:?}",
                         request.get("method")
@@ -244,13 +244,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
                 ))
                 .await?;
         }
-        if tokio::time::timeout(Duration::from_millis(25), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("wake delivery opened a second native connection".into());
-        }
-        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(listener)
     });
 
     let receipt = route
@@ -305,7 +299,12 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
             );
         }
     }
-    server.await??;
+    let listener = server.await??;
+    // Delivery returned and its backend joined; no producer can open another connection.
+    if !matches!(listener.into_std()?.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+    {
+        return Err("wake delivery opened a second native connection".into());
+    }
     Arc::try_unwrap(interactions)
         .map_err(|_| "wake interaction owner remained shared after delivery")?
         .close()

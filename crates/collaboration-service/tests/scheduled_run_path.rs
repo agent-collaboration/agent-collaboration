@@ -155,6 +155,7 @@ async fn exercise_scheduled_run(
     let schedule_worker = identity
         .schedule_timing_worker()
         .ok_or("scheduler missing")?;
+    let mut worker_passes = schedule_worker.observe_passes();
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("scheduled-run-fixture").await?;
     let instruction = client
@@ -164,9 +165,8 @@ async fn exercise_scheduled_run(
         })
         .await?;
     let backend_store = Arc::clone(&store);
-    let resume_uncertainty_observed = Arc::new(tokio::sync::Notify::new());
-    let backend_resume_uncertainty_observed = Arc::clone(&resume_uncertainty_observed);
     let backend = tokio::spawn(async move {
+        let mut prepared_run_id = None;
         for stage in 0..if busy_first || resume_rejected { 8 } else { 7 } {
             let logical_stage = if (busy_first || resume_rejected) && stage >= 2 {
                 stage - 1
@@ -194,6 +194,15 @@ async fn exercise_scheduled_run(
             };
             if request.get("method").and_then(Value::as_str) != Some(expected) {
                 return Err(format!("expected {expected}").into());
+            }
+            if logical_stage == 0 {
+                prepared_run_id = backend_store
+                    .lock()
+                    .await
+                    .observable_run_ids(None)
+                    .await?
+                    .into_iter()
+                    .next();
             }
             if matches!(logical_stage, 4 | 6)
                 && (request.pointer("/params/cursor") != Some(&Value::Null)
@@ -331,12 +340,17 @@ async fn exercise_scheduled_run(
                 {
                     return Err("unloaded worker resume requested full history".into());
                 }
-                // Make the durable in-flight state observable before returning the known rejection.
-                tokio::time::timeout(
-                    Duration::from_secs(6),
-                    backend_resume_uncertainty_observed.notified(),
-                )
-                .await?;
+                // The real resume request follows committed in-flight evidence. Inspect it
+                // while the response is held, before allowing the known rejection to settle.
+                // The scheduler inventory deliberately excludes unresolved preparation
+                // without a native turn. Retain the identity from initial preparation.
+                let run_id = prepared_run_id
+                    .as_ref()
+                    .ok_or("resuming Run identity missing")?;
+                let run = backend_store.lock().await.read_run::<SessionRef, collaboration_protocol::EndpointRef, CodexGeneration, collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                if run.phase != agent_automation::RunPhase::Uncertain {
+                    return Err("resume request escaped before durable uncertainty".into());
+                }
                 socket.send(Message::Text(json!({"id":resume.get("id"),"error":{"code":-32602,"message":"known resume rejection"}}).to_string().into())).await?;
                 continue;
             }
@@ -450,10 +464,9 @@ async fn exercise_scheduled_run(
     }
     let worker = tokio::spawn(schedule_worker.run(shutdown.clone()));
     let record=tokio::time::timeout(Duration::from_secs(6),async{
-        let mut poll=tokio::time::interval(Duration::from_millis(20));
         let mut known_run=None;
         loop{
-            poll.tick().await;
+            worker_passes.borrow_and_update();
             let current=store.lock().await.inspect_schedule::<SessionRef,collaboration_protocol::EndpointRef>(&schedule.schedule_id).await?;
             if current.active_run_id.is_some(){known_run=current.active_run_id;}
             if known_run.is_none() {
@@ -462,9 +475,6 @@ async fn exercise_scheduled_run(
             }
             if let Some(run_id)=&known_run{
                 let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
-                if resume_rejected && run.phase == agent_automation::RunPhase::Uncertain {
-                    resume_uncertainty_observed.notify_one();
-                }
                 if skip_failed_summary && run.phase == agent_automation::RunPhase::SummaryBlocked {
                     client.skip_summary(collaboration_protocol::RunRecoveryRequest {
                         operation_id: OperationId::generate(), run_id: run_id.clone(),
@@ -477,6 +487,7 @@ async fn exercise_scheduled_run(
                     || (matches!(preparation,PreparationOutcome::ResponseLost) && run.phase == agent_automation::RunPhase::Uncertain)
                 {return Ok::<_,automation_storage::StorageError>(run);}
             }
+            worker_passes.changed().await.map_err(|_|automation_storage::StorageError::InvalidRecord)?;
         }
     }).await??;
     if !matches!(preparation, PreparationOutcome::Accepted) {

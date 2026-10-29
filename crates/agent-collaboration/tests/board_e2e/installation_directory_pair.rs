@@ -109,7 +109,9 @@ impl DirectoryPair {
                 return Ok(());
             }
             if tokio::time::Instant::now() >= deadline {
-                return Ok(());
+                return Err(
+                    "Welcome did not persist the exact recipient installation binding".into(),
+                );
             }
         }
     }

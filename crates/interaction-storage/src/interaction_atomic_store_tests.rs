@@ -203,11 +203,40 @@ async fn library_outbox_and_journal_commit_with_push_and_roll_back_on_real_push_
     let path = directory.path().join("interaction.sqlite");
     let owner = Arc::new(InteractionStore::open(&path).await.expect("composed owner"));
     let adapter = InteractionAtomicStore::new(owner.clone(), Arc::new(NoDispatchHost));
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    let mut committed_writes = adapter.runtime_test_observe_committed_writes();
     let (committed_item, committed_push) = native_item_and_push();
     let committed_id = committed_push.push_id.clone();
     enqueue_and_project(&adapter, committed_item, committed_push)
         .await
         .expect("shared commit");
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    {
+        assert!(
+            committed_writes
+                .has_changed()
+                .expect("commit observation is live")
+        );
+        committed_writes.borrow_and_update();
+        adapter
+            .transaction(|scope| {
+                Box::pin(async move {
+                    let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM router_pushes")
+                        .fetch_one(scope.executor())
+                        .await
+                        .map_err(StoreError::backend)?;
+                    Ok(())
+                })
+            })
+            .await
+            .expect("read-only atomic observation");
+        assert!(
+            !committed_writes
+                .has_changed()
+                .expect("read observer remains live"),
+            "status reads must not wake their own commit observation"
+        );
+    }
     let mut connection = owner.writer.lock().await;
     sqlx::raw_sql("CREATE TRIGGER reject_atomic_push BEFORE INSERT ON router_pushes BEGIN SELECT RAISE(ABORT, 'fixture atomic push rejection'); END")
         .execute(&mut *connection).await.expect("real native insertion fault");
@@ -219,6 +248,13 @@ async fn library_outbox_and_journal_commit_with_push_and_roll_back_on_real_push_
     let error = enqueue_and_project(&adapter, rejected_item, rejected_push)
         .await
         .expect_err("atomic rollback");
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    assert!(
+        !committed_writes
+            .has_changed()
+            .expect("rollback observer remains live"),
+        "failed transaction must not publish committed progress"
+    );
     assert!(
         error.to_string().contains("fixture atomic push rejection"),
         "{error:?}"

@@ -311,7 +311,8 @@ impl ServedApi {
                     "expected {expected} calls in flight, found {}",
                     self.active_calls()
                 )
-            });
+            })
+            .expect("registry observation remains alive");
     }
 
     pub(crate) async fn stop(self) {
@@ -342,7 +343,8 @@ async fn send_and_abandon<TStream>(
     stream.flush().await.expect("flush request");
     tokio::time::timeout(Duration::from_secs(5), tool_calls.await_running(1))
         .await
-        .expect("the abandoned call starts");
+        .expect("the abandoned call starts")
+        .expect("registry observation remains alive");
     let mut early = [0_u8; 1];
     let mut answer = std::pin::pin!(stream.read(&mut early));
     assert!(

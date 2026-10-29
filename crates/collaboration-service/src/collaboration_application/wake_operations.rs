@@ -25,6 +25,7 @@ pub(crate) use failure::{WakeFailureContext, wake_failure};
 use failure::{invalid_field, storage_reason};
 
 pub struct WakeOperations {
+    clock: Arc<dyn crate::SubscriptionClock>,
     service_id: UuidIdentity,
     remote: Option<Arc<crate::MailDeliveryRuntime>>,
     store: Option<Arc<Mutex<AutomationStore>>>,
@@ -41,7 +42,16 @@ const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 
 impl WakeOperations {
     pub fn new(service_id: &UuidIdentity, store: Option<&Arc<Mutex<AutomationStore>>>) -> Self {
+        Self::new_with_clock(service_id, store, Arc::new(crate::SystemSubscriptionClock))
+    }
+
+    pub(crate) fn new_with_clock(
+        service_id: &UuidIdentity,
+        store: Option<&Arc<Mutex<AutomationStore>>>,
+        clock: Arc<dyn crate::SubscriptionClock>,
+    ) -> Self {
         Self {
+            clock,
             service_id: service_id.clone(),
             remote: None,
             store: store.cloned(),
@@ -77,7 +87,7 @@ impl WakeOperations {
     ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::operation(request.operation_id.clone());
         let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
+        let now_ms = self.clock.now().timestamp_millis();
         let timing = serde_json::to_value(request.timing).and_then(serde_json::from_value);
         let expiry = serde_json::to_value(request.expiry).and_then(serde_json::from_value);
         let (Ok(timing), Ok(expiry)) = (timing, expiry) else {
@@ -136,7 +146,7 @@ impl WakeOperations {
     ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
         let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
+        let now_ms = self.clock.now().timestamp_millis();
         let read = store
             .lock()
             .await
@@ -209,7 +219,7 @@ impl WakeOperations {
             .wake_listing_keys(after, u32::from(request.limit))
             .await
             .map_err(|_| fail(WakeFailureReason::AutomationUnavailable))?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.now().timestamp_millis();
         let mut snapshots = Vec::new();
         for key in page.records {
             let shown = if key.remote {
@@ -333,7 +343,7 @@ impl WakeOperations {
             wakeup_id: Some(request.wakeup_id.clone()),
         };
         let store = self.store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.now().timestamp_millis();
         let mutated = store
             .lock()
             .await

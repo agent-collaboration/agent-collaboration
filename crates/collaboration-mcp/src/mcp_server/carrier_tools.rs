@@ -258,7 +258,19 @@ where
     let mut observation = std::pin::pin!(observation);
     let mut delivery = std::pin::pin!(async {
         while let Some(event) = streamed.recv().await {
-            notify(event).await;
+            let sending = std::pin::pin!(notify(event));
+            #[cfg(test)]
+            let mut sending = sending;
+            #[cfg(test)]
+            if futures_util::poll!(sending.as_mut()).is_pending() {
+                tracing::trace!(
+                    target: "collaboration_mcp::runtime_test_observation_backpressure",
+                    "observation-notification-pending"
+                );
+            } else {
+                continue;
+            }
+            sending.await;
         }
     });
     let (result, delivered) = tokio::select! {

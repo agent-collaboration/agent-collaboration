@@ -164,6 +164,8 @@ impl MailHarness {
                 requests.clone(),
                 MachineNoticeReactions::open(&root).await?,
                 MachineSessionEventOwners {
+                    #[cfg(feature = "runtime-test-support")]
+                    progress: Default::default(),
                     projects: projects.clone(),
                     admission: Weak::new(),
                     fleet: Weak::new(),
@@ -234,6 +236,8 @@ impl MailHarness {
             self.requests.clone(),
             MachineNoticeReactions::open(&self.root).await?,
             MachineSessionEventOwners {
+                #[cfg(feature = "runtime-test-support")]
+                progress: Default::default(),
                 projects: self.projects.clone(),
                 admission: self.admission.clone(),
                 fleet: self.fleet.clone(),

@@ -106,17 +106,17 @@ impl ToolCallRegistry {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) async fn await_running(&self, expected: usize) {
+    pub(crate) async fn await_running(
+        &self,
+        expected: usize,
+    ) -> Result<(), tokio::sync::watch::error::RecvError> {
         let mut activity = self.activity.subscribe();
         loop {
             activity.borrow_and_update();
             if self.running() == expected {
-                return;
+                return Ok(());
             }
-            activity
-                .changed()
-                .await
-                .expect("registry observation remains alive");
+            activity.changed().await?;
         }
     }
 
@@ -149,6 +149,7 @@ mod tests {
         let running = never_finishes(&registry, &CancellationToken::new());
         tokio::time::timeout(Duration::from_secs(1), registry.await_running(1))
             .await
+            .unwrap()
             .unwrap();
 
         // Act
@@ -172,6 +173,7 @@ mod tests {
         let running = never_finishes(&registry, &caller);
         tokio::time::timeout(Duration::from_secs(1), registry.await_running(1))
             .await
+            .unwrap()
             .unwrap();
 
         // Act
@@ -195,6 +197,7 @@ mod tests {
         let running = never_finishes(&registry, &caller);
         tokio::time::timeout(Duration::from_secs(1), registry.await_running(1))
             .await
+            .unwrap()
             .unwrap();
 
         // Act
@@ -225,6 +228,7 @@ mod tests {
         let running = never_finishes(&registry, &CancellationToken::new());
         tokio::time::timeout(Duration::from_secs(1), registry.await_running(1))
             .await
+            .unwrap()
             .unwrap();
         let mut empty = std::pin::pin!(registry.await_running(0));
         assert!(futures_util::poll!(empty.as_mut()).is_pending());
@@ -234,7 +238,8 @@ mod tests {
 
         tokio::time::timeout(Duration::from_secs(1), empty)
             .await
-            .expect("dropping an admitted handler must notify the empty-registry waiter");
+            .expect("dropping an admitted handler must notify the empty-registry waiter")
+            .expect("registry observation remains alive");
     }
 
     #[tokio::test]

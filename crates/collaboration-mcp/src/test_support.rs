@@ -119,8 +119,11 @@ impl ServedCollaborationApi {
     }
 
     /// Observe real handler admission while its listener's request permit is held.
-    pub async fn await_running_calls(&self, expected: usize) {
-        self.tool_calls.await_running(expected).await;
+    pub async fn await_running_calls(&self, expected: usize) -> io::Result<()> {
+        self.tool_calls
+            .await_running(expected)
+            .await
+            .map_err(io::Error::other)
     }
 
     /// The service directory holding the manifest and the socket.

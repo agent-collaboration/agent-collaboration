@@ -62,6 +62,12 @@ mod mail_notice_events;
 type BoardSessionPump =
     SessionPump<ReqwestSessionTransport, MachineSessionStore, BoardConsumerProtocol>;
 
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "machine_test_progress.rs"]
+mod machine_test_progress;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+use machine_test_progress::MachineProgress;
+
 pub(super) struct PreparedMachineSession {
     pump: BoardSessionPump,
     events: mpsc::Receiver<ClientEvent<BoardConsumerProtocol>>,
@@ -72,6 +78,8 @@ pub(super) struct PreparedMachineSession {
     pub projects: Arc<ProjectWriters>,
     pub(super) welcomed: watch::Sender<bool>,
     stop: watch::Sender<bool>,
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    progress: MachineProgress,
 }
 
 pub(crate) struct RunningMachineSession {
@@ -79,6 +87,8 @@ pub(crate) struct RunningMachineSession {
     task: JoinSet<io::Result<()>>,
     #[cfg(any(test, feature = "runtime-test-support"))]
     pub(super) projects: Weak<ProjectWriters>,
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    progress: MachineProgress,
 }
 
 impl PreparedMachineSession {
@@ -152,6 +162,8 @@ impl PreparedMachineSession {
             projects,
             welcomed,
             stop,
+            #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+            progress: MachineProgress::default(),
         })
     }
 
@@ -164,6 +176,8 @@ impl PreparedMachineSession {
         publisher: Weak<NotificationPublisher>,
     ) -> RunningMachineSession {
         let stop = self.stop.clone();
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let progress = self.progress.clone();
         #[cfg(any(test, feature = "runtime-test-support"))]
         let projects = Arc::downgrade(&self.projects);
         let mut task = JoinSet::new();
@@ -173,6 +187,8 @@ impl PreparedMachineSession {
             task,
             #[cfg(any(test, feature = "runtime-test-support"))]
             projects,
+            #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+            progress,
         }
     }
 
@@ -191,6 +207,8 @@ impl PreparedMachineSession {
             projects,
             welcomed,
             stop,
+            #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+            progress,
             ..
         } = self;
         let mut tasks = JoinSet::new();
@@ -208,6 +226,8 @@ impl PreparedMachineSession {
                 fleet,
                 mail,
                 publisher,
+                #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+                progress,
             },
             welcomed,
             stopped,
@@ -240,6 +260,11 @@ impl PreparedMachineSession {
 }
 
 impl RunningMachineSession {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub(in crate::collaboration_runtime) fn observe_progress(&self) -> watch::Receiver<u64> {
+        self.progress.observe()
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
         &self,
@@ -279,6 +304,8 @@ struct MachineSessionEventOwners {
     fleet: Weak<FleetClient>,
     mail: Weak<MailDeliveryRuntime>,
     publisher: Weak<NotificationPublisher>,
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    progress: MachineProgress,
 }
 
 async fn run_events(
@@ -329,13 +356,17 @@ async fn run_events(
             Some(signal) = owners.projects.next_lifecycle_signal() => {
                 spawn_project_lifecycle(&mut handlers, &owners, signal);
             },
-            result = handlers.join_next(), if !handlers.is_empty() => match result {
+            result = handlers.join_next(), if !handlers.is_empty() => {
+                match result {
                 Some(Ok(SessionCompletion::Reaction(completed))) => {
                     finish_reaction(completed, generation, &mut reactions, &mut receipts, &requests, &owners.projects).await?;
                 }
                 Some(Ok(SessionCompletion::Operation(Err(error)))) => tracing::warn!(%error, "machine-session operation unavailable"),
                 Some(Err(error)) => tracing::warn!(%error, "machine-session operation task failed"),
                 _ => {},
+                }
+                #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+                owners.progress.record_completion();
             },
             event = events.recv() => match event {
                 Some(ClientEvent::Welcome { databases }) => {

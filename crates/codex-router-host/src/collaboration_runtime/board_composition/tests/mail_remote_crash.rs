@@ -428,6 +428,8 @@ async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
     let _held_writer = harness.mail.hold_writer().await?;
     let mut notices = MachineNoticeReactions::open(&harness.root).await?;
     let owners = MachineSessionEventOwners {
+        #[cfg(feature = "runtime-test-support")]
+        progress: Default::default(),
         projects: harness.projects.clone(),
         admission: Weak::new(),
         fleet: Weak::new(),

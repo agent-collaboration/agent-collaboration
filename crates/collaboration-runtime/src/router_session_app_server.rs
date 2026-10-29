@@ -46,6 +46,8 @@ pub struct RouterSessionAppServerContext {
     model_catalog: watch::Receiver<Vec<ProviderModelEntry>>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     project_trust: Option<Arc<dyn codex_native_integration::CodexProjectTrustLookup>>,
+    #[cfg(test)]
+    turn_queue_observations: watch::Sender<Option<mpsc::WeakSender<Value>>>,
 }
 
 impl RouterSessionAppServerContext {
@@ -64,6 +66,8 @@ impl RouterSessionAppServerContext {
             model_catalog,
             interaction_broker: None,
             project_trust: None,
+            #[cfg(test)]
+            turn_queue_observations: watch::channel(None).0,
         }
     }
 
@@ -309,7 +313,12 @@ pub async fn serve_router_session_app_server_connection(
             Some("turn/start" | "turn/steer" | "turn/interrupt")
         ) {
             match turn_sender.try_send(request) {
-                Ok(()) => {}
+                Ok(()) => {
+                    #[cfg(test)]
+                    let _previous = context
+                        .turn_queue_observations
+                        .send_replace(Some(turn_sender.downgrade()));
+                }
                 Err(mpsc::error::TrySendError::Full(request)) => {
                     websocket
                         .send(Message::Text(

@@ -18,6 +18,9 @@ const REMOTE_CALL_BOUND: Duration = Duration::from_secs(20);
 
 impl WakeOperations {
     pub fn with_remote(mut self, remote: Option<&Arc<crate::MailDeliveryRuntime>>) -> Self {
+        if let Some(remote) = remote {
+            self.clock = remote.subscription_clock();
+        }
         self.remote = remote.cloned();
         self
     }
@@ -31,7 +34,7 @@ impl WakeOperations {
         let fail = |reason| wake_failure(context.clone(), reason, LocalMutationState::None);
         let original =
             serde_json::to_vec(&request).map_err(|_| fail(WakeFailureReason::InvalidRecord))?;
-        let now = chrono::Utc::now();
+        let now = self.clock.now();
         // Freeze relative times at the requester. Transit never extends a wake's deadline.
         let timing = match &request.timing {
             collaboration_protocol::TimingRequest::After { seconds } => {
@@ -240,7 +243,7 @@ impl WakeOperations {
         }
         let bound = Duration::from_secs(u64::from(seconds));
         let deadline = tokio::time::Instant::now() + bound;
-        let wall_deadline = chrono::Utc::now() + chrono::Duration::seconds(i64::from(seconds));
+        let wall_deadline = self.clock.now() + chrono::Duration::seconds(i64::from(seconds));
         let work = async {
             let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
             let target = self
@@ -325,7 +328,7 @@ impl WakeOperations {
     ) -> Result<RemoteWakeResult, WakeFailure> {
         let deadline = match &request {
             RemoteWakeRequest::Wait { deadline, .. } => deadline.as_datetime(),
-            _ => chrono::Utc::now() + chrono::Duration::seconds(30),
+            _ => self.clock.now() + chrono::Duration::seconds(30),
         };
         let body = WakeBody {
             request,
@@ -409,7 +412,14 @@ impl WakeOperations {
                 answer => Ok(answer),
             }
         };
-        tokio::time::timeout(bound, operation)
+        let caller_deadline = tokio::time::Instant::now() + bound;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        tracing::trace!(
+            target: "collaboration_service::runtime_test_remote_wake_deadline",
+            timeout_ms = bound.as_secs().saturating_mul(1000),
+            "remote-wake-caller-deadline-armed"
+        );
+        tokio::time::timeout_at(caller_deadline, operation)
             .await
             .map_err(|_| fail(WakeFailureReason::RemoteUnavailable, uncertainty(&context)))?
     }

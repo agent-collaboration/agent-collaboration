@@ -120,10 +120,6 @@ fn create_fifo(path: &Path) -> TestResult {
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assert the contract; propagate fixture errors."
-)]
 async fn require_prompt_refusal(path: &Path) -> TestResult {
     let mut child = tokio::process::Command::new(std::env::current_exe()?)
         .args([
@@ -140,7 +136,9 @@ async fn require_prompt_refusal(path: &Path) -> TestResult {
     match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
         Ok(status) => {
             let status = status?;
-            assert!(status.success(), "nonregular handoff was accepted");
+            if !status.success() {
+                return Err("nonregular handoff was accepted".into());
+            }
             Ok(())
         }
         Err(_) => {

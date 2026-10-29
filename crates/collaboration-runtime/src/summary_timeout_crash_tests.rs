@@ -145,13 +145,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             }
             socket.send(Message::Text(json!({"id":request.get("id"),"result":{"data":[{"id":"summary-turn","status":status,"items":[]}],"nextCursor":null}}).to_string().into())).await?;
         }
-        if tokio::time::timeout(Duration::from_millis(100), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("recovery made an extra native call".into());
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(listener)
     });
     for confirmed in [false, true] {
         let record = store
@@ -202,7 +196,13 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             );
         }
     }
-    tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    let listener = tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    // Every recovery step has returned, and its scripted peer has joined.
+    // Retain the listener so any attempted extra connection remains observable.
+    if !matches!(listener.into_std()?.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+    {
+        return Err("recovery made an extra native call".into());
+    }
     drop(store);
     Ok(())
 }

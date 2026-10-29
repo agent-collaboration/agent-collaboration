@@ -88,6 +88,14 @@ pub struct MailDeliveryRuntime {
 }
 
 impl MailDeliveryRuntime {
+    pub(crate) fn subscription_clock(&self) -> Arc<dyn SubscriptionClock> {
+        self.clock.clone()
+    }
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub fn runtime_test_observe_committed_writes(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.store.runtime_test_observe_committed_writes()
+    }
+
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub async fn runtime_test_has_local_cancel_delivery(
         &self,

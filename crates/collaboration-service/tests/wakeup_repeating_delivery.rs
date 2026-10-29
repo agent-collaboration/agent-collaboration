@@ -49,7 +49,7 @@ struct NativeQueueObservation {
 async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     let explicit_time =
         ExplicitTimeGuard::new(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8));
-    let clock = Arc::new(ControlledWakeClock::new());
+    let clock = Arc::new(ControlledWakeClock::new().expect("controlled wake clock"));
     let root = tempfile::tempdir_in("/tmp").expect("fixture temp directory");
     let database = root.path().join("automation.sqlite");
     let store = Arc::new(tokio::sync::Mutex::new(
@@ -208,15 +208,21 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     let worker = tokio::spawn(wake_worker.run(shutdown.clone()));
     drop(identity);
 
-    clock.advance(Duration::from_secs(1)).await;
+    clock
+        .advance(Duration::from_secs(1))
+        .await
+        .expect("first clock advance");
     let first_delivery = next_native_queue_delivery(&mut observation_receiver, &mut passes)
         .await
         .expect("first native queue delivery arrives");
-    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes).await;
+    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes)
+        .await
+        .expect("first wake completion");
     passes.borrow_and_update();
     clock
         .advance(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) - 1))
-        .await;
+        .await
+        .expect("advance to before repeat deadline");
     passes
         .changed()
         .await
@@ -236,11 +242,16 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
             .is_none(),
         "an early second occurrence was allocated"
     );
-    clock.advance(Duration::from_secs(1)).await;
+    clock
+        .advance(Duration::from_secs(1))
+        .await
+        .expect("repeat clock advance");
     let second_delivery = next_native_queue_delivery(&mut observation_receiver, &mut passes)
         .await
         .expect("second native queue delivery arrives");
-    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes).await;
+    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes)
+        .await
+        .expect("second wake completion");
     tokio::time::timeout(Duration::from_secs(2), native_server)
         .await
         .expect("native server exits")
@@ -335,7 +346,10 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .close()
         .await
         .expect("close automation store");
-    explicit_time.finish().await;
+    explicit_time
+        .finish()
+        .await
+        .expect("explicit time guard joined");
 }
 
 async fn next_native_queue_delivery(
@@ -348,13 +362,13 @@ async fn next_native_queue_delivery(
             loop {
                 tokio::select! {
                     biased;
-                    observation = receiver.recv() => return observation,
-                    () = progress_worker(passes) => {}
+                    observation = receiver.recv() => return TestResult::Ok(observation),
+                    progress = progress_worker(passes) => progress?,
                 }
             }
         },
     )
-    .await?
+    .await??
     .ok_or_else(|| "native server ended before both recurring deliveries arrived".into())
 }
 
@@ -362,7 +376,7 @@ async fn await_wake_completion(
     store: &Arc<tokio::sync::Mutex<AutomationStore>>,
     wakeup: &WakeupId,
     passes: &mut tokio::sync::watch::Receiver<usize>,
-) {
+) -> TestResult<()> {
     tokio::time::timeout(
         Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
         async {
@@ -371,17 +385,16 @@ async fn await_wake_completion(
                     .lock()
                     .await
                     .read_wakeup::<SavedMessage>(wakeup)
-                    .await
-                    .unwrap();
+                    .await?;
                 if record.pending_delivery_id.is_none() && *passes.borrow() == 0 {
-                    return;
+                    return TestResult::Ok(());
                 }
-                progress_worker(passes).await;
+                progress_worker(passes).await?;
             }
         },
     )
-    .await
-    .expect("delivery completion commits before advancing the repeat gap");
+    .await??;
+    Ok(())
 }
 
 async fn load_and_validate_stored_wake_push(

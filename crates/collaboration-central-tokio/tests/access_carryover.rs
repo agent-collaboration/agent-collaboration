@@ -11,8 +11,7 @@ use collaboration_central_tokio::{TokioServer, TokioSettings};
 use std::time::Duration;
 #[path = "support/clocked_server.rs"]
 mod clocked_server;
-#[path = "native_http/support.rs"]
-mod configuration;
+use clocked_server::configuration;
 
 enum AccessCase {
     ZeroCacheAge,

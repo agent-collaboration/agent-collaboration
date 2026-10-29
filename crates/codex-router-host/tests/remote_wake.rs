@@ -7,10 +7,15 @@ use collaboration_protocol::{
     OperationId, SessionRef, WakeFailureReason, WakeMutationRequest, WakeRefusal, WakeSendRequest,
     WakeShowRequest, WakeState,
 };
+use collaboration_service::SubscriptionClock;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
+#[path = "support/controlled_host_wake_clock.rs"]
+mod controlled_host_wake_clock;
+use controlled_host_wake_clock::ControlledHostWakeClock;
 
 #[path = "support/registered_route_project.rs"]
 mod registered_route_project;
@@ -29,20 +34,26 @@ fn origin(root: &Path) -> TestResult<message_board::ActorOrigin> {
 async fn start(
     root: &Path,
     session: board_fleet_sync::BoardSessionInputs,
+    clock: Arc<ControlledHostWakeClock>,
 ) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
-    Ok(CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: Some(session),
-        directory: root.to_owned(),
-        codex_home: root.to_owned(),
-        backend_socket: root.join("unused-native.sock"),
-        mcp_bind: ([127, 0, 0, 1], 0).into(),
-        native_schema: None,
-        peer_registry_directory: Some(root.join("peers")),
-        remote_control_server_name: None,
-        owner_human_id: None,
-    })
-    .await?)
+    Ok(
+        CollaborationRuntime::runtime_test_start_with_subscription_clock(
+            CollaborationRuntimeInputs {
+                board_session: Some(session),
+                directory: root.to_owned(),
+                codex_home: root.to_owned(),
+                backend_socket: root.join("unused-native.sock"),
+                mcp_bind: ([127, 0, 0, 1], 0).into(),
+                native_schema: None,
+                peer_registry_directory: Some(root.join("peers")),
+                remote_control_server_name: None,
+                owner_human_id: None,
+            },
+            clock,
+        )
+        .await?,
+    )
 }
 
 fn target(runtime: &CollaborationRuntime, session: &str) -> TestResult<SessionRef> {
@@ -68,6 +79,7 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
     reason = "Behavior assertions stay distinct from propagated fixture failures."
 )]
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
+    let clock = Arc::new(ControlledHostWakeClock::new());
     let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
     let b = root.path().join("b");
@@ -108,12 +120,12 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         }
         Ok::<_, std::io::Error>(())
     });
-    let source = start(&a, central.session_inputs()?).await?;
-    let recipient = start(&b, enrolled.session_inputs()?).await?;
+    let source = start(&a, central.session_inputs()?, clock.clone()).await?;
+    let recipient = start(&b, enrolled.session_inputs()?, clock.clone()).await?;
     let offline_target = target(&recipient, "recipient")?;
     let offline_creator = target(&source, "creator")?;
     let mut known_remote_wake = None;
-    let result = async {
+    let result = Box::pin(async {
         let sender = CollaborationClient::connect(&a,"remote-wake-test","1").await?;
         let receiving = CollaborationClient::connect(&b,"remote-wake-test","1").await?;
         let creator = target(&source,"creator")?;
@@ -211,7 +223,8 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         let fire_id=firing.definition.wakeup_id;
         eprintln!("REMOTE_WAKE_STAGE fire-wait");
         let waiting=CollaborationClient::connect(&a,"remote-fire-wait","1").await?.subscribe_wakeup(WakeShowRequest{wakeup_id:fire_id.clone()}).await?;
-        let fire=tokio::time::timeout(BOUND,waiting.wait_until_first_fire()).await??;
+        clock.advance(Duration::from_millis(2001)).await?;
+        let fire=controlled_host_wake_clock::drive_wake_until(&recipient, &clock, waiting.wait_until_first_fire()).await??;
         assert_eq!(fire.wakeup_id,fire_id);
         eprintln!("REMOTE_WAKE_STAGE peer-push");
         let (auth,user)=tokio::time::timeout(BOUND,peer_received.recv()).await?.ok_or("recipient peer stopped")?;
@@ -241,11 +254,11 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         assert_eq!(central.session_connections(),1,"sender unexpectedly reconnected");
         assert_eq!(enrolled.session_connections(),1,"recipient unexpectedly reconnected");
         let mut expired=request(&creator,&to)?;
-        expired.expiry=serde_json::from_value(json!({"kind":"at","at":(chrono::Utc::now()-chrono::Duration::seconds(1)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}))?;
+        expired.expiry=serde_json::from_value(json!({"kind":"at","at":(clock.now()-chrono::Duration::seconds(1)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}))?;
         assert!(matches!(sender.send_wakeup(expired).await,Err(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::DeadlineExpired)));
 
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
-    }.await;
+    }).await;
     recipient.shutdown().await?;
     let recovered = if result.is_ok() {
         async {
@@ -253,6 +266,8 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         eprintln!("REMOTE_WAKE_STAGE offline-typed-management");
         let id=known_remote_wake.clone().ok_or("missing remote route")?;
         let mut operations=tokio::task::JoinSet::new();
+        let (subscriber, deadlines) = controlled_host_wake_clock::observe_caller_deadlines();
+        let _subscriber = tracing::subscriber::set_default(subscriber);
         for operation in 0..4 {
             let client=CollaborationClient::connect(&a,"offline-wake-control","1").await?;
             let id=id.clone();
@@ -267,13 +282,20 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
                 matches!(error,Some(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::RemoteUnavailable))
             });
         }
-        while let Some(result)=tokio::time::timeout(Duration::from_secs(25),operations.join_next()).await? {
-            assert!(result?,"offline management did not produce a typed owning-machine-unavailable refusal");
-        }
+        controlled_host_wake_clock::expire_management_after_arming(&clock, deadlines, async {
+            while let Some(result)=tokio::time::timeout(Duration::from_secs(25),operations.join_next()).await? {
+                assert!(result?,"offline management did not produce a typed owning-machine-unavailable refusal");
+            }
+            TestResult::Ok(())
+        }).await??;
         let mut expired_target=offline_target.clone();expired_target.session_id="expired-before-remote-admission".to_owned().try_into()?;
         let mut in_transit=request(&offline_creator,&expired_target)?;
         in_transit.expiry=serde_json::from_value(json!({"kind":"after","seconds":1}))?;
-        assert!(matches!(source_client.send_wakeup(in_transit).await,Err(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::DeadlineExpired)));
+        {
+            let (subscriber, committed) = controlled_host_wake_clock::observe_committed_wake(&in_transit.operation_id);
+            let _subscriber = tracing::subscriber::set_default(subscriber);
+            assert!(matches!(controlled_host_wake_clock::expire_after_commit(&clock, committed, source_client.send_wakeup(in_transit)).await?,Err(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::DeadlineExpired)));
+        }
         let service:message_board::ServiceId=String::from(offline_target.endpoint.service_id.clone()).try_into()?;
         let mailbox=board_central_test_support::ObjectAddress::Mailbox(service.clone());
         let connection=board_central_test_support::ObjectAddress::Connection(service);
@@ -287,7 +309,7 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         source_client.send_message(queued).await?;
         // The real Connection received the mailbox's hint while no Router was attached.
         central.runtime_control(mailbox,board_central_test_support::RuntimeControl::AwaitDroppedObjectReply).await?;
-        let restarted=start(&b,enrolled.session_inputs()?).await?;
+        let restarted=start(&b,enrolled.session_inputs()?,clock.clone()).await?;
         let proof=async {
             let (_,frame)=tokio::time::timeout(BOUND,peer_received.recv()).await?.ok_or("offline peer stopped")?;
             let frame=frame.ok_or("offline push missing")?;

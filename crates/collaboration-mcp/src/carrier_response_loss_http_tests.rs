@@ -132,15 +132,11 @@ async fn run_stateless_mcp_resumed_prompt_after_load(load_error: Option<Value>) 
                     .is_none(),
                 "a rejected load must not prompt or replay"
             );
+            None
         } else {
             drop(lines);
             drop(writer);
-            assert!(
-                tokio::time::timeout(std::time::Duration::from_millis(250), acp.accept())
-                    .await
-                    .is_err(),
-                "a lost load response must not trigger a second ACP connection or replay"
-            );
+            Some(acp)
         }
     });
     let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
@@ -161,7 +157,9 @@ async fn run_stateless_mcp_resumed_prompt_after_load(load_error: Option<Value>) 
         .expect("resumed prompt response");
     let body = protocol_response_json(response).await;
     listener.stop().await;
-    peer.await.expect("ACP peer join");
+    if let Some(acp) = peer.await.expect("ACP peer join") {
+        assert_no_pending_acp_connection(acp);
+    }
     body
 }
 
@@ -408,12 +406,14 @@ async fn run_stateless_mcp_create_response_loss(
             if matches!(initialize_outcome, InitializeOutcome::VersionMismatch) {
                 let next =
                     tokio::time::timeout(std::time::Duration::from_millis(250), lines.next_line())
-                        .await;
+                        .await
+                        .expect("version mismatch closes its ACP connection")
+                        .expect("post-mismatch ACP read");
                 assert!(
-                    !matches!(next, Ok(Ok(Some(_)))),
+                    next.is_none(),
                     "version mismatch must not dispatch an ACP conversation operation"
                 );
-                return;
+                return acp;
             }
             let create: Value = serde_json::from_str(
                 &lines
@@ -431,12 +431,7 @@ async fn run_stateless_mcp_create_response_loss(
             drop(writer);
             drop(lines);
         }
-        assert!(
-            tokio::time::timeout(std::time::Duration::from_millis(250), acp.accept())
-                .await
-                .is_err(),
-            "a lost ACP response must not create a replacement connection or replay the mutation"
-        );
+        acp
     });
     let listener = ServedApi::tcp(&api_config((identity).build(), temporary.path())).await;
     let client = reqwest::Client::new();
@@ -451,8 +446,22 @@ async fn run_stateless_mcp_create_response_loss(
     })).send().await.expect("conversation create response");
     let body = protocol_response_json(response).await;
     listener.stop().await;
-    peer.await.expect("ACP peer join");
+    let acp = peer.await.expect("ACP peer join");
+    assert_no_pending_acp_connection(acp);
     body
+}
+
+fn assert_no_pending_acp_connection(listener: tokio::net::UnixListener) {
+    // The HTTP result settled and the server joined its handler producer before
+    // this read. Retain the listener so any attempted replay remains observable.
+    let replacement = listener
+        .into_std()
+        .expect("retained listener is nonblocking")
+        .accept();
+    assert!(
+        matches!(replacement, Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+        "a lost or refused ACP response must not create a replacement connection or replay"
+    );
 }
 
 async fn protocol_response_json(response: reqwest::Response) -> Value {

@@ -1,4 +1,5 @@
 //! BR07 / VD §5a U1,U2,U4-group,U79: applicable pending work, dependencies and read-only summaries.
+use super::fixture::machine_progress;
 use super::{
     fixture::{BoardFixture, accepted, at, human, identity},
     record_inputs::{evidence, reference, task, trail},
@@ -23,6 +24,7 @@ fn ids(value: &Value, pointer: &str, field: &str) -> FixtureResult<Vec<Value>> {
 async fn await_cut(fixture: &BoardFixture) -> FixtureResult {
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
+            let progress = machine_progress::observe(fixture.host()?, None).await?;
             let view = read(
                 fixture,
                 "view_work",
@@ -32,7 +34,7 @@ async fn await_cut(fixture: &BoardFixture) -> FixtureResult {
             if at(&view, "/asOf")? == at(&view, "/replicatedThrough")? {
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
-            tokio::task::yield_now().await;
+            machine_progress::observe(fixture.host()?, Some(progress)).await?;
         }
     })
     .await?

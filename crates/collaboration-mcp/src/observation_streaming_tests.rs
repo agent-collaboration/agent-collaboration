@@ -21,6 +21,8 @@ use rmcp::{
 use serde_json::{Value, json};
 use std::{path::Path, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc};
+#[path = "observation_streaming_tests/backpressure_observation.rs"]
+mod backpressure_observation;
 
 /// An MCP client that hands the test each observation event notification it receives.
 struct ObservationEvents(mpsc::UnboundedSender<Value>);
@@ -247,6 +249,8 @@ async fn a_reader_that_stops_reading_neither_keeps_the_call_past_its_bound_nor_h
     // Arrange: one request slot on the Unix listener, and far more retained event bytes than
     // the notification channel, the HTTP writer and the socket buffers can hold.
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let (subscriber, mut notification_pending) = backpressure_observation::observe_pending();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
     let directory = private_directory();
     let target = provider_target("observed-by-a-stalled-reader");
     let (identity, hub) = provider_router(directory.path(), &[&target]).await;
@@ -270,6 +274,21 @@ async fn a_reader_that_stops_reading_neither_keeps_the_call_past_its_bound_nor_h
         .await
         .expect("send the observation");
     api.await_active_calls(1, Duration::from_secs(5)).await;
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        notification_pending.wait_for(|pending| *pending),
+    )
+    .await
+    .expect("actual notification backpressure deadline")
+    .expect("actual notification backpressure");
+    assert_eq!(
+        api.active_calls(),
+        1,
+        "stalled notification must still own its call"
+    );
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_millis(1001)).await;
+    tokio::time::resume();
 
     // Assert: the call ends at its bound although the reader still has not read.
     api.await_active_calls(0, Duration::from_secs(5)).await;

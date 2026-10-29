@@ -9,6 +9,8 @@ use tokio_util::sync::CancellationToken;
 pub struct ScheduleTimingWorker {
     store: Arc<Mutex<AutomationStore>>,
     runner: ScheduledRunWorker,
+    #[cfg(feature = "test-support")]
+    passes: tokio::sync::watch::Sender<()>,
 }
 impl ScheduleTimingWorker {
     pub fn new(
@@ -29,7 +31,14 @@ impl ScheduleTimingWorker {
                 configuration,
                 machine_identity,
             },
+            #[cfg(feature = "test-support")]
+            passes: tokio::sync::watch::channel(()).0,
         }
+    }
+    /// Observe completed owner passes and Run steps without driving the worker.
+    #[cfg(feature = "test-support")]
+    pub fn observe_passes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.passes.subscribe()
     }
     pub async fn run(self, shutdown: CancellationToken) {
         let mut interval = tokio::time::interval(Duration::from_millis(250));
@@ -61,6 +70,8 @@ impl ScheduleTimingWorker {
                         }
                         None => {}
                     }
+                    #[cfg(feature = "test-support")]
+                    self.passes.send_replace(());
                     continue;
                 }
                 _ = interval.tick() => {}
@@ -103,6 +114,8 @@ impl ScheduleTimingWorker {
                     active.insert(task.id(), run_id);
                 }
             }
+            #[cfg(feature = "test-support")]
+            self.passes.send_replace(());
         }
     }
     async fn tick(&self, waiting_cursor: &mut Option<ScheduleId>) -> Result<(), StorageError> {

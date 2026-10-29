@@ -23,13 +23,17 @@ use codex_router_host::ShutdownAction;
 use codex_router_host::ShutdownOutcome;
 use codex_router_host::probe_router;
 use codex_router_host::require_unowned_app_server_endpoint;
-use codex_router_test_support::native_app_server::run_delayed_native_app_server_observation_fixture;
 use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use codex_router_test_support::router_health::RouterHealthFixture;
 use codex_router_test_support::router_health::RouterHealthFixtureResponse;
 use codex_router_test_support::signal_recording::SignalFixtureMode;
 use codex_router_test_support::signal_recording::run_signal_fixture;
 use tokio::process::Command;
+
+#[path = "process_lifecycle/controlled_readiness.rs"]
+mod controlled_readiness;
+#[path = "process_lifecycle/controlled_shutdown.rs"]
+mod controlled_shutdown;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -123,78 +127,6 @@ async fn owned_app_server_is_isolated_and_receives_one_exact_pid_sigterm()
         Some(false),
         "graceful path must not record SIGKILL",
     )?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn app_server_force_escalation_signals_and_reaps_once()
--> Result<(), Box<dyn std::error::Error>> {
-    let directory = TestDirectory::new("forced")?;
-    let event_file = directory.path().join("events.log");
-    let identity = executable_identity(&std::env::current_exe()?).await?;
-    let mut command = signal_fixture_command(SignalFixtureMode::IgnoreTerminate, &event_file)?;
-    let process = ProcessGroupChild::spawn(&mut command)?;
-    wait_for_fixture_ready(&event_file).await?;
-    let mut app_server = AppServerChild::new(process, identity);
-
-    let fixture_deadlines =
-        AppServerShutdownDeadlines::new(Duration::from_millis(50), Duration::from_secs(2))
-            .ok_or("fixture shutdown deadlines must be ordered")?;
-    check_equal(
-        app_server
-            .shutdown_with_deadlines(fixture_deadlines)
-            .await?,
-        ShutdownOutcome::Killed,
-        "SIGTERM-ignoring app-server must use the kill backstop",
-    )?;
-    check_equal(
-        app_server.expected_exit().map(ExpectedExit::term_sent),
-        Some(true),
-        "force path must retain the first-signal progress",
-    )?;
-    check_equal(
-        app_server.expected_exit().map(ExpectedExit::kill_sent),
-        Some(true),
-        "force path must retain the one SIGKILL escalation",
-    )?;
-    check(
-        std::fs::read_to_string(&event_file)?.starts_with("ready\nsigterm\n"),
-        "fixture must observe the initial TERM before SIGKILL",
-    )?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn app_server_force_escalation_kills_the_complete_process_group()
--> Result<(), Box<dyn std::error::Error>> {
-    let directory = TestDirectory::new("app-server-process-group")?;
-    let process_log = directory.path().join("processes.log");
-    std::fs::write(&process_log, b"")?;
-    let identity = executable_identity(&std::env::current_exe()?).await?;
-    let mut command = Command::new(std::env::current_exe()?);
-    command
-        .arg("--exact")
-        .arg("app_server_group_parent_child_entrypoint")
-        .arg("--nocapture")
-        .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_PARENT", "1")
-        .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_LOG", &process_log)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let process = ProcessGroupChild::spawn(&mut command)?;
-    let mut app_server = AppServerChild::new(process, identity);
-    let process_ids = wait_for_process_ids(&process_log, 2).await?;
-
-    let fixture_deadlines =
-        AppServerShutdownDeadlines::new(Duration::from_millis(50), Duration::from_secs(2))
-            .ok_or("fixture shutdown deadlines must be ordered")?;
-    check_equal(
-        app_server
-            .shutdown_with_deadlines(fixture_deadlines)
-            .await?,
-        ShutdownOutcome::Killed,
-        "SIGTERM-ignoring app-server must be force-killed",
-    )?;
-    wait_for_process_exit(process_ids[1]).await?;
     Ok(())
 }
 
@@ -319,55 +251,6 @@ async fn app_server_owner_rejects_foreign_endpoint_and_observes_native_readiness
         !socket_path.exists(),
         "fixture app-server must release the conventional socket",
     )?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn app_server_readiness_gives_remote_control_its_own_deadline_after_native_ready()
--> Result<(), Box<dyn std::error::Error>> {
-    let directory = TestDirectory::new("composed-readiness")?;
-    let socket_path = directory.path().join("app-server.sock");
-    let fixture_socket = socket_path.clone();
-    let server = tokio::spawn(async move {
-        run_delayed_native_app_server_observation_fixture(
-            &fixture_socket,
-            "1.2.3",
-            Duration::from_millis(80),
-            Duration::from_millis(80),
-        )
-        .await
-    });
-
-    let event_file = directory.path().join("events.log");
-    let identity = executable_identity(&std::env::current_exe()?).await?;
-    let mut command = signal_fixture_command(SignalFixtureMode::ExitOnTerminate, &event_file)?;
-    let mut app_server = AppServerChild::spawn(&mut command, identity, "1.2.3".to_owned())?;
-    let readiness = app_server
-        .await_readiness(
-            &socket_path,
-            Duration::from_millis(120),
-            Duration::from_millis(120),
-        )
-        .await?;
-    check_equal(
-        readiness,
-        AppServerReadiness::Ready {
-            running_version: "1.2.3".to_owned(),
-            remote_control_server_name: Some(
-                "fixture"
-                    .to_owned()
-                    .try_into()
-                    .expect("valid fixture Remote Control name"),
-            ),
-        },
-        "native and Remote Control convergence must receive separate deadlines",
-    )?;
-    check_equal(
-        app_server.shutdown().await?,
-        ShutdownOutcome::Graceful,
-        "readiness fixture child must stop gracefully",
-    )?;
-    server.await?.map_err(std::io::Error::other)?;
     Ok(())
 }
 

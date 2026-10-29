@@ -396,8 +396,7 @@ fn output_line(stdout: &[u8], kind: &str) -> TestResult<Value> {
         .ok_or_else(|| format!("CLI omitted {kind}: {}", String::from_utf8_lossy(stdout)).into())
 }
 
-/// Follows a provider Session through one-second events_observe calls that resume after
-/// the last event's sequence within the hub's epoch.
+/// Reads each provider event as soon as it arrives, resuming from the last sequence.
 struct ProviderEvents {
     client: CollaborationClient,
     target: SessionRef,
@@ -431,7 +430,7 @@ impl ProviderEvents {
                 .observe_provider_session(BoundedObservationRequest {
                     target: self.target.clone(),
                     timeout_seconds: 1,
-                    max_events: 4096,
+                    max_events: 1,
                     max_bytes: 1_048_576,
                     after_sequence: self.after_sequence,
                     epoch: self.epoch,

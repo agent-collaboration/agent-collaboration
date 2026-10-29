@@ -122,7 +122,8 @@ async fn shed_commands_report_an_overload_to_retry() {
     });
     tokio::time::timeout(Duration::from_secs(10), served.await_running_calls(1))
         .await
-        .expect("the wake wait holds the only request slot");
+        .expect("the wake wait holds the only request slot")
+        .expect("registry observation remains alive");
     let probe = served
         .call("automation_status", json!({}))
         .await

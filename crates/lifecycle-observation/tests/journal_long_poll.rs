@@ -39,13 +39,16 @@ async fn reader_wakes_after_commit_without_holding_writer_lock() {
     assert_eq!(page.next.sequence, 1);
     let target = observation.scope.endpoint.clone();
     let position = page.next;
+    tokio::time::pause();
     let empty = tokio::time::timeout(
         Duration::from_secs(1),
         store.read_wait(&target, position, 100, 10),
     )
-    .await
-    .unwrap_or_else(|e| panic!("bounded wait: {e}"))
-    .unwrap_or_else(|e| panic!("timeout page: {e}"));
+    .await;
+    tokio::time::resume();
+    let empty = empty
+        .unwrap_or_else(|e| panic!("bounded wait: {e}"))
+        .unwrap_or_else(|e| panic!("timeout page: {e}"));
     assert!(empty.records.is_empty());
     assert!(empty.caught_up);
     assert_eq!(empty.next.sequence, 1);

@@ -108,17 +108,20 @@ pub async fn committed_handoff_before_outbox(scope: &mut MessagingCase<'_>) -> F
 
 async fn wait_frozen_intent(scope: &MessagingCase<'_>, post: &PostId) -> FixtureResult {
     tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            for record in scope.sender.feed_records("notifyIntent").await? {
-                let intent: NotifyIntent = serde_json::from_value(record)?;
-                if intent.cause == post.clone().into()
-                    && matches!(intent.state(), IntentState::HandedOff { .. })
-                {
-                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-                }
+        scope
+            .sender
+            .host()?
+            .drain_project_publisher(&scope.sender.project)
+            .await?;
+        for record in scope.sender.feed_records("notifyIntent").await? {
+            let intent: NotifyIntent = serde_json::from_value(record)?;
+            if intent.cause == post.clone().into()
+                && matches!(intent.state(), IntentState::HandedOff { .. })
+            {
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
+        Err("publisher completed without the committed frozen intent".into())
     })
     .await
     .map_err(|error| format!("post {post:?} did not reach HandedOff before crash: {error}"))?

@@ -333,7 +333,20 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         first_settlement.output,
         collaboration_protocol::ConversationOperationWaitOutput::Available { .. }
     ));
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        let mut busy_operations = route.observe_queue_busy_operations();
+        loop {
+            if busy_operations.borrow_and_update().as_ref() == Some(&queued_operation_id) {
+                break;
+            }
+            busy_operations
+                .changed()
+                .await
+                .expect("FIFO owner remains active");
+        }
+    })
+    .await
+    .expect("queued prompt encounters the held transient busy blocker");
     store
         .lock()
         .await

@@ -23,6 +23,12 @@ pub(crate) fn present_interaction(
     supports_question_form: bool,
 ) -> Option<OutboundInteraction> {
     if interaction.approver() != actor {
+        #[cfg(all(debug_assertions, feature = "test-support"))]
+        tracing::debug!(
+            target: "collaboration_runtime::runtime_test_acp_interaction_withheld",
+            request_id = interaction.request_id(),
+            "provider-acp-interaction-withheld-from-non-approver"
+        );
         return None;
     }
     match &interaction {

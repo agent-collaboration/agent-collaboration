@@ -14,6 +14,8 @@ use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind};
 use tokio::sync::Mutex;
+#[path = "provider_session_observation_control/controlled_deadline.rs"]
+mod controlled_deadline;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -377,31 +379,37 @@ async fn provider_observers_read_snapshot_and_live_order() {
     )
     .await
     .expect("large item");
-    let oversized_page = bounded
-        .observe_provider_session(BoundedObservationRequest {
+    let oversized_page = controlled_deadline::observe_after_last_retained_event(
+        &bounded,
+        BoundedObservationRequest {
             target: observed.target.clone(),
             timeout_seconds: 1,
             max_events: 10,
             max_bytes: 1_048_576,
             after_sequence: None,
             epoch: None,
-        })
-        .await
-        .expect("oversized observation");
+        },
+        6,
+    )
+    .await
+    .expect("oversized observation");
     assert!(oversized_page.events.iter().any(|event| {
         event == &json!({"kind":"eventTooLarge","sequence":6,"itemId":"oversized"})
     }));
-    let replay = bounded
-        .observe_provider_session(BoundedObservationRequest {
+    let replay = controlled_deadline::observe_after_last_retained_event(
+        &bounded,
+        BoundedObservationRequest {
             target: observed.target.clone(),
             timeout_seconds: 1,
             max_events: 10,
             max_bytes: 1_048_576,
             after_sequence: Some(5),
             epoch: observed.epoch,
-        })
-        .await
-        .expect("replay after the large item");
+        },
+        6,
+    )
+    .await
+    .expect("replay after the large item");
     assert!(replay.events.iter().any(|event| {
         event == &json!({"kind":"eventTooLarge","sequence":6,"itemId":"oversized"})
     }));

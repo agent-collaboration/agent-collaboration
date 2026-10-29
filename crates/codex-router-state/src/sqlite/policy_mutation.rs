@@ -1,10 +1,11 @@
 //! SQLite policy mutation responsibilities.
 use super::{
     AccountId, AccountRoutingPolicy, AccountStatus, AsyncWeeklyQuotaFloorMutationStore,
-    CURRENT_SCHEMA_VERSION, Duration, Instant, Path, Row, SqliteConnectOptions, SqlitePoolOptions,
+    CURRENT_SCHEMA_VERSION, Duration, Path, Row, SqliteConnectOptions, SqlitePoolOptions,
     StateStoreError, WeeklyQuotaFloorBasisPoints, WeeklyQuotaFloorMutationResult,
     is_busy_or_locked_sqlx_error,
 };
+use tokio::time::Instant;
 const WEEKLY_FLOOR_RETRY_DELAYS: [Duration; 3] = [
     Duration::from_millis(25),
     Duration::from_millis(50),
@@ -110,7 +111,25 @@ impl AsyncWeeklyQuotaFloorMutationStore {
             return Err(StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired);
         }
 
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            #[cfg(test)]
+            busy_retry_deadlines: tokio::sync::watch::channel(None).0,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn observe_busy_retry_deadlines(
+        &self,
+    ) -> tokio::sync::watch::Receiver<Option<Instant>> {
+        self.busy_retry_deadlines.subscribe()
+    }
+
+    async fn wait_before_busy_retry(&self, delay: Duration) {
+        let deadline = Instant::now() + delay;
+        #[cfg(test)]
+        self.busy_retry_deadlines.send_replace(Some(deadline));
+        tokio::time::sleep_until(deadline).await;
     }
 
     /// Atomically enables or disables one account's weekly quota floor.
@@ -170,10 +189,7 @@ impl AsyncWeeklyQuotaFloorMutationStore {
                     if delay >= remaining {
                         return Err(StateStoreError::AccountStatusDatabaseBusy);
                     }
-                    tokio::time::sleep_until(tokio::time::Instant::from_std(
-                        Instant::now() + delay,
-                    ))
-                    .await;
+                    self.wait_before_busy_retry(delay).await;
                 }
                 Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound) => {
                     return Err(StateStoreError::AccountStatusAccountNotFound);
@@ -219,10 +235,7 @@ impl AsyncWeeklyQuotaFloorMutationStore {
                     if delay >= remaining {
                         return Err(StateStoreError::WeeklyQuotaFloorDatabaseBusy);
                     }
-                    tokio::time::sleep_until(tokio::time::Instant::from_std(
-                        Instant::now() + delay,
-                    ))
-                    .await;
+                    self.wait_before_busy_retry(delay).await;
                 }
                 Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound) => {
                     return Err(StateStoreError::WeeklyQuotaFloorAccountNotFound);

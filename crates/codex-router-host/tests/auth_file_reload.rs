@@ -11,6 +11,8 @@ use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 
+#[path = "auth_file_reload/debounce_clock.rs"]
+mod debounce_clock;
 #[path = "support/operator_client.rs"]
 mod operator_client;
 
@@ -18,6 +20,8 @@ mod operator_client;
 async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::PermissionsExt;
+    let (subscriber, mut debounce_clock) = debounce_clock::observe_armed_deadlines();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
     let directory = tempfile::Builder::new()
         .prefix("auth-reload-")
         .tempdir_in("/tmp")?;
@@ -68,9 +72,12 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
         let initial_process = std::fs::read_to_string(&process_log)?;
         // Both writes land before the watcher can observe the burst. The final write
         // atomically replaces auth.json, rather than mutating its original inode.
+        debounce_clock.before_write();
         write_auth(&home, "account-x", "intermediate")?;
         write_auth(&home, "account-x", "x2")?;
-        wait_for_reload(coordination.operator_socket(), "reloaded").await?;
+        debounce_clock
+            .complete(wait_for_reload(coordination.operator_socket(), "reloaded"))
+            .await?;
         let mut client = NativeProtocolConnection::connect(&socket).await?;
         let account = client
             .request("account/read", json!({"refreshToken":false}))
@@ -87,8 +94,14 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
         )?;
         // Alternate observable outcomes so every file write waits for the Host's
         // completed verification, rather than an upstream cache change mid-RPC.
+        debounce_clock.before_write();
         write_auth(&home, "account-y", "y1")?;
-        wait_for_reload(coordination.operator_socket(), "refused_different_account").await?;
+        debounce_clock
+            .complete(wait_for_reload(
+                coordination.operator_socket(),
+                "refused_different_account",
+            ))
+            .await?;
         let account = client
             .request("account/read", json!({"refreshToken":false}))
             .await?;
@@ -107,8 +120,11 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
         )?;
 
         // The directory subscription must survive replacement of auth.json again.
+        debounce_clock.before_write();
         write_auth(&home, "account-x", "x3")?;
-        wait_for_reload(coordination.operator_socket(), "reloaded").await?;
+        debounce_clock
+            .complete(wait_for_reload(coordination.operator_socket(), "reloaded"))
+            .await?;
         let account = client
             .request("account/read", json!({"refreshToken":false}))
             .await?;
@@ -126,8 +142,14 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
             serde_json::from_slice(&std::fs::read(home.join("auth.json"))?)?;
 
         // Account switches may reuse an access token; account identity still wins.
+        debounce_clock.before_write();
         write_auth(&home, "account-y", "x3")?;
-        wait_for_reload(coordination.operator_socket(), "refused_different_account").await?;
+        debounce_clock
+            .complete(wait_for_reload(
+                coordination.operator_socket(),
+                "refused_different_account",
+            ))
+            .await?;
         let account = client
             .request("account/read", json!({"refreshToken":false}))
             .await?;
@@ -145,11 +167,14 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
         // Restore the same account by changing only its refresh token. This
         // in-place write also proves the current inode remains watched.
         matching_account_document["tokens"]["refresh_token"] = json!("refresh-only-revision");
+        debounce_clock.before_write();
         std::fs::write(
             home.join("auth.json"),
             serde_json::to_vec(&matching_account_document)?,
         )?;
-        wait_for_reload(coordination.operator_socket(), "reloaded").await?;
+        debounce_clock
+            .complete(wait_for_reload(coordination.operator_socket(), "reloaded"))
+            .await?;
         let account = client
             .request("account/read", json!({"refreshToken":false}))
             .await?;

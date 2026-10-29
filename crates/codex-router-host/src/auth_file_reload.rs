@@ -126,7 +126,13 @@ fn publish(status: &watch::Sender<Option<LoginReloadOutcome>>, outcome: LoginRel
 
 async fn debounce_auth_events(events: &mut NativeFileEvents) -> std::io::Result<()> {
     loop {
-        match tokio::time::timeout(AUTH_EVENT_DEBOUNCE, events.wait_for_change()).await {
+        let deadline = tokio::time::Instant::now() + AUTH_EVENT_DEBOUNCE;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        tracing::trace!(
+            target: "codex_router_host::runtime_test_auth_debounce",
+            "auth-debounce-deadline-armed"
+        );
+        match tokio::time::timeout_at(deadline, events.wait_for_change()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => return Err(error),
             Err(_) => return Ok(()),

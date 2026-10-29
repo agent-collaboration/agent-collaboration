@@ -127,7 +127,7 @@ impl NativeFileWatch {
     }
 
     fn rearm_watched_inode(&mut self) -> io::Result<()> {
-        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
         let file = match std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(nix::libc::O_NONBLOCK)
@@ -135,6 +135,18 @@ impl NativeFileWatch {
         {
             Ok(file) => Some(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            // Socket bind/unlink changes are covered by the directory watch.
+            // macOS refuses opening a Unix socket as a readable vnode.
+            Err(_error)
+                if match self.watched_path.metadata() {
+                    Ok(metadata) => metadata.file_type().is_socket(),
+                    // A socket can be unlinked between open and classification;
+                    // its already-queued directory event still covers replacement.
+                    Err(error) => error.kind() == io::ErrorKind::NotFound,
+                } =>
+            {
+                None
+            }
             Err(error) => return Err(error),
         };
         if let Some(file) = &file {
@@ -302,5 +314,34 @@ impl NativeFileWatch {
                 Err(error) => return Err(error.into()),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NativeFileEvents;
+
+    #[tokio::test]
+    async fn socket_binding_wakes_the_registered_observer_and_can_be_reopened()
+    -> std::io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("operator.sock");
+        let mut events = NativeFileEvents::open(&socket)?;
+        let listener = std::os::unix::net::UnixListener::bind(&socket)?;
+        tokio::time::timeout(std::time::Duration::from_secs(2), events.wait_for_change())
+            .await
+            .map_err(std::io::Error::other)??;
+        drop(events);
+        let mut reopened = NativeFileEvents::open(&socket)?;
+        drop(listener);
+        std::fs::remove_file(&socket)?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            reopened.wait_for_change(),
+        )
+        .await
+        .map_err(std::io::Error::other)??;
+        drop(reopened);
+        Ok(())
     }
 }

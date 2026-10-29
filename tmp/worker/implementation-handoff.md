@@ -1,67 +1,65 @@
 # W1 implementation checkpoint
 
-Date: 2026-10-29. Stage: in-progress; not review-ready or merge-ready.
-Repo: /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host
-Branch: test/no-wall-clock-host
-Base: 881f778c77b4d5532ef1be32f0bd2f44daaf73f5 (0.1.116).
-Head: checkpoint commit containing this file; exact SHA is sent to Lead/W2.
-Plan identity: none. Authority is the direct W1 commission in packet.md and the Lead decisions recorded in trace.md. Delivery is one eventual PR to main, CI watched at interval240, no merge authority. W1 is explicitly unpaired; Lead commissions independent review after completion. No independent review has occurred.
+2026-10-29. Stage:in-progress, not review-ready or merge-ready.
+Worktree:/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host
+Branch:test/no-wall-clock-host. Base:881f778c77b4d5532ef1be32f0bd2f44daaf73f5(v0.1.116).
+Last pushed6dbc117e856c015c46553a45690c81a3969f7cf0; later source dirty, git status authoritative. No active product mutant, no PR or independent review.
 
-This checkpoint preserves partial work and gives W2 its assigned blocking-worker lock observation entry. W1 continues the original assignment. Inventory classification, remaining conversions and required gates are incomplete.
+Authority:direct commission packet.md plus Lead grants in trace.md. No invented canonical plan. W1 is explicitly unpaired; Lead commissions independent review and accepts results. One eventual PR/main, CIwatch240, no merge/tag/production replacement. Assigned0.1.118 AFTER PR193(v0.1.117), W2then0.1.119. PR193 latest read OPEN, headcad60fb00ddf367bf09c5f06bb8033388c28e1db. No version bump/main integration yet.
 
-## W2 integration entry
+## Ownership
 
-In codex-router-secret-store::account_credential_lock:
+Frozen33folders:scope.txt. Actual touched packages17:touched-packages.txt; native gates exclude Cloudflare and add codex-router-cli/keychain-test-support.
+W2 owns serve_then_watch and three reserved callers. W1 owns approved Core/Cloudflare/Tokio revocation observation end-to-end, only approved two mechanical W2 Access callers and access_carryover import correction.
+W2 now owns these UNCHANGED files:verification/fixtures/sqlite-pressure-agent.ts,verification/fixtures/tests/sqlite-pressure-fixture.ts,verification/fixtures/tests/sqlite-pressure.test.ts. Do not edit.
+The pushed AccountCredentialLock::acquire_with_contention_observer entry is debug+test-support only; same real lock, actual blocking-worker WouldBlock observation, clear-on-return. W2 owns caller; six lock/FIFO cases passed.
 
-```rust
-#[cfg(all(feature = "test-support", debug_assertions))]
-pub fn acquire_with_contention_observer(
-    database_path: &Path,
-    account_id: &AccountId,
-    contention_observer: std::sync::mpsc::Sender<()>,
-) -> Result<AccountCredentialLock, AccountCredentialLockError>
-```
+## Source model
 
-Call it on the actual auth blocking worker. It arms that thread's observer, calls the same acquire implementation, reports the real OS WouldBlock result before the existing blocking lock, and clears the observer on return. An uncontended acquisition disconnects the unused sender. Dropped receivers do not alter lock acquisition. Normal acquire's signature is unchanged. The entry and observer implementation are absent without test-support and in release builds, including release builds with test-support accidentally enabled.
+A delays become actual owner/protocol/channel/process facts. B timing uses the existing clock or paused Tokio. C bounds remain failure guards. Product constants, wire/storage/public production inputs and original assertions stay unchanged. Cooperative state polling is separately deferred debt, neither converted nor compliant.
 
-W2 must retain its two approved shared Access helper caller changes and its ownership of serve_then_watch and the three reserved callers. W1 owns the approved Core/Cloudflare/Tokio revocation observation change end to end. See lead-lock-observer-seam.md and lead-causal-seams-decision.md.
+Source review inspected453original genericC rows(21parts),236timestamp origins(12parts),177elapsed/negative contexts,25field-level consumers. Current literal scan80sites,41test/example candidates; candidates are paused cases, actual causal guards, trait declarations or explicit exceptions. These scans are not final runtime proof.
 
-## Implementation and proof
+Host clock uses the approved debug/runtime-test-support-only constructor adjacent to startup; production wrappers SystemSubscriptionClock. One existing Arc feeds Mail/Subscription/Wake and private WakeOperations/receiver, replacing eight independent UTC captures. Public production constructor signatures unchanged. Exact actual outbox commit and actual armed caller deadlines fence advances. Final receiver remaining-wait line changed after latest compilation and is unverified.
+NativeFileEvents keeps directory observation for Unix sockets(macOS open EOPNOTSUPP), handles disappeared-inode race and retains regular auth-file inode observation. Final bind/reopen/unlink regression needs next gate.
+Machine counter observes actual joined handlers/reactions. Mail counter observes successful changed InteractionAtomicStore commits; readonly reads/failed transactions do not self-publish. Existing stdin waits select owned shutdown/listener failure. Final disposable ACP helper invokes existing exact debug Host controller before exact counts; ignored/manual journey unrun.
 
-Raw command details and failures are in trace.md; a scoped green does not complete the assignment.
+## Scoped runtime evidence
 
-| Scope | Current evidence |
+These receipts cover their compiled snapshots, not final HEAD or acceptance. Exact commands/failures/corrections are in trace.md and named logs.
+
+| Scope | Evidence |
 | --- | --- |
-| Repeating wake CI11 | Existing Clock injected through the same SubscriptionClock adapter; real store/native worker retained, 300-second minimum unchanged. nextest 1/0, suite2.017s, command5.66s, exit0. |
-| Drop lifecycle CI16 | Held actual presence probe exposed the missing publisher completion fence; intended red, then corrected real lifecycle test green. Expanded registry/CI16 batch6/0, suite3.087s, exit0. |
-| Registry and remote wakes | Dropped-handler notification regression red then green; remote clock cases5/0, suite2.958s, exit0. |
-| ACP cancel wire order | All three cases pass with held reply and actor FIFO fence. One deliberate drain-bypass fault failed all three; exact restoration passed3/0. Two additional distinct mutation controls remain. |
-| Native Access expiry | Real HTTP/RSA before/after caller-driven signed-expiry+5s. Full Access suite5/0 in runtime batch. Workerd caller compiled; actual Worker expiry remains unverified. |
-| Revocation typed waits | Feature-only subscribe-before-read, actual owner checkpoints, drop cleanup, independent client predicates. Native3/0 and progress-observer3/0 in runtime batch. Worker path and production exclusion proof still open. |
-| Host causal batch | Current CI9, PID/reap, dispatch/cancel/shutdown, auth-file watcher, retention and wake composition:11/0, suite12.530s, command405.29s, exit0. CI9 source unchanged; historical cause unclassified. |
-| Cross-lane lock entry | New worker contention/observer cleanup plus existing lock/FIFO cases:6/0,88skipped, suite0.211s, command8.44s, exit0; lock-worker-observer-green.log, run9db4c0ca-f157-44b6-81f4-e1e6f2f588f2. |
-| Scripted pinned TUI | Official Codex0.157.1 asset SHA verified in task scratch. Four UI cases and held partial-frame regression pass. Trust conversion still fails; original committed trust case passes. Early Enter sends no config/batchWrite; original delayed case does. Temporary RPC instrumentation and original-case swaps were restored exactly. Investigate upstream startup/protected-input state before another fix. |
-| Production Worker | Normal worker-release prebuild and production marker guard passed before latest revocation addition. Local clock enabled artifact, actual workerd scenarios, deliberate production guard rejection, release feature rejection and final normal rebuild remain. |
-| Quality | cargo fmt --all -- --check passes. Runtime test-source check passed. Full touched-package Clippy, nextest, release-bin check, module-cycle ratchet, comparable before/after totals, PR and CI remain open. |
+| CI11 |1/0,suite2.017s; unchanged300sminimum,realstore/worker/twodistinctnativepushes. |
+| CI16/registry |6/0,suite3.087s; real heldpresence/release,publisher-idle. Abortnotification regression redthen green. |
+| Three distinct controls |ACPdrain bypass3intendedred/3restored; Wakeclockignored1intendedred/1restored; Access60sgrace1intendedred/1restored. mutations/*-control.json; no mutant. |
+| Native Access |5/0, real HTTP/RSA,samesignedbytes before/aftercontrolledexpiry. |
+| Real workerd |Access4/0,revocation2/0,activation1/0,open1/0; each owned process reaped. Finalnormalartifact/releaseclockexclusion pending. |
+| CI6 |3/0,suite121.843s,run04a41fe4-a3e1-4400-bc6b-31b539040a34. CI10retiredonmain;CI9unchangedgreen,historicalcauseunknown. |
+| Host causal/Tailnet |Host11/0,suite12.530s; Tailnet18/0/1ignored,suite1.070s,run8fcf6050-10b2-4c87-bcd7-57e5d5b6ef49. No external allocation. |
+| Schedule/state/locks |All7schedule cases green; FIFO/credential4/0; StatefloorBusy1/0 preserving150<=virtualelapsed<250 and value/WAL/readonly. |
+| Board/mail |run41e622f0-932b-4dd7-a9d1-d34c8e779692:45run/42pass/3Hostwatcherfail,suite342.570s. Allboard/messaging/startupdiagnostics/atomiccommit pass. Socketcorrection resolved3Hostfailures in49casefollowup(48pass/1newcallersetupfail). |
+| New deadlines |run82e333e0-7c81-4f7e-bbe8-87eccd186767:14/0,suite40.273s. Callerrequiredmodel/effort/accessfixed;controlledcaller,all5authoutcomes,forwardedUnknown/retry,providerobservation/humanapprovalpass. |
+| MCP/creation |runc299b4fc-0668-445c-bdba-70e623a848f0:6/0,suite34.321s. ActualPendingnotification/HTTPcallerpass. Initial30screationbeforepumpstartsubsequentlycontrolled. |
+| Process/Host |run62105d5e-e2ce-4809-8c7a-0634a581576d:25/0/1099skip,suite4.950s,command130.37s,exit0. Creation~1.17s,Hostreplacement~1.5s;50msforce/80msreadiness/group/reap pass. |
+| Latest owners |rund3417988-94bc-40ea-b99b-5c34152aa6aa:15/0/1766skip,19bins,suite14.640s,command273.29s,exit0. HostremoteWake10.838s(previous32.4s),5servicereplay/expiry,MCPheldstore/shutdowngrace/registry,journalpass. Finalreceiverline uncredited. |
+| Pinned TUI |Official0.157.1assetverified;4convertedjourneys+partialframepass; originalignoredTrust1/0underexception. InstalledCodexunchanged. |
 
-## Source prepared but not yet verified
+## Explicit exceptions
 
-- CLI interrupt subscription is registered before dispatch; fixture sleep removed.
-- MCP request-admission observer is available through test-support; overload fixture waits on actual admission.
-- BoardHost serializes its existing control pair; fixture retries use actual replicate/drain controls. CI6 public E2E and pending registration behavior need execution.
-- Host idle-health assertion advances paused Tokio, then fences its loop with an explicit status observation, accounting for that observation's one probe. New version unrun.
-- Tailnet own-command waits use one joined waitid(EXITED|NOWAIT) thread, unchanged bound, then owning kill/reap on deadline. Graded Host wait and accepted external observations remain unchanged. Stdout readiness and real signal wake replace its fixture polling. Tests pending.
+NativeCodex live/ignored schedule/timeout journeys keep real clocks/models. Listed ignored/manual external typed-state readbacks are C only, not fixed negative windows. Single ignored pinnedTrust case retains exact protected-input label/waits. Single compiledCLI caller-deadline cell retains exact EOF/noCancel/Running/followup, covered by controlled_caller_deadline_detaches_without_cancel_and_preserves_target green.
+Native driver busy wait on a real held lock; no driver clock seam; accepted by Lead2026-10-29. ONLY nativeTursoattempt is exempt; five-secondTokio retry converted.
+Single compiledHost cell:external compiled-Host expiry boundary — exempt by Lead decision2026-10-29; deadline logic covered in-process at remote_wake_is_owned_and_fires_on_the_recipient_installation. Leadcriterion selects exception because actual response loop awaits50msTokiointerval, no clock-owned wake. Exact anchors in lead-compiled-host-expiry-branch.md. No childclockprotocol added. StagingAccessunrun.
 
-## Remaining work and risks
+## Remaining work
 
-1. Resolve the pinned TUI trust fixture from real source/protocol evidence. A rendered trust frame alone is not a proved remote-input readiness checkpoint. Upstream startup protected-input/query handling is the current research lead. No upstream fork/pin change or assertion removal.
-2. Execute CI6 variants. CI10's requested-cancellation API/test was removed on current main; preserve that retirement rather than resurrecting it.
-3. Finish every inventory row's actual A/B/C/context classification and remaining conversions. The inventory remains an incomplete checklist. Preserve the exact Lead exceptions for native live schedule/timeout and accepted external process-state observations.
-4. Finish local Worker proof and at least two more distinct fault controls, then full scoped quality/runtime gates and a valid comparable Sunclaw baseline. Existing interrupted Sunbook baseline has no test totals.
-5. Merge current origin/main before final delivery; use assigned0.1.117 only if still next unused, under Lead version ordering. Commit unsigned and push only this branch. One PR, watch CI, then final Lead handback/review.
+1. Native all-target/all-feature Clippy passed(run12,exit0,10.86s), as did Cloudflare wasm all-feature Clippy(exit0,37.94s),3718-file Rust size gate and diff whitespace check. Later MachineProgress debug gating preserves debug code and awaits feature-enabled release proof.
+2. New focused runtime run60df404e-8493-4740-ad2e-42cc9032e5eb passed59/0/1789skip,suite30.876s,command330.22s. Covers final receiver/socket/ACPwithheld/heldthread/nativeBusy/Welcome/CI11;CI11body0.237s,nativeBusy2.167s. Matching board example build90.20s.
+3. CloudflarewasmClippy,normalproductionWorkerrebuild+guard,release localclockfeature rejection; show default/release exclusions for clock/observation/lockseams.
+4. Fullnative17touchedpackage+CLI nextestci,keychainfeature; lockedreleasebins; ignoredmodulecycleratchetARCHITECTURE_JOBS=1.
+5. Comparable baseline MUST first commit all scoped source+canonicaldocs(no stash), detach881f778c SAME worktree/SAME target,matching boardexample,identicalrun-native-package-gate.sh/list/PATH/jobs2/features/threads2; realtotals/suitevscompile, switchbackverifyHEAD. No tmpsourcecopy/separatetarget/baseedits. Sunbookinterruptedloginvalid. Maintain60GiBfloor; cleanup BEFOREbothmeasurements onlyafterconsumersstop.
+6. Merge current origin/main; prepare0.1.118+lock, unsigned scoped commit/push, one unmerged PR/CIwatch240. The exact Lead instruction sets merge order, not a PR-creation freeze; do not wait on an inferred extra dependency. PRwrapupskillloaded; readiness-only/no merge is settled by commission. Its body needs a commissioned HEAD-tied Researcher draft; W1 does not commission helpers, so request the concrete body through Lead at that gate.
+7. Leadindependentreview/finalhandback; cleanupownartifactsafterreceipts+consumersstop.
 
-Security: no production Router/Host, real Codex state, global credentials/config, proxy source or upstream pins changed. Local Access control is compile-time gated and release-rejected; ordinary deployed builds omit it. Production artifacts still need final negative/positive exclusion checks. New lock observation has feature+debug gates and no shipping API. Scripted UI fixtures use private temporary Codex homes. Do not infer staging/live-provider proof from these tests.
-
-Builds use explicit pinned tool PATH in trace.md; the global Cargo launcher is broken and must not be repaired here. One Cargo/pnpm command per worktree. Check free disk before heavy/workspace runs; stop below60GiB. This worktree's dev artifacts were cleaned after owned consumers stopped (8001files/82.7GiB removed); subsequent proof rebuilt only needed artifacts. Preserve other worktrees and processes.
-
-Next route: continue the explicitly authorized W1 execution through implement-plan using the direct packet and Lead grants. This checkpoint is not an admission request for implementation-review.
+Pinnedtools:Rust1.98.1,Node26.11.1,pnpm12.14.0,nextest0.9.137,worker-build0.8.7,cargo-modules0.28.0. GlobalCargolauncherbroken,do not repair. Worker loader uses command-scoped pinned-toolchain DYLD_FALLBACK_LIBRARY_PATH. workers-rs liquid template metadata emits errors beforecommandscontinue; actual terminalexit governs. Latestdisk146GiBfree,target/debug67GiB. One Cargo OR pnpm perworktree, no sharedbuildlock.
+No productionRouter/Host,realuserstate/config/credentials,proxy/upstreampins touched. No staging/provider/crossmachine/deliveryacceptance claim.

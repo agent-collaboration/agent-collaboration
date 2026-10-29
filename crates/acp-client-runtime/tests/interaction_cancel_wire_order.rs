@@ -153,18 +153,22 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
         .expect("interaction reached port");
     let cancel = client.cancel_active_prompt(session_id.clone());
     tokio::pin!(cancel);
-    tokio::time::timeout(Duration::from_secs(2), async {
+    let turn_cancelled = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::select! {
-            () = cancelled.notified() => {},
-            result = &mut cancel => {
+            () = cancelled.notified() => true,
+            _result = &mut cancel => {
                 released.notify_one();
                 client.shutdown().await;
-                panic!("cancel finished before the held interaction reply: {result:?}");
+                false
             },
         }
     })
     .await
     .expect("interaction observes its Turn cancellation");
+    assert!(
+        turn_cancelled,
+        "cancel finished before the held interaction reply"
+    );
     // Inspect is a real actor command, queued after any prematurely admitted Cancel.
     // Its answer fences command processing while the interaction reply stays held.
     tokio::time::timeout(Duration::from_secs(2), client.session_activity(session_id))
@@ -175,8 +179,11 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
     released.notify_one();
     if !cancel_pending {
         client.shutdown().await;
-        panic!("session cancellation bypassed the held interaction reply");
     }
+    assert!(
+        cancel_pending,
+        "session cancellation bypassed the held interaction reply"
+    );
     tokio::time::timeout(Duration::from_secs(2), &mut cancel)
         .await
         .expect("cancel deadline")
