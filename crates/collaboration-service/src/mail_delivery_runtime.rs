@@ -207,7 +207,10 @@ impl MailDeliveryRuntime {
             config,
             session: session.clone(),
         });
-        let host = Arc::new(TokioHost::new(router.clone(), crate::SubscriptionRuntimeClock::new(clock.clone())));
+        let host = Arc::new(TokioHost::new(
+            router.clone(),
+            crate::SubscriptionRuntimeClock::new(clock.clone()),
+        ));
         let store = Arc::new(InteractionAtomicStore::new(owner.clone(), host.clone()));
         router
             .store

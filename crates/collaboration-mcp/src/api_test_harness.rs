@@ -305,13 +305,13 @@ impl ServedApi {
     /// Waits until the number of handlers in flight is `expected`, or fails at `deadline`.
     pub(crate) async fn await_active_calls(&self, expected: usize, deadline: Duration) {
         tokio::time::timeout(deadline, self.tool_calls.await_running(expected))
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "expected {expected} calls in flight, found {}",
-                self.active_calls()
-            )
-        });
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "expected {expected} calls in flight, found {}",
+                    self.active_calls()
+                )
+            });
     }
 
     pub(crate) async fn stop(self) {
@@ -341,8 +341,8 @@ async fn send_and_abandon<TStream>(
     stream.write_all(body).await.expect("write request body");
     stream.flush().await.expect("flush request");
     tokio::time::timeout(Duration::from_secs(5), tool_calls.await_running(1))
-    .await
-    .expect("the abandoned call starts");
+        .await
+        .expect("the abandoned call starts");
     let mut early = [0_u8; 1];
     let mut answer = std::pin::pin!(stream.read(&mut early));
     assert!(

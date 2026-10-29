@@ -9,9 +9,9 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 
 use crate::login_reload_outcome::LoginReloadOutcome;
+use crate::native_file_events::NativeFileEvents;
 
 mod native_auth_reload;
-mod native_file_events;
 
 const AUTH_EVENT_DEBOUNCE: Duration = Duration::from_millis(250);
 const RELOAD_DEADLINE: Duration = Duration::from_secs(10);
@@ -30,7 +30,7 @@ pub(crate) async fn prepare(
     };
     let home = home.to_owned();
     let watcher =
-        tokio::task::spawn_blocking(move || native_file_events::AuthFileEvents::open(&home)).await;
+        tokio::task::spawn_blocking(move || NativeFileEvents::open(&home.join("auth.json"))).await;
     let Ok(Ok(mut events)) = watcher else {
         publish(
             &status,
@@ -38,7 +38,7 @@ pub(crate) async fn prepare(
         );
         return (observed, Box::pin(std::future::pending()));
     };
-    let auth_path = events.auth_path().to_owned();
+    let auth_path = events.path().to_owned();
     let mut last_revision = read_revision(&auth_path)
         .await
         .ok()
@@ -124,9 +124,7 @@ fn publish(status: &watch::Sender<Option<LoginReloadOutcome>>, outcome: LoginRel
     status.send_replace(Some(outcome));
 }
 
-async fn debounce_auth_events(
-    events: &mut native_file_events::AuthFileEvents,
-) -> std::io::Result<()> {
+async fn debounce_auth_events(events: &mut NativeFileEvents) -> std::io::Result<()> {
     loop {
         match tokio::time::timeout(AUTH_EVENT_DEBOUNCE, events.wait_for_change()).await {
             Ok(Ok(())) => {}

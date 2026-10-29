@@ -1,0 +1,61 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling rustix v1.1.4
+   Compiling tokio v1.53.3
+   Compiling tempfile v3.27.0
+   Compiling codex-router-core v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host/crates/codex-router-core)
+   Compiling codex-router-secret-store v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host/crates/codex-router-secret-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.81s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host/.cargo/config.toml`
+────────────
+ Nextest run ID 9db4c0ca-f157-44b6-81f4-e1e6f2f588f2 with nextest profile: ci
+    Starting 6 tests across 1 binary (88 tests skipped)
+        PASS [   0.178s] (1/6) codex-router-secret-store encrypted_credential_store_tests::staged_credential_deletion_waits_for_the_store_lock
+        PASS [   0.199s] (2/6) codex-router-secret-store account_credential_lock::tests::an_uncontended_acquisition_consumes_its_explicit_observer
+        PASS [   0.202s] (3/6) codex-router-secret-store account_credential_lock::tests::an_explicit_observer_is_armed_on_the_actual_blocking_lock_worker
+        PASS [   0.205s] (4/6) codex-router-secret-store account_credential_lock::tests::symlinked_state_path_waits_on_the_same_cross_process_account_lock
+        PASS [   0.210s] (5/6) codex-router-secret-store central_credential_tests::symlink_to_fifo_is_refused_without_waiting_for_a_writer
+        PASS [   0.210s] (6/6) codex-router-secret-store central_credential_tests::fifo_handoff_is_refused_without_waiting_for_a_writer
+────────────
+     Summary [   0.211s] 6 tests run: 6 passed, 88 skipped
+real 8.44
+user 7.59
+sys 1.06

@@ -1,50 +1,67 @@
-# W1 implementation handoff
+# W1 implementation checkpoint
 
-Date: 2026-10-29. Stage: in-progress.
+Date: 2026-10-29. Stage: in-progress; not review-ready or merge-ready.
+Repo: /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host
+Branch: test/no-wall-clock-host
+Base: 881f778c77b4d5532ef1be32f0bd2f44daaf73f5 (0.1.116).
+Head: checkpoint commit containing this file; exact SHA is sent to Lead/W2.
+Plan identity: none. Authority is the direct W1 commission in packet.md and the Lead decisions recorded in trace.md. Delivery is one eventual PR to main, CI watched at interval240, no merge authority. W1 is explicitly unpaired; Lead commissions independent review after completion. No independent review has occurred.
 
-Repository: `/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-host`.
-Branch: `test/no-wall-clock-host`; base `881f778c77b4d5532ef1be32f0bd2f44daaf73f5` (0.1.116).
-Head: the WIP checkpoint containing this file; the exact SHA is in the Lead handback and `git rev-parse HEAD`.
-Plan identity: none. Governing authority is the owner's W1 packet plus the Lead decisions recorded in `trace.md`. No independent review has occurred. The Lead will commission a reviewer after completed implementation and proof.
+This checkpoint preserves partial work and gives W2 its assigned blocking-worker lock observation entry. W1 continues the original assignment. Inventory classification, remaining conversions and required gates are incomplete.
 
-The current authority is Lead push `01a18736-0175-7650-a32e-ccbb6fd226a0`: stop local builds/tests, push WIP, continue all validation on Sunclaw. No further Cargo, nextest, or pnpm test commands on this Mac.
+## W2 integration entry
 
-## Partial changes
+In codex-router-secret-store::account_credential_lock:
 
-These are source changes, not verified conversions:
+```rust
+#[cfg(all(feature = "test-support", debug_assertions))]
+pub fn acquire_with_contention_observer(
+    database_path: &Path,
+    account_id: &AccountId,
+    contention_observer: std::sync::mpsc::Sender<()>,
+) -> Result<AccountCredentialLock, AccountCredentialLockError>
+```
 
-- `AGENTS.md` contains exactly the requested testing rule.
-- `collaboration-runtime` wake worker/sender accept the existing `runtime_primitives::Clock`; scheduling, claim, push settlement, and completion read it. The worker has a test-support-only watch reporting active dispatch count at owner checkpoints.
-- `collaboration-service` and Host composition adapt the SAME SubscriptionClock instance. The old private MailClock adapter was moved to `SubscriptionRuntimeClock` and shared with both mail and wake owners; no reverse Cargo edge was added.
-- The recurring native-wake test now pauses Tokio, explicitly advances UTC, retains both native queue deliveries, waits for committed first completion before advancing 299+1 seconds, and asserts no early second allocation. Its new permanent support module prevents auto-advancing through real IO and advances worker ticks only between dispatches.
-- Remote-wake replay tests set their existing injected recipient clock after the frozen deadline instead of sleeping through it.
-- MCP test waits observe registry activity. The shutdown-grace check observes actual shutdown-token processing, then checks that the registry future remains pending. Negative response delay in the abandon helper is replaced by a pending read at admission.
+Call it on the actual auth blocking worker. It arms that thread's observer, calls the same acquire implementation, reports the real OS WouldBlock result before the existing blocking lock, and clears the observer on return. An uncontended acquisition disconnects the unused sender. Dropped receivers do not alter lock acquisition. Normal acquire's signature is unchanged. The entry and observer implementation are absent without test-support and in release builds, including release builds with test-support accidentally enabled.
 
-## Proof and limits
+W2 must retain its two approved shared Access helper caller changes and its ownership of serve_then_watch and the three reserved callers. W1 owns the approved Core/Cloudflare/Tokio revocation observation change end to end. See lead-lock-observer-seam.md and lead-causal-seams-decision.md.
 
-- Initial baseline invocation failed with exit 101 before compilation: a qualified CLI feature was requested without selecting the CLI package. The correction omitted that feature because no CLI package was selected.
-- Corrected baseline command: `/usr/bin/time -p cargo nextest run --profile ci --all-features -p acp-client-runtime -p agent-collaboration -p board-legacy-upgrade -p codex-router-host -p codex-router-secret-store -p codex-router-state -p collaboration-central-conformance -p collaboration-mcp -p collaboration-runtime -p collaboration-service -p codex-router-tailnet-verification-host`.
-- Old-source compilation finished in 5m44s. Binary signing/listing was still running when the owner stopped local test work. SIGINT exit 130; elapsed command wall time 1087.41 s. **No test results, no pass/fail counts, no valid before-test total.** Raw output: `before.log`.
-- The changed source has not been compiled, formatted, linted, tested, or mutation-checked. No runtime claim or sensitivity claim is made. No release check, module-cycle check, version bump, PR, or CI run occurred.
-- The broad inventory records 2089 initial timing/timestamp occurrences grouped into 833 rows, including production and timestamp-only context. The explicit reviewed entries at its top name conversion plans, but ambiguous scan entries remain. **The inventory classification is incomplete.**
+## Implementation and proof
 
-## Remaining work
+Raw command details and failures are in trace.md; a scoped green does not complete the assignment.
 
-1. Refine every inventory entry into actual A/B/C or timestamp/product-only context; retain the explicit real-staging JWT exception X. Include hidden duration behaviour driven through public timeout/schedule APIs, not only literal sleep calls.
-2. Compile and validate the current WIP on Sunclaw first. Review the new worker observation/paused-IO driver for hangs, wrong observer ordering, and unchanged real protocol assertions. Validate MCP cancellation/drop observation paths. These are untested and may need correction.
-3. Diagnose CI16 from its real owner path; the current test already pauses time and still waits on an intermediate DueRoots checkpoint. No root cause has been established or repair made.
-4. Finish all other A/B conversions in `scope.txt`, including ignored/manual journeys; the work remains much broader than this partial diff. CI6/CI9/CI10 status needs current-source inspection. STG-H1/H2 live in W2-owned verification TypeScript.
-5. Implement local Access expiry with the existing edge clock. Proposed local helper signature: `run_access_expiry_conformance(client, now: chrono::DateTime<chrono::Utc>, advance_clock: impl FnOnce(DateTime<Utc>) -> Future<Output = ConformanceResult<()>>)`. The callback receives exp+5 seconds after initial acceptance, preserving identical signed bytes and real HTTP/crypto. No signature change exists yet.
-6. Resolve mechanical edits/integration of the two W2-owned callers through the Lead. Tokio already has `tests/support/clocked_server.rs`. Local workerd hardwires CloudflareClock; the Lead permits a local-only compile-time feature/control only when deployed artifacts cannot contain it and a check rejects deployed builds with it. No new runtime auth control is authorized in normal builds. Inspect `.github/workflows/ci.yml` local versus deployed worker-build commands and Cloudflare deployment docs. No feature/control/deploy check has been implemented.
-7. Run at least three deliberate product mutation controls with intended failures and restored greens. Then fmt; touched-package all-target/all-feature Clippy with `-D warnings`; touched-package nextest with `--profile ci`; CLI feature support when selecting CLI; locked release check for the three required bin packages; module-cycle ratchet. Measure comparable before/after test durations on Sunclaw, since the local baseline is incomplete.
-8. Merge origin/main before final push; use assigned W1 version 0.1.117 only if still next unused at merge time (Lead owns assignment). One PR to main, no merge authority. Wait for CI with the requested 240-second watch interval, then Lead handback/review.
+| Scope | Current evidence |
+| --- | --- |
+| Repeating wake CI11 | Existing Clock injected through the same SubscriptionClock adapter; real store/native worker retained, 300-second minimum unchanged. nextest 1/0, suite2.017s, command5.66s, exit0. |
+| Drop lifecycle CI16 | Held actual presence probe exposed the missing publisher completion fence; intended red, then corrected real lifecycle test green. Expanded registry/CI16 batch6/0, suite3.087s, exit0. |
+| Registry and remote wakes | Dropped-handler notification regression red then green; remote clock cases5/0, suite2.958s, exit0. |
+| ACP cancel wire order | All three cases pass with held reply and actor FIFO fence. One deliberate drain-bypass fault failed all three; exact restoration passed3/0. Two additional distinct mutation controls remain. |
+| Native Access expiry | Real HTTP/RSA before/after caller-driven signed-expiry+5s. Full Access suite5/0 in runtime batch. Workerd caller compiled; actual Worker expiry remains unverified. |
+| Revocation typed waits | Feature-only subscribe-before-read, actual owner checkpoints, drop cleanup, independent client predicates. Native3/0 and progress-observer3/0 in runtime batch. Worker path and production exclusion proof still open. |
+| Host causal batch | Current CI9, PID/reap, dispatch/cancel/shutdown, auth-file watcher, retention and wake composition:11/0, suite12.530s, command405.29s, exit0. CI9 source unchanged; historical cause unclassified. |
+| Cross-lane lock entry | New worker contention/observer cleanup plus existing lock/FIFO cases:6/0,88skipped, suite0.211s, command8.44s, exit0; lock-worker-observer-green.log, run9db4c0ca-f157-44b6-81f4-e1e6f2f588f2. |
+| Scripted pinned TUI | Official Codex0.157.1 asset SHA verified in task scratch. Four UI cases and held partial-frame regression pass. Trust conversion still fails; original committed trust case passes. Early Enter sends no config/batchWrite; original delayed case does. Temporary RPC instrumentation and original-case swaps were restored exactly. Investigate upstream startup/protected-input state before another fix. |
+| Production Worker | Normal worker-release prebuild and production marker guard passed before latest revocation addition. Local clock enabled artifact, actual workerd scenarios, deliberate production guard rejection, release feature rejection and final normal rebuild remain. |
+| Quality | cargo fmt --all -- --check passes. Runtime test-source check passed. Full touched-package Clippy, nextest, release-bin check, module-cycle ratchet, comparable before/after totals, PR and CI remain open. |
 
-## Boundaries and risk
+## Source prepared but not yet verified
 
-Do not touch proxy, production Router/Host, real Codex home, upstream forks/pins, or W2 files without Lead authorization. No Python, lint allows, timeout increases, removed assertions, or added retries. No file over 1000 lines. Commit unsigned, no stash/amend/no-verify. One Cargo command at a time, on Sunclaw only under the newer instruction.
+- CLI interrupt subscription is registered before dispatch; fixture sleep removed.
+- MCP request-admission observer is available through test-support; overload fixture waits on actual admission.
+- BoardHost serializes its existing control pair; fixture retries use actual replicate/drain controls. CI6 public E2E and pending registration behavior need execution.
+- Host idle-health assertion advances paused Tokio, then fences its loop with an explicit status observation, accounting for that observation's one probe. New version unrun.
+- Tailnet own-command waits use one joined waitid(EXITED|NOWAIT) thread, unchanged bound, then owning kill/reap on deadline. Graded Host wait and accepted external observations remain unchanged. Stdout readiness and real signal wake replace its fixture polling. Tests pending.
 
-The clock adapter changes an existing public constructor as specifically approved by the Lead; all known in-scope callers were updated, but compilation is unobserved. No persisted format, remote request, security control, or deployed clock behaviour was changed. Merging this WIP today risks compile/lint failures and test deadlocks; it is not merge-ready.
+## Remaining work and risks
 
-This task's generated local target was cleaned after stopping all its consumers; baseline evidence is retained here. No running production process was stopped or replaced.
+1. Resolve the pinned TUI trust fixture from real source/protocol evidence. A rendered trust frame alone is not a proved remote-input readiness checkpoint. Upstream startup protected-input/query handling is the current research lead. No upstream fork/pin change or assertion removal.
+2. Execute CI6 variants. CI10's requested-cancellation API/test was removed on current main; preserve that retirement rather than resurrecting it.
+3. Finish every inventory row's actual A/B/C/context classification and remaining conversions. The inventory remains an incomplete checklist. Preserve the exact Lead exceptions for native live schedule/timeout and accepted external process-state observations.
+4. Finish local Worker proof and at least two more distinct fault controls, then full scoped quality/runtime gates and a valid comparable Sunclaw baseline. Existing interrupted Sunbook baseline has no test totals.
+5. Merge current origin/main before final delivery; use assigned0.1.117 only if still next unused, under Lead version ordering. Commit unsigned and push only this branch. One PR, watch CI, then final Lead handback/review.
 
-Recommended next action: continue through a Lead-authorized Sunclaw executor using `copy-paste-prompt.md`, not implementation acceptance.
+Security: no production Router/Host, real Codex state, global credentials/config, proxy source or upstream pins changed. Local Access control is compile-time gated and release-rejected; ordinary deployed builds omit it. Production artifacts still need final negative/positive exclusion checks. New lock observation has feature+debug gates and no shipping API. Scripted UI fixtures use private temporary Codex homes. Do not infer staging/live-provider proof from these tests.
+
+Builds use explicit pinned tool PATH in trace.md; the global Cargo launcher is broken and must not be repaired here. One Cargo/pnpm command per worktree. Check free disk before heavy/workspace runs; stop below60GiB. This worktree's dev artifacts were cleaned after owned consumers stopped (8001files/82.7GiB removed); subsequent proof rebuilt only needed artifacts. Preserve other worktrees and processes.
+
+Next route: continue the explicitly authorized W1 execution through implement-plan using the direct packet and Lead grants. This checkpoint is not an admission request for implementation-review.

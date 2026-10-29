@@ -36,9 +36,14 @@ impl ExplicitTimeGuard {
     pub fn new(bound: Duration) -> Self {
         let (release, released) = std::sync::mpsc::channel();
         let task = tokio::task::spawn_blocking(move || {
-            released.recv_timeout(bound).expect("wake proof exceeded its existing receive bound");
+            released
+                .recv_timeout(bound)
+                .expect("wake proof exceeded its existing receive bound");
         });
-        Self { release: Some(release), task: Some(task) }
+        Self {
+            release: Some(release),
+            task: Some(task),
+        }
     }
 
     pub async fn finish(mut self) {
@@ -63,5 +68,8 @@ pub async fn progress_worker(passes: &mut tokio::sync::watch::Receiver<usize>) {
     if active_dispatches == 0 {
         tokio::time::advance(Duration::from_millis(250)).await;
     }
-    passes.changed().await.expect("wake worker stopped before its next checkpoint");
+    passes
+        .changed()
+        .await
+        .expect("wake worker stopped before its next checkpoint");
 }

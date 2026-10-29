@@ -19,6 +19,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 mod lifecycle_pause;
+mod progress_observation;
 pub use lifecycle_pause::LifecyclePauseObservation;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ pub use lifecycle_pause::LifecyclePauseObservation;
 )]
 pub enum RevocationControl {
     Observe,
+    Await { condition: RevocationWait },
     ArmDelivery,
     ReleaseDelivery,
     ArmActivation,
@@ -39,6 +41,46 @@ pub enum RevocationControl {
     ArmBeforeActivation,
     ReleaseBeforeActivation,
     Replay { call: CallId },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RevocationWait {
+    DeliveryGateReached,
+    OperationCompleted,
+    ReadmissionCompleted,
+}
+
+impl RevocationWait {
+    fn reached(self, observed: &RevocationObservation) -> bool {
+        let completed = |operation: Option<&OperationStatus>| {
+            matches!(
+                operation.map(|operation| &operation.state),
+                Some(durable_steps::OperationState::Completed { .. })
+            )
+        };
+        match self {
+            Self::DeliveryGateReached => {
+                observed.gate_armed
+                    && observed.gate_reached
+                    && observed
+                        .enrollment
+                        .as_ref()
+                        .and_then(|row| row.last_revocation_operation)
+                        .is_some_and(|operation| {
+                            observed
+                                .calls
+                                .iter()
+                                .any(|call| call.operation == operation)
+                        })
+            }
+            Self::OperationCompleted => completed(observed.operation.as_ref()),
+            Self::ReadmissionCompleted => {
+                observed.enrollment.as_ref().is_some_and(|row| !row.revoked)
+                    && completed(observed.readmission_operation.as_ref())
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -94,11 +136,16 @@ struct ProbeState {
 #[derive(Default)]
 pub(crate) struct RevocationProbe {
     state: Mutex<ProbeState>,
+    progress: Arc<progress_observation::RevocationProgress>,
     pub(crate) activation_pause: lifecycle_pause::LifecyclePause,
     pub(crate) open_pause: lifecycle_pause::LifecyclePause,
     pub(crate) before_activation_pause: lifecycle_pause::LifecyclePause,
 }
 impl RevocationProbe {
+    pub(crate) fn notify_when_finished(&self) -> progress_observation::ProgressNotification {
+        self.progress.notify_when_finished()
+    }
+
     pub(crate) async fn before_dispatch(
         &self,
         call: RecordedLifecycleCall,
@@ -115,6 +162,7 @@ impl RevocationProbe {
                 None
             }
         };
+        self.progress.notify();
         if let Some(pending) = pending {
             pending.await.map_err(StoreError::backend)?;
         }
@@ -172,6 +220,7 @@ impl RevocationProbe {
                     std::mem::take(&mut state.release)
                 }
                 RevocationControl::Observe
+                | RevocationControl::Await { .. }
                 | RevocationControl::Replay { .. }
                 | RevocationControl::ArmActivation
                 | RevocationControl::ReleaseActivation
@@ -266,67 +315,84 @@ where
             .revocation_probe
             .apply(&input.control)
             .map_err(|_| CallFailure::AnswerLost)?;
-        if let RevocationControl::Replay { call } = input.control {
-            shared_host.replay_lifecycle_call(&call).await?;
+        if let RevocationControl::Replay { call } = &input.control {
+            shared_host.replay_lifecycle_call(call).await?;
         }
-        let ((enrollment, operation, readmission_operation, activation_step, open_step), _) =
-            StepDriver::new(host.clone())
-                .run(ReadRevocation {
-                    service: input.service,
-                })
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        let (gate_armed, gate_reached, calls) = shared_host
-            .revocation_probe
-            .observation()
-            .map_err(|_| CallFailure::AnswerLost)?;
-        let (open_calls, close_calls) = {
-            let state = shared_host
-                .revocation_probe
-                .state
-                .lock()
-                .map_err(|_| CallFailure::AnswerLost)?;
-            (
-                state
-                    .open_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-                state
-                    .close_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-            )
+        let condition = match input.control {
+            RevocationControl::Await { condition } => Some(condition),
+            _ => None,
         };
-        serde_json::to_vec(&RevocationObservation {
-            gate_armed,
-            gate_reached,
-            calls,
-            enrollment,
-            operation,
-            activation_pause: shared_host
+        loop {
+            let changed = condition
+                .map(|_| {
+                    shared_host
+                        .revocation_probe
+                        .progress
+                        .subscribe(runtime_primitives::IdSource::new_id(shared_host.as_ref()))
+                })
+                .transpose()?;
+            let ((enrollment, operation, readmission_operation, activation_step, open_step), _) =
+                StepDriver::new(host.clone())
+                    .run(ReadRevocation {
+                        service: input.service.clone(),
+                    })
+                    .await
+                    .map_err(|_| CallFailure::AnswerLost)?;
+            let (gate_armed, gate_reached, calls) = shared_host
                 .revocation_probe
-                .activation_pause
                 .observation()
-                .map_err(|_| CallFailure::AnswerLost)?,
-            open_pause: shared_host
-                .revocation_probe
-                .open_pause
-                .observation()
-                .map_err(|_| CallFailure::AnswerLost)?,
-            before_activation_pause: shared_host
-                .revocation_probe
-                .before_activation_pause
-                .observation()
-                .map_err(|_| CallFailure::AnswerLost)?,
-            open_calls,
-            close_calls,
-            readmission_operation,
-            activation_step,
-            open_step,
-        })
-        .map_err(|_| CallFailure::AnswerLost)
+                .map_err(|_| CallFailure::AnswerLost)?;
+            let (open_calls, close_calls) = {
+                let state = shared_host
+                    .revocation_probe
+                    .state
+                    .lock()
+                    .map_err(|_| CallFailure::AnswerLost)?;
+                (
+                    state
+                        .open_calls
+                        .iter()
+                        .map(|call| call.identity.clone())
+                        .collect(),
+                    state
+                        .close_calls
+                        .iter()
+                        .map(|call| call.identity.clone())
+                        .collect(),
+                )
+            };
+            let observation = RevocationObservation {
+                gate_armed,
+                gate_reached,
+                calls,
+                enrollment,
+                operation,
+                activation_pause: shared_host
+                    .revocation_probe
+                    .activation_pause
+                    .observation()
+                    .map_err(|_| CallFailure::AnswerLost)?,
+                open_pause: shared_host
+                    .revocation_probe
+                    .open_pause
+                    .observation()
+                    .map_err(|_| CallFailure::AnswerLost)?,
+                before_activation_pause: shared_host
+                    .revocation_probe
+                    .before_activation_pause
+                    .observation()
+                    .map_err(|_| CallFailure::AnswerLost)?,
+                open_calls,
+                close_calls,
+                readmission_operation,
+                activation_step,
+                open_step,
+            };
+            if condition.is_none_or(|condition| condition.reached(&observation)) {
+                return serde_json::to_vec(&observation).map_err(|_| CallFailure::AnswerLost);
+            }
+            changed.ok_or(CallFailure::AnswerLost)?.changed().await?;
+        }
     }
 }
 

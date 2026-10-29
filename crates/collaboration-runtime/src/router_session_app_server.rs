@@ -558,5 +558,8 @@ mod test_support;
 #[path = "router_session_app_server_tests.rs"]
 mod tests;
 #[cfg(test)]
+#[path = "router_session_app_server_tui_output.rs"]
+mod tui_output;
+#[cfg(test)]
 #[path = "router_session_app_server_tui_tests.rs"]
 mod tui_tests;

@@ -128,7 +128,7 @@ async fn publish_recorded_status(
         .await
         .unwrap();
 }
-async fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
+fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
     // The mail owner already reads this clock when deciding whether frozen
     // custody has expired. Advance that boundary without waiting real time.
     runtime.fixture.host.clock.store(
@@ -169,7 +169,7 @@ async fn assert_late_creation_replay(remember_creation: bool) {
         Some(serde_json::from_value(json!({"kind":"snapshot","value":snapshot})).unwrap()),
     )
     .await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     let mail = mail_runtime(&source);
     let sender_service = service(1);
     // Act: the identical public operation is retried after its immutable deadline.
@@ -200,7 +200,7 @@ async fn wake_operations_remote_expired_new_request_has_no_custody() {
     let deadline = chrono::Utc::now() - chrono::Duration::seconds(1);
     let request = create_request(deadline);
     let id = ItemId::new(uuid::Uuid::parse_str(request.operation_id.as_str()).unwrap()).unwrap();
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     let mail = mail_runtime(&source);
     let sender_service = service(1);
     let error = WakeOperations::new(&sender_service, Some(&source.automation))
@@ -271,7 +271,7 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     let result = retain_result
         .then(|| serde_json::from_value(json!({"kind":"mutation","value":paused})).unwrap());
     publish_recorded_status(&source, &owner, frozen.clone(), result).await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     if let Some(age) = retention_age {
         collaboration_runtime::AutomationRetentionWorker::new(source.automation.clone())
             .prune_batch((deadline + age).timestamp_millis())

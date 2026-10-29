@@ -47,7 +47,8 @@ struct NativeQueueObservation {
 
 #[tokio::test(start_paused = true)]
 async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
-    let explicit_time = ExplicitTimeGuard::new(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8));
+    let explicit_time =
+        ExplicitTimeGuard::new(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8));
     let clock = Arc::new(ControlledWakeClock::new());
     let root = tempfile::tempdir_in("/tmp").expect("fixture temp directory");
     let database = root.path().join("automation.sqlite");
@@ -129,8 +130,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         codex_home: root.path().to_owned(),
     };
 
-    let anchor =
-        clock.now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
+    let anchor = clock.now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
     let expiry = anchor
         .checked_add_signed(chrono::Duration::seconds(
             i64::from(REPEAT_INTERVAL_SECONDS) * 2 + 3,
@@ -214,10 +214,28 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .expect("first native queue delivery arrives");
     await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes).await;
     passes.borrow_and_update();
-    clock.advance(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) - 1)).await;
-    passes.changed().await.expect("owner evaluates the instant before the next firing");
-    assert!(observation_receiver.try_recv().is_err(), "wake repeated before its five-minute gap");
-    assert!(store.lock().await.read_wakeup::<SavedMessage>(&wake.definition.wakeup_id).await.unwrap().pending_delivery_id.is_none(), "an early second occurrence was allocated");
+    clock
+        .advance(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) - 1))
+        .await;
+    passes
+        .changed()
+        .await
+        .expect("owner evaluates the instant before the next firing");
+    assert!(
+        observation_receiver.try_recv().is_err(),
+        "wake repeated before its five-minute gap"
+    );
+    assert!(
+        store
+            .lock()
+            .await
+            .read_wakeup::<SavedMessage>(&wake.definition.wakeup_id)
+            .await
+            .unwrap()
+            .pending_delivery_id
+            .is_none(),
+        "an early second occurrence was allocated"
+    );
     clock.advance(Duration::from_secs(1)).await;
     let second_delivery = next_native_queue_delivery(&mut observation_receiver, &mut passes)
         .await
@@ -345,15 +363,25 @@ async fn await_wake_completion(
     wakeup: &WakeupId,
     passes: &mut tokio::sync::watch::Receiver<usize>,
 ) {
-    tokio::time::timeout(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8), async {
-        loop {
-            let record = store.lock().await.read_wakeup::<SavedMessage>(wakeup).await.unwrap();
-            if record.pending_delivery_id.is_none() && *passes.borrow() == 0 {
-                return;
+    tokio::time::timeout(
+        Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
+        async {
+            loop {
+                let record = store
+                    .lock()
+                    .await
+                    .read_wakeup::<SavedMessage>(wakeup)
+                    .await
+                    .unwrap();
+                if record.pending_delivery_id.is_none() && *passes.borrow() == 0 {
+                    return;
+                }
+                progress_worker(passes).await;
             }
-            progress_worker(passes).await;
-        }
-    }).await.expect("delivery completion commits before advancing the repeat gap");
+        },
+    )
+    .await
+    .expect("delivery completion commits before advancing the repeat gap");
 }
 
 async fn load_and_validate_stored_wake_push(

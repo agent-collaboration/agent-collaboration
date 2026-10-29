@@ -1,5 +1,7 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
+/// Local edge-clock control shares the production guard's runtime-control marker.
+pub const LOCAL_ACCESS_CLOCK_PATH: &str = "/admin/v1/conformance/runtime/access-clock";
 #[cfg(feature = "client")]
 mod access_expiry_scenario;
 #[cfg(feature = "client")]

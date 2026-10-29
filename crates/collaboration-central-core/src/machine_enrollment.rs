@@ -133,6 +133,8 @@ where
         };
         let now = DateTime::from_timestamp_millis(shared_host.now().unix_millis())
             .ok_or_else(|| corrupt("clock"))?;
+        #[cfg(feature = "conformance")]
+        let _progress = shared_host.revocation_probe.notify_when_finished();
         let (admission, _) = StepDriver::new(host.clone())
             .run(EnrollStep {
                 request,

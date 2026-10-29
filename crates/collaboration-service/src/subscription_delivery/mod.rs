@@ -16,7 +16,9 @@ pub use subscription_windows::{
 };
 
 pub use board_availability::BoardAvailability;
-pub use subscription_clock::{SubscriptionClock, SystemSubscriptionClock, SubscriptionRuntimeClock};
+pub use subscription_clock::{
+    SubscriptionClock, SubscriptionRuntimeClock, SystemSubscriptionClock,
+};
 pub use subscription_service::{SubscriptionDeliveryService, SubscriptionDeliveryServiceProps};
 pub use subscription_wait::{SubscriptionWaitFilter, SubscriptionWaitResult};
 

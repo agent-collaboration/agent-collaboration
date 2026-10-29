@@ -7,6 +7,7 @@ pub use live_session_ownership_check::{LiveSessionOwnership, LiveSessionOwnershi
 mod app_server_shutdown;
 mod auth_file_reload;
 mod login_reload_outcome;
+mod native_file_events;
 pub use login_reload_outcome::LoginReloadOutcome;
 mod child_diagnostics;
 mod claude_code_peer_delivery_route;

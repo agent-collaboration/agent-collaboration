@@ -406,7 +406,9 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 interactions.clone(),
-                std::sync::Arc::new(collaboration_service::SubscriptionRuntimeClock::new(subscription_clock.clone())),
+                std::sync::Arc::new(collaboration_service::SubscriptionRuntimeClock::new(
+                    subscription_clock.clone(),
+                )),
             )
         });
         let push_handoff_worker = automation_store.as_ref().map(|store| {
@@ -719,6 +721,10 @@ impl CollaborationRuntime {
         let automation_task = wake_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let schedule_task =
             schedule_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
+        #[cfg(feature = "runtime-test-support")]
+        let automation_maintenance_pass = retention_worker
+            .as_ref()
+            .map(|worker| worker.observe_passes());
         let automation_maintenance =
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let collaboration_api =
@@ -809,6 +815,8 @@ impl CollaborationRuntime {
             automation_task,
             schedule_task,
             automation_maintenance,
+            #[cfg(feature = "runtime-test-support")]
+            automation_maintenance_pass,
             current_generation: None,
             observer_task: None,
             collaboration_api,

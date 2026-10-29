@@ -17,40 +17,46 @@ enum FileEvent {
     Failed,
 }
 
-pub(super) struct AuthFileEvents {
-    auth_path: PathBuf,
+pub(crate) struct NativeFileEvents {
+    path: PathBuf,
     events: watch::Receiver<FileEvent>,
     stop: UnixStream,
     worker: Option<std::thread::JoinHandle<()>>,
 }
 
-impl AuthFileEvents {
-    pub(super) fn open(home: &Path) -> io::Result<Self> {
-        let home = home.canonicalize()?;
-        let auth_path = home.join("auth.json");
+impl NativeFileEvents {
+    pub(crate) fn open(path: &Path) -> io::Result<Self> {
+        let directory = path
+            .parent()
+            .ok_or_else(|| io::Error::other("watched file has no parent"))?
+            .canonicalize()?;
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| io::Error::other("watched path has no file name"))?;
+        let path = directory.join(file_name);
         let (stop, cancellation) = UnixStream::pair()?;
-        let native = NativeFileWatch::open(&home, cancellation)?;
+        let native = NativeFileWatch::open(&path, cancellation)?;
         let (sender, events) = watch::channel(FileEvent::Changed);
         let worker = std::thread::Builder::new()
-            .name("codex-auth-file-watch".into())
+            .name("host-file-watch".into())
             .spawn(move || {
                 if native.observe_changes(&sender).is_err() {
                     sender.send_replace(FileEvent::Failed);
                 }
             })?;
         Ok(Self {
-            auth_path,
+            path,
             events,
             stop,
             worker: Some(worker),
         })
     }
 
-    pub(super) fn auth_path(&self) -> &Path {
-        &self.auth_path
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 
-    pub(super) async fn wait_for_change(&mut self) -> io::Result<()> {
+    pub(crate) async fn wait_for_change(&mut self) -> io::Result<()> {
         self.events
             .changed()
             .await
@@ -62,7 +68,7 @@ impl AuthFileEvents {
     }
 }
 
-impl Drop for AuthFileEvents {
+impl Drop for NativeFileEvents {
     fn drop(&mut self) {
         // EOF remains observable even if the thread has not entered its wait yet.
         let _woken = self.stop.shutdown(Shutdown::Both);
@@ -76,19 +82,22 @@ impl Drop for AuthFileEvents {
 struct NativeFileWatch {
     kernel: nix::sys::event::Kqueue,
     _directory: std::fs::File,
-    auth_file: Option<std::fs::File>,
-    auth_path: PathBuf,
+    watched_file: Option<std::fs::File>,
+    watched_path: PathBuf,
     cancellation: UnixStream,
 }
 
 #[cfg(target_os = "macos")]
 impl NativeFileWatch {
-    fn open(home: &Path, cancellation: UnixStream) -> io::Result<Self> {
+    fn open(path: &Path, cancellation: UnixStream) -> io::Result<Self> {
         use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent};
         use std::os::fd::AsRawFd;
         let kernel = nix::sys::event::Kqueue::new()?;
         rustix::io::fcntl_setfd(&kernel, rustix::io::FdFlags::CLOEXEC)?;
-        let directory = std::fs::File::open(home)?;
+        let directory = std::fs::File::open(
+            path.parent()
+                .ok_or_else(|| io::Error::other("watched file has no parent"))?,
+        )?;
         watch_vnode(&kernel, &directory)?;
         let cancel_event = KEvent::new(
             usize::try_from(cancellation.as_raw_fd()).map_err(io::Error::other)?,
@@ -109,20 +118,20 @@ impl NativeFileWatch {
         let mut watch = Self {
             kernel,
             _directory: directory,
-            auth_file: None,
-            auth_path: home.join("auth.json"),
+            watched_file: None,
+            watched_path: path.to_owned(),
             cancellation,
         };
-        watch.rearm_auth_inode()?;
+        watch.rearm_watched_inode()?;
         Ok(watch)
     }
 
-    fn rearm_auth_inode(&mut self) -> io::Result<()> {
+    fn rearm_watched_inode(&mut self) -> io::Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         let file = match std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(nix::libc::O_NONBLOCK)
-            .open(&self.auth_path)
+            .open(&self.watched_path)
         {
             Ok(file) => Some(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -133,7 +142,7 @@ impl NativeFileWatch {
         }
         // Install the new descriptor before closing the old one; a rename never
         // removes the permanent directory watch or reuses the old descriptor.
-        self.auth_file = file;
+        self.watched_file = file;
         Ok(())
     }
 
@@ -168,7 +177,7 @@ impl NativeFileWatch {
             }
             // Directory events cover replacement; the current inode covers
             // subsequent in-place writes, which a directory vnode cannot see.
-            self.rearm_auth_inode()?;
+            self.rearm_watched_inode()?;
             events.send_replace(FileEvent::Changed);
         }
     }
@@ -206,17 +215,19 @@ fn watch_vnode(queue: &nix::sys::event::Kqueue, file: &std::fs::File) -> io::Res
 #[cfg(target_os = "linux")]
 struct NativeFileWatch {
     descriptor: std::os::fd::OwnedFd,
+    file_name: std::ffi::OsString,
     cancellation: UnixStream,
 }
 
 #[cfg(target_os = "linux")]
 impl NativeFileWatch {
-    fn open(home: &Path, cancellation: UnixStream) -> io::Result<Self> {
+    fn open(path: &Path, cancellation: UnixStream) -> io::Result<Self> {
         use rustix::fs::inotify::{self, CreateFlags, WatchFlags};
         let descriptor = inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK)?;
         inotify::add_watch(
             &descriptor,
-            home,
+            path.parent()
+                .ok_or_else(|| io::Error::other("watched file has no parent"))?,
             WatchFlags::MODIFY
                 | WatchFlags::CLOSE_WRITE
                 | WatchFlags::ATTRIB
@@ -229,6 +240,10 @@ impl NativeFileWatch {
         )?;
         Ok(Self {
             descriptor,
+            file_name: path
+                .file_name()
+                .ok_or_else(|| io::Error::other("watched path has no file name"))?
+                .to_owned(),
             cancellation,
         })
     }
@@ -250,15 +265,16 @@ impl NativeFileWatch {
                 return Ok(());
             }
             if ready.next().is_some_and(|fd| !fd.revents().is_empty())
-                && self.auth_file_changed()?
+                && self.watched_file_changed()?
             {
                 events.send_replace(FileEvent::Changed);
             }
         }
     }
 
-    fn auth_file_changed(&self) -> io::Result<bool> {
+    fn watched_file_changed(&self) -> io::Result<bool> {
         use rustix::fs::inotify::{ReadFlags, Reader};
+        use std::os::unix::ffi::OsStrExt;
         let mut storage = [std::mem::MaybeUninit::uninit(); 4096];
         let mut reader = Reader::new(&self.descriptor, &mut storage);
         let mut changed = false;
@@ -266,12 +282,12 @@ impl NativeFileWatch {
             match reader.next() {
                 Ok(event) => {
                     if event.events().contains(ReadFlags::IGNORED) {
-                        return Err(io::Error::other("auth directory watch removed"));
+                        return Err(io::Error::other("parent directory watch removed"));
                     }
                     if event.events().contains(ReadFlags::QUEUE_OVERFLOW)
                         || event
                             .file_name()
-                            .is_none_or(|name| name.to_bytes() == b"auth.json")
+                            .is_none_or(|name| name.to_bytes() == self.file_name.as_bytes())
                     {
                         changed = true;
                     }

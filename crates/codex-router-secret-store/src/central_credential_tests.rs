@@ -3,8 +3,8 @@ use std::{
     error::Error,
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::{Child, Command, Stdio},
-    time::{Duration, Instant},
+    process::{Command, Stdio},
+    time::Duration,
 };
 type TestResult = Result<(), Box<dyn Error>>;
 fn owner() -> CentralCredential {
@@ -81,38 +81,36 @@ fn shared_symlinked_hardlinked_oversized_and_malformed_handoffs_fail_closed() ->
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assert the contract; propagate fixture errors."
 )]
-fn fifo_handoff_is_refused_without_waiting_for_a_writer() -> TestResult {
+async fn fifo_handoff_is_refused_without_waiting_for_a_writer() -> TestResult {
     let directory = tempfile::tempdir()?;
     let fifo = directory.path().join("credential.fifo");
     create_fifo(&fifo)?;
-    require_prompt_refusal(&fifo)?;
+    require_prompt_refusal(&fifo).await?;
     assert!(fifo.exists());
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assert the contract; propagate fixture errors."
 )]
-fn symlink_to_fifo_is_refused_without_waiting_for_a_writer() -> TestResult {
+async fn symlink_to_fifo_is_refused_without_waiting_for_a_writer() -> TestResult {
     let directory = tempfile::tempdir()?;
     let fifo = directory.path().join("credential.fifo");
     create_fifo(&fifo)?;
     let link = directory.path().join("credential.json");
     std::os::unix::fs::symlink(&fifo, &link)?;
-    require_prompt_refusal(&link)?;
+    require_prompt_refusal(&link).await?;
     assert!(std::fs::symlink_metadata(&link)?.file_type().is_symlink());
     assert!(fifo.exists());
     Ok(())
 }
-
-struct HandoffChild(Child);
 
 fn create_fifo(path: &Path) -> TestResult {
     if !Command::new("mkfifo").arg(path).status()?.success() {
@@ -122,41 +120,33 @@ fn create_fifo(path: &Path) -> TestResult {
     Ok(())
 }
 
-impl Drop for HandoffChild {
-    fn drop(&mut self) {
-        let _killed = self.0.kill();
-        let _reaped = self.0.wait();
-    }
-}
-
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assert the contract; propagate fixture errors."
 )]
-fn require_prompt_refusal(path: &Path) -> TestResult {
-    let mut child = HandoffChild(
-        Command::new(std::env::current_exe()?)
-            .args([
-                "--ignored",
-                "--exact",
-                "central_credential_tests::nonregular_handoff_child",
-            ])
-            .env("CODEX_ROUTER_CREDENTIAL_HANDOFF_TEST_PATH", path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
-            .spawn()?,
-    );
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(status) = child.0.try_wait()? {
+async fn require_prompt_refusal(path: &Path) -> TestResult {
+    let mut child = tokio::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--ignored",
+            "--exact",
+            "central_credential_tests::nonregular_handoff_child",
+        ])
+        .env("CODEX_ROUTER_CREDENTIAL_HANDOFF_TEST_PATH", path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .spawn()?;
+    match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+        Ok(status) => {
+            let status = status?;
             assert!(status.success(), "nonregular handoff was accepted");
-            return Ok(());
+            Ok(())
         }
-        if Instant::now() >= deadline {
-            return Err("credential reader blocked on a nonregular handoff".into());
+        Err(_) => {
+            child.kill().await?;
+            Err("credential reader blocked on a nonregular handoff".into())
         }
-        std::thread::sleep(Duration::from_millis(10));
     }
 }
 

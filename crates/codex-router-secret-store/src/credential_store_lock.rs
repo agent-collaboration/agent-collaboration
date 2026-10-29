@@ -45,9 +45,21 @@ impl CredentialStoreLock {
                 path: path.clone(),
                 source,
             })?;
-        match mode {
-            CredentialStoreLockMode::Shared => FileExt::lock_shared(&file),
-            CredentialStoreLockMode::Exclusive => FileExt::lock_exclusive(&file),
+        let attempted = match mode {
+            CredentialStoreLockMode::Shared => FileExt::try_lock_shared(&file),
+            CredentialStoreLockMode::Exclusive => FileExt::try_lock_exclusive(&file),
+        };
+        match attempted {
+            Ok(()) => Ok(()),
+            Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
+                #[cfg(test)]
+                crate::lock_contention_observation::report_contention();
+                match mode {
+                    CredentialStoreLockMode::Shared => FileExt::lock_shared(&file),
+                    CredentialStoreLockMode::Exclusive => FileExt::lock_exclusive(&file),
+                }
+            }
+            Err(error) => Err(error),
         }
         .map_err(|source| SecretStoreError::CredentialStoreLock { path, source })?;
         Ok(Self { file })

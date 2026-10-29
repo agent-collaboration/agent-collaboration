@@ -117,7 +117,7 @@ impl OwnerFixture {
                 project,
                 root: ThreadId::generate(),
                 clock,
-                presence: Arc::new(ScriptedPresence(StdMutex::new(TargetPresence::Running))),
+                presence: Arc::new(ScriptedPresence::new(TargetPresence::Running)),
             };
             fixture
                 .create_root(&fixture.root, human("board-owner"))

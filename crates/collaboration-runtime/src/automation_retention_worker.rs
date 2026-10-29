@@ -8,6 +8,8 @@ pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
+    #[cfg(feature = "runtime-test-support")]
+    passes: tokio::sync::watch::Sender<()>,
 }
 impl AutomationRetentionWorker {
     pub fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
@@ -15,7 +17,14 @@ impl AutomationRetentionWorker {
             store,
             interaction_broker: None,
             native_push_store: None,
+            #[cfg(feature = "runtime-test-support")]
+            passes: tokio::sync::watch::channel(()).0,
         }
+    }
+
+    #[cfg(feature = "runtime-test-support")]
+    pub fn observe_passes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.passes.subscribe()
     }
 
     pub fn with_native_push_store(
@@ -98,6 +107,8 @@ impl AutomationRetentionWorker {
                     }
                 }
             }
+            #[cfg(feature = "runtime-test-support")]
+            self.passes.send_replace(());
         }
     }
 }

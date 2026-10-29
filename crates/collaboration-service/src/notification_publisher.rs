@@ -66,6 +66,8 @@ struct PublisherInner {
     mail: Weak<MailDeliveryRuntime>,
     progress: Arc<InteractionStore>,
     projects: Mutex<HashMap<(ProjectId, ProjectWorkStream), ProjectWork>>,
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    work_changed: tokio::sync::watch::Sender<()>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
 }
@@ -132,6 +134,8 @@ impl NotificationPublisher {
                 mail,
                 progress,
                 projects: Mutex::new(HashMap::new()),
+                #[cfg(any(test, feature = "runtime-test-support"))]
+                work_changed: tokio::sync::watch::channel(()).0,
                 shutdown: CancellationToken::new(),
                 tasks: TaskTracker::new(),
             }),
@@ -163,7 +167,10 @@ impl NotificationPublisher {
                     }
                 }
                 let mut work = inner.projects.lock().await;
-                if matches!(work.remove(&key), Some(ProjectWork::RescanRequested))
+                let completed = work.remove(&key);
+                #[cfg(any(test, feature = "runtime-test-support"))]
+                inner.work_changed.send_replace(());
+                if matches!(completed, Some(ProjectWork::RescanRequested))
                     && !inner.shutdown.is_cancelled() {
                     work.insert(key.clone(), ProjectWork::Running);
                     continue;
@@ -236,7 +243,9 @@ impl NotificationPublisher {
     #[cfg(any(test, feature = "runtime-test-support"))]
     #[doc(hidden)]
     pub async fn wait_project_idle_for_test(&self, project: &ProjectId) {
+        let mut changed = self.inner.work_changed.subscribe();
         loop {
+            changed.borrow_and_update();
             if !self
                 .inner
                 .projects
@@ -247,7 +256,8 @@ impl NotificationPublisher {
             {
                 return;
             }
-            tokio::task::yield_now().await;
+            // This owner retains the sender for the entire wait.
+            let _ = changed.changed().await;
         }
     }
 
@@ -290,7 +300,10 @@ impl PublisherInner {
                     tracing::warn!(%error, project = project.as_str(), "acknowledged handoff retirement delayed");
                 }
                 let mut work = inner.projects.lock().await;
-                if matches!(work.remove(&key), Some(ProjectWork::RescanRequested))
+                let completed = work.remove(&key);
+                #[cfg(any(test, feature = "runtime-test-support"))]
+                inner.work_changed.send_replace(());
+                if matches!(completed, Some(ProjectWork::RescanRequested))
                     && !inner.shutdown.is_cancelled()
                 {
                     work.insert(key.clone(), ProjectWork::Running);

@@ -17,6 +17,8 @@ const INTERACTION_FIXTURE: &str = concat!(
 
 struct HeldInteractionPort {
     started: Arc<tokio::sync::Notify>,
+    cancelled: Arc<tokio::sync::Notify>,
+    released: Arc<tokio::sync::Notify>,
 }
 
 impl InteractionPort for HeldInteractionPort {
@@ -38,10 +40,13 @@ impl InteractionPort for HeldInteractionPort {
         _agent_cancellation: CancellationToken,
     ) -> InteractionFuture<'_, ApprovalPortOutcome> {
         let started = Arc::clone(&self.started);
+        let cancelled = Arc::clone(&self.cancelled);
+        let released = Arc::clone(&self.released);
         Box::pin(async move {
             started.notify_one();
             turn_cancellation.cancelled().await;
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            cancelled.notify_one();
+            released.notified().await;
             ApprovalPortOutcome::Cancelled
         })
     }
@@ -54,10 +59,13 @@ impl InteractionPort for HeldInteractionPort {
         _agent_cancellation: CancellationToken,
     ) -> InteractionFuture<'_, QuestionResponse> {
         let started = Arc::clone(&self.started);
+        let cancelled = Arc::clone(&self.cancelled);
+        let released = Arc::clone(&self.released);
         Box::pin(async move {
             started.notify_one();
             turn_cancellation.cancelled().await;
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            cancelled.notify_one();
+            released.notified().await;
             QuestionResponse::Cancelled
         })
     }
@@ -100,6 +108,8 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire-order.json");
     let started = Arc::new(tokio::sync::Notify::new());
+    let cancelled = Arc::new(tokio::sync::Notify::new());
+    let released = Arc::new(tokio::sync::Notify::new());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
             executable: PathBuf::from("node"),
@@ -113,6 +123,8 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
         },
         Arc::new(HeldInteractionPort {
             started: Arc::clone(&started),
+            cancelled: Arc::clone(&cancelled),
+            released: Arc::clone(&released),
         }),
         Arc::new(NoopEventSink),
     )
@@ -139,13 +151,36 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
     tokio::time::timeout(Duration::from_secs(2), started.notified())
         .await
         .expect("interaction reached port");
-    tokio::time::timeout(
-        Duration::from_secs(2),
-        client.cancel_active_prompt(session_id),
-    )
+    let cancel = client.cancel_active_prompt(session_id.clone());
+    tokio::pin!(cancel);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::select! {
+            () = cancelled.notified() => {},
+            result = &mut cancel => {
+                released.notify_one();
+                client.shutdown().await;
+                panic!("cancel finished before the held interaction reply: {result:?}");
+            },
+        }
+    })
     .await
-    .expect("cancel deadline")
-    .expect("cancel notification");
+    .expect("interaction observes its Turn cancellation");
+    // Inspect is a real actor command, queued after any prematurely admitted Cancel.
+    // Its answer fences command processing while the interaction reply stays held.
+    tokio::time::timeout(Duration::from_secs(2), client.session_activity(session_id))
+        .await
+        .expect("session actor answers the command-processing fence")
+        .expect("session remains inspectable while its interaction is held");
+    let cancel_pending = futures_util::poll!(&mut cancel).is_pending();
+    released.notify_one();
+    if !cancel_pending {
+        client.shutdown().await;
+        panic!("session cancellation bypassed the held interaction reply");
+    }
+    tokio::time::timeout(Duration::from_secs(2), &mut cancel)
+        .await
+        .expect("cancel deadline")
+        .expect("cancel notification");
     tokio::time::timeout(Duration::from_secs(2), &mut prompt)
         .await
         .expect("prompt settlement deadline")

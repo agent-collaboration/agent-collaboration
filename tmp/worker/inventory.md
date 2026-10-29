@@ -64,18 +64,18 @@ Reviewed conversion entries (the broad scan below remains a coverage checklist):
 | crates/agent-collaboration/tests/acp_bridge_command.rs:85 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/agent-collaboration/tests/admission_overload_cli.rs:114 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/agent-collaboration/tests/admission_overload_cli.rs:126 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/automatic_summary_timeout.rs:53 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/busy_thread_delivery.rs:29,90 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:23,55 | C: retain bound around causal wait; inspect negative timeout assertions for B |
-| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:74 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:140,259 | C: retain bound around causal wait; inspect negative timeout assertions for B |
-| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:142 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/native_fork_continuation.rs:32 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:85 | C: retain bound around causal wait; inspect negative timeout assertions for B |
-| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:384,410 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/scheduled_continuity.rs:164 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/summary_failure_recovery.rs:58 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/agent-collaboration/tests/automation_live_support/worker_timeout_proof.rs:28,69 | A or B: inspect owner; replace polling with signal or drive injected time |
+| crates/agent-collaboration/tests/automation_live_support/automatic_summary_timeout.rs:53 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/busy_thread_delivery.rs:29,90 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:23,55 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:74 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:140,259 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:142 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/native_fork_continuation.rs:32 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:85 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:384,410 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/scheduled_continuity.rs:164 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/summary_failure_recovery.rs:58 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/worker_timeout_proof.rs:28,69 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
 | crates/agent-collaboration/tests/board_e2e/central_archive.rs:46,102 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/agent-collaboration/tests/board_e2e/central_joint.rs:71 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/agent-collaboration/tests/board_e2e/central_pair.rs:70,209,240,253 | C: retain bound around causal wait; inspect negative timeout assertions for B |
@@ -609,12 +609,12 @@ Reviewed conversion entries (the broad scan below remains a coverage checklist):
 | crates/message-board-storage/src/project_crash_tests.rs:47 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/message-board-storage/src/project_import_batch.rs:48 | B or diagnostic: inspect elapsed assertion; replace timing oracle with causal state |
 | crates/message-board-storage/src/project_store_tests.rs:423 | C: retain bound around causal wait; inspect negative timeout assertions for B |
-| crates/tailnet-verification-host/src/bounded_command.rs:49 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/tailnet-verification-host/src/host_lifecycle.rs:121,183,199,226 | A or B: inspect owner; replace polling with signal or drive injected time |
-| crates/tailnet-verification-host/src/host_lifecycle_interrupt_tests.rs:38,177 | A or B: inspect owner; replace polling with signal or drive injected time |
+| crates/tailnet-verification-host/src/bounded_command.rs:49 | Graded Host wait: external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29. Own-command callers convert to one joined blocking waitid observer (Lead 01a188fb). |
+| crates/tailnet-verification-host/src/host_lifecycle.rs:121,183,199,226 | external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29 |
+| crates/tailnet-verification-host/src/host_lifecycle_interrupt_tests.rs:38,177 | A — Converted to the fixture owner stdout-ready record (retained drain task), then existing signal-hook blocking notification after the production flag handler. Original profile-byte, process identity, settlement and reap assertions retained; validation pending. |
 | crates/tailnet-verification-host/src/host_lifecycle_interrupt_tests.rs:71 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/tailnet-verification-host/src/mcp_observation.rs:96 | C: retain bound around causal wait; inspect negative timeout assertions for B |
-| crates/tailnet-verification-host/src/owned_host.rs:196 | A or B: inspect owner; replace polling with signal or drive injected time |
+| crates/tailnet-verification-host/src/owned_host.rs:196 | external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29 |
 | crates/tailnet-verification-host/tests/mcp_transport.rs:111,174 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/tailnet-verification-host/tests/owned_cleanup.rs:40,207 | C: retain bound around causal wait; inspect negative timeout assertions for B |
 | crates/workspace-architecture-check/src/workspace_scan.rs:94,157 | B or diagnostic: inspect elapsed assertion; replace timing oracle with causal state |
@@ -627,15 +627,15 @@ These are context candidates, not automatically violations: inspect the consumer
 | --- | --- |
 | crates/agent-collaboration/src/event_commands.rs:207 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/agent-collaboration/src/session_contract_tests/catalog_filter_tests.rs:148 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/automatic_summary_timeout.rs:52,92,149 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/busy_thread_delivery.rs:89,206 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:73,109 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:141,166,200,214,281 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/native_fork_continuation.rs:31,42,92 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:383,391,409,454 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/scheduled_continuity.rs:81,163,249 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/summary_failure_recovery.rs:57,116,160,182 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/agent-collaboration/tests/automation_live_support/worker_timeout_proof.rs:68,146 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
+| crates/agent-collaboration/tests/automation_live_support/automatic_summary_timeout.rs:52,92,149 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/busy_thread_delivery.rs:89,206 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/debug_backend_restart.rs:73,109 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/durable_delivery_recovery.rs:141,166,200,214,281 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/native_fork_continuation.rs:31,42,92 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/proof_context.rs:383,391,409,454 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/scheduled_continuity.rs:81,163,249 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/summary_failure_recovery.rs:57,116,160,182 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
+| crates/agent-collaboration/tests/automation_live_support/worker_timeout_proof.rs:68,146 | live real-time journey, causal oracle — exempt by Lead decision 2026-10-29 |
 | crates/agent-collaboration/tests/board_e2e/complete_pages.rs:38 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/agent-collaboration/tests/board_e2e/fixture.rs:75 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/agent-collaboration/tests/board_e2e/installation_directory_pair.rs:93,111 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
@@ -869,8 +869,8 @@ These are context candidates, not automatically violations: inspect the consumer
 | crates/message-board-storage/src/project_import_batch.rs:32 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/message-board-storage/src/project_request_tests.rs:197 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/tailnet-verification-host/src/bounded_command.rs:41,46 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/tailnet-verification-host/src/host_lifecycle.rs:103,116,132,134,136 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
+| crates/tailnet-verification-host/src/host_lifecycle.rs:103,116,132,134,136 | external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29 |
 | crates/tailnet-verification-host/src/host_lifecycle_interrupt_tests.rs:28,35 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
 | crates/tailnet-verification-host/src/host_plan.rs:87 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
-| crates/tailnet-verification-host/src/owned_host.rs:184,185 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |
+| crates/tailnet-verification-host/src/owned_host.rs:184,185 | external-process state observation; state is the oracle, deadline bounds only — accepted by Lead 2026-10-29 |
 | crates/workspace-architecture-check/src/workspace_scan.rs:50,137 | context: timestamp or deadline origin; inspect consumer for elapsed-time dependence |

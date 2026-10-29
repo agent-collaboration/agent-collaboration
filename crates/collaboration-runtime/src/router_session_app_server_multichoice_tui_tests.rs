@@ -1,16 +1,13 @@
 use super::test_support::ScriptedSessionBackend;
+use super::tui_output::TuiOutput;
 use super::*;
 use crate::{NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker};
 use session_event_model::{PendingInteraction, QuestionRequest, SessionEvent};
-use std::{
-    os::unix::fs::PermissionsExt,
-    process::Stdio,
-    sync::{Arc, Mutex},
-};
+use std::{os::unix::fs::PermissionsExt, process::Stdio, sync::Arc};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::AsyncWriteExt,
     process::Command,
-    time::{Duration, Instant, sleep, timeout},
+    time::{Duration, timeout},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -86,6 +83,7 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
         .arg("stty cols 100 rows 30; exec \"$@\"")
         .arg("sh")
         .arg("codex")
+        .arg("hello")
         .arg("--remote")
         .arg(format!("unix://{}", socket_path.display()))
         .arg("--no-alt-screen")
@@ -96,43 +94,11 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .kill_on_drop(true)
         .spawn()?;
-    let output = Arc::new(Mutex::new(Vec::<u8>::new()));
-    let mut tui_stdout = tui.stdout.take().ok_or("TUI stdout")?;
-    let captured_output = Arc::clone(&output);
-    let output_reader = tokio::spawn(async move {
-        let mut chunk = [0_u8; 4096];
-        loop {
-            let read = tui_stdout.read(&mut chunk).await?;
-            if read == 0 {
-                break;
-            }
-            captured_output
-                .lock()
-                .expect("output lock")
-                .extend_from_slice(&chunk[..read]);
-        }
-        Ok::<(), std::io::Error>(())
-    });
+    let mut output = TuiOutput::capture(tui.stdout.take().ok_or("TUI stdout")?);
     timeout(Duration::from_secs(20), backend.created.notified()).await?;
-    sleep(Duration::from_secs(1)).await;
-    if let Some(stdin) = tui.stdin.as_mut() {
-        stdin.write_all(b"hello").await?;
-    }
-    sleep(Duration::from_millis(300)).await;
-    if let Some(stdin) = tui.stdin.as_mut() {
-        stdin.write_all(b"\r").await?;
-    }
-    let prompt_deadline = Instant::now() + Duration::from_secs(10);
-    while backend
-        .prompt_commands
-        .lock()
-        .expect("test lock")
-        .is_empty()
-        && Instant::now() < prompt_deadline
-    {
-        sleep(Duration::from_millis(50)).await;
-    }
+    timeout(Duration::from_secs(10), backend.prompt_submitted.notified()).await?;
     assert!(
         !backend
             .prompt_commands
@@ -141,7 +107,6 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
             .is_empty(),
         "pinned TUI did not start a provider Turn"
     );
-    sleep(Duration::from_millis(300)).await;
     let question: QuestionRequest = serde_json::from_value(json!({
         "requestId":"multichoice-tui","prompt":"Pick project checks","fields":[
             {"kind":"multiChoice","fieldId":"checks","label":"Checks","description":null,
@@ -173,16 +138,10 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
         },
     });
     assert!(sent.is_ok(), "multi-choice event had no TUI receiver");
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let mut rendered = false;
-    while Instant::now() < deadline {
-        if String::from_utf8_lossy(&output.lock().expect("output lock")).contains("unsupportedHere")
-        {
-            rendered = true;
-            break;
-        }
-        sleep(Duration::from_millis(50)).await;
-    }
+    let rendered = output
+        .wait_for_text("unsupportedHere", Duration::from_secs(10))
+        .await
+        .is_ok();
     if let Some(mut stdin) = tui.stdin.take() {
         let _ = stdin.write_all(b"\x03\x03").await;
     }
@@ -191,8 +150,7 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
     }
     shutdown.cancel();
     running.await??;
-    output_reader.await??;
-    let terminal = String::from_utf8(output.lock().expect("output lock").clone())?;
+    let terminal = output.finish().await?;
     let tail = terminal
         .chars()
         .rev()

@@ -492,11 +492,47 @@ impl OwnerRuntime {
     }
 }
 
-pub struct ScriptedPresence(pub StdMutex<TargetPresence>);
+struct PresenceProbeHold {
+    entered: oneshot::Sender<()>,
+    release: oneshot::Receiver<()>,
+}
+
+pub struct ScriptedPresence(
+    pub StdMutex<TargetPresence>,
+    StdMutex<Option<PresenceProbeHold>>,
+);
+impl ScriptedPresence {
+    pub fn new(presence: TargetPresence) -> Self {
+        Self(StdMutex::new(presence), StdMutex::new(None))
+    }
+
+    pub fn hold_next_check(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (entered, observed) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        assert!(
+            self.1
+                .lock()
+                .unwrap()
+                .replace(PresenceProbeHold {
+                    entered,
+                    release: released,
+                })
+                .is_none(),
+            "a presence check is already held"
+        );
+        (observed, release)
+    }
+}
 impl TargetPresenceProbe for ScriptedPresence {
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
-        let presence = self.0.lock().unwrap().clone();
-        Box::pin(async move { Ok(presence) })
+        let held = self.1.lock().unwrap().take();
+        Box::pin(async move {
+            if let Some(held) = held {
+                held.entered.send(()).unwrap();
+                held.release.await.unwrap();
+            }
+            Ok(self.0.lock().unwrap().clone())
+        })
     }
 }
 
