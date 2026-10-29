@@ -42,6 +42,8 @@ pub(crate) struct CredentialUpkeepWorker {
     stop_requested: CancellationToken,
     shutdown_deadline: Arc<OnceLock<Instant>>,
     thread: Option<JoinHandle<()>>,
+    #[cfg(test)]
+    shutdown_wait_observer: Option<mpsc::Sender<()>>,
 }
 
 impl Drop for CredentialUpkeepWorker {
@@ -50,12 +52,20 @@ impl Drop for CredentialUpkeepWorker {
         let _ = self.shutdown_deadline.set(deadline);
         self.stop_requested.cancel();
         let _ = self.control_sender.send(WorkerControl::Stop);
-        if self
-            .stopped_receiver
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .is_ok()
-            && let Some(thread) = self.thread.take()
-        {
+        let stopped = match self.stopped_receiver.try_recv() {
+            Ok(()) => true,
+            Err(mpsc::TryRecvError::Empty) => {
+                #[cfg(test)]
+                if let Some(observer) = self.shutdown_wait_observer.take() {
+                    let _observed = observer.send(());
+                }
+                self.stopped_receiver
+                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                    .is_ok()
+            }
+            Err(mpsc::TryRecvError::Disconnected) => false,
+        };
+        if stopped && let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
@@ -65,10 +75,31 @@ enum WorkerControl {
     Stop,
     #[cfg(test)]
     Wake,
+    #[cfg(test)]
+    ObserveCompletedCycle(mpsc::Sender<()>),
+}
+
+#[derive(Eq, PartialEq)]
+enum WorkerCycleWake {
+    StopWorker,
+    RunCycle,
 }
 
 #[cfg(test)]
 impl CredentialUpkeepWorker {
+    pub(crate) fn observe_shutdown_wait_for_test(&mut self) -> mpsc::Receiver<()> {
+        let (observer, observed) = mpsc::channel();
+        assert!(
+            self.shutdown_wait_observer.replace(observer).is_none(),
+            "shutdown observation must have one owner"
+        );
+        observed
+    }
+
+    pub(crate) fn observe_completed_cycle_for_test(&self) {
+        self.wake_handle_for_test().observe_completed_cycle();
+    }
+
     pub(crate) fn wake_for_test(&self) {
         self.control_sender
             .send(WorkerControl::Wake)
@@ -89,6 +120,16 @@ pub(crate) struct CredentialUpkeepWakeHandle {
 
 #[cfg(test)]
 impl CredentialUpkeepWakeHandle {
+    pub(crate) fn observe_completed_cycle(&self) {
+        let (completed, observed) = mpsc::channel();
+        self.control_sender
+            .send(WorkerControl::ObserveCompletedCycle(completed))
+            .expect("cycle observation must reach its real owner");
+        observed
+            .recv_timeout(Duration::from_secs(2))
+            .expect("the real upkeep cycle must complete before observation");
+    }
+
     pub(crate) fn wake(&self) {
         self.control_sender
             .send(WorkerControl::Wake)
@@ -174,11 +215,36 @@ where
                 }
                 let remaining =
                     bounded_upkeep_wait(cycle_result, observed_now, cycle_started.elapsed());
-                match control_receiver.recv_timeout(remaining) {
-                    Ok(WorkerControl::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                    #[cfg(test)]
-                    Ok(WorkerControl::Wake) => {}
-                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                #[cfg(test)]
+                let next_cycle = Instant::now() + remaining;
+                let receive_cycle_wake = |wait: Duration| -> Option<WorkerCycleWake> {
+                    match control_receiver.recv_timeout(wait) {
+                        Ok(WorkerControl::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            Some(WorkerCycleWake::StopWorker)
+                        }
+                        #[cfg(test)]
+                        Ok(WorkerControl::Wake) => Some(WorkerCycleWake::RunCycle),
+                        #[cfg(test)]
+                        Ok(WorkerControl::ObserveCompletedCycle(completed)) => {
+                            let _observed = completed.send(());
+                            None
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => Some(WorkerCycleWake::RunCycle),
+                    }
+                };
+                let wake = receive_cycle_wake(remaining);
+                #[cfg(test)]
+                let wake = {
+                    let mut wake = wake;
+                    while wake.is_none() {
+                        wake = receive_cycle_wake(
+                            next_cycle.saturating_duration_since(Instant::now()),
+                        );
+                    }
+                    wake
+                };
+                if wake != Some(WorkerCycleWake::RunCycle) {
+                    break;
                 }
             }
             let close_budget = remaining_shutdown_time(&worker_deadline);
@@ -201,6 +267,8 @@ where
         stop_requested,
         shutdown_deadline,
         thread: Some(thread),
+        #[cfg(test)]
+        shutdown_wait_observer: None,
     })
 }
 

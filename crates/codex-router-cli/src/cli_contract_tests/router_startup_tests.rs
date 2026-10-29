@@ -510,7 +510,7 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
 
 #[test]
 fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
-    use super::credential_upkeep_tests::wait_for_upkeep_generation;
+    use super::credential_upkeep_tests::assert_upkeep_generation;
     use crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock;
 
     let test_root = TestRoot::new("serve-idle-oauth-upkeep");
@@ -671,14 +671,16 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
         must_ok(oauth_call_receiver.recv_timeout(Duration::from_secs(2))),
         1
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 2);
+    wake_handle.observe_completed_cycle();
+    assert_upkeep_generation(&state_path, &enabled_id, 2);
     clock.store(1_000 + 2 * 86_400, Ordering::SeqCst);
     wake_handle.wake();
     assert_eq!(
         must_ok(oauth_call_receiver.recv_timeout(Duration::from_secs(2))),
         2
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 3);
+    wake_handle.observe_completed_cycle();
+    assert_upkeep_generation(&state_path, &enabled_id, 3);
 
     let mut health_client = must_ok(TcpStream::connect(("127.0.0.1", router_port)));
     must_ok(

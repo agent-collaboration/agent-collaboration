@@ -111,14 +111,16 @@ fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_pro
         must_ok(call_receiver.recv_timeout(Duration::from_secs(2))),
         1
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 2);
+    worker.observe_completed_cycle_for_test();
+    assert_upkeep_generation(&state_path, &enabled_id, 2);
     now.store(1_000 + 2 * 86_400, Ordering::SeqCst);
     worker.wake_for_test();
     assert_eq!(
         must_ok(call_receiver.recv_timeout(Duration::from_secs(2))),
         2
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 3);
+    worker.observe_completed_cycle_for_test();
+    assert_upkeep_generation(&state_path, &enabled_id, 3);
     drop(worker);
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     let read_runtime = must_ok(
@@ -260,8 +262,9 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     ];
     expected_accounts.sort();
     assert_eq!(observed_accounts, expected_accounts);
-    wait_for_upkeep_generation(&state_path, &exhausted_id, 2);
-    wait_for_upkeep_generation(&state_path, &idle_id, 2);
+    worker.observe_completed_cycle_for_test();
+    assert_upkeep_generation(&state_path, &exhausted_id, 2);
+    assert_upkeep_generation(&state_path, &idle_id, 2);
     drop(worker);
 
     for account_id in [&exhausted_id, &idle_id] {
@@ -359,7 +362,7 @@ fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     drop(state);
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok(
+    let mut worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
             secrets.into(),
@@ -371,24 +374,32 @@ fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
         ),
     );
     must_ok(entered_receiver.recv_timeout(Duration::from_secs(2)));
+    let shutdown_wait = worker.observe_shutdown_wait_for_test();
     let (stopped_sender, stopped_receiver) = mpsc::channel();
     let shutdown = thread::spawn(move || {
         drop(worker);
         stopped_sender.send(()).expect("shutdown should report");
     });
+    must_ok(shutdown_wait.recv_timeout(Duration::from_secs(2)));
     assert!(matches!(
-        stopped_receiver.recv_timeout(Duration::from_millis(100)),
-        Err(mpsc::RecvTimeoutError::Timeout)
+        stopped_receiver.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
     ));
     must_ok(release_sender.send(()));
     must_ok(stopped_receiver.recv_timeout(Duration::from_secs(2)));
     must_ok(shutdown.join().map_err(|_| "shutdown thread failed"));
-    wait_for_upkeep_generation(&state_path, &account_id, 2);
+    assert_upkeep_generation(&state_path, &account_id, 2);
+}
+
+#[derive(Debug)]
+enum UpkeepShutdownEvent {
+    ProviderEntered(AccountId),
+    Stopped,
 }
 
 #[derive(Clone)]
 struct HeldQueuedUpkeepRefreshClient {
-    entered_sender: mpsc::Sender<AccountId>,
+    entered_sender: mpsc::Sender<UpkeepShutdownEvent>,
     release_receiver: Arc<Mutex<mpsc::Receiver<()>>>,
 }
 
@@ -404,7 +415,7 @@ impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
     ) -> Result<AccountCredentialBundle, codex_router_auth::resolver::CredentialRefreshFailure>
     {
         self.entered_sender
-            .send(account_id.clone())
+            .send(UpkeepShutdownEvent::ProviderEntered(account_id.clone()))
             .unwrap_or_else(|_| panic!("provider entry should report account"));
         self.release_receiver
             .lock()
@@ -462,46 +473,63 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
     let credential_store = secrets.clone();
     drop(secrets);
 
-    let (entered_sender, entered_receiver) = mpsc::channel();
+    let (events, observed_events) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok(
+    let mut worker = must_ok(
         start_background_credential_upkeep_worker_with_client_and_clock(
             &state_path,
             credential_store.into(),
             HeldQueuedUpkeepRefreshClient {
-                entered_sender,
+                entered_sender: events.clone(),
                 release_receiver: Arc::new(Mutex::new(release_receiver)),
             },
             || 1_000,
         ),
     );
     let admitted = (0..4)
-        .map(|_| must_ok(entered_receiver.recv_timeout(Duration::from_secs(3))))
+        .map(
+            |_| match must_ok(observed_events.recv_timeout(Duration::from_secs(3))) {
+                UpkeepShutdownEvent::ProviderEntered(account) => account,
+                event @ UpkeepShutdownEvent::Stopped => {
+                    panic!("worker must enter four held providers before shutdown: {event:?}")
+                }
+            },
+        )
         .collect::<Vec<_>>();
-    let (stopped_sender, stopped_receiver) = mpsc::channel();
+    let shutdown_wait = worker.observe_shutdown_wait_for_test();
     let shutdown = thread::spawn(move || {
         drop(worker);
-        stopped_sender.send(()).expect("shutdown should report");
+        events
+            .send(UpkeepShutdownEvent::Stopped)
+            .expect("shutdown should report");
     });
+    must_ok(shutdown_wait.recv_timeout(Duration::from_secs(2)));
     assert!(matches!(
-        stopped_receiver.recv_timeout(Duration::from_millis(100)),
-        Err(mpsc::RecvTimeoutError::Timeout)
+        observed_events.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
     ));
     for _ in 0..4 {
         must_ok(release_sender.send(()));
     }
-    let post_stop_entry = entered_receiver.recv_timeout(Duration::from_secs(2)).ok();
-    if post_stop_entry.is_some() {
-        must_ok(release_sender.send(()));
-    }
-    must_ok(stopped_receiver.recv_timeout(Duration::from_secs(3)));
+    let post_stop_entry = match must_ok(observed_events.recv_timeout(Duration::from_secs(3))) {
+        UpkeepShutdownEvent::Stopped => None,
+        UpkeepShutdownEvent::ProviderEntered(account) => {
+            // Keep a wrong worker's cleanup bounded, then fail its actual extra entry.
+            must_ok(release_sender.send(()));
+            assert!(matches!(
+                must_ok(observed_events.recv_timeout(Duration::from_secs(3))),
+                UpkeepShutdownEvent::Stopped
+            ));
+            Some(account)
+        }
+    };
     must_ok(shutdown.join().map_err(|_| "shutdown thread failed"));
     assert!(
         post_stop_entry.is_none(),
         "queued account reached provider after Stop: {post_stop_entry:?}"
     );
     for account_id in &admitted {
-        wait_for_upkeep_generation(&state_path, account_id, 2);
+        assert_upkeep_generation(&state_path, account_id, 2);
     }
     let queued_id = account_ids
         .iter()
@@ -513,33 +541,22 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
     assert_eq!(queued.active_credential_generation(), Some(1));
 }
 
-pub(super) fn wait_for_upkeep_generation(state_path: &Path, account_id: &AccountId, expected: u64) {
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
+pub(super) fn assert_upkeep_generation(state_path: &Path, account_id: &AccountId, expected: u64) {
+    let runtime = test_async_runtime();
+    let observed = must_ok(runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            let state = must_ok(AsyncSqliteStateStore::open_read_only(state_path).await);
+            let account =
+                must_ok(state.load_account(account_id).await).expect("upkeep account must remain");
+            let generation = account.active_credential_generation();
+            must_ok(state.close().await);
+            generation
+        })
+        .await
+    }));
+    assert_eq!(
+        observed,
+        Some(expected),
+        "completed upkeep cycle must persist the exact generation"
     );
-    let deadline = Instant::now() + Duration::from_secs(2);
-    let state = loop {
-        match runtime.block_on(AsyncSqliteStateStore::open_read_only(state_path)) {
-            Ok(state) => break state,
-            Err(error) if format!("{error}").contains("locked") && Instant::now() < deadline => {
-                thread::yield_now();
-            }
-            Err(error) => panic!("read-only upkeep observation failed: {error}"),
-        }
-    };
-    loop {
-        match runtime.block_on(state.load_account(account_id)) {
-            Ok(Some(account)) if account.active_credential_generation() == Some(expected) => {
-                must_ok(runtime.block_on(state.close()));
-                return;
-            }
-            Ok(_) => {}
-            Err(error) if format!("{error}").contains("locked") => {}
-            Err(error) => panic!("upkeep account observation failed: {error}"),
-        }
-        assert!(Instant::now() < deadline, "credential activation timed out");
-        thread::yield_now();
-    }
 }
