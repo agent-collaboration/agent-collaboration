@@ -1,8 +1,8 @@
 use super::{
-    Arc, AtomicBool, ConcurrentUpstreamConfig, ConcurrentUpstreamSharedState, Duration, ErrorKind,
-    Instant, Ordering, PressureHandles, QuotaReconnectSqlitePressureConfig, TcpListener,
-    join_result, looks_like_websocket_upgrade, respond_to_http_request,
-    run_concurrent_mock_websocket_session, thread,
+    Arc, AtomicBool, ConcurrentUpstreamConfig, ConcurrentUpstreamSharedState, Duration, Instant,
+    Ordering, PressureHandles, QuotaReconnectSqlitePressureConfig, TcpListener, join_result,
+    looks_like_websocket_upgrade, respond_to_http_request, run_concurrent_mock_websocket_session,
+    thread,
 };
 
 pub(super) fn run_concurrent_mock_upstream(
@@ -12,6 +12,7 @@ pub(super) fn run_concurrent_mock_upstream(
     config: ConcurrentUpstreamConfig,
     sqlite_pressure: Option<QuotaReconnectSqlitePressureConfig>,
     pressure_handles: PressureHandles,
+    completion: std::os::unix::net::UnixStream,
 ) -> Result<(), String> {
     let deadline = Instant::now()
         + Duration::from_secs(45)
@@ -35,6 +36,26 @@ pub(super) fn run_concurrent_mock_upstream(
         }
         if Instant::now() >= deadline {
             return Err("concurrent upstream timed out waiting for sessions".to_owned());
+        }
+        let mut descriptors = [
+            rustix::event::PollFd::new(&listener, rustix::event::PollFlags::IN),
+            rustix::event::PollFd::new(&completion, rustix::event::PollFlags::IN),
+        ];
+        super::socket_readiness::wait_for_socket_readiness(&mut descriptors, Some(deadline))
+            .map_err(|error| format!("concurrent upstream readiness failed: {error}"))?;
+        if state
+            .state
+            .lock()
+            .map_err(|_| "concurrent upstream state mutex poisoned".to_owned())?
+            .completed_sessions
+            >= config.expected_upstream_sessions
+        {
+            break;
+        }
+        if shutdown.load(Ordering::SeqCst) {
+            return Err(
+                "concurrent upstream shut down before expected sessions completed".to_owned(),
+            );
         }
         match listener.accept() {
             Ok((stream, _peer)) => {
@@ -71,9 +92,6 @@ pub(super) fn run_concurrent_mock_upstream(
                             format!("failed to spawn concurrent upstream session: {error}")
                         })?,
                 );
-            }
-            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(10));
             }
             Err(error) => return Err(format!("concurrent upstream accept failed: {error}")),
         }

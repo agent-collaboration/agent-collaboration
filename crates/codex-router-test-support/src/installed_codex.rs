@@ -117,6 +117,9 @@ mod http_probe;
 #[path = "installed_codex/child_output_capture.rs"]
 mod child_output_capture;
 #[cfg(test)]
+#[path = "installed_codex/concurrent_upstream_tests.rs"]
+mod concurrent_upstream_tests;
+#[cfg(test)]
 #[path = "installed_codex/fixture_schema_tests.rs"]
 mod fixture_schema_tests;
 #[path = "installed_codex/no_connection_upstream.rs"]

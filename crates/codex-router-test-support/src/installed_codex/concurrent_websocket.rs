@@ -256,7 +256,7 @@ pub(super) fn wait_for_concurrent_session_barrier(
         let wait = deadline.saturating_duration_since(now);
         let (next_state, _timeout) = shared
             .condition
-            .wait_timeout(state, wait.min(Duration::from_millis(100)))
+            .wait_timeout(state, wait)
             .map_err(|_| "concurrent upstream condition wait poisoned".to_owned())?;
         state = next_state;
     }
@@ -296,7 +296,17 @@ pub(super) fn finish_concurrent_non_prewarm_session(
     state
         .in_overlap_session_event_counts
         .push(in_overlap_event_count);
+    let all_completed = state.completed_sessions >= state.expected_upstream_sessions;
     shared.condition.notify_all();
+    drop(state);
+    if all_completed {
+        let completion = shared
+            .accept_completion
+            .lock()
+            .map_err(|_| "concurrent completion signal mutex poisoned".to_owned())?
+            .take();
+        drop(completion);
+    }
     Ok(())
 }
 
@@ -329,7 +339,7 @@ pub(super) fn wait_for_all_concurrent_overlap_proof_events(
         let wait = deadline.saturating_duration_since(now);
         let (next_state, _timeout) = shared
             .condition
-            .wait_timeout(state, wait.min(Duration::from_millis(100)))
+            .wait_timeout(state, wait)
             .map_err(|_| "concurrent upstream condition wait poisoned".to_owned())?;
         state = next_state;
     }

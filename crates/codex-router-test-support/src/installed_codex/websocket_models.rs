@@ -184,6 +184,7 @@ pub(super) struct ConcurrentWebSocketTranscript {
 pub(super) struct ConcurrentUpstreamSharedState {
     pub(super) state: Mutex<ConcurrentUpstreamState>,
     pub(super) condition: Condvar,
+    pub(super) accept_completion: Mutex<Option<std::os::unix::net::UnixStream>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -547,6 +548,8 @@ impl MockConcurrentWebSocketUpstream {
             .local_addr()
             .map_err(|error| format!("failed to read concurrent upstream address: {error}"))?
             .to_string();
+        let (completion, completed) = std::os::unix::net::UnixStream::pair()
+            .map_err(|error| format!("failed to create concurrent completion signal: {error}"))?;
         let state = Arc::new(ConcurrentUpstreamSharedState {
             state: Mutex::new(ConcurrentUpstreamState {
                 expected_sessions: config.expected_sessions,
@@ -591,6 +594,7 @@ impl MockConcurrentWebSocketUpstream {
                 sqlite_pressure_released_unix_ms: None,
             }),
             condition: Condvar::new(),
+            accept_completion: Mutex::new(Some(completed)),
         });
         let shutdown = Arc::new(AtomicBool::new(false));
         let pressure_handles = Arc::new(Mutex::new(Vec::new()));
@@ -607,6 +611,7 @@ impl MockConcurrentWebSocketUpstream {
                     config,
                     sqlite_pressure,
                     thread_pressure_handles,
+                    completion,
                 )
             })
             .map_err(|error| format!("failed to spawn concurrent mock upstream: {error}"))?;
