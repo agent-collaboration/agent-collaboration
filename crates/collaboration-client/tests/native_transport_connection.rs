@@ -3,7 +3,7 @@ use collaboration_client::{
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use std::os::unix::fs::DirBuilderExt;
 
 #[tokio::test]
@@ -21,26 +21,39 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
     let native_path = root.join("native.sock");
     let native_listener = tokio::net::UnixListener::bind(&native_path)
         .unwrap_or_else(|error| panic!("native bind: {error}"));
+    let (connect_returned, observe_connect) = std::sync::mpsc::channel();
     let native_peer = tokio::spawn(async move {
         let (stream, _) = native_listener
             .accept()
             .await
             .unwrap_or_else(|error| panic!("accept: {error}"));
-        let mut socket = tokio_tungstenite::accept_async(stream)
-            .await
-            .unwrap_or_else(|error| panic!("upgrade: {error}"));
-        let first =
-            tokio::time::timeout(std::time::Duration::from_millis(100), socket.next()).await;
-        assert!(
-            first.is_err(),
-            "client sent native initialization or replay"
-        );
-        socket
-            .send(tokio_tungstenite::tungstenite::Message::Text(
-                "{\"method\":\"fixture/ready\"}".into(),
-            ))
-            .await
-            .unwrap_or_else(|error| panic!("send: {error}"));
+        tokio::task::spawn_blocking(move || {
+            let stream = stream.into_std().expect("owned native socket");
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut socket = tokio_tungstenite::tungstenite::accept(stream).expect("real upgrade");
+            observe_connect
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("actual native connect must return before absence inspection");
+            socket.get_mut().set_nonblocking(true).unwrap();
+            // Read tungstenite's buffered bytes and the kernel queue directly;
+            // Tokio readiness and a successful quiet window prove neither.
+            assert!(
+                matches!(socket.read(), Err(tokio_tungstenite::tungstenite::Error::Io(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock),
+                "client sent native initialization or replay"
+            );
+            socket.get_mut().set_nonblocking(false).unwrap();
+            socket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    "{\"method\":\"fixture/ready\"}".into(),
+                ))
+                .unwrap_or_else(|error| panic!("send: {error}"));
+        })
+        .await
+        .expect("native peer reader must join");
     });
     let endpoint=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"label":"fixture","availability":{"state":"available","observedAt":"2026-09-13T12:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|error|panic!("endpoint: {error}"));
     let identity = identity
@@ -59,6 +72,9 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
         String::from(connection.endpoint.endpoint_id.clone()),
         "codex-local"
     );
+    connect_returned
+        .send(())
+        .expect("native peer must observe connect completion");
     let message = connection
         .stream
         .next()
@@ -150,13 +166,10 @@ async fn client_rejects_unavailable_and_escaped_native_endpoints_without_connect
         escaped_error,
         NativeTransportError::ChannelEscapesServiceDirectory
     ));
+    let native_listener = native_listener.into_std().unwrap();
     assert!(
-        tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            native_listener.accept()
-        )
-        .await
-        .is_err(),
+        matches!(native_listener.accept(), Err(error)
+        if error.kind() == std::io::ErrorKind::WouldBlock),
         "escaped native listener accepted a connection"
     );
 

@@ -57,27 +57,41 @@ async fn cancel_drains_a_started_authority_read_before_session_cleanup() {
     );
     let mut snapshots = ports.snapshot_receiver;
     let intents = ports.intent_sender;
-    let session_task = tokio::spawn(session.run());
+    let session = session.run();
+    tokio::pin!(session);
     begin_inspection(&intents).await;
-    authority_started.notified().await;
+    tokio::select! {
+        () = authority_started.notified() => {},
+        outcome = &mut session => panic!("session completed before authority read entry: {outcome:?}"),
+    }
 
     intents
         .send(ResetSessionIntent::Cancel)
         .await
         .expect("cancel intent");
-    tokio::task::yield_now().await;
-
-    assert!(!session_task.is_finished());
+    let cancel_wait = std::future::poll_fn(|context| {
+        std::task::Poll::Ready(std::future::Future::poll(session.as_mut(), context))
+    })
+    .await;
+    assert!(
+        cancel_wait.is_pending(),
+        "Cancel must wait for its started authority read"
+    );
+    assert_eq!(
+        snapshots.borrow().phase(),
+        WorkflowPhase::Inspecting,
+        "Cancel cannot publish completed cleanup before the started read settles"
+    );
     authority_release.notify_one();
-    wait_for_phase(&mut snapshots, WorkflowPhase::Browse).await;
+    tokio::select! {
+        _snapshot = wait_for_phase(&mut snapshots, WorkflowPhase::Browse) => {},
+        outcome = &mut session => panic!("session completed before Browse cleanup: {outcome:?}"),
+    }
     intents
         .send(ResetSessionIntent::Shutdown)
         .await
         .expect("shutdown intent");
-    assert_eq!(
-        session_task.await.expect("session task"),
-        ResetSessionOutcome::Cancelled
-    );
+    assert_eq!(session.await, ResetSessionOutcome::Cancelled);
 }
 
 #[tokio::test]

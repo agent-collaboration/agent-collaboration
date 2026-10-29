@@ -802,6 +802,8 @@ fn map_secret_error(error: SecretStoreError) -> CredentialResolverError {
 mod credential_renewal;
 
 pub use credential_renewal::AsyncRouterCredentialResolver;
+#[cfg(test)]
+pub(crate) use credential_renewal::CredentialPersistenceRetry;
 pub use credential_renewal::CredentialRefreshTaskSupervisor;
 pub use credential_renewal::DefaultAsyncRouterCredentialResolver;
 #[cfg(test)]

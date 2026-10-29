@@ -23,8 +23,13 @@ mod storage_tests;
 
 static TEMP_DIRECTORY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn device_login_matches_upstream_requests_and_exchanges_pkce_verifier() {
+    let (release_clock, clock_release) = std::sync::mpsc::channel();
+    let clock_guard = tokio::task::spawn_blocking(move || {
+        clock_release.recv_timeout(std::time::Duration::from_secs(5))
+    });
+    let poll_waiting = Arc::new(tokio::sync::Notify::new());
     let issuer = FakeDeviceIssuer::spawn(vec![
         FakeResponse::json(
             200,
@@ -48,7 +53,8 @@ async fn device_login_matches_upstream_requests_and_exchanges_pkce_verifier() {
     let client = OpenAiOAuthDeviceLoginClient::with_test_issuer(
         issuer.base_url(),
         std::time::Duration::from_secs(60),
-    );
+    )
+    .with_poll_wait_observer(Arc::clone(&poll_waiting));
     let cancellation = CancellationToken::new();
 
     let device_code = client
@@ -60,9 +66,18 @@ async fn device_login_matches_upstream_requests_and_exchanges_pkce_verifier() {
         device_code.verification_url(),
         format!("{}/codex/device", issuer.base_url())
     );
-    let credentials = client
-        .complete_device_code_login(&device_code, &cancellation)
+    let complete = client.complete_device_code_login(&device_code, &cancellation);
+    tokio::pin!(complete);
+    for _pending_response in 0..2 {
+        tokio::select! {
+            result = &mut complete => panic!("login completed before both real pending responses: {result:?}"),
+            () = poll_waiting.notified() => {},
+        }
+        tokio::time::advance(device_code.poll_interval).await;
+    }
+    let credentials = tokio::time::timeout(std::time::Duration::from_secs(2), &mut complete)
         .await
+        .expect("authorized real HTTP exchange must settle")
         .expect("approved device login should exchange its verifier");
 
     assert_eq!(
@@ -81,6 +96,11 @@ async fn device_login_matches_upstream_requests_and_exchanges_pkce_verifier() {
     );
 
     let requests = issuer.finish().await;
+    release_clock.send(()).unwrap();
+    clock_guard
+        .await
+        .unwrap()
+        .expect("real issuer must settle inside the guard");
     assert_eq!(requests.len(), 5);
     assert!(requests[0].starts_with("POST /api/accounts/deviceauth/usercode HTTP/1.1"));
     assert!(

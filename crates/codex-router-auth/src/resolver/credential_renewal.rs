@@ -12,6 +12,13 @@ use super::{
     current_unix_seconds, map_secret_error, map_state_error, provider_credential_bundle_key,
 };
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CredentialPersistenceRetry {
+    Disposition,
+    SuccessorCommit,
+}
+
 /// Async resolver for provider credentials through router-owned state and secret stores.
 #[derive(Clone, Debug)]
 pub struct AsyncRouterCredentialResolver<S, C>
@@ -25,6 +32,9 @@ where
     fixed_now_unix_seconds: Option<u64>,
     #[cfg(test)]
     test_now_unix_seconds: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
+    #[cfg(test)]
+    persistence_retry_observer:
+        Option<tokio::sync::mpsc::UnboundedSender<CredentialPersistenceRetry>>,
     refresh_leases: AsyncRefreshLeaseRegistry,
     refresh_tasks: CredentialRefreshTaskSupervisor,
 }
@@ -97,6 +107,8 @@ where
             fixed_now_unix_seconds,
             #[cfg(test)]
             test_now_unix_seconds: None,
+            #[cfg(test)]
+            persistence_retry_observer: None,
             refresh_leases: AsyncRefreshLeaseRegistry::new(),
             refresh_tasks: CredentialRefreshTaskSupervisor::new(),
         }
@@ -118,6 +130,8 @@ where
             fixed_now_unix_seconds,
             #[cfg(test)]
             test_now_unix_seconds: None,
+            #[cfg(test)]
+            persistence_retry_observer: None,
             refresh_leases,
             refresh_tasks: CredentialRefreshTaskSupervisor::new(),
         }
@@ -296,6 +310,15 @@ where
         now_unix_seconds: std::sync::Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
         self.test_now_unix_seconds = Some(now_unix_seconds);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_persistence_retry_observer(
+        mut self,
+        observer: tokio::sync::mpsc::UnboundedSender<CredentialPersistenceRetry>,
+    ) -> Self {
+        self.persistence_retry_observer = Some(observer);
         self
     }
 
@@ -691,7 +714,7 @@ where
                             .max(bounded_backoff),
                     )
                 });
-                let disposition_started = std::time::Instant::now();
+                let disposition_started = tokio::time::Instant::now();
                 loop {
                     match self
                         .state_store
@@ -716,6 +739,11 @@ where
                         Ok(true) => break,
                         Ok(false) => return Err(CredentialResolverError::RefreshUnavailable),
                         Err(_) if disposition_started.elapsed() < Duration::from_secs(30) => {
+                            #[cfg(test)]
+                            if let Some(observer) = &self.persistence_retry_observer {
+                                let _observed =
+                                    observer.send(CredentialPersistenceRetry::Disposition);
+                            }
                             tokio::time::sleep(Duration::from_millis(250)).await;
                         }
                         Err(_) => return Err(CredentialResolverError::RefreshUnavailable),
@@ -733,7 +761,7 @@ where
             provider_credential_bundle_key(provider, account_id, successor_generation)
                 .map_err(map_secret_error)?;
         let refreshed_secret = refreshed.to_secret_string().map_err(map_secret_error)?;
-        let commit_started = std::time::Instant::now();
+        let commit_started = tokio::time::Instant::now();
         let mut secret_saved = false;
         loop {
             if !secret_saved {
@@ -784,6 +812,10 @@ where
             }
             if commit_started.elapsed() >= Duration::from_secs(30) {
                 return Err(CredentialResolverError::RefreshUnavailable);
+            }
+            #[cfg(test)]
+            if let Some(observer) = &self.persistence_retry_observer {
+                let _observed = observer.send(CredentialPersistenceRetry::SuccessorCommit);
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }

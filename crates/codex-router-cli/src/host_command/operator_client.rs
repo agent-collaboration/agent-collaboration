@@ -216,7 +216,7 @@ mod tests {
     use tokio::io::AsyncWriteExt;
     use tokio::sync::oneshot;
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn first_connect_reports_missing_host_without_waiting_for_lifecycle_deadline() {
         let socket = std::env::temp_dir().join(format!(
             "codex-router-missing-host-{}-{}.sock",

@@ -7,12 +7,10 @@ use codex_router_state::window_observation::WindowObservation;
 use codex_router_state::window_observation::WindowObservationProps;
 use std::io::Read;
 use std::io::Write;
-use std::net::TcpListener;
 use std::sync::mpsc;
-use std::thread;
-use std::thread::JoinHandle;
-use std::time::Instant;
 use tempfile::TempDir;
+use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 
 const STALE_OBSERVATION_AT: u64 = 100;
 const STALE_DEADLINE: u64 = 200;
@@ -42,13 +40,13 @@ impl AsyncProviderCredentialResolver for SyntheticClaudeCredentialResolver {
 struct FakeClaudeUsageEndpoint {
     endpoint: String,
     request_receiver: mpsc::Receiver<String>,
-    server_thread: JoinHandle<()>,
+    server_task: JoinHandle<()>,
 }
 
 impl FakeClaudeUsageEndpoint {
-    fn finish(self) -> String {
+    async fn finish(self) -> String {
         let request = self.request_receiver.recv_timeout(Duration::from_secs(3));
-        let server_result = self.server_thread.join();
+        let server_result = self.server_task.await;
         server_result.expect("fake Claude usage server should finish");
         request
             .expect("fake Claude usage server should capture one request")
@@ -56,61 +54,54 @@ impl FakeClaudeUsageEndpoint {
     }
 }
 
-fn start_fake_claude_usage_endpoint(body: String) -> FakeClaudeUsageEndpoint {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake Claude usage listener");
-    listener
-        .set_nonblocking(true)
-        .expect("fake Claude usage listener should use bounded accept");
+async fn start_fake_claude_usage_endpoint(body: String) -> FakeClaudeUsageEndpoint {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake Claude usage listener");
     let address = listener.local_addr().expect("listener address");
     let endpoint = format!("http://{address}/api/oauth/usage");
     let (request_sender, request_receiver) = mpsc::channel();
-    let server_thread = thread::spawn(move || {
-        let accept_deadline = Instant::now() + Duration::from_secs(3);
-        let (mut stream, _) = loop {
-            match listener.accept() {
-                Ok(connection) => break connection,
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::WouldBlock
-                        && Instant::now() < accept_deadline =>
-                {
-                    thread::yield_now();
-                }
-                Err(error) => panic!("fake Claude usage server should accept: {error}"),
-            }
-        };
+    let server_task = tokio::spawn(async move {
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept())
+            .await
+            .expect("fake usage accept must settle")
+            .expect("fake usage accept");
+        let mut stream = stream.into_std().expect("owned accepted socket");
         stream
             .set_nonblocking(false)
-            .expect("accepted fake usage stream should use blocking reads");
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .expect("fake usage stream should have bounded reads");
+            .expect("blocking request reader");
+        tokio::task::spawn_blocking(move || {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("fake usage stream should have bounded reads");
 
-        let mut request = Vec::new();
-        let mut buffer = [0_u8; 1024];
-        let header_end = loop {
-            let count = stream.read(&mut buffer).expect("read fake usage request");
-            assert!(count > 0, "fake usage request includes headers");
-            request.extend_from_slice(&buffer[..count]);
-            assert!(request.len() <= 8_192, "fake usage headers remain bounded");
-            if let Some(position) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
-                break position + 4;
-            }
-        };
-        request_sender
-            .send(String::from_utf8(request[..header_end].to_vec()).expect("request headers"))
-            .expect("test should receive fake usage request");
-        write!(
-            stream,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            body.len(),
-            body
-        )
-        .expect("write fake Claude usage response");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            let header_end = loop {
+                let count = stream.read(&mut buffer).expect("read fake usage request");
+                assert!(count > 0, "fake usage request includes headers");
+                request.extend_from_slice(&buffer[..count]);
+                assert!(request.len() <= 8_192, "fake usage headers remain bounded");
+                if let Some(position) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    break position + 4;
+                }
+            };
+            request_sender
+                .send(String::from_utf8(request[..header_end].to_vec()).expect("request headers"))
+                .expect("test should receive fake usage request");
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("write fake Claude usage response");
+        }).await.expect("fake usage request task must join");
     });
     FakeClaudeUsageEndpoint {
         endpoint,
         request_receiver,
-        server_thread,
+        server_task,
     }
 }
 
@@ -183,7 +174,7 @@ impl ClaudeQuotaIngestionFixture {
         String,
         String,
     ) {
-        let usage_endpoint = start_fake_claude_usage_endpoint(body);
+        let usage_endpoint = start_fake_claude_usage_endpoint(body).await;
         let provider = HttpQuotaRefreshProvider::new_with_claude_usage_endpoint_for_test(
             Duration::from_secs(2),
             usage_endpoint.endpoint.clone(),
@@ -200,7 +191,7 @@ impl ClaudeQuotaIngestionFixture {
         )
         .await;
         let output = String::from_utf8(stdout).expect("refresh output should be UTF-8");
-        let request = usage_endpoint.finish();
+        let request = usage_endpoint.finish().await;
         (result, output, request)
     }
 

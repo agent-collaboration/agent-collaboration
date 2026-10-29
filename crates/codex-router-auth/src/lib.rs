@@ -82,11 +82,14 @@ mod tests {
     use crate::router_credentials::RouterCredentialBundle;
 
     mod credential_activation_tests;
+    mod credential_concurrency_tests;
     mod credential_maintenance_reauth_tests;
     mod credential_provider_mismatch_tests;
     mod credential_renewal_http_outcome_tests;
     mod credential_renewal_outcome_tests;
     mod credential_renewal_tests;
+    mod recording_refresh_client;
+    use recording_refresh_client::RecordingRefreshClient;
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -763,64 +766,6 @@ mod tests {
             assert_eq!(request.account_label(), "acct_primary");
             assert_eq!(request.route_name(), "responses");
             Ok(QuotaFetchResponse::new(request.route_name(), 77))
-        }
-    }
-
-    #[derive(Clone)]
-    struct RecordingRefreshClient {
-        expected_account_id: String,
-        expected_refresh_token: String,
-        response: AccountCredentialBundle,
-        calls: Arc<AtomicUsize>,
-        delay_millis: u64,
-    }
-
-    impl RecordingRefreshClient {
-        fn new(response: AccountCredentialBundle) -> Self {
-            Self::new_for_account("acct_refresh_bundle", "refresh-token-canary", response)
-        }
-
-        fn new_for_account(
-            expected_account_id: &str,
-            expected_refresh_token: &str,
-            response: AccountCredentialBundle,
-        ) -> Self {
-            Self {
-                expected_account_id: expected_account_id.to_owned(),
-                expected_refresh_token: expected_refresh_token.to_owned(),
-                response,
-                calls: Arc::new(AtomicUsize::new(0)),
-                delay_millis: 0,
-            }
-        }
-
-        fn calls(&self) -> usize {
-            self.calls.load(Ordering::SeqCst)
-        }
-
-        fn with_delay_millis(mut self, delay_millis: u64) -> Self {
-            self.delay_millis = delay_millis;
-            self
-        }
-    }
-
-    impl CredentialRefreshClient for RecordingRefreshClient {
-        #[expect(
-            clippy::panic_in_result_fn,
-            reason = "Assertions must fail this test while fixture errors propagate through Result."
-        )]
-        fn refresh_credentials(
-            &self,
-            account_id: &AccountId,
-            refresh_token: &SecretString,
-        ) -> Result<AccountCredentialBundle, crate::resolver::CredentialRefreshFailure> {
-            assert_eq!(account_id.as_str(), self.expected_account_id);
-            assert_eq!(refresh_token.expose_secret(), self.expected_refresh_token);
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            if self.delay_millis != 0 {
-                thread::sleep(std::time::Duration::from_millis(self.delay_millis));
-            }
-            Ok(self.response.clone())
         }
     }
 

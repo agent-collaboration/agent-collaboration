@@ -405,129 +405,6 @@ async fn cancelled_waiter_does_not_cancel_provider_rotation_or_release_account_l
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn separate_process_resolvers_use_one_rotating_refresh() {
-    if let Some(root) = std::env::var_os("CODEX_ROUTER_CROSS_PROCESS_REFRESH_ROOT") {
-        let root = PathBuf::from(root);
-        fs::write(root.join("child-ready"), b"ready").expect("child should report ready");
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while !root.join("start").exists() {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "child start timed out"
-            );
-            thread::yield_now();
-        }
-        let state = must_ok(AsyncSqliteStateStore::open(&root.join("state.sqlite")).await);
-        let secrets = must_ok(
-            codex_router_secret_store::test_support::open_encrypted_credential_store(
-                root.join("secrets"),
-            ),
-        );
-        let resolver = AsyncRouterCredentialResolver::new(
-            state,
-            secrets,
-            CrossProcessRefreshClient { root },
-            Some(1_000),
-        );
-        let resolved = must_ok(
-            resolver
-                .resolve_provider_credentials(
-                    &account_id("cross-process-account"),
-                    codex_router_core::provider::Provider::Openai,
-                )
-                .await,
-        );
-        assert_eq!(resolved.credential_generation(), 2);
-        return;
-    }
-
-    let temp_dir = AuthTestTempDir::new("cross-process-refresh");
-    let root = temp_dir.path();
-    let state = must_ok(AsyncSqliteStateStore::open(&root.join("state.sqlite")).await);
-    let secrets = must_ok(
-        codex_router_secret_store::test_support::open_encrypted_credential_store(
-            root.join("secrets"),
-        ),
-    );
-    let account_id = account_id("cross-process-account");
-    must_ok(
-        state
-            .upsert_account(
-                &AccountRecord::new(
-                    codex_router_core::provider::Provider::Openai,
-                    account_id.clone(),
-                    "cross process",
-                    AccountStatus::Enabled,
-                )
-                .with_active_credential_generation(1),
-            )
-            .await,
-    );
-    let active_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
-    must_ok(
-        secrets.write_secret(
-            &active_key,
-            &must_ok(
-                AccountCredentialBundle::imported_codex_auth(
-                    "expired-access-canary",
-                    Some("old-refresh-canary".to_owned()),
-                )
-                .with_expires_unix_seconds(900)
-                .to_secret_string(),
-            ),
-        ),
-    );
-    let mut child = must_ok(
-        Command::new(std::env::current_exe().expect("test binary"))
-            .arg("--exact")
-            .arg("tests::credential_renewal_tests::separate_process_resolvers_use_one_rotating_refresh")
-            .env("CODEX_ROUTER_CROSS_PROCESS_REFRESH_ROOT", root)
-            .stdout(std::process::Stdio::null())
-            .spawn(),
-    );
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    while !root.join("child-ready").exists() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "child readiness timed out"
-        );
-        tokio::task::yield_now().await;
-    }
-    let resolver = AsyncRouterCredentialResolver::new(
-        state,
-        secrets,
-        CrossProcessRefreshClient {
-            root: root.to_path_buf(),
-        },
-        Some(1_000),
-    );
-    must_ok(fs::write(root.join("start"), b"start"));
-    let resolved = must_ok(
-        resolver
-            .resolve_provider_credentials(
-                &account_id,
-                codex_router_core::provider::Provider::Openai,
-            )
-            .await,
-    );
-    assert_eq!(resolved.credential_generation(), 2);
-    assert!(
-        must_ok(child.wait()).success(),
-        "child resolver should finish"
-    );
-    let provider_calls = must_ok(fs::read_dir(root))
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with("provider-call-")
-        })
-        .count();
-    assert_eq!(provider_calls, 1);
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancelled_waiter_keeps_lock_until_blocking_secret_write_and_activation_finish() {
     let temp_dir = AuthTestTempDir::new("held-secret-write");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -632,8 +509,12 @@ async fn cancelled_waiter_keeps_lock_until_blocking_secret_write_and_activation_
     assert_eq!(refresh_client.calls(), 1);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(start_paused = true)]
 async fn transient_secret_write_failure_retries_commit_without_second_provider_use() {
+    let (release_clock, clock_release) = std::sync::mpsc::channel();
+    let clock_guard =
+        tokio::task::spawn_blocking(move || clock_release.recv_timeout(Duration::from_secs(5)));
+    let (retry_observer, mut retry_observed) = tokio::sync::mpsc::unbounded_channel();
     let temp_dir = AuthTestTempDir::new("transient-secret-write");
     let database_path = temp_dir.path().join("state.sqlite");
     let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
@@ -688,17 +569,17 @@ async fn transient_secret_write_failure_retries_commit_without_second_provider_u
         secrets.clone(),
         refresh_client.clone(),
         Some(1_000),
-    );
-    let resolved = must_ok(
-        tokio::time::timeout(
-            Duration::from_secs(2),
-            resolver.resolve_provider_credentials(
-                &account_id,
-                codex_router_core::provider::Provider::Openai,
-            ),
-        )
-        .await,
-    );
+    )
+    .with_persistence_retry_observer(retry_observer);
+    let resolution = resolver.resolve_provider_credentials(&account_id, Provider::Openai);
+    tokio::pin!(resolution);
+    tokio::select! {
+        result = &mut resolution => panic!("commit completed before its actual failed-write retry: {result:?}"),
+        observed = retry_observed.recv() => assert_eq!(observed, Some(crate::resolver::CredentialPersistenceRetry::SuccessorCommit)),
+    }
+    assert!(secrets.failed_once.load(Ordering::SeqCst));
+    tokio::time::advance(Duration::from_millis(250)).await;
+    let resolved = must_ok(tokio::time::timeout(Duration::from_secs(2), &mut resolution).await);
     let resolved = must_ok(resolved);
     assert_eq!(resolved.credential_generation(), 2);
     assert!(secrets.failed_once.load(Ordering::SeqCst));
@@ -707,6 +588,8 @@ async fn transient_secret_write_failure_retries_commit_without_second_provider_u
     assert_eq!(active.active_credential_generation(), Some(2));
     let successor_key = must_ok(openai_account_credential_bundle_key(&account_id, 2));
     assert!(file_secrets.read_secret(&successor_key).is_ok());
+    must_ok(release_clock.send(()));
+    must_ok(clock_guard.await).expect("real secret commit must settle inside the guard");
 }
 
 #[tokio::test]
@@ -892,36 +775,6 @@ impl SecretStore for HeldSecretWriteStore {
 
     fn delete_staged(&self, key: &SecretKey) -> Result<(), SecretStoreError> {
         self.inner.delete_staged(key)
-    }
-}
-
-#[derive(Clone)]
-struct CrossProcessRefreshClient {
-    root: PathBuf,
-}
-
-impl CredentialRefreshClient for CrossProcessRefreshClient {
-    #[expect(
-        clippy::unwrap_in_result,
-        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
-    )]
-    fn refresh_credentials(
-        &self,
-        _account_id: &AccountId,
-        _refresh_token: &SecretString,
-    ) -> Result<AccountCredentialBundle, crate::resolver::CredentialRefreshFailure> {
-        fs::write(
-            self.root
-                .join(format!("provider-call-{}", std::process::id())),
-            b"used",
-        )
-        .expect("provider call should be recorded");
-        thread::sleep(Duration::from_millis(100));
-        Ok(AccountCredentialBundle::imported_codex_auth(
-            "replacement-access-canary",
-            Some("replacement-refresh-canary".to_owned()),
-        )
-        .with_expires_unix_seconds(2_000))
     }
 }
 

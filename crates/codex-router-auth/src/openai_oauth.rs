@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::time::Duration;
-use std::time::Instant;
+use tokio::time::Instant;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -173,6 +173,8 @@ pub struct OpenAiOAuthDeviceLoginClient {
     verification_url: String,
     http_client: Option<reqwest::Client>,
     max_poll_duration: Duration,
+    #[cfg(test)]
+    poll_wait_observer: Option<std::sync::Arc<tokio::sync::Notify>>,
 }
 
 impl OpenAiOAuthDeviceLoginClient {
@@ -239,7 +241,15 @@ impl OpenAiOAuthDeviceLoginClient {
                 .build()
                 .ok(),
             max_poll_duration,
+            #[cfg(test)]
+            poll_wait_observer: None,
         }
+    }
+
+    #[cfg(test)]
+    fn with_poll_wait_observer(mut self, observer: std::sync::Arc<tokio::sync::Notify>) -> Self {
+        self.poll_wait_observer = Some(observer);
+        self
     }
 
     /// Requests a one-time user code from OpenAI.
@@ -424,6 +434,10 @@ impl OpenAiOAuthDeviceLoginClient {
             let wait_duration = device_code
                 .poll_interval
                 .min(self.max_poll_duration.saturating_sub(elapsed));
+            #[cfg(test)]
+            if let Some(observer) = &self.poll_wait_observer {
+                observer.notify_one();
+            }
             tokio::select! {
                 () = cancellation.cancelled() => {
                     return Err(OpenAiOAuthDeviceLoginError::Cancelled);

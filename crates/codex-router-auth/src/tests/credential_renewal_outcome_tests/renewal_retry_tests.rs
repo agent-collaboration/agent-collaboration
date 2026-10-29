@@ -297,13 +297,17 @@ async fn elapsed_retry_deadline_renews_even_when_ordinary_renewal_is_not_due() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(start_paused = true)]
 async fn confirmed_unspent_failure_retries_transient_sqlite_disposition_without_provider_reuse() {
     use crate::resolver::CredentialRefreshFailure;
     use codex_router_state::credential_maintenance::CredentialFailureClass;
     use codex_router_state::credential_maintenance::CredentialMaintenanceState;
     use sqlx::Connection as _;
 
+    let (release_clock, clock_release) = std::sync::mpsc::channel();
+    let clock_guard =
+        tokio::task::spawn_blocking(move || clock_release.recv_timeout(Duration::from_secs(5)));
+    let (retry_observer, mut retry_observed) = tokio::sync::mpsc::unbounded_channel();
     let temp_dir = AuthTestTempDir::new("transient-retry-disposition");
     let database_path = temp_dir.path().join("state.sqlite");
     let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
@@ -355,21 +359,6 @@ async fn confirmed_unspent_failure_retries_transient_sqlite_disposition_without_
         .await,
     );
     must_ok(fault_connection.close().await);
-    let release_path = database_path.clone();
-    let release_fault = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(release_path)
-            .create_if_missing(false);
-        let mut connection = sqlx::SqliteConnection::connect_with(&options)
-            .await
-            .expect("fault database");
-        sqlx::query("DROP TRIGGER fail_retry_disposition")
-            .execute(&mut connection)
-            .await
-            .expect("release disposition fault");
-        connection.close().await.expect("fault connection close");
-    });
     let refresh_client = RejectingRefreshClient {
         failure: CredentialRefreshFailure::confirmed_unspent(
             CredentialFailureClass::RateLimited,
@@ -382,17 +371,27 @@ async fn confirmed_unspent_failure_retries_transient_sqlite_disposition_without_
         secrets,
         refresh_client.clone(),
         Some(1_000),
+    )
+    .with_persistence_retry_observer(retry_observer);
+    let resolution = resolver.resolve_provider_credentials(&account_id, Provider::Openai);
+    tokio::pin!(resolution);
+    tokio::select! {
+        result = &mut resolution => panic!("faulted disposition completed before its actual failed-write retry: {result:?}"),
+        observed = retry_observed.recv() => assert_eq!(observed, Some(crate::resolver::CredentialPersistenceRetry::Disposition)),
+    }
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(&database_path)
+        .create_if_missing(false);
+    let mut connection = must_ok(sqlx::SqliteConnection::connect_with(&options).await);
+    must_ok(
+        sqlx::query("DROP TRIGGER fail_retry_disposition")
+            .execute(&mut connection)
+            .await,
     );
-
-    let result = must_ok(
-        tokio::time::timeout(
-            Duration::from_secs(3),
-            resolver.resolve_provider_credentials(&account_id, Provider::Openai),
-        )
-        .await,
-    );
+    must_ok(connection.close().await);
+    tokio::time::advance(Duration::from_millis(250)).await;
+    let result = must_ok(tokio::time::timeout(Duration::from_secs(3), &mut resolution).await);
     assert!(result.is_err());
-    must_ok(release_fault.await);
     let health = must_ok(state.load_credential_maintenance(&account_id).await).expect("health");
     assert_eq!(health.state, CredentialMaintenanceState::Retrying);
     assert_eq!(
@@ -401,6 +400,8 @@ async fn confirmed_unspent_failure_retries_transient_sqlite_disposition_without_
     );
     assert_eq!(health.next_attempt_unix_seconds, Some(1_120));
     assert_eq!(refresh_client.calls.load(Ordering::SeqCst), 1);
+    must_ok(release_clock.send(()));
+    must_ok(clock_guard.await).expect("real SQLite I/O must finish inside the guard");
 }
 
 #[derive(Clone)]

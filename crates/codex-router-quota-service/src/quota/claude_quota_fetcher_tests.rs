@@ -86,10 +86,9 @@ async fn fake_usage_endpoint_receives_oauth_headers_and_returns_windows() {
 
 #[tokio::test]
 async fn fake_usage_endpoint_accepts_overlapping_legacy_and_limits_windows() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake usage listener");
-    listener
-        .set_nonblocking(true)
-        .expect("fake usage listener should be bounded");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake usage listener");
     let endpoint = format!(
         "http://{}/api/oauth/usage",
         listener.local_addr().expect("listener address")
@@ -97,46 +96,40 @@ async fn fake_usage_endpoint_accepts_overlapping_legacy_and_limits_windows() {
     let (request_sender, request_receiver) = mpsc::channel();
     let body = r#"{"five_hour":{"utilization":25,"resets_at":"2026-10-01T00:00:00Z"},"seven_day":{"utilization":80,"resets_at":"2026-10-02T00:00:00Z"},"limits":[{"kind":"session","percent":60,"resets_at":"2026-10-03T00:00:00Z"},{"kind":"weekly_all","percent":100,"resets_at":"2026-10-04T00:00:00Z"}]}"#;
     let server_body = body.to_owned();
-    let server = thread::spawn(move || {
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        let (mut stream, _) = loop {
-            match listener.accept() {
-                Ok(connection) => break connection,
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::WouldBlock
-                        && std::time::Instant::now() < deadline =>
-                {
-                    thread::yield_now();
-                }
-                Err(error) => panic!("fake usage server should accept request: {error}"),
-            }
-        };
+    let server = tokio::spawn(async move {
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept())
+            .await
+            .expect("usage listener must accept inside its failure guard")
+            .expect("usage accept");
+        let mut stream = stream.into_std().expect("owned accepted socket");
         stream
             .set_nonblocking(false)
-            .expect("accepted fake usage stream should use blocking reads");
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .expect("fake usage stream should have bounded reads");
-        let mut request = Vec::new();
-        let mut buffer = [0_u8; 1024];
-        let request_end = loop {
-            let count = stream.read(&mut buffer).expect("read usage request");
-            assert!(count > 0, "usage request includes headers");
-            request.extend_from_slice(&buffer[..count]);
-            if let Some(index) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
-                break index + 4;
-            }
-        };
-        request_sender
-            .send(String::from_utf8(request[..request_end].to_vec()).expect("request headers"))
-            .expect("test receives request headers");
-        write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                server_body.len(),
-                server_body
-            )
-            .expect("write fake usage response");
+            .expect("blocking request reader");
+        tokio::task::spawn_blocking(move || {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("fake usage stream should have bounded reads");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            let request_end = loop {
+                let count = stream.read(&mut buffer).expect("read usage request");
+                assert!(count > 0, "usage request includes headers");
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(index) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            request_sender
+                .send(String::from_utf8(request[..request_end].to_vec()).expect("request headers"))
+                .expect("test receives request headers");
+            write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    server_body.len(),
+                    server_body
+                )
+                .expect("write fake usage response");
+        }).await.expect("usage reader task must join");
     });
     let fetcher = ClaudeQuotaFetcher::new_with_endpoint_for_test(Duration::from_secs(2), endpoint);
     let account_id = AccountId::new("acct_claude_overlap").expect("account id");
@@ -155,7 +148,7 @@ async fn fake_usage_endpoint_accepts_overlapping_legacy_and_limits_windows() {
         .recv_timeout(Duration::from_secs(3))
         .expect("fake usage server should observe one request")
         .to_ascii_lowercase();
-    server.join().expect("fake usage server should finish");
+    server.await.expect("fake usage server should finish");
 
     assert!(request.starts_with("get /api/oauth/usage "));
     assert!(request.contains("anthropic-beta: oauth-2025-04-20"));
