@@ -104,7 +104,8 @@ pub(crate) async fn upsert_quota_snapshot_in_async_transaction(
            remaining_headroom, reset_unix_seconds,
            reset_credits_available, stale_penalty
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+          WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
          ON CONFLICT(account_id, route_band) DO UPDATE SET
            source = excluded.source,
            observed_unix_seconds = excluded.observed_unix_seconds,

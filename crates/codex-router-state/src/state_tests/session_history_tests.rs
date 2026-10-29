@@ -8,6 +8,7 @@ async fn sqlx_active_session_events_retain_completed_sessions_after_release() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_completed_session"]).await;
     let account = account_id("acct_completed_session");
     let reservation_id = ReservationId::new("reservation_completed_1");
 
@@ -72,6 +73,7 @@ async fn sqlx_active_session_event_compaction_purges_only_completed_old_sessions
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_event_compaction"]).await;
     let account = account_id("acct_event_compaction");
     let old_completed = ReservationId::new("reservation-old-completed");
     let exact_cutoff_completed = ReservationId::new("reservation-exact-cutoff-completed");
@@ -210,6 +212,7 @@ async fn sqlx_active_session_release_timestamp_bounds_rollup_interval() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_release_timestamp"]).await;
     let account = account_id("acct_release_timestamp");
     let reservation_id = ReservationId::new("reservation_release_timestamp");
 
@@ -252,6 +255,7 @@ async fn sqlx_active_session_rollups_clip_partial_buckets_and_overlap() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_rollup_session"]).await;
     let account = account_id("acct_rollup_session");
     let first = ReservationId::new("reservation_rollup_1");
     let second = ReservationId::new("reservation_rollup_2");

@@ -1,6 +1,139 @@
 use super::*;
 use codex_router_secret_store::test_support::open_encrypted_credential_store;
 
+struct RetainedRemovalCredentialResolver;
+
+impl AsyncProviderCredentialResolver for RetainedRemovalCredentialResolver {
+    async fn resolve_provider_credentials_async(
+        &self,
+        account_id: &AccountId,
+        _expected_provider: codex_router_core::provider::Provider,
+    ) -> Result<ResolvedProviderCredential, CredentialResolverError> {
+        Ok(ResolvedProviderCredential::new(
+            account_id.clone(),
+            SecretString::new("fixture-access"),
+            1,
+        ))
+    }
+}
+
+struct HeldModelsQuotaProvider {
+    entered: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
+    response_succeeds: bool,
+}
+
+impl QuotaRefreshProvider for HeldModelsQuotaProvider {
+    async fn fetch_quota(
+        &self,
+        request: QuotaRefreshProviderRequest,
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
+        assert_eq!(request.account_id().as_str(), "acct_primary");
+        if request.route_band() == "models" {
+            self.entered.notify_one();
+            self.release.notified().await;
+            if !self.response_succeeds {
+                return Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderStatus { status: 503 });
+            }
+        }
+        Ok(QuotaRefreshProviderResponse {
+            windows: verified_quota_windows(80),
+            ..Default::default()
+        })
+    }
+}
+
+#[test]
+fn account_remove_discards_in_flight_quota_writes() {
+    let mut outcomes = Vec::new();
+    for response_succeeds in [true, false] {
+        let fixture = RemovalFixture::new("remove-in-flight-quota", AccountStatus::Enabled);
+        fixture.login_account("acct_secondary", "secondary");
+        // Keep the second account outside the refresh while preserving all of its rows.
+        run_cli(
+            [
+                "account",
+                "disable",
+                "--account",
+                "secondary",
+                "--router-root",
+                path_to_str(fixture.root.path()),
+            ],
+            CliContext::new(Vec::new()),
+        );
+        fixture.seed_dependents();
+        let secondary_before = fixture.dependent_row_counts("acct_secondary");
+        let state_path = fixture.root.path().join("state.sqlite");
+        let secret_root = fixture.root.path().join("secrets");
+        let runtime = test_async_runtime();
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let provider = HeldModelsQuotaProvider {
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+            response_succeeds,
+        };
+        let mut refresh = runtime.spawn(async move {
+            refresh_quota_store_paths_with_dependencies_async(
+                &mut Vec::new(),
+                &state_path,
+                &secret_root,
+                "unused-provider-endpoint".to_owned(),
+                &RetainedRemovalCredentialResolver,
+                &provider,
+                1_100,
+            )
+            .await
+        });
+        runtime.block_on(async {
+            tokio::select! {
+                () = entered.notified() => {},
+                result = &mut refresh => panic!("refresh ended before the held Models fetch: {result:?}"),
+            }
+        });
+        run_cli(
+            [
+                "account",
+                "disable",
+                "--account",
+                "primary",
+                "--router-root",
+                path_to_str(fixture.root.path()),
+            ],
+            CliContext::new(Vec::new()),
+        );
+        assert_eq!(must_ok(fixture.remove()), "removed account: primary\n");
+        release.notify_one();
+        must_ok(must_ok(runtime.block_on(refresh)));
+        assert!(!fixture.account_exists());
+        assert!(!fixture.credential_exists(1));
+        outcomes.push((
+            response_succeeds,
+            fixture.dependent_row_counts("acct_primary"),
+            secondary_before,
+            fixture.dependent_row_counts("acct_secondary"),
+        ));
+    }
+    // Collect both late outcomes before asserting, so a red run exercises both paths.
+    for (response_succeeds, removed_counts, secondary_before, secondary_after) in outcomes {
+        assert_eq!(
+            secondary_after, secondary_before,
+            "second account must stay intact"
+        );
+        assert_eq!(
+            removed_counts,
+            vec![0; DEPENDENT_COUNTS.len()],
+            "late response succeeds={response_succeeds}; tables={DEPENDENT_COUNTS:?}"
+        );
+    }
+}
+
+#[path = "account_removal_queued_tests.rs"]
+mod queued_writes;
+
 #[test]
 fn account_remove_help_and_target_options_follow_sibling_commands() {
     let help = must_ok(CliCommand::parse(
@@ -348,6 +481,31 @@ impl RemovalFixture {
             }
             pool.close().await;
         });
+    }
+
+    fn dependent_row_counts(&self, account_name: &str) -> Vec<i64> {
+        test_async_runtime().block_on(async {
+            let pool = must_ok(
+                sqlx::sqlite::SqlitePoolOptions::new()
+                    .connect_with(
+                        sqlx::sqlite::SqliteConnectOptions::new()
+                            .filename(self.root.path().join("state.sqlite"))
+                            .read_only(true),
+                    )
+                    .await,
+            );
+            let mut counts = Vec::new();
+            for statement in DEPENDENT_COUNTS {
+                counts.push(must_ok(
+                    sqlx::query_scalar(*statement)
+                        .bind(account_name)
+                        .fetch_one(&pool)
+                        .await,
+                ));
+            }
+            pool.close().await;
+            counts
+        })
     }
 }
 
