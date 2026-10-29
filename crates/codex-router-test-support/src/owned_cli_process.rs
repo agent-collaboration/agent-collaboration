@@ -1,4 +1,7 @@
 //! Owned CLI child capture: concurrent pipes and explicit wait on every returned failure.
+mod sync_child_exit;
+pub(crate) use sync_child_exit::{ChildExitObservation, wait_for_sync_child};
+
 use crate::FixtureResult as ProofResult;
 use std::{
     fmt,

@@ -27,9 +27,10 @@ use super::hostile_and_state::seed_smoke_account;
 use super::assert_codex_visible_output;
 use super::assert_redacted_three_websocket_payload;
 use super::assert_smoke_contract;
+use super::child_output_capture::run_with_expiry_after_output_closed;
+use super::child_output_capture::run_with_timeout;
 use super::first_frame_shape_summary;
 use super::http_probe::upstream_account_token;
-use super::process_runtime::run_with_timeout;
 use super::run_hostile_no_token_smoke;
 use super::run_installed_codex_http_sse_mock_smoke;
 use super::run_installed_codex_mock_smoke;
@@ -350,13 +351,14 @@ fn timed_out_codex_output_suppresses_captured_stdout_stderr() {
     command
         .arg("-c")
         .arg(
-            "printf 'local-secret-canary shell_command'; printf 'workdir: /tmp/raw-path session id: raw-session-id user prompt-canary diagnostic: waiting on loopback closed connection function_call_output' >&2; sleep 2",
+            "printf 'local-secret-canary shell_command'; printf 'workdir: /tmp/raw-path session id: raw-session-id user prompt-canary diagnostic: waiting on loopback closed connection function_call_output' >&2; exec 1>&- 2>&-; read fixture_input",
         )
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    let error = match run_with_timeout(command, std::time::Duration::from_millis(250)) {
-        Ok(_) => panic!("sleeping command must time out"),
+    let error = match run_with_expiry_after_output_closed(command) {
+        Ok(_) => panic!("held command must time out after its output closes"),
         Err(error) => error,
     };
 

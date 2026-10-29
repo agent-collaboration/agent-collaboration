@@ -21,7 +21,7 @@ Report only to 🦁 Lead at {"endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1b
 
 ## Current state and changed responsibilities
 
-Pushed checkpoints:a96feaac,cbc82148,236606c9,6104fb93,merge7b2088d7,e00bccd8,257c6a7d. No PR; workspace version still0.1.116. W2 version0.1.118 is assigned but must still be unused; W1 lands first, then merge fresh main before final delivery. No merge/tag/publication/production replacement authority.
+Pushed checkpoints:a96feaac,cbc82148,236606c9,6104fb93,merge7b2088d7,e00bccd8,257c6a7d,71a2cd73,b95ce136. No PR; workspace version still0.1.116. W2 version0.1.118 is assigned but must still be unused; W1 lands first, then merge fresh main before final delivery. No merge/tag/publication/production replacement authority.
 
 - Fake API inventory/helper and three granted agent-collaboration callers: explicit operation/child completion, retained transcript/further-call checks and direct kernel queue inspection. Two permanent observer controls.
 - Native carrier: permanent CI18 real backpressure+actual-child-exit regression; supervisor drains an attached producer after exit within unchanged settlement bound. Real backend-loss kill/reap case uses a private lazy deadline.
@@ -31,7 +31,7 @@ Pushed checkpoints:a96feaac,cbc82148,236606c9,6104fb93,merge7b2088d7,e00bccd8,25
 - CLI transport tests: existing actual listening-address line drives clients; all21 retry helper definitions/uses cut over, stdout preserved. Fragmented/malformed receipt controls. Stop timeout: private HostStopDeadline and cfg(test)-only CLI exit instant retain real socket/kernel/lock path and normal40s budget, removing the real40s success prerequisite.
 - Native client negative windows: operation completion then direct buffered/kernel inspection; reset Cancel directly observes its real pending future/Inspecting before authority release.
 
-Batch6: admission saturation now uses the actual running-call receipt;11/11 passed. Imported MCP expect corrected to the same invariant assertion; combined client/MCP clippy and fmt pass, registry lifecycle5/5 passed. No command is running at this writing. Check status/handles later. Central startup observation approved01a1895c and implemented: real T0/pre-expiry/T1 children, actual alarm receipt then direct owning-store assertion before requests. Final7/7green,clippy/fmt0,default-only feature graph. Scope and remaining indirect timers still open.
+Batch6: admission saturation now uses the actual running-call receipt;11/11 passed. Imported MCP expect corrected to the same invariant assertion; combined client/MCP clippy and fmt pass, registry lifecycle5/5 passed. Batch8 now verified: private sync owned wait, real pipes/EOF-controlled expiry, actual stdout readiness and reader joins; full test-support50pass/16ignored,6.531s,0b664d93-3c1a-482d-bf4d-0e85bb07e929,clippy/fmt0. No command is running at this writing. Check status/handles later. Central startup observation approved01a1895c and implemented: real T0/pre-expiry/T1 children, actual alarm receipt then direct owning-store assertion before requests. Final7/7green,clippy/fmt0,default-only feature graph. Scope and remaining indirect timers still open.
 
 ## Implementation proof and limits
 

@@ -114,6 +114,12 @@ mod hostile_and_state;
 #[path = "installed_codex/http_probe.rs"]
 mod http_probe;
 
+#[path = "installed_codex/child_output_capture.rs"]
+mod child_output_capture;
+#[cfg(test)]
+#[path = "installed_codex/owned_process_tests.rs"]
+mod owned_process_tests;
+
 #[path = "installed_codex/process_runtime.rs"]
 mod process_runtime;
 
@@ -144,6 +150,7 @@ mod websocket_models;
 #[path = "installed_codex/websocket_upstream.rs"]
 mod websocket_upstream;
 
+use child_output_capture::{process_output_markers, redacted_process_output_preview};
 use concurrent_websocket::{
     overlap_duration_ms, real_overlap_duration_ms, run_concurrent_mock_websocket_session,
     wait_for_concurrent_session_barrier, wake_mock_upstream_accept,
@@ -165,9 +172,9 @@ use http_probe::{
 };
 use process_runtime::{
     CodexChildEnvironment, CodexTransportMode, RouterProcessStartOptions, SmokeContractAssertion,
-    assert_codex_visible_output, process_output_markers, redacted_process_output_preview,
-    run_codex_exec, run_codex_exec_with_timeout, run_codex_exec_with_timeout_observed,
-    start_router_process, start_router_process_with_options, workspace_root,
+    assert_codex_visible_output, run_codex_exec, run_codex_exec_with_timeout,
+    run_codex_exec_with_timeout_observed, start_router_process, start_router_process_with_options,
+    workspace_root,
 };
 use quota_reconnect_upstream::run_concurrent_mock_upstream;
 use s8_provenance::{

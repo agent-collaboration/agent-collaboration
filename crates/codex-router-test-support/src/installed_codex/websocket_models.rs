@@ -267,43 +267,33 @@ impl RouterProcessGuard {
             self.join_output_readers(label)?;
             return Ok(self.observation.clone());
         };
-        let deadline = Instant::now() + timeout;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    let stdout_lines = self.join_output_reader(label, "stdout")?;
-                    let stderr_lines = self.join_output_reader(label, "stderr")?;
-                    if !status.success() {
-                        self.observation.cleanup_result = format!("exited:{status}");
-                        return Err(format!(
-                            "{label} exited with status {status}\nstdout:\n{}\nstderr:\n{}",
-                            stdout_lines.join("\n"),
-                            stderr_lines.join("\n")
-                        ));
-                    }
-                    self.observation.cleanup_result = format!("exited:{status}");
-                    return Ok(self.observation.clone());
-                }
-                Ok(None) if Instant::now() < deadline => {
-                    thread::sleep(Duration::from_millis(20));
-                }
-                Ok(None) => {
-                    let _ = child.kill();
-                    let status = child
-                        .wait()
-                        .map_err(|error| format!("failed to wait for {label}: {error}"))?;
-                    self.observation.cleanup_result = format!("wait-timeout-terminated:{status}");
-                    let stdout_lines = self.join_output_reader(label, "stdout")?;
-                    let stderr_lines = self.join_output_reader(label, "stderr")?;
+        let observation =
+            crate::owned_cli_process::wait_for_sync_child(&mut child, Instant::now() + timeout)
+                .map_err(|error| format!("failed to wait for {label}: {error}"));
+        let stdout_lines = self.join_output_reader(label, "stdout");
+        let stderr_lines = self.join_output_reader(label, "stderr");
+        let observation = observation?;
+        let stdout_lines = stdout_lines?;
+        let stderr_lines = stderr_lines?;
+        match observation {
+            crate::owned_cli_process::ChildExitObservation::Exited(status) => {
+                self.observation.cleanup_result = format!("exited:{status}");
+                if !status.success() {
                     return Err(format!(
-                        "{label} did not exit before timeout\nstdout:\n{}\nstderr:\n{}",
+                        "{label} exited with status {status}\nstdout:\n{}\nstderr:\n{}",
                         stdout_lines.join("\n"),
                         stderr_lines.join("\n")
                     ));
                 }
-                Err(error) => {
-                    return Err(format!("failed to inspect {label}: {error}"));
-                }
+                Ok(self.observation.clone())
+            }
+            crate::owned_cli_process::ChildExitObservation::DeadlineExpired(status) => {
+                self.observation.cleanup_result = format!("wait-timeout-terminated:{status}");
+                Err(format!(
+                    "{label} did not exit before timeout\nstdout:\n{}\nstderr:\n{}",
+                    stdout_lines.join("\n"),
+                    stderr_lines.join("\n")
+                ))
             }
         }
     }
@@ -312,29 +302,18 @@ impl RouterProcessGuard {
         let Some(mut child) = self.child.take() else {
             return Ok(());
         };
-        let deadline = Instant::now() + grace;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    self.observation.cleanup_result = format!("already-exited:{status}");
-                    return Ok(());
+        self.observation.cleanup_result =
+            match crate::owned_cli_process::wait_for_sync_child(&mut child, Instant::now() + grace)
+                .map_err(|error| format!("failed to wait for {label}: {error}"))?
+            {
+                crate::owned_cli_process::ChildExitObservation::Exited(status) => {
+                    format!("already-exited:{status}")
                 }
-                Ok(None) if !grace.is_zero() && Instant::now() < deadline => {
-                    thread::sleep(Duration::from_millis(20));
+                crate::owned_cli_process::ChildExitObservation::DeadlineExpired(status) => {
+                    format!("terminated:{status}")
                 }
-                Ok(None) => {
-                    let _ = child.kill();
-                    let status = child
-                        .wait()
-                        .map_err(|error| format!("failed to wait for {label}: {error}"))?;
-                    self.observation.cleanup_result = format!("terminated:{status}");
-                    return Ok(());
-                }
-                Err(error) => {
-                    return Err(format!("failed to inspect {label}: {error}"));
-                }
-            }
-        }
+            };
+        Ok(())
     }
 
     pub(super) fn join_output_readers(&mut self, label: &str) -> Result<(), String> {
