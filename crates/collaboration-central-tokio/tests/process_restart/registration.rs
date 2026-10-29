@@ -259,7 +259,7 @@ async fn reopened_welcome_accepts_notice_before_its_exact_session() -> Conforman
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Contract assertions fail the test while fixture errors propagate."

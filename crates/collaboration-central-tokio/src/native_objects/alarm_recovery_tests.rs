@@ -36,6 +36,27 @@ async fn ready(slot: &ObjectSlot) -> TestResult {
     tokio::time::timeout(Duration::from_secs(2), ready.wait_for(|ready| *ready)).await??;
     Ok(())
 }
+
+#[tokio::test]
+async fn startup_alarm_observation_never_discovers_or_opens_an_object() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let objects = open(root.path()).await?;
+    let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
+    let observation = objects
+        .await_startup_alarm(ObjectAddress::Copy(database))
+        .await;
+    if observation.is_ok() {
+        return Err("an undiscovered object has no startup alarm receipt".into());
+    }
+    if !objects.slots.lock().await.is_empty() {
+        return Err("startup observation discovered an object".into());
+    }
+    if root.path().join(format!("copy-{database}.db")).exists() {
+        return Err("startup observation opened an owning database".into());
+    }
+    objects.shutdown().await?;
+    Ok(())
+}
 fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> Value {
     json!({"source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
 }

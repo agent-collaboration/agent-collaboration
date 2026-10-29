@@ -38,6 +38,25 @@ impl ServerProcess {
         jwks: &str,
         controls: &[RuntimeControlRequest],
     ) -> ConformanceResult<Self> {
+        Self::start_configured(root, jwks, controls, None, &[]).await
+    }
+
+    pub async fn start_at(
+        root: &Path,
+        jwks: &str,
+        now_millis: i64,
+        startup_alarms: &[ObjectAddress],
+    ) -> ConformanceResult<Self> {
+        Self::start_configured(root, jwks, &[], Some(now_millis), startup_alarms).await
+    }
+
+    async fn start_configured(
+        root: &Path,
+        jwks: &str,
+        controls: &[RuntimeControlRequest],
+        now_millis: Option<i64>,
+        startup_alarms: &[ObjectAddress],
+    ) -> ConformanceResult<Self> {
         let mut child = Command::new(std::env::current_exe()?)
             .args([
                 "--ignored",
@@ -48,6 +67,14 @@ impl ServerProcess {
             .env("CENTRAL_RESTART_ROOT", root)
             .env("CENTRAL_RESTART_JWKS", jwks)
             .env("CENTRAL_RESTART_CONTROLS", serde_json::to_string(controls)?)
+            .env(
+                "CENTRAL_RESTART_NOW",
+                now_millis.map_or_else(String::new, |now| now.to_string()),
+            )
+            .env(
+                "CENTRAL_RESTART_ALARMS",
+                serde_json::to_string(startup_alarms)?,
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -55,15 +82,42 @@ impl ServerProcess {
             .spawn()?;
         let stdout = child.stdout.take().ok_or("server stdout missing")?;
         let mut lines = BufReader::new(stdout).lines();
-        let base = tokio::time::timeout(Duration::from_secs(10), async {
-            while let Some(line) = lines.next_line().await? {
+        let ready = tokio::time::timeout(Duration::from_secs(10), async {
+            let base = loop {
+                let line = lines
+                    .next_line()
+                    .await?
+                    .ok_or("native server exited before readiness")?;
                 if let Some(base) = line.strip_prefix("CENTRAL_PROCESS_READY ") {
-                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(base.to_owned());
+                    break base.to_owned();
+                }
+            };
+            for expected in startup_alarms {
+                loop {
+                    let line = lines
+                        .next_line()
+                        .await?
+                        .ok_or("native server exited before startup alarm completion")?;
+                    if let Some(address) = line.strip_prefix("CENTRAL_STARTUP_ALARM_COMPLETED ") {
+                        let actual: ObjectAddress = serde_json::from_str(address)?;
+                        if &actual != expected {
+                            return Err("startup alarm receipt named another object".into());
+                        }
+                        break;
+                    }
                 }
             }
-            Err("native server exited before readiness".into())
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(base)
         })
-        .await??;
+        .await;
+        let base = match ready {
+            Ok(Ok(base)) => base,
+            failed => {
+                let killed = child.start_kill();
+                let reaped = child.wait().await;
+                return Err(format!("native startup receipt failed: {failed:?}; terminate={killed:?}; wait={reaped:?}").into());
+            }
+        };
         // Drain the test runner's small terminal output until the child exits.
         let output =
             tokio::spawn(async move { while matches!(lines.next_line().await, Ok(Some(_))) {} });

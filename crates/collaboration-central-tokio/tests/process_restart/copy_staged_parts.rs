@@ -25,12 +25,13 @@ async fn copy_staged_part_expires_automatically_after_process_death_and_restages
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let first = ServerProcess::start(root.path(), &jwks.url).await?;
+    let created = chrono::Utc::now().timestamp_millis();
+    let first = ServerProcess::start_at(root.path(), &jwks.url, created, &[]).await?;
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(10))
         .build()?;
-    let prepared = stage_before_process_death(&http, &first.base).await;
+    let prepared = stage_before_process_death(&http, &first.base, created).await;
     let crashed = first.crash().await;
     crashed?;
     let prepared = match prepared {
@@ -41,9 +42,27 @@ async fn copy_staged_part_expires_automatically_after_process_death_and_restages
         }
     };
 
-    let second = ServerProcess::start(root.path(), &jwks.url).await?;
-    let observed = observe_expiry_and_restage(&http, &second.base, &prepared).await;
+    let address = ObjectAddress::Copy(prepared.database);
+    let second = ServerProcess::start_at(
+        root.path(),
+        &jwks.url,
+        created,
+        std::slice::from_ref(&address),
+    )
+    .await?;
+    let retained = assert_original_part(
+        &read_health(&http, &second.base, prepared.database).await?,
+        &prepared,
+        created,
+    );
     let stopped = second.stop().await;
+    retained?;
+    stopped?;
+    let expired = created + PART_RETENTION_MILLIS;
+    let third = ServerProcess::start_at(root.path(), &jwks.url, expired, &[address]).await?;
+    let observed =
+        observe_expiry_and_restage(&http, &third.base, root.path(), &prepared, expired).await;
+    let stopped = third.stop().await;
     let keys_stopped = jwks.shutdown().await;
     observed?;
     stopped?;
@@ -55,6 +74,7 @@ async fn copy_staged_part_expires_automatically_after_process_death_and_restages
 async fn stage_before_process_death(
     http: &reqwest::Client,
     base: &str,
+    created: i64,
 ) -> ConformanceResult<StagedCopy> {
     let mut holder = enroll_admitted_peer(
         &ConformanceClient::new(base)?,
@@ -85,6 +105,20 @@ async fn stage_before_process_death(
                 creation_scenarios::metadata(&mut holder.socket, &workspace, operation).await?,
             )?;
         }
+        // Preserve the independent four-hour holder grant while Copy's saved
+        // part ages a full day. Only the first process receives this setup pin;
+        // neither reopened process receives a clock command.
+        control(
+            base,
+            ObjectAddress::Registry,
+            RuntimeControl::SetTime {
+                now: RegistryTime(
+                    chrono::DateTime::from_timestamp_millis(created + PART_RETENTION_MILLIS)
+                        .ok_or("Registry setup time is outside the timestamp range")?,
+                ),
+            },
+        )
+        .await?;
         let writer = PeerId::new(holder.peer)?;
         let registered = creation_scenarios::register(
             &mut holder.socket,
@@ -100,19 +134,8 @@ async fn stage_before_process_death(
         assert_eq!(status.schema.version, 0);
         assert!(staged_parts(&original)?.is_empty());
 
-        // Only the first Copy clock is backdated. A new process has no pin,
-        // so its real startup timer must derive the near-wall durable expiry.
-        let staged_at = chrono::Utc::now() - chrono::TimeDelta::milliseconds(86_400_000 - 65_000);
-        let staged_at = chrono::DateTime::from_timestamp_millis(staged_at.timestamp_millis())
+        let staged_at = chrono::DateTime::from_timestamp_millis(created)
             .ok_or("staging time is outside the timestamp range")?;
-        control(
-            base,
-            ObjectAddress::Copy(database),
-            RuntimeControl::SetTime {
-                now: RegistryTime(staged_at),
-            },
-        )
-        .await?;
         let (piece, transaction) = first_part(database)?;
         assert_eq!(
             apply(&mut holder.socket, piece.clone()).await?,
@@ -129,7 +152,7 @@ async fn stage_before_process_death(
             staged_at,
             status,
         };
-        assert_original_part(&read_health(http, base, database).await?, &saved)?;
+        assert_original_part(&read_health(http, base, database).await?, &saved, created)?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(saved)
     }
     .await;
@@ -145,37 +168,34 @@ async fn stage_before_process_death(
 async fn observe_expiry_and_restage(
     http: &reqwest::Client,
     base: &str,
+    root: &std::path::Path,
     saved: &StagedCopy,
+    expired: i64,
 ) -> ConformanceResult<()> {
     let deadline = saved.staged_at + chrono::TimeDelta::milliseconds(PART_RETENTION_MILLIS);
     assert!(
-        chrono::Utc::now() < deadline,
-        "restart missed the pre-expiry barrier"
+        expired >= deadline.timestamp_millis(),
+        "Copy pruned before its saved deadline"
     );
-    assert_original_part(&read_health(http, base, saved.database).await?, saved)?;
-    // Health dispatches ReadCopyHealth only: it cannot prune or arm a wake.
-    // No time control, write, Repair or normal session runs until expiry.
-    tokio::time::timeout(Duration::from_secs(75), async {
-        loop {
-            let health = read_health(http, base, saved.database).await?;
-            assert_eq!(copy_status(&health)?, &saved.status);
-            if staged_parts(&health)?.is_empty() {
-                assert!(
-                    chrono::Utc::now() >= deadline,
-                    "Copy pruned before its saved deadline"
-                );
-                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-            }
-            assert_original_part(&health, saved)?;
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .map_err(|_| "startup did not automatically expire the original staged Copy part")??;
+    // The child's real startup alarm completed before this direct owning-store read.
+    // No Health, session, time control or Repair has touched this process yet.
+    assert_eq!(
+        read_count(
+            &root.join(format!("copy-{}.db", saved.database)),
+            "SELECT COUNT(*) AS count FROM _fleet_sync_staged_parts"
+        )
+        .await?,
+        0,
+        "startup did not automatically expire the original staged Copy part"
+    );
+    let health = read_health(http, base, saved.database).await?;
+    assert_eq!(copy_status(&health)?, &saved.status);
+    assert!(staged_parts(&health)?.is_empty());
 
     let mut holder = registration::reconnect(base).await?;
     let proof = async {
-        let before = chrono::Utc::now();
+        let before =
+            chrono::DateTime::from_timestamp_millis(expired).ok_or("invalid restart time")?;
         assert_eq!(
             apply(&mut holder, saved.piece.clone()).await?,
             ReplicationAnswer::PartStaged {
@@ -184,7 +204,7 @@ async fn observe_expiry_and_restage(
                 acked: position(0)?,
             }
         );
-        let after = chrono::Utc::now();
+        let after = before;
         let health = read_health(http, base, saved.database).await?;
         assert_eq!(copy_status(&health)?, &saved.status);
         let [restaged] = staged_parts(&health)? else {
@@ -311,7 +331,15 @@ fn copy_status(health: &LiveCopyHealth) -> ConformanceResult<&CopyStatus> {
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
-fn assert_original_part(health: &LiveCopyHealth, saved: &StagedCopy) -> ConformanceResult<()> {
+fn assert_original_part(
+    health: &LiveCopyHealth,
+    saved: &StagedCopy,
+    now: i64,
+) -> ConformanceResult<()> {
+    assert!(
+        now < saved.staged_at.timestamp_millis() + PART_RETENTION_MILLIS,
+        "restart missed the pre-expiry barrier"
+    );
     assert_eq!(copy_status(health)?, &saved.status);
     let [part] = staged_parts(health)? else {
         return Err("original staged part did not survive process restart".into());

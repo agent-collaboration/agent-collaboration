@@ -184,6 +184,14 @@ impl TokioCentralPlatform {
         self.objects.stop.cancel();
     }
 
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn await_startup_alarm(
+        &self,
+        address: collaboration_central_core::ObjectAddress,
+    ) -> Result<(), durable_steps::StoreError> {
+        self.objects.await_startup_alarm(address).await
+    }
+
     /// Actual per-file metadata results from the most recent Health call.
     #[cfg(feature = "conformance")]
     pub async fn conformance_health_sample(

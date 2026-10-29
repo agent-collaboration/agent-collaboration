@@ -88,9 +88,19 @@ impl TokioServer {
         settings: TokioSettings,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Self, TokioServerError> {
+        Self::start_with_clock_and_controls(settings, Arc::new(SystemClock), controls).await
+    }
+
+    /// Supplies process time before ordinary object discovery and reconstruction.
+    #[cfg(feature = "conformance")]
+    pub async fn start_with_clock_and_controls(
+        settings: TokioSettings,
+        clock: Arc<dyn runtime_primitives::Clock>,
+        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+    ) -> Result<Self, TokioServerError> {
         let platform = TokioCentralPlatform::new_with_controls(
             &settings.jwks_url,
-            Arc::new(SystemClock),
+            clock,
             crate::native_logging::observe,
             &settings.root,
             settings.registry,
@@ -167,6 +177,15 @@ impl TokioServer {
     #[cfg(feature = "conformance")]
     pub fn conformance_platform(&self) -> &TokioCentralPlatform {
         &self.platform
+    }
+
+    /// Observes an existing owner's completed startup alarm without driving it.
+    #[cfg(feature = "conformance")]
+    pub async fn await_startup_alarm(
+        &self,
+        address: collaboration_central_core::ObjectAddress,
+    ) -> Result<(), durable_steps::StoreError> {
+        self.platform.await_startup_alarm(address).await
     }
 
     pub async fn shutdown(mut self) -> Result<(), TokioServerError> {

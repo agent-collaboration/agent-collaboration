@@ -13,19 +13,31 @@ pub(super) async fn run(
     clock: SharedClock,
     stop: CancellationToken,
     #[cfg(test)] ready: tokio::sync::watch::Sender<bool>,
+    #[cfg(feature = "conformance")] startup_completed: tokio::sync::watch::Sender<bool>,
 ) {
     let mut retry_delay = INITIAL_RETRY_DELAY;
     // Existing Copies are explicitly woken by startup discovery. Opening a
     // fresh Copy only for Health must create no migration or follow-up work.
     if !matches!(runtime.as_ref(), RuntimeFace::Copy(_)) {
-        drive(&runtime, &wake, &clock, &mut retry_delay).await;
+        drive(
+            &runtime,
+            &wake,
+            &clock,
+            &mut retry_delay,
+            #[cfg(feature = "conformance")]
+            &startup_completed,
+        )
+        .await;
     }
     #[cfg(test)]
     ready.send_replace(true);
     loop {
         tokio::select! {
             _ = stop.cancelled() => break,
-            _ = wake.wait() => drive(&runtime, &wake, &clock, &mut retry_delay).await,
+            _ = wake.wait() => drive(&runtime, &wake, &clock, &mut retry_delay,
+                #[cfg(feature = "conformance")]
+                &startup_completed,
+            ).await,
         }
     }
 }
@@ -35,9 +47,12 @@ async fn drive(
     wake: &TokioWakeTimer<SharedClock>,
     clock: &SharedClock,
     retry_delay: &mut Duration,
+    #[cfg(feature = "conformance")] startup_completed: &tokio::sync::watch::Sender<bool>,
 ) {
     if runtime.on_alarm().await.is_ok() {
         *retry_delay = INITIAL_RETRY_DELAY;
+        #[cfg(feature = "conformance")]
+        startup_completed.send_replace(true);
         return;
     }
     eprintln!("central alarm drive failed");

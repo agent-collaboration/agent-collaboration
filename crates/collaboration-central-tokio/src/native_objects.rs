@@ -137,6 +137,8 @@ struct ObjectSlot {
     alarm_task: OnceLock<()>,
     #[cfg(test)]
     alarm_owner_ready: tokio::sync::watch::Sender<bool>,
+    #[cfg(feature = "conformance")]
+    startup_alarm_completed: tokio::sync::watch::Sender<bool>,
 }
 
 pub(crate) struct NativeObjects {
@@ -311,6 +313,8 @@ impl NativeObjects {
                         alarm_task: OnceLock::new(),
                         #[cfg(test)]
                         alarm_owner_ready: tokio::sync::watch::channel(false).0,
+                        #[cfg(feature = "conformance")]
+                        startup_alarm_completed: tokio::sync::watch::channel(false).0,
                     })
                 })
                 .clone()
@@ -407,6 +411,8 @@ impl NativeObjects {
             let stop = self.stop.clone();
             #[cfg(test)]
             let ready = slot.alarm_owner_ready.clone();
+            #[cfg(feature = "conformance")]
+            let startup_completed = slot.startup_alarm_completed.clone();
             self.tasks.spawn(alarm_owner::run(
                 runtime,
                 wake,
@@ -414,6 +420,8 @@ impl NativeObjects {
                 stop,
                 #[cfg(test)]
                 ready,
+                #[cfg(feature = "conformance")]
+                startup_completed,
             ));
         });
         Ok(slot)
@@ -656,3 +664,5 @@ mod alarm_recovery_tests;
 #[cfg(feature = "conformance")]
 #[path = "conformance_board_import.rs"]
 mod conformance_board_import;
+#[cfg(feature = "conformance")]
+mod startup_alarm;

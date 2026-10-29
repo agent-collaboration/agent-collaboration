@@ -87,13 +87,35 @@ async fn native_central_process() -> ConformanceResult<()> {
     };
     let controls: Vec<collaboration_central_conformance::RuntimeControlRequest> =
         serde_json::from_str(&std::env::var("CENTRAL_RESTART_CONTROLS")?)?;
-    let server = if controls.is_empty() {
+    let now = std::env::var("CENTRAL_RESTART_NOW")?;
+    let server = if !now.is_empty() {
+        TokioServer::start_with_clock_and_controls(
+            settings,
+            std::sync::Arc::new(RestartClock(now.parse()?)),
+            controls,
+        )
+        .await?
+    } else if controls.is_empty() {
         TokioServer::start(settings).await?
     } else {
         TokioServer::start_with_controls(settings, controls).await?
     };
     println!("CENTRAL_PROCESS_READY {}", server.base_url());
     std::io::stdout().flush()?;
+    let startup_alarms: Vec<ObjectAddress> =
+        serde_json::from_str(&std::env::var("CENTRAL_RESTART_ALARMS")?)?;
+    for address in startup_alarms {
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            server.await_startup_alarm(address.clone()),
+        )
+        .await??;
+        println!(
+            "CENTRAL_STARTUP_ALARM_COMPLETED {}",
+            serde_json::to_string(&address)?
+        );
+        std::io::stdout().flush()?;
+    }
     tokio::task::spawn_blocking(|| {
         let mut command = String::new();
         std::io::stdin().read_line(&mut command)
@@ -101,6 +123,13 @@ async fn native_central_process() -> ConformanceResult<()> {
     .await??;
     server.shutdown().await?;
     Ok(())
+}
+
+struct RestartClock(i64);
+impl runtime_primitives::Clock for RestartClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(self.0)
+    }
 }
 
 #[expect(
