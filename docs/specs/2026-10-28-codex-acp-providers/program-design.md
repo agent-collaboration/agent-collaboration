@@ -1,23 +1,25 @@
 # Program Design: one bridge, injected provider behavior
 
-The existing face speaks Codex app-server. The existing actor speaks ACP and owns sending. Add provider behavior at that actor's boundary; keep lifecycle and protocol ownership where they already are.
+The existing face speaks Codex app-server. The existing actor speaks ACP and owns sending. **Dependency injection means a constructor receives a Rust trait object.** Host composition constructs the selected concrete provider behavior; the shared runtime and actor consume that dependency without choosing providers.
 
 ```mermaid
 flowchart TD
-  CLI["Codex CLI unchanged"] -->|native requests| Face["Native face: decode and encode"]
-  Face -->|read and command ports| Host["Host: existing session routing and queue"]
-  Host --> Actor["ACP actor: single ordered sender"]
-  Actor -->|prepare and interpret| Trait["Injected provider behavior"]
-  Trait --> Claude["Claude: metadata and final-Text invocation"]
-  Trait --> Cursor["Cursor: metadata and native mention IDs"]
-  Actor -->|existing ACP connection| Provider["Existing Claude or Cursor process"]
-  Provider -->|updates and outcome| Hub["Existing session hub and item projection"]
-  Hub -->|native notifications| Face
+  Host["Host composition<br/>qualifies launch and constructs one behavior"] -->|Claude qualification result| Claude["ClaudeAcpBehavior<br/>immutable skill-source configuration"]
+  Host -->|constructs when Cursor| Cursor["CursorAcpBehavior"]
+  Tests["Explicit test composition"] -->|constructs| Default["StandardAcpBehavior<br/>test and direct-runtime control"]
+  Claude -.->|implements| Trait["ProviderBehavior trait<br/>owned by ACP runtime"]
+  Cursor -.->|implements| Trait
+  Default -.->|implements| Trait
+  Host -->|injects via constructor| Runtime["Existing ACP runtime<br/>receives Arc of trait object"]
+  Runtime -->|shares immutable Arc| Actor["Existing session actor<br/>owns session state and sending"]
+  Actor -->|calls trait methods| Trait
 ```
+
+The Host construction arrows show its two configured provider alternatives: each endpoint gets **one** selected implementation. Standard behavior is an explicit test/direct-runtime control, not a third configured Host provider. Dotted arrows mean “implements”, not a runtime call from the trait to a provider selector. The trait has no registry or factory hidden behind it.
 
 ## Current path and change
 
-At branch source `ae66b4222`, `collaboration-runtime/src/router_session_app_server_methods.rs` answers `skills/list` with empty data, rejects structured Skill in `parse_turn_input`, and silently substitutes a default for an invalid model. `router_session_app_server.rs` has no compact admission. The existing Host command port forwards text/images through delivery/FIFO to `acp-client-runtime::provider_session_actor`; its dispatch report and hub events drive turn acceptance and output.
+At merged source `b6c30d62d` (includes main `f6d68f174`), `collaboration-runtime/src/router_session_app_server_methods.rs` answers `skills/list` with empty data, rejects structured Skill in `parse_turn_input`, and silently substitutes a default for an invalid model. `router_session_app_server.rs` has no compact admission. The existing Host command port forwards text/images through delivery/FIFO to `acp-client-runtime::provider_session_actor`; its dispatch report and hub events drive turn acceptance and output. Preserve main's admitted single-text user-history item, separate provider user-group IDs and fail-closed sink publication while adapting this path.
 
 These are missing adaptations, not a missing transport. Current native Codex traffic and the reverse `codex-acp-adapter` stay on their existing paths. The proposed changes are native list/input/compact admission, a typed selection envelope through the existing queue, provider-specific preparation, and typed effect/error projection. The native handler must contain no Claude/Cursor branches.
 
@@ -50,24 +52,43 @@ Both selected providers supply invocation IDs without physical skill paths. Use 
 | Existing `session-event-model` | Provider-neutral skill view and submission envelope | No SDK/provider implementation. Consumed by contracts, face, Host and actor. |
 | Existing `collaboration-contracts` | Read skill view and submit/compact capabilities | Domain types, no Host/runtime implementation. |
 | Existing `collaboration-runtime` | Native codecs, connection/cwd binding and hub projection | Contracts/domain; no concrete provider knowledge. |
-| Existing `acp-client-runtime` | ACP transport, ordered actor and consumer-owned behavior trait | Domain + ACP SDK; never imports concrete adapters. |
-| **One new `acp-provider-adapters` crate** | Claude/Cursor metadata interpretation and invocation rules; standard ACP default | Depends downwards on runtime trait/domain. Host constructs/injects it. No database/UI dependency. |
+| Existing `acp-client-runtime` | ACP transport, ordered actor and consumer-owned ProviderBehavior trait | Domain + ACP SDK; never imports concrete adapters. Runtime constructors require the dependency. |
+| **One new `acp-provider-adapters` crate** | Concrete trait implementations; Claude launch qualification/preparation and embedded metadata asset | Depends downwards on runtime trait/domain. Host calls concrete startup preparation and constructs/injects one implementation. Startup resolution may do I/O; trait methods never do. No database/UI dependency. |
 | Existing `codex-router-host` | Choose provider, construct/inject behavior, preserve launch environment | Depends on runtime + adapters; composition only. |
 | **Small private `providers/claude-acp` package** | Use official Claude library's public session metadata APIs in its existing ACP process | Existing qualified library/SDK imports; no second installed SDK, agent or service. |
 
-The trait consumed by the actor has only the differences needed now:
+### Trait contract and lifetime
+
+The proposed trait is object-safe, synchronous and immutable. Its methods classify or prepare provider-specific values; none sends ACP traffic, starts a task, launches a process or reads a file. Keeping these methods immutable makes one dependency safe to share across an endpoint's existing session actors. All mutable conversation state stays in those actors and the existing hub.
 
 ```rust
-pub trait ProviderBehavior: Send {
-    fn observe(&mut self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
+pub trait ProviderBehavior: Send + Sync {
+    fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError>;
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;
 }
 ```
 
-`ProviderFacts` contains an optional replacement skill view and optional typed compaction hint for an existing tool ID. `ProviderUpdate` is the neutral command-list/tool-status/closure shape decoded at the existing ACP edge. Command rows retain invocation name, description, optional input hint and optional opaque `_meta` at that edge. Concrete behaviors synchronously classify their actual outgoing metadata; standard ACP reports source-unavailable where skill classification is unestablished. `ProviderError` is a closed enum: InvalidSelection, Unsupported, SourceUnavailable, MalformedMetadata. Runtime/Host failure additionally retains Busy, ProviderRejected, NotSubmitted and OutcomeUnknown. The standard implementation preserves ordinary ACP behavior and refuses unestablished skill/compact capabilities.
+| Method | Input owned by its caller | Result / guarantee |
+| --- | --- | --- |
+| `observe` | Provider-neutral session-admitted, command-list, tool-status or closure update from existing lifecycle/stream | Derived skill view and/or typed semantic hint; caller applies it to its own state. No lifecycle or transport effect. |
+| `prepare` | Validated ProviderSubmission with exact content and selected identities | Prepared ACP content, or closed refusal before any send. Actor still revalidates the selection against its current view. |
+| `compact` | Invocation on the injected, already-qualified behavior | Existing provider compact content/operation, or Unsupported. Actor owns idle/busy admission, dispatch and terminal correlation. |
 
-Only the existing actor replaces its ephemeral skill view when it receives the same ordered provider update stream it already owns. There is no Rust metadata read worker, filesystem reader, refresh task or new in-flight state. Session close retires the view through the existing lifecycle. No watcher, timer, background service or global catalogue.
+### Where the dependency is constructed and passed
+
+1. `codex-router-host::provider_startup_composition` matches the **configured endpoint provider once**. For Claude it prepares the launch as described below and constructs `ClaudeAcpBehavior` with that explicit immutable qualification result; for Cursor it constructs `CursorAcpBehavior`. It injects the resulting `Arc<dyn ProviderBehavior>` with the prepared launch. Preserve routing/environment and native-Claude binding; the qualified Claude executable/arguments are deliberately changed to run the metadata asset. That asset is launch integration, not the DI mechanism.
+2. `ExternalProviderRuntime::initialize_*` and `AgentSessionClient::initialize_*` receive that explicit dependency. Every existing initializer/caller is updated in the same cutover; tests explicitly supply StandardAcpBehavior or a scripted trait implementation. Do not add a hidden global/default lookup or an optional builder that silently chooses a provider.
+3. The existing connection task stores the immutable Arc in its runtime handles. Both existing session-admission paths pass it into `run_provider_session`. Cloning an Arc shares the same stateless implementation; it does not share a skill catalogue or active-turn state.
+4. Each actor calls the trait and applies the returned facts to its own inventory/projection. The actor remains the only ACP sender. Add no provider-name branches for these skills/commands in the actor, face or native codec. Host selection and concrete implementation code know the provider. Existing unrelated Cursor todo projection remains at its current owner; this project does not refactor it.
+
+This follows the existing constructor pattern: `RouterSessionAppServerContext::new` already receives `Arc<dyn SessionCommandPort>` and `Arc<dyn SessionEventHub>`. Compile-time direction is **Host → adapters and runtime; adapters → runtime's trait; runtime → domain types**. Runtime cannot depend on the adapter crate. No DI container, service locator, plugin registration system or additional factory trait is introduced.
+
+The dependency lives until the existing endpoint runtime retires. A session close removes that session's mutable view and turn state, not the shared immutable behavior. A different provider configuration gets a newly constructed runtime/dependency through existing startup ownership. The public-library Claude wrapper's per-query metadata state remains in that provider process; it does not migrate into this Rust trait object.
+
+`ProviderFacts` contains an optional replacement skill view and optional typed compaction hint for an existing tool ID. `ProviderUpdate` is the neutral session-admitted/command-list/tool-status/closure shape at the existing ACP edge. Each actor calls `observe(SessionAdmitted)` before processing its ordered stream so constructor-known source failure reaches the hub even if no command list ever arrives. Command rows retain invocation name, description, optional input hint and optional opaque `_meta` at that edge. Concrete behaviors synchronously classify their actual outgoing metadata; standard ACP reports source-unavailable where skill classification is unestablished. `ProviderError` is a closed enum: InvalidSelection, Unsupported, SourceUnavailable, MalformedMetadata. Runtime/Host failure additionally retains Busy, ProviderRejected, NotSubmitted and OutcomeUnknown. The standard implementation preserves ordinary ACP behavior and refuses unestablished skill/compact capabilities.
+
+Only the existing actor replaces its ephemeral skill view at admission and from the same ordered provider update stream it already owns. There is no Rust metadata read worker, skill-filesystem reader, refresh task or new in-flight state. Session close retires the view through the existing lifecycle. No watcher, timer, background service or global catalogue.
 
 The existing hub exposes an atomic latest view plus update subscription through the read contract, reusing its existing session snapshot/event ownership. The native connection binds cwd to a session as C1 specifies and emits `skills/changed` only when binding/view meaning changes. `skills/list` always answers the current view immediately; `forceReload` rereads that view rather than manufacturing a native provider rescan. A stable read emits no further invalidation. Source failure returns per-cwd errors; Unknown returns no current rows/errors. Chat never waits on a metadata read.
 
@@ -89,6 +110,12 @@ Keep only the latest original list, effective descriptors and one in-flight meta
 
 Preserve the **0.81.0 bin envelope**: its SDK `resolveSettings({settingSources:[]})` and effective.env application, stdout only for ACP, stderr diagnostics, unhandled-rejection handler, optional existing logger, EOF/SIGINT/SIGTERM → public `agent.dispose()`. Resolve SDK from `createRequire(canonicalOfficialLibraryURL)` and import absolute URLs, never from the project cwd. The package builds Router-only `.mjs` embedded in the adapter crate; existing Host launch arguments run that asset in the **same Node ACP process**, importing the installed qualified official library. Preserve Router routing variables and global native-Claude binding. No runtime script cache, global install, fork, private-method patch or extra supervisor. A nonqualified custom launch remains original, with the skill-source failure reported instead of guessed.
 
+**Launch preparation has an owner and an explicit result.** In the existing Host startup branch, after existing native-Claude/environment binding and before `ExternalProviderRuntime::initialize_*`, call the concrete Claude adapter's `prepare_claude_launch(ExternalProviderLaunch)`. This is one provider-specific startup function, not another trait/factory. It returns the launch plus `ClaudeSkillSource = Annotated | Unavailable(reason)`, which is passed to `ClaudeAcpBehavior::new`. The adapter crate already depends on the runtime that owns ExternalProviderLaunch, so this creates no reverse Host dependency.
+
+The preparation function resolves the configured executable on the Host launch PATH, then canonicalizes the official package entry and Node executable. Qualify only the inspected official0.81.0 package/bin and its SDK0.3.280 public exports, with a compatible recorded Node runtime and the original launch arguments supported by that bin envelope. Recognize a direct official bin/symlink or the installed pnpm shim's explicit `cmd-shim-target` metadata; validate the resolved target against the package's declared bin. Do not evaluate arbitrary shell, scan skill directories or assume an unrelated custom executable is the official library. An unknown shim, changed package/API, unsupported argument or unresolved runtime fails qualification.
+
+On qualification, replace only executable/arguments with the canonical Node running the embedded module via module-eval, importing the qualified absolute library/SDK URLs; keep environment, persistence target, routing and native-Claude binding. No emitted disk script, second process or runtime installation is needed. Record nonsecret canonical path/version identities for target qualification. If qualification fails, keep the original executable/arguments and construct Claude behavior with Unavailable(reason): SessionAdmitted and every later command update yield a source error, never indefinite Unknown or guessed skill rows. Ordinary chat/settings/lifecycle retain the original launch; skills refuse SourceUnavailable and compact refuses Unsupported because the official library/version has not been qualified for that launch. A qualified wrapper's initial unannotated list is Unknown only until its available/unavailable annotation arrives; its existing per-query failure publication supplies the latter. Missing/failed transport follows existing closure, never successful skill discovery. This failure route preserves working chat but does not satisfy required Claude U1/U2; qualification is required for delivery completion.
+
 ### Cursor
 
 Installed Cursor2026.10.22-27dcf5f drops internal `metadata.skill`, but `convertSkillToSlashCommand` appends a native description indicator that ACP forwards verbatim. Classify only the exact final suffixes `(project skill)`, `(user skill)`, `(builtin skill)` or `(skill)`, with the preceding separator inserted by the producer. Map them to Repo, User, System and System; strip only that final producer indicator for display. Normal command rows end with their own `(team)`, `(global)`, `(project)` or `(user)` indicator, and the fixed `copy-request-id` is a command. A command title mimicking a skill still ends with its command indicator and must not classify as a skill. Do not search arbitrary description substrings.
@@ -100,6 +127,8 @@ Cursor publishes the list at new/load and caches its native loader; this design 
 ## Invocation and commands
 
 Claude C2 splits exact input around its single selected token, preserving optional prefix as preceding Text and placing command Text last after images. Cursor C2 supports one or multiple distinct selected identities in one Text: rewrite their matching full tokens to the advertised slash IDs, deduplicate repeated structured identity, keep other bytes/images untouched and let Cursor collect every native reference. Both refuse selected multi-Text/selected-steer forms before send. Revalidate after the existing FIFO wait; a missing selection fails the dispatch report immediately. Ordinary inputs use `selected=[]`. Do not widen persisted `PromptContent`.
+
+Compute the existing admitted user-history item from the **original incoming content before provider preparation**: when it is a single Text, retain exactly the user's `$name` text, even if Claude preparation splits it into multiple Text blocks. Inputs with images or other multi-block content retain main's existing no-synthesized-user-item rule. This keeps UI history faithful to the submitted text without storing a second representation or changing item schemas; provider user-group items retain their separate IDs.
 
 For compact, Claude prepares its existing `/compact` ACP prompt only at idle. Normalize its version1 `_meta.contextCompaction` marker into the existing tool projection using canonical tool-kind `contextCompaction`, retaining tool ID/status and preserving it on status-only updates. No stored SessionItem variant change. Native ContextCompaction item and turn success require the current explicit compact's completed manual-or-unlabelled marker **and** successful prompt terminal; automatic trigger cannot confirm manual compact. Missing/failed marker fails, cancel interrupts, lost outcome stays unknown. Cursor compact refuses before send for this inspected build. Model/mode use existing settings; no second settings engine.
 
@@ -114,7 +143,8 @@ sequenceDiagram
   C->>F: Existing structured skill submission
   F->>H: Typed content and selection
   H->>A: Existing ordered dispatch
-  A->>B: Validate current identity and prepare
+  A->>A: Revalidate selection against actor-owned view
+  A->>B: Prepare validated submission
   alt Invalid or unsupported
     B-->>A: Typed refusal
     A-->>F: Immediate dispatch failure
@@ -150,7 +180,33 @@ Trust stays at existing owners: native face validates input and addressed sessio
 | U2 | R2/C2 invocation | E1,E2,E3 | Existing actor + concrete behavior | prepare + existing prompt dispatch | ProviderSubmission in domain/contracts | queued→revalidated→sent/refused | Immediate typed refusal, zero sends | Native input through Host/FIFO to provider effect |
 | U3 | R3/C3 commands | E1,E4 | Native operation handler + actor | compact and existing setting ports | Existing native RPCs; typed command | idle/running/terminal | Unsupported/busy/failure/uncertainty | Native requests, marker/setting readback and turn |
 | U4 | R4/C4 preservation | E1,E3,E4 | Existing actor/hub/broker | Existing lifecycle | Existing events, records and approvals | Existing lifecycle | No new sender or replay | Native/reverse controls, chat/history/interrupt |
-| U5 | R5/C5 injection | E1–E4 | Host composition + trait consumer | ProviderBehavior constructor injection | Runtime trait; one adapter crate | Per-session ephemeral state | Standard default refuses unqualified effects | Dependency graph, two implementations, one sender |
+| U5 | R5/C5 injection | E1–E4 | Host composition + trait consumer | ProviderBehavior constructor injection | Runtime trait; one adapter crate | Immutable dependency; mutable state per actor | Explicit standard behavior refuses unqualified effects | Dependency graph, two implementations, one sender |
+
+## Verification entry and real/fake boundary
+
+The existing **TypeScript TUI verification package** `scripts/verification/tui` owns journey orchestration, declared source/build/tool identity, captures, readback, scene checks and original artifacts. Its existing native adapter owns the PTY. Add the installed-Codex ACP scenario at that boundary; do not make the metadata observer a replacement TUI driver or build a second terminal/capture system.
+
+```mermaid
+flowchart TD
+  TS["Existing TypeScript TUI verifier<br/>ACP scenario extension needed"] -->|launch and input| PTY["Existing native PTY adapter<br/>installed Codex target extension"]
+  PTY --> Client["Real unchanged Codex CLI"]
+  Client --> Face["Real app-server shim and actor"]
+  Face --> Provider["Real Claude or Cursor ACP"]
+  TS -->|same session| API["Existing public API observer<br/>supporting effect readback"]
+  API -.->|effect readback| Face
+```
+
+For the end-to-end requirement the CLI, native PTY, shim, injected implementation and provider stay real. A controlled ACP peer or scripted trait is useful only for deterministic unit/integration failure cases and cannot earn a real-provider journey. The TypeScript harness currently exposes Quota/Sessions surfaces; the Codex ACP entry is **needed**, not an existing option being claimed to work. [Verification Design](verification-design.html) owns the precise observations and limits.
+
+```mermaid
+flowchart TD
+  Tests["Focused unit and integration tests"] --> Consumer["Real decoder, FIFO and actor consumer"]
+  Scripted["Scripted ProviderBehavior<br/>controlled literal results"] -->|constructor injection| Consumer
+  Consumer -->|existing ACP transport| Peer["Controlled ACP peer<br/>records prompts and emits ordered updates"]
+  Peer -->|controlled response| Consumer
+```
+
+This second path deliberately replaces behavior/provider dependencies to force refusal and ordering cases. It proves only its declared test boundary and **never qualifies J1/J2/J3 real-provider journeys**.
 
 ## Why this much, and no more
 

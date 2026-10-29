@@ -1,51 +1,80 @@
-# Verification Design: prove Claude and Cursor through Codex CLI
+# Verification Design: TypeScript TUI journeys and meaningful regressions
 
-This document plans proof. It records no feature execution. Inputs: [Requirements](requirements.html), [Specification](specification.html), [Program Design](program-design.html).
+Use the existing **`scripts/verification/tui` TypeScript verifier** to drive the real Codex CLI. Its native adapter owns the PTY; TypeScript owns declared-target qualification, scenarios, readback and original-artifact checks. Supporting API observations confirm provider effect and identity. They do not replace driving the TUI.
+
+This plans proof; no feature journey or product test has run. Inputs: [Requirements](requirements.html), [Specification](specification.html), [Program Design](program-design.html).
+
+## Existing harness and needed extension
+
+The package currently supports **Quota and Sessions**. `capture-run.ts` exposes those surfaces; `public-sessions-run.ts` drives the public Sessions entry. Add an installed-Codex ACP target/scenario in this package. Do not run an existing Quota/Sessions capture and relabel it Codex proof.
+
+| Existing source to reuse | What it establishes | Needed Codex extension |
+| --- | --- | --- |
+| `source-binding.ts`, `evidence-schema.ts` | Exact source/executable/tool binding; current harness requires Node26.12.1 | Bind installed Codex, candidate Host/router, native adapter, private socket, provider/session/cwd and viewport using the existing artifact/schema patterns |
+| `driver-lifecycle.ts`, `public-lifecycle.ts` | Exact driver discovery, bounded launch/settlement, cooperative owned cleanup | Launch unchanged Codex through its real `--remote` session entry; no production replacement/config writes |
+| `cua-readback.ts`, `original-artifacts.ts` | Same-child/PTY identity and original capture/readback checks | Actual Codex keyboard scenarios and checkpoints, preserving original PTY/captures and matching native requests |
+| `scene-contracts.ts`, `capture-selection.ts` | Explicit scenes and accepted input/selection | Bounded Codex ACP scenario and checkpoint oracle; no generic second capture framework |
+| Existing native support in `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/` | Native capture/PTY ownership and fixed child adapter | Installed Codex launch/input target at this existing adapter boundary; TypeScript creates no second PTY or terminal emulator |
+| `verification/observations/acp-metadata-observation.ts` | Public target/session/native API/history readback | Supporting skill/command effect observation correlated with that same TUI child/session; it remains an observer, not the TUI driver |
+
+The extension is **needed**, not an existing option claimed to work. Actual keyboard selection, submitted native input, original artifacts and provider result must refer to the same declared child/session. Receipts alone establish neither visible UI nor a provider effect. Keep existing Quota/Sessions scenarios and rejection tests intact.
 
 ## What you will see
 
 ### U1 — Both providers' real skills appear
 
-Open `$` in unchanged Codex CLI against Claude, then against Cursor. See the correct fixture skill for that provider and cwd, before invoking a skill. Check a late inventory and a failed source. **Unverified until run:** first-session provider classification, exact native IDs/ambiguity and native error display.
+The TS/native-PTY journey opens `$` against Claude and Cursor, sees the expected fixture skill and excludes a command. Late metadata updates without a stalled client; errors are visible beside valid rows. An unqualified original Claude launch shows SourceUnavailable while chat/settings remain usable; it does not count as the required qualified Claude success. **Unverified until run:** new Codex scenes, actual rendering and real provider classification.
 
-### U2 — The selected provider skill runs
+### U2 — Keyboard-selected skills actually execute
 
-Select the fixture through the actual picker, attach distinct text and an image, and observe a provider-owned effect absent from the literal input. Check leading/nonleading use, multiple distinct Cursor selections, and refused invalid forms. **Unverified until run:** Claude final-Text expansion, Cursor native ID recognition, reference round-trip and zero-send refusals on actual wiring.
+Select through the real picker, submit distinct arguments and an image, and observe a provider-owned effect absent from the literal prompt. Include leading/nonleading input and multiple distinct Cursor skills. **Unverified until run:** native expansion, path round-trip, preserved content and actual error presentation.
 
-### U3 — Existing commands have their proper effects
+### U3 — Existing slash operations have their distinct effects
 
-Use `/model`, mode and `/compact` through their existing native operations. Read back effective settings and observe Claude's real compaction marker and native terminal lifecycle. Cursor's unsupported compact must refuse without a prompt. **Unverified until run:** effects, busy-state clearing and native handling of errors.
+Drive `/model`, mode and `/compact` in the same TUI. Read effective settings and Claude's compaction marker plus terminal outcome. Cursor compact shows unsupported and leaves input usable. **Unverified until run:** real command flows, effects and busy/error handling.
 
-### U4 — Existing conversations still work
+### U4 — Conversations and their lifecycle survive
 
-Run live/reopened chat, interrupt and approval controls for each provider; keep native Codex and reverse ACP controls. Refresh skills during an active turn and retain output, identity and terminal result. **Unverified until run:** real interleaving, shutdown cleanup and cross-route preservation.
+Drive live/reopened chat, interrupt and approval controls for both providers. Read back the admitted single-Text skill message as the exact original `$name` input, including Claude nonleading input that prepares into two Text blocks; keep main's no-synthesized-item behavior for image/multi-block input and separate provider user-group IDs. Refresh skills during an active turn while retaining its stream, identity and terminal result. Keep separate native Codex/reverse ACP controls. **Unverified until run:** actual interleaving, history and owned-process cleanup.
 
-### U5 — Provider rules stay replaceable
+### U5 — Constructor DI supplies the right implementation
 
-Inspect dependencies and run the same actor contracts with standard, Claude and Cursor behavior. The two providers use one sender and shared native face. **Unverified until implementation:** manifest graph, generated asset integrity, no private patches or prohibited store/framework.
+Run the real consumer with differing implementations of the same ProviderBehavior trait and observe different literal classified/prepared results. Inspect constructor propagation, dependencies and shipped asset. Force qualified and unqualified Claude launch preparation; verify the exact resulting executable/arguments, preserved environment and immutable constructor input, plus source error and unsupported compact for the unqualified case. **Unverified until implementation:** both session-admission paths, session-state isolation and final normal-build graph.
 
-## Target and shared journeys
+## Target and lasting journeys
 
-Declared candidate: a clean committed build from this dedicated branch containing current main, macOS, unchanged installed Codex0.165.0, Claude ACP0.81.0 / SDK0.3.280 / native Claude qualified at delivery, Cursor2026.10.22-27dcf5f. Use an isolated signed normal-dependency debug Host, private unused root/socket/port and normal trusted Codex home. Preserve production and configuration. Record actual build, executable versions/hashes and endpoint/session identities before model input. No global provider install or production replacement.
+Candidate: clean committed source containing current main; isolated normal signed debug Host on macOS; unchanged installed Codex0.165.0; Claude ACP0.81.0/SDK0.3.280 and qualified native Claude; Cursor2026.10.22-27dcf5f. Requalify updated providers/tools before extending a claim. Use private unused root/socket/port and normal trusted Codex home. Preserve production/config. Exact toolchain/capacity is a delivery-preflight input, not an assumed pass.
 
-- **J2 commands, needed lasting:** same real client/Host/provider route; drive native compact/model/mode operations, read provider marker/settings and native terminal state, capture unsupported Cursor compact with zero send.
-- **J3 preservation, existing lasting plus additions:** the ACP metadata live/history recipe and public observer are existing; add active-turn skill refresh, no-list/source-failure chat and wrapper lifecycle controls. Retain separate native Codex/reverse ACP controls. Existing projection tests alone do not establish these new outcomes.
+- **J1 skills — needed, lasting:** extend `verify-codex-router` with TS-driven actual `$` selection/input and same-child captures/readback for both providers. Supporting native input/list and provider effect distinguish execution from echo. Include empty/late/failed metadata, cwd/session isolation, ambiguity, full-token arguments/images and multiple Cursor selections.
+- **J2 commands — needed, lasting:** same TS/native-PTY path drives model/mode/compact controls. Supporting native request, effective setting/typed marker and turn state must agree. Include unsupported Cursor compact and usable idle input after error.
+- **J3 preservation — existing ACP metadata journey plus needed TS Codex scenarios, lasting:** drive reopen/interrupt/approval, original selected-skill input history, active-turn refresh and wrapper EOF/signals. Supporting public history keeps genuine prose, user input and metadata distinct. Native Codex/reverse ACP controls stay separate.
 
 ## Coverage rows
 
-| Need / obligations | Reference and real seam | Journey / test and passing condition | Wrong build rejected | What remains unverified until run |
-| --- | --- | --- | --- | --- |
-| U1 / R1,C1,V1 | Native0.165 SkillsListResponse and C1; actual provider classification → actor/hub → chooser | J1 lasting. Correct skills for Claude and Cursor before skill input, exact advertised ID and scope, valid rows preserved alongside native errors for ambiguous/unknown rows, correct cwd/binding, immediate startup and late invalidation. Source failure differs from empty. | Empty face; every command labelled skill; command title suffix spoof; native ID recomputed; wrong connection; stalled list | Installed provider/classifier agreement and first session |
-| U2 / R2,C2,V2 | C2 exact content rules and native structured input; actual queue/actor/provider | J1 lasting. Fixture skill effect once; multiple distinct Cursor selections all recognized; exact prefix/suffix/UTF-8/image preservation; no file access for server references; invalid/stale/ambiguous/unsupported forms cause defined error and zero sends. | Model explanation, echo, lost image, first-only drop, wrong duplicate target, selected-steer converted to new turn | Native expansion and all real refusal paths |
-| U3 / R3,C3,V3 | C3; native command request and provider effect/readback | J2 lasting. Claude manual compaction marker+successful terminal; native turn returns idle; model/mode readback matches. Cursor unsupported compact emits no prompt. Missing/failed/automatic marker cannot confirm manual compact. | Queue ack or tool title counted as compact; default model fallback; normal reply to `/compress` counted as effect | Native errors and effect confirmation |
-| U4 / R4,C4,V4 | Existing adopted lifecycle; real metadata/control route | J3 lasting. Both providers preserve chat/history/interrupt/approvals; metadata is outside prose. Refresh cannot gate/restart/cancel a running turn; uncertainty never duplicates. Wrapper EOF/signals leave no child; protected native/reverse routes keep results. | Second sender, lost history, synthetic discovery prompt, reload disrupts turn, leaked child, false cross-provider inference | Active-turn timing and cleanup on exact candidate |
-| U5 / R5,C5,V5 | Consumer-owned trait/dependency direction; real producer/consumer metadata shapes | Focused real TS→Rust contract and actor tests; structural manifest/cycle/asset checks, no new journey. Two implementations share actor/face and closed errors. Embedded Claude asset matches source. | Duplicate SDK/config loader, private patch, stale asset, reverse dependency, catalogue/store/framework | Final source/build graph and artifact |
+| Need / obligations | Deciding seam and observation | Passing condition / wrong build rejected | Reuse and remaining unverified |
+| --- | --- | --- | --- |
+| U1 / R1,C1,V1 | J1: TS harness/native PTY → actual picker, with native list/provider metadata | Correct skills for both providers before skill input, exact ID/scope/cwd, valid rows alongside errors and late invalidation. Empty face, command-title spoof, wrong session or stalled list fails. | Reuse binding/original-artifact/same-PTY controls; Codex scenes and real picker needed. |
+| U2 / R2,C2,V2 | J1: actual keyboard selection → native structured input → real Host/FIFO/actor/provider effect | Effect once, exact text/arguments/images; all selected Cursor identities recognized. Echo, explanation, first-only drop, changed identity or lost image fails. Deterministic wire-level peers decide zero-send refusal cases. | Reuse original captures and supporting effect observation; actual expansion/rendering unrun. |
+| U3 / R3,C3,V3 | J2: real slash/model TUI flow → native request → marker/settings/terminal | Claude explicit marker+successful terminal and cleared busy; settings readback matches. Unsupported Cursor compact sends no prompt. Ack/title/automatic marker substituted for manual compact or model fallback fails. | Reuse TS lifecycle/capture and extended public observer; actual effects/error presentation unrun. |
+| U4 / R4,C4,V4 | J3: same real child/session, live/reopened UI and public history, active-turn refresh/cleanup | Stream/identity/terminal preserved, chat usable, no duplicate uncertain effect or leaked owned child. Wrong PTY, lost history, synthetic discovery prompt or reload disturbing turn fails. | Reuse metadata/live-replay recipe and owned cleanup; actual concurrency/lifecycle unrun. |
+| U5 / R5,C5,V5 | Constructor/consumer integration, real TS→Rust metadata and dependency/asset inspection | Host-selected immutable implementation reaches runtime and both admissions; consumer uses only trait; state stays actor-owned; producer values decode; shipped asset matches source. Hidden provider lookup, reverse concrete dependency, shared mutable view or stale asset fails. | Focused automated/structural proof, no extra TUI journey; implementation/normal graph unrun. |
 
-## Smallest honest proof
+## Tests that can catch the wrong implementation
 
-Pure reference/token/classification rules use focused table/property tests with independent literal contracts. Cursor classifier conformance covers all four native skill indicators, all command indicators, a mimicking title, exact nested IDs, duplicates, unknown suffixes, invalid mention grammar and valid rows alongside errors. No filesystem loader is under test because none is introduced. Controlled Query promises cover Claude echo/coalescing/stale publication and real producer serialization feeds the actual Rust decoder. Actor tests force removal during a held queue wait and verify refusal before sending; sleeps cannot establish that interleaving.
+Take expected values from C1–C3/native schemas or checked producer fixtures, not production helpers. Keep the smallest responsible boundary real.
 
-The existing `.agents/skills/verify-codex-router/references/acp-metadata.md`, its `verification/observations/acp-metadata-observation.ts` and live/replay projection tests were read. Reuse their exact-target checks, public views, original PTY captures and guarded owned cleanup. Build the needed J1/J2 extensions before relying on them; no general verifier framework. A mocked provider can test malformed/unknown outcomes but cannot earn a real-provider row.
+| Wrong behavior | Valuable regression / independent oracle |
+| --- | --- |
+| Picker and submitted identity differ | Actual TUI selection and native request match the fixture's identity and provider-owned effect. Screenshot presence alone cannot pass. |
+| Wrong behavior injected | Actual consumer receives two scripted trait implementations with different literal outputs; assert emitted value/wire content, not only a constructor or method call count. |
+| Claude wrapper is never launched or qualification is ignored | Preparation tests qualify the checked official-bin/pnpm-shim fixture and reject custom/mismatched targets. Inspect actual rewritten launch/import identity; real original-launch integration yields source error, zero skill/compact prompts and working ordinary chat. J1 separately requires qualified real Claude success. |
+| Cursor command looks like a skill | Literal producer rows retain distinct terminal command/skill indicators. Cover mimicking titles, exact nested IDs, duplicate/unknown/uninvocable rows and valid rows alongside errors. |
+| Skill disappears during a queue wait | Hold dispatch, replace view, release; real ACP peer sees zero prompts and Host receives immediate refusal. No sleeps or timeout increases. |
+| Content rewritten incorrectly | Table/property cases preserve independent literal Unicode, whitespace, suffixes and image payloads. J1 separately checks actual multiple-Cursor/single-Claude native expansion. |
+| Claude reload loops or publishes after retirement | Controlled Query promises force echoes, descriptor/result changes and retired state/query; actual TS output enters real Rust decoder. J3 separately decides real turn preservation. |
+| Compaction succeeds from an ack/title | Real codec/actor cases cover marker+terminal, missing/failed/automatic marker, cancel and uncertainty; only C3's combination succeeds. J2 proves real provider effect. |
+| Verifier accepts false evidence | Extend existing rejection tests for wrong source/binary/provider/session/PTY, absent/reordered checkpoint, echo-only output and blank/wrong scene. Assert the real rejection. |
 
-If Claude reload disrupts a turn, or actual Cursor output contradicts its qualified indicator/ID contract, return the source/observed failure to Program Design. Do not lower the passing condition, drop Cursor, silently accept unavailable skills as U1 completion, or add a new client path. Other versions/platforms and release/install proof are outside the declared target until separately qualified.
-- **J1 skills, needed lasting:** extend `verify-codex-router`'s real installed-client ACP journey to drive the `$` chooser and selection for **both** providers; read native list/input plus actual provider effect and original PTY. Include native-output fixtures for exact suffix indicators, nested IDs, duplicate/unknown/uninvocable rows and a command whose title mimics a skill. Expected classification comes from the native producer contract, not the bridge classifier.
+Pure rules use focused tests; DI/serialization/actor ordering uses real-consumer integration; actual interactions use the existing TS/native-PTY journeys. Do not repeat every parsing edge through the TUI. No temporary test files, hand-authored success receipts, terminal emulation or standalone replacement verifier.
+
+If native expansion, Cursor output or active-turn reload contradicts the design, return the failure to Program Design. Do not drop a provider or count unavailable skills as U1 completion. The HTML document-preview limitation is separate from this product verification route; no product journey is reported passed here. Other versions/platforms and release proof remain outside the declared target until qualified.
