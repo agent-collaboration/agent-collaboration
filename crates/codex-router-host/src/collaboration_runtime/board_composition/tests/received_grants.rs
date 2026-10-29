@@ -307,6 +307,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         .await?;
     database.hold_bootstrap_after_rename();
     let claiming = fixture.projects.clone();
+    let original_request = request.clone();
     let mut claimed = tokio::spawn(async move { claiming.claim(&request).await });
     let mut claim_joined = false;
     let second_origin = ActorOrigin {
@@ -336,10 +337,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
     let second_running = second_board.start().ok_or("second runtime")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     let proof = async {
-        let installed = tokio::select! {
-            installed = database.wait_bootstrap_published() => installed?,
-            answer = &mut claimed => { claim_joined = true; return Err(format!("claim ended before hold: {answer:?}").into()); },
-        };
+        let installed = timeout(BOUND, database.wait_bootstrap_published()).await??;
         assert_eq!(installed.position, prefix.position);
         let old = observer.install_record(installed.install_id).await?;
         assert!(matches!(old.status, InstallStatus::Running { .. }));
@@ -351,6 +349,11 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         drop(slot);
         let root_record = fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e2.json", project.as_str()));
         let root_bytes = std::fs::read(&root_record)?;
+        // Await the real bounded completion response while native publication
+        // remains held. Pending is not admission; replay the same attempt below.
+        let pending_reply = timeout(BOUND, &mut claimed).await?;
+        claim_joined = true;
+        assert!(matches!(pending_reply??, ProjectClaimReply::Pending { attempt } if attempt == original_request.request_id));
         gate.release()?;
         let session_store = board_fleet_sync::MachineSessionStore::open(&fixture.projects.directory).await?;
         timeout(BOUND, async {
@@ -378,9 +381,8 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         assert_eq!(old_after.install_id, old.install_id);
         assert_eq!(old_after.generation, old.generation);
         assert!(matches!(old_after.status, InstallStatus::Ready { .. }), "old record after e4: {old_after:?}");
-        let old_reply = timeout(BOUND, &mut claimed).await?;
-        claim_joined = true;
-        assert!(old_reply?.is_err(), "the obsolete e2 claimant was admitted");
+        let old_reply = timeout(BOUND, fixture.projects.claim(&original_request)).await?;
+        assert!(old_reply.is_err(), "the obsolete e2 claimant was admitted");
         let retained = fleet_sync_writer::inspect_native_file(database.path()).await?;
         assert!(matches!(retained.authority, Some(fleet_sync_writer::RetainedAuthority::Superseded { current: Some(current), .. }) if current.value() == 4), "e2 authority did not retain actual supersession: {:?}", retained.authority);
         let new = observer.install_record(ready.install.install_id).await?;

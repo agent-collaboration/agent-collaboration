@@ -206,6 +206,9 @@ pub struct HostSnapshot {
     router_executable_relation: crate::RouterExecutableRelation,
     recovery_budget: RecoveryBudget,
     last_lifecycle_outcome: Option<LifecycleOutcome>,
+    // The operator channel spans installed CLI versions; older Hosts omit this observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_login_reload: Option<crate::login_reload_outcome::LoginReloadOutcome>,
 }
 
 /// Independently owned dimensions captured in one host snapshot.
@@ -245,6 +248,7 @@ impl HostSnapshot {
             router_executable_relation: dimensions.router_executable_relation,
             recovery_budget: dimensions.recovery_budget,
             last_lifecycle_outcome: dimensions.last_lifecycle_outcome,
+            last_login_reload: None,
         }
     }
 
@@ -327,5 +331,21 @@ impl HostSnapshot {
     #[must_use]
     pub const fn last_lifecycle_outcome(&self) -> Option<&LifecycleOutcome> {
         self.last_lifecycle_outcome.as_ref()
+    }
+
+    /// Returns the most recent auth-file reload result, if an event was observed.
+    #[must_use]
+    pub const fn last_login_reload(
+        &self,
+    ) -> Option<&crate::login_reload_outcome::LoginReloadOutcome> {
+        self.last_login_reload.as_ref()
+    }
+
+    pub(crate) fn with_login_reload(
+        mut self,
+        outcome: Option<crate::login_reload_outcome::LoginReloadOutcome>,
+    ) -> Self {
+        self.last_login_reload = outcome;
+        self
     }
 }

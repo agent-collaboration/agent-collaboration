@@ -18,11 +18,15 @@ use codex_router_host::{HostPortOverrides, parse_loopback_mcp_bind, resolve_host
 use operator_client::OperatorClientError;
 
 mod foreground_launch;
+mod host_stop;
 pub(crate) mod operator_client;
 #[cfg(test)]
 mod port_configuration_tests;
+mod process_exit_observer;
 mod provider_launch_configuration;
 pub(crate) mod replacement_outcome;
+#[cfg(test)]
+mod stop_tests;
 #[cfg(test)]
 mod tailnet_tests;
 
@@ -37,6 +41,8 @@ pub(crate) enum HostAction {
     Status,
     /// Replace the whole Host with this installed CLI and wait for readiness.
     Restart,
+    /// Stop the Host and every agent session it manages; wait for process exit.
+    Stop,
     /// Restart the router child when owned by this Host.
     Router {
         #[command(subcommand)]
@@ -230,6 +236,15 @@ pub(crate) async fn run_host_command<W: Write + Send>(
         owner_home.as_deref(),
     );
     let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
+    if command.action == Some(HostAction::Stop) {
+        let outcome = host_stop::stop_host(
+            &coordination_paths,
+            operator_request_deadline(HostAction::Stop),
+        )
+        .await?;
+        writeln!(stdout, "{}", outcome.message())?;
+        return Ok(());
+    }
     if command.runs_foreground() {
         let port_overrides = command.port_overrides();
         let ports = resolve_host_ports(&router_root, launch_mode.is_isolated(), port_overrides)?;
@@ -260,6 +275,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
 
     let request = match command.action() {
         HostAction::Status => OperatorRequest::Status,
+        HostAction::Stop => OperatorRequest::StopHost,
         HostAction::Restart => OperatorRequest::RestartHost {
             executable: std::env::current_exe()?,
         },
@@ -383,6 +399,7 @@ fn validate_router_root(router_root: &Path) -> Result<(), HostCommandError> {
 const fn operator_request_deadline(action: HostAction) -> Duration {
     match action {
         HostAction::Status => STATUS_REQUEST_DEADLINE,
+        HostAction::Stop => STATUS_REQUEST_DEADLINE,
         HostAction::Restart => Duration::from_secs(150),
         HostAction::AppServer {
             action: AppServerAction::Restart,
@@ -398,6 +415,8 @@ const fn operator_request_deadline(action: HostAction) -> Duration {
 
 #[derive(Debug, Error)]
 pub enum HostCommandError {
+    #[error(transparent)]
+    Stop(#[from] host_stop::HostStopError),
     #[error(transparent)]
     PortConfiguration(#[from] codex_router_host::PortConfigurationError),
     #[error("Host restart failed: {0}")]

@@ -301,6 +301,11 @@ impl HostRuntime {
         {
             return Err(HostError::AppServerEndpoint(endpoint_error));
         }
+        let (login_reload_status, mut login_reload) = crate::auth_file_reload::prepare(
+            config.collaboration_codex_home(),
+            config.app_server_socket(),
+        )
+        .await;
         let (router_result, app_server_result) = tokio::join!(
             startup_convergence::start_router(&config, child_launch_plans.router_command.as_ref()),
             startup_convergence::start_app_server(&config, child_launch_plans.app_server.clone()),
@@ -354,6 +359,7 @@ impl HostRuntime {
             }
         };
         let mut state = RuntimeState::ready(router_condition, readiness);
+        state.login_reload = Some(login_reload_status);
         let initial_router_relation = router_executable_observer.lock().await.relation();
         state.observe_router_executable(initial_router_relation);
         state.record_lifecycle(
@@ -428,6 +434,7 @@ impl HostRuntime {
                 }
             }
             tokio::select! {
+                never = &mut login_reload, if matches!(state.phase, HostPhase::Steady) && app_server.is_some() => match never {},
                 failure = collaboration_lifecycle::wait_failure(&mut collaboration), if collaboration.is_some() => {
                     match failure {
                         crate::CollaborationFailure::LocalListener(error) => {
