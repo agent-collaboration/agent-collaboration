@@ -33,9 +33,16 @@ struct LayerProbeProps {
     arm: InputArm,
     #[iocraft(required)]
     initial: ActiveLayer,
+    remove_routing_guard: bool,
 }
 
-fn inside(mouse: &FullscreenMouseEvent, left: u16, top: u16, width: u16, height: u16) -> bool {
+fn pointer_within_rect(
+    mouse: &FullscreenMouseEvent,
+    left: u16,
+    top: u16,
+    width: u16,
+    height: u16,
+) -> bool {
     mouse.column >= left
         && mouse.column < left + width
         && mouse.row >= top
@@ -47,6 +54,7 @@ fn central_input(
     mut active: State<ActiveLayer>,
     mut counts: State<InputCounts>,
     mut value: State<String>,
+    remove_routing_guard: bool,
 ) {
     // One synchronous owner adjudicates each event against live state, including in a burst.
     match event {
@@ -61,18 +69,22 @@ fn central_input(
                 ActiveLayer::Dialog => counts.write().dialog += 1,
                 ActiveLayer::Background => counts.write().background += 1,
             },
-            KeyCode::Char(character) if active.get() == ActiveLayer::Background => {
+            KeyCode::Char(character)
+                if active.get() == ActiveLayer::Background || remove_routing_guard =>
+            {
                 value.write().push(character)
             }
             _ => {}
         },
-        TerminalEvent::BracketedPaste(text) if active.get() == ActiveLayer::Background => {
+        TerminalEvent::BracketedPaste(text)
+            if active.get() == ActiveLayer::Background || remove_routing_guard =>
+        {
             value.write().push_str(&text)
         }
         TerminalEvent::FullscreenMouse(mouse) => {
             match active.get() {
                 ActiveLayer::Dropdown => {
-                    if inside(&mouse, 8, 3, 10, 5) {
+                    if pointer_within_rect(&mouse, 8, 3, 10, 5) {
                         match mouse.kind {
                             MouseEventKind::Down(_) => counts.write().dropdown += 1,
                             MouseEventKind::ScrollDown => counts.write().dropdown_scroll += 1,
@@ -83,13 +95,16 @@ fn central_input(
                     }
                 }
                 ActiveLayer::Dialog => {
-                    if inside(&mouse, 8, 4, 10, 1) && matches!(mouse.kind, MouseEventKind::Down(_))
+                    if (pointer_within_rect(&mouse, 8, 4, 10, 1)
+                        || pointer_within_rect(&mouse, 20, 5, 6, 1))
+                        && matches!(mouse.kind, MouseEventKind::Down(_))
                     {
                         counts.write().dialog += 1;
                     }
                 }
                 ActiveLayer::Background => {
-                    if inside(&mouse, 8, 4, 10, 1) && matches!(mouse.kind, MouseEventKind::Down(_))
+                    if pointer_within_rect(&mouse, 8, 4, 10, 1)
+                        && matches!(mouse.kind, MouseEventKind::Down(_))
                     {
                         counts.write().background += 1;
                     }
@@ -111,6 +126,18 @@ struct ScrollProbeProps {
     #[iocraft(required)]
     counts: State<InputCounts>,
     dropdown: bool,
+}
+
+#[derive(Props)]
+struct CursorReadoutProps {
+    #[iocraft(required)]
+    handle: Ref<TextInputHandle>,
+}
+
+#[component]
+fn CursorReadout(props: &CursorReadoutProps) -> impl Into<AnyElement<'static>> {
+    // Evaluated after the TextInput child updates its cursor handle.
+    element!(Text(content: format!("cursor={}", props.handle.read().cursor_offset())))
 }
 #[component]
 fn ScrollProbe(props: &ScrollProbeProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -142,6 +169,7 @@ fn ScrollProbe(props: &ScrollProbeProps, mut hooks: Hooks) -> impl Into<AnyEleme
 #[component]
 fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let arm = props.arm;
+    let remove_routing_guard = props.remove_routing_guard;
     let mut active = hooks.use_state(|| props.initial);
     let mut counts = hooks.use_state(InputCounts::default);
     let mut value = hooks.use_state(String::new);
@@ -149,7 +177,7 @@ fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement
     hooks.use_terminal_events(move |event| {
         counts.write().events += 1;
         if arm == InputArm::Central {
-            central_input(event, active, counts, value);
+            central_input(event, active, counts, value, remove_routing_guard);
         } else {
             match event {
                 TerminalEvent::Key(key) if key.kind == KeyEventKind::Press => match key.code {
@@ -162,7 +190,7 @@ fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement
                 },
                 TerminalEvent::FullscreenMouse(mouse)
                     if active.get() == ActiveLayer::Dropdown
-                        && !inside(&mouse, 8, 3, 10, 5)
+                        && !pointer_within_rect(&mouse, 8, 3, 10, 5)
                         && matches!(mouse.kind, MouseEventKind::Down(_)) =>
                 {
                     active.set(ActiveLayer::Dialog)
@@ -197,6 +225,11 @@ fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement
         InputArm::Native | InputArm::Adapters => element!(Button(has_focus: true, handler: move |_| counts.write().dropdown += 1) { Text(content: "DROPDOWN") }).into_any(),
         InputArm::Central => element!(Text(content: "DROPDOWN")).into_any(),
     };
+    let outside_button = match arm {
+        InputArm::Native => element!(Button(handler: move |_| counts.write().dialog += 1) { Text(content: "ACTION") }).into_any(),
+        InputArm::Adapters => element!(DialogButton(handler: move |_| counts.write().dialog += 1) { Text(content: "ACTION") }).into_any(),
+        InputArm::Central => element!(Text(content: "ACTION")).into_any(),
+    };
     element! {
         View(width: 60, height: 18) {
             ContextProvider(value: Context::owned(background_scope)) {
@@ -221,6 +254,7 @@ fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement
                 ContextProvider(value: Context::owned(dialog_scope)) {
                     View(position: Position::Absolute, left: 4, top: 2, width: 22, height: 8, background_color: Color::Reset) {}
                     View(position: Position::Absolute, left: 8, top: 4, width: 10, height: 1) { #(Some(dialog_button)) }
+                    View(position: Position::Absolute, left: 20, top: 5, width: 6, height: 1) { #(Some(outside_button)) }
                 }
             }) } else { None })
             #(if layer == ActiveLayer::Dropdown { Some(element! {
@@ -235,16 +269,18 @@ fn LayerProbe(props: &LayerProbeProps, mut hooks: Hooks) -> impl Into<AnyElement
                 Text(content: format!("ARM {arm:?} layer={layer:?} events={}", counters.events))
                 Text(content: format!("bg={} dialog={} menu={} clipped={}", counters.background, counters.dialog, counters.dropdown, counters.clipped))
                 Text(content: format!("scroll-bg={} scroll-menu={}", counters.background_scroll, counters.dropdown_scroll))
-                Text(content: format!("value={:?} cursor={}", value.to_string(), handle.read().cursor_offset()))
+                Text(content: format!("value={:?}", value.to_string()))
+                #(if arm == InputArm::Central { Some(element!(Text(content: format!("cursor={}", value.read().len())))) } else { None })
+                #(if arm != InputArm::Central { Some(element!(CursorReadout(handle))) } else { None })
             }
         }
     }
 }
 
-fn key(code: KeyCode) -> TerminalEvent {
+fn key_event(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
-fn mouse(kind: MouseEventKind, column: u16, row: u16) -> TerminalEvent {
+fn mouse_event(kind: MouseEventKind, column: u16, row: u16) -> TerminalEvent {
     TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(kind, column, row))
 }
 
@@ -258,7 +294,8 @@ async fn run_case(
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut ui = element!(LayerProbe(arm, initial));
+    let remove_routing_guard = std::env::args().any(|arg| arg == "--remove-routing-guard");
+    let mut ui = element!(LayerProbe(arm, initial, remove_routing_guard));
     let frames = ui.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let mut expected_events = 0;
@@ -290,7 +327,15 @@ async fn run_case(
     tokio::time::timeout(Duration::from_secs(5), journey)
         .await
         .map_err(io::Error::other)??;
-    fs::write(format!("tmp/probes/3/{arm:?}-{label}.frames"), &transcript)?;
+    let suffix = if remove_routing_guard {
+        "-unguarded"
+    } else {
+        ""
+    };
+    fs::write(
+        format!("tmp/probes/3/{arm:?}-{label}{suffix}.frames"),
+        &transcript,
+    )?;
     println!("{transcript}");
     Ok(())
 }
@@ -298,46 +343,69 @@ async fn run_case(
 #[tokio::main]
 async fn main() -> io::Result<()> {
     fs::create_dir_all("tmp/probes/3")?;
-    for arm in [InputArm::Native, InputArm::Adapters, InputArm::Central] {
+    let arms = if std::env::args().any(|arg| arg == "--remove-routing-guard") {
+        vec![InputArm::Central]
+    } else {
+        vec![InputArm::Native, InputArm::Adapters, InputArm::Central]
+    };
+    for arm in arms {
         run_case(
             arm,
             "pointer",
             ActiveLayer::Dropdown,
             vec![
-                vec![mouse(MouseEventKind::Down(MouseButton::Left), 9, 4)],
-                vec![mouse(MouseEventKind::Up(MouseButton::Left), 9, 4)],
-                vec![mouse(MouseEventKind::Down(MouseButton::Left), 9, 4)],
-                vec![mouse(MouseEventKind::ScrollDown, 9, 4)],
-                vec![mouse(MouseEventKind::ScrollDown, 9, 4)],
-                vec![mouse(MouseEventKind::Down(MouseButton::Left), 1, 10)],
-                vec![mouse(MouseEventKind::Down(MouseButton::Left), 20, 5)],
-                vec![mouse(MouseEventKind::Up(MouseButton::Left), 20, 5)],
-                vec![key(KeyCode::Esc)],
-                vec![key(KeyCode::Char('z'))],
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 9, 4)],
+                vec![mouse_event(MouseEventKind::Up(MouseButton::Left), 9, 4)],
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 9, 4)],
+                vec![mouse_event(MouseEventKind::ScrollDown, 9, 4)],
+                vec![mouse_event(MouseEventKind::ScrollDown, 9, 4)],
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 20, 5)],
+                vec![mouse_event(MouseEventKind::Up(MouseButton::Left), 20, 5)],
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 20, 5)],
+                vec![mouse_event(MouseEventKind::Up(MouseButton::Left), 20, 5)],
+                vec![key_event(KeyCode::Esc)],
+                vec![key_event(KeyCode::Char('z'))],
                 vec![TerminalEvent::BracketedPaste("PASTE".to_owned())],
+            ],
+        )
+        .await?;
+        run_case(
+            arm,
+            "clipped",
+            ActiveLayer::Background,
+            vec![
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 1, 10)],
+                vec![mouse_event(MouseEventKind::Up(MouseButton::Left), 1, 10)],
+                vec![mouse_event(MouseEventKind::Down(MouseButton::Left), 1, 10)],
             ],
         )
         .await?;
         for (label, bursts) in [
             (
                 "open-key-burst",
-                vec![vec![key(KeyCode::F(2)), key(KeyCode::Char('a'))]],
+                vec![vec![
+                    key_event(KeyCode::F(2)),
+                    key_event(KeyCode::Char('a')),
+                ]],
             ),
             (
                 "open-key-split",
-                vec![vec![key(KeyCode::F(2))], vec![key(KeyCode::Char('a'))]],
+                vec![
+                    vec![key_event(KeyCode::F(2))],
+                    vec![key_event(KeyCode::Char('a'))],
+                ],
             ),
             (
                 "open-paste-burst",
                 vec![vec![
-                    key(KeyCode::F(2)),
+                    key_event(KeyCode::F(2)),
                     TerminalEvent::BracketedPaste("PASTE".to_owned()),
                 ]],
             ),
             (
                 "open-paste-split",
                 vec![
-                    vec![key(KeyCode::F(2))],
+                    vec![key_event(KeyCode::F(2))],
                     vec![TerminalEvent::BracketedPaste("PASTE".to_owned())],
                 ],
             ),
@@ -348,14 +416,17 @@ async fn main() -> io::Result<()> {
             arm,
             "close-enter-burst",
             ActiveLayer::Dropdown,
-            vec![vec![key(KeyCode::Esc), key(KeyCode::Enter)]],
+            vec![vec![key_event(KeyCode::Esc), key_event(KeyCode::Enter)]],
         )
         .await?;
         run_case(
             arm,
             "close-enter-split",
             ActiveLayer::Dropdown,
-            vec![vec![key(KeyCode::Esc)], vec![key(KeyCode::Enter)]],
+            vec![
+                vec![key_event(KeyCode::Esc)],
+                vec![key_event(KeyCode::Enter)],
+            ],
         )
         .await?;
     }

@@ -14,7 +14,7 @@ enum BackdropStyle {
     OpaqueView,
 }
 
-fn dropdown() -> impl Into<AnyElement<'static>> {
+fn dropdown_surface() -> impl Into<AnyElement<'static>> {
     element! {
         View(position: Position::Absolute, left: 8, top: 3, width: 10, height: 5,
             background_color: Color::Reset, border_style: BorderStyle::Single) {
@@ -32,7 +32,11 @@ fn help_surface() -> impl Into<AnyElement<'static>> {
     }
 }
 
-fn scene(home: DropdownHome, help_on_top: Option<bool>, backdrop: BackdropStyle) -> Canvas {
+fn render_layer_scene(
+    home: DropdownHome,
+    help_on_top: Option<bool>,
+    backdrop: BackdropStyle,
+) -> Canvas {
     element! {
         View(width: 40, height: 12, flex_direction: FlexDirection::Column) {
             #((0..12).map(|row| element! {
@@ -54,7 +58,7 @@ fn scene(home: DropdownHome, help_on_top: Option<bool>, backdrop: BackdropStyle)
                     }
                 }))
             }
-            #(matches!(home, DropdownHome::Root).then(dropdown))
+            #(matches!(home, DropdownHome::Root).then(dropdown_surface))
             #(matches!(help_on_top, Some(true)).then(help_surface))
         }
     }.render(Some(40))
@@ -66,7 +70,7 @@ fn main() -> io::Result<()> {
     for home in [DropdownHome::Descendant, DropdownHome::Root] {
         for help_on_top in [None, Some(true), Some(false)] {
             let label = format!("{home:?}-help-{help_on_top:?}");
-            let canvas = scene(home, help_on_top, BackdropStyle::Normal);
+            let canvas = render_layer_scene(home, help_on_top, BackdropStyle::Normal);
             println!("CASE {label}\n{canvas}");
             println!(
                 "CELL (8,6)={:?} (11,5)={:?}",
@@ -83,7 +87,7 @@ fn main() -> io::Result<()> {
         BackdropStyle::StyledText,
         BackdropStyle::OpaqueView,
     ] {
-        let canvas = scene(DropdownHome::Root, None, backdrop);
+        let canvas = render_layer_scene(DropdownHome::Root, None, backdrop);
         println!(
             "BACKDROP {backdrop:?} text(0,0)={:?} style={:?}\n{canvas}",
             canvas.cell(0, 0).and_then(CanvasCell::text),

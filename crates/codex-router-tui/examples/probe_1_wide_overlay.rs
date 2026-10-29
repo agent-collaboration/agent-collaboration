@@ -44,15 +44,38 @@ fn LiveOverlay(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     if should_exit.get() {
         system.exit();
     }
+    let glyph = match (phase.get() / 3) % 7 {
+        0 => "界",
+        1 => "X",
+        2 => "✉",
+        3 => "✉️",
+        4 => "📋",
+        5 => "⎇",
+        _ => "📂",
+    };
+    let variant = (phase.get() / (3 * 7)) % 4;
+    let label = match variant {
+        0 => "left-cross",
+        1 => "left-start",
+        2 => "transparent",
+        _ => "right-cross",
+    };
+    let text = if variant == 3 {
+        format!("ABCDEFGHIJKL{glyph}ZZ")
+    } else {
+        format!("AA{glyph}ZZ")
+    };
+    let overlay_left = if variant == 1 { 2 } else { 3 };
     element! {
         View(width: 40, height: 10, flex_direction: FlexDirection::Column) {
             Text(content: format!("PHASE {} (key advances; q exits)", phase.get()))
+            Text(content: format!("{label} {glyph} width={}", glyph.width()))
             View(width: 20, height: 5) {
-                Text(content: "AA界ZZ")
+                Text(content: text)
                 #(if phase.get() % 3 != 1 { Some(element! {
-                    View(position: Position::Absolute, left: 3, top: 0,
+                    View(position: Position::Absolute, left: overlay_left, top: 0,
                         width: 10, height: 4, border_style: BorderStyle::Single,
-                        background_color: Color::Reset) {}
+                        background_color: (variant != 2).then_some(Color::Reset)) {}
                 }) } else { None })
             }
         }
