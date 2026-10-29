@@ -1,0 +1,172 @@
+$ vitest run
+
+ RUN  v5.0.4 /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/scripts/verification/tui
+
+ ❯ public-lifecycle.test.ts (3 tests | 3 failed) 1089ms
+   × public timeout requests its own CUA stop and remains failure after cooperative zero exit 382ms
+   × public timeout preserves unsettled exact child without signaling 284ms
+   × fixture CUA timeout uses declared CUA marker instead of static capture marker 423ms
+ ❯ public-sessions.test.ts (8 tests | 1 failed) 1794ms
+   × read-only Host qualification checks actual process binary manifest health and effect binding 826ms
+ ❯ driver-lifecycle.test.ts (12 tests | 3 failed) 8032ms
+   × capture_discovery_bounds_and_reaps_its_exact_child 140ms
+   × static_deadline_stays_failure_after_cooperative_child_exit 588ms
+   × static_deadline_reports_unsettled_child_without_signalling_it 261ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  driver-lifecycle.test.ts > capture_discovery_bounds_and_reaps_its_exact_child
+Error: EMFILE: too many open files, watch
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_stays_failure_after_cooperative_child_exit
+AssertionError: expected [Function] to throw error including 'static capture deadline' but got 'unexpected exit 1; driver stderr\nnod…'
+
+- Expected
++ Received
+
+- static capture deadline
++ unexpected exit 1; driver stderr
++ node:events:505
++     throw er; // Unhandled 'error' event
++     ^
++
++ Error: EMFILE: too many open files, watch
++     at FSWatcher._handle.onchange (node:internal/fs/watchers:269:21)
++ Emitted 'error' event on FSWatcher instance at:
++     at FSWatcher._handle.onchange (node:internal/fs/watchers:275:12) {
++   errno: -24,
++   syscall: 'watch',
++   code: 'EMFILE',
++   filename: null
++ }
++
++ Node.js v26.12.1
++
+
+ ❯ driver-lifecycle.test.ts:152:3
+    150|    );
+    151|   }),
+    152|  ).rejects.toThrow('static capture deadline');
+       |   ^
+    153|  expect(await child.completion).toBe(0);
+    154|  expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_reports_unsettled_child_without_signalling_it
+AssertionError: expected [Function] to throw error including 'cleanup unsettled' but got 'unexpected exit 1; node:events:505\n …'
+
+- Expected
++ Received
+
+- cleanup unsettled
++ unexpected exit 1; node:events:505
++     throw er; // Unhandled 'error' event
++     ^
++
++ Error: EMFILE: too many open files, watch
++     at FSWatcher._handle.onchange (node:internal/fs/watchers:269:21)
++ Emitted 'error' event on FSWatcher instance at:
++     at FSWatcher._handle.onchange (node:internal/fs/watchers:275:12) {
++   errno: -24,
++   syscall: 'watch',
++   code: 'EMFILE',
++   filename: null
++ }
++
++ Node.js v26.12.1
++
+
+ ❯ driver-lifecycle.test.ts:176:3
+    174|    );
+    175|   }),
+    176|  ).rejects.toThrow('cleanup unsettled');
+       |   ^
+    177|  expect(child.process.exitCode).toBeNull();
+    178|  expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout requests its own CUA stop and remains failure after cooperative zero exit
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ public-lifecycle.test.ts:60:33
+     58|   waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 1…
+     59|  ).rejects.toThrow('public CUA failed');
+     60|  expect(await child.completion).toBe(0);
+       |                                 ^
+     61|  expect(readFileSync(join(root, 'cua-sessions/cua-stop'), 'utf8')).toB…
+     62|  expect(existsSync(join(root, 'capture-stop'))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout preserves unsettled exact child without signaling
+AssertionError: expected 1 to be null
+
+- Expected:
+null
+
++ Received:
+1
+
+ ❯ public-lifecycle.test.ts:75:33
+     73|   waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 0…
+     74|  ).rejects.toThrow('cleanup unsettled');
+     75|  expect(child.process.exitCode).toBeNull();
+       |                                 ^
+     76|  expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
+     77|   exit: null,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  public-lifecycle.test.ts > fixture CUA timeout uses declared CUA marker instead of static capture marker
+AssertionError: promise resolved "1" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+1
+
+ ❯ public-lifecycle.test.ts:93:3
+     91|    join(root, 'cua-sessions/cua-stop'),
+     92|   ),
+     93|  ).rejects.toThrow('static capture deadline');
+       |   ^
+     94|  expect(await child.completion).toBe(0);
+     95|  expect(existsSync(join(root, 'capture-stop'))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  public-sessions.test.ts > read-only Host qualification checks actual process binary manifest health and effect binding
+Error: process identity unavailable: spawnSync /bin/ps EPERM
+ ❯ lookupProcessIdentity process-identity.ts:13:9
+     11|  if (result.status === 1 && !result.stdout.trim() && !result.stderr.tr…
+     12|  if (result.error || result.status !== 0)
+     13|   throw new Error(`process identity unavailable: ${result.error?.messa…
+       |         ^
+     14|  const match = /^(\d+)\s+(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)…
+     15|   result.stdout.trim(),
+ ❯ public-sessions.test.ts:179:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed | 8 passed (11)
+      Tests  7 failed | 146 passed (153)
+   Start at  06:17:03
+   Duration  28.12s (tests 95%, import 3%, transform 1%)
+
+[ELIFECYCLE] Test failed. See above for more details.
+real 29.77
+user 11.05
+sys 7.30

@@ -322,7 +322,9 @@ impl crate::LocalCollaboration for ScriptedProviderRouter {
         let operation = self.settled.clone();
         let wait_delay = self.wait_delay;
         Box::pin(async move {
-            tokio::time::sleep(wait_delay).await;
+            if !wait_delay.is_zero() {
+                tokio::time::sleep(wait_delay).await;
+            }
             let operation = operation.ok_or(crate::ClientError::Protocol("no provider I/O"))?;
             let target = operation.target.clone();
             Ok(collaboration_protocol::ConversationOperationWaitResult {
@@ -406,7 +408,7 @@ async fn provider_create_rejects_codex_only_inputs_before_mutation() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn provider_create_wait_returns_the_target_from_exact_operation()
 -> Result<(), Box<dyn std::error::Error>> {
     use collaboration_protocol::{

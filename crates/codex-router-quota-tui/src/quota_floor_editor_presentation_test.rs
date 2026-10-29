@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 use iocraft::prelude::*;
 
 use super::quota_browse_presentation_test::quota_two_account_view_model;
+use super::quota_frame_observation::render_frame_journey;
 use super::quota_floor_editor::WeeklyFloorEditorPhase;
 use super::quota_floor_editor::WeeklyFloorEditorState;
 use super::quota_floor_editor::WeeklyFloorStep;
@@ -87,15 +88,14 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
         let reloaded_view_model = reloaded_view_model.clone();
         Box::pin(async move { Some(reloaded_view_model) })
     });
-    let events = vec![
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+    let steps: Vec<(fn(&str) -> bool, TerminalEvent)> = vec![
+        (|_| true, TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down))),
+        (|frame| frame.contains("❯ duplicate"), TerminalEvent::Key(control_key('e'))),
+        (|frame| frame.contains("Weekly floor") && frame.contains("10%"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right))),
+        (|frame| frame.contains("Weekly floor") && frame.contains("11%"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))),
+        (|frame| !frame.contains("Weekly floor") && frame.contains("Filters"), TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc))),
     ];
-
-    let frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model,
             width: 120usize,
@@ -103,16 +103,8 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
             reload_view_model: Some(loader),
             weekly_floor_saver: Some(saver),
         )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
+    }.into_any();
+    let frames = render_frame_journey(component, steps).await;
 
     assert_eq!(
         *recorded_saves

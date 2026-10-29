@@ -388,7 +388,7 @@ async fn quota_status_non_left_row_events_do_not_change_account_focus() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn quota_status_reloads_view_model_on_timer() {
     let reload_count = Arc::new(AtomicUsize::new(0));
     let reload_view_model: QuotaStatusViewModelLoader = {
@@ -421,18 +421,7 @@ async fn quota_status_reloads_view_model_on_timer() {
             })
         })
     };
-    let exit_events = futures_util::stream::unfold(false, |sent| async move {
-        if sent {
-            return None;
-        }
-        tokio::time::sleep(Duration::from_millis(35)).await;
-        Some((
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-            true,
-        ))
-    });
-
-    let frames = element! {
+    let component = element! {
         QuotaStatusComponent(
             view_model: quota_view_model(),
             width: 120usize,
@@ -441,11 +430,14 @@ async fn quota_status_reloads_view_model_on_timer() {
             reload_interval: Duration::from_millis(10),
             spinner_interval: Duration::from_secs(60),
         )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(exit_events))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
+    }.into_any();
+    let frames = crate::quota_frame_observation::render_frame_journey(
+        component,
+        vec![(
+            |frame| frame.contains("❯ beta"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+        )],
+    ).await;
 
     assert!(
         reload_count.load(Ordering::SeqCst) > 0,

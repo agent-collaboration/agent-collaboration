@@ -1,0 +1,246 @@
+$ vitest run -- driver-lifecycle.test.ts public-lifecycle.test.ts
+
+ RUN  v5.0.4 /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/scripts/verification/tui
+
+ ❯ public-sessions.test.ts (8 tests | 2 failed) 6026ms
+   × public_sessions_launch_uses_exact_binary_cwd_and_normal_environment undefined 2303ms
+   × public_sessions_launch_uses_exact_binary_cwd_and_normal_environment normal codex 2134ms
+ ❯ public-lifecycle.test.ts (3 tests | 3 failed) 30105ms
+   × public timeout requests its own CUA stop and remains failure after cooperative zero exit 10025ms
+   × public timeout preserves unsettled exact child without signaling 10050ms
+   × fixture CUA timeout uses declared CUA marker instead of static capture marker 10030ms
+ ❯ component-collection.test.ts (33 tests | 3 failed) 40382ms
+   × collection_rechecks_real_source_and_artifact_after_driver none 10105ms
+   × collection_rechecks_real_source_and_artifact_after_driver source 10028ms
+   × collection_rechecks_real_source_and_artifact_after_driver artifact 10087ms
+ ❯ driver-lifecycle.test.ts (12 tests | 12 failed) 98224ms
+   × cua_fixture_discovery_rejects_more_than_one_libtest_filter 10018ms
+   × capture_discovery_bounds_and_reaps_its_exact_child 5104ms
+   × capture_discovery_preserves_success_and_nonzero_output 10063ms
+   × static_deadline_stays_failure_after_cooperative_child_exit 10041ms
+   × static_deadline_reports_unsettled_child_without_signalling_it 10033ms
+   × static_wait_preserves_normal_success_and_failure_without_stop 0 4193ms
+   × static_wait_preserves_normal_success_and_failure_without_stop 7 3696ms
+   × static_stop_refuses_to_overwrite_a_foreign_marker 10326ms
+   × discovery and oracle remain finite when a controlled descendant inherits stdout false 10077ms
+   × discovery and oracle remain finite when a controlled descendant inherits stdout true 10441ms
+   × oracle timeout remains failure after later exit 0 when own-child signal is not delivered 5605ms
+   × oracle timeout remains failure after later exit 1 when own-child signal is not delivered 8627ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver none
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver source
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver artifact
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ component-collection.test.ts:27:42
+     25|  for (const root of roots.splice(0)) rmSync(root, { recursive: true, f…
+     26| });
+     27| test.each(['none', 'source', 'artifact'])(
+       |                                          ^
+     28|  'collection_rechecks_real_source_and_artifact_after_driver %s',
+     29|  async (mutation) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > cua_fixture_discovery_rejects_more_than_one_libtest_filter
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:77:1
+     75|  });
+     76| }
+     77| test('cua_fixture_discovery_rejects_more_than_one_libtest_filter', asy…
+       | ^
+     78|  const repository = initializedSourceRepository();
+     79|  roots.push(repository);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > capture_discovery_bounds_and_reaps_its_exact_child
+Error: child did not publish discovery-ready
+ ❯ FSWatcher.<anonymous> driver-lifecycle.test.ts:72:12
+     70|   watcher.once('close', () => {
+     71|    if (!existsSync(marker) || readFileSync(marker, 'utf8') !== expecte…
+     72|     reject(new Error(`child did not publish ${name}`));
+       |            ^
+     73|   });
+     74|   observe();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > capture_discovery_preserves_success_and_nonzero_output
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:131:1
+    129|  expect(failure).toContain('stdout_base64');
+    130| });
+    131| test('capture_discovery_preserves_success_and_nonzero_output', async (…
+       | ^
+    132|  const root = rootDirectory();
+    133|  const good = controlledExecutable(root, 'good-list', `process.stdout.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_stays_failure_after_cooperative_child_exit
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:142:1
+    140|  await expect(discoverCaptureTest([bad], root)).rejects.toThrow('"exit…
+    141| });
+    142| test('static_deadline_stays_failure_after_cooperative_child_exit', asy…
+       | ^
+    143|  const root = rootDirectory();
+    144|  const child = protocolDriver(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_reports_unsettled_child_without_signalling_it
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:169:1
+    167|  });
+    168| });
+    169| test('static_deadline_reports_unsettled_child_without_signalling_it', …
+       | ^
+    170|  const root = rootDirectory();
+    171|  const child = protocolDriver(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_wait_preserves_normal_success_and_failure_without_stop 0
+ FAIL  driver-lifecycle.test.ts > static_wait_preserves_normal_success_and_failure_without_stop 7
+Error: static capture deadline; cleanup unsettled; stop_error=null
+ ❯ waitStaticCapture driver-lifecycle.ts:109:9
+    107|  if (result === null) child.process.unref();
+    108|  if (timedOut)
+    109|   throw new Error(
+       |         ^
+    110|    `static capture deadline; ${result === null ? 'cleanup unsettled' :…
+    111|   );
+ ❯ driver-lifecycle.test.ts:200:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_stop_refuses_to_overwrite_a_foreign_marker
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:211:1
+    209|  },
+    210| );
+    211| test('static_stop_refuses_to_overwrite_a_foreign_marker', async () => {
+       | ^
+    212|  const root = rootDirectory();
+    213|  writeFileSync(join(root, 'capture-stop'), 'different protocol\n');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > discovery and oracle remain finite when a controlled descendant inherits stdout false
+ FAIL  driver-lifecycle.test.ts > discovery and oracle remain finite when a controlled descendant inherits stdout true
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ driver-lifecycle.test.ts:233:25
+    231| });
+    232|
+    233| test.each([false, true])(
+       |                         ^
+    234|  'discovery and oracle remain finite when a controlled descendant inhe…
+    235|  async (oracle) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 0 when own-child signal is not delivered
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 1 when own-child signal is not delivered
+Error: child did not publish oracle-ready
+ ❯ FSWatcher.<anonymous> driver-lifecycle.test.ts:72:12
+     70|   watcher.once('close', () => {
+     71|    if (!existsSync(marker) || readFileSync(marker, 'utf8') !== expecte…
+     72|     reject(new Error(`child did not publish ${name}`));
+       |            ^
+     73|   });
+     74|   observe();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 0 when own-child signal is not delivered
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 1 when own-child signal is not delivered
+Error: Promise returned by `expect(actual).rejects.toThrow(expected)` was not awaited. This assertion is asynchronous and must be awaited; otherwise, it is not guaranteed to complete before the test finishes:
+
+await expect(actual).rejects.toThrow(expected)
+
+ ❯ driver-lifecycle.test.ts:294:5
+    292|    const waiting = expect(
+    293|     runCapturedCommand({ command: [executable], repository: root, time…
+    294|    ).rejects.toThrow(`"exit":${exit},"timeout":true`);
+       |     ^
+    295|    await ready;
+    296|    await vi.advanceTimersByTimeAsync(100);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout requests its own CUA stop and remains failure after cooperative zero exit
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ public-lifecycle.test.ts:55:1
+     53|  }
+     54| }
+     55| test('public timeout requests its own CUA stop and remains failure aft…
+       | ^
+     56|  const { root, child } = fixture(true);
+     57|  await once(child.process, 'message');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout preserves unsettled exact child without signaling
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ public-lifecycle.test.ts:73:1
+     71|  });
+     72| });
+     73| test('public timeout preserves unsettled exact child without signaling…
+       | ^
+     74|  const { root, child } = fixture(false);
+     75|  await once(child.process, 'message');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  public-lifecycle.test.ts > fixture CUA timeout uses declared CUA marker instead of static capture marker
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ public-lifecycle.test.ts:90:1
+     88|  expect(await child.completion).toBe(0);
+     89| });
+     90| test('fixture CUA timeout uses declared CUA marker instead of static c…
+       | ^
+     91|  const { root, child } = fixture(true);
+     92|  await once(child.process, 'message');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  public-sessions.test.ts > public_sessions_launch_uses_exact_binary_cwd_and_normal_environment undefined
+ FAIL  public-sessions.test.ts > public_sessions_launch_uses_exact_binary_cwd_and_normal_environment normal codex
+AssertionError: expected null to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+null
+
+ ❯ public-sessions.test.ts:116:25
+    114|    timeout: 2000,
+    115|   });
+    116|   expect(result.status).toBe(0);
+       |                         ^
+    117|   expect(readJson(fixture.record)).toEqual({
+    118|    argv: [],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+
+ Test Files  4 failed | 7 passed (11)
+      Tests  20 failed | 133 passed (153)
+   Start at  06:20:18
+   Duration  102.33s (tests 98%, import 2%)
+
+[ELIFECYCLE] Test failed. See above for more details.

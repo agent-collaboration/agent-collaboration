@@ -1,0 +1,67 @@
+$ vitest run
+
+ RUN  v5.0.4 /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/scripts/verification/tui
+
+ ❯ driver-lifecycle.test.ts (12 tests | 2 failed) 12227ms
+   × oracle timeout remains failure after later exit 0 when own-child signal is not delivered 2127ms
+   × oracle timeout remains failure after later exit 1 when own-child signal is not delivered 2317ms
+ ❯ component-collection.test.ts (33 tests | 1 failed) 38541ms
+   × collection_rechecks_real_source_and_artifact_after_driver artifact 11770ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver artifact
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ component-collection.test.ts:27:42
+     25|  for (const root of roots.splice(0)) rmSync(root, { recursive: true, f…
+     26| });
+     27| test.each(['none', 'source', 'artifact'])(
+       |                                          ^
+     28|  'collection_rechecks_real_source_and_artifact_after_driver %s',
+     29|  async (mutation) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 0 when own-child signal is not delivered
+AssertionError: expected [Function] to throw error including '"exit":0,"timeout":true' but got 'command reap deadline; {"command":["/…'
+
+Expected: ""exit":0,"timeout":true"
+Received: "command reap deadline; {"command":["/private/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/router-tui-contract-3hRn1i/late-oracle"],"pid":81182,"stdout_path":"/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/2026-10-quota-command-25221d/stdout","stderr_path":"/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/2026-10-quota-command-25221d/stderr","exit":null,"timeout":true,"stdout_base64":"","stderr_base64":""}"
+
+ ❯ driver-lifecycle.test.ts:285:5
+    283|    await expect(
+    284|     runCapturedCommand({ command: [executable], repository: root, time…
+    285|    ).rejects.toThrow(`"exit":${exit},"timeout":true`);
+       |     ^
+    286|    expect(refusedSignal).toHaveBeenCalledWith('SIGKILL');
+    287|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  driver-lifecycle.test.ts > oracle timeout remains failure after later exit 1 when own-child signal is not delivered
+AssertionError: expected [Function] to throw error including '"exit":1,"timeout":true' but got 'command reap deadline; {"command":["/…'
+
+Expected: ""exit":1,"timeout":true"
+Received: "command reap deadline; {"command":["/private/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/router-tui-contract-dhYjfS/late-oracle"],"pid":81496,"stdout_path":"/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/2026-10-quota-command-72KUka/stdout","stderr_path":"/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/2026-10-quota-command-72KUka/stderr","exit":null,"timeout":true,"stdout_base64":"","stderr_base64":""}"
+
+ ❯ driver-lifecycle.test.ts:285:5
+    283|    await expect(
+    284|     runCapturedCommand({ command: [executable], repository: root, time…
+    285|    ).rejects.toThrow(`"exit":${exit},"timeout":true`);
+       |     ^
+    286|    expect(refusedSignal).toHaveBeenCalledWith('SIGKILL');
+    287|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 9 passed (11)
+      Tests  3 failed | 150 passed (153)
+   Start at  06:18:19
+   Duration  39.97s (tests 99%, import 1%)
+
+[ELIFECYCLE] Test failed. See above for more details.
+real 41.45
+user 11.28
+sys 7.14

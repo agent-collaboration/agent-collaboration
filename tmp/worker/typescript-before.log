@@ -1,0 +1,220 @@
+$ vitest run
+
+ RUN  v5.0.4 /Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/scripts/verification/tui
+
+ ❯ public-lifecycle.test.ts (3 tests | 3 failed) 1184ms
+   × public timeout requests its own CUA stop and remains failure after cooperative zero exit 374ms
+   × public timeout preserves unsettled exact child without signaling 444ms
+   × fixture CUA timeout uses declared CUA marker instead of static capture marker 364ms
+ ❯ public-sessions.test.ts (8 tests | 1 failed) 1515ms
+   × read-only Host qualification checks actual process binary manifest health and effect binding 492ms
+ ❯ source-binding.test.ts (10 tests | 2 failed) 4061ms
+   × capture_target_rejects_omitted_or_changed_compiled_controls_input 1001ms
+   × capture target binds exact current Node and rejects digest or executable substitution 1517ms
+ ❯ driver-lifecycle.test.ts (12 tests | 4 failed) 6648ms
+   × cua_fixture_discovery_rejects_more_than_one_libtest_filter 1154ms
+   × capture_discovery_bounds_and_reaps_its_exact_child 165ms
+   × static_deadline_stays_failure_after_cooperative_child_exit 500ms
+   × static_deadline_reports_unsettled_child_without_signalling_it 714ms
+ ❯ component-collection.test.ts (33 tests | 3 failed) 17249ms
+   × collection_rechecks_real_source_and_artifact_after_driver none 1514ms
+   × collection_rechecks_real_source_and_artifact_after_driver source 1599ms
+   × collection_rechecks_real_source_and_artifact_after_driver artifact 1575ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver none
+Error: capture requires pinned Node v26.12.1
+ ❯ verifyTarget source-binding.ts:114:44
+    112|  ])
+    113|   verifyArtifact(binding);
+    114|  if (process.version !== 'v26.12.1') throw new Error('capture requires…
+       |                                            ^
+    115|  if (realpathSync(process.execPath) !== plan.node.path)
+    116|   throw new Error('parent CLI must use the declared Node executable');
+ ❯ runComponentCapture capture-execution.ts:226:2
+ ❯ component-collection.test.ts:72:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver source
+ FAIL  component-collection.test.ts > collection_rechecks_real_source_and_artifact_after_driver artifact
+AssertionError: expected [Function] to throw error matching /source changed|artifact changed/u but got 'capture requires pinned Node v26.12.1'
+
+- Expected:
+/source changed|artifact changed/u
+
++ Received:
+"capture requires pinned Node v26.12.1"
+
+ ❯ component-collection.test.ts:77:43
+     75|    });
+     76|   } else {
+     77|    await expect(runComponentCapture(plan)).rejects.toThrow(/source cha…
+       |                                           ^
+     78|    expect(() => readFileSync(join(plan.output, 'component-gallery-mani…
+     79|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  driver-lifecycle.test.ts > cua_fixture_discovery_rejects_more_than_one_libtest_filter
+Error: capture requires pinned Node v26.12.1
+ ❯ verifyTarget source-binding.ts:114:44
+    112|  ])
+    113|   verifyArtifact(binding);
+    114|  if (process.version !== 'v26.12.1') throw new Error('capture requires…
+       |                                            ^
+    115|  if (realpathSync(process.execPath) !== plan.node.path)
+    116|   throw new Error('parent CLI must use the declared Node executable');
+ ❯ checkDriver capture-execution.ts:55:2
+ ❯ driver-lifecycle.test.ts:76:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  driver-lifecycle.test.ts > capture_discovery_bounds_and_reaps_its_exact_child
+Error: EMFILE: too many open files, watch
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_stays_failure_after_cooperative_child_exit
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ driver-lifecycle.test.ts:153:33
+    151|   }),
+    152|  ).rejects.toThrow('static capture deadline');
+    153|  expect(await child.completion).toBe(0);
+       |                                 ^
+    154|  expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n…
+    155|  expect(readFileSync(join(root, 'driver.stdout'), 'utf8')).toContain('…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  driver-lifecycle.test.ts > static_deadline_reports_unsettled_child_without_signalling_it
+AssertionError: expected [Function] to throw error including 'cleanup unsettled' but got 'static capture deadline; driver exite…'
+
+Expected: "cleanup unsettled"
+Received: "static capture deadline; driver exited; stop_error=null"
+
+ ❯ driver-lifecycle.test.ts:176:3
+    174|    );
+    175|   }),
+    176|  ).rejects.toThrow('cleanup unsettled');
+       |   ^
+    177|  expect(child.process.exitCode).toBeNull();
+    178|  expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout requests its own CUA stop and remains failure after cooperative zero exit
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ public-lifecycle.test.ts:60:33
+     58|   waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 1…
+     59|  ).rejects.toThrow('public CUA failed');
+     60|  expect(await child.completion).toBe(0);
+       |                                 ^
+     61|  expect(readFileSync(join(root, 'cua-sessions/cua-stop'), 'utf8')).toB…
+     62|  expect(existsSync(join(root, 'capture-stop'))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  public-lifecycle.test.ts > public timeout preserves unsettled exact child without signaling
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ public-lifecycle.test.ts:81:33
+     79|  });
+     80|  writeFileSync(join(root, 'fixture-release'), 'release');
+     81|  expect(await child.completion).toBe(0);
+       |                                 ^
+     82| });
+     83| test('fixture CUA timeout uses declared CUA marker instead of static c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  public-lifecycle.test.ts > fixture CUA timeout uses declared CUA marker instead of static capture marker
+AssertionError: promise resolved "1" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+1
+
+ ❯ public-lifecycle.test.ts:93:3
+     91|    join(root, 'cua-sessions/cua-stop'),
+     92|   ),
+     93|  ).rejects.toThrow('static capture deadline');
+       |   ^
+     94|  expect(await child.completion).toBe(0);
+     95|  expect(existsSync(join(root, 'capture-stop'))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  public-sessions.test.ts > read-only Host qualification checks actual process binary manifest health and effect binding
+Error: process identity unavailable: spawnSync /bin/ps EPERM
+ ❯ lookupProcessIdentity process-identity.ts:13:9
+     11|  if (result.status === 1 && !result.stdout.trim() && !result.stderr.tr…
+     12|  if (result.error || result.status !== 0)
+     13|   throw new Error(`process identity unavailable: ${result.error?.messa…
+       |         ^
+     14|  const match = /^(\d+)\s+(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)…
+     15|   result.stdout.trim(),
+ ❯ public-sessions.test.ts:179:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  source-binding.test.ts > capture_target_rejects_omitted_or_changed_compiled_controls_input
+Error: capture requires pinned Node v26.12.1
+ ❯ verifyTarget source-binding.ts:114:44
+    112|  ])
+    113|   verifyArtifact(binding);
+    114|  if (process.version !== 'v26.12.1') throw new Error('capture requires…
+       |                                            ^
+    115|  if (realpathSync(process.execPath) !== plan.node.path)
+    116|   throw new Error('parent CLI must use the declared Node executable');
+ ❯ source-binding.test.ts:57:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  source-binding.test.ts > capture target binds exact current Node and rejects digest or executable substitution
+Error: capture requires pinned Node v26.12.1
+ ❯ verifyTarget source-binding.ts:114:44
+    112|  ])
+    113|   verifyArtifact(binding);
+    114|  if (process.version !== 'v26.12.1') throw new Error('capture requires…
+       |                                            ^
+    115|  if (realpathSync(process.execPath) !== plan.node.path)
+    116|   throw new Error('parent CLI must use the declared Node executable');
+ ❯ source-binding.test.ts:118:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+
+ Test Files  5 failed | 6 passed (11)
+      Tests  13 failed | 140 passed (153)
+   Start at  06:15:29
+   Duration  28.20s (tests 88%, transform 9%, import 4%)
+
+[ELIFECYCLE] Test failed. See above for more details.
+real 30.63
+user 10.71
+sys 7.12

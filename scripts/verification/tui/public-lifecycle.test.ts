@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { controlledExecutable } from './controlled-child-fixtures.ts';
 import { startDriver, waitStaticCapture } from './driver-lifecycle.ts';
@@ -21,6 +21,7 @@ import { readJson } from './source-binding.ts';
 const roots: string[] = [];
 const children: DriverChild[] = [];
 afterEach(async () => {
+	vi.useRealTimers();
 	await Promise.all(
 		children.splice(0).map(async (child) => {
 			if (child.process.exitCode === null && child.process.signalCode === null)
@@ -54,9 +55,12 @@ function fixture(cooperative: boolean): { root: string; child: DriverChild } {
 test('public timeout requests its own CUA stop and remains failure after cooperative zero exit', async () => {
 	const { root, child } = fixture(true);
 	await once(child.process, 'message');
-	await expect(
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = expect(
 		waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 1 }),
 	).rejects.toThrow('public CUA failed');
+	await vi.advanceTimersByTimeAsync(30);
+	await waiting;
 	expect(await child.completion).toBe(0);
 	expect(readFileSync(join(root, 'cua-sessions/cua-stop'), 'utf8')).toBe('stop\n');
 	expect(existsSync(join(root, 'capture-stop'))).toBe(false);
@@ -69,9 +73,12 @@ test('public timeout requests its own CUA stop and remains failure after coopera
 test('public timeout preserves unsettled exact child without signaling', async () => {
 	const { root, child } = fixture(false);
 	await once(child.process, 'message');
-	await expect(
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = expect(
 		waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 0.03 }),
 	).rejects.toThrow('cleanup unsettled');
+	await vi.advanceTimersByTimeAsync(60);
+	await waiting;
 	expect(child.process.exitCode).toBeNull();
 	expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
 		exit: null,
@@ -83,7 +90,8 @@ test('public timeout preserves unsettled exact child without signaling', async (
 test('fixture CUA timeout uses declared CUA marker instead of static capture marker', async () => {
 	const { root, child } = fixture(true);
 	await once(child.process, 'message');
-	await expect(
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = expect(
 		waitStaticCapture(
 			child,
 			root,
@@ -91,6 +99,8 @@ test('fixture CUA timeout uses declared CUA marker instead of static capture mar
 			join(root, 'cua-sessions/cua-stop'),
 		),
 	).rejects.toThrow('static capture deadline');
+	await vi.advanceTimersByTimeAsync(30);
+	await waiting;
 	expect(await child.completion).toBe(0);
 	expect(existsSync(join(root, 'capture-stop'))).toBe(false);
 });

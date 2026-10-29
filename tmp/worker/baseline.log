@@ -1,0 +1,844 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling unicode-ident v1.0.24
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling libc v0.2.186
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.2
+   Compiling version_check v0.9.5
+   Compiling serde v1.0.228
+   Compiling itoa v1.0.18
+   Compiling pin-project-lite v0.2.17
+   Compiling log v0.4.33
+   Compiling serde_core v1.0.228
+   Compiling thiserror v2.0.18
+   Compiling zmij v1.0.23
+   Compiling equivalent v1.0.2
+   Compiling autocfg v1.5.1
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling smallvec v1.15.2
+   Compiling futures-core v0.3.34
+   Compiling typenum v1.20.1
+   Compiling once_cell v1.21.4
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v2.0.1
+   Compiling generic-array v0.14.7
+   Compiling bytes v1.12.0
+   Compiling subtle v2.6.1
+   Compiling bitflags v2.13.0
+   Compiling core-foundation-sys v0.8.7
+   Compiling num-traits v0.2.19
+   Compiling hashbrown v0.17.1
+   Compiling tracing-core v0.1.36
+   Compiling stable_deref_trait v1.2.1
+   Compiling futures-io v0.3.34
+   Compiling serde_json v1.0.150
+   Compiling writeable v0.6.3
+   Compiling litemap v0.8.2
+   Compiling utf8_iter v1.0.4
+   Compiling iana-time-zone v0.1.65
+   Compiling icu_properties_data v2.2.0
+   Compiling icu_normalizer_data v2.2.0
+   Compiling futures-task v0.3.34
+   Compiling base64 v0.22.1
+   Compiling crossbeam-utils v0.8.21
+   Compiling write16 v1.0.0
+   Compiling utf16_iter v1.0.5
+   Compiling heck v0.5.0
+   Compiling percent-encoding v2.3.2
+   Compiling futures-sink v0.3.34
+   Compiling scopeguard v1.2.0
+   Compiling slab v0.4.12
+   Compiling parking_lot_core v0.9.12
+   Compiling lock_api v0.4.14
+   Compiling getrandom v0.4.3
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling cpufeatures v0.2.17
+   Compiling syn v2.0.118
+   Compiling rand_core v0.6.4
+   Compiling jobserver v0.1.35
+   Compiling syn v3.0.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling socket2 v0.6.4
+   Compiling mio v1.2.1
+   Compiling cc v1.2.65
+   Compiling futures-channel v0.3.34
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.52
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling http v1.4.2
+   Compiling digest v0.10.7
+   Compiling regex-syntax v0.8.11
+   Compiling aho-corasick v1.1.4
+   Compiling sha1_smol v1.0.1
+   Compiling form_urlencoded v1.2.2
+   Compiling pkg-config v0.3.33
+   Compiling parking v2.2.1
+   Compiling parking_lot v0.12.5
+   Compiling sha2 v0.10.9
+   Compiling rustix v1.1.4
+   Compiling hex v0.4.3
+   Compiling concurrent-queue v2.5.0
+   Compiling winnow v0.7.15
+   Compiling toml_write v0.1.2
+   Compiling vcpkg v0.2.15
+   Compiling chrono v0.4.45
+   Compiling rand_core v0.9.5
+   Compiling event-listener v5.4.1
+   Compiling num-integer v0.1.47
+   Compiling hashbrown v0.16.1
+   Compiling fastrand v2.5.0
+   Compiling crc-catalog v2.5.0
+   Compiling indexmap v2.14.0
+   Compiling uuid v1.26.0
+   Compiling crc v3.4.0
+   Compiling futures-intrusive v0.5.0
+   Compiling crossbeam-queue v0.3.12
+   Compiling num-bigint v0.4.8
+   Compiling hashlink v0.11.1
+   Compiling spin v0.9.9
+   Compiling zeroize v1.9.0
+   Compiling regex-automata v0.4.18
+   Compiling futures-util v0.3.34
+   Compiling libsqlite3-sys v0.35.0
+   Compiling atoi v2.0.0
+   Compiling dotenvy v0.15.7
+   Compiling flume v0.12.0
+   Compiling foldhash v0.1.5
+   Compiling httparse v1.10.1
+   Compiling rustls-pki-types v1.15.0
+   Compiling hashbrown v0.15.5
+   Compiling ring v0.17.14
+   Compiling ref-cast v1.0.27
+   Compiling untrusted v0.9.0
+   Compiling rustls v0.23.46
+   Compiling data-encoding v2.11.0
+   Compiling serde_derive_internals v0.30.0
+   Compiling webpki-roots v1.0.10
+   Compiling dyn-clone v1.0.20
+   Compiling winnow v1.0.3
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling synstructure v0.13.2
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling futures-macro v0.3.34
+   Compiling ref-cast-impl v1.0.27
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling fixedbitset v0.5.7
+   Compiling sha1 v0.10.6
+   Compiling schemars_derive v1.2.2
+   Compiling ryu v1.0.23
+   Compiling petgraph v0.8.3
+   Compiling unicode-width v0.1.14
+   Compiling rustversion v1.0.22
+   Compiling fnv v1.0.7
+   Compiling webpki-roots v0.26.11
+   Compiling fallible-iterator v0.3.0
+   Compiling lazy_static v1.5.0
+   Compiling ahash v0.8.12
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling siphasher v1.0.3
+   Compiling num-rational v0.4.2
+   Compiling num-iter v0.1.46
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling tracing-attributes v0.1.31
+   Compiling displaydoc v0.2.6
+   Compiling tokio-macros v2.7.0
+   Compiling zerofrom v0.1.8
+   Compiling tempfile v3.27.0
+   Compiling futures-executor v0.3.32
+   Compiling yoke v0.8.3
+   Compiling strum_macros v0.28.0
+   Compiling turso_macros v0.8.1
+   Compiling num-complex v0.4.6
+   Compiling tokio v1.53.3
+   Compiling tracing v0.1.44
+   Compiling regex v1.12.4
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling num v0.4.3
+   Compiling strum_macros v0.26.4
+   Compiling miette-derive v7.6.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling unicode-general-category v1.1.0
+   Compiling bit-vec v0.8.0
+   Compiling rand_chacha v0.9.0
+   Compiling borrow-or-share v0.2.4
+   Compiling bit-set v0.8.0
+   Compiling rand v0.9.4
+   Compiling fraction v0.17.0
+   Compiling sharded-slab v0.1.7
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.9
+   Compiling num-cmp v0.1.0
+   Compiling outref v0.5.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling bytecount v0.6.9
+   Compiling miette v7.6.0
+   Compiling vsimd v0.8.0
+   Compiling micromap v0.3.0
+   Compiling fancy-regex v0.19.0
+   Compiling strum v0.28.0
+   Compiling jsonschema-regex v0.53.0
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling uuid-simd v0.8.0
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_collections v2.2.0
+   Compiling ryu-js v1.0.3
+   Compiling anyhow v1.0.103
+   Compiling semver v1.0.28
+   Compiling rustc_version v0.4.1
+   Compiling either v1.16.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling fluent-uri v0.4.1
+   Compiling email_address v0.2.9
+   Compiling toml_edit v0.22.27
+   Compiling jsonschema-value v0.53.0
+   Compiling strum v0.26.3
+   Compiling serde_json_canonicalizer v0.3.2
+   Compiling itertools v0.12.1
+   Compiling opaque-debug v0.3.1
+   Compiling strsim v0.11.1
+   Compiling turso_parser v0.8.1
+   Compiling http-body v1.0.1
+   Compiling libloading v0.8.9
+   Compiling libm v0.2.16
+   Compiling referencing v0.53.0
+   Compiling icu_locale_data v2.2.0
+   Compiling bytemuck_derive v1.10.2
+   Compiling icu_provider v2.2.0
+   Compiling rustls-webpki v0.103.16
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling schemars v1.2.2
+   Compiling memoffset v0.9.1
+   Compiling icu_collator_data v2.2.0
+   Compiling glob v0.3.3
+   Compiling atomic-waker v1.1.2
+   Compiling turso_ext v0.8.1
+   Compiling ident_case v1.0.1
+   Compiling jsonschema v0.53.0
+   Compiling bytemuck v1.25.0
+   Compiling clang-sys v1.8.1
+   Compiling crc32c v0.6.8
+   Compiling toml v0.8.23
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling branches v0.4.4
+   Compiling simsimd v6.5.16
+   Compiling url v2.5.8
+   Compiling aegis v0.9.8
+   Compiling bigdecimal v0.4.10
+   Compiling uncased v0.9.10
+   Compiling crossbeam-epoch v0.9.21
+   Compiling tower-service v0.3.3
+   Compiling prettyplease v0.2.37
+   Compiling rustc-hash v2.1.2
+   Compiling rustix v0.38.44
+   Compiling pastey v0.2.3
+   Compiling cfg_aliases v0.2.1
+   Compiling message-board v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/message-board)
+   Compiling turso_core v0.8.1
+   Compiling tokio-stream v0.1.18
+   Compiling tokio-util v0.7.18
+   Compiling sqlx-core v0.9.0
+   Compiling icu_locale v2.2.0
+   Compiling aristo-macros v0.4.1
+   Compiling minimal-lexical v0.2.1
+   Compiling softaes v0.1.3
+   Compiling byteorder v1.5.0
+   Compiling roaring v0.11.4
+   Compiling nom v7.1.3
+   Compiling aristo v0.4.1
+   Compiling intrusive-collections v0.9.7
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.29.0
+   Compiling icu_collator v2.2.0
+   Compiling fastbloom v0.14.1
+   Compiling pack1 v1.1.0
+   Compiling prost-derive v0.14.4
+   Compiling twox-hash v2.1.2
+   Compiling rapidhash v4.4.1
+   Compiling arc-swap v1.9.1
+   Compiling bumpalo v3.20.3
+   Compiling bindgen v0.69.5
+   Compiling tokio-tungstenite v0.29.0
+   Compiling cfg_block v0.1.1
+   Compiling home v0.5.12
+   Compiling sqlx-sqlite v0.9.0
+   Compiling simdutf8 v0.1.5
+   Compiling allocator-api2 v0.4.0
+   Compiling which v4.4.2
+   Compiling cexpr v0.6.0
+   Compiling http-body-util v0.1.3
+   Compiling fleet-sync-query-gen v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling tracing-serde v0.2.0
+   Compiling matchers v0.2.0
+   Compiling powerfmt v0.2.0
+   Compiling lazycell v1.3.0
+   Compiling deranged v0.5.8
+   Compiling rustc-hash v1.1.0
+   Compiling time-core v0.1.9
+   Compiling num-conv v0.2.2
+   Compiling shlex v1.3.0
+   Compiling prost v0.14.4
+   Compiling tracing-subscriber v0.3.23
+   Compiling polling v3.11.0
+   Compiling crossbeam-channel v0.5.15
+   Compiling inout v0.1.4
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling symlink v0.1.0
+   Compiling try-lock v0.2.5
+   Compiling want v0.3.1
+   Compiling cipher v0.4.4
+   Compiling h2 v0.4.16
+   Compiling universal-hash v0.5.1
+   Compiling env_filter v1.0.1
+   Compiling genawaiter-macro v0.99.1
+   Compiling httpdate v1.0.3
+   Compiling polyval v0.6.2
+   Compiling genawaiter v0.99.1
+   Compiling time v0.3.55
+   Compiling env_logger v0.11.10
+   Compiling turso_sdk_kit_macros v0.8.1
+   Compiling ipnet v2.12.0
+   Compiling ghash v0.5.1
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling aead v0.5.2
+   Compiling security-framework-sys v2.17.0
+   Compiling core-foundation v0.10.1
+   Compiling aes-gcm v0.10.3
+   Compiling security-framework v3.7.0
+   Compiling sqlx-macros-core v0.9.0
+   Compiling tower v0.5.3
+   Compiling serde_urlencoded v0.7.1
+   Compiling hmac v0.12.1
+   Compiling runtime-primitives v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling tower-http v0.6.11
+   Compiling fleet-sync-protocol v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling darling_core v0.20.11
+   Compiling strum_macros v0.27.2
+   Compiling rustls-native-certs v0.8.4
+   Compiling phf_shared v0.12.1
+   Compiling chrono-tz v0.10.4
+   Compiling phf v0.12.1
+   Compiling tracing-appender v0.2.5
+   Compiling futures v0.3.32
+   Compiling fleet-sync-lease v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling sqlx-macros v0.9.0
+   Compiling fleet-sync-receiver v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling fleet-sync-writer v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling fleet-sync-session v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling toml_edit v0.25.11+spec-1.1.0
+   Compiling sqlx v0.9.0
+   Compiling async-trait v0.1.89
+   Compiling utf-8 v0.7.6
+   Compiling strum v0.27.2
+   Compiling hyper v1.10.1
+   Compiling darling_macro v0.20.11
+   Compiling proc-macro-crate v3.5.0
+   Compiling fleet-sync-delivery v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling tungstenite v0.27.0
+   Compiling darling v0.20.11
+   Compiling darling_core v0.24.1
+   Compiling cfg_aliases v0.1.1
+   Compiling message-board-storage v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/message-board-storage)
+   Compiling nix v0.28.0
+   Compiling async-tungstenite v0.31.0
+   Compiling fleet-sync-tokio-runner v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling chacha20 v0.10.2
+   Compiling hyper-util v0.1.20
+   Compiling derive_builder_core v0.20.2
+   Compiling rmcp v3.4.0
+   Compiling automation-storage v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/automation-storage)
+   Compiling mime v0.3.17
+   Compiling axum-core v0.5.6
+   Compiling rand v0.10.2
+   Compiling sse-stream v0.2.6
+   Compiling turso_sdk_kit v0.8.1
+   Compiling derive_builder_macro v0.20.2
+   Compiling serde_path_to_error v0.1.20
+   Compiling matchit v0.8.4
+   Compiling base64 v0.23.1
+   Compiling interaction-storage v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/interaction-storage)
+   Compiling lifecycle-observation v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/lifecycle-observation)
+   Compiling derive_builder v0.20.2
+   Compiling hyper-rustls v0.27.9
+   Compiling collaboration-runtime v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-runtime)
+   Compiling cmake v0.1.58
+   Compiling reqwest v0.12.28
+   Compiling dunce v1.0.5
+   Compiling axum v0.8.9
+   Compiling fs_extra v1.3.0
+   Compiling collaboration-central-core v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-central-core)
+   Compiling aws-lc-rs v1.18.2
+   Compiling darling_macro v0.24.1
+   Compiling aws-lc-sys v0.46.0
+   Compiling hybrid-array v0.4.15
+   Compiling croner v4.0.0
+   Compiling codex-router-core v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-core)
+   Compiling cmov v0.5.4
+   Compiling cpufeatures v0.3.1
+   Compiling darling v0.24.1
+   Compiling agent-automation v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/agent-automation)
+   Compiling crypto-common v0.2.2
+   Compiling inout v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling ctutils v0.4.4
+   Compiling cpubits v0.1.1
+   Compiling keyring-core v1.0.0
+   Compiling fs2 v0.4.3
+   Compiling unicode-segmentation v1.13.3
+   Compiling unicode-xid v0.2.6
+   Compiling opentelemetry v0.31.0
+   Compiling apple-native-keyring-store v1.0.2
+   Compiling signal-hook v0.3.18
+   Compiling unicode-width v0.2.2
+   Compiling convert_case v0.10.0
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling rmcp-macros v3.4.0
+   Compiling reqwest-websocket v0.5.1
+   Compiling cipher v0.5.2
+   Compiling universal-hash v0.6.1
+   Compiling aead v0.6.1
+   Compiling codex-native-integration v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-native-integration)
+   Compiling collaboration-mail-protocol v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-mail-protocol)
+   Compiling session-event-model v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/session-event-model)
+   Compiling fleet-admission v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/fleet-admission)
+   Compiling polyval v0.7.3
+   Compiling aes v0.9.3
+   Compiling ctr v0.10.1
+   Compiling ghash v0.6.0
+   Compiling derive_more-impl v2.1.1
+   Compiling slotmap v1.1.1
+   Compiling aes-gcm v0.11.1
+   Compiling litrs v1.0.0
+   Compiling codex-router-secret-store v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-secret-store)
+   Compiling signal-hook-mio v0.2.5
+   Compiling codex-router-quota v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-quota)
+   Compiling document-features v0.2.12
+   Compiling hashlink v0.10.0
+   Compiling zstd-safe v8.2.0
+   Compiling codex-router-state v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-state)
+   Compiling crc32fast v1.5.2
+   Compiling arrayvec v0.7.8
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling alloc-no-stdlib v3.0.0
+   Compiling board-sync-protocol v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/board-sync-protocol)
+   Compiling taffy v0.5.2
+   Compiling rusqlite v0.37.0
+   Compiling collaboration-protocol v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-protocol)
+   Compiling alloc-stdlib v0.3.0
+   Compiling derive_more v2.1.1
+   Compiling codex-router-selection v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-selection)
+   Compiling pin-project-internal v1.1.13
+   Compiling iocraft-macros v0.2.5 (https://github.com/agent-collaboration/iocraft.git?rev=829ebd86bd07fe2100c096ec6d785875ec2e0c79#829ebd86)
+   Compiling generational-box v0.5.6
+   Compiling adler2 v2.0.1
+   Compiling simd-adler32 v0.3.10
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling miniz_oxide v0.9.1
+   Compiling brotli-decompressor v6.0.1
+   Compiling darling_core v0.23.0
+   Compiling collaboration-central-admin-protocol v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-central-admin-protocol)
+   Compiling crossterm v0.29.0
+   Compiling pin-project v1.1.13
+   Compiling futures-lite v2.6.1
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstyle-query v1.1.5
+   Compiling colorchoice v1.0.5
+   Compiling flate2 v1.1.10
+   Compiling terminal_size v0.4.4
+   Compiling anstream v1.0.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling brotli v9.0.0
+   Compiling async-io v2.6.0
+   Compiling compression-core v0.4.33
+   Compiling clap_lex v1.1.0
+   Compiling clap_derive v4.6.1
+   Compiling hyper-tungstenite v0.20.0
+   Compiling async-channel v2.5.0
+   Compiling async-lock v3.4.2
+   Compiling clap_builder v4.6.0
+   Compiling piper v0.2.5
+   Compiling node-test-fixture v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/node-test-fixture)
+   Compiling iocraft v0.9.2 (https://github.com/agent-collaboration/iocraft.git?rev=829ebd86bd07fe2100c096ec6d785875ec2e0c79#829ebd86)
+   Compiling async-task v4.7.1
+   Compiling shell-words v1.1.1
+   Compiling blocking v1.7.0
+   Compiling futures-concurrency v7.7.1
+   Compiling agent-client-protocol-derive v2.2.0
+   Compiling tonic v0.14.6
+   Compiling codex-router-auth v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-auth)
+   Compiling darling_macro v0.23.0
+   Compiling async-signal v0.2.14
+   Compiling portable-atomic v1.13.1
+   Compiling async-process v2.5.0
+   Compiling clap v4.6.1
+   Compiling darling v0.23.0
+   Compiling tonic-prost v0.14.6
+   Compiling opentelemetry_sdk v0.31.0
+   Compiling comfy-table v7.2.2
+   Compiling opentelemetry-http v0.31.0
+   Compiling codex-router-tui v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-tui)
+   Compiling serde_with_macros v3.22.0
+   Compiling console v0.16.4
+   Compiling unit-prefix v0.5.2
+   Compiling opentelemetry-appender-tracing v0.31.1
+   Compiling tracing-opentelemetry v0.32.1
+   Compiling tungstenite v0.28.0
+   Compiling jsonc-parser v0.34.0
+   Compiling indicatif v0.18.6
+   Compiling thiserror v1.0.69
+   Compiling thiserror-impl v1.0.69
+   Compiling serial2 v0.2.37
+   Compiling downcast-rs v1.2.1
+   Compiling serde_with v3.22.0
+   Compiling filedescriptor v0.8.3
+   Compiling portable-pty v0.9.0
+   Compiling opentelemetry-proto v0.31.0
+   Compiling opentelemetry-otlp v0.31.1
+   Compiling agent-client-protocol-schema v1.9.1
+   Compiling zstd v0.14.3
+   Compiling compression-codecs v0.4.45
+   Compiling async-compression v0.4.50
+   Compiling codex-router-proxy v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-proxy)
+   Compiling codex-acp-adapter v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-acp-adapter)
+   Compiling collaboration-client v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-client)
+   Compiling claude-code-peer-messaging v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/claude-code-peer-messaging)
+   Compiling agent-client-protocol v2.2.0
+   Compiling codex-router-quota-service v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-quota-service)
+   Compiling codex-router-quota-tui v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-quota-tui)
+   Compiling acp-client-runtime v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/acp-client-runtime)
+   Compiling turso_sync_engine v0.8.1
+   Compiling turso_sync_sdk_kit v0.8.1
+   Compiling turso v0.8.1
+   Compiling sqlx-turso-core v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling sqlx-turso-macros v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling sqlx-turso v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling durable-steps v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f)
+   Compiling collaboration-central-conformance v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-central-conformance)
+   Compiling board-fleet-sync v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/board-fleet-sync)
+   Compiling collaboration-contracts v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-contracts)
+   Compiling collaboration-central-tokio v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-central-tokio)
+   Compiling collaboration-service v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-service)
+   Compiling collaboration-mcp v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/collaboration-mcp)
+   Compiling board-central-test-support v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/board-central-test-support)
+   Compiling codex-router-host v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-host)
+   Compiling agent-session-inventory v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/agent-session-inventory)
+   Compiling agent-session-picker v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/agent-session-picker)
+   Compiling agent-collaboration v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/agent-collaboration)
+   Compiling codex-router-cli v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-cli)
+   Compiling codex-router-test-support v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-test-support)
+   Compiling codex-router-quota-reset-test-harness v0.1.116 (/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/crates/codex-router-quota-reset-test-harness)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `collaboration-client` (test "admission_overload") generated 1 warning
+warning: `agent-session-picker` (lib test) generated 1 warning (1 duplicate)
+warning: `agent-session-inventory` (lib test) generated 1 warning (1 duplicate)
+warning: `codex-router-cli` (bin "codex-router") generated 1 warning (1 duplicate)
+warning: `codex-router-cli` (test "fleet_enrollment_producer") generated 1 warning (1 duplicate)
+warning: `codex-router-test-support` (lib test) generated 1 warning (1 duplicate)
+warning: `codex-router-cli` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5m 50s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.test-no-wall-clock-cli/.cargo/config.toml`
+────────────
+ Nextest run ID a460af71-2a3d-4fca-a2fe-e8fa2d371895 with nextest profile: ci
+    Starting 1858 tests across 145 binaries (51 tests skipped)
+        SLOW [> 60.000s] (─────────) agent-session-inventory sessions::claude_launch_target::tests::active_inventory_uses_the_existing_claude_local_discovery
+        SLOW [> 60.000s] (─────────) agent-session-inventory sessions::claude_launch_target::tests::native_catalogue_tests::native_background_active_list_and_resume_directory_survive_public_api_projection
+        FAIL [  67.514s] (  50/1858) agent-session-inventory sessions::claude_launch_target::tests::native_catalogue_tests::native_background_active_list_and_resume_directory_survive_public_api_projection
+  stdout ───
+
+    running 1 test
+    test sessions::claude_launch_target::tests::native_catalogue_tests::native_background_active_list_and_resume_directory_survive_public_api_projection ... FAILED
+
+    failures:
+
+    failures:
+        sessions::claude_launch_target::tests::native_catalogue_tests::native_background_active_list_and_resume_directory_survive_public_api_projection
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 9.32s
+
+  stderr ───
+
+    thread 'sessions::claude_launch_target::tests::native_catalogue_tests::native_background_active_list_and_resume_directory_survive_public_api_projection' (369860662) panicked at crates/agent-session-inventory/src/session_commands/claude_native_catalogue_tests.rs:55:9:
+    assertion `left == right` failed: an unavailable background read must be visible while preserving the peer: Some("Native Claude inventory incomplete")
+      left: true
+     right: false
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   8.941s] ( 147/1858) agent-session-inventory sessions::source_action_transport::tests::native_ssh_lost_or_misattributed_receipt_keeps_action_unknown_without_replay
+  stdout ───
+
+    running 1 test
+    test sessions::source_action_transport::tests::native_ssh_lost_or_misattributed_receipt_keeps_action_unknown_without_replay ... FAILED
+
+    failures:
+
+    failures:
+        sessions::source_action_transport::tests::native_ssh_lost_or_misattributed_receipt_keeps_action_unknown_without_replay
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 5.47s
+
+  stderr ───
+
+    thread 'sessions::source_action_transport::tests::native_ssh_lost_or_misattributed_receipt_keeps_action_unknown_without_replay' (369869889) panicked at crates/agent-session-inventory/src/session_commands/source_action_transport_tests.rs:64:10:
+    called `Result::unwrap()` on an `Err` value: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        SLOW [> 60.000s] (─────────) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_history_job_and_peer_only_loaded_observation_keep_both_facts
+        SLOW [> 60.000s] (─────────) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_api_distinguishes_complete_empty_unidentified_and_invalid_jobs
+        FAIL [  61.054s] ( 205/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_api_distinguishes_complete_empty_unidentified_and_invalid_jobs
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_api_distinguishes_complete_empty_unidentified_and_invalid_jobs ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_api_distinguishes_complete_empty_unidentified_and_invalid_jobs
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 10.98s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_api_distinguishes_complete_empty_unidentified_and_invalid_jobs' (369879847) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:166:24:
+    qualified managed rows survive unavailable native identity: InvalidInventory
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [  63.467s] ( 215/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_history_job_and_peer_only_loaded_observation_keep_both_facts
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_history_job_and_peer_only_loaded_observation_keep_both_facts ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_history_job_and_peer_only_loaded_observation_keep_both_facts
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 12.38s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_history_job_and_peer_only_loaded_observation_keep_both_facts' (369879838) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:27:10:
+    called `Result::unwrap()` on an `Err` value: InvalidInventory
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [  12.883s] ( 216/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_history_and_loaded_views_corroborate_once_without_inventing_updated_time
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_history_and_loaded_views_corroborate_once_without_inventing_updated_time ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_history_and_loaded_views_corroborate_once_without_inventing_updated_time
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 6.81s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_history_and_loaded_views_corroborate_once_without_inventing_updated_time' (369881226) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:228:10:
+    real native history must publish: InvalidInventory
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [  14.309s] ( 231/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 8.34s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity' (369881168) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:105:10:
+    called `Result::unwrap()` on an `Err` value: InvalidInventory
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [  14.506s] ( 235/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_working_job_stays_active_with_idle_or_unreported_peer_metadata
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_working_job_stays_active_with_idle_or_unreported_peer_metadata ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_working_job_stays_active_with_idle_or_unreported_peer_metadata
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 8.42s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_working_job_stays_active_with_idle_or_unreported_peer_metadata' (369881246) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:65:14:
+    called `Result::unwrap()` on an `Err` value: InvalidInventory
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [  14.557s] ( 236/1858) agent-session-picker session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_background_api_reaches_captured_details_and_copy_as_uuid
+  stdout ───
+
+    running 1 test
+    test session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_background_api_reaches_captured_details_and_copy_as_uuid ... FAILED
+
+    failures:
+
+    failures:
+        session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_background_api_reaches_captured_details_and_copy_as_uuid
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 246 filtered out; finished in 8.54s
+
+  stderr ───
+
+    thread 'session_picker::picker_component::tests::native_catalogue_publication_tests::actual_native_background_api_reaches_captured_details_and_copy_as_uuid' (369881190) panicked at crates/agent-session-picker/src/session_picker/native_catalogue_publication_tests.rs:383:9:
+    native publication phase=1: ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+    │ Sessions · 0/0                                                                                                                                                New  Details  Help │
+    │ Machine: All machines ▾                                                                  Filters · All providers ▾                                                               │
+    │ This machine: 0 sessions | Observed source: Unavailable (session inventory does not match its source)                                                                            │
+    │ Partial view — unavailable: Observed source                                                                                                                                      │
+    │ ┌─────────────────────────────────────────────────────────────────────────────────────┐  ┌─────────────────────────────────────────────────────────────────────────────────────┐ │
+    │ │    Session                                                  Status    Upd    New    │  │ New Codex session                                                                   │ │
+    │ │ ─────────────────────────────────────────────────────────────────────────────────   │  │ No existing sessions match these filters                                            │ │
+    │ │ No existing sessions match these filters                                            │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ │                                                                                     │  │                                                                                     │ │
+    │ └─────────────────────────────────────────────────────────────────────────────────────┘  └─────────────────────────────────────────────────────────────────────────────────────┘ │
+    ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  Cancelling due to interrupt: 16 tests still running
+      SIGINT [  17.789s] ( 456/1858) codex-native-integration::native_schema_bundle schema_digest_uses_one_canonical_lowercase_hex_encoding
+      SIGINT [  18.543s] ( 457/1858) codex-native-integration::native_protocol_observation native_probe_initializes_experimental_api_and_waits_for_remote_connection
+      SIGINT [  17.802s] ( 458/1858) codex-native-integration::native_schema_bundle schema_digest_captures_known_canonical_bundle_and_detects_mismatch
+      SIGINT [  17.825s] ( 459/1858) codex-native-integration::native_schema_bundle complete_bundle_digest_is_independent_of_json_whitespace_and_key_order
+      SIGINT [  16.441s] ( 460/1858) codex-native-integration::native_thread_operations exact_interrupt_rejects_empty_id_and_inspect_does_not_resume
+      SIGINT [  17.802s] ( 461/1858) codex-native-integration::native_schema_bundle schema_digest_checks_every_hexadecimal_position
+      SIGINT [  17.756s] ( 462/1858) codex-native-integration::native_schema_bundle unresolved_and_network_references_are_rejected_without_fetching
+      SIGINT [  17.962s] ( 463/1858) codex-native-integration::native_resume_attachment resume_preserves_effective_configuration_and_buffers_attachment_events
+      SIGINT [  17.747s] ( 464/1858) codex-native-integration::native_schema_validation native_payload_validation_follows_references_and_rejects_missing_definition
+      SIGINT [  17.857s] ( 465/1858) codex-native-integration::native_schema_bundle bundle_rejects_unsafe_paths_missing_entrypoint_and_duplicate_keys
+      SIGINT [  17.789s] ( 466/1858) codex-native-integration::native_schema_bundle schema_digest_rejects_wrong_prefix_length_or_noncanonical_digits
+      SIGINT [  17.649s] ( 467/1858) codex-native-integration::native_schema_validation thread_rename_capability_uses_codex_app_server_schema_type_names
+      SIGINT [  17.752s] ( 468/1858) codex-native-integration::native_schema_validation native_envelope_validation_resolves_top_level_and_v2_references
+      SIGINT [  17.825s] ( 469/1858) codex-native-integration::native_schema_bundle exported_directory_rejects_symlinks_instead_of_reading_outside_files
+      SIGINT [  48.961s] ( 470/1858) codex-native-integration::native_executable_identity managed_version_and_updater_use_the_same_resolved_executable
+      SIGINT [  17.753s] ( 471/1858) codex-native-integration::native_schema_export export_uses_only_generator_arguments_and_rejects_changed_executable
+────────────
+     Summary [ 268.765s] 471/1858 tests run: 447 passed (1 slow), 24 failed, 51 skipped
+warning: 1387/1858 tests were not run due to interrupt
+error: test run failed
+real 1053.73
+user 1858.93
+sys 154.51

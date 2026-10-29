@@ -1,7 +1,43 @@
 //! Product tests consume the latest painted frame before choosing pointer coordinates.
 use futures_util::{FutureExt, Stream, StreamExt};
 use iocraft::Canvas;
+use iocraft::prelude::ElementExt;
 use std::{io, pin::Pin};
+
+/// Sends each key only after the current paint acknowledges its prerequisite.
+pub(crate) async fn render_frame_journey(
+    mut component: iocraft::AnyElement<'static>,
+    steps: Vec<(fn(&str) -> bool, iocraft::prelude::TerminalEvent)>,
+) -> Vec<String> {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let frames = component.mock_terminal_render_loop(
+        iocraft::MockTerminalConfig::with_events(events),
+    );
+    tokio::pin!(frames);
+    let mut observed = Vec::new();
+    for (ready, event) in steps {
+        let canvas = next_matching_frame(
+            frames.as_mut(),
+            std::time::Duration::from_secs(2),
+            |canvas| ready(&canvas.to_string()),
+        )
+        .await
+        .expect("event prerequisite must be painted");
+        observed.push(canvas.to_string());
+        sender.send(event).expect("journey input must remain open");
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while let Some(canvas) = frames.next().await {
+            observed.push(canvas.to_string());
+        }
+    })
+    .await
+    .expect("final exit event must settle the render loop");
+    observed
+}
 
 /// A finite acknowledgement of caller-owned dimensions and modal or focus content.
 pub(crate) async fn next_matching_frame<TRenderedFrames>(
