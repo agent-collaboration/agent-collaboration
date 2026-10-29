@@ -79,8 +79,6 @@ impl AsyncWeeklyQuotaFloorMutationStore {
         )?;
         if account.label() != expected_account.label()
             || account.provider() != expected_account.provider()
-            || account.active_credential_generation()
-                != expected_account.active_credential_generation()
         {
             return Err(AccountRemovalError::TargetChanged);
         }
@@ -88,6 +86,10 @@ impl AsyncWeeklyQuotaFloorMutationStore {
             return Err(AccountRemovalError::RequiresDisabled {
                 account_label: account.label().to_owned(),
             });
+        }
+        if account.active_credential_generation() != expected_account.active_credential_generation()
+        {
+            return Err(AccountRemovalError::TargetChanged);
         }
 
         // Older tables intentionally have no FK. Delete their account-owned rows

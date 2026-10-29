@@ -154,33 +154,38 @@ fn account_remove_preserves_disabled_metadata_when_secret_cleanup_fails() {
 
 #[test]
 fn account_remove_rechecks_disabled_state_after_target_resolution() {
-    let fixture = RemovalFixture::new("remove-reenabled", AccountStatus::Disabled);
-    let runtime = test_async_runtime();
-    runtime.block_on(async {
-        let state = must_ok(
-            AsyncSqliteStateStore::open_read_only(&fixture.root.path().join("state.sqlite")).await,
-        );
-        let target =
-            must_ok(state.load_account(&account_id("acct_primary")).await).expect("account");
-        must_ok(state.close().await);
-        let mutation = must_ok(
-            AsyncWeeklyQuotaFloorMutationStore::open(&fixture.root.path().join("state.sqlite"))
-                .await,
-        );
-        must_ok(
-            mutation
-                .set_account_status_by_label("primary", AccountStatus::Enabled)
-                .await,
-        );
-        let result = mutation.begin_disabled_account_removal(&target).await;
-        assert!(matches!(
-            result,
-            Err(codex_router_state::sqlite::AccountRemovalError::RequiresDisabled { .. })
-        ));
-        mutation.close().await;
-    });
-    assert!(fixture.account_exists());
-    assert!(fixture.credential_exists(1));
+    for generation in [1, 2] {
+        let fixture = RemovalFixture::new("remove-reenabled", AccountStatus::Disabled);
+        let runtime = test_async_runtime();
+        runtime.block_on(async {
+            let state = must_ok(
+                AsyncSqliteStateStore::open(&fixture.root.path().join("state.sqlite")).await,
+            );
+            let target =
+                must_ok(state.load_account(&account_id("acct_primary")).await).expect("account");
+            let reenabled = AccountRecord::new(
+                target.provider(), target.account_id().clone(), target.label(), AccountStatus::Enabled,
+            ).with_active_credential_generation(generation);
+            must_ok(state.upsert_account(&reenabled).await);
+            must_ok(state.close().await);
+            let mutation = must_ok(
+                AsyncWeeklyQuotaFloorMutationStore::open(&fixture.root.path().join("state.sqlite"))
+                    .await,
+            );
+            let error = match mutation.begin_disabled_account_removal(&target).await {
+                Ok(_) => panic!("an enabled target must be refused"),
+                Err(error) => error,
+            };
+            assert!(matches!(
+                &error,
+                codex_router_state::sqlite::AccountRemovalError::RequiresDisabled { account_label }
+                    if account_label == "primary"
+            ), "generation {generation}: {error}");
+            mutation.close().await;
+        });
+        assert!(fixture.account_exists());
+        assert!(fixture.credential_exists(1));
+    }
 }
 
 struct RemovalFixture {
