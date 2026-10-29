@@ -120,10 +120,6 @@ fn create_fifo(path: &Path) -> TestResult {
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assert the contract; propagate fixture errors."
-)]
 async fn require_prompt_refusal(path: &Path) -> TestResult {
     let mut child = tokio::process::Command::new(std::env::current_exe()?)
         .args([

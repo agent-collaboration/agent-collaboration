@@ -42,6 +42,8 @@ pub struct CredentialActivationRequest {
     account_id: AccountId,
     label: String,
     bundle: CredentialBundle,
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    lock_contention_observer: Option<std::sync::mpsc::Sender<()>>,
 }
 
 impl CredentialActivationRequest {
@@ -58,7 +60,19 @@ impl CredentialActivationRequest {
             account_id,
             label: label.into(),
             bundle,
+            #[cfg(all(feature = "test-support", debug_assertions))]
+            lock_contention_observer: None,
         }
+    }
+
+    /// Observes the real OS lock result on this activation's blocking worker.
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    pub fn with_lock_contention_observer_for_test(
+        mut self,
+        observer: std::sync::mpsc::Sender<()>,
+    ) -> Self {
+        self.lock_contention_observer = Some(observer);
+        self
     }
 }
 
@@ -83,7 +97,17 @@ impl CredentialActivation {
         }
         let database_path = state_store.database_path().to_path_buf();
         let lock_account_id = request.account_id.clone();
+        #[cfg(all(feature = "test-support", debug_assertions))]
+        let contention_observer = request.lock_contention_observer;
         let mut account_lock = tokio::task::spawn_blocking(move || {
+            #[cfg(all(feature = "test-support", debug_assertions))]
+            if let Some(observer) = contention_observer {
+                return AccountCredentialLock::acquire_with_contention_observer(
+                    &database_path,
+                    &lock_account_id,
+                    observer,
+                );
+            }
             AccountCredentialLock::acquire(&database_path, &lock_account_id)
         })
         .await

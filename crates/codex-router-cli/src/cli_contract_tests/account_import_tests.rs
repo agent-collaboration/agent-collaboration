@@ -214,6 +214,7 @@ impl CredentialRefreshClient for HeldLoginRaceRefreshClient {
 }
 
 #[test]
+#[cfg(debug_assertions)]
 fn device_relogin_waits_for_claimed_refresh_then_wins_the_active_generation() {
     let test_root = TestRoot::new("device-relogin-refresh-race");
     must_ok(fs::create_dir(test_root.path()));
@@ -275,6 +276,7 @@ fn device_relogin_waits_for_claimed_refresh_then_wins_the_active_generation() {
     let login_secret_root = secret_root;
     let login_account = account_id.clone();
     let (login_done_sender, login_done_receiver) = mpsc::channel();
+    let (contention_observer, observe_contention) = mpsc::channel();
     let login_thread = thread::spawn(move || {
         let runtime = test_async_runtime();
         let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&login_state_path)));
@@ -284,18 +286,20 @@ fn device_relogin_waits_for_claimed_refresh_then_wins_the_active_generation() {
             ),
         );
         must_ok(
-            runtime.block_on(import_codex_auth_from_request_async(
+            runtime.block_on(crate::account::import_codex_auth_with_lock_observer_async(
                 &state,
                 &secrets,
                 AccountImportRequest::new(login_account, "race", "login-access-canary")
                     .with_refresh_token("login-refresh-canary"),
+                contention_observer,
             )),
         );
         must_ok(login_done_sender.send(()));
     });
+    must_ok(observe_contention.recv_timeout(Duration::from_secs(2)));
     assert!(matches!(
-        login_done_receiver.recv_timeout(Duration::from_millis(100)),
-        Err(mpsc::RecvTimeoutError::Timeout)
+        login_done_receiver.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
     ));
     must_ok(release_sender.send(()));
     assert_eq!(
