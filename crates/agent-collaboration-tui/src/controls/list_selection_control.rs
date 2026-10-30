@@ -7,7 +7,16 @@ use crate::{
     surface_stack::{SurfaceId, SurfaceModel, SurfaceStack},
 };
 use iocraft::prelude::*;
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum SelectionReveal {
+    FollowSelection,
+    PreserveViewport,
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ListNavigationPolicy {
@@ -43,6 +52,8 @@ pub struct ListSelectionControl {
     binding: ListSelectionBinding,
     scroll: ScrollHandle,
     navigation_policy: ListNavigationPolicy,
+    hover_selection: bool,
+    selection_reveal: Arc<Mutex<SelectionReveal>>,
 }
 impl ListSelectionControl {
     pub fn new(binding: ListSelectionBinding) -> Self {
@@ -50,11 +61,31 @@ impl ListSelectionControl {
             scroll: ScrollHandle::new(binding.parent.stack),
             binding,
             navigation_policy: ListNavigationPolicy::default(),
+            hover_selection: false,
+            selection_reveal: Arc::new(Mutex::new(SelectionReveal::FollowSelection)),
         }
     }
     pub fn with_navigation_policy(mut self, policy: ListNavigationPolicy) -> Self {
         self.navigation_policy = policy;
         self
+    }
+    /// Opt in to selection/focus on pointer motion, preserving the viewport.
+    pub fn with_hover_selection(mut self, enabled: bool) -> Self {
+        self.hover_selection = enabled;
+        self
+    }
+    pub(crate) fn reveals_selection(&self) -> bool {
+        *self
+            .selection_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            == SelectionReveal::FollowSelection
+    }
+    fn set_selection_reveal(&self, reveal: SelectionReveal) {
+        *self
+            .selection_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = reveal;
     }
     pub fn id(&self) -> &TargetId {
         &self.binding.id
@@ -149,6 +180,7 @@ impl ListSelectionControl {
             value.set(next);
             self.binding.parent.stack.hit_regions().invalidate();
             if changed {
+                self.set_selection_reveal(SelectionReveal::FollowSelection);
                 (self.binding.on_select)(selected);
             }
         }
@@ -193,7 +225,7 @@ impl ListSelectionControl {
             let mut next = control.binding.value.read().clone();
             let changed = next.navigate(code, (control.binding.page_rows)());
             if changed {
-                control.publish_selection(next);
+                control.publish_selection(next, SelectionReveal::FollowSelection);
             }
             if wheel && changed {
                 InputUse::Scrolled
@@ -202,7 +234,8 @@ impl ListSelectionControl {
             }
         })
     }
-    fn publish_selection(&self, next: ListSelectionState) {
+    fn publish_selection(&self, next: ListSelectionState, reveal: SelectionReveal) {
+        self.set_selection_reveal(reveal);
         let selected = next.selected().cloned();
         let mut value = self.binding.value;
         value.set(next);
@@ -215,10 +248,16 @@ impl ListSelectionControl {
             let key = key.clone();
             let control = self.clone();
             let input = TargetInputHandler::new(move |event| {
-                if !matches!(event,TerminalEvent::FullscreenMouse(mouse) if matches!(mouse.kind,MouseEventKind::Down(MouseButton::Left)))
-                {
-                    return InputUse::Unused;
-                }
+                let reveal = match event {
+                    TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
+                        MouseEventKind::Down(MouseButton::Left) => SelectionReveal::FollowSelection,
+                        MouseEventKind::Moved if control.hover_selection => {
+                            SelectionReveal::PreserveViewport
+                        }
+                        _ => return InputUse::Unused,
+                    },
+                    _ => return InputUse::Unused,
+                };
                 let parent = control.binding.parent;
                 if parent.stack.snapshot().top_id() != parent.surface {
                     return InputUse::Unused;
@@ -227,9 +266,10 @@ impl ListSelectionControl {
                 if !next.rows().contains(&key) {
                     return InputUse::Used;
                 }
+                control.set_selection_reveal(reveal);
                 parent.stack.focus(parent.surface, &control.binding.id);
                 if next.select(&key) {
-                    control.publish_selection(next);
+                    control.publish_selection(next, reveal);
                 }
                 InputUse::Used
             });

@@ -37,6 +37,8 @@ mod input_receipts;
 #[cfg(test)]
 #[path = "suites/list_controls.rs"]
 mod list_controls;
+#[path = "suites/list_hover.rs"]
+mod list_hover;
 #[cfg(test)]
 #[path = "suites/list_navigation_policy.rs"]
 mod list_navigation_policy;

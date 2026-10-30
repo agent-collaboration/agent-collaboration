@@ -55,6 +55,7 @@ pub struct ListSceneProps {
     pub navigation_policy: ListNavigationPolicy,
     pub marker_offset: u16,
     pub viewport_rows: Option<u16>,
+    pub hover_selection: bool,
 }
 #[component]
 pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -92,6 +93,11 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             page_rows: Arc::new(|| 2),
         })
         .with_navigation_policy(props.navigation_policy);
+        let control = if props.hover_selection {
+            control.with_hover_selection(true)
+        } else {
+            control
+        };
         let mut targets = control.targets();
         let toolbar = ActionDef {
             toolbar_label: None,
