@@ -15,6 +15,7 @@ import {
 	withTerminal,
 } from './baseline-journeys.ts';
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
+import { openMeasuredDetails } from './dialog-frame-readiness.ts';
 import { findDialog } from './grid-scene-matcher.ts';
 import { encodeJourneyKey } from './journey-key.ts';
 import type { PtyGridDriver, KeyProtocol } from './pty-grid-driver.ts';
@@ -54,12 +55,9 @@ async function press(driver: PtyGridDriver, keys: KeyProtocol, key: string): Pro
 	);
 }
 async function finish(driver: PtyGridDriver): Promise<string> {
-	const drain = async (): Promise<void> => {
-		if ((await driver.receive()) !== 'eof') await drain();
-	};
-	await drain();
+	const exitCode = await driver.drainUntilExit();
 	const bytes = driver.bytes().toString('utf8');
-	if ((await driver.finish()) !== 0) throw new Error('input journey child failed');
+	if (exitCode !== 0) throw new Error('input journey child failed');
 	return bytes;
 }
 export function targetCell(
@@ -276,15 +274,12 @@ async function pickerDirectAction(
 		keys,
 		name: 'main-' + action,
 		surface: 'sessions-filters',
+		sessionsReceipts: keys === 'legacy',
 		observe: async (driver, directory) => {
 			if (keys === 'kitty')
 				await driver.send(Buffer.from(action === 'resume' ? '\x1b[13;5u' : '\x1b[13;6u'));
 			else {
-				await press(driver, keys, 'Enter');
-				await driver.waitForGrid(
-					'Details fallback',
-					(grid) => findDialog(grid, 'Session details') !== null,
-				);
+				await openMeasuredDetails(driver, directory, keys);
 				// provider_filter_storyboard_request selects the native Codex Alpha
 				// record first; its title and UUID also bind the outcome below.
 				const cell = detailsActionCell(driver.grid(), 'codex', action);
