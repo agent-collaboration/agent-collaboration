@@ -92,6 +92,56 @@ pub type SessionClientExecutor = Arc<
         + Sync,
 >;
 
+/// The caller has already ended the picker render loop and restored its terminal.
+pub fn run_local_claude_terminal(
+    request: CapturedClientAction,
+    service_directory: &std::path::Path,
+    home_directory: Option<&std::path::Path>,
+    global_arguments: &[std::ffi::OsString],
+) -> Result<(), super::SessionsCommandError> {
+    use super::SessionsCommandError;
+    if request.source != PickerSourceContext::DefaultHosted {
+        return Err(SessionsCommandError::SessionSourceUnqualified);
+    }
+    let SessionClientEffect::Native {
+        service_epoch,
+        action,
+    } = request.effect
+    else {
+        return Err(SessionsCommandError::SessionSourceUnqualified);
+    };
+    let resume = matches!(action, SourceNativeClaudeAction::Resume { .. });
+    let request = SourceRequest {
+        service_directory: service_directory
+            .to_string_lossy()
+            .into_owned()
+            .try_into()
+            .map_err(|_| SessionsCommandError::SessionSourceUnavailable)?,
+        expected_service: request.service_id,
+        operation: SourceOperation::NativeClaude {
+            service_epoch,
+            action,
+        },
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(SessionsCommandError::Runtime)?;
+    let command = runtime.block_on(super::source_ssh_executor::prepare_local_claude_terminal(
+        &request,
+        home_directory,
+    ))?;
+    drop(runtime);
+    // Match the existing Codex terminal owner: the native child inherits this TTY.
+    super::claude_terminal_launch::run_claude_terminal(command)?;
+    if resume && !global_arguments.is_empty() {
+        println!(
+            "Opened with its saved settings; options given to agent-sessions apply to new sessions only."
+        );
+    }
+    Ok(())
+}
+
 pub async fn execute_client_action(
     service_directory: Option<&std::path::Path>,
     codex_home: Option<&std::path::Path>,

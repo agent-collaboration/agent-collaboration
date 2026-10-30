@@ -126,6 +126,7 @@ pub(super) fn render_help(
             agent_session_inventory::picker_runtime_status::PickerRuntimeStatus::Active,
             agent_session_inventory::picker_runtime_status::PickerRuntimeStatus::Idle,
             agent_session_inventory::picker_runtime_status::PickerRuntimeStatus::SystemError,
+            agent_session_inventory::picker_runtime_status::PickerRuntimeStatus::Conflict,
         ]
         .into_iter()
         .map(|status| ShortcutEntry {

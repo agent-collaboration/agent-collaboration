@@ -35,7 +35,7 @@ pub(super) fn render_details_dialog(
         let action = *action;
         let copier = copier.clone();
         let expected_target = expected_target.clone();
-        element!(DialogAction(label: action.label(), has_focus: action == dialog.focused_action,
+        element!(DialogAction(label: dialog.action_label(action), has_focus: action == dialog.focused_action,
             keyboard_owner: DialogKeyboardOwner::Caller, handler: move |_| {
                 let still_current = model_state.read().details_dialog.as_ref().is_some_and(|current| current.target == expected_target);
                 if still_current {

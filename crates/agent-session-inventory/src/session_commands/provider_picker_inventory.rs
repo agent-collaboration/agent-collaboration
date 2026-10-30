@@ -108,7 +108,8 @@ pub async fn read_provider_records(
                         state = NativeLiveReadState::Unavailable(reason);
                         break;
                     }
-                    failure @ InventoryReadFailure::Invalid { .. } => {
+                    failure @ (InventoryReadFailure::Invalid { .. }
+                    | InventoryReadFailure::InvalidNative { .. }) => {
                         return Err(failure.into_client());
                     }
                 },
@@ -121,6 +122,14 @@ pub async fn read_provider_records(
                 return Err(ClientError::Protocol("invalid provider inventory page"));
             }
             if let Some(view) = view {
+                if page.native_coverage.as_ref().is_some_and(|coverage| {
+                    coverage
+                        .conflicts
+                        .iter()
+                        .any(|conflict| conflict.target.endpoint != description.endpoint)
+                }) {
+                    return Err(ClientError::Protocol("invalid native conflict endpoint"));
+                }
                 let observed = NativeLiveReadState::from_observation(view, page.native_coverage)
                     .map_err(ClientError::Protocol)?;
                 if !matches!(state, NativeLiveReadState::Reading) && state != observed {
@@ -217,6 +226,9 @@ pub async fn read_provider_records(
                 }
             }
         }
+    }
+    for part in &coverage {
+        SessionPickerRecord::apply_native_conflicts(&mut rows, part);
     }
     Ok((native_endpoint, rows, coverage))
 }

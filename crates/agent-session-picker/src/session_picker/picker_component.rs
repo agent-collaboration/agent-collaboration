@@ -205,8 +205,21 @@ pub fn SessionsPickerComponent<'a>(
     );
     super::client_action_state::use_client_actions(
         &mut hooks,
-        model,
-        props.client_executor.clone(),
+        super::client_action_state::ClientActionContext {
+            model,
+            executor: props.client_executor.clone(),
+            outcome: selected_outcome,
+            background_completed: std::sync::Arc::new({
+                let reload_port = reload_port.clone();
+                move || {
+                    let mut generation = reload_generation;
+                    let mut model = model;
+                    let next = generation.get().saturating_add(1);
+                    generation.set(next);
+                    reload_port.send(model.write().prepare_source_reload(next));
+                }
+            }),
+        },
     );
     super::source_action_worker::use_source_preparation(
         &mut hooks,

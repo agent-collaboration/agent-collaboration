@@ -65,6 +65,29 @@ pub struct PeerSessionInventory {
     has_unreadable_live_record: bool,
 }
 
+impl PeerSessionInventory {
+    /// Ambiguous identity claims remain attributable even when no live summary is safe to use.
+    #[must_use]
+    pub fn conflicting_session_claims(&self) -> std::collections::BTreeMap<SessionId, u32> {
+        let mut claims = std::collections::BTreeMap::<SessionId, u32>::new();
+        for candidate in &self.candidates {
+            let count = claims.entry(candidate.session_id.clone()).or_default();
+            *count = count.saturating_add(1);
+        }
+        claims.retain(|_, count| *count > 1);
+        claims
+    }
+
+    #[must_use]
+    pub fn unexplained_skipped_records(&self) -> u32 {
+        let conflicting_records = self
+            .conflicting_session_claims()
+            .values()
+            .fold(0_u32, |count, claims| count.saturating_add(*claims));
+        self.skipped_records.saturating_sub(conflicting_records)
+    }
+}
+
 struct PeerSessionCandidate {
     session_id: SessionId,
     lookup: PeerSessionLookup,

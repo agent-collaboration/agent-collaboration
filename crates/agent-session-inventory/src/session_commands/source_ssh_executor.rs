@@ -48,6 +48,13 @@ pub async fn inspect_local_clients(
     Ok((manifest.service_id, reply))
 }
 
+pub async fn prepare_local_claude_terminal(
+    request: &SourceRequest,
+    home_directory: Option<&Path>,
+) -> Result<std::process::Command, super::SessionsCommandError> {
+    native_claude::prepare_terminal_command(request, home_directory).await
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SourceEntryFailure {
     #[error("{0}")]
@@ -257,6 +264,7 @@ pub async fn execute_read(
                             super::source_inventory_failure::InventoryReadFailure::Invalid {
                                 ..
                             } => SourceRejection::InvalidRequest,
+                            super::source_inventory_failure::InventoryReadFailure::InvalidNative { inventory_source, reason } => SourceRejection::InvalidNativeInventory { inventory_source, reason },
                         }
                     })?,
             })

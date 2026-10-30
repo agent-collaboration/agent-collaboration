@@ -11,7 +11,7 @@ use agent_session_inventory::source_inventory_request::{
 };
 use agent_session_inventory::{
     picker_runtime_status::{PickerRecordsSnapshot, PickerRuntimeCoverage},
-    sessions::{SessionPickerIdentity, SessionRowProvenance},
+    sessions::{SessionPickerIdentity, SessionPickerRecord, SessionRowProvenance},
 };
 use collaboration_client::protocol::EndpointRef;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -295,6 +295,9 @@ fn validate_source_page(
         }
         previous.runtime_coverage = snapshot.runtime_coverage;
         previous.native_live_coverage = snapshot.native_live_coverage;
+        for part in &previous.native_live_coverage {
+            SessionPickerRecord::apply_native_conflicts(&mut previous.records, part);
+        }
         Ok((previous.records.len(), progress))
     } else {
         let count = snapshot.records.len();
