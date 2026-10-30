@@ -4,7 +4,7 @@ How the obligations in the [Specification](specification.md) become owned code. 
 
 ## Structure decision
 
-**Selected: rename and extend.** `codex-router-tui` becomes `agent-collaboration-tui` in a hard cutover. Its two codex-router-specific typography roles move out to the quota crate, so the renamed crate meets constraint C1. The new parts are added inside it: one input owner, a surface stack, an overlay host, an action registry, and the controls. The picker and the quota screen move onto it, and their own key-handling code is deleted.
+**Selected: rename and extend.** `codex-router-tui` becomes `agent-collaboration-tui` in a hard cutover. The two consumers are renamed with it (owner, 2026-10-30): `agent-session-picker` becomes `agent-session-tui`, and `codex-router-quota-tui` becomes `agent-router-quota-tui`. Its two codex-router-specific typography roles move out to the quota crate, so the renamed crate meets constraint C1. The new parts are added inside it: one input owner, a surface stack, an overlay host, an action registry, and the controls. The picker and the quota screen move onto it, and their own key-handling code is deleted.
 
 | Alternative | Why not |
 | --- | --- |
@@ -19,7 +19,7 @@ How the obligations in the [Specification](specification.md) become owned code. 
 
 ```mermaid
 flowchart TB
-  subgraph app["Consumer screen (agent-session-picker, codex-router-quota-tui)"]
+  subgraph app["Consumer screen (agent-session-tui, agent-router-quota-tui)"]
     decl["declares: scope, focus targets, actions, overlays to open"]
     effects["owns: what each action does (Router, sessions, quota)"]
   end
@@ -198,7 +198,7 @@ Concurrency: a single event loop. Events are routed one at a time, against state
 ## Reuse and borrowing
 
 - **From `codex-router-tui`, moved with their layout and measurement but not their input handling:** `DialogFrame`, `DialogMargins`, `DialogBodyViewport`, `DialogFooter`, `FormFields`/`FormField`, `FocusReveal`, `SelectableRow`, and the typography roles. `DialogFrame` and `DialogBodyViewport` today install their own subscriptions through `UseDialogInteraction` (`use_dialog_events`, local wheel listeners). Those are removed; their scrolling and close keys are routed by InputOwner, and the structural check (R5) covers them. `DialogFrame` gains a marked primary action and, for forms only, content-height sizing; other dialogs keep the 10-17 percentage sizing (R12). `DialogHost`/`DialogInputScope`/`UseDialogInteraction` are replaced by InputOwner and SurfaceStack. `SearchSelect` is replaced by `ComboBox`. `ShortcutHelp` is replaced by the generated Help dialog.
-- **Moved out to `codex-router-quota-tui`:** the `WeeklyWindow`/`ShortWindow` colour roles (C1).
+- **Moved out to `agent-router-quota-tui`:** the `WeeklyWindow`/`ShortWindow` colour roles (C1).
 - **Borrowed from CometixTUI** (MIT/Apache, with attribution, no dependency): the pure key-binding parser (`use_keybinding.rs:1-153`), adapted to our repeat policy; the `scroll_content_top_for_absolute_rect` helper (`scroll_view.rs:440-459`); and the pure focus traversal and restore routines (`focus.rs:121-435`). Their defaults are not taken: sibling scopes sharing Tab, and Esc clearing focus.
 - **Borrowed as design from hunk:** command registry → menus/Help projection, menu controller behaviour, and checked items.
 
@@ -206,7 +206,7 @@ Concurrency: a single event loop. Events are routed one at a time, against state
 
 | Phase | Change | Done when |
 | --- | --- | --- |
-| 1 | Rename `codex-router-tui` → `agent-collaboration-tui` in all four consumers; move the quota colour roles out. | Workspace builds; no reference to the old name remains; the crate has no codex-router dependency. |
+| 1 | Rename `codex-router-tui` → `agent-collaboration-tui`, `agent-session-picker` → `agent-session-tui` and `codex-router-quota-tui` → `agent-router-quota-tui`, updating every crate that uses them; move the quota colour roles out. | Workspace builds; no reference to the old name remains; the crate has no codex-router dependency. |
 | 2 | Add SurfaceStack, FocusModel, HitRegions, InputOwner, ActionRegistry, OverlayHost, and the new controls; extend DialogFrame. | The crate's own tests cover R1-R15 at component level. |
 | 3 | Move the session picker onto the crate; delete `picker_input.rs`'s key chain, the per-dialog key maps and the hand-written Help; build the toolbar and ≡ menu. | Picker meets R1-R14 on a real terminal; no picker code subscribes to terminal events. |
 | 4 | Move the quota screen onto the crate's controls and InputOwner; keep its 2026-10-23 look and layout, except that its bottom row of actions becomes the ≡ menu and toolbar (owner, option A). | Quota meets R1–R11, R15 and R16 (its full preserved feature list, including the reset workflow's quit behaviour (Ctrl+C ignored while committing, exit without commit before it) and the AccountId and effect guards); Esc no longer exits it, while Q and Ctrl+C do. Deleting its old key maps deletes no domain guard. |

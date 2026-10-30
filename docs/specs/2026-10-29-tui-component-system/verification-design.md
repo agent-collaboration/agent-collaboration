@@ -38,10 +38,15 @@ Each test reads two things back:
 
 Targets: Linux CI, and macOS arm64 on Sunclaw (owner: tests run on Sunclaw). Debug profile, signed through `scripts/cargo_debug_signing_runner.sh`.
 
-**B — compiled screen journeys.** *Lasting; extends the existing `verify-codex-router` [compiled TUI journeys](../../../.agents/skills/verify-codex-router/references/tui-journeys.md).* The real `agent-sessions` picker and the quota screen run as compiled binaries through the existing non-publishable `codex-router-quota-reset-test-harness` fixture entry, with no Host and no provider session. The existing Rust PTY driver and `scripts/verification/tui/` entrypoints drive them. Each checkpoint waits for its expected screen, then keeps:
-- the original PNG;
-- the text grid;
-- the Vision OCR marker result.
+**B — compiled screen journeys.** *Lasting; extends the existing `verify-codex-router` [compiled TUI journeys](../../../.agents/skills/verify-codex-router/references/tui-journeys.md).* The real `agent-sessions` picker and the quota screen run as compiled binaries through the existing non-publishable `codex-router-quota-reset-test-harness` fixture entry, with no Host and no provider session. The existing Rust PTY driver writes keys into a PTY. The bytes the program writes back are fed into a headless terminal emulator, written in TypeScript or Rust, which yields the exact screen as a cell grid: each cell's character, colours and attributes, plus the cursor. Each checkpoint waits until the grid matches its expected screen, then asserts on cells. It keeps the raw byte stream and the grid. There is no screenshot OCR, so a character can't be misread or missed: the oracle reads exactly what the terminal would show. Gallery pictures (D) are drawn from the same grids by a TypeScript renderer.
+
+The emulator is qualified before any journey relies on it. Fixtures with known grids cover:
+- SGR colours, both named and 24-bit;
+- two-column glyphs (📂, ✉️, 界), including one starting at an overlay's left edge;
+- the kitty keyboard-protocol query and its reply;
+- a resize.
+
+An emulator that mis-measures a width or drops a colour fails qualification. The default candidate is `@xterm/headless` (the terminal core VS Code uses), with the Rust `vt100` crate as the fallback; the plan's first step picks one by this qualification and records why.
 
 This layer adds what A can't see: real key encodings arriving over a PTY. The driver runs every journey twice:
 - **legacy keys**: the driver doesn't answer the keyboard-protocol query;
@@ -56,11 +61,13 @@ Bursts are sent as single PTY writes. A single write is a transport burst; it do
 
 The owner's eyes and one capture per step are the evidence. It runs once per delivery and is not kept as a test.
 
-**D — before/after gallery.** *One-time per delivery.* B's original captures, before and after, go into a presentation-html gallery. The owner judges the look against the mocks and the dialog rules ("make sure html design is good"). Captures that show real session titles are never committed.
+**D — before/after gallery.** *One-time per delivery.* B's grids, before and after, are drawn as pictures by the TypeScript renderer and go into a presentation-html gallery. The owner judges the look against the mocks and the dialog rules ("make sure html design is good"). Captures that show real session titles are never committed.
 
-**E — lint gate.** *Lasting.* The consumer crates (`agent-session-picker`, `codex-router-quota-tui`) and `agent-collaboration-tui` itself get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`, `use_local_terminal_events` (today used by `codex-router-tui`'s `dialog_interaction.rs` and `DialogButton`) and `use_terminal_size`, which subscribes internally. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. InputOwner's single subscription is the one sanctioned call site, marked with `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. It is a targeted boundary assertion, and `expect` fails if that call ever disappears. InputOwner also owns the root's terminal-size observation. Negative controls run under the actual workspace CI command, so each per-crate configuration is shown to be picked up. There are three, and each must fail: a consumer calling `use_terminal_events`; a consumer calling `use_local_terminal_events`; and a moved shared control (such as `DialogButton`) keeping its old local listener. A render-only control must pass. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
+**E — lint gate.** *Lasting.* The consumer crates (`agent-session-tui` and `agent-router-quota-tui`, today `agent-session-picker` and `codex-router-quota-tui`) and `agent-collaboration-tui` itself get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`, `use_local_terminal_events` (today used by `codex-router-tui`'s `dialog_interaction.rs` and `DialogButton`) and `use_terminal_size`, which subscribes internally. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. InputOwner's single subscription is the one sanctioned call site, marked with `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. It is a targeted boundary assertion, and `expect` fails if that call ever disappears. InputOwner also owns the root's terminal-size observation. Negative controls run under the actual workspace CI command, so each per-crate configuration is shown to be picked up. There are three, and each must fail: a consumer calling `use_terminal_events`; a consumer calling `use_local_terminal_events`; and a moved shared control (such as `DialogButton`) keeping its old local listener. A render-only control must pass. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
 
 **F — public-entry journeys.** *Lasting; the existing `verify-codex-router` routes.* These run the real `agent-sessions` executable from its argument entry, through inventory and dispatcher, to the selected-machine client actions: CLIENT-REAL-ENTRY in `tui-journeys.md`, plus the cases in `client-actions.md` and `claude-background.md`. They run on a signed debug Router and Host with an isolated debug root on Sunclaw, using Haiku. B's fixture calls the picker directly and can't see this path, so F carries the 10-17 obligations about real launches and actions. The Claude foreground and background launch modes from the Claude-fix PR join F there.
+
+**Languages.** Every piece of the verification system is TypeScript or Rust (owner, 2026-10-30: "only use ts or rust, not other languages"). Today's TUI journeys check screenshots with a Swift Vision OCR checker (13 `verify_screen_*.swift` files), render them with VHS tapes and ttyd, and start them from shell scripts. B replaces all of that with the grid oracle above. The plan ports the existing scene checks onto grids and removes the Swift files, tapes and shell runners from the TUI journeys.
 
 ### Why this mix
 
@@ -68,6 +75,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 - A test that sends events one per frame would pass today's leak, where text typed while a menu opens lands in the box behind. A therefore always also sends bursts.
 - A journey that only runs legacy keys never exercises the kitty path, where Ctrl+Enter is distinct. B therefore runs both.
 - No harness proves a physical Ghostty delivers Ctrl+Enter (Requirements H2). Only C can.
+- Screenshot OCR can misread, merge or miss characters, and a check built on it can pass or fail for reasons unrelated to the screen. B therefore asserts on the exact cell grid from the PTY bytes.
 
 ## "Proven by", for the owner
 
@@ -292,7 +300,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 **10-17 baseline · R16**
 - *Seam:* every migrated screen.
 - *Observation:* B, the existing journeys, for everything the screens show and do. F, the existing public-entry journeys, for what B's fixture can't reach: the real `agent-sessions` argument entry, inventory, dispatcher and selected-machine client actions.
-- *Target and journey:* B: the existing compact Sessions and Quota tapes, Normal43 and the hard-case Quota journey, re-run on the rebuilt screens. F: the `verify-codex-router` public-entry routes, CLIENT-REAL-ENTRY (`tui-journeys.md`) and the cases in `client-actions.md` and `claude-background.md`, on a signed debug Router and Host with an isolated debug root on Sunclaw, using Haiku. Both lasting.
+- *Target and journey:* B: the existing compact Sessions and Quota journeys, Normal43 and the hard-case Quota journey, with their scene checks ported from screenshot OCR to the grid oracle, re-run on the rebuilt screens. F: the `verify-codex-router` public-entry routes, CLIENT-REAL-ENTRY (`tui-journeys.md`) and the cases in `client-actions.md` and `claude-background.md`, on a signed debug Router and Host with an isolated debug root on Sunclaw, using Haiku. Both lasting.
 - *Reference:* 10-17 Requirements, Specification and Verification Design; 2026-10-23 C1–C10.
 - *Passes when:* every existing checkpoint passes unchanged, except those whose expectation the owner changed:
   - dropdown choices;
@@ -308,7 +316,9 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 
 | Journey | Layer | Lifetime | Entry and what it reads |
 | --- | --- | --- | --- |
-| Overlay isolation | B | lasting | Both binaries; open each overlay, send bursts of text, arrows and clicks aimed beneath; read the text grid and OCR beneath unchanged |
+| Grid oracle and emulator qualification | B | lasting | Feed fixtures with known screens (colours, wide glyphs, kitty query, resize) through the chosen TypeScript or Rust headless emulator; the grid must match exactly |
+| Ported existing journeys | B | lasting | The 10-17 and 10-23 Sessions and Quota journeys, their scene checks moved from Swift OCR to grid assertions; the Swift checker, VHS tapes and shell runners removed |
+| Overlay isolation | B | lasting | Both binaries; open each overlay, send bursts of text, arrows and clicks aimed beneath; read the grid beneath unchanged |
 | Focus traversal | B | lasting | Both binaries; Tab, arrows and clicks over every target; same-child resize then an immediate click |
 | Main-screen keys | B | lasting | Both binaries; legacy and kitty modes; Enter, Ctrl+Enter, Ctrl+Shift+Enter, Esc ladder, Ctrl+C, Q |
 | New session dialog | B | lasting | Picker; fields, dropdown, Ctrl+Enter with dropdown open, legacy fallback; Start reaches the existing preparation stand-in once |
