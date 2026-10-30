@@ -244,7 +244,8 @@ The paired Verifier independently runs the S2–S4 layer-A suite at the declared
   - New dialog: ComboBoxes for Client and Machine, a Run choice when the client supports both, the "Ctrl+Enter start · Esc close" hint;
   - keys: Enter shows Details; Ctrl+Enter opens; Ctrl+Shift+Enter forks; the Esc ladder; Ctrl+C via `.ignore_ctrl_c()` with the picker outcome read back;
   - initial size from the launch boundary;
-  - a consumer `clippy.toml` with the three disallowed methods.
+  - a consumer `clippy.toml` with the three disallowed methods;
+  - a test-only recording source-preparation stand-in, wired into the existing storyboard fixture entry (`picker_entrypoint.rs`, fixture path only). It writes a durable readback (call count plus the captured request: client, machine, directory, run mode) to the harness's receipt path, so the B "New session dialog" journey can prove Start runs once with the committed field values. Added at the Verifier's coverage audit, 2026-10-30.
 - **Writes:** `crates/agent-session-picker/src/session_picker/*`, plus `crates/agent-collaboration` where the picker root is launched.
 - **Earns:**
   - U4 · R4, reused part: `picker_details_navigation_tests.rs`, migrated: Enter inspects and cannot launch; Ctrl+Enter resumes without Details; Ctrl+Shift+Enter shows the fork confirmation. Package nextest, every change.
