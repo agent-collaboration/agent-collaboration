@@ -8,7 +8,7 @@ Draft PR194: https://github.com/agent-collaboration/agent-collaboration/pull/194
 ## Authority and delivery
 
 Direct W1 commission and recorded Lead decisions govern. W1 is an unpaired Worker; Lead owns acceptance and independent review and commissions the final-head PR-body Researcher. Do not self-author the PR body or commission helpers.
-Current version is0.1.118. Latest order: PR193 merged/released0.1.117, Claude-fix PR1950.1.118, W1 PR1940.1.119. Main is cb01dffd3e60b29e814495fd676844690b07e313; merge it at the next push per Lead01a18b4b. Do not bump119 until Lead says PR194 is next to merge.
+Current version is0.1.118. Latest order: PR193 merged/released0.1.117, Claude-fix PR1950.1.118, W1 PR1940.1.119. Main cb01dffd3e60b29e814495fd676844690b07e313 is included in the integration checkpoint per Lead01a18b4b. The819789a4 proof precedes that integration; combined-head CI remains unverified. Do not bump119 until Lead says PR194 is next to merge.
 No merge, tag, production replacement or live-provider acceptance authority.
 
 ## Current build authority
@@ -63,7 +63,7 @@ Preserve all explicit Lead exceptions for ignored/live Codex, accepted manual ex
 
 CI comparison and inventory reconciliation are complete at the declared repair head. Keep proof for819789a4 separate from future main/version integration.
 After explicit local resume, finish cancellation red/green, required scoped Clippy and one archive measurement; stop at30GiBfloor. No local full suite.
-Canonical handoff, copy-paste prompt, inventory and receipts reflect the current evidence. Refresh main/PR state before integration. Version119 waits for Lead next-to-merge grant. Preserve required final integrated-head release check and CI; older release/exclusion receipts remain historical evidence.
+Canonical handoff, copy-paste prompt, inventory and receipts reflect the current evidence. Refresh main/PR state before final delivery. Version119 waits for Lead next-to-merge grant. Preserve required final integrated-head release check and CI; older release/exclusion receipts remain historical evidence.
 Commit scoped docs/source as needed, push this branch, send exact final head to Lead for Researcher body. Keep PR draft until governed review/readiness; no merge.
 Complete applicable current-head checks/comments/reviews/threads/body/mergeability and quiet poll. Then consumer-check and clean only approved own artifacts, report physical free space for other lanes.
 

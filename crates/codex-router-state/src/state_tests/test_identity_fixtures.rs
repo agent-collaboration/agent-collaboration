@@ -12,6 +12,27 @@ use codex_router_core::affinity::AffinityKeyHash;
 use codex_router_core::ids::AccountId;
 use rusqlite::Connection;
 
+pub(super) async fn seed_account_records(
+    store: &crate::sqlite::AsyncSqliteStateStore,
+    provider: codex_router_core::provider::Provider,
+    account_names: &[&str],
+) {
+    for account_name in account_names {
+        store
+            .upsert_account(
+                &crate::account::AccountRecord::new(
+                    provider,
+                    account_id(account_name),
+                    *account_name,
+                    crate::account::AccountStatus::Enabled,
+                )
+                .with_active_credential_generation(1),
+            )
+            .await
+            .expect("account-owned fixture rows require a parent account");
+    }
+}
+
 pub(super) fn expect_error<T, E>(result: Result<T, E>, context: &'static str) -> E {
     match result {
         Ok(_) => panic!("{context}"),

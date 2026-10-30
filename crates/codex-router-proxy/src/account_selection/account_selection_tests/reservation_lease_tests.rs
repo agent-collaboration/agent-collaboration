@@ -55,6 +55,15 @@ async fn sqlite_active_client_lease_reporter_records_release_clock_timestamp() {
         DbWriteActor::start(Arc::new(SqliteDbWriteRepository::new(store.clone())), 4);
     let reporter = SqliteActiveClientLeaseReporter::new(db_write_actor.clone(), Arc::new(|| 1_100));
     let account_id = account_id("acct_release_clock");
+    store
+        .upsert_account(&codex_router_state::account::AccountRecord::new(
+            codex_router_core::provider::Provider::Openai,
+            account_id.clone(),
+            "release-clock",
+            codex_router_state::account::AccountStatus::Enabled,
+        ))
+        .await
+        .expect("lease reporter fixture requires a parent account");
     let mut reservation_book = ReservationBook::default();
     let reservation_handle = reservation_book.reserve_next_at(account_id, 1, 1_000);
 

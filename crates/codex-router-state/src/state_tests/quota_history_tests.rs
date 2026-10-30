@@ -8,6 +8,7 @@ async fn async_quota_history_appends_queries_and_purges_old_observations() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_history"]).await;
     let account_id = account_id("acct_history");
     let before_cutoff_observation = quota_history_observation(
         account_id.clone(),

@@ -202,6 +202,15 @@ async fn production_quota_refresh_composition_runs_inside_the_process_runtime() 
         .await
         .expect("quota history state should open");
     let fixture_account_id = account_id("acct_refresh_retention_fixture");
+    state
+        .upsert_account(&AccountRecord::new(
+            codex_router_core::provider::Provider::Openai,
+            fixture_account_id.clone(),
+            "refresh-retention",
+            AccountStatus::Disabled,
+        ))
+        .await
+        .expect("history retention fixture requires an existing, non-refreshing account");
     let retained_observation = PersistedQuotaHistoryObservation::new(
         fixture_account_id.clone(),
         "refresh-retention",

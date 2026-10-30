@@ -619,6 +619,7 @@ mod pin_authority_tests {
         let store = pin_store(&temporary_directory).await;
         let cache = SessionAccountAffinityCache::shared(Duration::from_secs(10));
         let account = account_id("acct_observed");
+        super::tests::save_claude_account(&store, &account).await;
         let pin = SessionAccountAffinity::with_pin_state(
             Provider::Claude,
             "session",
@@ -668,6 +669,7 @@ mod pin_authority_tests {
         let store = pin_store(&temporary_directory).await;
         let cache = SessionAccountAffinityCache::shared(Duration::from_secs(10));
         let account = account_id("acct_released");
+        super::tests::save_claude_account(&store, &account).await;
         store
             .upsert_session_account_affinity(&SessionAccountAffinity::with_pin_state(
                 Provider::Claude,
@@ -759,6 +761,8 @@ mod pin_authority_tests {
         let cache = SessionAccountAffinityCache::shared(Duration::from_secs(10));
         let old_account = account_id("acct_old");
         let new_account = account_id("acct_new");
+        super::tests::save_claude_account(&store, &old_account).await;
+        super::tests::save_claude_account(&store, &new_account).await;
         let stale_observation = PinObservation::new(Some(old_account), 7);
         store
             .upsert_session_account_affinity(&SessionAccountAffinity::with_pin_state(

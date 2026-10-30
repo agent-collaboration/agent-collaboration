@@ -1,5 +1,5 @@
 {
-  "stage": "CI comparison green at819789a4; local cancellation red/green,all-feature Clippy,archive breakdown and final main/version integration pending",
+  "stage": "Repaired-source CI comparison green; maincb01 integrated in checkpoint, combined-head CI pending; local builds held",
   "base": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
   "workspaceVersion": "0.1.118",
   "nativeGatePackages": [
@@ -253,7 +253,7 @@
     "target": "0.1.119",
     "order": "PR193 released117;PR195 Claude fix118;PR194119",
     "bump": "Deferred until Lead says next to merge",
-    "mergeMain": "cb01dffd3e60b29e814495fd676844690b07e313 at next push"
+    "mergeMain": "cb01dffd3e60b29e814495fd676844690b07e313 integrated in checkpoint"
   },
   "ciComparison": {
     "run": 41004749636,
@@ -465,5 +465,20 @@
       "consumers": 0
     },
     "status": "Superseded by explicit Lead01a18b08 CI method; no valid local baseline outcomes; retained history only"
+  },
+  "mainIntegration": {
+    "main": "cb01dffd3e60b29e814495fd676844690b07e313",
+    "sourceProofHead": "819789a4572ff6f874eb30e28136d295a400a66f",
+    "validation": {
+      "manifestAndLockVersionConflicts": 50,
+      "currentVersion": "0.1.118",
+      "targetVersion": "0.1.119 remains deferred",
+      "combinedSqliteModule": "both incoming account_removal module/export and W1 observer preserved",
+      "proxyDeltaToMain": 0,
+      "directRustfmtExit": 0,
+      "diffCheckExit": 0,
+      "cargoBuild": "unrun; explicit Lead hold",
+      "integratedHeadCI": "pending"
+    }
   }
 }
