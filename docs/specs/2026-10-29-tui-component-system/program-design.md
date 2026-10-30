@@ -230,11 +230,11 @@ Every item acts on the account Details was opened for. Opening Details captures 
 1. The quota view returns a closed outcome `QuotaOutcome::AccountCommand { target: AccountActionTarget, request: AccountCommandRequest }` from its render loop. This replaces today's `io::Result<()>` with an outcome enum; `quota_status_entrypoint.rs:47-76`.
 2. `codex-router-cli` runs the matching existing command owner after teardown, in the same terminal, so the login's interactive OAuth works.
 3. It maps the command's end to `enum AccountCommandResult { Succeeded, Cancelled, Refused { reason }, Failed { message } }`. Cancelled means the user interrupted the interactive login (Ctrl+C or exit status 130). Refused carries the owner's typed refusal, for example `RequiresDisabled`.
-4. It restarts quota with a fresh report read, reselects the captured AccountId, and shows the result as one plain sentence.
+4. It restarts quota with a fresh report read and shows the result as one plain sentence. Reselection: the captured AccountId when it is still listed. After a successful Remove it is gone by design, so the account that now occupies its former position is selected (or the last one, if it was last; none if the list is empty), with the result "Removed <label>".
 
 Nothing is retried. The owners' own guards stay in force: login re-resolves identity after OAuth, and remove refuses a non-disabled account before touching secrets and re-checks inside its transaction. This is the same direction as the picker's Claude terminal outcome. It adds no new account store, mutation owner or dispatcher.
 
-**Remove confirmation** swaps the Details body, so there is still one dialog level: "Remove <label>? This deletes its saved login and history." with [Cancel] and [Remove]. Focus starts on Cancel. Remove is never focused or primary at first, and Ctrl+Enter is not bound in this confirmation. Only an explicit activation of Remove returns the request. Cancel or Esc restores the Details body unchanged.
+**Remove confirmation** swaps the Details body, so there is still one dialog level: "Remove <label>? This deletes its saved login and history." with [Cancel] and [Remove]. Cancel is this confirmation's primary action and has the initial focus, so Ctrl+Enter (R9's every-dialog rule) cancels. Remove is a secondary button that is never focused or primary initially. Only an explicit activation of Remove returns the request. Cancel or Esc restores the Details body unchanged.
 
 ## Trace table
 
