@@ -219,7 +219,6 @@ function publicSessionsRecord(root: string): FixtureCommand {
 		expected_service_id: '00000000-0000-4000-8000-000000000001',
 		expected_service_epoch: '00000000-0000-4000-8000-000000000002',
 		output,
-		ttyd: 'unused',
 		temporary_directory: root,
 		dynamic_library_path: 'unused',
 	};

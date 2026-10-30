@@ -13,8 +13,8 @@ import { join } from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { checkDriver } from './capture-execution.ts';
-import { controlledExecutable, initializedSourceRepository } from './controlled-child-fixtures.ts';
+import { requireOneTest } from './capture-selection.ts';
+import { controlledExecutable } from './controlled-child-fixtures.ts';
 import {
 	discoverCaptureTest,
 	runCapturedCommand,
@@ -22,8 +22,8 @@ import {
 	waitStaticCapture,
 } from './driver-lifecycle.ts';
 import type { DriverChild } from './driver-lifecycle.ts';
-import { protocolPlan, temporaryRoot } from './receipt-fixtures.ts';
-import { captureArtifact, readJson, sourceBinding } from './source-binding.ts';
+import { temporaryRoot } from './receipt-fixtures.ts';
+import { readJson } from './source-binding.ts';
 const roots: string[] = [];
 const children: DriverChild[] = [];
 function rootDirectory(): string {
@@ -55,26 +55,17 @@ function protocolDriver(root: string, source: string): DriverChild {
 		closeSync(stderr);
 	}
 }
-test('cua_fixture_discovery_rejects_more_than_one_libtest_filter', async () => {
-	const repository = initializedSourceRepository();
-	roots.push(repository);
-	writeFileSync(join(repository, 'crates/input.rs'), 'source');
+test('discovery must identify only the exact declared libtest entry', async () => {
+	const root = rootDirectory();
 	const executable = controlledExecutable(
-		repository,
-		'exact-protocol',
-		`const args=process.argv.slice(2);if(args.at(-1)==='--list'){const filters=args.filter(value=>!value.startsWith('--'));if(filters.length!==1)process.exit(2);process.stdout.write(filters[0]+': test\\n1 test, 0 benchmarks');}else if(args[0]==='compact-quota-all'){process.stdout.write(JSON.stringify({checkpoint:args[0],recognizedLines:[],recognizedFieldPairs:[],choiceFocusMeasurements:[],missingMarkers:['Quota status'],unexpectedMarkers:[]}));process.exitCode=1;}else process.exitCode=2;`,
+		root,
+		'discovery',
+		"process.stdout.write('declared: test\\n');",
 	);
-	const binding = captureArtifact(executable);
-	const plan = {
-		...protocolPlan(rootDirectory()),
-		repository,
-		source: sourceBinding(repository),
-		capture_driver: binding,
-		harness_binary: binding,
-		image_verifier: binding,
-	};
-	await checkDriver(plan, 'cua-quota', 'normal');
-	expect(existsSync(plan.output)).toBe(false);
+	const discovery = await discoverCaptureTest([executable, 'declared', '--exact', '--list'], root);
+	requireOneTest(discovery, 'declared');
+	expect(() => requireOneTest(discovery + 'other: test\n', 'declared')).toThrow('broadened');
+	expect(() => requireOneTest(discovery, 'wrong')).toThrow('missing');
 });
 test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 	const root = rootDirectory();

@@ -13,20 +13,16 @@ import { isAbsolute, join, resolve } from 'node:path';
 
 import { z } from 'zod';
 
-import { captureEnvironment } from './capture-execution.ts';
 import { requireOneTest } from './capture-selection.ts';
-import { readCuaState } from './cua-readback.ts';
-import { discoverCaptureTest, startDriver } from './driver-lifecycle.ts';
+import { discoverCaptureTest } from './driver-lifecycle.ts';
 import {
 	artifactBindingSchema,
 	capturePlanSchema,
 	processIdentitySchema,
 } from './evidence-schema.ts';
-import type { CuaPtyReadback, TerminalViewport } from './evidence-schema.ts';
-import { collectCuaArtifacts } from './original-artifacts.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
-import { waitPublicDriver } from './public-lifecycle.ts';
-import { captureTest, supportDirectory } from './scene-contracts.ts';
+import { runPublicGridCapture, publicGridActionSchema } from './public-grid-capture.ts';
+const captureTest = 'compiled_public_sessions_grid_observation';
 import {
 	captureArtifact,
 	fileDigest,
@@ -79,6 +75,9 @@ export const publicPlanSchema = capturePlanSchema
 		public_target: publicTargetSchema,
 		runtime_plan: runtimePlanSchema,
 		runtime_effect_evidence: artifactBindingSchema,
+		chrome: artifactBindingSchema,
+		keys: z.enum(['legacy', 'kitty']),
+		actions: z.array(publicGridActionSchema).min(1),
 	})
 	.readonly();
 
@@ -206,10 +205,19 @@ export async function qualifyPublicTarget(plan: PublicSessionsPlan): Promise<voi
 		}),
 	);
 }
-export async function preparePublicCapture(plan: PublicSessionsPlan): Promise<NodeJS.ProcessEnv> {
+export async function checkPublicCapture(plan: PublicSessionsPlan): Promise<void> {
 	await qualifyPublicTarget(plan);
+	verifyArtifact(plan.chrome);
 	if (plan.cua_artifact_scenes.length === 0)
 		throw new Error('public capture needs exact declared original scenes');
+	const scenes = plan.actions
+		.filter((action) => action.kind === 'checkpoint')
+		.map((action) => action.scene);
+	if (
+		JSON.stringify(scenes) !== JSON.stringify(plan.cua_artifact_scenes) ||
+		new Set(scenes).size !== scenes.length
+	)
+		throw new Error('public checkpoint sequence differs from declared scenes');
 	requireOneTest(
 		await discoverCaptureTest(
 			[plan.capture_driver.path, captureTest, '--exact', '--list'],
@@ -217,22 +225,29 @@ export async function preparePublicCapture(plan: PublicSessionsPlan): Promise<No
 		),
 		captureTest,
 	);
+}
+export async function preparePublicCapture(plan: PublicSessionsPlan): Promise<NodeJS.ProcessEnv> {
+	await checkPublicCapture(plan);
 	mkdirSync(plan.output, { mode: 0o700 });
+	const childOutput = join(plan.output, 'cua-sessions');
+	mkdirSync(childOutput, { mode: 0o700 });
 	const configuration = {
 		...publicSessionsChildConfiguration(
 			plan.public_target,
 			plan.public_target.expected_host,
-			join(plan.output, 'cua-sessions'),
+			childOutput,
 		),
-		ttyd: plan.ttyd.path,
 		temporary_directory: plan.temporary_directory,
-		dynamic_library_path: plan.dynamic_library_path,
+		dynamic_library_path: 'unused',
 	};
 	const targetFile = join(plan.output, 'public-target.json');
 	writeFileSync(targetFile, JSON.stringify(configuration), { mode: 0o600, flag: 'wx' });
 	chmodSync(targetFile, 0o600);
 	writeFileSync(join(plan.output, 'declared-target.json'), JSON.stringify(plan, null, 2));
 	return {
+		QUOTA_STORYBOARD_OUTPUT: plan.output,
+		QUOTA_STORYBOARD_NODE: plan.node.path,
+		QUOTA_STORYBOARD_NODE_SHA256: plan.node.sha256,
 		QUOTA_STORYBOARD_PUBLIC_SESSIONS_CONFIG: targetFile,
 		QUOTA_STORYBOARD_PUBLIC_SESSIONS_CONFIG_SHA256: captureArtifact(targetFile).sha256,
 		QUOTA_STORYBOARD_PUBLIC_SESSIONS_BINARY: plan.public_target.binary.path,
@@ -242,38 +257,8 @@ export async function preparePublicCapture(plan: PublicSessionsPlan): Promise<No
 	};
 }
 export async function runPublicCapture(plan: PublicSessionsPlan): Promise<void> {
-	const launch = await preparePublicCapture(plan);
-	const environment = {
-		...captureEnvironment(plan),
-		...launch,
-		QUOTA_STORYBOARD_CUA_SURFACE: 'sessions',
-		QUOTA_STORYBOARD_CUA_ARTIFACT_SCENES: plan.cua_artifact_scenes.join(','),
-	};
-	const command = [
-		plan.capture_driver.path,
-		captureTest,
-		'--exact',
-		'--ignored',
-		'--nocapture',
-		'--test-threads=1',
-	];
-	writeFileSync(join(plan.output, 'command.json'), JSON.stringify(command));
-	// Native driver owns its PTY, browser, and native/provider job. The only
-	// cancellation is its pre-existing private cooperative marker.
-	const { openSync, closeSync } = await import('node:fs');
-	const stdout = openSync(join(plan.output, 'driver.stdout'), 'w');
-	const stderr = openSync(join(plan.output, 'driver.stderr'), 'w');
-	try {
-		const child = startDriver(command, {
-			cwd: plan.repository,
-			env: environment,
-			stdio: ['ignore', stdout, stderr],
-		});
-		await waitPublicDriver(child, plan.output);
-	} finally {
-		closeSync(stdout);
-		closeSync(stderr);
-	}
+	const environment = await preparePublicCapture(plan);
+	await runPublicGridCapture(plan, environment);
 	await qualifyPublicTarget(plan);
 	const receipt = publicLifecycleSchema.parse(
 		readJson(join(plan.output, 'cua-sessions/public-cua-receipt.json')),
@@ -281,22 +266,18 @@ export async function runPublicCapture(plan: PublicSessionsPlan): Promise<void> 
 	if (
 		receipt.node_sha256 !== plan.node.sha256 ||
 		receipt.binary_sha256 !== plan.public_target.binary.sha256 ||
-		receipt.public_capture_source_sha256 !==
-			fileDigest(join(plan.repository, supportDirectory, 'public_sessions_capture.rs')) ||
-		receipt.fixed_child_sha256 !==
-			fileDigest(join(plan.repository, 'scripts/verification/tui/fixture-child.ts')) ||
 		receipt.host_service_id !== plan.public_target.expected_host.service_id ||
 		receipt.host_service_epoch !== plan.public_target.expected_host.service_epoch ||
-		receipt.effect_evidence_sha256 !== plan.runtime_effect_evidence.sha256
+		receipt.effect_evidence_sha256 !== plan.runtime_effect_evidence.sha256 ||
+		receipt.artifact_count !== plan.cua_artifact_scenes.length
 	)
-		throw new Error('public CUA lifecycle source/Host/effect binding mismatch');
+		throw new Error('public lifecycle source/Host/effect binding mismatch');
 	writeFileSync(
 		join(plan.output, 'public-cua-summary.json'),
 		JSON.stringify(
 			{
 				target: plan,
 				receipt,
-				original_artifacts: collectCuaArtifacts(plan, 'sessions', receipt.artifact_count),
 				complete: false,
 				limits:
 					'UI originals and actual Host/job effects/settlement require separate observation; no fixture zero-effect claim.',
@@ -305,12 +286,4 @@ export async function runPublicCapture(plan: PublicSessionsPlan): Promise<void> 
 			2,
 		),
 	);
-}
-
-export async function readPublicCuaState(
-	plan: PublicSessionsPlan,
-	viewport: TerminalViewport,
-): Promise<CuaPtyReadback> {
-	await qualifyPublicTarget(plan);
-	return readCuaState(plan, 'sessions', viewport);
 }

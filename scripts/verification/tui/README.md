@@ -1,11 +1,12 @@
-# Quota and Sessions capture tools
+# Compiled terminal verification
 
-Run these tools with Node 26.12.1 and the package-local pnpm 12.14.0 toolchain.
-Node executes the TypeScript sources directly. Plans bind the absolute Node
-executable and its SHA-256 alongside the driver, fixture, VHS, ttyd and image
-checker. The parent CLI must use the declared executable.
+The Rust `TerminalDriver` owns each PTY. TypeScript sends its next input, feeds
+actual output bytes to `@wterm/ghostty` (libghostty), and checks the cells. All three
+wterm packages are pinned at 0.5.7. The separate original-image sink renders those
+bytes with `@wterm/dom` in headless Chrome through DevTools. No reconstructed cell
+image counts as an original. A headless image is not physical-terminal evidence.
 
-From the repository root:
+Use Node 26.12.1 and pnpm 12.14.0, from the repository root:
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -13,41 +14,42 @@ pnpm --dir scripts/verification/tui typecheck
 pnpm --dir scripts/verification/tui lint
 pnpm --dir scripts/verification/tui format:check
 pnpm --dir scripts/verification/tui test
-node scripts/verification/tui/capture-run.ts --help
+node scripts/verification/tui/terminal-qualification.ts OUTPUT.json
+node scripts/verification/tui/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture-run.ts PLAN.json
 ```
 
-The permanent Rust adapter tests also run in ordinary workspace test runs. Before
-running them locally, install the locked package dependencies as above and export
-the selected Node runtime's canonical path and digest:
+`gridCapturePlanSchema` in `capture-run.ts` declares the repository, exact source
+head, signed driver/product/component artifact paths and SHA-256s, fresh output,
+journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
+is the prebuilt `quota_storyboard_capture_test` libtest, not Cargo. Component
+journeys require the exact fixture-bearing Quota library test executable; the
+runner checks its test entry before launching it. Source files and artifact hashes
+are recorded and checked for drift. Build provenance remains the producer's duty.
 
-```sh
-export QUOTA_STORYBOARD_NODE="$(node -p 'require("node:fs").realpathSync(process.execPath)')"
-export QUOTA_STORYBOARD_NODE_SHA256="$("$QUOTA_STORYBOARD_NODE" --input-type=module -e 'import { createHash } from "node:crypto"; import { readFileSync } from "node:fs"; process.stdout.write(createHash("sha256").update(readFileSync(process.execPath)).digest("hex"));')"
-```
+`journey-catalogue.ts` names 24 literal journeys: Sessions, Quota, Normal43 and
+hard cases at 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24. Data ports exist for all
+six grids; the S0 pilot observed only 120×36. A definition is not a passing receipt.
+`baseline-journeys.ts` separately records the component-system's pre-change
+failures, passing isolation cases, absent future entries, and unobserved fixtures.
 
-The tests require Node 26.12.1 and reject a different executable or digest. These
-variables nominate the runtime; they do not start a capture or install tools.
-The CI TypeScript job and Rust test job use the same prerequisites. Capture plans
-still carry their own exact runtime binding.
+Every checkpoint keeps raw ANSI, JSON cells, text and assertion results. Each
+original keeps its byte/image hashes, renderer/WASM/Chrome identities, source,
+build, viewport and checkpoint. Each journey rejects the actual empty-core and
+retained wrong-scene controls before writing a success receipt. An entry timeout
+is an apparatus/feasibility failure, never a product defect.
 
-`capture-run.ts` runs a declared compact capture or bounded live CUA lease.
-`component-capture-run.ts` runs a declared Normal or hard-case Quota capture.
-`evidence-readback.ts` records source bindings and same-child PTY dimensions.
-`public-sessions-run.ts` qualifies the existing declared Host read-only before
-launching the public Sessions entry. It preserves normal home directories and
-requires separate effect and job-settlement evidence.
+`public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
+public route without launching its TUI. Its Host/process/health/effect checks,
+normal HOME/CODEX_HOME, exact public argv/cwd and job-settlement boundary remain
+separate from fixture zero-effect receipts. Running that route requires its own
+allowed-effects packet. S0 does not launch it.
 
-The native Rust harness owns the PTY and capture resources. Its permanent
-`fixture-child.ts` and `ttyd-adapter.ts` helpers inherit the native descriptors;
-the TypeScript core does not emulate terminal rendering or allocate another PTY.
+Native wrapper tests still exercise the real PTY, kernel resizing, retained-child
+cleanup and durable fixture receipts. They require nominated canonical
+`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.12.1.
+Their stand-ins prove wrapper contracts, not product appearance or real provider
+jobs. Never install debug product binaries or replace production processes.
 
-Tests use isolated Git repositories, controlled child processes, protocol-only
-image bytes and a controlled HTTP listener. These validate rejection, lifecycle
-and binding behavior. They do not establish product appearance, provider behavior
-or delivery acceptance. Galleries retain pending personal image inspection and
-explicit unverified rows.
-
-Discovery and image-checker subprocesses retain private raw output files in
-system temporary directories. A deadline never becomes success after later exit.
-Capture cancellation uses the declared cooperative marker; an unsettled driver
-is reported without broad process signaling or speculative cleanup.
+See the canonical repository recipe:
+`.agents/skills/verify-codex-router/references/tui-journeys.md`.

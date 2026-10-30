@@ -45,7 +45,7 @@ test('unknown capture option cannot launch the controlled driver', () => {
 		stderr: result.stderr,
 	}).toMatchObject({ status: 2, launched: false });
 });
-test.each(['capture-run.ts', 'component-capture-run.ts', 'public-sessions-run.ts'])(
+test.each(['capture-run.ts', 'public-sessions-run.ts'])(
 	'strict positional CLI rejects unknown missing and extra args before plan read %s',
 	(entry) => {
 		for (const args of [

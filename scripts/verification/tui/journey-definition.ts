@@ -1,0 +1,38 @@
+import { z } from 'zod';
+export const journeyKeySchema = z.enum([
+	'Ctrl+D',
+	'Ctrl+E',
+	'Ctrl+F',
+	'Ctrl+G',
+	'Ctrl+N',
+	'Ctrl+R',
+	'Down',
+	'Enter',
+	'Escape',
+	'F1',
+	'F4',
+	'F5',
+	'PageDown',
+	'PageUp',
+	'Right',
+	'Shift+Tab',
+	'Tab',
+	'Up',
+]);
+export const journeyActionSchema = z.discriminatedUnion('kind', [
+	z.object({
+		kind: z.literal('key'),
+		key: journeyKeySchema,
+		repeat: z.number().int().min(1).max(256),
+	}),
+	z.object({ kind: z.literal('text'), text: z.string() }),
+	z.object({ kind: z.literal('wait'), pattern: z.string() }),
+	z.object({ kind: z.literal('field'), dialog: z.string(), label: z.string(), value: z.string() }),
+]);
+export const journeyDefinitionSchema = z.object({
+	name: z.string(),
+	groups: z.array(z.object({ checkpoint: z.string(), actions: z.array(journeyActionSchema) })),
+	finish: z.array(journeyActionSchema),
+});
+export type JourneyAction = z.infer<typeof journeyActionSchema>;
+export type JourneyDefinition = z.infer<typeof journeyDefinitionSchema>;

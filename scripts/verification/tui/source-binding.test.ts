@@ -48,14 +48,14 @@ test('capture_target_rejects_omitted_or_changed_compiled_controls_input', () => 
 	const support = join(repository, 'crates/capture');
 	mkdirSync(support, { recursive: true });
 	for (const name of ['image', 'checkpoint', 'controls'])
-		writeFileSync(join(support, `verify_screen_${name}.swift`), name);
+		writeFileSync(join(support, `grid_${name}.rs`), name);
 	const plan = capturePlanSchema.parse({
 		...protocolPlan(root),
 		repository,
 		source: sourceBinding(repository),
 	});
 	verifyTarget(plan);
-	const controls = 'crates/capture/verify_screen_controls.swift';
+	const controls = 'crates/capture/grid_controls.rs';
 	const omitted = {
 		...plan.source,
 		files: Object.fromEntries(
