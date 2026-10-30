@@ -140,7 +140,8 @@ impl Theme {
         };
         self.foreground_color(color)
     }
-    pub(crate) const fn foreground_color(self, color: Color) -> Color {
+    /// Applies the covered-surface foreground to a consumer's custom colour.
+    pub const fn foreground_color(self, color: Color) -> Color {
         if self.covered {
             return Color::Rgb {
                 r: 142,

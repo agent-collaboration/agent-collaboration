@@ -18,6 +18,25 @@ mod tests {
     };
     use iocraft::prelude::*;
 
+    #[test]
+    fn consumer_custom_colour_uses_the_shared_covered_foreground_transform() {
+        use agent_collaboration_tui::theme::Theme;
+        let custom = Color::Rgb {
+            r: 19,
+            g: 83,
+            b: 211,
+        };
+        assert_eq!(Theme::default().foreground_color(custom), custom);
+        assert_eq!(
+            Theme::covered().foreground_color(custom),
+            Color::Rgb {
+                r: 142,
+                g: 150,
+                b: 163
+            }
+        );
+    }
+
     const TEXT_CASES: [(UiTextRole, &str, Color); 10] = [
         (UiTextRole::Body, "Body", Color::White),
         (
