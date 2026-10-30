@@ -316,7 +316,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Unverified:* whatever those journeys already list.
 
 **U16 · R17** (controls)
-- *Seam:* the quota Details action; the quota terminal outcome; the CLI's restart.
+- *Seam:* the quota Details actions and `AccountActionTarget`; `QuotaOutcome::AccountCommand` and `AccountCommandResult`; the CLI's run-then-restart.
 - *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. C, once: the owner logs in again for real from Details.
 - *Target and journey:* B, `needed:` "Log in again" on the quota binary, legacy and kitty modes. Lasting. C is temporary.
 - *Reference:* R17; U16.
@@ -326,9 +326,14 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - Quota then returns with the same account selected.
   - A stand-in exit with failure returns to quota with a plain message, and no second invocation.
   - The action is the primary one for an account whose status is re-login required, and ordinary otherwise.
+  - **Fresh data:** the fixture's report for that account changes when the stand-in login succeeds (status re-login required → available). After return, the grid shows the new status, so a restart with the old cached report fails.
+  - **Cancel:** the stand-in exits as an interrupted login (status 130). Quota comes back on the same account with "Login cancelled", the process is still running, and there is no second invocation.
+  - **Captured target:** open Details for account A, then move browse focus to B and trigger a reload. Every item still targets A: Options and Weekly floor open for A, and the stand-in argv carries A's label.
+  - **Remove confirmation:** the first confirmation grid has focus on Cancel and Remove unfocused. Ctrl+Enter there dispatches nothing (zero stand-in invocations). Only an explicit Remove activation dispatches `account remove --account <label>`.
+  - **Disabled-first refusal through the UI:** the stand-in for remove answers with the owner's `RequiresDisabled` refusal (as if the account was re-enabled after the confirmation opened). Quota returns with a plain refusal message and no retry. The real refusal itself is decided by the reused owner tests.
   - The Actions ▾ menu lists exactly R17's items with their keys, and each acts on the dialog's account: Options and Weekly floor open their existing dialogs for it; Disable/Enable flips its status; Copy puts its ID on the clipboard stand-in. Remove is absent for an enabled account. For a disabled one, it runs `account remove` only after the confirmation is accepted, and cancelling changes nothing.
-- *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login.
-- *Reuses:* none.
+- *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login; restarting with the cached report; exiting the app on a cancelled login; a preselected Remove or a Ctrl+Enter that removes; an item acting on the browse-focused account instead of the captured one.
+- *Reuses:* the existing removal owner tests for the real refusal and retention: `account_removal_tests.rs:162-173` (enabled refusal, credentials and rows intact), `289-321` (a target re-enabled before the writer → `RequiresDisabled`), and the compiled `account_removal_cli.rs:126-139`.
 - *Unverified:* the real OAuth flows (C).
 
 ## Journeys still needed
