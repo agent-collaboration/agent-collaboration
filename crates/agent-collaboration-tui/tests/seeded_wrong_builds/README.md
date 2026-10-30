@@ -65,6 +65,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `receipt-surface-after-close.patch` | The new top surface hides the overlay or parent that actually consumed the event. |
 | `receipt-before-callback.patch` | The receipt becomes visible before on_routed returns. |
 | `receipt-text-leak.patch` | Printable text is serialized instead of its payload-free category. |
+| `content-dialog-forced-percent.patch` | A content-sized form fills an intrinsic percentage rectangle and clips its fourth section. |
+| `content-dialog-no-measurement.patch` | Wrapped header/chrome is not accounted for in the measured content height, hiding fields below the fold. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

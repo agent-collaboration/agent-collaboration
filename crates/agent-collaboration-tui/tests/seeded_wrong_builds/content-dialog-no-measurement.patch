@@ -1,0 +1,21 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+@@ -63,16 +63,3 @@ pub fn DialogFrame<'a>(
+     hooks.use_hook(|| FrameMeasure(height)).0 = height;
+-    let body = props.scroll.position();
+-    let frame_height = if content_height && height.get() > 0 {
+-        let natural = height
+-            .get()
+-            .saturating_sub(body.viewport_height)
+-            .saturating_add(body.natural_height);
+-        Size::Length(u32::from(
+-            natural.min(sizing.map_or(u16::MAX, |sizing| sizing.max_height)),
+-        ))
+-    } else if content_height {
+-        Size::Auto
+-    } else {
+-        Size::Percent(100.0)
+-    };
++    let frame_height=if content_height {Size::Auto}else{Size::Percent(100.0)};
+     let padding = props.padding.unwrap_or(u16::from(height.get() >= 16));

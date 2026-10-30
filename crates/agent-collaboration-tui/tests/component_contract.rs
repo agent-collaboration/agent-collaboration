@@ -8,6 +8,9 @@ mod combo_controls;
 #[path = "suites/control_editor.rs"]
 mod control_editor;
 #[cfg(test)]
+#[path = "suites/dialog_content_sizing.rs"]
+mod dialog_content_sizing;
+#[cfg(test)]
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]

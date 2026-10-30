@@ -7,6 +7,15 @@ use crate::{
 };
 use iocraft::{ComponentDrawer, Hook, prelude::*};
 
+/// The host owns the resolved bounds; dialog chrome uses the same sizing axes.
+#[derive(Clone, Copy)]
+pub(crate) struct SurfaceSizing {
+    pub width: Size,
+    pub height: Size,
+    pub max_width: u16,
+    pub max_height: u16,
+}
+
 struct SurfacePaintHook {
     regions: HitRegions,
     surface: SurfaceId,
@@ -57,10 +66,18 @@ fn SurfacePanel<'a>(
     hook.background = background;
     hook.overlay = props.overlay;
     let children = std::mem::take(&mut props.children);
+    let sizing = SurfaceSizing {
+        width: props.width,
+        height: props.height,
+        max_width: props.max_width,
+        max_height: props.max_height,
+    };
     element! {
         View(position:props.position,left:props.left,top:props.top,width:props.width,height:props.height,max_width:props.max_width,max_height:props.max_height,overflow:Overflow::Hidden,
             background_color:background,flex_direction:FlexDirection::Column) {
-            ContextProvider(value:Context::owned(context)) { #(children) }
+            ContextProvider(value:Context::owned(context)) {
+                ContextProvider(value:Context::owned(sizing)) { #(children) }
+            }
         }
     }
 }
