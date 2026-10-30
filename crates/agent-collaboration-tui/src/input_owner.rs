@@ -26,6 +26,8 @@ pub struct InputOwnerProps<'a> {
     #[iocraft(required)]
     pub quit_action: ActionId,
     pub on_routed: Handler<Routed>,
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    pub dispatch_receipt: Option<crate::input_dispatch_receipt::InputDispatchReceiptSink>,
     pub children: Vec<AnyElement<'a>>,
 }
 #[component]
@@ -42,10 +44,18 @@ pub fn InputOwner<'a>(
     use_frame_publication(&mut hooks, stack.hit_regions());
     let quit_action = props.quit_action.clone();
     let on_routed = props.on_routed.clone();
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    let dispatch_receipt = props.dispatch_receipt.clone();
     hooks.use_terminal_events(move |event| {
+        #[cfg(all(feature = "test-support", debug_assertions))]
+        let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
         let snapshot = stack.snapshot();
-        let routed = route_event(stack, &snapshot, &quit_action, event);
-        on_routed(routed);
+        let decision = route_event(stack, &snapshot, &quit_action, event);
+        on_routed(decision.routed);
+        #[cfg(all(feature = "test-support", debug_assertions))]
+        if let Some(sink) = &dispatch_receipt {
+            sink.record(receipt_event, decision.facts);
+        }
     });
     let (width, height) = stack.viewport();
     let children = std::mem::take(&mut props.children);
@@ -56,15 +66,46 @@ pub fn InputOwner<'a>(
     }
 }
 
-fn run_action(stack: &SurfaceStack, id: &ActionId, surface: SurfaceId) -> Routed {
+struct RouteDecision {
+    routed: Routed,
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    facts: crate::input_dispatch_receipt::InputRouteFacts,
+}
+impl RouteDecision {
+    fn new(
+        routed: Routed,
+        _surface: SurfaceId,
+        _target: Option<&TargetId>,
+        _action: Option<&ActionId>,
+    ) -> Self {
+        Self {
+            routed,
+            #[cfg(all(feature = "test-support", debug_assertions))]
+            facts: crate::input_dispatch_receipt::InputRouteFacts {
+                surface: _surface,
+                target: _target.cloned(),
+                action: _action.cloned(),
+            },
+        }
+    }
+    fn ignored(surface: SurfaceId) -> Self {
+        Self::new(Routed::Ignored, surface, None, None)
+    }
+}
+fn run_action(
+    stack: &SurfaceStack,
+    id: &ActionId,
+    surface: SurfaceId,
+    target: Option<&TargetId>,
+) -> RouteDecision {
     if let Some(handler) = stack
         .surface(surface)
         .and_then(|surface| surface.actions.invocation(id))
     {
         handler(());
-        Routed::Action(id.clone())
+        RouteDecision::new(Routed::Action(id.clone()), surface, target, Some(id))
     } else {
-        Routed::Ignored
+        RouteDecision::ignored(surface)
     }
 }
 fn route_event(
@@ -72,15 +113,17 @@ fn route_event(
     stack: &SurfaceStack,
     quit: &ActionId,
     event: TerminalEvent,
-) -> Routed {
+) -> RouteDecision {
     match event {
         TerminalEvent::Resize(width, height) => {
             handle.set_viewport(width, height);
-            Routed::Ignored
+            RouteDecision::ignored(stack.top_id())
         }
-        TerminalEvent::Key(key) if key.kind == KeyEventKind::Release => Routed::Ignored,
+        TerminalEvent::Key(key) if key.kind == KeyEventKind::Release => {
+            RouteDecision::ignored(stack.top_id())
+        }
         TerminalEvent::Key(key) if key.kind == KeyEventKind::Repeat && !repeatable(key.code) => {
-            Routed::Ignored
+            RouteDecision::ignored(stack.top_id())
         }
         TerminalEvent::Key(key)
             if key.kind == KeyEventKind::Press
@@ -92,9 +135,9 @@ fn route_event(
                 .and_then(|surface| surface.actions.invocation(quit))
             {
                 handler(());
-                Routed::Quit
+                RouteDecision::new(Routed::Quit, SurfaceId::Screen, None, Some(quit))
             } else {
-                Routed::Ignored
+                RouteDecision::ignored(SurfaceId::Screen)
             }
         }
         TerminalEvent::Key(key) => route_key(handle, stack, key),
@@ -102,7 +145,7 @@ fn route_event(
             focused_input(handle, stack, TerminalEvent::BracketedPaste(value))
         }
         TerminalEvent::FullscreenMouse(mouse) => route_mouse(handle, stack, mouse),
-        _ => Routed::Ignored,
+        _ => RouteDecision::ignored(stack.top_id()),
     }
 }
 fn repeatable(code: KeyCode) -> bool {
@@ -131,7 +174,11 @@ fn deliver(handle: SurfaceStackHandle, target: &TargetSpec, event: TerminalEvent
         }
     }
 }
-fn focused_input(handle: SurfaceStackHandle, stack: &SurfaceStack, event: TerminalEvent) -> Routed {
+fn focused_input(
+    handle: SurfaceStackHandle,
+    stack: &SurfaceStack,
+    event: TerminalEvent,
+) -> RouteDecision {
     if let Some(target) = stack
         .top()
         .focus
@@ -139,12 +186,17 @@ fn focused_input(handle: SurfaceStackHandle, stack: &SurfaceStack, event: Termin
         .filter(|target| target.is_enabled())
         && deliver(handle, target, event)
     {
-        Routed::Text(target.id.clone())
+        RouteDecision::new(
+            Routed::Text(target.id.clone()),
+            stack.top_id(),
+            Some(&target.id),
+            None,
+        )
     } else {
-        Routed::Ignored
+        RouteDecision::ignored(stack.top_id())
     }
 }
-fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) -> Routed {
+fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) -> RouteDecision {
     if key.kind == KeyEventKind::Press
         && key.code == KeyCode::Enter
         && key.modifiers == KeyModifiers::CONTROL
@@ -161,24 +213,20 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
         {
             handle.close_top();
             let parent = handle.snapshot();
-            return parent
-                .top()
-                .primary_action
-                .as_ref()
-                .map_or(Routed::Ignored, |id| {
-                    run_action(&parent, id, parent.top_id())
-                });
+            return parent.top().primary_action.as_ref().map_or_else(
+                || RouteDecision::ignored(parent.top_id()),
+                |id| run_action(&parent, id, parent.top_id(), None),
+            );
         }
         if stack
             .overlays()
             .last()
             .is_some_and(|overlay| overlay.kind == OverlayKind::Dialog)
         {
-            return stack
-                .top()
-                .primary_action
-                .as_ref()
-                .map_or(Routed::Ignored, |id| run_action(stack, id, stack.top_id()));
+            return stack.top().primary_action.as_ref().map_or_else(
+                || RouteDecision::ignored(stack.top_id()),
+                |id| run_action(stack, id, stack.top_id(), None),
+            );
         }
     }
     if let Some(target) = stack
@@ -188,27 +236,33 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
         .filter(|target| target.is_enabled())
     {
         if deliver(handle, target, TerminalEvent::Key(key.clone())) {
-            return Routed::Text(target.id.clone());
+            return RouteDecision::new(
+                Routed::Text(target.id.clone()),
+                stack.top_id(),
+                Some(&target.id),
+                None,
+            );
         }
         if key.kind == KeyEventKind::Press
             && key.code == KeyCode::Enter
             && key.modifiers.is_empty()
             && let Some(action) = &target.activation
         {
-            return run_action(stack, action, stack.top_id());
+            return run_action(stack, action, stack.top_id(), Some(&target.id));
         }
     }
     if key.kind == KeyEventKind::Press
         && key.code == KeyCode::Esc
         && stack.top_id() != SurfaceId::Screen
     {
-        return handle
-            .close_top()
-            .map_or(Routed::Ignored, Routed::OverlayClosed);
+        return handle.close_top().map_or_else(
+            || RouteDecision::ignored(stack.top_id()),
+            |id| RouteDecision::new(Routed::OverlayClosed(id), stack.top_id(), None, None),
+        );
     }
     if let Some((id, handler)) = stack.top().actions.key_invocation(&key) {
         handler(());
-        return Routed::Action(id);
+        return RouteDecision::new(Routed::Action(id.clone()), stack.top_id(), None, Some(&id));
     }
     let direction = match key.code {
         KeyCode::Tab if key.modifiers.is_empty() => Some((FocusDirection::Next, false)),
@@ -229,20 +283,20 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
             }
         });
     }
-    Routed::Ignored
+    RouteDecision::ignored(stack.top_id())
 }
 fn route_mouse(
     handle: SurfaceStackHandle,
     stack: &SurfaceStack,
     mouse: FullscreenMouseEvent,
-) -> Routed {
-    let Some(map) = handle.hit_regions().published() else {
-        return Routed::Ignored;
-    };
+) -> RouteDecision {
     let surface = stack.top_id();
+    let Some(map) = handle.hit_regions().published() else {
+        return RouteDecision::ignored(surface);
+    };
     let point = (mouse.column, mouse.row);
     let Some(inside) = map.surface_contains(surface, point) else {
-        return Routed::Ignored;
+        return RouteDecision::ignored(surface);
     };
     if !inside {
         if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
@@ -253,11 +307,12 @@ fn route_mouse(
                 )
             })
         {
-            return handle
-                .close_top()
-                .map_or(Routed::Ignored, Routed::OverlayClosed);
+            return handle.close_top().map_or_else(
+                || RouteDecision::ignored(surface),
+                |id| RouteDecision::new(Routed::OverlayClosed(id), surface, None, None),
+            );
         }
-        return Routed::Ignored;
+        return RouteDecision::ignored(surface);
     }
     let kind = if matches!(
         mouse.kind,
@@ -282,7 +337,7 @@ fn route_mouse(
         handle.set_hovered(target.map(|target| (surface, target.id.clone())));
     }
     let Some(target) = target else {
-        return Routed::Ignored;
+        return RouteDecision::ignored(surface);
     };
     if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
         handle.focus(surface, &target.id);
@@ -292,12 +347,17 @@ fn route_mouse(
         target,
         TerminalEvent::FullscreenMouse(mouse.clone()),
     ) {
-        return Routed::Text(target.id.clone());
+        return RouteDecision::new(
+            Routed::Text(target.id.clone()),
+            surface,
+            Some(&target.id),
+            None,
+        );
     }
     if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         && let Some(action) = &target.activation
     {
-        return run_action(stack, action, surface);
+        return run_action(stack, action, surface, Some(&target.id));
     }
-    Routed::Ignored
+    RouteDecision::ignored(surface)
 }

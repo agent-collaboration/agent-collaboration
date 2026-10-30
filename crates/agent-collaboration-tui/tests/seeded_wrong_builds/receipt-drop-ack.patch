@@ -1,0 +1,7 @@
+diff --git a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+--- a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
++++ b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+@@ -249,2 +249,3 @@ impl InputDispatchReceiptSink {
+         }
++        if writer.sequence==0 {return;}
+         if let Err(error) = writer.record(event, facts) {

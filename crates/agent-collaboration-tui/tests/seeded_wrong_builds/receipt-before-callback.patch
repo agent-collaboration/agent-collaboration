@@ -1,0 +1,11 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -53,3 +53,2 @@ pub fn InputOwner<'a>(
+         let decision = route_event(stack, &snapshot, &quit_action, event);
+-        on_routed(decision.routed);
+         #[cfg(all(feature = "test-support", debug_assertions))]
+@@ -58,2 +57,3 @@ pub fn InputOwner<'a>(
+         }
++        on_routed(decision.routed);
+     });

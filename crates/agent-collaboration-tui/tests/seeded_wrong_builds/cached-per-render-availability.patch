@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
 --- a/crates/agent-collaboration-tui/src/actions.rs
 +++ b/crates/agent-collaboration-tui/src/actions.rs
-@@ -204,2 +204,7 @@ impl ActionRegistry {
+@@ -207,2 +207,7 @@ impl ActionRegistry {
      }
 +    pub(crate) fn freeze_availability(&self) -> Self {
 +        let mut frozen=self.clone();
@@ -12,11 +12,13 @@ diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collab
 diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
 --- a/crates/agent-collaboration-tui/src/input_owner.rs
 +++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -44,4 +44,6 @@ pub fn InputOwner<'a>(
-     let on_routed = props.on_routed.clone();
+@@ -48,2 +48,3 @@ pub fn InputOwner<'a>(
+     let dispatch_receipt = props.dispatch_receipt.clone();
 +    let cached_availability={let snapshot=stack.snapshot();let mut scopes=vec![(SurfaceId::Screen,snapshot.surface(SurfaceId::Screen).unwrap().actions.freeze_availability())];for overlay in snapshot.overlays() {scopes.push((SurfaceId::Overlay(overlay.id),overlay.model.actions.freeze_availability()));}scopes};
      hooks.use_terminal_events(move |event| {
+@@ -51,3 +52,4 @@ pub fn InputOwner<'a>(
+         let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
 -        let snapshot = stack.snapshot();
 +        let mut snapshot = stack.snapshot();
 +        for (surface,actions) in &cached_availability {if let Some(model)=snapshot.surface_mut(*surface) {model.actions=actions.clone();}}
-         let routed = route_event(stack, &snapshot, &quit_action, event);
+         let decision = route_event(stack, &snapshot, &quit_action, event);

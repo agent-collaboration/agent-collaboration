@@ -22,6 +22,9 @@ mod hit_geometry;
 #[cfg(test)]
 #[path = "suites/input_isolation.rs"]
 mod input_isolation;
+#[cfg(all(test, feature = "test-support", debug_assertions))]
+#[path = "suites/input_receipts.rs"]
+mod input_receipts;
 #[cfg(test)]
 #[path = "suites/list_controls.rs"]
 mod list_controls;

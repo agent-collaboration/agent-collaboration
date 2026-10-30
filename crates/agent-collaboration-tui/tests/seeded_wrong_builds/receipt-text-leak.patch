@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+--- a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
++++ b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+@@ -178,3 +178,3 @@ impl From<&TerminalEvent> for InputEventReadback {
+                     }
+-                    KeyCode::Char(_) => KeyCodeReadback::Text,
++                    KeyCode::Char(character) => KeyCodeReadback::Fixed {name:character.to_string()},
+                     code => KeyCodeReadback::Fixed {

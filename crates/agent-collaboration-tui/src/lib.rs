@@ -7,6 +7,8 @@ mod dialog_test_frame;
 pub mod focus_model;
 pub mod hit_regions;
 mod hit_regions_model;
+#[cfg(all(feature = "test-support", debug_assertions))]
+pub mod input_dispatch_receipt;
 pub mod input_owner;
 pub mod overlay_host;
 pub mod surface_handle;

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+--- a/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
++++ b/crates/agent-collaboration-tui/src/input_dispatch_receipt.rs
+@@ -288,2 +288,4 @@ impl ReceiptWriter {
+         self.output.write_all(b"\n")?;
++        serde_json::to_writer(&mut self.output,&receipt)?;
++        self.output.write_all(b"\n")?;
+         self.output.flush()?;

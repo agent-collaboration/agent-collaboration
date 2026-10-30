@@ -58,6 +58,20 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `raw-unit-separator-not-normalized.patch` | The raw Help key misses Ctrl+7 and can produce an unprintable chord label. |
 | `content-scroll-pages-selection.patch` | ContentScroll page/wheel input changes the selected key instead of only scrolling content. |
 | `list-marker-offset-ignored.patch` | A folded group's marker is drawn on its heading rather than the configured row. |
+| `receipt-unexpected-action.patch` | An unrelated input unexpectedly invokes the real Inspect action; the independent effect count changes. |
+| `receipt-resize-as-click.patch` | A delivered Resize is recorded as a mouse press. |
+| `receipt-drop-ack.patch` | A routed event produces no complete receipt. |
+| `receipt-duplicate-ack.patch` | An event produces duplicate receipt lines/sequences. |
+| `receipt-surface-after-close.patch` | The new top surface hides the overlay or parent that actually consumed the event. |
+| `receipt-before-callback.patch` | The receipt becomes visible before on_routed returns. |
+| `receipt-text-leak.patch` | Printable text is serialized instead of its payload-free category. |
+
+Receipt controls require `--features test-support` with a debug test profile.
+The existing outside-fallthrough control also challenges the real receipt and
+the independent screen-effect count after an outside menu press. The three
+input-owner controls were mechanically refreshed for RouteDecision without
+changing their defects: frozen availability, frozen surface snapshot and
+outside-click fallthrough.
 
 These controls are implementation evidence; the independent S5 observation is
 separate. Check each patch applies, then challenge it individually against the

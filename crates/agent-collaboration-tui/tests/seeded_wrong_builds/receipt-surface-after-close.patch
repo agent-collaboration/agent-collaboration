@@ -1,0 +1,9 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -56,3 +56,4 @@ pub fn InputOwner<'a>(
+         if let Some(sink) = &dispatch_receipt {
+-            sink.record(receipt_event, decision.facts);
++            let mut facts=decision.facts;facts.surface=stack.snapshot().top_id();
++            sink.record(receipt_event, facts);
+         }

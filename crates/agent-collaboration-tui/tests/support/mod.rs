@@ -13,3 +13,5 @@ pub mod dialog_scene;
 pub mod input_scene;
 pub mod list_scene;
 pub mod live_action_scene;
+#[cfg(all(test, feature = "test-support", debug_assertions))]
+pub(crate) mod receipt_scene;

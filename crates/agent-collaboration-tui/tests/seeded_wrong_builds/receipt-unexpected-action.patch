@@ -1,0 +1,7 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -116,2 +116,3 @@ fn route_event(
+ ) -> RouteDecision {
++    if let Some(handler)=stack.surface(SurfaceId::Screen).and_then(|surface|surface.actions.invocation(&ActionId::new("inspect").unwrap())) {handler(());}
+     match event {
