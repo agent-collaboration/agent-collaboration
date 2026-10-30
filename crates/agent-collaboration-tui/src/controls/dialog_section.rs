@@ -29,7 +29,7 @@ pub fn DialogSection<'a>(
         .map_or(Theme::default(), |context| context.theme());
     let children = std::mem::take(&mut props.children);
     element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,background_color:props.surface.map(|role|theme.background(role))) {
-        #((!props.heading.is_empty()).then(||element!(Text(content:props.heading.clone(),color:theme.foreground(TextRole::Accent)))))
+        #((!props.heading.is_empty()).then(||element!(Text(content:props.heading.clone(),color:theme.foreground(TextRole::Primary),weight:Weight::Bold))))
         #(children)
     })
 }

@@ -1,0 +1,18 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_dialog.rs b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_dialog.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+@@ -67,3 +67,3 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
+     let context_block=(!content.context.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+-        Text(content:"Context",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
++        Text(content:"Context",color:theme.foreground(TextRole::Accent))
+         #(content.context.into_iter().map(|line|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
+@@ -74,3 +74,3 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
+     let conventions_block=(!content.conventions.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+-        Text(content:"Input conventions",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
++        Text(content:"Input conventions",color:theme.foreground(TextRole::Accent))
+         #(content.conventions.into_iter().map(|row|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
+@@ -83,3 +83,3 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
+         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+-        Text(content:"Actions",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
++        Text(content:"Actions",color:theme.foreground(TextRole::Accent))
+         #(entries.into_iter().map(|(action,keys)| {let available=action.availability.is_available();let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {

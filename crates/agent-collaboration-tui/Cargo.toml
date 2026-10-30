@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["dep:serde", "dep:serde_json"]
+test-support = ["dep:serde", "dep:serde_json", "iocraft/unstable-output-streams"]
 
 [dependencies]
 iocraft.workspace = true
