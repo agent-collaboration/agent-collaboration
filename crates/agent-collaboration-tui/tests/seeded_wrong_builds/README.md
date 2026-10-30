@@ -77,6 +77,9 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `menu-no-widen.patch` | A requested narrow menu clips its title instead of expanding into available viewport space. |
 | `menu-auxiliary-starves-title.patch` | Unbounded key/reason columns force an action title to wrap at a narrow viewport. |
 | `menu-all-aliases.patch` | Menu paints the full alias list instead of the primary key; Help is the complete alias projection. |
+| `hover-reveals-partial-row.patch` | Hover selection scrolls to reveal a partially visible tall row. |
+| `hover-activates-row.patch` | Pointer motion invokes the selected row's action. |
+| `hover-enabled-by-default.patch` | A list that never opted in changes selection and focus on pointer motion. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
