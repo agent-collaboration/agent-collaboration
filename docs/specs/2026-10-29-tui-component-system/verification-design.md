@@ -6,7 +6,7 @@ The owner asked for this to be a lasting system rather than a one-off check: "ma
 
 ## The verification system
 
-Four observations decide every row. Each is described once here; the rows name them.
+Six observations decide every row. Each is described once here; the rows name them.
 
 ```mermaid
 flowchart LR
@@ -14,6 +14,7 @@ flowchart LR
     A["A · Crate interaction tests<br/>real crate controls in iocraft's<br/>mock-terminal render loop"]
     B["B · Compiled screen journeys<br/>agent-sessions and quota binaries<br/>driven through a PTY"]
     E["E · Lint gate<br/>consumer crates can't<br/>listen to the terminal"]
+    F["F · Public-entry journeys<br/>real agent-sessions entry to<br/>selected-machine client actions"]
   end
   subgraph once["One-time, with the owner"]
     C["C · Owner's Ghostty<br/>physical keys and mouse"]
@@ -57,7 +58,9 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 
 **D — before/after gallery.** *One-time per delivery.* B's original captures, before and after, go into a presentation-html gallery. The owner judges the look against the mocks and the dialog rules ("make sure html design is good"). Captures that show real session titles are never committed.
 
-**E — lint gate.** *Lasting.* The consumer crates (`agent-session-picker`, `codex-router-quota-tui`) get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`, `use_local_terminal_events` and `use_terminal_size`, which subscribes internally. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. The crate's InputOwner is the only caller, and it also owns the root's terminal-size observation. It lives in `agent-collaboration-tui`, whose own configuration doesn't carry the entry, so no suppression is needed. The gate's negative control runs under the actual workspace CI command, so the per-crate configuration is shown to be picked up. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
+**E — lint gate.** *Lasting.* The consumer crates (`agent-session-picker`, `codex-router-quota-tui`) and `agent-collaboration-tui` itself get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`, `use_local_terminal_events` (today used by `codex-router-tui`'s `dialog_interaction.rs` and `DialogButton`) and `use_terminal_size`, which subscribes internally. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. InputOwner's single subscription is the one sanctioned call site, marked with `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. It is a targeted boundary assertion, and `expect` fails if that call ever disappears. InputOwner also owns the root's terminal-size observation. Negative controls run under the actual workspace CI command, so each per-crate configuration is shown to be picked up. There are three, and each must fail: a consumer calling `use_terminal_events`; a consumer calling `use_local_terminal_events`; and a moved shared control (such as `DialogButton`) keeping its old local listener. A render-only control must pass. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
+
+**F — public-entry journeys.** *Lasting; the existing `verify-codex-router` routes.* These run the real `agent-sessions` executable from its argument entry, through inventory and dispatcher, to the selected-machine client actions: CLIENT-REAL-ENTRY in `tui-journeys.md`, plus the cases in `client-actions.md` and `claude-background.md`. They run on a signed debug Router and Host with an isolated debug root on Sunclaw, using Haiku. B's fixture calls the picker directly and can't see this path, so F carries the 10-17 obligations about real launches and actions. The Claude foreground and background launch modes from the Claude-fix PR join F there.
 
 ### Why this mix
 
@@ -85,7 +88,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U13 Combo boxes | Each dropdown rule is driven: filter, pick, cancel, highlight through reorders and removals, unavailable options. | — |
 | U14 Same building blocks everywhere | The same control kinds on the picker and the quota screen go through the same behaviour tests and are compared in the gallery. | — |
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
-| 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. | Whatever those journeys themselves list as unverified. |
+| 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. The real `agent-sessions` entry is driven through to Claude and Cursor actions on local and remote machines, and they still work. | Any case those routes haven't observed yet stays open, named, not waived. |
 
 ## Coverage rows
 
@@ -107,7 +110,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Target and journey:* as U1. B scenes "menu open", "dropdown open" and "dialog open" on both screens. Lasting.
 - *Reference:* R2 text.
 - *Passes when:*
-  - With any overlay open, every key and click aimed beneath leaves the beneath surface's state unchanged.
+  - With any overlay open, every key and click aimed beneath leaves the beneath surface's state unchanged, apart from R1's two named exceptions: Ctrl+C quits, and Ctrl+Enter with a dropdown open runs the dialog's primary action once.
   - In the parsed screen, every beneath cell outside the overlay's painted footprint (the overlay and its one-cell gutter) keeps its character, and its foreground and any background use the dimmed role.
   - In the redraw that closes the overlay, the beneath cells return to their normal roles.
 - *Wrong build that fails:* one that hides the beneath text (characters gone), or one that dims without blocking input (state changes).
@@ -125,7 +128,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - The first draw focuses the first list row.
   - At every completed frame, the published click map equals the target geometry independently observed in that frame's draw, clipped cells excluded.
   - After a resize or scroll, clicks on a target's new visible cells activate it, and clicks on its old cells don't.
-  - Clipping cases: a fully hidden target; a partly visible one clicked on its visible and its hidden half; nested and bordered viewports; horizontal and vertical clipping separately. Hidden cells never activate and visible cells always do, so a build that ignores every click fails too.
+  - Clipping cases: a fully hidden target; a partly visible one clicked on its visible and its hidden half, including a button inside a plain consumer `overflow: Hidden` view that no crate viewport owns; nested and bordered viewports; horizontal and vertical clipping separately; each again after a resize. Hidden cells never activate and visible cells always do, so a build that ignores every click fails too.
 - *Wrong build that fails:* one that builds the click map from `use_component_rect`'s one-frame-old value, so the map disagrees with the frame's draw. Or one that clips only against the crate's own viewports and misses a consumer's `overflow: Hidden` view.
 - *Reuses:* none.
 - *Unverified:* —
@@ -138,7 +141,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Passes when:*
   - On the picker, Enter in the list or the filter field opens Details and records no launch. Ctrl+Enter yields the open outcome for the exact source-qualified session without opening Details. Ctrl+Shift+Enter opens the fork confirmation.
   - Esc clears a non-empty search, then resets non-default filters, then changes nothing, and the process is still running.
-  - Ctrl+C reaches the app: the app's own Quit action is logged, then the process ends, from the main screen and with an overlay open, on both screens. Observed in B only, because A's mock loop has no Ctrl+C opt-in.
+  - Ctrl+C reaches the app: the app's own quit or cancel outcome is read back at its effect boundary (the picker's existing `SESSION_PICKER_OUTCOME` readback; quota's quit result), then the process ends. This holds from the main screen and with an overlay open, on both screens. Observed in B only, because A's mock loop has no Ctrl+C opt-in. A separate B case sends Ctrl+C during a quota reset commit: the process stays running, and no quit outcome appears until the guard allows it.
   - On quota, Q still quits, and each reset-workflow phase keeps its current quit behaviour: Ctrl+C does nothing while a reset is being committed, and before the commit it exits without committing (`reset_key_action`, protected by `quota_account_options_test.rs`).
 - *Wrong build that fails:* Enter launching (the change I wrongly wrote and reverted), or Esc quitting. Or a render loop without `.ignore_ctrl_c()`: iocraft then ends the loop itself before the app sees the key, so the process exits but no Quit action is logged, and the Committing guard is bypassed.
 - *Reuses:* `crates/agent-session-picker/src/session_picker/picker_details_navigation_tests.rs`. Read: it drives the real picker component with Enter, Ctrl+Enter and Ctrl+Shift+Enter and asserts the outcomes, including "ordinary Enter inspects; it cannot resume or create". It keeps the interaction real, with no mocked routing. Kept, migrated onto the crate's InputOwner.
@@ -281,22 +284,23 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Observation:* E; plus A's U6/U7 agreement tests on the real screens.
 - *Target and journey:* E in the existing clippy gate. Lasting.
 - *Reference:* R5 text.
-- *Passes when:* `clippy -D warnings` passes with `use_terminal_events`, `use_local_terminal_events` and `use_terminal_size` disallowed in both consumer crates. It fails on a deliberately added call, in a negative control run under the actual workspace CI command.
-- *Wrong build that fails:* a screen keeping its own `use_terminal_events` key chain, as `picker_input.rs` does today.
+- *Passes when:* `clippy -D warnings` passes with `use_terminal_events`, `use_local_terminal_events` and `use_terminal_size` disallowed in both consumer crates and in the component crate, which has one `expect`-marked call in InputOwner. Each of E's three negative controls fails under the actual workspace CI command.
+- *Wrong build that fails:* a screen keeping its own `use_terminal_events` key chain, as `picker_input.rs` does today. Or a shared control keeping a `use_local_terminal_events` listener, as `DialogButton` does today.
 - *Reuses:* the existing clippy gate.
 - *Unverified:* private routing by other means. It is caught only by its symptoms in U6/U7.
 
 **10-17 baseline · R16**
 - *Seam:* every migrated screen.
-- *Observation:* B, the existing journeys.
-- *Target and journey:* B. The existing compact Sessions and Quota tapes, Normal43 and the hard-case Quota journey, re-run on the rebuilt screens. Lasting.
+- *Observation:* B, the existing journeys, for everything the screens show and do. F, the existing public-entry journeys, for what B's fixture can't reach: the real `agent-sessions` argument entry, inventory, dispatcher and selected-machine client actions.
+- *Target and journey:* B: the existing compact Sessions and Quota tapes, Normal43 and the hard-case Quota journey, re-run on the rebuilt screens. F: the `verify-codex-router` public-entry routes, CLIENT-REAL-ENTRY (`tui-journeys.md`) and the cases in `client-actions.md` and `claude-background.md`, on a signed debug Router and Host with an isolated debug root on Sunclaw, using Haiku. Both lasting.
 - *Reference:* 10-17 Requirements, Specification and Verification Design; 2026-10-23 C1–C10.
 - *Passes when:* every existing checkpoint passes unchanged, except those whose expectation the owner changed:
   - dropdown choices;
   - Esc on quota;
   - the dialog rhythm.
   Those are re-baselined and listed. Identity and effect guards hold: source-qualified session refs, AccountId, one Start, and no automatic retry.
-- *Wrong build that fails:* a capability that silently disappears in the move, such as a Sessions filter or a quota reset step.
+  F passes when each 10-17/U15–U16 case still passes through the rebuilt picker. The cases are native Claude launch and receipt, managed Cursor and Claude actions on local and remote selected machines, exact captured identity, and the original arguments kept. Where an exact-source earlier result still applies, the delivery evidence says what it covers and why; where a case is unobserved, it stays open with this route, not waived.
+- *Wrong build that fails:* a capability that silently disappears in the move, such as a Sessions filter or a quota reset step. Or a picker whose components and fixture outcomes work while the public executable dispatches the wrong client, retargets the source, or no longer launches native Claude.
 - *Reuses:* the existing journeys and the PTY tests `compiled_quota_filters_real_stored_providers_and_disabled_intersections` and `compiled_sessions_atomic_paste_searches_literal_id_and_restores_terminal_modes`. Both are named in the journey reference as real PTY tests on the compiled fixture.
 - *Unverified:* whatever those journeys already list.
 
