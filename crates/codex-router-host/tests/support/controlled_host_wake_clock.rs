@@ -8,6 +8,14 @@ use tokio::sync::watch;
 use tracing::field::{Field, Visit};
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
+// A select can cancel advance at its yield point while Tokio time is paused.
+struct ResumeTokioTimeOnDrop;
+impl Drop for ResumeTokioTimeOnDrop {
+    fn drop(&mut self) {
+        tokio::time::resume();
+    }
+}
+
 pub(crate) struct ControlledHostWakeClock(Mutex<DateTime<Utc>>);
 impl ControlledHostWakeClock {
     pub(crate) fn new() -> Self {
@@ -25,8 +33,8 @@ impl ControlledHostWakeClock {
                 .ok_or("controlled wake clock advance out of range")?;
         }
         tokio::time::pause();
+        let _resume_tokio_time = ResumeTokioTimeOnDrop;
         tokio::time::advance(duration).await;
-        tokio::time::resume();
         Ok(())
     }
 }
@@ -195,4 +203,22 @@ pub(crate) async fn expire_management_after_arming<Waiting: Future>(
     tokio::time::timeout(Duration::from_secs(25), waiting)
         .await
         .map_err(Into::into)
+}
+
+#[tokio::test]
+async fn cancelled_wake_clock_advance_resumes_tokio_time() {
+    let clock = ControlledHostWakeClock::new();
+    let mut advancing = Box::pin(clock.advance(Duration::from_millis(250)));
+    std::future::poll_fn(|context| {
+        assert!(
+            advancing.as_mut().poll(context).is_pending(),
+            "the actual clock advance must reach its yielding cancellation point"
+        );
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(advancing);
+
+    tokio::time::pause();
+    tokio::time::resume();
 }

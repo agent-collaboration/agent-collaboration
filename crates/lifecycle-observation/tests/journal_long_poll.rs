@@ -1,7 +1,7 @@
 use collaboration_protocol::LifecycleObservation;
 use lifecycle_observation::{JournalPosition, LifecycleStore, ObservationJournal};
 use serde_json::json;
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
 #[tokio::test]
 async fn reader_wakes_after_commit_without_holding_writer_lock() {
@@ -40,12 +40,20 @@ async fn reader_wakes_after_commit_without_holding_writer_lock() {
     let target = observation.scope.endpoint.clone();
     let position = page.next;
     tokio::time::pause();
-    let empty = tokio::time::timeout(
-        Duration::from_secs(1),
-        store.read_wait(&target, position, 100, 10),
-    )
+    let empty_wait_milliseconds = 10;
+    let mut empty_read = Box::pin(store.read_wait(&target, position, 100, empty_wait_milliseconds));
+    std::future::poll_fn(|context| {
+        assert!(
+            empty_read.as_mut().poll(context).is_pending(),
+            "the empty read must yield after capturing its policy deadline"
+        );
+        std::task::Poll::Ready(())
+    })
     .await;
+    // Native I/O may still be pending; start its completion bound after resuming.
+    tokio::time::advance(Duration::from_millis(empty_wait_milliseconds)).await;
     tokio::time::resume();
+    let empty = tokio::time::timeout(Duration::from_secs(1), empty_read).await;
     let empty = empty
         .unwrap_or_else(|e| panic!("bounded wait: {e}"))
         .unwrap_or_else(|e| panic!("timeout page: {e}"));

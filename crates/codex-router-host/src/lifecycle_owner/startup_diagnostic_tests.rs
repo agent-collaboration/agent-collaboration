@@ -101,19 +101,33 @@ async fn failed_startup_trace(script: &str, virtual_readiness_deadline: bool) ->
     } else {
         None
     };
-    let outcome = super::start_router(&config, Some(&command))
-        .with_subscriber(subscriber)
-        .await;
-    if let Some((watcher, recording)) = child_recording {
-        tokio::time::resume();
-        let recorded = recording.await.expect("PID observation guard joins");
+    let startup = super::start_router(&config, Some(&command)).with_subscriber(subscriber);
+    tokio::pin!(startup);
+    let outcome = if let Some((watcher, mut recording)) = child_recording {
+        let (outcome, recorded) = tokio::select! {
+            biased;
+            outcome = &mut startup => {
+                tokio::time::resume();
+                (outcome, recording.await.expect("PID observation guard joins"))
+            }
+            recorded = &mut recording => {
+                let recorded = recorded.expect("PID observation guard joins");
+                // Hold startup across readiness expiry; native reaping needs running time.
+                tokio::time::advance(config.deadlines().router_start()).await;
+                tokio::time::resume();
+                (startup.await, recorded)
+            }
+        };
         watcher.abort();
         let _joined = watcher.await;
         assert!(
             recorded,
             "real child recorded its PID before virtual readiness expiry"
         );
-    }
+        outcome
+    } else {
+        startup.await
+    };
     assert!(matches!(outcome, Err(HostError::RouterUnavailable)));
     let child_pid = std::fs::read_to_string(root.path().join("child-pid"))
         .expect("fixture child ran")
