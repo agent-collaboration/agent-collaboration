@@ -1,5 +1,5 @@
 {
-  "stage": "in-progress; final0.1.118 full gates and before/after comparison pending",
+  "stage": "CI comparison green at819789a4; local cancellation red/green,all-feature Clippy,archive breakdown and final main/version integration pending",
   "base": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
   "workspaceVersion": "0.1.118",
   "nativeGatePackages": [
@@ -221,6 +221,228 @@
     "pollingDebt": "separately deferred; neither converted nor compliant"
   },
   "measurement": {
+    "method": "Complete CI workspace per-test comparison",
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18b08-6c7f-7ac1-8f85-af05c60ab45e",
+    "before": {
+      "run": 40826492254,
+      "head": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
+      "index": "main-881f-ci-outcomes.index.json"
+    },
+    "after": {
+      "run": 41004749636,
+      "head": "819789a4572ff6f874eb30e28136d295a400a66f",
+      "index": "pr194-repaired-ci-outcomes.index.json"
+    },
+    "comparison": "ci-baseline-vs-repaired.index.json",
+    "nameExplanations": "ci-repaired-name-explanations.jsonl",
+    "recording": "Nextest --final-status-level all; complete final outcomes after the chosen workspace Summary",
+    "otherPhases": "All raw source phases retained; separate quota80 and default-port1 phases not conflated with workspace",
+    "compileTiming": "Not a cold-compile comparison"
+  },
+  "unverified": [
+    "Local cancellation old-behavior red then exact restored green; initial compile interrupted before tests at30GiBfloor",
+    "Scoped all-target/all-feature Clippy for the repaired files after explicit local resume",
+    "One authorized archive stage breakdown; CI PASS39.804s does not provide the requested breakdown",
+    "Final main/version119 integration and its required release check/current-head CI",
+    "Ignored/manual disposable Host matrix journey; staging/live-provider/cross-machine claims remain outside obtained proof",
+    "Final-head Researcher PR body,Lead independent review and current-head comments/threads/readiness; no merge authority"
+  ],
+  "sourceProofHead": "819789a4572ff6f874eb30e28136d295a400a66f",
+  "versionAssignment": {
+    "current": "0.1.118",
+    "target": "0.1.119",
+    "order": "PR193 released117;PR195 Claude fix118;PR194119",
+    "bump": "Deferred until Lead says next to merge",
+    "mergeMain": "cb01dffd3e60b29e814495fd676844690b07e313 at next push"
+  },
+  "ciComparison": {
+    "run": 41004749636,
+    "conclusion": "success",
+    "head": "819789a4572ff6f874eb30e28136d295a400a66f",
+    "before": {
+      "path": "tmp/worker/main-881f-ci-outcomes.index.json",
+      "head": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
+      "present": 5824,
+      "counts": {
+        "pass": 5728,
+        "fail": 0,
+        "skip": 96
+      },
+      "suiteSeconds": 2414.835
+    },
+    "after": {
+      "path": "tmp/worker/pr194-repaired-ci-outcomes.index.json",
+      "head": "819789a4572ff6f874eb30e28136d295a400a66f",
+      "present": 5838,
+      "counts": {
+        "pass": 5742,
+        "fail": 0,
+        "skip": 96
+      },
+      "suiteSeconds": 2008.539
+    },
+    "coverage": "Every binary/test in the union; source changes must explain each added/removed identity separately",
+    "union": 5841,
+    "totals": {
+      "retained": 5821,
+      "added": 17,
+      "removed": 3,
+      "sameStatus": 5821,
+      "changedStatus": 0
+    },
+    "statusMatrix": {
+      "pass->pass": 5725,
+      "skip->skip": 96
+    },
+    "parts": [
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-1.jsonl",
+        "records": 800,
+        "sha256": "a87b97a094748e9a30e4f147c969422d9b04fd6f0e4f7d1f67a772cd28e83837"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-2.jsonl",
+        "records": 800,
+        "sha256": "014a3266cd5981c277fa4a0903aa3dad08e0bc618cbc08925b185bbb61f37849"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-3.jsonl",
+        "records": 800,
+        "sha256": "16bb5b9ee68e27bb10d95711a71350f1a44c0e8c5af34939816a5bc01472147c"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-4.jsonl",
+        "records": 800,
+        "sha256": "d940cc8e6aa7c9779d0b6b19a6c8790576148ea79bf5c1533e00b8e835e1c25e"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-5.jsonl",
+        "records": 800,
+        "sha256": "17b28de9d02f5107a1de22e216d5488a7be8b8396bb8baf5c022f37ee84ef0ee"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-6.jsonl",
+        "records": 800,
+        "sha256": "80765e88a040702089d3f8dd72183378a0413ad8d4770bb2b5dc761ec5c3172a"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-7.jsonl",
+        "records": 800,
+        "sha256": "999d4aa1da69843516e829c9a8ed6489cd483e5455c2b2d710a0035d1aa497af"
+      },
+      {
+        "path": "tmp/worker/ci-baseline-vs-repaired.part-8.jsonl",
+        "records": 241,
+        "sha256": "1fd1960f24b9bb983f0b6ab4d9450c0225bed9d685297e36030fe49fe634f8fa"
+      }
+    ],
+    "createdAt": "2026-10-30T05:50:30.708Z",
+    "sourceExplanations": {
+      "path": "tmp/worker/ci-repaired-name-explanations.jsonl",
+      "rows": 20,
+      "sha256": "7cafa635f029ce28382e8a1c88c5a3e5bc5e42d6a2bf474f82dcea42307b21c9"
+    },
+    "commandsIdentical": true,
+    "environment": "ubuntu-26.04 image20261025.179.1,Rust1.98.1,nextest0.9.137",
+    "qualification": "Observed CI workspace suite wall time; no cold-compile or causal speed attribution"
+  },
+  "repairCI": {
+    "run": 41004749636,
+    "allThreeRepairsPass": true,
+    "cancellationRegression": {
+      "pass": true,
+      "seconds": 0.061
+    },
+    "nativeStartup": {
+      "earlyExitPass": true,
+      "signalExitPass": true,
+      "liveNonlistenerPass": true
+    },
+    "journalLongPoll": {
+      "pass": true,
+      "seconds": 0.042
+    },
+    "remoteWake": {
+      "pass": true,
+      "seconds": 16.572
+    },
+    "archiveCLI": {
+      "pass": true,
+      "seconds": 39.804,
+      "qualification": "No stage breakdown measured"
+    }
+  },
+  "currentCIQuality": {
+    "run": 41004749636,
+    "allActiveJobs": "success",
+    "format": "pass",
+    "workspaceDefaultFeatureAllTargetClippy": "pass",
+    "moduleCycles": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 22,
+      "suiteSeconds": 1269.904
+    },
+    "rustSizeGate": {
+      "files": 3718,
+      "maximumPhysicalLines": 1000
+    },
+    "localE2EPhases": [
+      {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "suiteSeconds": 63.939
+      },
+      {
+        "passed": 54,
+        "failed": 0,
+        "skipped": 1,
+        "suiteSeconds": 778.496
+      },
+      {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "suiteSeconds": 38.772
+      }
+    ]
+  },
+  "localCancellation": {
+    "at": "2026-10-30T05:11:33.753Z",
+    "head": "819789a4572ff6f874eb30e28136d295a400a66f",
+    "path": "crates/codex-router-host/tests/support/controlled_host_wake_clock.rs",
+    "originalSha256": "6233eda0582fc0e489ff64566202b0c3bdd759ccde3c2c21e913b15f43b1a069",
+    "mutantSha256": "d248f2f8cf5301e495446f824b45a6298160bd7460d3dafdd28a30953b9c138d",
+    "mutation": "Restore pre-repair explicit resume after awaited advance, preserving permanent regression",
+    "red": {
+      "status": "unrun",
+      "commandExit": 130,
+      "testsExecuted": 0,
+      "reason": "Disk-floor guard interrupted compilation at32146333696bytes free before any Nextest Starting or Summary",
+      "log": "cancellation-red.log-receipt.json",
+      "disk": "cancellation-red-disk.json"
+    },
+    "green": {
+      "status": "unrun",
+      "reason": "Red never executed; all local Cargo held"
+    },
+    "restoration": {
+      "at": "2026-10-30T05:26:47.090Z",
+      "sha256": "6233eda0582fc0e489ff64566202b0c3bdd759ccde3c2c21e913b15f43b1a069",
+      "exact": true
+    }
+  },
+  "activeHold": {
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18b58-2167-7f10-b5c8-83e4d9ebb52d",
+    "scope": "All local builds until explicit Lead resume",
+    "pending": [
+      "cancellation old-behavior red and restored green",
+      "scoped all-target all-feature Clippy for repaired files",
+      "one archive stage breakdown with temporary logging removed afterward"
+    ]
+  },
+  "retiredLocalMeasurement": {
     "script": "tmp/worker/run-native-package-gate.sh",
     "scriptSha256": "66ceee7ecbfa1f8f9e82a8848e24ac3027487cbe0c57a407cd6371dda887a7f0",
     "packageListSha256": "1f68ee9a627407f452a418010e39f9682a491e34c42dc55d39ec89bbbd70a5da",
@@ -241,13 +463,7 @@
       "observedFreeBeforeGiB": 103,
       "observedFreeAfterGiB": 114,
       "consumers": 0
-    }
-  },
-  "unverified": [
-    "final0.1.118 full native suite, Clippy/release/module-cycle gates",
-    "exact same-worktree baseline/after comparison",
-    "ignored/manual disposable Host matrix journey",
-    "staging/live provider/cross-machine and production replacement",
-    "PR/CI and Lead independent review"
-  ]
+    },
+    "status": "Superseded by explicit Lead01a18b08 CI method; no valid local baseline outcomes; retained history only"
+  }
 }
