@@ -96,6 +96,14 @@ export function targetCell(
 		throw new Error('drawn target missing or ambiguous: ' + label);
 	return matches[0];
 }
+export function detailsActionCell(
+	grid: TerminalGrid,
+	rowKind: 'codex' | 'native-claude',
+	action: 'resume' | 'fork',
+): { readonly column: number; readonly row: number } {
+	const label = action === 'fork' ? 'Fork' : rowKind === 'codex' ? 'Resume' : 'Open';
+	return targetCell(grid, 'Session details', label);
+}
 async function newStart(
 	plan: InputJourneyPlan,
 	keys: KeyProtocol,
@@ -277,11 +285,9 @@ async function pickerDirectAction(
 					'Details fallback',
 					(grid) => findDialog(grid, 'Session details') !== null,
 				);
-				const cell = targetCell(
-					driver.grid(),
-					'Session details',
-					action === 'resume' ? 'Open' : 'Fork',
-				);
+				// provider_filter_storyboard_request selects the native Codex Alpha
+				// record first; its title and UUID also bind the outcome below.
+				const cell = detailsActionCell(driver.grid(), 'codex', action);
 				await driver.send(
 					Buffer.from(
 						`\x1b[<0;${cell.column + 1};${cell.row + 1}M\x1b[<0;${cell.column + 1};${cell.row + 1}m`,

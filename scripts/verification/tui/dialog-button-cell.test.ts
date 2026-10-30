@@ -1,7 +1,7 @@
 /** Button-role oracle over controlled VT data, not product behavior. */
 import { expect, test } from 'vitest';
 
-import { targetCell } from './input-journeys.ts';
+import { detailsActionCell, targetCell } from './input-journeys.ts';
 import { createTerminalCore, snapshotGrid } from './terminal-grid.ts';
 import type { TerminalGrid } from './terminal-grid.ts';
 async function drawnDialog(
@@ -33,4 +33,24 @@ test('hint-only or duplicate real button roles cannot supply a click target', as
 	const duplicate = await drawnDialog('\x1b[93m', '\x1b[37m', true);
 	expect(() => targetCell(hintOnly, 'New session', 'Start')).toThrow();
 	expect(() => targetCell(duplicate, 'New session', 'Start')).toThrow();
+});
+
+test.each([
+	['codex', 'Resume'],
+	['native-claude', 'Open'],
+] as const)('Details resume uses the %s row action %s', async (rowKind, label) => {
+	const core = await createTerminalCore(120, 36);
+	try {
+		core.writeString(
+			`\x1b[2;2H┌──────────────────────────────────────────────────────┐\x1b[3;2H│ Session details                                      │\x1b[5;2H│ \x1b[93m● ${label}\x1b[0m\x1b[8;2H└──────────────────────────────────────────────────────┘`,
+		);
+		const grid = snapshotGrid(core);
+		expect(detailsActionCell(grid, rowKind, 'resume')).toEqual({ column: 5, row: 4 });
+		expect(() =>
+			detailsActionCell(grid, rowKind === 'codex' ? 'native-claude' : 'codex', 'resume'),
+		).toThrow();
+		expect(() => detailsActionCell(grid, rowKind, 'fork')).toThrow();
+	} finally {
+		core.dispose();
+	}
 });
