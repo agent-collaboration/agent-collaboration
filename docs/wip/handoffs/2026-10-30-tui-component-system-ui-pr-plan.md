@@ -79,7 +79,7 @@ Proof-layer names: project silent. The plan uses the Verification Design's layer
 ## Mechanism choices made here (recorded, reversible)
 
 - **Layer A's frame reader.** This is a test-only parser in `agent-collaboration-tui`'s test support. It reads `Canvas::write_ansi` output: SGR, printable text with `unicode-width` 0.2 widths, and CRLF, ignoring the trailing CRLF. It **rejects any other escape sequence**, so an unknown sequence fails loudly instead of passing. It is chosen over a new dev-dependency because `write_ansi`'s output is a small closed grammar, and a new crate would need `cargo deny`/`cargo audit` admission for a few dozen lines of parsing.
-- **Verification languages.** TypeScript and Rust only (owner). The B oracle is a headless emulator's cell grid, not screenshot OCR. Swift, VHS tapes and shell runners leave the TUI journeys in S0.
+- **Verification languages.** TypeScript and Rust only (owner). The B oracle is wterm's (libghostty) cell grid, not screenshot OCR; no xterm.js (owner). Swift, VHS tapes and shell runners leave the TUI journeys in S0.
 - **Layer E's sanctioned call site.** It is `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. This is the one marked boundary; there is no other lint suppression.
 - **Old components are removed in S8**, after both consumers have moved. They are not removed in S4, because the consumers still use them until then. Nothing ships with two input paths, because all of this is one PR.
 - **Module-cycle ratchet across the rename (S1).** If the baseline lists modules by crate name, the edge set before and after must be identical apart from the name. Prove it with a sorted diff of edges under the name mapping. Any other change stops S1.
@@ -92,10 +92,10 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
 
 - **Covers:** the Verification Design's "Journeys still needed" (B), its languages rule, and the baseline half of "Build order".
 - **First, the grid oracle (owner: "only use ts or rust").**
-  - Qualify a headless terminal emulator: `@xterm/headless` by default, Rust `vt100` as the fallback. Fixtures with known grids cover named and 24-bit colours, wide glyphs (📂, ✉️, 界, including at overlay-left−1), the kitty query and reply, and resize. Record the choice and why.
+  - Qualify wterm as the headless emulator (owner: no xterm.js): `@wterm/core` `TerminalCore` with the `@wterm/ghostty` (libghostty) core, at exact pinned versions. Fixtures with known grids cover named and 24-bit colours, wide glyphs (📂, ✉️, 界, including at overlay-left−1), the kitty query and reply, and resize. Record the choice and why.
   - Feed the Rust PTY driver's bytes into it.
   - Port the existing scene checks in `scene-contracts.ts` and the Swift `verify_screen_*.swift` checks to grid assertions in TypeScript.
-  - Add the original-image route in TypeScript: the exact PTY bytes rendered by xterm.js in headless Chrome over the DevTools protocol (no Playwright), saved as original PNGs bound to source, build, viewport and checkpoint. This replaces VHS and ttyd. Show one checkpoint matching its old VHS original's content at the same viewport.
+  - Add the original-image route in TypeScript: the exact PTY bytes rendered by `@wterm/dom` on the same libghostty core in headless Chrome over the DevTools protocol (no Playwright), saved as original PNGs bound to source, build, viewport and checkpoint. This replaces VHS and ttyd. Show one checkpoint matching its old VHS original's content at the same viewport.
   - Remove the 13 Swift files, the VHS tapes and the `run_capture.sh` / `run_provider_filter_capture.sh` runners from `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/`.
   - Show that every ported journey still fails on its existing wrong-scene and blank controls.
 - **Writes:**
