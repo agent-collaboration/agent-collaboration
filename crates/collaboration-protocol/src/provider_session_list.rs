@@ -129,6 +129,36 @@ pub enum ClaudeCodeInteractiveStatus {
     Other,
 }
 
+#[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeClaudePeerObservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<ProviderWorkingDirectory>,
+    pub name: Option<String>,
+    pub status: ClaudeCodeInteractiveStatus,
+    pub started_at: i64,
+    pub updated_at: i64,
+    pub status_updated_at: Option<i64>,
+    pub kind: String,
+    pub entrypoint: String,
+}
+
+#[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeClaudeSessionConflict {
+    pub target: SessionRef,
+    pub reason: crate::NativeClaudeConflictReason,
+}
+
+#[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeClaudeInventoryCoverage {
+    pub peer: crate::NativeClaudeInventoryPart,
+    pub background: crate::NativeClaudeInventoryPart,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<NativeClaudeSessionConflict>,
+}
+
 #[derive(JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSessionListResult {

@@ -139,6 +139,11 @@ pub enum ProviderInventoryFailure {
     /// The request was refused before any read; the message names the correction.
     #[error("{0}")]
     InvalidRequest(&'static str),
+    #[error("Invalid native Claude inventory")]
+    InvalidNativeInventory {
+        inventory_source: collaboration_protocol::NativeInventorySource,
+        reason: collaboration_protocol::NativeInventoryInvalidReason,
+    },
     /// The listing could not be produced: `{kind, stage: discovery, message}`.
     #[error("Provider session inventory unavailable")]
     Unavailable(ProviderInventoryFailureKind),
@@ -164,6 +169,12 @@ impl serde::Serialize for ProviderInventoryFailure {
         let message = self.to_string();
         let payload = match self {
             Self::InvalidRequest(_) => json!({"kind":"invalidRequest","message":message}),
+            Self::InvalidNativeInventory {
+                inventory_source,
+                reason,
+            } => {
+                json!({"kind":"invalidNativeInventory","stage":"discovery","source":inventory_source,"reason":reason,"message":message})
+            }
             Self::Unavailable(kind) => {
                 json!({"kind":kind,"stage":"discovery","message":message})
             }
@@ -209,7 +220,9 @@ impl CollaborationRejection for NativeSessionFailure {
 impl CollaborationRejection for ProviderInventoryFailure {
     fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
         match self {
-            Self::InvalidRequest(_) => Some(CollaborationRejectionReason::InvalidShape),
+            Self::InvalidRequest(_) | Self::InvalidNativeInventory { .. } => {
+                Some(CollaborationRejectionReason::InvalidShape)
+            }
             // A page too large for its response budget is not the API's concurrency limit.
             Self::Unavailable(kind) => match kind {
                 ProviderInventoryFailureKind::WrongService
@@ -226,6 +239,11 @@ impl CollaborationRejection for ProviderInventoryFailure {
             Self::InvalidRequest(message) => {
                 PublishedRejection::bare(PublishedRejection::INVALID_PARAMS, *message)
             }
+            Self::InvalidNativeInventory { .. } => PublishedRejection::typed(
+                PublishedRejection::INVALID_PARAMS,
+                self.to_string(),
+                self,
+            ),
             Self::Unavailable(_) => PublishedRejection::typed(
                 PublishedRejection::OPERATION_FAILED,
                 self.to_string(),

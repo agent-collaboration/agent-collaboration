@@ -214,6 +214,38 @@ pub async fn submit_native_source(
         service_id: profile.service_id.clone(),
         service_epoch: service_epoch.clone(),
     };
+    if let SourceNativeClaudeAction::Resume { target, .. } = &action {
+        // This reply comes from the configured executor, not the running Host's
+        // version or a cached UI observation. Older executors must never receive
+        // a resume they could implement by starting a copy.
+        let reply =
+            super::source_ssh_transport::read_source(profile, SourceOperation::ClientInventory)
+                .await?;
+        let SourceReply::ClientInventory {
+            inventory,
+            native_claude,
+        } = reply
+        else {
+            return Err(SourceReadError::InvalidReply);
+        };
+        let membership = crate::source_inventory_binding::SourceInventoryBinding::from_inventory(
+            &profile.service_id,
+            &inventory,
+        )
+        .map_err(|_| SourceReadError::InvalidReply)?;
+        if membership.service_epoch != service_epoch {
+            return Err(SourceReadError::Rejected(SourceRejection::StaleBinding));
+        }
+        if membership.native_claude_endpoint.as_ref() != Some(&target.endpoint) {
+            return Err(SourceReadError::InvalidReply);
+        }
+        if !matches!(native_claude,
+            super::source_ssh_protocol::SourceNativeLaunchAvailability::Ready { capabilities }
+            if capabilities.contains(&super::source_ssh_protocol::SourceNativeClaudeCapability::GuardedResume)
+        ) {
+            return Err(SourceReadError::UnguardedNativeResume);
+        }
+    }
     let reply = super::source_ssh_transport::exchange_source(
         profile,
         SourceOperation::NativeClaude {

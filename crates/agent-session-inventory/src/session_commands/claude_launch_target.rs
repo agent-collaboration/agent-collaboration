@@ -1,6 +1,7 @@
 //! Routed Claude Code process launch and transcript inventory.
 
 use super::SessionsCommandError;
+use super::claude_transcript_inventory::list_stored_transcript_records;
 use collaboration_client::protocol::{
     EndpointRef, NativeSessionScope, NativeSessionSource, NativeSessionView,
     ProviderSessionListParams, ProviderSessionSummary, ServiceManifest,
@@ -40,14 +41,52 @@ pub struct ClaudeLaunchTarget {
     claude_projects_directory: Option<PathBuf>,
 }
 
+#[derive(Clone)]
 pub struct RoutedClaudeEnvironment {
     base_url: String,
     auth_token: String,
 }
 
-struct ActiveClaudeInventory {
-    records: Vec<serde_json::Value>,
-    notice: Option<String>,
+pub(crate) struct NativeClaudeInventory {
+    pub(crate) sessions: Vec<ProviderSessionSummary>,
+    pub(crate) read_notice: Option<String>,
+    pub(crate) conflicts: Vec<collaboration_client::protocol::NativeClaudeSessionConflict>,
+}
+
+impl NativeClaudeInventory {
+    fn listing_notice(&self) -> Option<String> {
+        let mut notices: Vec<String> = self.read_notice.iter().cloned().collect();
+        notices.extend(self.conflicts.iter().map(|conflict| {
+            format!(
+                "{} / {}: Session {}: {}",
+                String::from(conflict.target.endpoint.service_id.clone()),
+                String::from(conflict.target.endpoint.endpoint_id.clone()),
+                String::from(conflict.target.session_id.clone()),
+                conflict.reason.description()
+            )
+        }));
+        (!notices.is_empty()).then(|| notices.join("; "))
+    }
+
+    fn into_records(self) -> Result<Vec<serde_json::Value>, SessionsCommandError> {
+        self.sessions
+            .into_iter()
+            .filter_map(|session| {
+                let conflict = self
+                    .conflicts
+                    .iter()
+                    .find(|conflict| &conflict.target == session.target());
+                active_claude_session_record(session).map(|mut record| {
+                    if let Some(conflict) = conflict {
+                        let reason = serde_json::to_value(&conflict.reason).map_err(SessionsCommandError::Json)?;
+                        record.as_object_mut().ok_or_else(|| SessionsCommandError::ClaudeLaunch("Native Claude inventory is invalid. Refresh the source and try again.".to_owned()))?
+                            .insert("nativeConflict".to_owned(), reason);
+                    }
+                    Ok(record)
+                })
+            })
+            .collect()
+    }
 }
 
 impl ClaudeLaunchTarget {
@@ -77,7 +116,11 @@ impl ClaudeLaunchTarget {
             };
         }
         match self.routed_environment().await {
-            Ok(_) => SourceNativeLaunchAvailability::Ready,
+            Ok(_) => SourceNativeLaunchAvailability::Ready {
+                capabilities: vec![
+                    super::source_ssh_protocol::SourceNativeClaudeCapability::GuardedResume,
+                ],
+            },
             Err(error) => SourceNativeLaunchAvailability::Unavailable {
                 message: error.to_string(),
             },
@@ -149,8 +192,14 @@ impl ClaudeLaunchTarget {
         limit: usize,
     ) -> Result<(Vec<serde_json::Value>, Option<String>), SessionsCommandError> {
         let stored_records = self.stored_transcript_records().await?;
-        let (active_records, active_error) = match self.active_session_records(limit).await {
-            Ok(inventory) => (inventory.records, inventory.notice),
+        let (active_records, active_error) = match self
+            .native_session_inventory(NativeSessionView::Active, limit)
+            .await
+        {
+            Ok(inventory) => {
+                let notice = inventory.listing_notice();
+                (inventory.into_records()?, notice)
+            }
             Err(error) => (Vec::new(), Some(error)),
         };
         let mut records = active_records;
@@ -160,11 +209,32 @@ impl ClaudeLaunchTarget {
         Ok((records, active_error))
     }
 
-    pub async fn resume_working_directory(&self, session_id: &str) -> Option<PathBuf> {
-        let Ok((records, _active_error)) = self.session_records(usize::MAX).await else {
-            return None;
+    pub async fn resume_working_directory(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<PathBuf>, SessionsCommandError> {
+        let Ok(inventory) = self
+            .native_session_inventory(NativeSessionView::Active, usize::MAX)
+            .await
+        else {
+            return Ok(None);
         };
-        recorded_working_directory(&records, session_id)
+        if let Some(conflict) = inventory
+            .conflicts
+            .iter()
+            .find(|conflict| String::from(conflict.target.session_id.clone()) == session_id)
+        {
+            return Err(SessionsCommandError::ClaudeLaunch(format!(
+                "Native Claude {} / {}, session {session_id}: {}",
+                String::from(conflict.target.endpoint.service_id.clone()),
+                String::from(conflict.target.endpoint.endpoint_id.clone()),
+                conflict.reason.description()
+            )));
+        }
+        Ok(recorded_working_directory(
+            &inventory.into_records()?,
+            session_id,
+        ))
     }
 
     pub fn command(
@@ -181,6 +251,40 @@ impl ClaudeLaunchTarget {
             .env(ANTHROPIC_AUTH_TOKEN_ENV, environment.auth_token);
         if let Some(working_directory) = working_directory {
             command.current_dir(working_directory);
+        }
+        command
+    }
+
+    pub fn attach_command(
+        &self,
+        job_handle: &collaboration_client::protocol::NativeClaudeJobHandle,
+        working_directory: Option<&Path>,
+        environment: RoutedClaudeEnvironment,
+    ) -> Command {
+        let mut command = Command::new("claude");
+        command
+            .args(["attach", &String::from(job_handle.clone())])
+            .env(ANTHROPIC_BASE_URL_ENV, environment.base_url)
+            .env(ANTHROPIC_AUTH_TOKEN_ENV, environment.auth_token);
+        if let Some(directory) = working_directory {
+            command.current_dir(directory);
+        }
+        command
+    }
+
+    pub fn foreground_command(
+        &self,
+        arguments: &[OsString],
+        working_directory: Option<&Path>,
+        environment: RoutedClaudeEnvironment,
+    ) -> Command {
+        let mut command = Command::new("claude");
+        command
+            .args(arguments)
+            .env(ANTHROPIC_BASE_URL_ENV, environment.base_url)
+            .env(ANTHROPIC_AUTH_TOKEN_ENV, environment.auth_token);
+        if let Some(directory) = working_directory {
+            command.current_dir(directory);
         }
         command
     }
@@ -249,7 +353,11 @@ impl ClaudeLaunchTarget {
             .map_err(SessionsCommandError::ClaudeLaunch)
     }
 
-    async fn active_session_records(&self, limit: usize) -> Result<ActiveClaudeInventory, String> {
+    pub(crate) async fn native_session_inventory(
+        &self,
+        view: NativeSessionView,
+        limit: usize,
+    ) -> Result<NativeClaudeInventory, String> {
         let client = collaboration_client::CollaborationClient::connect(
             &self.service_directory,
             "agent-sessions-claude-list",
@@ -264,15 +372,16 @@ impl ClaudeLaunchTarget {
             service_id: client.identity().service_id.clone(),
             endpoint_id,
         };
-        let mut records = Vec::new();
+        let mut sessions = Vec::new();
         let mut notice = None;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
-        while records.len() < limit {
+        let mut conflicts = Vec::new();
+        while sessions.len() < limit {
             let page = client
                 .list_provider_sessions(ProviderSessionListParams {
                     endpoint: endpoint.clone(),
-                    view: NativeSessionView::Active,
+                    view,
                     scope: NativeSessionScope::Any,
                     source: NativeSessionSource::Interactive,
                     query: None,
@@ -280,14 +389,36 @@ impl ClaudeLaunchTarget {
                     cursor: cursor.clone(),
                 })
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| {
+                    super::source_inventory_failure::InventoryReadFailure::from_client(&error)
+                        .into_rejection()
+                        .to_string()
+                })?;
+            if page.native_coverage.as_ref().is_some_and(|coverage| {
+                coverage
+                    .conflicts
+                    .iter()
+                    .any(|conflict| conflict.target.endpoint != endpoint)
+            }) {
+                return Err("invalid native conflict endpoint".to_owned());
+            }
             let coverage = crate::picker_runtime_status::NativeLiveReadState::from_observation(
-                crate::picker_runtime_status::NativeCatalogueView::Loaded,
+                if matches!(view, NativeSessionView::Stored) {
+                    crate::picker_runtime_status::NativeCatalogueView::Stored
+                } else {
+                    crate::picker_runtime_status::NativeCatalogueView::Loaded
+                },
                 page.native_coverage,
             )
             .map_err(str::to_owned)?;
-            if coverage.is_incomplete() {
-                notice = Some("Native Claude inventory incomplete".to_owned());
+            if !coverage.reads_are_complete() {
+                let warnings = coverage.read_warning_lines();
+                notice = Some(format!(
+                    "{} / {}: {}",
+                    String::from(endpoint.service_id.clone()),
+                    String::from(endpoint.endpoint_id.clone()),
+                    warnings.join("; ")
+                ));
             }
             if page.endpoint != endpoint
                 || page.sessions.iter().any(|summary| {
@@ -297,11 +428,14 @@ impl ClaudeLaunchTarget {
                 return Err("invalid native Claude inventory".to_owned());
             }
             for session in page.sessions {
-                if let Some(record) = active_claude_session_record(session) {
-                    records.push(record);
-                    if records.len() >= limit {
-                        break;
-                    }
+                sessions.push(session);
+                if sessions.len() >= limit {
+                    break;
+                }
+            }
+            for conflict in coverage.conflicts() {
+                if !conflicts.contains(conflict) {
+                    conflicts.push(conflict.clone());
                 }
             }
             let Some(next_cursor) = page.next_cursor else {
@@ -312,7 +446,11 @@ impl ClaudeLaunchTarget {
             }
             cursor = Some(next_cursor);
         }
-        Ok(ActiveClaudeInventory { records, notice })
+        Ok(NativeClaudeInventory {
+            sessions,
+            read_notice: notice,
+            conflicts,
+        })
     }
 }
 
@@ -357,6 +495,7 @@ fn active_claude_session_record(session: ProviderSessionSummary) -> Option<serde
                 "source":"active","sessionId":String::from(target.session_id),
                 "jobHandle":String::from(job_handle),"backgroundState":state,
                 "name":peer_name.or(name),"workingDirectory":String::from(working_directory),
+                "liveWorkingDirectory":peer.as_ref().and_then(|peer|peer.working_directory.clone()).map(String::from),
                 "status":peer.as_ref().map(|peer|peer.status).or(status),
                 "startedAtUnixSeconds":peer.as_ref().map_or(started_at,|peer|peer.started_at),
                 "updatedAtUnixSeconds":peer.as_ref().map(|peer|peer.updated_at),
@@ -448,95 +587,24 @@ fn is_successful_http_status_line(status_line: &[u8]) -> bool {
         && fields.next() == Some("200")
 }
 
-fn list_stored_transcript_records(
-    projects_directory: &Path,
-) -> Result<Vec<serde_json::Value>, String> {
-    let project_directories = match fs::read_dir(projects_directory) {
-        Ok(project_directories) => project_directories,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(format!("Claude projects directory unavailable: {error}")),
-    };
-    let mut records = Vec::new();
-    for project_entry in project_directories {
-        let project_entry =
-            project_entry.map_err(|error| format!("Claude project entry unavailable: {error}"))?;
-        if !project_entry
-            .file_type()
-            .map_err(|error| format!("Claude project entry metadata unavailable: {error}"))?
-            .is_dir()
-        {
-            continue;
-        }
-        let project_name = project_entry.file_name().to_string_lossy().into_owned();
-        for transcript_entry in fs::read_dir(project_entry.path())
-            .map_err(|error| format!("Claude project transcripts unavailable: {error}"))?
-        {
-            let transcript_entry = transcript_entry
-                .map_err(|error| format!("Claude transcript entry unavailable: {error}"))?;
-            if !transcript_entry
-                .file_type()
-                .map_err(|error| format!("Claude transcript metadata unavailable: {error}"))?
-                .is_file()
-            {
-                continue;
-            }
-            let transcript_path = transcript_entry.path();
-            if transcript_path
-                .extension()
-                .and_then(|extension| extension.to_str())
-                != Some("jsonl")
-            {
-                continue;
-            }
-            let Some(session_id) = transcript_path.file_stem().and_then(|stem| stem.to_str())
-            else {
-                continue;
-            };
-            if !is_canonical_session_uuid(session_id) {
-                continue;
-            }
-            let modified_at_unix_seconds = transcript_entry
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.modified().ok())
-                .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
-                .and_then(|duration| i64::try_from(duration.as_secs()).ok());
-            records.push(serde_json::json!({
-                "source": "storedTranscript",
-                "sessionId": session_id,
-                "project": project_name,
-                "updatedAtUnixSeconds": modified_at_unix_seconds,
-            }));
-        }
-    }
-    Ok(records)
-}
-
 fn recorded_working_directory(records: &[serde_json::Value], session_id: &str) -> Option<PathBuf> {
     records
         .iter()
         .filter(|record| {
             record.get("sessionId").and_then(serde_json::Value::as_str) == Some(session_id)
+                && record
+                    .get("nativeConflict")
+                    .is_none_or(serde_json::Value::is_null)
         })
         .find_map(|record| {
             record
-                .get("workingDirectory")
+                .get("liveWorkingDirectory")
+                .filter(|value| !value.is_null())
+                .or_else(|| record.get("workingDirectory"))
                 .and_then(serde_json::Value::as_str)
                 .map(PathBuf::from)
                 .filter(|working_directory| working_directory.is_absolute())
         })
-}
-
-fn is_canonical_session_uuid(session_id: &str) -> bool {
-    let bytes = session_id.as_bytes();
-    bytes.len() == 36
-        && [8, 13, 18, 23]
-            .into_iter()
-            .all(|index| bytes.get(index) == Some(&b'-'))
-        && bytes
-            .iter()
-            .enumerate()
-            .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
 }
 
 fn record_updated_at_seconds(record: &serde_json::Value) -> i64 {

@@ -257,7 +257,7 @@ impl StoredSourceContinuation {
             SessionsSource::Interactive => NativeSessionSource::Interactive,
             SessionsSource::Subagents => NativeSessionSource::Subagents,
         };
-        let (rows, complete) = match partition {
+        let (mut rows, complete) = match partition {
             StoredReadPartition::NativeCodex(_) => {
                 if self.native_pager.is_none() {
                     self.native_pager = Some(
@@ -334,9 +334,7 @@ impl StoredSourceContinuation {
                     Err(super::source_inventory_failure::InventoryReadFailure::Unavailable(_)) => {
                         return Err(SourceInventoryRejection::SourceUnavailable);
                     }
-                    Err(super::source_inventory_failure::InventoryReadFailure::Invalid {
-                        ..
-                    }) => return Err(SourceInventoryRejection::InvalidInventory),
+                    Err(failure) => return Err(failure.into_rejection()),
                 };
                 self.provider_pages += 1;
                 if page.endpoint != endpoint
@@ -346,6 +344,14 @@ impl StoredSourceContinuation {
                     return Err(SourceInventoryRejection::InvalidInventory);
                 }
                 if let Some(view) = view {
+                    if page.native_coverage.as_ref().is_some_and(|coverage| {
+                        coverage
+                            .conflicts
+                            .iter()
+                            .any(|conflict| conflict.target.endpoint != endpoint)
+                    }) {
+                        return Err(SourceInventoryRejection::InvalidInventory);
+                    }
                     let observed =
                         NativeLiveReadState::from_observation(view, page.native_coverage)
                             .map_err(|_| SourceInventoryRejection::InvalidInventory)?;
@@ -413,6 +419,9 @@ impl StoredSourceContinuation {
         };
         if complete {
             self.finish_partition();
+        }
+        for part in &self.native_live_coverage {
+            SessionPickerRecord::apply_native_conflicts(&mut rows, part);
         }
         Ok(rows)
     }

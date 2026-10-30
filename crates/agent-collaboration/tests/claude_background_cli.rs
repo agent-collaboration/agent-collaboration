@@ -35,6 +35,18 @@ struct ClaudeProcessFixture {
 
 impl ClaudeProcessFixture {
     async fn new() -> std::io::Result<Self> {
+        let signing = Command::new(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/cargo_debug_signing_runner.sh"),
+        )
+        .args(["--sign-only", env!("CARGO_BIN_EXE_agent-sessions")])
+        .status()
+        .await?;
+        if !signing.success() {
+            return Err(std::io::Error::other(
+                "could not sign the spawned fixture CLI",
+            ));
+        }
         let root = tempfile::Builder::new()
             .prefix("claude-background-")
             // The normal macOS temp root makes control.sock exceed SUN_LEN.
@@ -155,7 +167,7 @@ impl Drop for ClaudeProcessFixture {
 }
 
 #[tokio::test]
-async fn literal_claude_new_starts_native_background_and_preserves_routed_process_boundary() {
+async fn literal_claude_new_starts_foreground_and_preserves_routed_process_boundary() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let output = tokio::time::timeout(
         Duration::from_secs(5),
@@ -175,8 +187,8 @@ async fn literal_claude_new_starts_native_background_and_preserves_routed_proces
     let invocation = fixture.invocation().unwrap();
     assert_eq!(
         invocation.arguments,
-        ["--bg"],
-        "literal public New must choose native background mode"
+        Vec::<String>::new(),
+        "literal public New must choose native foreground mode"
     );
     assert_eq!(
         invocation.working_directory,
@@ -195,7 +207,7 @@ async fn literal_claude_new_starts_native_background_and_preserves_routed_proces
 }
 
 #[tokio::test]
-async fn claude_resume_preserves_background_aliases_and_all_custom_arguments() {
+async fn claude_resume_rejects_override_arguments_without_starting_a_copy() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let session_id = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
     let output = tokio::time::timeout(
@@ -222,38 +234,12 @@ async fn claude_resume_preserves_background_aliases_and_all_custom_arguments() {
     .await
     .unwrap()
     .unwrap();
+    assert!(!output.status.success());
+    assert!(!fixture.root.path().join("invocations.txt").exists());
+    assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 0);
     assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr).contains("without them to continue this session")
     );
-    let invocation = fixture.invocation().unwrap();
-    assert_eq!(
-        invocation.arguments,
-        [
-            "--bg",
-            "--resume",
-            session_id,
-            "--background",
-            "--bg",
-            "--model",
-            "opus",
-            "--effort",
-            "low",
-            "--fork-session",
-            "Describe 東京 project without changing it"
-        ]
-    );
-    assert_eq!(
-        invocation.working_directory,
-        fs::canonicalize(&fixture.working_directory).unwrap()
-    );
-    assert_eq!(
-        invocation.base_url,
-        format!("http://{}/anthropic", fixture.endpoint)
-    );
-    assert_eq!(invocation.auth_token, "fixture-router-token");
-    assert_eq!(output.stdout, b"bg-fixture-receipt-001\n");
 }
 
 // This substitutes only a native nonzero outcome. Actual Claude guard ordering
@@ -278,12 +264,13 @@ async fn claude_print_arguments_reach_native_cli_and_its_failure_is_preserved() 
         assert!(!output.status.success());
         assert_eq!(
             fixture.invocation().unwrap().arguments,
-            ["--bg", flag],
+            [flag],
             "vendor option tokens must remain unchanged"
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("fixture-native-print-conflict") && stderr.contains("exit status: 9"),
+            stderr.contains("fixture-native-print-conflict")
+                && stderr.contains("exited with code 9"),
             "{stderr}"
         );
         assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 1);
@@ -292,7 +279,7 @@ async fn claude_print_arguments_reach_native_cli_and_its_failure_is_preserved() 
 }
 
 #[tokio::test]
-async fn claude_background_preserves_actual_nonzero_exit_and_reports_spawn_failure() {
+async fn claude_foreground_preserves_actual_nonzero_exit_and_reports_spawn_failure() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let output = tokio::time::timeout(
         Duration::from_secs(5),
@@ -306,11 +293,9 @@ async fn claude_background_preserves_actual_nonzero_exit_and_reports_spawn_failu
     .unwrap()
     .unwrap();
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Claude Code exited with exit status: 7")
-    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Claude exited with code 7"));
     assert_eq!(output.stdout, b"bg-fixture-receipt-001\n");
-    assert_eq!(fixture.invocation().unwrap().arguments, ["--bg"]);
+    assert!(fixture.invocation().unwrap().arguments.is_empty());
 
     let missing = ClaudeProcessFixture::new().await.unwrap();
     fs::rename(
@@ -329,13 +314,13 @@ async fn claude_background_preserves_actual_nonzero_exit_and_reports_spawn_failu
     .unwrap()
     .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("failed to launch Claude Code"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Could not launch Claude Code"));
     assert!(!missing.root.path().join("invocation.json").exists());
     assert_eq!(missing.health_requests.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
-async fn claude_background_preserves_required_option_values_that_resemble_modes() {
+async fn claude_foreground_preserves_required_option_values_that_resemble_modes() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let arguments = [
         "--append-system-prompt",
@@ -364,7 +349,7 @@ async fn claude_background_preserves_required_option_values_that_resemble_modes(
         String::from_utf8_lossy(&output.stderr)
     );
     let invocation = fixture.invocation().unwrap();
-    let expected = std::iter::once("--bg").chain(arguments).collect::<Vec<_>>();
+    let expected = arguments.to_vec();
     assert_eq!(
         invocation.arguments, expected,
         "all supplied values must reach the same native process boundary unchanged"
@@ -373,3 +358,6 @@ async fn claude_background_preserves_required_option_values_that_resemble_modes(
 
 #[path = "claude_background_cli/native_source_tests.rs"]
 mod native_source_tests;
+
+#[path = "claude_background_cli/attach_flow_tests.rs"]
+mod attach_flow_tests;

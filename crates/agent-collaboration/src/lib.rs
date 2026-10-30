@@ -3,13 +3,17 @@ mod session_environment;
 pub use session_environment::CliContext;
 use session_environment::app_server_socket_or_default;
 pub use session_environment::{RunArgumentsFailure, run_arguments};
+#[cfg(feature = "quota-reset-test-harness")]
+mod claude_terminal_test_harness;
 mod details_client_composition;
 mod session_client_composition;
 #[path = "session_command_dispatch.rs"]
 mod sessions;
 #[cfg(feature = "quota-reset-test-harness")]
 pub fn run_sessions_picker_test_harness() -> std::io::Result<()> {
-    if std::env::args().nth(2).as_deref() == Some("--provider-filter-storyboard") {
+    if std::env::args().nth(2).as_deref() == Some("--claude-terminal-lifecycle") {
+        claude_terminal_test_harness::run()
+    } else if std::env::args().nth(2).as_deref() == Some("--provider-filter-storyboard") {
         agent_session_picker::session_picker::run_sessions_picker_test_harness()
     } else {
         sessions::run_stored_model_terminal_fixture()

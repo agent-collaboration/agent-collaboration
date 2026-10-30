@@ -54,6 +54,30 @@ async fn native_target_qualification_reads_only_canonical_loaded_interactive_ori
     );
 }
 #[tokio::test]
+async fn native_target_rejects_ambiguous_live_claims_before_stored_fallback_or_launch() {
+    let mut api = FakeCollaborationApi::new(SERVICE, EPOCH).unwrap();
+    let request = request(api.directory());
+    let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"})).unwrap();
+    let peer = tokio::spawn(api.serve_then_watch(vec![
+        FakeReply::Result(json!({"serviceEpoch":EPOCH,"sequence":1,"endpoints":[membership("claude-local")]})),
+        FakeReply::Result(json!({"endpoint":target.endpoint,"observedAt":"2026-10-18T00:00:00Z","nextCursor":null,"nativeCoverage":{"peer":{"kind":"complete"},"background":{"kind":"complete"},"conflicts":[{"target":target,"reason":{"kind":"duplicateLiveClaims","claims":2}}]},"sessions":[]})),
+    ],Duration::from_millis(25)));
+    assert!(
+        validate_native_target(
+            &request,
+            &EPOCH.to_owned().try_into().unwrap(),
+            &target,
+            "/native"
+        )
+        .await
+        .is_err()
+    );
+    let transcript = peer.await.unwrap().unwrap().unwrap();
+    assert_eq!(transcript.calls.len(), 2);
+    assert!(transcript.further_call.is_none());
+}
+
+#[tokio::test]
 async fn native_target_rejects_noncanonical_or_duplicate_membership_before_session_read() {
     for (endpoint_id, descriptions) in [
         ("label-claude", vec![membership("label-claude")]),

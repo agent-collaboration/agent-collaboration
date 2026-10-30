@@ -1,5 +1,4 @@
 //! Native jobs, peers and read completeness carry distinct facts and identities.
-use crate::ClaudeCodeInteractiveStatus;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -101,24 +100,22 @@ impl NativeClaudeBackgroundState {
     }
 }
 
-#[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NativeClaudePeerObservation {
-    pub name: Option<String>,
-    pub status: ClaudeCodeInteractiveStatus,
-    pub started_at: i64,
-    pub updated_at: i64,
-    pub status_updated_at: Option<i64>,
-    pub kind: String,
-    pub entrypoint: String,
-}
-
 #[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum NativeInventoryUnavailableReason {
     ExecutableUnavailable,
     ReadTimedOut,
     ReadUnavailable,
+}
+
+impl std::fmt::Display for NativeInventoryUnavailableReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::ExecutableUnavailable => "executable unavailable",
+            Self::ReadTimedOut => "read timed out",
+            Self::ReadUnavailable => "read unavailable",
+        })
+    }
 }
 
 #[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -140,8 +137,50 @@ pub enum NativeClaudeInventoryPart {
 }
 
 #[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NativeClaudeInventoryCoverage {
-    pub peer: NativeClaudeInventoryPart,
-    pub background: NativeClaudeInventoryPart,
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum NativeClaudeConflictReason {
+    DuplicateLiveClaims { claims: u32 },
+}
+
+#[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NativeInventorySource {
+    PeerRegistry,
+    BackgroundJobs,
+}
+
+#[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NativeInventoryInvalidReason {
+    InvalidOutput,
+    UnexplainedSkippedRecords,
+    DuplicateSessionIdentity,
+}
+
+impl std::fmt::Display for NativeInventorySource {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::PeerRegistry => "peer registry",
+            Self::BackgroundJobs => "background jobs",
+        })
+    }
+}
+
+impl std::fmt::Display for NativeInventoryInvalidReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidOutput => "invalid output",
+            Self::UnexplainedSkippedRecords => "unexplained skipped records",
+            Self::DuplicateSessionIdentity => "duplicate session identity",
+        })
+    }
+}
+
+impl NativeClaudeConflictReason {
+    #[must_use]
+    pub const fn description(&self) -> &'static str {
+        match self {
+            Self::DuplicateLiveClaims { .. } => "multiple live peers claim this session",
+        }
+    }
 }

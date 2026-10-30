@@ -390,6 +390,7 @@ async fn configured_inventory_retains_real_stored_rows_with_explicit_native_unav
         assert_eq!(
             coverage.state,
             NativeLiveReadState::Incomplete(NativeClaudeInventoryCoverage {
+                conflicts: Vec::new(),
                 peer: if coverage.view == NativeCatalogueView::Stored {
                     NativeClaudeInventoryPart::NotRequested
                 } else {

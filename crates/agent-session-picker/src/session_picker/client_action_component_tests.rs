@@ -32,7 +32,9 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
         let capabilities = NewClientSourceCapabilities {
             service_id: binding.endpoint.service_id.clone(),
             service_epoch: binding.generation.service_epoch.clone(),
-            native_claude: SourceNativeLaunchAvailability::Ready,
+            native_claude: SourceNativeLaunchAvailability::Ready {
+                capabilities: vec![],
+            },
             cursor: CursorCreationAvailability::Ready(binding.clone()),
         };
         let loader: crate::session_picker::NewClientInventoryLoader = Arc::new(move |_| {
@@ -54,6 +56,11 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
                 .to_vec();
         }
         let arguments = request.native_arguments.clone();
+        let search_query = if client_name == "Claude" {
+            "Claude Code · background"
+        } else {
+            client_name
+        };
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let events = futures_util::stream::unfold(receiver, |mut receiver| async {
             receiver.recv().await.map(|event| (event, receiver))
@@ -87,11 +94,11 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
                         }
                         2 if frame.contains("Search:") => {
                             sender
-                                .send(TerminalEvent::BracketedPaste(client_name.to_owned()))
+                                .send(TerminalEvent::BracketedPaste(search_query.to_owned()))
                                 .unwrap();
                             phase = 3;
                         }
-                        3 if frame.contains(&format!("Search: {client_name}")) => {
+                        3 if frame.contains(&format!("Search: {search_query}")) => {
                             sender.send(key(KeyCode::Enter)).unwrap();
                             phase = 4;
                         }

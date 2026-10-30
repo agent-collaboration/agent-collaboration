@@ -4,6 +4,7 @@ use collaboration_client::protocol::ClaudeCodeInteractiveStatus;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NativeBackgroundRecord {
+    pub working_directory: collaboration_client::protocol::ProviderWorkingDirectory,
     pub job_handle: collaboration_client::protocol::NativeClaudeJobHandle,
     pub state: collaboration_client::protocol::NativeClaudeBackgroundState,
     pub status: Option<ClaudeCodeInteractiveStatus>,

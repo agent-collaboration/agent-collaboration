@@ -183,6 +183,7 @@ pub(super) fn footer_lines(width: usize, show_help: bool) -> Vec<String> {
             PickerRuntimeStatus::NotLoaded,
             PickerRuntimeStatus::Unknown,
             PickerRuntimeStatus::SystemError,
+            PickerRuntimeStatus::Conflict,
         ]
         .map(|status| format!("{} {}", status.icon(), status.label()));
         if width >= 104 {
