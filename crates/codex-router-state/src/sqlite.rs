@@ -1,5 +1,6 @@
 //! SQLite metadata store.
 
+mod account_removal;
 mod account_store;
 mod active_leases;
 mod affinity_store;
@@ -8,6 +9,7 @@ mod legacy_schema_v1to5;
 #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
 mod legacy_schema_v6to10;
 mod policy_mutation;
+pub use account_removal::{AccountRemovalError, PendingAccountRemoval};
 mod quota_history;
 mod quota_refresh_status;
 mod quota_snapshots;

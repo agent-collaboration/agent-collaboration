@@ -13,6 +13,53 @@ fn source_request(fixture: &ClaudeProcessFixture) -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn current_source_inventory_advertises_guarded_resume() {
+    use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
+    use collaboration_service::ApplicationFixture;
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
+    let service_directory = fixture.root.path().join("router/agent-communication");
+    fs::set_permissions(&service_directory, fs::Permissions::from_mode(0o700)).unwrap();
+    let api = ServedCollaborationApi::start_with(
+        &service_directory,
+        ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )
+        .unwrap()
+        .build(),
+        TestServeOptions {
+            router_proxy_endpoint: Some(fixture.endpoint),
+            ..TestServeOptions::default()
+        },
+    )
+    .unwrap();
+    let mut request = source_request(&fixture);
+    request["operation"] = json!({"kind":"clientInventory"});
+    let output = tokio::time::timeout(
+        Duration::from_secs(5),
+        fixture
+            .command()
+            .args(["--source-request-v1", &request.to_string()])
+            .output(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    api.stop().await.unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        response["reply"]["nativeClaude"],
+        json!({"kind":"ready","capabilities":["guardedResume"]})
+    );
+    assert!(!fixture.root.path().join("invocations.txt").exists());
+}
+
+#[tokio::test]
 async fn source_native_missing_receipt_is_unknown_without_router_id_or_second_launch() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let request = source_request(&fixture);

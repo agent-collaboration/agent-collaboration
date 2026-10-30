@@ -164,6 +164,15 @@ impl WireObserver {
     ) {
         self.hold_reply(ReplyKind::Renewal)
     }
+    pub fn hold_next_mail_submit(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        self.hold_reply(ReplyKind::MailSubmit(item))
+    }
     fn hold_reply(
         &self,
         kind: ReplyKind,
@@ -201,6 +210,10 @@ impl WireObserver {
             OperationRequest::Lease(fleet_sync_protocol::LeaseRequest::Renew(_)) => {
                 ReplyKind::Renewal
             }
+            OperationRequest::Consumer(board_sync_protocol::BoardConsumerRequest::MailSubmit {
+                item,
+                ..
+            }) => ReplyKind::MailSubmit(item.id()),
             _ => return None,
         };
         let mut planned = self.next_hold.lock().unwrap();
@@ -492,6 +505,7 @@ enum ReplyKind {
     Receive(DeliveryStream),
     Status,
     Renewal,
+    MailSubmit(fleet_sync_protocol::ItemId),
 }
 struct HeldFetchReply {
     frame: fleet_sync_protocol::FrameId,

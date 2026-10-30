@@ -28,6 +28,8 @@ pub enum OperatorRequest {
     Status,
     /// Wait for this host lifetime's startup terminal state.
     AwaitHostStart,
+    /// Request the existing signal-driven orderly shutdown. Process exit is the result.
+    StopHost,
     /// Replace the whole Host with the invoking CLI executable.
     RestartHost {
         /// Absolute installed CLI path selected by the caller.

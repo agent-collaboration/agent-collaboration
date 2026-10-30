@@ -66,7 +66,7 @@ mod session_schema_fixtures;
 
 use test_identity_fixtures::{
     TestTempDir, account_id, affinity_hash, assert_no_previous_response_id_in_affinity_owner_rows,
-    expect_error, quota_history_observation,
+    expect_error, quota_history_observation, seed_account_records,
 };
 
 use policy_schema_fixtures::{

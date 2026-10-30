@@ -263,11 +263,10 @@ impl PickerRuntimeInventory {
                     && matches!(
                         super::source_inventory_failure::InventoryReadFailure::from_client(error),
                         super::source_inventory_failure::InventoryReadFailure::Invalid { .. }
+                        | super::source_inventory_failure::InventoryReadFailure::InvalidNative { .. }
                     )
                 {
-                    return Err(
-                        crate::source_inventory_request::SourceInventoryRejection::InvalidInventory,
-                    );
+                    return Err(super::source_inventory_failure::InventoryReadFailure::from_client(error).into_rejection());
                 }
             }
             (providers.ok(), native.ok())

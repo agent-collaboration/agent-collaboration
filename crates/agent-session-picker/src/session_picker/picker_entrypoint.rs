@@ -62,6 +62,9 @@ pub fn run_sessions_picker_test_harness() -> io::Result<()> {
         Some(SessionsPickerOutcome::InterruptedClientAction(_)) => {
             "SESSION_PICKER_OUTCOME interrupted-client".to_owned()
         }
+        Some(SessionsPickerOutcome::LaunchNativeClaude(_)) => {
+            "SESSION_PICKER_OUTCOME native-claude".to_owned()
+        }
         None => "SESSION_PICKER_OUTCOME canceled".to_owned(),
     };
     writeln!(io::stdout(), "{marker}")

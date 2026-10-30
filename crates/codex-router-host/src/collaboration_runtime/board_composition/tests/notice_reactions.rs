@@ -55,8 +55,9 @@ impl Runtime {
         let readiness = ready.clone();
         let (fleet, creation) = arrange_project(&board, &root).await?;
         let admission = board.admission.clone();
-        let running = board.start().ok_or("session not started")?;
-        timeout(BOUND, central.auth.entered.notified()).await?;
+        // Prepare the local directory before starting the bounded handshake.
+        // Holding authentication while doing SQLite setup can outlive the real
+        // transport's connection deadline and close the fixture's waiter.
         settle_fixture_directory(&fleet, &creation).await?;
         let cache = FleetCache::open(&root.join("fleet-cache.sqlite")).await?;
         central
@@ -66,6 +67,16 @@ impl Runtime {
             })
             .await?;
         cache.close().await;
+        assert_eq!(
+            central
+                .auth
+                .upgrades
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "local fixture inputs must be prepared before authentication starts"
+        );
+        let running = board.start().ok_or("session not started")?;
+        timeout(BOUND, central.auth.entered.notified()).await?;
         central.release()?;
         wait_welcome(ready).await?;
         collaboration_contracts::ProjectRegistration::start(

@@ -126,6 +126,11 @@ flowchart LR
 | `keychain_locked` | Router cannot read its key at Host start (R23) | the key becomes readable (R23) | all accounts |
 | `exhausted` | the provider rejects the account's own usage window (R8) | a quota observation taken after the rejection shows headroom in every window that was rejected (R8a) | one account |
 
+The owner can permanently remove a disabled account with `account remove --account
+<label>`. Enabled accounts must be disabled first. Removal deletes its credential
+generations, account metadata, quota history, policies and session/affinity pins;
+the label can subsequently be added again with `account login`.
+
 Tiers apply only to eligible accounts and decide order, not eligibility (R3).
 
 ### Session pin lifecycle (E6, Claude)

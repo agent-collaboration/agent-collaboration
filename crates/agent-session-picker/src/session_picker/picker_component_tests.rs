@@ -171,6 +171,7 @@ fn capture_record(
         provider_state: None,
         native_background: None,
         native_peer: None,
+        native_conflict: None,
         native_inventory_view: None,
         session_id: session_id.to_owned(),
         title: title.to_owned(),

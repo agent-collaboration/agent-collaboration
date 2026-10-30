@@ -44,6 +44,12 @@ async fn session_account_affinity_upsert_replaces_account_and_last_seen() {
     let store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("state store should open");
+    seed_account_records(
+        &store,
+        Provider::Openai,
+        &["acct_first", "acct_replacement"],
+    )
+    .await;
     let first = SessionAccountAffinity::new(
         codex_router_core::provider::Provider::Openai,
         "session-123",
@@ -82,6 +88,12 @@ async fn session_account_affinity_cas_allows_one_writer_for_the_same_observation
     let first_store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("first state store should open");
+    seed_account_records(
+        &first_store,
+        Provider::Claude,
+        &["acct_first_writer", "acct_second_writer"],
+    )
+    .await;
     let second_store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("second state store should open");
@@ -149,6 +161,12 @@ async fn session_account_affinity_cas_rejects_late_writes_after_expiry_and_relea
     let store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("state store should open");
+    seed_account_records(
+        &store,
+        Provider::Claude,
+        &["acct_expired", "acct_replacement"],
+    )
+    .await;
     let expired_account = account_id("acct_expired");
     let initial_pin = SessionAccountAffinity::with_pin_state(
         Provider::Claude,
@@ -252,6 +270,8 @@ async fn session_account_affinities_are_provider_scoped_and_retain_released_rows
     let store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("state store should open");
+    seed_account_records(&store, Provider::Openai, &["acct_openai"]).await;
+    seed_account_records(&store, Provider::Claude, &["acct_claude"]).await;
     let openai_affinity = SessionAccountAffinity::new(
         codex_router_core::provider::Provider::Openai,
         "same-session",
@@ -324,6 +344,12 @@ async fn session_account_affinity_purge_deletes_only_rows_before_cutoff() {
     let store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("state store should open");
+    seed_account_records(
+        &store,
+        Provider::Openai,
+        &["acct_old", "acct_cutoff", "acct_fresh"],
+    )
+    .await;
     for affinity in [
         SessionAccountAffinity::new(
             codex_router_core::provider::Provider::Openai,

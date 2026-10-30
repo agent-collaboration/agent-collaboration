@@ -11,9 +11,17 @@ async fn piece_integrity_refusal_joins_its_sender_without_resend_while_another_p
         .with_max_level(tracing::Level::ERROR)
         .with_test_writer()
         .try_init();
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = claim_fixture::ClaimFixture::start()
+        .await
+        .map_err(|error| io::Error::other(format!("arrange integrity fixture: {error}")))?;
     let proof = Box::pin(observe_refusal(&fixture)).await;
-    let stopped = fixture.shutdown().await;
+    if let Err(error) = &proof {
+        eprintln!("integrity refusal proof failed before cleanup: {error}");
+    }
+    let stopped = fixture
+        .shutdown()
+        .await
+        .map_err(|error| io::Error::other(format!("close integrity fixture: {error}")));
     stopped?;
     proof
 }
@@ -25,7 +33,8 @@ async fn observe_refusal(fixture: &claim_fixture::ClaimFixture) -> TestResult {
         &fixture.directory.path().join("source.sqlite"),
         &refused,
     )
-    .await?;
+    .await
+    .map_err(|error| io::Error::other(format!("import refused project: {error}")))?;
     assert!(matches!(
         fixture.claim(&refused).await?,
         board_sync_protocol::ProjectClaimReply::Claimed { .. }
@@ -38,8 +47,11 @@ async fn observe_refusal(fixture: &claim_fixture::ClaimFixture) -> TestResult {
         &expected,
         origin()?,
     )
-    .await?;
-    let (healthy, prefix) = create_healthy_project(fixture).await?;
+    .await
+    .map_err(|error| io::Error::other(format!("replicate refused project prefix: {error}")))?;
+    let (healthy, prefix) = create_healthy_project(fixture)
+        .await
+        .map_err(|error| io::Error::other(format!("create healthy project: {error}")))?;
     super::received_grants::write_and_replicate(
         &fixture.projects,
         &fixture.registry,
@@ -48,7 +60,8 @@ async fn observe_refusal(fixture: &claim_fixture::ClaimFixture) -> TestResult {
         &prefix,
         origin()?,
     )
-    .await?;
+    .await
+    .map_err(|error| io::Error::other(format!("replicate healthy project prefix: {error}")))?;
 
     let writer = fixture.projects.ensure(&refused).await?;
     let mut observation = fixture.central.refuse_piece_integrity(
@@ -64,7 +77,10 @@ async fn observe_refusal(fixture: &claim_fixture::ClaimFixture) -> TestResult {
     let mut write = writer.store.begin_admission(origin()?).await?;
     write.append_record(Record::Project(changed)).await?;
     write.commit().await?;
-    observation.wait_refused().await?;
+    observation
+        .wait_refused()
+        .await
+        .map_err(|error| io::Error::other(format!("observe actual integrity refusal: {error}")))?;
 
     // This observer joins naturally completed tasks. It never sends a stop.
     let failure = timeout(BOUND, writer.join_without_stopping_for_test())
@@ -91,7 +107,10 @@ async fn observe_refusal(fixture: &claim_fixture::ClaimFixture) -> TestResult {
         &prefix,
         origin()?,
     )
-    .await?;
+    .await
+    .map_err(|error| {
+        io::Error::other(format!("replicate healthy project after refusal: {error}"))
+    })?;
     assert_eq!(
         observation.requests(),
         1,

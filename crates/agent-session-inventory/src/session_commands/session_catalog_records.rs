@@ -52,6 +52,7 @@ pub struct SessionPickerRecord {
     pub provider_state: Option<ProviderSessionState>,
     pub native_background: Option<NativeBackgroundRecord>,
     pub native_peer: Option<collaboration_client::protocol::NativeClaudePeerObservation>,
+    pub native_conflict: Option<collaboration_client::protocol::NativeClaudeConflictReason>,
     pub native_inventory_view: Option<crate::picker_runtime_status::NativeCatalogueView>,
     pub session_id: String,
     pub title: String,
@@ -96,13 +97,40 @@ pub struct SessionConversationPreview {
 }
 
 impl SessionPickerRecord {
+    pub fn apply_native_conflicts(
+        records: &mut [Self],
+        coverage: &crate::picker_runtime_status::NativeLiveCoverage,
+    ) {
+        for record in records {
+            let SessionPickerIdentity::NativeClaude(target) = &record.identity else {
+                continue;
+            };
+            if target.endpoint != coverage.endpoint
+                || coverage.view != crate::picker_runtime_status::NativeCatalogueView::Loaded
+            {
+                continue;
+            }
+            record.native_conflict = coverage
+                .state
+                .conflicts()
+                .iter()
+                .find(|conflict| &conflict.target == target)
+                .map(|conflict| conflict.reason.clone());
+            if record.native_conflict.is_some() {
+                record.native_peer = None;
+                record.runtime_status = PickerRuntimeStatus::Conflict;
+            }
+        }
+    }
+
     pub fn native_restore_eligible(&self) -> bool {
-        !self.native_background.as_ref().is_some_and(|job| {
-            matches!(
-                job.state,
-                collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }
-            ) && self.native_peer.is_none()
-        })
+        self.native_conflict.is_none()
+            && !self.native_background.as_ref().is_some_and(|job| {
+                matches!(
+                    job.state,
+                    collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }
+                ) && self.native_peer.is_none()
+            })
     }
     pub fn with_native_inventory_view(
         mut self,
@@ -124,16 +152,15 @@ impl SessionPickerRecord {
     }
 
     /// Only the qualified Stored → Loaded observation corroborates an existing row.
-    /// In-stream repeats, conflicting directories and handles remain invalid.
+    /// In-stream repeats and contradictory job facts remain invalid.
     pub fn corroborate_native_loaded(&mut self, mut live: Self) -> Result<(), &'static str> {
         use crate::picker_runtime_status::NativeCatalogueView;
         if !matches!(self.identity, SessionPickerIdentity::NativeClaude(_))
             || self.identity != live.identity
             || self.native_inventory_view != Some(NativeCatalogueView::Stored)
             || live.native_inventory_view != Some(NativeCatalogueView::Loaded)
-            || self.cwd != live.cwd
             || self.source_context != live.source_context
-            || matches!((&self.native_background,&live.native_background),(Some(stored),Some(current)) if stored.job_handle!=current.job_handle)
+            || matches!((&self.native_background,&live.native_background),(Some(stored),Some(current)) if stored.job_handle!=current.job_handle || stored.working_directory!=current.working_directory)
         {
             return Err("conflicting native inventory observation");
         }
@@ -299,6 +326,7 @@ impl SessionPickerRecord {
             provider_state: None,
             native_background: None,
             native_peer: None,
+            native_conflict: None,
             native_inventory_view: None,
             session_id: record.session_id.clone(),
             title: display_title,
@@ -379,8 +407,10 @@ impl SessionPickerRecord {
                 job_handle,
                 state,
                 status,
+                working_directory,
                 ..
             } => Some(NativeBackgroundRecord {
+                working_directory: working_directory.clone(),
                 job_handle: job_handle.clone(),
                 state: state.clone(),
                 status: *status,
@@ -397,9 +427,11 @@ impl SessionPickerRecord {
                 status_updated_at,
                 kind,
                 entrypoint,
+                working_directory,
                 ..
             } => Some(
                 collaboration_client::protocol::NativeClaudePeerObservation {
+                    working_directory: Some(working_directory.clone()),
                     name: name.clone(),
                     status: *status,
                     started_at: *started_at,
@@ -462,7 +494,9 @@ impl SessionPickerRecord {
                 ..
             } => (
                 target,
-                working_directory,
+                peer.as_ref()
+                    .and_then(|peer| peer.working_directory.as_ref())
+                    .unwrap_or(working_directory),
                 peer.as_ref().map(|peer| peer.updated_at),
                 None,
                 name.clone(),
@@ -507,6 +541,7 @@ impl SessionPickerRecord {
             provider_state,
             native_background,
             native_peer,
+            native_conflict: None,
             native_inventory_view: None,
             session_id,
             title: title.clone(),

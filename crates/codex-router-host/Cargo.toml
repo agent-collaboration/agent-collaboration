@@ -26,6 +26,8 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+nix = { workspace = true, features = ["event"] }
+sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
@@ -62,7 +64,7 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 httparse.workspace = true
 opentelemetry.workspace = true
 reqwest.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["event"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -90,7 +92,6 @@ collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", feature
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40", features = ["test-observation"] }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }
 agent-client-protocol.workspace = true
-sha2.workspace = true
 tempfile = "3.27.0"
 sqlx = { workspace = true, features = ["sqlite"] }
 toml = "1.1.2"

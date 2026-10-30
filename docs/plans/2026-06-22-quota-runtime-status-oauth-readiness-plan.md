@@ -124,6 +124,11 @@ Reserved for Plan 2:
 - `account logout`
 - `account remove`
 - multi-account add/re-auth flow
+
+Current command addition (2026-10-29): `account remove --router-root <path>
+--account <label>` is available for disabled accounts. It deletes the account's
+credentials, metadata, quota history and session/affinity pins. Disable it first;
+the same label can be added again with `account login`.
 - OS keyring/Keychain default backend
 - migration or explicit fallback story for existing file-backed imports
 

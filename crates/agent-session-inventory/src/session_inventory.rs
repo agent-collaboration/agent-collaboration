@@ -7,7 +7,11 @@ pub use session_launch_selection::SessionsLaunchTarget;
 pub mod claude_launch_target;
 #[path = "session_commands/claude_session_commands.rs"]
 pub mod claude_session_commands;
+#[path = "session_commands/claude_transcript_inventory.rs"]
+mod claude_transcript_inventory;
 pub use claude_session_commands::run_claude_sessions_command;
+#[path = "session_commands/claude_terminal_launch.rs"]
+pub mod claude_terminal_launch;
 
 pub use collaboration_client::session_catalog::SessionSearchExpression;
 

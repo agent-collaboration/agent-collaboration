@@ -29,6 +29,26 @@ pub struct HttpConfiguredInventoryClient {
 
 impl HttpConfiguredInventoryClient {
     pub fn new(profile: &RouterConnectionProfile) -> Result<Self, ClientError> {
+        Self::build(
+            profile,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    // Standalone package tests use WebPKI roots; fixture trust stays out of non-test builds.
+    fn with_test_root(
+        profile: &RouterConnectionProfile,
+        certificate: reqwest::Certificate,
+    ) -> Result<Self, ClientError> {
+        Self::build(profile, Some(certificate))
+    }
+
+    fn build(
+        profile: &RouterConnectionProfile,
+        #[cfg(test)] test_root: Option<reqwest::Certificate>,
+    ) -> Result<Self, ClientError> {
         // Credential presentation is operator-owned; never guess a header or read a secret.
         let RouterConnectionTransport::Remote {
             mcp_address,
@@ -61,6 +81,10 @@ impl HttpConfiguredInventoryClient {
                     "invalid configured source scheme",
                 ));
             }
+        }
+        #[cfg(test)]
+        if let Some(certificate) = test_root {
+            client_builder = client_builder.add_root_certificate(certificate);
         }
         let client = client_builder
             .build()
@@ -275,6 +299,14 @@ async fn ssh_read(
 fn source_read_client_error(error: super::source_ssh_protocol::SourceReadError) -> ClientError {
     use super::source_ssh_protocol::{SourceReadError, SourceRejection};
     match error {
+        SourceReadError::Rejected(SourceRejection::InvalidNativeInventory {
+            inventory_source,
+            reason,
+        }) => InventoryReadFailure::InvalidNative {
+            inventory_source,
+            reason,
+        }
+        .into_client(),
         SourceReadError::ReadUnavailable
         | SourceReadError::Rejected(SourceRejection::SourceUnavailable) => {
             ClientError::Transport(std::io::Error::new(
@@ -282,7 +314,9 @@ fn source_read_client_error(error: super::source_ssh_protocol::SourceReadError) 
                 "configured SSH read unavailable",
             ))
         }
-        SourceReadError::InvalidReply | SourceReadError::Rejected(_) => {
+        SourceReadError::InvalidReply
+        | SourceReadError::Rejected(_)
+        | SourceReadError::UnguardedNativeResume => {
             ClientError::Protocol("configured SSH read failed")
         }
     }

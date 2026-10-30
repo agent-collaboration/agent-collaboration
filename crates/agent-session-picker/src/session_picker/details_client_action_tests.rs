@@ -257,7 +257,7 @@ async fn managed_details_load_is_explicit_once_and_keeps_captured_source_target_
 }
 
 #[tokio::test]
-async fn native_details_fork_and_resume_keep_captured_directory_and_submit_one_native_effect() {
+async fn native_details_actions_keep_identity_across_background_and_terminal_handoffs() {
     use agent_session_inventory::sessions::{
         SessionPickerIdentity,
         source_ssh_protocol::{SourceNativeBinding, SourceNativeClaudeAction},
@@ -325,7 +325,7 @@ async fn native_details_fork_and_resume_keep_captured_directory_and_submit_one_n
                         && frame.contains("Session details")
                         && frame
                             .lines()
-                            .any(|line| line.contains("Fork") && line.contains("Resume"))
+                            .any(|line| line.contains("Fork") && line.contains("Open"))
                     {
                         assert!(effects.lock().unwrap().is_empty());
                         sender.send(key(KeyCode::Tab)).unwrap();
@@ -368,10 +368,21 @@ async fn native_details_fork_and_resume_keep_captured_directory_and_submit_one_n
                 "phase={phase}: {last}"
             );
         }
-        assert_eq!(phase, 3);
+        assert_eq!(phase, if fork { 3 } else { 2 });
         let effects = effects.lock().unwrap();
-        assert_eq!(effects.len(), 1);
-        let effect = effects.first().unwrap();
+        let effect = if fork {
+            assert_eq!(effects.len(), 1);
+            effects.first().unwrap()
+        } else {
+            assert!(
+                effects.is_empty(),
+                "foreground Open must not execute inside the mounted picker"
+            );
+            let Some(SessionsPickerOutcome::LaunchNativeClaude(retained)) = &outcome else {
+                panic!("foreground Open must return the captured terminal action");
+            };
+            retained.as_ref()
+        };
         assert_eq!(effect.source, PickerSourceContext::DefaultHosted);
         assert_eq!(
             String::from(effect.service_id.clone()),
@@ -409,9 +420,19 @@ async fn native_details_fork_and_resume_keep_captured_directory_and_submit_one_n
         };
         assert_eq!(*actual, target);
         assert_eq!(directory.as_str(), "/source/native-directory");
-        assert_eq!(*actual_arguments, arguments);
-        assert!(
-            matches!(outcome,Some(SessionsPickerOutcome::InterruptedClientAction(retained)) if retained.as_ref()==effect)
-        );
+        if fork {
+            assert_eq!(*actual_arguments, arguments);
+            assert!(
+                matches!(&outcome,Some(SessionsPickerOutcome::InterruptedClientAction(retained)) if retained.as_ref()==effect)
+            );
+        } else {
+            assert!(
+                actual_arguments.is_empty(),
+                "opening keeps saved settings even with global arguments"
+            );
+            assert!(
+                matches!(&outcome,Some(SessionsPickerOutcome::LaunchNativeClaude(retained)) if retained.as_ref()==effect)
+            );
+        }
     }
 }

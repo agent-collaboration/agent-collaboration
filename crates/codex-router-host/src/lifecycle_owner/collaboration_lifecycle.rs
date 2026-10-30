@@ -37,6 +37,7 @@ impl CollaborationLifecycle {
         let Some(directory) = config.collaboration_directory() else {
             return Ok(None);
         };
+        let preparation_started_at = std::time::Instant::now();
         let router_secret_root = config.coordination_paths().router_secret_root();
         let external_provider_startups =
             crate::claude_provider_launch_environment::configure_claude_provider_launches(
@@ -45,6 +46,10 @@ impl CollaborationLifecycle {
                 router_secret_root.as_deref(),
             )
             .await?;
+        crate::record_debug_readiness_timing(
+            "providerEnvironmentConfigured",
+            preparation_started_at,
+        );
         let mut owner = Self {
             owner_human_id: config.owner_human_id().cloned(),
             directory: directory.to_owned(),
@@ -79,6 +84,7 @@ impl CollaborationLifecycle {
                 Err(cleanup) => io::Error::other(format!("{error}; startup cleanup: {cleanup}")),
             });
         }
+        crate::record_debug_readiness_timing("collaborationSynchronized", preparation_started_at);
         Ok(Some(owner))
     }
     pub(super) async fn synchronize(
@@ -113,6 +119,7 @@ impl CollaborationLifecycle {
             self.shutdown().await?;
         }
         if self.runtime.is_none() {
+            let inputs_started_at = std::time::Instant::now();
             let router_root = self.router_root.clone();
             let board_session = tokio::task::spawn_blocking(move || {
                 crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
@@ -131,6 +138,12 @@ impl CollaborationLifecycle {
             instance
                 .clear_stale_endpoint_sockets(&self.directory)
                 .await?;
+            crate::record_debug_readiness_timing("collaborationInputsReady", inputs_started_at);
+            let composition_started_at = std::time::Instant::now();
+            crate::record_debug_readiness_timing(
+                "collaborationRuntimeBegin",
+                composition_started_at,
+            );
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
                     collaboration_runtime: CollaborationRuntimeInputs {
@@ -151,6 +164,11 @@ impl CollaborationLifecycle {
                 self.router_executable_relation.clone(),
             )
             .await?;
+            crate::record_debug_readiness_timing(
+                "collaborationRuntimeReady",
+                composition_started_at,
+            );
+            let retention_started_at = std::time::Instant::now();
             if let Err(error) = runtime
                 .configure_provider_operation_retention(self.provider_operation_retention_days)
                 .await
@@ -163,6 +181,10 @@ impl CollaborationLifecycle {
                     }
                 });
             }
+            crate::record_debug_readiness_timing(
+                "providerRetentionConfigured",
+                retention_started_at,
+            );
             self.runtime = Some(runtime);
             self.schema_digest = digest;
         }

@@ -62,6 +62,7 @@ impl StatusObservation {
             recovery_budget: state.recovery_budget,
             last_lifecycle_outcome: state.last_lifecycle_outcome.clone(),
         })
+        .with_login_reload(state.login_reload_outcome())
         .with_port_selection(port_selection);
         (snapshot, self.pending_identity)
     }

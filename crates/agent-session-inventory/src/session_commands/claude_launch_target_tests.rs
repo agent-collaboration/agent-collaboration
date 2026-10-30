@@ -394,7 +394,10 @@ async fn unreadable_claude_session_listing_keeps_resume_on_invoking_directory() 
         claude_projects_directory: Some(projects_path),
     };
 
-    let working_directory = launch_target.resume_working_directory(SESSION_ID).await;
+    let working_directory = launch_target
+        .resume_working_directory(SESSION_ID)
+        .await
+        .unwrap();
     let command = launch_target.command(
         Some(SESSION_ID),
         &[],
@@ -515,9 +518,14 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
         claude_projects_directory: None,
     };
 
-    let inventory = launch_target.active_session_records(10).await;
+    let inventory = launch_target
+        .native_session_inventory(NativeSessionView::Active, 10)
+        .await;
     runtime.shutdown().await.expect("runtime shutdown");
-    let records = inventory.expect("active Claude inventory").records;
+    let records = inventory
+        .expect("active Claude inventory")
+        .into_records()
+        .expect("CLI inventory projection");
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0]["sessionId"], SESSION_ID);

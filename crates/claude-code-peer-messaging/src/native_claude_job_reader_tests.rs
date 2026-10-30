@@ -7,6 +7,72 @@ fn job(state: &str) -> Value {
     json!({"kind":"background","id":"job-handle-42","sessionId":"00000000-0000-4000-8000-000000000042","cwd":"/source/project","startedAt":1790162100123_i64,"state":state,"name":"Before first prompt"})
 }
 
+#[test]
+fn claude_2_1_312_mixed_catalogue_preserves_jobs_without_requiring_peer_job_fields() {
+    // Recorded, redacted vendor output includes peer-only rows and waitingFor.
+    let fixture = include_bytes!("test_fixtures/claude_agents_2_1_312.json");
+
+    let observed = decode_background_jobs(fixture)
+        .expect("Claude 2.1.312 interactive rows must not invalidate background inventory");
+
+    assert_eq!(observed.jobs.len(), 10);
+    assert_eq!(observed.unidentified_jobs, 0);
+    assert!(
+        observed
+            .jobs
+            .iter()
+            .take(9)
+            .all(|job| job.state == NativeClaudeBackgroundState::Blocked)
+    );
+    let working = observed.jobs.last().unwrap();
+    assert_eq!(String::from(working.job_handle.clone()), "00000010");
+    assert_eq!(
+        String::from(working.session_id.clone()),
+        "00000000-0000-4000-8000-000000000010"
+    );
+    assert_eq!(working.state, NativeClaudeBackgroundState::Working);
+    assert_eq!(working.status, Some(ClaudeCodeInteractiveStatus::Idle));
+    assert_eq!(working.started_at, 1_793_291_703);
+}
+
+#[test]
+fn claude_2_1_312_all_catalogue_accepts_missing_names_and_terminal_states() {
+    let fixture = include_bytes!("test_fixtures/claude_agents_all_2_1_312.json");
+
+    let observed = decode_background_jobs(fixture)
+        .expect("the recorded complete Claude 2.1.312 catalogue must decode");
+
+    assert_eq!(observed.jobs.len(), 26);
+    assert_eq!(observed.unidentified_jobs, 0);
+    assert_eq!(
+        observed
+            .jobs
+            .iter()
+            .filter(|job| job.name.is_none())
+            .count(),
+        2
+    );
+    for (state, count) in [
+        (NativeClaudeBackgroundState::Blocked, 9),
+        (NativeClaudeBackgroundState::Working, 1),
+        (NativeClaudeBackgroundState::Done, 12),
+        (NativeClaudeBackgroundState::Failed, 3),
+        (NativeClaudeBackgroundState::Stopped, 1),
+    ] {
+        assert_eq!(
+            observed
+                .jobs
+                .iter()
+                .filter(|job| job.state == state)
+                .count(),
+            count
+        );
+    }
+    let working = observed.jobs.last().unwrap();
+    assert_eq!(String::from(working.job_handle.clone()), "00000026");
+    assert_eq!(working.status, Some(ClaudeCodeInteractiveStatus::Busy));
+}
+
 fn executable_fixture(configuration: Value) -> (tempfile::TempDir, NativeClaudeJobReader) {
     let root = tempfile::tempdir().unwrap();
     let executable = root.path().join("claude");

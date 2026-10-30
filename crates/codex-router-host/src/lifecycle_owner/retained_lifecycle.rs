@@ -33,6 +33,7 @@ pub(super) struct RuntimeState {
     pub(super) router_drift_logged: bool,
     pub(super) recovery_budget: RecoveryBudget,
     pub(super) last_lifecycle_outcome: Option<LifecycleOutcome>,
+    pub(super) login_reload: Option<crate::auth_file_reload::LoginReloadStatus>,
 }
 
 impl RuntimeState {
@@ -54,6 +55,7 @@ impl RuntimeState {
             router_drift_logged: false,
             recovery_budget: RecoveryBudget::Available,
             last_lifecycle_outcome: None,
+            login_reload: None,
         };
         state.apply_readiness(readiness);
         state
@@ -90,6 +92,15 @@ impl RuntimeState {
             recovery_budget: self.recovery_budget,
             last_lifecycle_outcome: self.last_lifecycle_outcome.clone(),
         })
+        .with_login_reload(self.login_reload_outcome())
+    }
+
+    pub(super) fn login_reload_outcome(
+        &self,
+    ) -> Option<crate::login_reload_outcome::LoginReloadOutcome> {
+        self.login_reload
+            .as_ref()
+            .and_then(|status| status.borrow().clone())
     }
 
     pub(super) fn observe_router_executable(

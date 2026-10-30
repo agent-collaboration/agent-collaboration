@@ -44,9 +44,11 @@ mod account_help;
 mod account_login_identity;
 #[path = "account_options.rs"]
 mod account_options;
+#[path = "account_removal.rs"]
+mod account_removal;
 use account_help::{
     ACCOUNT_DISABLE_HELP_TEXT, ACCOUNT_ENABLE_HELP_TEXT, ACCOUNT_HELP_TEXT, ACCOUNT_LIST_HELP_TEXT,
-    ACCOUNT_LOGIN_HELP_TEXT, ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT,
+    ACCOUNT_LOGIN_HELP_TEXT, ACCOUNT_REMOVE_HELP_TEXT, ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT,
 };
 #[cfg(test)]
 use account_login_identity::account_id_from_label;
@@ -60,6 +62,13 @@ use account_options::{
 /// Account CLI command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AccountCommand {
+    /// Permanently removes a disabled account and its credentials.
+    Remove {
+        /// Router-owned root.
+        router_root: PathBuf,
+        /// Exact display label.
+        account_label: String,
+    },
     /// Prints account command help.
     Help(&'static str),
     /// Runs provider OAuth login and activates the resulting credentials.
@@ -117,6 +126,17 @@ impl AccountCommand {
         };
 
         match command.as_str() {
+            "remove" => {
+                if parser.next_if_help()? {
+                    parser.reject_remaining()?;
+                    return Ok(Self::Help(ACCOUNT_REMOVE_HELP_TEXT));
+                }
+                let options = AccountStatusOptions::parse(parser)?;
+                Ok(Self::Remove {
+                    router_root: options.router_root()?,
+                    account_label: options.account_label()?,
+                })
+            }
             "--help" | "-h" | "help" => {
                 parser.reject_remaining()?;
                 Ok(Self::Help(ACCOUNT_HELP_TEXT))
@@ -192,6 +212,18 @@ impl AccountCommand {
 /// Account command failure.
 #[derive(Debug, Error)]
 pub enum AccountCommandError {
+    /// State-owned account removal was refused or failed.
+    #[error(transparent)]
+    RemovalState(#[from] codex_router_state::sqlite::AccountRemovalError),
+    /// Removal label did not identify one configured account.
+    #[error("account '{account_label}' was not found")]
+    RemovalAccountNotFound { account_label: String },
+    /// Legacy state contains more than one account with the label.
+    #[error("account removal label '{account_label}' is ambiguous")]
+    RemovalAccountAmbiguous { account_label: String },
+    /// Cleanup failed before the relational deletion could commit.
+    #[error("account credential cleanup failed; account remains disabled; retry account remove")]
+    RemovalCredentialCleanup,
     /// Router root creation failed.
     #[error("failed to create router root {path}: {source}")]
     CreateRouterRoot {
@@ -394,6 +426,10 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     claude_secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     match command {
+        AccountCommand::Remove {
+            router_root,
+            account_label,
+        } => account_removal::remove_account(stdout, router_root, account_label),
         AccountCommand::Help(text) => stdout
             .write_all(text.as_bytes())
             .map_err(AccountCommandError::Stdout),
@@ -502,6 +538,7 @@ fn login_with_openai_device_auth(
             activation_request,
         ))
         .map_err(map_credential_activation_error)?;
+    runtime.block_on(state.close())?;
 
     writeln!(stdout, "logged in account: {label}").map_err(AccountCommandError::Stdout)?;
     writeln!(stdout, "account_id: {}", account_id.as_str()).map_err(AccountCommandError::Stdout)?;
@@ -605,6 +642,7 @@ fn login_with_claude_oauth(
             activation_request,
         ))
         .map_err(map_credential_activation_error)?;
+    runtime.block_on(state.close())?;
 
     writeln!(stdout, "logged in Claude account: {label}").map_err(AccountCommandError::Stdout)?;
     writeln!(stdout, "account_id: {}", account_id.as_str()).map_err(AccountCommandError::Stdout)?;

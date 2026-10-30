@@ -1,16 +1,48 @@
-# Host restart validation
+# Host restart and stop validation
 
-The three commands have separate jobs:
+The lifecycle commands have separate jobs:
 
 | Command | Effect |
 | --- | --- |
 | `codex-router host restart` | Replace the entire Host using the installed CLI issuing this command, retaining the running Host's root, port and launch configuration; wait for readiness. |
+| `codex-router host stop` | Stop every agent session the Host manages through its existing orderly shutdown; wait for the Host process to exit and release its lock. |
 | `codex-router host app-server restart` | Restart managed Codex without updating it or replacing the Host. |
 | `codex-router host app-server update` | Run the managed Codex updater; preserve the running runtime on no change or update failure; activate changed Codex through the existing Host replacement path. |
 
 Installing a binary and replacing a running Host are separate actions. Restart
 does not fetch a release. Native connections may disconnect during replacement;
 local readiness and Remote Control degradation are reported separately.
+
+`host stop` accepts the same `--router-root PATH` as the other Host commands.
+It prints one line and exits 0 after shutdown or when no Host is running. If the
+Host does not exit within the existing operator deadline, it reports failure
+and sends no forced termination signal. After a successful stop, `host status`
+reports that no Host is running; a second `host stop` succeeds again.
+
+## ChatGPT token rotation
+
+The Host watches the active Codex home directory for `auth.json` changes,
+including atomic replacement, and debounces bursts. It asks the managed
+app-server to run `account/read` with `refreshToken: true` for changed tokens;
+it never restarts that process in response to authentication changes. Codex
+continues to own OAuth refresh and auth-file writes. Verified post-refresh file
+revisions are deduplicated to prevent Codex's own writes from creating a refresh loop.
+
+`host status` reports `last_login_reload`, also recorded in Host logs. A
+successful RPC alone does not establish reload: the Host verifies the resulting
+cached access token in memory without logging it. First login and a different
+account are refused by upstream's guarded reload; logout cannot clear its
+cache this way. Run `codex-router host app-server restart` explicitly for those
+cases, accepting that managed Codex sessions are unloaded. Failed/refused file
+revisions are not automatically retried.
+
+`cargo nextest run -p codex-router-host --test auth_file_reload` checks burst
+deduplication, repeated atomic replacement and different-account refusal through
+the real Host and native protocol with a synthetic upstream. Real-Codex proof
+must additionally use a private `CODEX_HOME`, signed isolated debug Host and
+dedicated `CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET`. Rewrite only fixture credentials
+from outside; compare the remote client's account, app-server PID and Host status
+before and after rotation. Never write normal Codex authentication or configuration.
 
 ## First activation and failure recovery
 

@@ -10,6 +10,7 @@ pub(super) enum SessionDetailsTarget {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum DetailsAction {
     Resume,
+    ResumeBackground,
     Load,
     Fork,
     CopySessionId,
@@ -21,6 +22,7 @@ impl DetailsAction {
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Resume => "Resume",
+            Self::ResumeBackground => "Resume in background",
             Self::Load => "Load",
             Self::Fork => "Fork",
             Self::CopySessionId => "Copy session ID",
@@ -131,6 +133,23 @@ impl SessionDetailsDialog {
             ],
         };
         let mut actions = actions.to_vec();
+        if matches!(
+            &self.client_inventory,
+            super::details_client_inventory::DetailsClientReadState::Ready(
+                super::details_client_inventory::DetailsClientCapabilities::Native { .. }
+            )
+        ) && self
+            .record()
+            .native_background
+            .as_ref()
+            .is_some_and(|job| job.state.is_terminal())
+        {
+            let position = actions
+                .iter()
+                .position(|action| *action == DetailsAction::Resume)
+                .map_or(actions.len(), |index| index + 1);
+            actions.insert(position, DetailsAction::ResumeBackground);
+        }
         if self
             .record()
             .cwd
@@ -144,6 +163,19 @@ impl SessionDetailsDialog {
             actions.insert(position, DetailsAction::CopyPath);
         }
         actions
+    }
+
+    pub(super) fn action_label(&self, action: DetailsAction) -> &'static str {
+        if action == DetailsAction::Resume
+            && matches!(
+                self.record().identity,
+                agent_session_inventory::sessions::SessionPickerIdentity::NativeClaude(_)
+            )
+        {
+            "Open"
+        } else {
+            action.label()
+        }
     }
 
     pub(super) fn move_focus(&mut self, backwards: bool) {
