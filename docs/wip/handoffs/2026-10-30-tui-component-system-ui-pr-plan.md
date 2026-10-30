@@ -78,8 +78,8 @@ Proof-layer names: project silent. The plan uses the Verification Design's layer
 
 ## Mechanism choices made here (recorded, reversible)
 
-- **Layer A's frame reader.** This is a test-only parser in `agent-collaboration-tui`'s test support. It reads `Canvas::write_ansi` output: SGR, printable text with `unicode-width` 0.2 widths, and CRLF, ignoring the trailing CRLF. It **rejects any other escape sequence**, so an unknown sequence fails loudly instead of passing. It is chosen over a new dev-dependency because `write_ansi`'s output is a small closed grammar, and a new crate would need `cargo deny`/`cargo audit` admission for a few dozen lines of parsing.
-- **Verification languages.** TypeScript and Rust only (owner). The B oracle is a headless emulator's cell grid, not screenshot OCR. Swift, VHS tapes and shell runners leave the TUI journeys in S0.
+- **Layer A's frame reader.** This is a test-only parser in `agent-collaboration-tui`'s test support. It reads `Canvas::write_ansi` output: SGR, printable text with `unicode-width` 0.2 widths, CSI K (erase to the end of the row, which the pinned `write_row_impl` emits on every row, `canvas.rs:449-450`) with real erase semantics at the known width, and CRLF, ignoring the trailing CRLF. It **rejects any other escape sequence**, OSC 8 hyperlinks included (the crate never emits them; out of scope), so an unknown sequence fails loudly instead of passing. (Corrected 2026-10-30 from the Implementer's ground-truth check.) It is chosen over a new dev-dependency because `write_ansi`'s output is a small closed grammar, and a new crate would need `cargo deny`/`cargo audit` admission for a few dozen lines of parsing.
+- **Verification languages.** TypeScript and Rust only (owner). The B oracle is wterm's (libghostty) cell grid, not screenshot OCR; no xterm.js (owner). Swift, VHS tapes and shell runners leave the TUI journeys in S0.
 - **Layer E's sanctioned call site.** It is `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. This is the one marked boundary; there is no other lint suppression.
 - **Old components are removed in S8**, after both consumers have moved. They are not removed in S4, because the consumers still use them until then. Nothing ships with two input paths, because all of this is one PR.
 - **Module-cycle ratchet across the rename (S1).** If the baseline lists modules by crate name, the edge set before and after must be identical apart from the name. Prove it with a sorted diff of edges under the name mapping. Any other change stops S1.
@@ -92,11 +92,18 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
 
 - **Covers:** the Verification Design's "Journeys still needed" (B), its languages rule, and the baseline half of "Build order".
 - **First, the grid oracle (owner: "only use ts or rust").**
-  - Qualify a headless terminal emulator: `@xterm/headless` by default, Rust `vt100` as the fallback. Fixtures with known grids cover named and 24-bit colours, wide glyphs (📂, ✉️, 界, including at overlay-left−1), the kitty query and reply, and resize. Record the choice and why.
+  - Qualify wterm as the headless emulator (owner: no xterm.js): `@wterm/core` `TerminalCore` with the `@wterm/ghostty` (libghostty) core, at exact pinned versions. Fixtures with known grids cover named and 24-bit colours, wide glyphs (📂, ✉️, 界, including at overlay-left−1), the kitty query and reply, and resize. Record the choice and why.
   - Feed the Rust PTY driver's bytes into it.
   - Port the existing scene checks in `scene-contracts.ts` and the Swift `verify_screen_*.swift` checks to grid assertions in TypeScript.
-  - Add the original-image route in TypeScript: the exact PTY bytes rendered by xterm.js in headless Chrome over the DevTools protocol (no Playwright), saved as original PNGs bound to source, build, viewport and checkpoint. This replaces VHS and ttyd. Show one checkpoint matching its old VHS original's content at the same viewport.
-  - Remove the 13 Swift files, the VHS tapes and the `run_capture.sh` / `run_provider_filter_capture.sh` runners from `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/`.
+  - Add the original-image route in TypeScript: the exact PTY bytes rendered by `@wterm/dom` on the same libghostty core in headless Chrome over the DevTools protocol (no Playwright), saved as original PNGs bound to source, build, viewport and checkpoint. This replaces VHS and ttyd. Show one checkpoint matching its old VHS original's content at the same viewport.
+  - Remove the whole xterm.js path (owner: "make sure you remove xterm js"). Today's screenshots come from VHS → ttyd → xterm.js in headless Chrome. Remove from the 41 files that reference ttyd or VHS:
+    - the ttyd and VHS launch code, including `scripts/verification/tui/ttyd-adapter.ts` and the VHS tape builders and receipts in the capture harness;
+    - the `vhs_f4/` folder;
+    - the 13 Swift `verify_screen_*.swift` files;
+    - `run_capture.sh` and `run_provider_filter_capture.sh`;
+    - their sections of the `verify-codex-router` recipe.
+
+    At the end of S0, a one-time check `rg -i "ttyd|vhs|@xterm|xterm\.js"` over `scripts/verification`, the harness `tests/` and `.agents/skills/verify-codex-router` finds nothing. This is a check, not a permanent test. `TERM=xterm-256color` is the standard terminal-type name the PTY children use; it is unrelated to xterm.js and stays.
   - Show that every ported journey still fails on its existing wrong-scene and blank controls.
 - **Writes:**
   - `scripts/verification/tui/` scene contracts and tapes for: overlay isolation, focus traversal, main-screen keys, the New session dialog, and wide glyph under overlay;
@@ -110,7 +117,11 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Account details has no gap above "Quota windows";
   - the wide-glyph corner is lost.
   Command: `capture-run.ts <plan> --check`, then the run, on Sunclaw. Runs first, in parallel with S1–S4.
-- **Pre-change signal:** each journey fails today for exactly its named defect. A journey that passes on today's build proves nothing and is reworked before S9.
+- **Pre-change signal** (clarified 2026-10-30 after the Verifier's admission check), three kinds of baseline:
+  - **Known defects** must fail today, each for exactly its named defect: Esc quitting the main screen; Help listing Esc wrongly; New session ignoring ↓ and starting focus on Start; Account details with no gap above Quota windows; the wide-glyph corner lost under an existing dialog opened over 📂 rows.
+  - **Isolation on overlays that exist today** (Help, New, Details, the filter choosers, quota Account and Pool details): bursts of text, paste, arrows and clicks aimed beneath. Record red or pass per overlay. A pass is a valid baseline, and the journey then guards against regressions.
+  - **Entries that are new in this PR** (the ≡ menu, toolbar, dropdowns): record "absent at base", neither red nor pass. Their sensitivity comes from S5's seeded wrong builds; their first green is at S6/S7.
+  - An entry timeout is never counted as a red.
 - **Existing tests:** the compact Sessions and Quota tapes are kept unchanged here. They are re-baselined only in S9, for the three owner-decided changes.
 - **Stop:** a needed journey can't reach its entry through the fixture harness. Return a `verification-design-gap` with the row.
 
