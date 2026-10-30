@@ -51,6 +51,11 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `help-keeps-saved-base-model.patch` | A saved Help copy hides updates to the dialog's continuing model. |
 | `model-update-writes-help.patch` | Updating the dialog replaces Help's own routing model. |
 | `typography-ignores-covered-context.patch` | Shared headings, body text and column rules retain uncovered colors beneath an overlay. |
+| `list-rows-focusable.patch` | Tab walks individual list rows before reaching the toolbar. |
+| `list-selection-kept-by-index.patch` | Reload changes the selected identity when the same key moved. |
+| `list-navigation-in-consumer.patch` | A consumer input chain changes the covered list beneath an overlay. |
+| `form-minimum-label-width-ignored.patch` | Separate sections place their values at different columns despite the shared minimum. |
+| `raw-unit-separator-not-normalized.patch` | The raw Help key misses Ctrl+7 and can produce an unprintable chord label. |
 
 These controls are implementation evidence; the independent S5 observation is
 separate. Check each patch applies, then challenge it individually against the

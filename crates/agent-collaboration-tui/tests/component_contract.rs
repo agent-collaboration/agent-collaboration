@@ -23,6 +23,9 @@ mod hit_geometry;
 #[path = "suites/input_isolation.rs"]
 mod input_isolation;
 #[cfg(test)]
+#[path = "suites/list_controls.rs"]
+mod list_controls;
+#[cfg(test)]
 #[path = "suites/live_actions.rs"]
 mod live_actions;
 #[cfg(test)]

@@ -28,6 +28,7 @@ impl From<AnyElement<'static>> for FormFieldsChild {
 pub struct FormFieldsProps {
     pub stacked: bool,
     pub row_gap: u16,
+    pub minimum_label_width: Option<u32>,
     pub children: Vec<FormFieldsChild>,
 }
 
@@ -39,19 +40,14 @@ struct FormFieldColumns {
 /// One measured label column and one reserved selector gutter for every row.
 #[component]
 pub fn FormFields(props: &mut FormFieldsProps) -> impl Into<AnyElement<'static>> {
-    let label_width = props
-        .children
-        .iter()
-        .filter_map(|child| match child {
-            FormFieldsChild::Field(field) => {
-                Some(UnicodeWidthStr::width(field.props.label.as_str()))
-            }
-            FormFieldsChild::Content(_) => None,
-        })
-        .max()
-        .unwrap_or_default();
+    let labels = props.children.iter().filter_map(|child| match child {
+        FormFieldsChild::Field(field) => Some(field.props.label.as_str()),
+        FormFieldsChild::Content(_) => None,
+    });
+    let label_width =
+        FormFields::label_width_for(labels).max(props.minimum_label_width.unwrap_or_default());
     let columns = FormFieldColumns {
-        label_width: u32::try_from(label_width).unwrap_or(u32::MAX),
+        label_width,
         stacked: props.stacked,
     };
     let children = std::mem::take(&mut props.children)
@@ -64,6 +60,18 @@ pub fn FormFields(props: &mut FormFieldsProps) -> impl Into<AnyElement<'static>>
         ContextProvider(value:Context::owned(columns)) {
             View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:props.row_gap) {#(children)}
         }
+    }
+}
+
+impl FormFields {
+    /// Sections can share a display-width budget without duplicating measurement rules.
+    pub fn label_width_for<TLabel: AsRef<str>>(labels: impl IntoIterator<Item = TLabel>) -> u32 {
+        let width = labels
+            .into_iter()
+            .map(|label| UnicodeWidthStr::width(label.as_ref()))
+            .max()
+            .unwrap_or_default();
+        u32::try_from(width).unwrap_or(u32::MAX)
     }
 }
 
@@ -132,6 +140,61 @@ pub fn SelectableRow<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::controls::{DialogSection, DialogSections};
+
+    #[test]
+    fn separate_form_sections_share_one_dialog_wide_value_origin() {
+        let minimum = FormFields::label_width_for(["ID", "マシン設定"]);
+        let frame=element!(View(width:60,flex_direction:FlexDirection::Column) {
+            DialogSections {
+                DialogSection(heading:"Identity".to_owned()) {
+                    FormFields(minimum_label_width:Some(minimum)) {FormField(label:"ID".to_owned()) {Text(content:"FIRST_VALUE")}}
+                }
+                DialogSection(heading:"Connection".to_owned()) {
+                    FormFields(minimum_label_width:Some(minimum)) {FormField(label:"マシン設定".to_owned()) {Text(content:"SECOND_VALUE")}}
+                }
+            }
+        }).render(None).to_string();
+        for value in ["FIRST_VALUE", "SECOND_VALUE"] {
+            let prefix = frame
+                .lines()
+                .find(|line| line.contains(value))
+                .unwrap()
+                .split_once(value)
+                .unwrap()
+                .0;
+            assert_eq!(UnicodeWidthStr::width(prefix), 14, "{value}: {frame}");
+        }
+    }
+
+    #[test]
+    fn minimum_label_width_preserves_local_measurement_and_default_bytes() {
+        assert_eq!(FormFields::label_width_for(["ID", "マシン設定"]), 10);
+        assert_eq!(FormFields::label_width_for(std::iter::empty::<&str>()), 0);
+        let mut baseline = None;
+        for minimum in [None, Some(0), Some(1)] {
+            let canvas = element!(View(width:40) {FormFields(minimum_label_width:minimum) {
+                FormField(label:"マシン設定".to_owned()) {Text(content:"VALUE")}
+            }})
+            .render(None);
+            let mut bytes = Vec::new();
+            canvas.write_ansi(&mut bytes).unwrap();
+            if let Some(expected) = &baseline {
+                assert_eq!(&bytes, expected);
+            } else {
+                baseline = Some(bytes);
+            }
+            let frame = canvas.to_string();
+            let prefix = frame
+                .lines()
+                .find(|line| line.contains("VALUE"))
+                .unwrap()
+                .split_once("VALUE")
+                .unwrap()
+                .0;
+            assert_eq!(UnicodeWidthStr::width(prefix), 14, "{frame}");
+        }
+    }
 
     #[test]
     fn measured_unicode_labels_and_focus_share_one_value_origin() {

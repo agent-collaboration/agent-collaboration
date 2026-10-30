@@ -1,0 +1,30 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+@@ -171,3 +171,4 @@ impl ListSelectionControl {
+             let mut next = control.binding.value.read().clone();
+-            let changed = next.navigate(code, (control.binding.page_rows)());
++            let _=(&mut next,code,(control.binding.page_rows)());
++            let changed=false;
+             if changed {
+diff --git a/crates/agent-collaboration-tui/tests/support/list_scene.rs b/crates/agent-collaboration-tui/tests/support/list_scene.rs
+--- a/crates/agent-collaboration-tui/tests/support/list_scene.rs
++++ b/crates/agent-collaboration-tui/tests/support/list_scene.rs
+@@ -73,2 +73,17 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
+     let selections = props.selections.clone();
++    let fallback_selections=selections.clone();
++    hooks.use_terminal_events(move |event| {
++        let code=match event {
++            TerminalEvent::Key(key) if key.kind!=KeyEventKind::Release&&key.modifiers.is_empty()=>key.code,
++            TerminalEvent::FullscreenMouse(mouse)=>match mouse.kind {MouseEventKind::ScrollDown=>KeyCode::Down,MouseEventKind::ScrollUp=>KeyCode::Up,_=>return},
++            _=>return,
++        };
++        let mut next=value.read().clone();
++        let position=next.rows().iter().position(|key|Some(key)==next.selected()).unwrap_or(0);
++        let last=next.rows().len().saturating_sub(1);
++        let position=match code {KeyCode::Down=>position.saturating_add(1).min(last),KeyCode::Up=>position.saturating_sub(1),KeyCode::PageDown=>position.saturating_add(2).min(last),KeyCode::PageUp=>position.saturating_sub(2),KeyCode::Home=>0,KeyCode::End=>last,_=>return};
++        if let Some(key)=next.rows().get(position).cloned()&&next.select(&key) {
++            let mut value=value;value.set(next);fallback_selections.lock().unwrap().push(Some(key.as_str().to_owned()));
++        }
++    });
+     let stack = use_surface_stack(&mut hooks, |stack| {

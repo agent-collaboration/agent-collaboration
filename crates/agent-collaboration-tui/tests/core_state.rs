@@ -51,6 +51,19 @@ mod tests {
     }
 
     #[test]
+    fn raw_unit_separator_normalizes_to_the_printable_control_seven_chord() {
+        let printable: KeyChord = "Ctrl+7".parse().unwrap();
+        let raw = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('\u{1f}'));
+        assert!(
+            printable.matches(&raw),
+            "raw US must match the printable binding"
+        );
+        let raw_binding: KeyChord = "\u{1f}".parse().unwrap();
+        assert_eq!(raw_binding.to_string(), "Ctrl+7");
+        assert!(!raw_binding.to_string().chars().any(char::is_control));
+        assert_eq!(raw_binding, printable);
+    }
+    #[test]
     fn duplicate_key_in_one_scope_is_rejected_including_equivalent_spellings() {
         for (first, second) in [
             ("Ctrl+N", "control+n"),

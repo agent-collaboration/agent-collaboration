@@ -21,6 +21,10 @@ impl std::error::Error for KeyChordError {}
 impl KeyChord {
     fn normalized(code: KeyCode, mut modifiers: KeyModifiers) -> Self {
         let code = match code {
+            KeyCode::Char('\u{1f}') => {
+                modifiers |= KeyModifiers::CONTROL;
+                KeyCode::Char('7')
+            }
             KeyCode::Char(character) => KeyCode::Char(character.to_ascii_lowercase()),
             KeyCode::BackTab => {
                 modifiers |= KeyModifiers::SHIFT;

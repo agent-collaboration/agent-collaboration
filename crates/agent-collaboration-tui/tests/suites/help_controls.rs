@@ -11,12 +11,13 @@ mod tests {
         },
         controls::{
             Button, HelpContent, HelpContextLine, HelpControl, HelpInputConvention, button_target,
+            menu_overlay,
         },
         focus_model::{FocusModel, TargetId},
         input_owner::InputOwner,
         overlay_host::OverlayHost,
-        surface_handle::use_surface_stack,
-        surface_stack::{SurfaceId, SurfaceModel},
+        surface_handle::{SurfaceStackHandle, use_surface_stack},
+        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -42,6 +43,7 @@ mod tests {
     struct HelpFixture {
         control: HelpControl,
         enabled: State<bool>,
+        stack: SurfaceStackHandle,
     }
     #[derive(Props)]
     struct HelpSceneProps {
@@ -88,11 +90,12 @@ mod tests {
             *props.handle.0.lock().unwrap() = Some(HelpFixture {
                 control: help.clone(),
                 enabled,
+                stack,
             });
             let open = ActionDef {
                 id: action("help"),
                 title: "Help".into(),
-                keys: vec!["F1".parse().unwrap()],
+                keys: vec!["F1".parse().unwrap(), "Ctrl+7".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,
                 placement: Placement::Toolbar,
@@ -187,6 +190,7 @@ mod tests {
                 let HelpFixture {
                     control: help,
                     mut enabled,
+                    ..
                 } = handle.0.lock().unwrap().as_ref().unwrap().clone();
                 let surface = opened.last().unwrap().snapshot.0[1].0;
                 let scroll = help.scroll(surface).unwrap();
@@ -259,6 +263,89 @@ mod tests {
                 .await
                 .unwrap();
         }
+    }
+    #[tokio::test]
+    async fn raw_unit_separator_opens_help_with_printable_bindings_in_help_and_menu() {
+        let handle = HelpHandle::default();
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(HelpScene(journal,handle:handle.clone()));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        let scenario = async {
+            driver.initial(&mut frames).await;
+            let raw =
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('\u{1f}')));
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(raw, true)],
+                    true,
+                    |ack| {
+                        assert_eq!(
+                            ack.snapshot.0.len(),
+                            2,
+                            "raw US must open Help before redraw"
+                        )
+                    },
+                )
+                .await;
+            assert!(text(&driver).contains("Ctrl+7"));
+            assert!(
+                driver
+                    .frames
+                    .last()
+                    .unwrap()
+                    .cells
+                    .iter()
+                    .flatten()
+                    .all(|cell| !cell.text.chars().any(char::is_control))
+            );
+            driver
+                .drive(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::Esc), true)],
+                    true,
+                )
+                .await;
+            let fixture = handle.0.lock().unwrap().as_ref().unwrap().clone();
+            fixture
+                .stack
+                .open_overlay(
+                    menu_overlay(
+                        fixture.stack,
+                        &fixture.stack.snapshot().top().actions,
+                        OverlayLayout::AtCells {
+                            left: 3,
+                            top: 3,
+                            width: 68,
+                            height: 20,
+                        },
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            driver.initial(&mut frames).await;
+            let menu = text(&driver);
+            assert!(
+                menu.lines()
+                    .any(|line| line.contains("Help") && line.contains("Ctrl+7")),
+                "{menu}"
+            );
+            assert!(
+                driver
+                    .frames
+                    .last()
+                    .unwrap()
+                    .cells
+                    .iter()
+                    .flatten()
+                    .all(|cell| !cell.text.chars().any(char::is_control))
+            );
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+            .await
+            .unwrap();
     }
     #[tokio::test]
     async fn dialog_help_swaps_one_body_and_restores_query_focus_and_draft_byte_for_byte() {

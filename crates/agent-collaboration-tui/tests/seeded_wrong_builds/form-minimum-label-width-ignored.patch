@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/form_fields.rs b/crates/agent-collaboration-tui/src/controls/form_fields.rs
+--- a/crates/agent-collaboration-tui/src/controls/form_fields.rs
++++ b/crates/agent-collaboration-tui/src/controls/form_fields.rs
+@@ -47,3 +47,3 @@ pub fn FormFields(props: &mut FormFieldsProps) -> impl Into<AnyElement<'static>>
+     let label_width =
+-        FormFields::label_width_for(labels).max(props.minimum_label_width.unwrap_or_default());
++        FormFields::label_width_for(labels).max(0);
+     let columns = FormFieldColumns {
