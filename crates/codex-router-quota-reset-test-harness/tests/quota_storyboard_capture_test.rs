@@ -17,6 +17,21 @@ mod isolated_fixture_test;
 )]
 mod loopback_provider_test;
 
+#[path = "quota_storyboard_capture_test/grid_terminal_capture.rs"]
+mod grid_terminal_capture;
+#[path = "quota_reset_pty_test/terminal_interaction_test.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared PTY owner retains the existing semantic-wait API for its original tests"
+)]
+mod terminal_interaction_test;
+
+#[tokio::test(flavor = "current_thread")]
+#[ignore = "requires a declared grid-observer target and an interactive driver protocol"]
+async fn compiled_grid_terminal_observation() -> TestResult<()> {
+    grid_terminal_capture::run_grid_terminal().await
+}
+
 use isolated_fixture_test::TestResult;
 
 const CURRENT_STATIC_VIEWPORTS: [(u16, u16); 6] =

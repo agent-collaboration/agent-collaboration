@@ -38,7 +38,46 @@ enum ReaderEvent {
     Eof,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum KeyboardProtocol {
+    Legacy,
+    Kitty,
+}
+
 impl TerminalDriver {
+    /// Receive actual PTY bytes before the observer chooses its next input.
+    /// None is EOF; a deadline remains an error, never a synthetic empty frame.
+    pub(super) fn receive_bytes(&mut self, timeout: Duration) -> TestResult<Option<Vec<u8>>> {
+        if self.reached_eof {
+            return Ok(None);
+        }
+        match self.output_receiver.recv_timeout(timeout)? {
+            ReaderEvent::Bytes(bytes) => {
+                self.transcript.extend_from_slice(&bytes);
+                Ok(Some(bytes))
+            }
+            ReaderEvent::Eof => {
+                self.reached_eof = true;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Replies originate in the emulator, rather than a fabricated query answer.
+    /// Legacy observations deliberately leave the kitty query unanswered.
+    pub(super) fn send_terminal_reply(
+        &mut self,
+        reply: &[u8],
+        protocol: KeyboardProtocol,
+    ) -> TestResult<()> {
+        if protocol == KeyboardProtocol::Legacy
+            && reply.starts_with(b"\x1b[?")
+            && reply.ends_with(b"u")
+        {
+            return Ok(());
+        }
+        self.send(reply)
+    }
     pub(super) fn spawn(
         program: &Path,
         arguments: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -53,6 +92,20 @@ impl TerminalDriver {
         current_directory: &Path,
         no_color: bool,
     ) -> TestResult<Self> {
+        let environment = if no_color {
+            vec![("NO_COLOR", OsStr::new("1"))]
+        } else {
+            Vec::new()
+        };
+        Self::spawn_with_environment(program, arguments, current_directory, &environment)
+    }
+
+    pub(super) fn spawn_with_environment(
+        program: &Path,
+        arguments: impl IntoIterator<Item = impl AsRef<OsStr>>,
+        current_directory: &Path,
+        environment: &[(&str, &OsStr)],
+    ) -> TestResult<Self> {
         let pair = native_pty_system().openpty(INITIAL_SIZE)?;
         let mut command = CommandBuilder::new(program);
         command.args(arguments);
@@ -61,8 +114,17 @@ impl TerminalDriver {
         command.env("TERM", "xterm-256color");
         command.env("LANG", "C.UTF-8");
         command.env("TMPDIR", std::env::temp_dir());
-        if no_color {
-            command.env("NO_COLOR", "1");
+        for (key, value) in environment {
+            if !matches!(
+                *key,
+                "NO_COLOR"
+                    | "QUOTA_COMPONENT_FIXTURE"
+                    | "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"
+                    | "QUOTA_COMPONENT_FIXTURE_RELEASE_FILE"
+            ) {
+                return Err(std::io::Error::other("unapproved PTY fixture environment key").into());
+            }
+            command.env(key, value);
         }
         command.cwd(current_directory);
         let child = pair.slave.spawn_command(command)?;
@@ -291,10 +353,7 @@ impl TerminalDriver {
         let deadline = Instant::now() + timeout;
         while !self.reached_eof {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            match self.output_receiver.recv_timeout(remaining)? {
-                ReaderEvent::Bytes(bytes) => self.transcript.extend(bytes),
-                ReaderEvent::Eof => self.reached_eof = true,
-            }
+            self.receive_bytes(remaining)?;
         }
         Ok(())
     }
@@ -473,6 +532,39 @@ impl Drop for TerminalDriver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incremental_reads_preserve_actual_bytes_and_only_legacy_skips_kitty_reply() -> TestResult<()>
+    {
+        let (sender, receiver) = mpsc::channel();
+        let bytes = b"\x1b[?u\x1b[c".to_vec();
+        sender.send(ReaderEvent::Bytes(bytes.clone()))?;
+        sender.send(ReaderEvent::Eof)?;
+        let mut terminal = TerminalDriver {
+            master: None,
+            writer: None,
+            child: None,
+            output_receiver: receiver,
+            reader_thread: None,
+            transcript: Vec::new(),
+            reached_eof: false,
+        };
+        assert_eq!(terminal.receive_bytes(Duration::ZERO)?, Some(bytes.clone()));
+        assert_eq!(terminal.transcript, bytes);
+        assert_eq!(terminal.receive_bytes(Duration::ZERO)?, None);
+        terminal.send_terminal_reply(b"\x1b[?0u", KeyboardProtocol::Legacy)?;
+        assert!(
+            terminal
+                .send_terminal_reply(b"\x1b[?0u", KeyboardProtocol::Kitty)
+                .is_err()
+        );
+        assert!(
+            terminal
+                .send_terminal_reply(b"\x1b[?62;c", KeyboardProtocol::Legacy)
+                .is_err()
+        );
+        Ok(())
+    }
 
     #[test]
     fn transcript_boundary_includes_bytes_already_queued_by_pty_reader() -> TestResult<()> {

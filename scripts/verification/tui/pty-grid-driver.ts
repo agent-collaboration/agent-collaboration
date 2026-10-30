@@ -1,0 +1,231 @@
+/** Grid observer over the existing Rust TerminalDriver. One owner of each PTY. */
+import { spawn } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { GhosttyCore } from '@wterm/ghostty';
+
+import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts';
+import type { TerminalGrid } from './terminal-grid.ts';
+
+export type KeyProtocol = 'legacy' | 'kitty';
+interface WaitingLine {
+	readonly resolve: (line: string) => void;
+	readonly reject: (error: Error) => void;
+	readonly timer: ReturnType<typeof setTimeout>;
+}
+export interface PtyGridTarget {
+	readonly repository: string;
+	readonly driver: string;
+	readonly surface: 'sessions' | 'sessions-filters' | 'quota' | 'quota-filters' | 'normal' | 'hard';
+	readonly keys: KeyProtocol;
+	readonly evidence: string;
+	readonly componentBinary?: string;
+}
+export class PtyGridDriver {
+	private readonly child: ChildProcessWithoutNullStreams;
+	private readonly core: GhosttyCore;
+	private readonly target: PtyGridTarget;
+	private readonly lines: string[] = [];
+	private waiter: WaitingLine | null = null;
+	private readonly raw: Buffer[] = [];
+	private readonly commands: string[] = [];
+	private ended = false;
+	private readonly completion: Promise<number | null>;
+	private released: Promise<number | null> | null = null;
+	private constructor(target: PtyGridTarget, core: GhosttyCore) {
+		this.target = target;
+		this.core = core;
+		this.child = spawn(
+			target.driver,
+			[
+				'compiled_grid_terminal_observation',
+				'--exact',
+				'--ignored',
+				'--nocapture',
+				'--test-threads=1',
+			],
+			{
+				cwd: target.repository,
+				env: {
+					...process.env,
+					TUI_GRID_SURFACE: target.surface,
+					TUI_GRID_KEYS: target.keys,
+					...(target.componentBinary === undefined
+						? {}
+						: {
+								TUI_GRID_COMPONENT_BINARY: target.componentBinary,
+								TUI_GRID_COMPONENT_RECEIPT: join(target.evidence, 'fixture-finished'),
+							}),
+				},
+			},
+		);
+		let pending = '';
+		let stdout = '';
+		let stderr = '';
+		this.child.stdout.on('data', (chunk: Buffer) => {
+			pending += chunk.toString('utf8');
+			stdout += chunk.toString('utf8');
+			while (pending.includes('\n')) {
+				const end = pending.indexOf('\n');
+				const line = pending.slice(0, end);
+				pending = pending.slice(end + 1);
+				const marker = line.indexOf('TUI_GRID ');
+				if (marker < 0) continue;
+				const response = line.slice(marker + 9);
+				if (this.waiter !== null) {
+					clearTimeout(this.waiter.timer);
+					this.waiter.resolve(response);
+					this.waiter = null;
+				} else this.lines.push(response);
+			}
+		});
+		this.child.stderr.on('data', (chunk: Buffer) => {
+			stderr += chunk.toString('utf8');
+		});
+		this.completion = new Promise((resolve) => {
+			this.child.once('error', (error) => {
+				if (this.waiter !== null) {
+					clearTimeout(this.waiter.timer);
+					this.waiter.reject(error);
+					this.waiter = null;
+				}
+			});
+			this.child.once('close', (code) => {
+				this.ended = true;
+				writeFileSync(join(target.evidence, 'driver.stdout'), stdout);
+				writeFileSync(join(target.evidence, 'driver.stderr'), stderr);
+				if (this.waiter !== null) {
+					clearTimeout(this.waiter.timer);
+					this.waiter.reject(new Error(`PTY driver exited ${code}: ${stderr}`));
+					this.waiter = null;
+				}
+				resolve(code);
+			});
+		});
+	}
+	static async start(target: PtyGridTarget): Promise<PtyGridDriver> {
+		const core = await createTerminalCore(120, 36);
+		const driver = new PtyGridDriver(target, core);
+		try {
+			const ready = await driver.nextLine();
+			if (ready !== 'READY 120 36') throw new Error(`PTY readiness failed: ${ready}`);
+			return driver;
+		} catch (error) {
+			await driver.stop();
+			throw error;
+		}
+	}
+	private nextLine(): Promise<string> {
+		const queued = this.lines.shift();
+		if (queued !== undefined) return Promise.resolve(queued);
+		if (this.ended) return Promise.reject(new Error('PTY driver already ended'));
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				this.waiter = null;
+				reject(new Error('PTY command deadline'));
+			}, 30_000);
+			this.waiter = { resolve, reject, timer };
+		});
+	}
+	private async command(command: string): Promise<string> {
+		this.commands.push(command);
+		this.child.stdin.write(`${command}\n`);
+		return this.nextLine();
+	}
+	async send(bytes: Uint8Array): Promise<void> {
+		if (bytes.length === 0) return;
+		const response = await this.command(`write ${Buffer.from(bytes).toString('hex')}`);
+		if (response !== 'OK') throw new Error(response);
+	}
+	async resize(columns: number, rows: number): Promise<void> {
+		const response = await this.command(`resize ${columns} ${rows}`);
+		if (response !== 'OK') throw new Error(response);
+		this.core.resize(columns, rows);
+	}
+	async receive(timeoutMillis = 8_000): Promise<'bytes' | 'eof'> {
+		const response = await this.command(`read ${timeoutMillis}`);
+		if (response === 'EOF') return 'eof';
+		if (!response.startsWith('BYTES ')) throw new Error(response);
+		const bytes = Buffer.from(response.slice(6), 'hex');
+		this.raw.push(bytes);
+		this.core.writeRaw(bytes);
+		const replies: string[] = [];
+		for (let reply = this.core.getResponse(); reply !== null; reply = this.core.getResponse()) {
+			const isKitty = reply.startsWith('\x1b[?') && reply.endsWith('u');
+			if (this.target.keys !== 'legacy' || !isKitty) replies.push(reply);
+		}
+		if (replies.length > 0) {
+			const result = await this.command(`reply ${Buffer.from(replies.join('')).toString('hex')}`);
+			if (result !== 'OK') throw new Error(result);
+		}
+		return 'bytes';
+	}
+	grid(): TerminalGrid {
+		return snapshotGrid(this.core);
+	}
+	bytes(): Buffer {
+		return Buffer.concat(this.raw);
+	}
+	frameGeneration(): number {
+		return this.core.synchronizedOutputGeneration();
+	}
+	async waitForGrid(
+		name: string,
+		matches: (grid: TerminalGrid) => boolean,
+		after = -1,
+	): Promise<TerminalGrid> {
+		const deadline = Date.now() + 8_000;
+		const nextFrame = async (): Promise<TerminalGrid> => {
+			if (!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid()))
+				return this.grid();
+			if (
+				Date.now() >= deadline ||
+				(await this.receive(Math.max(1, deadline - Date.now()))) === 'eof'
+			) {
+				throw new Error(
+					`grid checkpoint unreachable: ${name}\n${gridLines(this.grid()).join('\n')}`,
+				);
+			}
+			return nextFrame();
+		};
+		return nextFrame();
+	}
+	async running(): Promise<boolean> {
+		return (await this.command('running')) === 'RUNNING';
+	}
+	async finish(): Promise<number | null> {
+		const response = await this.command('finish');
+		if (!response.startsWith('FINISHED ')) throw new Error(response);
+		return this.release();
+	}
+	async stop(): Promise<number | null> {
+		if (!this.ended) {
+			try {
+				await this.command('stop');
+			} catch {
+				if (!this.ended) this.child.stdin.end();
+			}
+		}
+		return this.release();
+	}
+	private async release(): Promise<number | null> {
+		this.released ??= this.settle();
+		return this.released;
+	}
+	private async settle(): Promise<number | null> {
+		const code = await this.completion;
+		writeFileSync(join(this.target.evidence, 'terminal.ansi'), this.bytes());
+		writeFileSync(
+			join(this.target.evidence, 'driver-commands.json'),
+			JSON.stringify(this.commands, null, 2),
+		);
+		writeFileSync(
+			join(this.target.evidence, 'terminal-grid.json'),
+			JSON.stringify(this.grid(), null, 2),
+		);
+		this.core.dispose();
+		return code;
+	}
+}
