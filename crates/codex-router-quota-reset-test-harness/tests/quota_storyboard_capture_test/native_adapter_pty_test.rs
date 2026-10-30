@@ -1,15 +1,14 @@
 //! Native adapter protocol proof. Controlled stand-ins do not claim product appearance.
 use super::TestResult;
-use std::fs;
-use std::os::unix::fs::MetadataExt;
-use std::process::Command;
-use std::time::{Duration, Instant};
-#[path = "native_adapter_fixture_support.rs"]
-mod fixture_support;
+use crate::native_adapter_fixture_support as fixture_support;
 use fixture_support::{
     NativeAdapter, NativeFixture, TIMEOUT, observe_process, process_group, require_condition,
     require_equal, require_process_absent, run_command,
 };
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+use std::process::Command;
+use std::time::{Duration, Instant};
 const COMPONENT_ARGUMENTS: &str = "quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture\n--exact\n--ignored\n--nocapture\n--test-threads=1";
 
 #[test]

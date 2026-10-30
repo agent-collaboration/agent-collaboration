@@ -130,24 +130,7 @@ impl TerminalDriver {
         Self::spawn_prepared_command(command, None)
     }
 
-    pub(super) fn spawn_public_wrapper(
-        node: &Path,
-        wrapper: &Path,
-        configuration: &Path,
-        output: &Path,
-    ) -> TestResult<Self> {
-        let mut command = CommandBuilder::new(node);
-        command.arg(wrapper);
-        command.arg(configuration);
-        // Public entry keeps the real inherited environment, including absent CODEX_HOME.
-        command.env("QUOTA_STORYBOARD_FIXTURE_COMMAND", configuration);
-        command.env("TERM", "xterm-256color");
-        command.env("LANG", "C.UTF-8");
-        command.cwd(output);
-        Self::spawn_prepared_command(command, Some(output.to_path_buf()))
-    }
-
-    fn spawn_prepared_command(
+    pub(super) fn spawn_prepared_command(
         command: CommandBuilder,
         public_wrapper: Option<PathBuf>,
     ) -> TestResult<Self> {
@@ -631,6 +614,7 @@ impl Drop for TerminalDriver {
 
 #[cfg(test)]
 mod tests {
+    use super::super::isolated_fixture_test::ensure;
     use super::*;
 
     #[test]
@@ -650,20 +634,31 @@ mod tests {
             reached_eof: false,
             public_wrapper: None,
         };
-        assert_eq!(terminal.receive_bytes(Duration::ZERO)?, Some(bytes.clone()));
-        assert_eq!(terminal.transcript, bytes);
-        assert_eq!(terminal.receive_bytes(Duration::ZERO)?, None);
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)? == Some(bytes.clone()),
+            "incremental read changed actual bytes",
+        )?;
+        ensure(
+            terminal.transcript == bytes,
+            "incremental read did not retain transcript",
+        )?;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)?.is_none(),
+            "reader EOF was not preserved",
+        )?;
         terminal.send_terminal_reply(b"\x1b[?0u", KeyboardProtocol::Legacy)?;
-        assert!(
+        ensure(
             terminal
                 .send_terminal_reply(b"\x1b[?0u", KeyboardProtocol::Kitty)
-                .is_err()
-        );
-        assert!(
+                .is_err(),
+            "kitty reply was wrongly skipped",
+        )?;
+        ensure(
             terminal
                 .send_terminal_reply(b"\x1b[?62;c", KeyboardProtocol::Legacy)
-                .is_err()
-        );
+                .is_err(),
+            "legacy device reply was wrongly skipped",
+        )?;
         Ok(())
     }
 
