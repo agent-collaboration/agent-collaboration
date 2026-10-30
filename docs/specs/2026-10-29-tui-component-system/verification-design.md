@@ -317,7 +317,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 
 **U16 · R17** (controls)
 - *Seam:* the quota Details actions and `AccountActionTarget`; `QuotaOutcome::AccountCommand` and `AccountCommandResult`; the CLI's run-then-restart.
-- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. C, once: the owner logs in again for real from Details.
+- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. Only the interactive login is a child process after teardown. Disable/Enable, Remove and Copy ID run in-process through an injected typed account-commands port over the existing owners (decided 2026-10-30: a subprocess exit code cannot carry the typed `RequiresDisabled` refusal without parsing stderr). In B the quota fixture installs a test-support recording port; the "stand-in invocations" below for those actions are that port's recorded calls, and its "refusal" is a typed `RequiresDisabled` it returns. One adapter test drives the real port against the existing owners in a temporary store for the typed refusal. C, once: the owner logs in again for real from Details.
 - *Target and journey:* B, `needed:` "Log in again" on the quota binary, legacy and kitty modes. Lasting. C is temporary.
 - *Reference:* R17; U16.
 - *Passes when:*
