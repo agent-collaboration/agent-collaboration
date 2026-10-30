@@ -1,6 +1,9 @@
 //! Shared terminal presentation. Product state and effects remain with callers.
 pub mod actions;
+pub mod controls;
 mod dialog_sizing;
+#[cfg(test)]
+mod dialog_test_frame;
 pub mod focus_model;
 pub mod hit_regions;
 mod hit_regions_model;
@@ -10,14 +13,15 @@ pub mod surface_handle;
 pub mod surface_stack;
 pub mod theme;
 pub use dialog_sizing::{
-    DialogAxisBounds, DialogAxisSize, DialogPercentage, DialogPreferredSize, DialogPresentation,
+    DialogAxisBounds, DialogAxisSize, DialogMargins, DialogPercentage, DialogPreferredSize,
+    DialogPresentation,
 };
 mod dialog_body_viewport;
 pub use dialog_body_viewport::{DialogBodyViewport, DialogBodyViewportProps, DialogScrollKeys};
 mod dialog;
 mod dialog_interaction;
 
-pub use dialog::{DialogFrame, DialogFrameProps, DialogHost, DialogHostProps, DialogMargins};
+pub use dialog::{DialogFrame, DialogFrameProps, DialogHost, DialogHostProps};
 pub use dialog_interaction::{
     DialogButton, DialogButtonProps, DialogInputScope, UseDialogInteraction,
 };

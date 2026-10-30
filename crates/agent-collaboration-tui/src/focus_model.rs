@@ -35,6 +35,12 @@ impl fmt::Debug for TargetInputHandler {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TargetId(String);
 impl TargetId {
+    pub fn for_action(action: &crate::actions::ActionId) -> Self {
+        Self(format!("action:{}", action.as_str()))
+    }
+    pub fn child(&self, suffix: &str) -> Self {
+        Self(format!("{}:{}:{suffix}", self.0.len(), self.0))
+    }
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         let value = value.into();
         validate_identifier(&value)?;
@@ -58,9 +64,16 @@ impl GroupId {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TargetRole {
+    Focusable,
+    PointerOnly,
+}
+
 #[derive(Clone, Debug)]
 pub struct TargetSpec {
     pub id: TargetId,
+    pub role: TargetRole,
     pub group: Option<GroupId>,
     pub availability: AvailabilityFn,
     pub input: TargetInputHandler,
@@ -70,6 +83,7 @@ impl TargetSpec {
     pub fn new(id: TargetId) -> Self {
         Self {
             id,
+            role: TargetRole::Focusable,
             group: None,
             availability: AvailabilityFn::default(),
             input: TargetInputHandler::default(),
@@ -79,6 +93,13 @@ impl TargetSpec {
     pub fn in_group(mut self, group: GroupId) -> Self {
         self.group = Some(group);
         self
+    }
+    pub fn pointer_only(mut self) -> Self {
+        self.role = TargetRole::PointerOnly;
+        self
+    }
+    pub fn can_focus(&self) -> bool {
+        self.role == TargetRole::Focusable && self.is_enabled()
     }
     pub fn with_input(mut self, input: TargetInputHandler) -> Self {
         self.input = input;
@@ -134,7 +155,7 @@ impl FocusModel {
         validate_targets(&targets)?;
         let current = targets
             .iter()
-            .find(|target| target.is_enabled())
+            .find(|target| target.can_focus())
             .map(|target| target.id.clone());
         Ok(Self { targets, current })
     }
@@ -153,7 +174,7 @@ impl FocusModel {
         if self
             .targets
             .iter()
-            .any(|target| target.id == *id && target.is_enabled())
+            .any(|target| target.id == *id && target.can_focus())
         {
             self.current = Some(id.clone());
             true
@@ -166,9 +187,9 @@ impl FocusModel {
             .and_then(|id| {
                 self.targets
                     .iter()
-                    .find(|target| target.id == *id && target.is_enabled())
+                    .find(|target| target.id == *id && target.can_focus())
             })
-            .or_else(|| self.targets.iter().find(|target| target.is_enabled()))
+            .or_else(|| self.targets.iter().find(|target| target.can_focus()))
             .map(|target| target.id.clone());
     }
     pub fn replace_targets(&mut self, targets: Vec<TargetSpec>) -> Result<(), FocusError> {
@@ -193,7 +214,7 @@ impl FocusModel {
             .targets
             .iter()
             .filter(|target| {
-                target.is_enabled() && (!within_group || target.group.as_ref() == group)
+                target.can_focus() && (!within_group || target.group.as_ref() == group)
             })
             .map(|target| &target.id)
             .collect::<Vec<_>>();

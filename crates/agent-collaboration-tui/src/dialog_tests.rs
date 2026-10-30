@@ -1,3 +1,5 @@
+use crate::controls::{FormField, FormFields, SelectableRow};
+use crate::dialog_test_frame::StaticDialogFrame as DialogFrame;
 use crate::*;
 use futures_util::StreamExt;
 use iocraft::prelude::*;
@@ -81,84 +83,74 @@ fn excessive_margins_and_tiny_viewports_remain_bounded() {
     }
 }
 
-#[derive(Props)]
-struct InteractionProbeProps {
-    label: String,
-}
-
-#[component]
-fn InteractionProbe(
-    props: &InteractionProbeProps,
-    mut hooks: Hooks,
-) -> impl Into<AnyElement<'static>> {
-    let mut count = hooks.use_state(|| 0_u32);
-    hooks.use_dialog_events(move |event| {
-        if matches!(
-            event,
-            TerminalEvent::Key(KeyEvent {
-                code: KeyCode::Char('b'),
-                kind: KeyEventKind::Press,
-                ..
-            })
-        ) {
-            count.set(count.get() + 1);
-        }
-    });
-    hooks.use_dialog_local_events(move |event| {
-        if matches!(
-            event,
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
-                kind: MouseEventKind::Down(MouseButton::Left),
-                ..
-            })
-        ) {
-            count.set(count.get() + 1);
-        }
-    });
-    element!(Text(content: format!("{}:{}", props.label, count.get())))
-}
-
 #[component]
 fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let mut open = hooks.use_state(|| true);
+    use crate::{
+        actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+        controls::ScrollHandle,
+        focus_model::{FocusModel, InputUse, TargetId, TargetInputHandler, TargetSpec},
+        hit_regions::{HitRegion, HitRegionKind},
+        input_owner::InputOwner,
+        overlay_host::OverlayHost,
+        surface_handle::use_surface_stack,
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    };
+    let count = hooks.use_state(|| 0u32);
+    let exit = hooks.use_state(|| false);
     let mut system = hooks.use_context_mut::<SystemContext>();
-    let mut should_exit = hooks.use_state(|| false);
-    let (width, height) = hooks.use_terminal_size();
-    hooks.use_terminal_events(move |event| {
-        if matches!(
-            event,
-            TerminalEvent::Key(KeyEvent {
-                code: KeyCode::Char('q'),
-                ..
-            })
-        ) {
-            should_exit.set(true);
-        }
+    let stack = use_surface_stack(&mut hooks, |_| SurfaceModel {
+        focus: FocusModel::new(vec![
+            TargetSpec::new(TargetId::new("background").unwrap()).with_input(
+                TargetInputHandler::new(move |event| {
+                    if matches!(
+                        event,
+                        TerminalEvent::Key(KeyEvent {
+                            code: KeyCode::Char('b'),
+                            kind: KeyEventKind::Press,
+                            ..
+                        }) | TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
+                            kind: MouseEventKind::Down(MouseButton::Left),
+                            ..
+                        })
+                    ) {
+                        let mut count = count;
+                        count.set(count.get() + 1);
+                        InputUse::Used
+                    } else {
+                        InputUse::Unused
+                    }
+                }),
+            ),
+        ])
+        .unwrap(),
+        actions: ActionRegistry::new(
+            ScopeId::new("background").unwrap(),
+            vec![ActionDef {
+                id: ActionId::new("quit").unwrap(),
+                title: "Quit",
+                keys: vec!["q".parse().unwrap()],
+                availability: AvailabilityFn::default(),
+                choice: None,
+                placement: Placement::Hidden,
+                run: Handler::from(move |()| {
+                    let mut exit = exit;
+                    exit.set(true);
+                }),
+            }],
+        )
+        .unwrap(),
+        primary_action: None,
     });
-    if should_exit.get() {
+    let mut opened = hooks.use_ref(|| false);
+    if !opened.get() {
+        let scroll = ScrollHandle::new(stack);
+        stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(vec![TargetSpec::new(TargetId::new("body").unwrap()).with_input(scroll.input_handler())]).unwrap(),actions:ActionRegistry::new(ScopeId::new("dialog").unwrap(),Vec::new()).unwrap(),primary_action:None},view:OverlayView::new(move||element!(crate::controls::DialogFrame(title:"Dialog active".to_owned(),scroll:scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:vec![element!(Text(content:"Account: alpha")).into_any()],actions:vec![element!(Text(content:"Esc Close")).into_any()]) {#((1..=40).map(|index|element!(Text(content:format!("CONTENT {index}")))))}).into_any()),layout:OverlayLayout::CenteredCells {width:30,height:10}}).unwrap();
+        opened.set(true);
+    }
+    if exit.get() {
         system.exit();
     }
-    let dialog = if open.get() {
-        Some(element! {
-            DialogFrame(width: width.max(40), height: height.max(12), title: "Dialog active".to_owned(),
-                presentation: DialogPresentation::cells(30, 10),
-                context:vec![element!(Text(content:"Account: alpha")).into_any()],
-                scroll_keys: crate::DialogScrollKeys::Navigation, on_close: move |_| open.set(false),
-                actions: vec![element!(Text(content: "Esc Close")).into_any()]) {
-                #((1..=40).map(|index| element!(Text(content: format!("CONTENT {index}")))))
-            }
-        }.into_any())
-    } else {
-        None
-    };
-    element! {
-        DialogHost(width: width.max(40), height: height.max(12),
-            background: vec![element! {
-                View(width: 100pct, height: 100pct, flex_direction: FlexDirection::Column) {
-                    InteractionProbe(label: "background".to_owned())
-                }
-            }.into_any()], dialog)
-    }
+    element!(InputOwner(stack,width:40u16,height:12u16,quit_action:ActionId::new("quit").unwrap()) {OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {HitRegion(target:TargetId::new("background").unwrap(),kind:HitRegionKind::Target) {Text(content:format!("background:{}",count.get()))}}}})
 }
 
 #[tokio::test]
@@ -345,7 +337,7 @@ fn default_frames_keep_header_and_actions_usable_at_supported_and_constrained_si
 fn form_field_columns_use_terminal_layout_for_wide_labels() {
     let frame = element! {
         View(width:40,flex_direction:FlexDirection::Column) {
-          crate::FormFields {
+          FormFields {
             FormField(label:"機械".to_owned()) {Text(content:"Sunbook")}
             FormField(label:"Folder".to_owned()) {Text(content:"/repo")}
           }
@@ -378,7 +370,7 @@ fn percentage_dialog_footer_is_pinned_below_flexible_empty_space() {
     ] {
         let frame = element! {View(width:u32::from(width),height:u32::from(height)) {
             DialogFrame(width,height,title:"Credit usage".to_owned(),
-                actions:vec![element!(crate::DialogAction(label:"Cancel")).into_any(),element!(crate::DialogAction(label:"Save")).into_any()]) {
+                actions:vec![element!(Text(content:"Cancel")).into_any(),element!(Text(content:"Save")).into_any()]) {
                 Text(content:"Use credits: Allow")
             }
         }}.render(None).to_string();

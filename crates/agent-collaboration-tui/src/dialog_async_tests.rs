@@ -1,3 +1,4 @@
+use crate::dialog_test_frame::StaticDialogFrame as DialogFrame;
 use crate::*;
 use futures_util::StreamExt;
 use iocraft::prelude::*;
@@ -17,9 +18,7 @@ struct AsyncDialogProps {
 #[component]
 fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut loaded = hooks.use_state(|| false);
-    let mut clicks = hooks.use_state(|| 0_u32);
-    let mut viewport = hooks.use_state(|| (80_u16, 24_u16));
-    let mut exit = hooks.use_state(|| false);
+    let clicks = hooks.use_state(|| 0u32);
     let mut system = hooks.use_context_mut::<SystemContext>();
     hooks.use_future({
         let mut receiver = props.receiver.clone();
@@ -34,31 +33,119 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
             loaded.set(true);
         }
     });
-    hooks.use_terminal_events(move |event| match event {
-        TerminalEvent::Resize(width, height) => viewport.set((width, height)),
-        TerminalEvent::Key(KeyEvent {
-            code: KeyCode::Esc, ..
-        }) => exit.set(true),
-        _ => {}
+    use crate::{
+        actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+        controls::{ScrollHandle, button_target},
+        focus_model::{FocusModel, TargetId},
+        input_owner::InputOwner,
+        overlay_host::OverlayHost,
+        surface_handle::use_surface_stack,
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    };
+    let stack = use_surface_stack(&mut hooks, |_| SurfaceModel {
+        focus: FocusModel::new(Vec::new()).unwrap(),
+        actions: ActionRegistry::new(ScopeId::new("screen").unwrap(), Vec::new()).unwrap(),
+        primary_action: None,
     });
-    if exit.get() {
+    let mut opened = hooks.use_ref(|| false);
+    if !opened.get() {
+        let apply = ActionDef {
+            id: ActionId::new("apply").unwrap(),
+            title: "Apply",
+            keys: Vec::new(),
+            availability: AvailabilityFn::default(),
+            choice: None,
+            placement: Placement::Toolbar,
+            run: Handler::from(move |()| {
+                let mut clicks = clicks;
+                clicks.set(clicks.get() + 1);
+            }),
+        };
+        let scroll = ScrollHandle::new(stack);
+        stack
+            .open_overlay(OverlaySpec {
+                kind: OverlayKind::Dialog,
+                model: SurfaceModel {
+                    focus: FocusModel::new(vec![button_target(
+                        TargetId::for_action(&apply.id),
+                        &apply,
+                    )])
+                    .unwrap(),
+                    actions: ActionRegistry::new(
+                        ScopeId::new("async-dialog").unwrap(),
+                        vec![apply],
+                    )
+                    .unwrap(),
+                    primary_action: None,
+                },
+                view: OverlayView::new(move || {
+                    element!(AsyncDialogBody(stack,loaded,clicks,scroll:scroll.clone())).into_any()
+                }),
+                layout: OverlayLayout::Dialog {
+                    presentation: DialogPresentation::cells(50, 14),
+                    margins: DialogMargins {
+                        top: 1,
+                        right: 2,
+                        bottom: 1,
+                        left: 2,
+                    },
+                },
+            })
+            .unwrap();
+        opened.set(true);
+    }
+    // The loader belongs to this mounted root; viewport changes never recreate it.
+    let width = stack.viewport().0;
+    let layout = OverlayLayout::Dialog {
+        presentation: if width != 0 && width < 60 {
+            DialogPresentation::default()
+        } else {
+            DialogPresentation::cells(50, 14)
+        },
+        margins: DialogMargins {
+            top: 1,
+            right: 2,
+            bottom: 1,
+            left: 2,
+        },
+    };
+    if let Some(overlay) = stack.snapshot().overlays().last()
+        && overlay.layout != layout
+    {
+        let id = overlay.id;
+        stack.update(|model| model.set_overlay_layout_for_test(id, layout));
+    }
+    if stack.snapshot().overlays().is_empty() {
         system.exit();
     }
-    let (width, height) = viewport.get();
-    let status = if loaded.get() { "Loaded" } else { "Loading" };
-    element! {
-        DialogHost(width,height, dialog: Some(element! {
-            DialogFrame(width,height, title: format!("{width}x{height} {status}"),
-                presentation: if width < 60 { DialogPresentation::default() } else { DialogPresentation::cells(50, 14) },
-                context:vec![element!(Text(content:"Account: alpha")).into_any()],
-                margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
-                actions: vec![element! {
-                    DialogAction(label: format!("Apply {}", clicks.get()), has_focus: true, handler: move |_| clicks.set(clicks.get()+1))
-                }.into_any()]) {
-                Text(content: "Loading runs independently of dialog input")
-            }
-        }.into_any()))
-    }
+    element!(InputOwner(stack,width:80u16,height:24u16,quit_action:ActionId::new("quit").unwrap()) {OverlayHost})
+}
+
+#[derive(Props)]
+struct AsyncDialogBodyProps {
+    #[iocraft(required)]
+    stack: crate::surface_handle::SurfaceStackHandle,
+    #[iocraft(required)]
+    loaded: State<bool>,
+    #[iocraft(required)]
+    clicks: State<u32>,
+    #[iocraft(required)]
+    scroll: crate::controls::ScrollHandle,
+}
+#[component]
+fn AsyncDialogBody(props: &AsyncDialogBodyProps) -> impl Into<AnyElement<'static>> {
+    use crate::{
+        actions::ActionId,
+        focus_model::TargetId,
+        hit_regions::{HitRegion, HitRegionKind},
+    };
+    let (width, height) = props.stack.viewport();
+    let status = if props.loaded.get() {
+        "Loaded"
+    } else {
+        "Loading"
+    };
+    element!(crate::controls::DialogFrame(title:format!("{width}x{height} {status}"),scroll:props.scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:vec![element!(Text(content:"Account: alpha")).into_any()],actions:vec![element!(HitRegion(target:TargetId::for_action(&ActionId::new("apply").unwrap()),kind:HitRegionKind::Target) {Text(content:format!("Apply {}",props.clicks.get()))}).into_any()]) {Text(content:"Loading runs independently of dialog input")})
 }
 
 #[tokio::test]

@@ -72,6 +72,36 @@ impl FrameGrid {
             })
             .collect()
     }
+    /// These component fixtures contain exactly one round framed panel.
+    pub fn round_frame_text(&self) -> String {
+        let (top, left) = self
+            .cells
+            .iter()
+            .enumerate()
+            .find_map(|(row, cells)| {
+                cells
+                    .iter()
+                    .position(|cell| cell.text == "╭")
+                    .map(|column| (row, column))
+            })
+            .expect("round panel's top-left corner");
+        let right = self.cells[top]
+            .iter()
+            .rposition(|cell| cell.text == "╮")
+            .expect("round panel's top-right corner");
+        let bottom = (top..self.height)
+            .find(|row| self.cells[*row][left].text == "╰")
+            .expect("round panel's bottom-left corner");
+        (top..=bottom)
+            .map(|row| {
+                self.cells[row][left..=right]
+                    .iter()
+                    .map(|cell| cell.text.as_str())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
     pub fn apply(&mut self, input: &str) -> Result<(), FrameError> {
         let mut characters = input.chars().peekable();
         let (mut column, mut row) = (0, 0);

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+@@ -163,3 +163,3 @@ impl ComboBoxControl {
+                         }
+-                        next.hover(&key);
++                        // Seeded wrong build: click uses the old highlight.
+                         let picked = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))

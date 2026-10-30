@@ -1,0 +1,7 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/text_field.rs b/crates/agent-collaboration-tui/src/controls/text_field.rs
+--- a/crates/agent-collaboration-tui/src/controls/text_field.rs
++++ b/crates/agent-collaboration-tui/src/controls/text_field.rs
+@@ -213,2 +213,3 @@ pub fn TextField(props: &TextFieldProps, mut hooks: Hooks) -> impl Into<AnyEleme
+     element!(View(width:100pct,min_height:1,overflow:Overflow::Hidden,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
++        TextInput(value:value.text.clone(),has_focus:focused,on_change:{let mut state=props.value;move |text|state.set(TextFieldState::new(text))})
+         EditorLine(value,focused,disabled,placeholder:props.placeholder.clone())

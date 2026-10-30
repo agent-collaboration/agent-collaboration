@@ -1,0 +1,10 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+@@ -86,5 +86,3 @@ impl ComboBoxControl {
+         let snapshot = binding.parent.stack.snapshot();
+-        if snapshot.surface(binding.parent.surface).is_none() {
+-            return Ok(false);
+-        }
++        // Seeded wrong build: stale controls still mutate the closed parent draft.
+         let mut next = binding.value.read().clone();

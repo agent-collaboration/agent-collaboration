@@ -26,11 +26,25 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `stale-scroll-map.patch` | A click in the same burst after scrolling uses an invalid map. |
 | `no-ctrl-c-opt-in.patch` | The backend intercepts Ctrl+C before InputOwner acknowledges it. |
 
-All thirteen controls were replayed separately through the full S3 package suite.
-Each compiled and exited 100 with its named runtime failure. Compile errors,
-patch-application errors, and color setup failures do not count as sensitivity.
+| `native-text-input.patch` | The native widget handles covered text and paste, or loses the routed cursor. |
+| `cached-per-render-availability.patch` | A second press in one burst runs an action after the first makes it unavailable. Only action availability is cached; overlay and focus snapshots remain fresh. |
+| `hand-typed-menu-label.patch` | The menu rectangle no longer contains the registry's title/key pair. Background labels cannot satisfy this assertion. |
+| `combo-first-match-reset.patch` | Still-matching typing loses the current keyed highlight. |
+| `combo-highlight-by-position.patch` | Reorder/removal changes the highlighted identity. |
+| `double-section-gap.patch` | Sections have two blank rows between them. |
+| `missing-section-gap.patch` | Sections have no blank row between them. |
+| `missing-action-gap.patch` | Dialog actions have no blank row above them. |
+| `combo-targets-built-once.patch` | An option added while open has no clickable target. |
+| `combo-stale-highlight-click.patch` | A click after reorder/removal picks the prior highlight rather than the row under the pointer. |
+| `combo-stale-parent-update.patch` | A retained control mutates the closed dialog's draft. |
+| `pointer-rows-focusable.patch` | Tab leaves the filter for an option row; Enter must pick the keyed highlight instead. |
+| `publish-invalidated-paint.patch` | Focus reveal invalidates the paint's map, yet that old map is published. |
+| `help-does-not-restore-model.patch` | Returning from Help loses the saved dialog focus/input model. |
+| `cached-help-availability.patch` | Help no longer reflects the source action's live unavailable reason. |
+| `focused-button-enter-inert.patch` | Enter no longer activates the focused primary button. |
 
-Check each patch applies before replay. Later slices must refresh a patch when
-its owning model changes and establish its named full-package failure at the S5
-target. A failed application is an evidence gap, never a passing control.
-The independent S5 observation remains separate from these implementation runs.
+These controls are implementation evidence; the independent S5 observation is
+separate. Check each patch applies, then challenge it individually against the
+full package at the declared S5 source target. Runtime assertion failures must
+identify the named defect. Compile errors, application errors, color setup
+failures, and entry/redraw timeouts do not establish sensitivity.

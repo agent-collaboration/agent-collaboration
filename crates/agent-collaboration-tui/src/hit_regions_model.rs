@@ -53,6 +53,8 @@ pub(crate) struct HitRegionCache {
     staged: HitMapSnapshot,
     published: Option<HitMapSnapshot>,
     frames: u64,
+    invalidation: u64,
+    staged_invalidation: u64,
 }
 pub struct HitRegions(Ref<HitRegionCache>);
 impl Copy for HitRegions {}
@@ -69,10 +71,14 @@ impl HitRegions {
         self.0.read().published.clone()
     }
     pub fn invalidate(mut self) {
-        self.0.write().published = None;
+        let mut cache = self.0.write();
+        cache.invalidation = cache.invalidation.wrapping_add(1);
+        cache.published = None;
     }
     pub(crate) fn begin(mut self) {
-        self.0.write().staged = HitMapSnapshot::default();
+        let mut cache = self.0.write();
+        cache.staged = HitMapSnapshot::default();
+        cache.staged_invalidation = cache.invalidation;
     }
     pub(crate) fn stage_target(mut self, region: TargetRegion) {
         self.0.write().staged.targets.push(region);
@@ -85,6 +91,6 @@ impl HitRegions {
         cache.frames = cache.frames.saturating_add(1);
         let mut frame = std::mem::take(&mut cache.staged);
         frame.frame = cache.frames;
-        cache.published = Some(frame);
+        cache.published = (cache.staged_invalidation == cache.invalidation).then_some(frame);
     }
 }

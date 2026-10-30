@@ -1,0 +1,19 @@
+diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
+--- a/crates/agent-collaboration-tui/src/actions.rs
++++ b/crates/agent-collaboration-tui/src/actions.rs
+@@ -204,2 +204,7 @@ impl ActionRegistry {
+     }
++    pub(crate) fn freeze_availability(&self) -> Self {
++        let mut frozen=self.clone();
++        for action in &mut frozen.actions {let availability=action.availability.get();action.availability=AvailabilityFn::new(move||availability.clone());}
++        frozen
++    }
+     pub fn presentations(&self) -> Vec<ActionPresentation> {
+diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
+@@ -121,3 +121,3 @@ impl HelpControl {
+         }
+-        let source = stack.top().actions.clone();
++        let source = stack.top().actions.freeze_availability();
+         let scroll = ScrollHandle::new(self.0.stack);

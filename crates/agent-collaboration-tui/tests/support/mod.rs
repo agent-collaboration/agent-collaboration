@@ -9,4 +9,5 @@ pub fn require_color_environment() {
     );
 }
 
+pub mod dialog_scene;
 pub mod input_scene;

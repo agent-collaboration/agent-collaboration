@@ -3,9 +3,10 @@ use crate::{
     focus_model::{FocusError, TargetId, TargetSpec},
     hit_regions_model::HitRegions,
     surface_stack::{
-        OverlayId, OverlayIdentityExhausted, OverlaySpec, SurfaceId, SurfaceModel, SurfaceStack,
+        OverlayId, OverlayIdentityExhausted, OverlayKind, OverlaySpec, SurfaceId, SurfaceModel,
+        SurfaceStack,
     },
-    theme::Theme,
+    theme::{SurfaceRole, Theme},
 };
 use iocraft::prelude::*;
 
@@ -106,6 +107,19 @@ pub struct SurfaceContext {
     pub surface: SurfaceId,
 }
 impl SurfaceContext {
+    pub fn surface_role(self) -> SurfaceRole {
+        let stack = self.stack.snapshot();
+        if self.surface == SurfaceId::Screen
+            || stack.overlays().iter().any(|overlay| {
+                SurfaceId::Overlay(overlay.id) == self.surface
+                    && overlay.kind == OverlayKind::Dialog
+            })
+        {
+            SurfaceRole::Base
+        } else {
+            SurfaceRole::Raised
+        }
+    }
     pub fn theme(self) -> Theme {
         if self.stack.snapshot().is_covered(self.surface) {
             Theme::covered()

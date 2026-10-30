@@ -1,14 +1,7 @@
-use crate::{DialogBodyViewport, DialogInputScope, DialogPresentation, UseDialogInteraction};
+use crate::{
+    DialogBodyViewport, DialogInputScope, DialogMargins, DialogPresentation, UseDialogInteraction,
+};
 use iocraft::prelude::*;
-
-/// Vertical values are terminal rows; horizontal values are terminal columns.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct DialogMargins {
-    pub top: u16,
-    pub right: u16,
-    pub bottom: u16,
-    pub left: u16,
-}
 
 #[derive(Props)]
 pub struct DialogHostProps<'a> {

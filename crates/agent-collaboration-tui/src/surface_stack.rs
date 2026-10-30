@@ -66,6 +66,10 @@ pub struct OverlaySpec {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OverlayLayout {
+    Dialog {
+        presentation: crate::DialogPresentation,
+        margins: crate::DialogMargins,
+    },
     CenteredCells {
         width: u16,
         height: u16,
@@ -85,30 +89,71 @@ impl Default for OverlayLayout {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OverlayPlacement {
+    Fixed {
+        left: u16,
+        top: u16,
+        width: u16,
+        height: u16,
+    },
+    Centered {
+        width: Size,
+        height: Size,
+        max_width: u16,
+        max_height: u16,
+        margins: crate::DialogMargins,
+    },
+}
 impl OverlayLayout {
-    pub fn resolve(self, viewport: (u16, u16)) -> (u16, u16, u16, u16) {
+    pub fn resolve(self, viewport: (u16, u16)) -> OverlayPlacement {
         match self {
+            Self::Dialog {
+                presentation,
+                margins,
+            } => {
+                let left = margins.left.min(viewport.0);
+                let right = margins.right.min(viewport.0.saturating_sub(left));
+                let top = margins.top.min(viewport.1);
+                let bottom = margins.bottom.min(viewport.1.saturating_sub(top));
+                let ((width, max_width), (height, max_height)) = presentation.resolve(
+                    viewport.0.saturating_sub(left + right),
+                    viewport.1.saturating_sub(top + bottom),
+                );
+                OverlayPlacement::Centered {
+                    width,
+                    height,
+                    max_width,
+                    max_height,
+                    margins: crate::DialogMargins {
+                        left,
+                        right,
+                        top,
+                        bottom,
+                    },
+                }
+            }
             Self::CenteredCells { width, height } => {
                 let width = width.min(viewport.0);
                 let height = height.min(viewport.1);
-                (
-                    (viewport.0 - width) / 2,
-                    (viewport.1 - height) / 2,
+                OverlayPlacement::Fixed {
+                    left: (viewport.0 - width) / 2,
+                    top: (viewport.1 - height) / 2,
                     width,
                     height,
-                )
+                }
             }
             Self::AtCells {
                 left,
                 top,
                 width,
                 height,
-            } => (
+            } => OverlayPlacement::Fixed {
                 left,
                 top,
-                width.min(viewport.0.saturating_sub(left)),
-                height.min(viewport.1.saturating_sub(top)),
-            ),
+                width: width.min(viewport.0.saturating_sub(left)),
+                height: height.min(viewport.1.saturating_sub(top)),
+            },
         }
     }
 }
@@ -171,6 +216,12 @@ impl SurfaceStack {
     }
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
+    }
+    #[cfg(test)]
+    pub(crate) fn set_overlay_layout_for_test(&mut self, id: OverlayId, layout: OverlayLayout) {
+        if let Some(overlay) = self.overlays.iter_mut().find(|overlay| overlay.id == id) {
+            overlay.layout = layout;
+        }
     }
     pub fn surface(&self, id: SurfaceId) -> Option<&SurfaceModel> {
         match id {

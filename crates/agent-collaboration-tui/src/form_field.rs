@@ -122,37 +122,3 @@ pub fn SelectableRow<'a>(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn measured_unicode_labels_and_focus_share_one_value_origin() {
-        for stacked in [false, true] {
-            for selected in [false, true] {
-                let frame = element!(View(width:40) {
-                    FormFields(stacked) {
-                        FormField(label:"マシン設定".to_owned(),has_focus:selected) {Text(content:"Sunbook")}
-                        FormField(label:"Folder".to_owned()) {Text(content:"/repo")}
-                    }
-                }).render(None).to_string();
-                for value in ["Sunbook", "/repo"] {
-                    let prefix = frame
-                        .lines()
-                        .find(|line| line.contains(value))
-                        .unwrap()
-                        .split_once(value)
-                        .unwrap()
-                        .0;
-                    assert_eq!(
-                        UnicodeWidthStr::width(prefix),
-                        if stacked { 2 } else { 14 },
-                        "{frame}"
-                    );
-                }
-                assert_eq!(frame.matches('❯').count(), usize::from(selected), "{frame}");
-            }
-        }
-    }
-}
