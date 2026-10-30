@@ -1,5 +1,9 @@
 //! Shared terminal presentation. Product state and effects remain with callers.
+pub mod actions;
 mod dialog_sizing;
+pub mod focus_model;
+pub mod surface_stack;
+pub mod theme;
 pub use dialog_sizing::{
     DialogAxisBounds, DialogAxisSize, DialogPercentage, DialogPreferredSize, DialogPresentation,
 };

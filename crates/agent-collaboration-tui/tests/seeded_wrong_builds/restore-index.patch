@@ -1,0 +1,30 @@
+diff --git a/crates/agent-collaboration-tui/src/surface_stack.rs b/crates/agent-collaboration-tui/src/surface_stack.rs
+--- a/crates/agent-collaboration-tui/src/surface_stack.rs
++++ b/crates/agent-collaboration-tui/src/surface_stack.rs
+@@ -48,2 +48,3 @@ pub struct Overlay {
+     pub restore_focus: Option<TargetId>,
++    restore_index: Option<usize>,
+ }
+@@ -124,2 +125,8 @@ impl SurfaceStack {
+         let restore_focus = self.top().focus.current().cloned();
++        let restore_index = self
++            .top()
++            .focus
++            .targets()
++            .iter()
++            .position(|target| Some(&target.id) == restore_focus.as_ref());
+         self.overlays.push(Overlay {
+@@ -130,2 +137,3 @@ impl SurfaceStack {
+             restore_focus,
++            restore_index,
+         });
+@@ -136,3 +144,8 @@ impl SurfaceStack {
+         let closed = self.overlays.pop()?;
+-        self.top_mut().focus.restore(closed.restore_focus.as_ref());
++        // Seeded wrong build: restoration follows the old position, not identity.
++        let target = closed
++            .restore_index
++            .and_then(|index| self.top().focus.targets().get(index))
++            .map(|target| target.id.clone());
++        self.top_mut().focus.restore(target.as_ref());
+         Some(closed.id)

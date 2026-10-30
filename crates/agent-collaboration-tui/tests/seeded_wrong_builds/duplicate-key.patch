@@ -1,0 +1,17 @@
+diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
+--- a/crates/agent-collaboration-tui/src/actions.rs
++++ b/crates/agent-collaboration-tui/src/actions.rs
+@@ -159,3 +159,2 @@ impl ActionRegistry {
+         let mut identities = std::collections::HashSet::new();
+-        let mut bindings = std::collections::HashSet::new();
+         for action in &actions {
+@@ -164,8 +163,4 @@ impl ActionRegistry {
+             }
+-            for key in &action.keys {
+-                if !bindings.insert(key.clone()) {
+-                    return Err(ActionError::DuplicateKey(key.clone()));
+-                }
+-            }
+         }
++        // Seeded wrong build: duplicate keys silently resolve to the last action.
+         Ok(Self { scope, actions })

@@ -158,6 +158,7 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
 - **Writes:** `agent-collaboration-tui/src/{surface_stack,focus_model,actions,theme}.rs` and `tests/support/`.
 - **Consumer:** S3.
 - **Proof (unit):**
+  - Command: `env -u NO_COLOR cargo nextest run --profile ci -p agent-collaboration-tui`. Color-sensitive A setup fails immediately when `NO_COLOR` is set; the pin memoizes it privately, with no public override. No skipping or uncolored expectations (Lead decision, 2026-10-30).
   - Duplicate key in one scope is rejected. Wrong build: last binding silently wins.
   - Push/pop/restore by `TargetId`, falling back to the first enabled target. Wrong build: restore by index.
   - Focus traversal and groups: a table over target layouts. This is a property, since one rule covers all layouts.
@@ -177,7 +178,7 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Overlays as root siblings with the one-cell gutter.
   - Dimmed covered surfaces.
 - **Writes:** `agent-collaboration-tui/src/{input_owner,hit_regions,overlay_host}.rs`.
-- **Earns, at layer A** (`cargo nextest run --profile ci -p agent-collaboration-tui`, every change, Sunclaw and CI):
+- **Earns, at layer A** (`env -u NO_COLOR cargo nextest run --profile ci -p agent-collaboration-tui`, every change, Sunclaw and CI):
   - U1 · R1, A part: every boundary case as a burst and frame-separated; beneath snapshots byte-equal; only R1's exceptions.
   - U2 · R2, A part: beneath inert; dimmed roles outside the overlay-plus-gutter footprint; restored in the closing redraw.
   - U3 · R3, A part: Tab, arrows and click reach; exactly one focus; published map equals draw geometry each frame. Clip cases: fully hidden target; half-visible target; plain `overflow: Hidden` consumer view; nested and bordered; each axis; after resize.
