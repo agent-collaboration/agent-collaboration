@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -106,3 +106,3 @@ pub(super) fn DialogHeader<'a>(
-         && (width.get() == 0 || needed <= usize::from(width.get()));
--    let title = fit_header_title(&props.title, usize::from(width.get()));
+@@ -135,3 +135,3 @@ pub(super) fn DialogHeader<'a>(
+             || needed + usize::from(help_width.get()) < usize::from(available_width));
+-    let title = fit_header_title(&props.title, usize::from(available_width));
 +    let title = props.title.clone();
-     element!(View(width:100pct,height:1,min_height:1,flex_shrink:0.0_f32,column_gap:1,overflow:Overflow::Hidden) {
+     element!(View(width:100pct,height:if separate {Size::Auto}else{Size::Length(1)},min_height:1,flex_shrink:0.0_f32,column_gap:1,align_items:AlignItems::FlexStart,flex_wrap:if separate {FlexWrap::Wrap}else{FlexWrap::NoWrap},overflow:Overflow::Hidden) {

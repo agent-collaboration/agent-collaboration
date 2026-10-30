@@ -183,8 +183,22 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
                 }
                 2 if frame.contains("32x24 Loading") => {
                     assert!(
-                        frame.contains("Account: al…") && frame.contains("Apply 0"),
+                        frame.contains("Account: alpha") && frame.contains("Apply 0"),
                         "{frame}"
+                    );
+                    let rows = frame.lines().collect::<Vec<_>>();
+                    let title = rows
+                        .iter()
+                        .position(|row| row.contains("32x24 Loading"))
+                        .unwrap();
+                    let identity = rows
+                        .iter()
+                        .position(|row| row.contains("Account: alpha"))
+                        .unwrap();
+                    assert_eq!(
+                        identity,
+                        title + 1,
+                        "complete context owns its pinned row: {frame}"
                     );
                     assert!(
                         frame.lines().all(|line| line.chars().count() <= 32),

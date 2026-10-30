@@ -1,17 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -95,7 +95,3 @@ pub(super) fn DialogHeader<'a>(
-     let needed = props.title.width()
--        + if has_context {
--            usize::from(context_width.get())
--        } else {
--            0
--        }
-+        + usize::from(context_width.get())
-         + usize::from(help_width.get())
-@@ -104,3 +100,3 @@ pub(super) fn DialogHeader<'a>(
-     let show_help = help.is_some()
--        && (!has_context || !context_wrapped.get())
-+        && !context_wrapped.get()
-         && (width.get() == 0 || needed <= usize::from(width.get()));
+@@ -118,3 +118,3 @@ pub(super) fn DialogHeader<'a>(
+     let help = props.help.take();
+-    let identity_width = if has_context { context_width.get() } else { 0 };
++    let identity_width = context_width.get();
+     let identity_rows = if has_context {

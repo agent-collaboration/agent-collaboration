@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+@@ -74,3 +74,3 @@ fn HeaderContext<'a>(
+         && (props.natural_width.get() > width.get() || props.natural_height.get() > 1);
+-    element!(View(width:if props.separate {Size::Percent(100.0)}else{preferred},min_width:0,flex_shrink:if props.separate {0.0_f32}else{1.0_f32},height:if props.separate {Size::Auto}else{Size::Length(1)},align_items:AlignItems::FlexStart,overflow:Overflow::Hidden) {
++    element!(View(width:if props.separate {Size::Percent(100.0)}else{preferred},min_width:0,flex_shrink:if props.separate {0.0_f32}else{1.0_f32},height:Size::Length(1),align_items:AlignItems::FlexStart,overflow:Overflow::Hidden) {
+         // Measure the one context subtree at row width, independently of its

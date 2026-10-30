@@ -32,6 +32,9 @@ mod dialog_header_layout;
 #[path = "suites/dialog_page_navigation.rs"]
 mod dialog_page_navigation;
 #[cfg(test)]
+#[path = "suites/dialog_pinned_context.rs"]
+mod dialog_pinned_context;
+#[cfg(test)]
 #[path = "suites/global_quit_aliases.rs"]
 mod global_quit_aliases;
 #[cfg(test)]
