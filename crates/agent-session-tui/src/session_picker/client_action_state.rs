@@ -2,6 +2,7 @@
 //! detachment. Refreshes and repeated keys never create another submission.
 use super::{SessionsPickerOutcome, picker_model::SessionsPickerModel};
 use agent_session_inventory::sessions::{
+    claude_terminal_launch::ClaudeTerminalMode,
     source_client_action::{CapturedClientAction, SessionClientEffect, SessionClientExecutor},
     source_ssh_protocol::{
         SourceNativeExitStatus, SourceNativeObservation, SourceReadError, SourceReply,
@@ -75,10 +76,16 @@ impl SessionsPickerModel {
             service_id: capabilities.service_id.clone(),
             effect,
         };
-        self.client_action = if draft.client == NewSessionClient::ClaudeNativeForeground {
-            PickerClientAction::Terminal(captured)
-        } else {
-            PickerClientAction::Queued(captured)
+        self.client_action = match draft.client {
+            NewSessionClient::ClaudeNativeForeground => {
+                PickerClientAction::Terminal(captured, ClaudeTerminalMode::Foreground)
+            }
+            NewSessionClient::ClaudeNativeBackground
+                if draft.selected_source == super::PickerSourceContext::DefaultHosted =>
+            {
+                PickerClientAction::Terminal(captured, ClaudeTerminalMode::BackgroundThenAttach)
+            }
+            _ => PickerClientAction::Queued(captured),
         };
         self.new_session = None;
         self.details_dialog = None;
@@ -89,7 +96,7 @@ impl SessionsPickerModel {
 pub(super) enum PickerClientAction {
     #[default]
     Idle,
-    Terminal(CapturedClientAction),
+    Terminal(CapturedClientAction, ClaudeTerminalMode),
     Queued(CapturedClientAction),
     Running(CapturedClientAction),
     Finished {
@@ -153,14 +160,15 @@ pub(super) fn use_client_actions(hooks: &mut Hooks<'_, '_>, context: ClientActio
         }
     });
     let terminal = match &model.read().client_action {
-        PickerClientAction::Terminal(request) => Some(request.clone()),
+        PickerClientAction::Terminal(request, mode) => Some((request.clone(), *mode)),
         _ => None,
     };
-    if let Some(request) = terminal {
+    if let Some((request, mode)) = terminal {
         model.write().client_action = PickerClientAction::Idle;
-        outcome.set(Some(SessionsPickerOutcome::LaunchNativeClaude(Box::new(
-            request,
-        ))));
+        outcome.set(Some(SessionsPickerOutcome::LaunchNativeClaude(
+            Box::new(request),
+            mode,
+        )));
     }
     let queued = if has_executor {
         match &model.read().client_action {
@@ -252,7 +260,7 @@ impl SessionsPickerModel {
             (
                 DetailsClientCapabilities::Native { source },
                 SessionPickerIdentity::NativeClaude(target),
-                DetailsAction::Resume | DetailsAction::ResumeBackground,
+                DetailsAction::Resume,
             ) => {
                 let Some(directory) = record
                     .cwd
@@ -280,8 +288,7 @@ impl SessionsPickerModel {
         };
         self.next_client_generation = attempt;
         let foreground = matches!(&effect, SessionClientEffect::Native { .. })
-            && source == super::PickerSourceContext::DefaultHosted
-            && action == DetailsAction::Resume;
+            && source == super::PickerSourceContext::DefaultHosted;
         let captured = CapturedClientAction {
             attempt,
             source,
@@ -289,7 +296,7 @@ impl SessionsPickerModel {
             effect,
         };
         self.client_action = if foreground {
-            PickerClientAction::Terminal(captured)
+            PickerClientAction::Terminal(captured, ClaudeTerminalMode::Foreground)
         } else {
             PickerClientAction::Queued(captured)
         };

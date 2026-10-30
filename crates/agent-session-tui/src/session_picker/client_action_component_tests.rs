@@ -152,6 +152,25 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
                 "{client_name} phase={phase}: {last}"
             );
         }
+        if client_name == "Claude" {
+            assert_eq!(phase, 5);
+            assert!(
+                captured.lock().unwrap().is_empty(),
+                "background New cannot execute inside the picker"
+            );
+            let Some(SessionsPickerOutcome::LaunchNativeClaude(request, mode)) = outcome else {
+                panic!("background New must carry its terminal attach step");
+            };
+            assert_eq!(mode, ClaudeTerminalMode::BackgroundThenAttach);
+            assert_eq!(
+                request.source,
+                super::super::PickerSourceContext::DefaultHosted
+            );
+            assert!(matches!(request.effect, SessionClientEffect::Native {
+                action: agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction::New { arguments: actual, .. }, ..
+            } if actual == arguments));
+            continue;
+        }
         assert_eq!(phase, 6);
         let captured = captured.lock().unwrap();
         assert_eq!(
