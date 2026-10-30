@@ -102,8 +102,8 @@ pub(super) async fn handle_app_server_rpc(
             context.project_trust.as_deref(),
         )
     };
-    let mut resume_attachment = None;
-    if method == "thread/resume"
+    let mut session_attachment = None;
+    if matches!(method.as_str(), "thread/start" | "thread/resume")
         && response.get("result").is_some()
         && let Some(thread_id) = response
             .pointer("/result/thread/id")
@@ -122,10 +122,30 @@ pub(super) async fn handle_app_server_rpc(
             .attach(session.clone())
             .await
             .map_err(|_| AppServerConnectionError::HubUnavailable)?;
-        if request
-            .pointer("/params/excludeTurns")
-            .and_then(Value::as_bool)
-            != Some(true)
+        let current_settings =
+            attachment
+                .snapshot
+                .iter()
+                .rev()
+                .find_map(|event| match &event.event {
+                    session_event_model::SessionEvent::SettingsChanged { settings } => {
+                        Some(settings)
+                    }
+                    _ => None,
+                });
+        let result = response
+            .get_mut("result")
+            .and_then(Value::as_object_mut)
+            .ok_or(AppServerConnectionError::RequestWorkerUnavailable)?;
+        result.insert(
+            "reasoningEffort".into(),
+            json!(current_settings.and_then(|settings| settings.effort.as_deref())),
+        );
+        if method == "thread/resume"
+            && request
+                .pointer("/params/excludeTurns")
+                .and_then(Value::as_bool)
+                != Some(true)
         {
             let thread = response
                 .pointer_mut("/result/thread")
@@ -136,12 +156,12 @@ pub(super) async fn handle_app_server_rpc(
                 json!(historical_turns(&session, &attachment.snapshot)),
             );
         }
-        resume_attachment = Some((session, attachment));
+        session_attachment = Some((session, attachment));
     }
     Ok(HandledAppServerRequest {
         binding_attempt: None,
         method,
         response,
-        resume_attachment,
+        session_attachment,
     })
 }

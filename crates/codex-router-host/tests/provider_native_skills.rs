@@ -329,6 +329,12 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
         .pointer("/result/thread/id")
         .and_then(Value::as_str)
         .ok_or("thread ID")?;
+    assert_eq!(started["result"]["reasoningEffort"], "low");
+    send(&mut client, 7, "thread/settings/update", json!({"threadId":thread,"model":"new","collaborationMode":{"mode":"default","settings":{"model":"new","reasoning_effort":started["result"]["reasoningEffort"],"developer_instructions":null}}})).await?;
+    assert_eq!(
+        reply(&mut client, 7, &mut notifications).await?,
+        json!({"id":7,"result":{}})
+    );
     send(
         &mut client,
         2,
@@ -346,12 +352,16 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
         "new"
     );
     let writes = receipts(&receipt)?;
-    assert_eq!(writes.len(), 2);
+    assert_eq!(writes.len(), 4);
     assert_eq!(writes[0]["method"], "session/set_config_option");
     assert_eq!(writes[0]["params"]["configId"], "model");
     assert_eq!(writes[0]["params"]["value"], "new");
     assert_eq!(writes[1]["params"]["configId"], "effort");
-    assert_eq!(writes[1]["params"]["value"], "high");
+    assert_eq!(writes[1]["params"]["value"], "low");
+    assert_eq!(writes[2]["params"]["configId"], "model");
+    assert_eq!(writes[2]["params"]["value"], "new");
+    assert_eq!(writes[3]["params"]["configId"], "effort");
+    assert_eq!(writes[3]["params"]["value"], "high");
     for (index, mode_settings) in [
         json!({"model":"old","reasoning_effort":null,"developer_instructions":null}),
         json!({"model":"old","developer_instructions":null}),
@@ -367,7 +377,7 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
         );
         assert_eq!(
             receipts(&receipt)?.len(),
-            2,
+            4,
             "unqualified effort reset must have zero provider effects"
         );
     }
@@ -392,10 +402,10 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
     let writes = receipts(&receipt)?;
     assert_eq!(
         writes.len(),
-        3,
+        5,
         "invalid effort must never reach the provider"
     );
-    assert_eq!(writes[2]["params"]["value"], "old");
+    assert_eq!(writes[4]["params"]["value"], "old");
     send(
         &mut client,
         6,
@@ -412,7 +422,7 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
         &mut notifications,
     )
     .await?;
-    assert_eq!(receipts(&receipt)?.len(), 4);
+    assert_eq!(receipts(&receipt)?.len(), 6);
     client.close(None).await?;
     runtime.shutdown().await?;
     Ok(())

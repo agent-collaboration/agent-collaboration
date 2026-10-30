@@ -174,7 +174,7 @@ struct HandledAppServerRequest {
     binding_attempt: Option<u64>,
     method: String,
     response: Value,
-    resume_attachment: Option<(SessionRef, SessionEventAttachment)>,
+    session_attachment: Option<(SessionRef, SessionEventAttachment)>,
 }
 
 pub async fn serve_router_session_app_server_connection(
@@ -245,7 +245,7 @@ pub async fn serve_router_session_app_server_connection(
                     && handled.response.get("result").is_some()
                     && let Some(thread_id) = handled.response.pointer("/result/thread/id").and_then(Value::as_str)
                 {
-                    let session = if let Some((session, _)) = &handled.resume_attachment {
+                    let session = if let Some((session, _)) = &handled.session_attachment {
                         Some(session.clone())
                     } else {
                         context.events.sessions(context.endpoint.clone()).await
@@ -257,7 +257,7 @@ pub async fn serve_router_session_app_server_connection(
                     if let Some(session) = session
                         && attached_sessions.insert(session.clone())
                     {
-                        let attachment = if let Some((_, attachment)) = handled.resume_attachment.take() {
+                        let attachment = if let Some((_, attachment)) = handled.session_attachment.take() {
                             attachment
                         } else {
                             context.events.attach(session.clone()).await

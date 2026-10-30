@@ -272,3 +272,104 @@ async fn complete_default_mask_reset_is_unsupported_before_any_effect_but_sparse
     }
     Ok(())
 }
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions reject dropped current settings and false reset refusals; setup errors propagate."
+)]
+async fn start_and_resume_preserve_latest_exact_current_effort_in_their_atomic_attachment()
+-> Result<(), Box<dyn std::error::Error>> {
+    for effort in [Some("default"), Some("vendor:turbo"), Some("high"), None] {
+        let backend = ScriptedSessionBackend::new()?;
+        *backend.effective_model.lock().expect("model") = Some("old".into());
+        *backend.effective_effort.lock().expect("effort") = effort.map(str::to_owned);
+        backend
+            .history
+            .lock()
+            .expect("history")
+            .push(collaboration_contracts::HubEvent {
+                sequence: 1,
+                event: session_event_model::SessionEvent::SettingsChanged {
+                    settings: session_event_model::SessionSettings {
+                        model: Some("old".into()),
+                        effort: effort.map(str::to_owned),
+                        ..Default::default()
+                    },
+                },
+            });
+        let context = Arc::new(RouterSessionAppServerContext::new(
+            backend.endpoint.clone(),
+            ScriptedSessionBackend::actor()?,
+            backend.clone(),
+            backend.clone(),
+            tokio::sync::watch::channel(vec![
+                ProviderModelEntry::try_new("old".into(), "Old".into(), String::new())?,
+                ProviderModelEntry::try_new("new".into(), "New".into(), String::new())?,
+            ])
+            .1,
+        ));
+        let started = handle_app_server_rpc(
+            context.clone(),
+            json!({"id":1,"method":"thread/start","params":{"cwd":"/tmp"}}),
+        )
+        .await?;
+        assert_eq!(started.response["result"]["reasoningEffort"], json!(effort));
+        assert!(
+            started.session_attachment.is_some(),
+            "start must retain the exact reply snapshot for subscription"
+        );
+        assert_eq!(
+            backend
+                .attachment_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+        let thread = &started.response["result"]["thread"]["id"];
+        if let Some(effort) = effort {
+            // Pinned stock /model first sends UpdateModel with a complete Default
+            // mask seeded from session.reasoning_effort, before its effort event.
+            let changed = handle_app_server_rpc(context.clone(), json!({"id":2,"method":"thread/settings/update","params":{"threadId":thread,"model":"new","collaborationMode":{"mode":"default","settings":{"model":"new","reasoning_effort":effort,"developer_instructions":null}}}})).await?;
+            assert_eq!(changed.response, json!({"id":2,"result":{}}));
+            let writes = backend.setting_commands.lock().expect("writes");
+            assert_eq!(writes.len(), 2);
+            assert_eq!(writes[0].value, "new");
+            assert_eq!(writes[1].value, effort);
+        }
+        let updated = handle_app_server_rpc(context.clone(), json!({"id":3,"method":"thread/settings/update","params":{"threadId":thread,"effort":"latest:exact"}})).await?;
+        assert!(updated.response.get("result").is_some());
+        let resumed = handle_app_server_rpc(context.clone(), json!({"id":4,"method":"thread/resume","params":{"threadId":thread,"excludeTurns":true}})).await?;
+        assert_eq!(
+            resumed.response["result"]["reasoningEffort"],
+            "latest:exact"
+        );
+        assert!(resumed.session_attachment.is_some());
+        assert_eq!(
+            backend
+                .attachment_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            2
+        );
+        backend
+            .history
+            .lock()
+            .expect("history")
+            .push(collaboration_contracts::HubEvent {
+                sequence: 99,
+                event: session_event_model::SessionEvent::SettingsChanged {
+                    settings: Default::default(),
+                },
+            });
+        let unknown = handle_app_server_rpc(
+            context,
+            json!({"id":5,"method":"thread/resume","params":{"threadId":thread}}),
+        )
+        .await?;
+        assert!(
+            unknown.response["result"]["reasoningEffort"].is_null(),
+            "latest unknown must not fall back to an older effort"
+        );
+        assert!(backend.prompt_commands.lock().expect("prompts").is_empty());
+    }
+    Ok(())
+}
