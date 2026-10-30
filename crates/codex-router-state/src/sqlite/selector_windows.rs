@@ -223,7 +223,8 @@ impl AsyncSqliteStateStore {
                account_id, route_band, state, reason_code,
                observed_unix_seconds, expires_unix_seconds
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
              ON CONFLICT(account_id, route_band) DO UPDATE SET
                state = excluded.state,
                reason_code = excluded.reason_code,
@@ -244,7 +245,8 @@ impl AsyncSqliteStateStore {
                account_id, source, observed_unix_seconds, route_band,
                remaining_headroom, reset_unix_seconds, stale_penalty
              )
-             VALUES (?1, ?2, ?3, ?4, 0, NULL, 0)
+             SELECT ?1, ?2, ?3, ?4, 0, NULL, 0
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
              ON CONFLICT(account_id, route_band) DO UPDATE SET
                source = excluded.source,
                observed_unix_seconds = excluded.observed_unix_seconds,
@@ -402,7 +404,8 @@ impl AsyncSqliteStateStore {
                last_attempt_unix_seconds, last_error_class,
                stale_after_unix_seconds
              )
-             VALUES (?1, ?2, NULL, ?3, ?4, ?3)
+             SELECT ?1, ?2, NULL, ?3, ?4, ?3
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
              ON CONFLICT(account_id, route_band) DO UPDATE SET
                last_attempt_unix_seconds = excluded.last_attempt_unix_seconds,
                last_error_class = excluded.last_error_class,
@@ -609,7 +612,8 @@ pub(super) async fn insert_selector_window_in_async_transaction(
            remaining_headroom, reset_unix_seconds, effective,
            observed_unix_seconds
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+          WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
          ON CONFLICT(account_id, route_band, limit_window_seconds) DO UPDATE SET
            status = excluded.status,
            remaining_headroom = excluded.remaining_headroom,

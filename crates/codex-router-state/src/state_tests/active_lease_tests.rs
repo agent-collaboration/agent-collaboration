@@ -8,6 +8,12 @@ async fn sqlx_active_client_leases_count_release_and_prune() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(
+        &store,
+        Provider::Openai,
+        &["acct_active_alpha", "acct_active_beta"],
+    )
+    .await;
     let alpha = account_id("acct_active_alpha");
     let beta = account_id("acct_active_beta");
 
@@ -110,6 +116,7 @@ async fn sqlx_active_client_leases_do_not_collide_across_process_runs() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_active_shared"]).await;
     let account = account_id("acct_active_shared");
     let reservation_id = ReservationId::new("reservation_1");
 

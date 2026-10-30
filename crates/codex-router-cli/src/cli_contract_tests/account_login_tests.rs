@@ -508,14 +508,14 @@ fn fake_id_token() -> String {
     format!("{header}.{payload}.signature")
 }
 
-struct FakeDeviceIssuer {
-    base_url: String,
+pub(super) struct FakeDeviceIssuer {
+    pub(super) base_url: String,
     address: SocketAddr,
     server: Option<JoinHandle<Vec<String>>>,
 }
 
 impl FakeDeviceIssuer {
-    fn spawn(access_token: &str, refresh_token: &str) -> Self {
+    pub(super) fn spawn(access_token: &str, refresh_token: &str) -> Self {
         let listener = must_ok(TcpListener::bind("127.0.0.1:0"));
         let address = must_ok(listener.local_addr());
         let id_token = fake_id_token();
@@ -552,7 +552,7 @@ impl FakeDeviceIssuer {
         }
     }
 
-    fn finish(mut self) -> Vec<String> {
+    pub(super) fn finish(mut self) -> Vec<String> {
         self.server
             .take()
             .expect("fake issuer should still be running")

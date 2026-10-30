@@ -150,7 +150,8 @@ impl AsyncSqliteStateStore {
                    max_concurrent_sessions, completed_sessions,
                    stale_purged_sessions
                  )
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+                  WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)
                  ON CONFLICT(account_id, route_band, bucket_start_unix_seconds, bucket_end_unix_seconds)
                  DO UPDATE SET
                    active_session_seconds = excluded.active_session_seconds,

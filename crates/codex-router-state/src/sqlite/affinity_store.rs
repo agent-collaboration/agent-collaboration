@@ -16,7 +16,8 @@ impl AsyncSqliteStateStore {
                affinity_key_hash, route_band, account_id, credential_generation,
                source_transport, created_unix_seconds
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?3)
              ON CONFLICT(affinity_key_hash, route_band, account_id) DO UPDATE SET
                credential_generation = excluded.credential_generation,
                source_transport = excluded.source_transport,
@@ -43,7 +44,8 @@ impl AsyncSqliteStateStore {
         sqlx::query(
             "INSERT INTO session_account_affinities (
                provider, session_id, account_id, last_seen_unix_seconds, pin_version
-             ) VALUES (?1, ?2, ?3, ?4, ?5)
+             ) SELECT ?1, ?2, ?3, ?4, ?5
+              WHERE ?3 IS NULL OR EXISTS (SELECT 1 FROM accounts WHERE account_id = ?3)
              ON CONFLICT(provider, session_id) DO UPDATE SET
                account_id = excluded.account_id,
                last_seen_unix_seconds = excluded.last_seen_unix_seconds,
@@ -93,6 +95,23 @@ impl AsyncSqliteStateStore {
         let pin_ttl_seconds = u64_to_i64(pin_ttl_seconds)?;
         let observed_account_id = observation.active_account().map(AccountId::as_str);
         let replacement_account_id = affinity.account_id().map(AccountId::as_str);
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(sqlx_error)?;
+        if let Some(account_id) = replacement_account_id {
+            let account_exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = ?1)")
+                    .bind(account_id)
+                    .fetch_one(&mut *transaction)
+                    .await
+                    .map_err(sqlx_error)?;
+            if !account_exists {
+                transaction.rollback().await.map_err(sqlx_error)?;
+                return Ok(false);
+            }
+        }
         let result = sqlx::query!(
             "INSERT INTO session_account_affinities (
                  provider, session_id, account_id, last_seen_unix_seconds, pin_version
@@ -146,10 +165,10 @@ impl AsyncSqliteStateStore {
             observed_account_id,
             pin_ttl_seconds,
         )
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(sqlx_error)?;
-
+        transaction.commit().await.map_err(sqlx_error)?;
         Ok(result.rows_affected() == 1)
     }
 
