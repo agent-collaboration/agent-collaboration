@@ -52,7 +52,7 @@ export function readPublicGridState(
 	});
 	if (
 		wrapper === null ||
-		wrapper.uid !== process.getuid?.() ||
+		wrapper.realUid !== process.getuid?.() ||
 		realpathSync(wrapper.executable) !== plan.node.path ||
 		identity.status !== 0 ||
 		identity.stdout !== readFileSync(join(output, 'quota-wrapper.identity'), 'utf8') ||
@@ -64,7 +64,7 @@ export function readPublicGridState(
 	const child = lookupProcessIdentity(pid);
 	if (
 		child === null ||
-		child.uid !== process.getuid?.() ||
+		child.realUid !== process.getuid?.() ||
 		realpathSync(child.executable) !== plan.public_target.binary.path
 	)
 		throw new Error('public PTY identity does not match executable/owner');
