@@ -486,6 +486,9 @@ mod blocking_tests;
 #[path = "router_session_app_server_compact_tests.rs"]
 mod compact_tests;
 #[cfg(test)]
+#[path = "router_session_app_server_cwd_filter_tests.rs"]
+mod cwd_filter_tests;
+#[cfg(test)]
 #[path = "router_session_app_server_cwd_tests.rs"]
 mod cwd_tests;
 #[cfg(test)]

@@ -177,12 +177,37 @@ pub(super) async fn handle_app_server_thread_request(
             Ok(thread_start_response(&summary))
         }
         "thread/list" => {
+            let cwd_filters = thread_list_cwd_filters(&params)?;
             let summaries = events
                 .sessions(endpoint)
                 .await
                 .map_err(|_| ThreadMethodError::Unavailable)?;
+            let data = if let Some(filters) = cwd_filters {
+                // Canonicalization and server-cwd lookup must not block the native I/O task.
+                tokio::task::spawn_blocking(move || {
+                    let filters = filters
+                        .into_iter()
+                        .map(normalize_thread_list_cwd)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok::<_, ThreadMethodError>(
+                        summaries
+                            .iter()
+                            .filter(|summary| {
+                                filters.iter().any(|filter| {
+                                    thread_list_paths_match(&summary.working_directory, filter)
+                                })
+                            })
+                            .map(render_thread)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .await
+                .map_err(|_| ThreadMethodError::Unavailable)??
+            } else {
+                summaries.iter().map(render_thread).collect()
+            };
             Ok(json!({
-                "data": summaries.iter().map(render_thread).collect::<Vec<_>>(),
+                "data": data,
                 "nextCursor": null, "backwardsCursor": null
             }))
         }
@@ -258,6 +283,60 @@ pub(super) async fn handle_app_server_thread_request(
             }
         }
         _ => Err(ThreadMethodError::InvalidParams),
+    }
+}
+
+fn thread_list_cwd_filters(params: &Value) -> Result<Option<Vec<PathBuf>>, ThreadMethodError> {
+    let paths = match params.get("cwd") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::String(path)) => vec![PathBuf::from(path)],
+        Some(Value::Array(paths)) => paths
+            .iter()
+            .map(|path| {
+                path.as_str()
+                    .map(PathBuf::from)
+                    .ok_or(ThreadMethodError::InvalidParams)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        _ => return Err(ThreadMethodError::InvalidParams),
+    };
+    // Some(empty) is the explicit empty match set, not an absent filter.
+    Ok(Some(paths))
+}
+
+fn normalize_thread_list_cwd(path: PathBuf) -> Result<PathBuf, ThreadMethodError> {
+    let path = match (path.to_str(), std::env::home_dir()) {
+        (Some("~"), Some(home)) => home,
+        (Some(value), Some(home)) => value.strip_prefix("~/").map_or_else(
+            || path.clone(),
+            |rest| home.join(rest.trim_start_matches('/')),
+        ),
+        _ => path,
+    };
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map_err(|_| ThreadMethodError::InvalidParams)?
+            .join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    Ok(normalized)
+}
+
+fn thread_list_paths_match(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
     }
 }
 
