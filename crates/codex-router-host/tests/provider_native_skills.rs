@@ -182,16 +182,62 @@ async fn native_selected_refusal_is_correlated_before_any_send_and_valid_input_k
     send(
         &mut client,
         sequence,
+        "thread/read",
+        json!({"threadId":thread,"includeTurns":true}),
+    )
+    .await?;
+    let before_compact =
+        reply(&mut client, sequence, &mut notifications).await?["result"]["thread"]["turns"]
+            .clone();
+    sequence += 1;
+    let compact_request = sequence;
+    notifications.clear();
+    send(
+        &mut client,
+        sequence,
         "thread/compact/start",
         json!({"threadId":thread}),
     )
     .await?;
+    let compact_ack = reply(&mut client, sequence, &mut notifications).await?;
+    assert_eq!(compact_ack, json!({"id":compact_request,"result":{}}));
+    assert!(!notifications.iter().any(|frame| frame["method"] == "error"));
+    sequence += 1;
+    let compact_error = tokio::time::timeout(BOUND, async {
+        loop {
+            let frame = client.next().await.ok_or("missing compact refusal")??;
+            let frame: Value = serde_json::from_str(frame.to_text()?)?;
+            if frame["method"] == "error" {
+                return Ok::<_, Box<dyn std::error::Error>>(frame);
+            }
+            notifications.push(frame);
+        }
+    })
+    .await??;
     assert_eq!(
-        reply(&mut client, sequence, &mut notifications).await?["error"]["code"],
-        -32000
+        compact_error,
+        json!({"method":"error","params":{
+            "threadId":thread,"turnId":format!("compact-request:{compact_request}"),"willRetry":false,
+            "error":{"message":"Compaction is unsupported for this provider session","codexErrorInfo":null}
+        }})
+    );
+    send(
+        &mut client,
+        sequence,
+        "thread/read",
+        json!({"threadId":thread,"includeTurns":true}),
+    )
+    .await?;
+    assert_eq!(
+        reply(&mut client, sequence, &mut notifications).await?["result"]["thread"]["turns"],
+        before_compact
     );
     sequence += 1;
     assert!(receipts(&receipt)?.is_empty());
+    assert!(!notifications.iter().any(|frame| matches!(
+        frame["method"].as_str(),
+        Some("turn/started" | "turn/completed")
+    )));
     send(&mut client, sequence, "turn/start", json!({"threadId":thread,"input":[{"type":"text","text":"前置\t$review  args\n"},{"type":"image","url":"data:image/png;base64,aGVsbG8="},selected]})).await?;
     let accepted = reply(&mut client, sequence, &mut notifications).await?;
     sequence += 1;

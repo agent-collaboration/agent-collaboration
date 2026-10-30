@@ -15,6 +15,7 @@ pub(super) async fn handle_app_server_rpc(
         .unwrap_or("")
         .to_owned();
     let catalog = context.model_catalog.borrow().clone();
+    let mut post_response_frames = Vec::new();
     let mut response = if matches!(
         method.as_str(),
         "thread/start"
@@ -64,19 +65,29 @@ pub(super) async fn handle_app_server_rpc(
         match result {
             Ok(result) => json!({"id":id,"result":result}),
             Err(error) => {
-                let code = match error {
-                    ThreadMethodError::InvalidParams
-                    | ThreadMethodError::InvalidSelection
-                    | ThreadMethodError::WorkingDirectoryRequired
-                    | ThreadMethodError::ImageUnreadable
-                    | ThreadMethodError::ImageTooLarge
-                    | ThreadMethodError::PromptTooLarge
-                    | ThreadMethodError::ImageUnsupportedType => -32602,
-                    ThreadMethodError::NotFound => -32002,
-                    ThreadMethodError::Unavailable | ThreadMethodError::Unsupported => -32000,
-                    ThreadMethodError::Busy => -32600,
-                };
-                json!({"id":id,"error":{"code":code,"message":error.to_string()}})
+                if matches!(error, ThreadMethodError::Unsupported)
+                    && method == "thread/compact/start"
+                    && let Some(notification) = unsupported_compact_notification(&request)
+                {
+                    // Stock Codex treats this response as control admission. Report the
+                    // failed effect separately, without creating a provider Turn or marker.
+                    post_response_frames.push(notification);
+                    json!({"id":id,"result":{}})
+                } else {
+                    let code = match error {
+                        ThreadMethodError::InvalidParams
+                        | ThreadMethodError::InvalidSelection
+                        | ThreadMethodError::WorkingDirectoryRequired
+                        | ThreadMethodError::ImageUnreadable
+                        | ThreadMethodError::ImageTooLarge
+                        | ThreadMethodError::PromptTooLarge
+                        | ThreadMethodError::ImageUnsupportedType => -32602,
+                        ThreadMethodError::NotFound => -32002,
+                        ThreadMethodError::Unavailable | ThreadMethodError::Unsupported => -32000,
+                        ThreadMethodError::Busy => -32600,
+                    };
+                    json!({"id":id,"error":{"code":code,"message":error.to_string()}})
+                }
             }
         }
     } else if method == "config/read" {
@@ -162,6 +173,24 @@ pub(super) async fn handle_app_server_rpc(
         binding_attempt: None,
         method,
         response,
+        post_response_frames,
         session_attachment,
     })
+}
+
+fn unsupported_compact_notification(request: &Value) -> Option<Value> {
+    let request_id = request.get("id")?;
+    match request_id {
+        Value::String(_) => {}
+        Value::Number(number) if number.is_i64() || number.is_u64() => {}
+        _ => return None,
+    }
+    let thread_id = request.pointer("/params/threadId")?.as_str()?;
+    // ErrorNotification.turnId also carries control submission IDs in stock Codex.
+    // Exact JSON preserves numeric/string request identity; this is never a Hub Turn ID.
+    let submission_id = format!("compact-request:{request_id}");
+    Some(json!({"method":"error","params":{
+        "threadId":thread_id,"turnId":submission_id,"willRetry":false,
+        "error":{"message":"Compaction is unsupported for this provider session","codexErrorInfo":null}
+    }}))
 }

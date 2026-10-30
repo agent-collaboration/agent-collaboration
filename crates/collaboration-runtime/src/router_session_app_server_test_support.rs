@@ -43,6 +43,8 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) steer_started: Notify,
     pub(super) turn_command_order: Mutex<Vec<&'static str>>,
     pub(super) cancel_commands: Mutex<Vec<SessionTargetCommand>>,
+    pub(super) compact_commands: Mutex<Vec<SessionTargetCommand>>,
+    pub(super) compact_failure: Mutex<Option<CommandFailure>>,
     pub(super) setting_commands: Mutex<Vec<SetSessionSettingCommand>>,
     pub(super) created: Notify,
     pub(super) events: broadcast::Sender<collaboration_contracts::HubEvent>,
@@ -88,6 +90,8 @@ impl ScriptedSessionBackend {
             steer_started: Notify::new(),
             turn_command_order: Mutex::new(Vec::new()),
             cancel_commands: Mutex::new(Vec::new()),
+            compact_commands: Mutex::new(Vec::new()),
+            compact_failure: Mutex::new(None),
             setting_commands: Mutex::new(Vec::new()),
             created: Notify::new(),
             events,
@@ -111,8 +115,16 @@ impl ScriptedSessionBackend {
 }
 
 impl SessionCommandPort for ScriptedSessionBackend {
-    fn compact(&self, _command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
-        Box::pin(async {
+    fn compact(&self, command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
+        self.compact_commands
+            .lock()
+            .expect("test lock")
+            .push(command);
+        let failure = self.compact_failure.lock().expect("test lock").clone();
+        Box::pin(async move {
+            if let Some(failure) = failure {
+                return Err(failure);
+            }
             Ok(SessionTurnHandle {
                 turn_id: "compact-turn".into(),
             })

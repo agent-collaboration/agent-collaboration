@@ -174,6 +174,7 @@ struct HandledAppServerRequest {
     binding_attempt: Option<u64>,
     method: String,
     response: Value,
+    post_response_frames: Vec<Value>,
     session_attachment: Option<(SessionRef, SessionEventAttachment)>,
 }
 
@@ -222,6 +223,9 @@ pub async fn serve_router_session_app_server_connection(
                 let Some(handled) = handled else { break; };
                 let mut handled = handled?;
                 websocket.send(Message::Text(handled.response.to_string().into())).await?;
+                for notification in handled.post_response_frames {
+                    websocket.send(Message::Text(notification.to_string().into())).await?;
+                }
                 if let Some(attempt) = handled.binding_attempt {
                     let bound = skill_binding::bound_response(&handled.response, context.events.as_ref(), &context.endpoint).await;
                     if let Some(change) = skill_bindings.complete(attempt, bound) {
@@ -478,6 +482,9 @@ use methods::{
 #[cfg(test)]
 #[path = "router_session_app_server_blocking_tests.rs"]
 mod blocking_tests;
+#[cfg(test)]
+#[path = "router_session_app_server_compact_tests.rs"]
+mod compact_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_cwd_tests.rs"]
 mod cwd_tests;
