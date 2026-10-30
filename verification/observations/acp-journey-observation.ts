@@ -11,15 +11,15 @@ import {
   nativeSkillsListSchema,
   nativeThreadSchema,
   providerJourneyEventsSchema,
+  type ActiveJourneyReadback,
   type JourneyCheckResult,
   type JourneyObservationPlan,
-  type JourneyReadback,
   type NativeSkillsList,
   type NativeThread,
   type ProviderJourneyEvents,
   type ProviderToolItem,
 } from "./acp-journey-models.ts";
-import { checkJourney } from "./acp-journey-oracle.ts";
+import { checkActiveJourney, checkIdleJourney, nativeThreadAlias } from "./acp-journey-oracle.ts";
 
 interface NativeReadback {
   readonly unboundSkills: NativeSkillsList;
@@ -29,62 +29,106 @@ interface NativeReadback {
   readonly resumedModel: string;
 }
 
-/**
- * One fresh native connection: list skills before and after this connection's own resume
- * binds the cwd, and read the thread through both history views. Raw responses are retained.
- */
-export async function readNativeJourney(plan: JourneyObservationPlan): Promise<NativeReadback> {
-  const socketPath = join(plan.service_directory, "router-sessions", `${plan.endpoint_id}.sock`);
-  const requests = [
-    {
-      id: 1n,
-      method: "initialize",
-      params: { clientInfo: { name: "journey-verifier", version: "1" } },
-    },
-    { id: 2n, method: "skills/list", params: { cwds: [plan.cwd] } },
-    { id: 3n, method: "thread/read", params: { threadId: plan.session_id, includeTurns: true } },
-    {
-      id: 4n,
-      method: "thread/resume",
-      params: { threadId: plan.session_id, cwd: plan.cwd, excludeTurns: false },
-    },
-    { id: 5n, method: "skills/list", params: { cwds: [plan.cwd] } },
-  ];
-  const results = new Map<bigint, Record<string, unknown>>();
-  const client = new UnixWebSocketObserver(socketPath);
-  try {
-    await client.opened();
-    for (const request of requests) {
-      await client.send(evidenceJson(request));
-      let raw: string;
-      let response;
-      for (;;) {
-        raw = await client.receive();
-        response = readObservedJson(raw);
-        if (response.id === request.id) break;
-      }
-      saveRaw(join(plan.evidence, `app-server-${request.id}.json`), raw);
-      if (Object.hasOwn(response, "error"))
-        throw new Error(`${request.method} failed; raw response retained`);
-      results.set(request.id, observedObject(response.result));
-    }
-  } finally {
-    await client.close();
+/** One native request/response exchange on a fresh connection, with every raw response retained. */
+class NativeExchange {
+  private readonly plan: JourneyObservationPlan;
+  private readonly threadId: string;
+  private readonly client: UnixWebSocketObserver;
+  private nextId = 1n;
+  constructor(plan: JourneyObservationPlan, threadId: string) {
+    this.plan = plan;
+    this.threadId = threadId;
+    this.client = new UnixWebSocketObserver(
+      join(plan.service_directory, "router-sessions", `${plan.endpoint_id}.sock`),
+    );
   }
-  const thread = (id: bigint): NativeThread => {
-    const view = nativeThreadSchema.parse(observedObject(results.get(id)).thread);
-    if (view.id !== plan.session_id) throw new Error("app-server returned the wrong thread");
+  async open(): Promise<void> {
+    await this.client.opened();
+    await this.call("initialize", { clientInfo: { name: "journey-verifier", version: "1" } });
+  }
+  async call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const id = this.nextId;
+    this.nextId += 1n;
+    await this.client.send(evidenceJson({ id, method, params }));
+    let raw: string;
+    let response;
+    for (;;) {
+      raw = await this.client.receive();
+      response = readObservedJson(raw);
+      if (response.id === id) break;
+    }
+    saveRaw(join(this.plan.evidence, `app-server-${id}.json`), raw);
+    if (Object.hasOwn(response, "error"))
+      throw new Error(`${method} failed; raw response retained`);
+    return observedObject(response.result);
+  }
+  async readThread(): Promise<NativeThread> {
+    return this.thread(
+      await this.call("thread/read", { threadId: this.threadId, includeTurns: true }),
+    );
+  }
+  thread(result: Record<string, unknown>): NativeThread {
+    const view = nativeThreadSchema.parse(observedObject(result.thread));
+    if (view.id !== this.threadId) throw new Error("app-server returned the wrong thread");
     return view;
-  };
-  const resumed = observedObject(results.get(4n));
-  if (typeof resumed.model !== "string") throw new Error("thread/resume lacks an effective model");
-  return {
-    unboundSkills: nativeSkillsListSchema.parse(results.get(2n)),
-    threadRead: thread(3n),
-    threadResume: thread(4n),
-    resumedModel: resumed.model,
-    boundSkills: nativeSkillsListSchema.parse(results.get(5n)),
-  };
+  }
+  async close(): Promise<void> {
+    await this.client.close();
+  }
+}
+
+/**
+ * idle-bind: read the thread, refuse unless it is idle, then list skills before and after this
+ * connection's own resume binds the cwd. The resume has lifecycle effects, so it never runs while
+ * a turn is active.
+ */
+export async function readNativeJourney(
+  plan: JourneyObservationPlan,
+  threadId: string,
+): Promise<NativeReadback> {
+  const native = new NativeExchange(plan, threadId);
+  try {
+    await native.open();
+    const threadRead = await native.readThread();
+    if (threadRead.status.type !== "idle")
+      throw new Error(`thread is ${threadRead.status.type}, not idle; refusing to resume it`);
+    const unboundSkills = nativeSkillsListSchema.parse(
+      await native.call("skills/list", { cwds: [plan.cwd] }),
+    );
+    const resumed = await native.call("thread/resume", {
+      threadId,
+      cwd: plan.cwd,
+      excludeTurns: false,
+    });
+    if (typeof resumed.model !== "string")
+      throw new Error("thread/resume lacks an effective model");
+    const boundSkills = nativeSkillsListSchema.parse(
+      await native.call("skills/list", { cwds: [plan.cwd] }),
+    );
+    return {
+      unboundSkills,
+      threadRead,
+      threadResume: native.thread(resumed),
+      resumedModel: resumed.model,
+      boundSkills,
+    };
+  } finally {
+    await native.close();
+  }
+}
+
+/** active-read-only: initialize and read history only; no resume, no skills/list, no binding. */
+export async function readActiveJourney(
+  plan: JourneyObservationPlan,
+  threadId: string,
+): Promise<ActiveJourneyReadback> {
+  const native = new NativeExchange(plan, threadId);
+  try {
+    await native.open();
+    return { threadRead: await native.readThread() };
+  } finally {
+    await native.close();
+  }
 }
 
 /** Latest provider item per ID, split into agent prose and typed tool items. */
@@ -120,7 +164,10 @@ export function providerJourneyItems(observation: ProviderJourneyEvents): {
   };
 }
 
-function observeProviderEvents(plan: JourneyObservationPlan): ProviderJourneyEvents {
+function observeProviderEvents(
+  plan: JourneyObservationPlan,
+  serviceId: string,
+): ProviderJourneyEvents {
   const completed = spawnSync(
     plan.collaboration_cli,
     [
@@ -148,13 +195,10 @@ function observeProviderEvents(plan: JourneyObservationPlan): ProviderJourneyEve
   if (completed.status !== 0)
     throw new Error("public provider observation failed; raw response retained");
   const observation = providerJourneyEventsSchema.parse(decode(completed.stdout));
-  const manifest = hostManifestSchema.parse(
-    decode(readFileSync(join(plan.service_directory, "service.json"), "utf8")),
-  );
   if (
     observation.target.sessionId !== plan.session_id ||
     observation.target.endpoint.endpointId !== plan.endpoint_id ||
-    observation.target.endpoint.serviceId !== manifest.serviceId
+    observation.target.endpoint.serviceId !== serviceId
   )
     throw new Error("public observation returned a different Session");
   return observation;
@@ -166,6 +210,17 @@ export function retainedThreadRead(path: string): NativeThread {
   return nativeThreadSchema.parse(observedObject(observedObject(response.result).thread));
 }
 
+/**
+ * The native thread this observation reads. Public events address the raw provider Session; the
+ * native face addresses its alias, so the declared native thread ID must be exactly that alias.
+ */
+export function observedThreadId(plan: JourneyObservationPlan, serviceId: string): string {
+  const alias = nativeThreadAlias(serviceId, plan.endpoint_id, plan.session_id);
+  if (alias !== plan.native_thread_id)
+    throw new Error("declared native thread ID is not the alias of this provider Session");
+  return alias;
+}
+
 export async function runJourneyObservation(
   plan: JourneyObservationPlan,
 ): Promise<JourneyCheckResult[]> {
@@ -173,19 +228,24 @@ export async function runJourneyObservation(
   mkdirSync(plan.evidence, { mode: 0o700 });
   saveRaw(join(plan.evidence, "binding.json"), prettyEvidenceJson(plan, false, false));
   saveRaw(join(plan.evidence, "build-manifest.json"), readFileSync(plan.build_manifest, "utf8"));
-  const provider = providerJourneyItems(observeProviderEvents(plan));
-  const native = await readNativeJourney(plan);
-  const readback: JourneyReadback = {
-    ...native,
-    providerAgentTexts: provider.agentTexts,
-    providerToolItems: provider.toolItems,
-  };
-  const results = checkJourney(
-    readback,
-    { endpointId: plan.endpoint_id, sessionId: plan.session_id, cwd: plan.cwd },
-    plan.checks,
-    retainedThreadRead,
+  const { serviceId } = hostManifestSchema.parse(
+    decode(readFileSync(join(plan.service_directory, "service.json"), "utf8")),
   );
+  const threadId = observedThreadId(plan, serviceId);
+  const provider = providerJourneyItems(observeProviderEvents(plan, serviceId));
+  const results =
+    plan.mode === "active-read-only"
+      ? checkActiveJourney(await readActiveJourney(plan, threadId), plan.checks)
+      : checkIdleJourney(
+          {
+            ...(await readNativeJourney(plan, threadId)),
+            providerAgentTexts: provider.agentTexts,
+            providerToolItems: provider.toolItems,
+          },
+          { endpointId: plan.endpoint_id, sessionId: plan.session_id, cwd: plan.cwd },
+          plan.checks,
+          retainedThreadRead,
+        );
   saveRaw(join(plan.evidence, "result.json"), prettyEvidenceJson(results, false, false));
   return results;
 }

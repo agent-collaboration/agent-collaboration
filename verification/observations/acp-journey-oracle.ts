@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import type {
+  ActiveJourneyReadback,
   ExpectedSkill,
   JourneyCheck,
   JourneyCheckResult,
@@ -21,6 +23,50 @@ export function skillReferencePath(
 ): string {
   const encode = (value: string): string => Buffer.from(value, "utf8").toString("base64url");
   return `/__codex_router_skill__/${endpointId}/${encode(sessionId)}/${encode(invocationName)}`;
+}
+
+/** RFC 4122 name-based UUID (version 5, SHA-1) as canonical lowercase hyphenated text. */
+export function uuidV5(namespace: string, name: string): string {
+  const digest = createHash("sha1")
+    .update(Buffer.from(namespace.replaceAll("-", ""), "hex"))
+    .update(name, "utf8")
+    .digest()
+    .subarray(0, 16);
+  digest.writeUInt8((digest.readUInt8(6) & 0x0f) | 0x50, 6);
+  digest.writeUInt8((digest.readUInt8(8) & 0x3f) | 0x80, 8);
+  const hex = digest.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+const RFC4122_NAMESPACE_URL = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+// The four text forms the uuid crate's `Uuid::parse_str` accepts: simple, hyphenated, braced, urn.
+// Hex digits are case-insensitive; the `urn:uuid:` prefix is matched byte for byte (uuid 1.26.0).
+const HEX = "[0-9a-fA-F]";
+const HYPHENATED = `(${HEX}{8})-(${HEX}{4})-(${HEX}{4})-(${HEX}{4})-(${HEX}{12})`;
+const UUID_FORMS = [
+  new RegExp(`^(${HEX}{8})(${HEX}{4})(${HEX}{4})(${HEX}{4})(${HEX}{12})$`, "u"),
+  new RegExp(`^${HYPHENATED}$`, "u"),
+  new RegExp(`^\\{${HYPHENATED}\\}$`, "u"),
+  new RegExp(`^urn:uuid:${HYPHENATED}$`, "u"),
+];
+
+/**
+ * The native thread ID Codex sees for a provider Session: a raw session ID that is already a UUID
+ * in canonical form, otherwise UUIDv5(URL namespace, "codex-router:session:<service>:<endpoint>:<raw>").
+ */
+export function nativeThreadAlias(
+  serviceId: string,
+  endpointId: string,
+  sessionId: string,
+): string {
+  for (const form of UUID_FORMS) {
+    const uuid = form.exec(sessionId);
+    if (uuid !== null) return uuid.slice(1).join("-").toLowerCase();
+  }
+  return uuidV5(
+    RFC4122_NAMESPACE_URL,
+    `codex-router:session:${serviceId}:${endpointId}:${sessionId}`,
+  );
 }
 
 function onlyEntryFor(list: NativeSkillsList, cwd: string): NativeSkillsList["data"][number] {
@@ -139,7 +185,7 @@ function checkCompactedView(view: NativeThread): string {
   if (compactionItems(turn.items).length !== 1)
     throw new Error("last turn lacks exactly one contextCompaction item");
   if (turn.status !== "completed") throw new Error("compaction turn did not complete");
-  if (userTexts({ id: view.id, turns: [turn] }).some((text) => text.startsWith("/compact")))
+  if (userTexts({ ...view, turns: [turn] }).some((text) => text.startsWith("/compact")))
     throw new Error("prepared /compact prompt leaked into user history");
   return turn.id;
 }
@@ -179,7 +225,25 @@ export function checkEffectiveModel(
   return { kind: "effective-model", observed: { model: readback.resumedModel } };
 }
 
-export function checkJourney(
+export function checkTurnInProgress(readback: ActiveJourneyReadback): JourneyCheckResult {
+  const turn = readback.threadRead.turns.at(-1);
+  if (turn === undefined || turn.status !== "inProgress")
+    throw new Error("no in-progress turn: the active observation ran after the turn ended");
+  return { kind: "turn-in-progress", observed: { turn_id: turn.id } };
+}
+
+export function checkActiveJourney(
+  readback: ActiveJourneyReadback,
+  checks: readonly JourneyCheck[],
+): JourneyCheckResult[] {
+  return checks.map((check) => {
+    if (check.kind !== "turn-in-progress")
+      throw new Error(`${check.kind} needs an idle-bind observation`);
+    return checkTurnInProgress(readback);
+  });
+}
+
+export function checkIdleJourney(
   readback: JourneyReadback,
   target: { readonly endpointId: string; readonly sessionId: string; readonly cwd: string },
   checks: readonly JourneyCheck[],
@@ -187,6 +251,8 @@ export function checkJourney(
 ): JourneyCheckResult[] {
   return checks.map((check) => {
     switch (check.kind) {
+      case "turn-in-progress":
+        throw new Error("turn-in-progress needs an active-read-only observation");
       case "skills-listed":
         return checkSkillsListed(readback, target, check.expected_skills, check.excluded_names);
       case "skill-effect":

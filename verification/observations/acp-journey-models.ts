@@ -55,8 +55,18 @@ export const journeyCheckSchema = z.discriminatedUnion("kind", [
     before_thread_read: absolutePathSchema,
   }),
   z.strictObject({ kind: z.literal("effective-model"), expected_model: z.string().min(1) }),
+  // J3 active-turn preservation: read while the TUI's own turn is still running.
+  z.strictObject({ kind: z.literal("turn-in-progress") }),
 ]);
 export type JourneyCheck = z.infer<typeof journeyCheckSchema>;
+
+/**
+ * `idle-bind` resumes on its own connection to bind the cwd, which has lifecycle effects, so it
+ * runs only once the TUI's step has reached an idle checkpoint. `active-read-only` never resumes
+ * or lists skills, so it cannot disturb the active turn it reads.
+ */
+export const journeyModeSchema = z.enum(["idle-bind", "active-read-only"]);
+export type JourneyMode = z.infer<typeof journeyModeSchema>;
 
 export const journeyObservationPlanSchema = metadataObservationPlanSchema
   .omit({
@@ -66,11 +76,23 @@ export const journeyObservationPlanSchema = metadataObservationPlanSchema
     require_usage: true,
   })
   .extend({
-    // The working directory the TUI bound with `--cd`; this connection binds it again.
+    // The raw provider SessionRef session ID, addressed by public events and skill references.
+    session_id: z.string().min(1),
+    // Its native thread ID, the one Codex resumes; checked against the Router alias rule.
+    native_thread_id: z.uuid(),
+    // The working directory the TUI bound with `--cd`; idle-bind binds it again.
     cwd: absolutePathSchema,
+    mode: journeyModeSchema,
     checks: z.array(journeyCheckSchema).min(1),
   })
-  .strict();
+  .strict()
+  .refine(
+    (plan) =>
+      plan.checks.every(
+        (check) => (check.kind === "turn-in-progress") === (plan.mode === "active-read-only"),
+      ),
+    "active-read-only allows only turn-in-progress, which idle-bind cannot observe",
+  );
 export type JourneyObservationPlan = z.infer<typeof journeyObservationPlanSchema>;
 
 /** Used fields of native `skills/list` entries; the raw response stays authoritative. */
@@ -105,6 +127,7 @@ export const nativeThreadItemSchema = z.looseObject({
 export type NativeThreadItem = z.infer<typeof nativeThreadItemSchema>;
 export const nativeThreadSchema = z.looseObject({
   id: z.string(),
+  status: z.looseObject({ type: z.string() }),
   turns: z.array(
     z.looseObject({
       id: z.string(),
@@ -115,7 +138,12 @@ export const nativeThreadSchema = z.looseObject({
 });
 export type NativeThread = z.infer<typeof nativeThreadSchema>;
 
-/** The native and public views one observer connection retains for every check. */
+/** What an `active-read-only` observation may collect: history and public events, nothing more. */
+export interface ActiveJourneyReadback {
+  readonly threadRead: NativeThread;
+}
+
+/** The native and public views one `idle-bind` observer connection retains for every check. */
 export interface JourneyReadback {
   readonly unboundSkills: NativeSkillsList;
   readonly boundSkills: NativeSkillsList;

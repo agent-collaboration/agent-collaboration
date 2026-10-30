@@ -8,6 +8,11 @@ import {
   type NativeThread,
 } from "../acp-journey-models.ts";
 import {
+  checkActiveJourney,
+  checkIdleJourney,
+  checkTurnInProgress,
+  nativeThreadAlias,
+  uuidV5,
   checkCompactRefused,
   checkCompacted,
   checkEffectiveModel,
@@ -45,7 +50,7 @@ const BOUND = list([
   },
 ]);
 function thread(turns: NativeThread["turns"]): NativeThread {
-  return { id: SESSION, turns };
+  return { id: SESSION, status: { type: "idle" }, turns };
 }
 const userText = (id: string, text: string) => ({
   id,
@@ -490,15 +495,97 @@ test("the journey plan requires an absolute bound cwd and at least one check", (
     service_directory: "/service",
     endpoint_id: "claude-local",
     session_id: SESSION,
+    native_thread_id: SESSION,
     evidence: "/evidence",
     cwd: CWD,
+    mode: "idle-bind",
     checks: [{ kind: "effective-model", expected_model: "claude-haiku-5-5" }],
   };
   assert.equal(journeyObservationPlanSchema.parse(base).cwd, CWD);
+  // Raw provider Session IDs are opaque provider data, not necessarily UUIDs.
+  assert.equal(
+    journeyObservationPlanSchema.parse({ ...base, session_id: "chat/../a b" }).session_id,
+    "chat/../a b",
+  );
+  assert.throws(
+    () => journeyObservationPlanSchema.parse({ ...base, mode: "active-read-only" }),
+    /active-read-only allows only turn-in-progress/,
+  );
+  assert.throws(
+    () => journeyObservationPlanSchema.parse({ ...base, checks: [{ kind: "turn-in-progress" }] }),
+    /active-read-only allows only turn-in-progress/,
+  );
+  assert.equal(
+    journeyObservationPlanSchema.parse({
+      ...base,
+      mode: "active-read-only",
+      checks: [{ kind: "turn-in-progress" }],
+    }).mode,
+    "active-read-only",
+  );
   assert.throws(
     () => journeyObservationPlanSchema.parse({ ...base, cwd: "repo" }),
     /absolute path required/,
   );
   assert.throws(() => journeyObservationPlanSchema.parse({ ...base, checks: [] }));
   assert.throws(() => journeyObservationPlanSchema.parse({ ...base, terminal_capture: "/x" }));
+});
+
+test("UUIDv5 reproduces the published RFC 4122 name-based vector", (): void => {
+  // Python's uuid documentation: uuid5(NAMESPACE_DNS, "python.org").
+  assert.equal(
+    uuidV5("6ba7b810-9dad-11d1-80b4-00c04fd430c8", "python.org"),
+    "886313e1-3b8a-5372-9b90-0c9aee199e5d",
+  );
+});
+
+test("the native thread alias keeps UUID text the Router parses and hashes everything else", (): void => {
+  const service = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
+  // Canonical form of the four text forms uuid 1.26.0 `Uuid::parse_str` accepts.
+  for (const accepted of [
+    "019A0000-0000-7000-8000-0000000000AB",
+    "019a00000000700080000000000000aB",
+    "{019a0000-0000-7000-8000-0000000000ab}",
+    "urn:uuid:019a0000-0000-7000-8000-0000000000ab",
+  ])
+    assert.equal(
+      nativeThreadAlias(service, "claude-local", accepted),
+      "019a0000-0000-7000-8000-0000000000ab",
+      accepted,
+    );
+  // Opaque IDs, including a slash/dot/space ID and a URN prefix the crate does not match, are
+  // UUIDv5(URL namespace, "codex-router:session:<service>:<endpoint>:<raw>"). The literal was
+  // derived separately with xxd and shasum and hand-set version/variant bits.
+  assert.equal(
+    nativeThreadAlias(service, "cursor-local", "chat/../a b"),
+    "5756efda-4d21-59ce-aef2-2b68a02a6598",
+  );
+  assert.notEqual(
+    nativeThreadAlias(service, "claude-local", "URN:UUID:019a0000-0000-7000-8000-0000000000ab"),
+    "019a0000-0000-7000-8000-0000000000ab",
+  );
+  assert.notEqual(
+    nativeThreadAlias(service, "claude-local", "chat/../a b"),
+    nativeThreadAlias(service, "cursor-local", "chat/../a b"),
+  );
+});
+
+test("turn-in-progress reads only an active turn and the dispatchers keep the modes apart", (): void => {
+  const active = thread([ORDINARY, { id: "turn-2", status: "inProgress", items: [] }]);
+  assert.deepEqual(checkTurnInProgress({ threadRead: active }), {
+    kind: "turn-in-progress",
+    observed: { turn_id: "turn-2" },
+  });
+  assert.throws(
+    () => checkTurnInProgress({ threadRead: thread([ORDINARY]) }),
+    /no in-progress turn/,
+  );
+  assert.throws(
+    () => checkActiveJourney({ threadRead: active }, [{ kind: "compacted" }]),
+    /compacted needs an idle-bind observation/,
+  );
+  assert.throws(
+    () => checkIdleJourney(readback(), TARGET, [{ kind: "turn-in-progress" }], () => thread([])),
+    /turn-in-progress needs an active-read-only observation/,
+  );
 });
