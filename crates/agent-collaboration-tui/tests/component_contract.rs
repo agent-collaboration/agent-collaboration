@@ -91,3 +91,7 @@ mod typography_coverage;
 #[cfg(test)]
 #[path = "suites/wheel_isolation.rs"]
 mod wheel_isolation;
+
+#[cfg(test)]
+#[path = "suites/dialog_context_content.rs"]
+mod dialog_context_content;

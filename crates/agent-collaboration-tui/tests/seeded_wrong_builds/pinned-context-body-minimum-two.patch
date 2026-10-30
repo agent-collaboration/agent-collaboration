@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -4,3 +4,3 @@ use iocraft::{ComponentDrawer, Hook, prelude::*};
- use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+@@ -5,3 +5,3 @@ use iocraft::{ComponentDrawer, Hook, prelude::*};
+ use unicode_width::UnicodeWidthStr;
 -const MINIMUM_BODY_ROWS: u16 = 3;
 +const MINIMUM_BODY_ROWS: u16 = 2;
  struct HeaderMeasure {

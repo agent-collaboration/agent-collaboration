@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -141,3 +141,3 @@ pub fn DialogFrame<'a>(
+@@ -151,3 +151,3 @@ pub fn DialogFrame<'a>(
          );
 -    let context_gap = u16::from(has_context && body_budget > 1);
 +    let context_gap = u16::from(has_context);

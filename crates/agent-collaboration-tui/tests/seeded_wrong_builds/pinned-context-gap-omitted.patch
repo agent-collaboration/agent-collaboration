@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -155,3 +155,3 @@ pub fn DialogFrame<'a>(
+@@ -165,3 +165,3 @@ pub fn DialogFrame<'a>(
          border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
 -        View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
 +        View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap.saturating_sub(1)) {
-             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,available_rows)
+             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)

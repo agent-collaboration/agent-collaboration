@@ -1,12 +1,12 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -130,7 +130,3 @@ pub(super) fn DialogHeader<'a>(
-         && props.available_rows >= identity_rows.saturating_add(1 + MINIMUM_BODY_ROWS);
+@@ -82,7 +82,3 @@ pub(super) fn DialogHeader<'a>(
+     let separate = has_context && !fits_inline && props.available_rows >= 2 + MINIMUM_BODY_ROWS;
 -    let show_help = help.is_some()
 -        && !separate
 -        && (!has_context || fits_inline)
 -        && (available_width == 0
 -            || needed + usize::from(help_width.get()) < usize::from(available_width));
 +    let show_help = help.is_some();
-     let title = fit_header_title(&props.title, usize::from(available_width));
+     let minimum_context = context

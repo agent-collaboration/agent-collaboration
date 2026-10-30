@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+@@ -78,3 +78,3 @@ pub(super) fn DialogHeader<'a>(
+     let help = props.help.take();
+-    let identity_width = context.as_ref().map_or(0, PinnedContext::natural_width);
++    let identity_width = context.as_ref().map_or(0, |context|context.natural_width().max(60));
+     let needed = props.title.width() + identity_width + usize::from(has_context);

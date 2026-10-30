@@ -145,7 +145,7 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let mut opened = hooks.use_ref(|| false);
     if !opened.get() {
         let scroll = ScrollHandle::new(stack);
-        stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(vec![TargetSpec::new(TargetId::new("body").unwrap()).with_input(scroll.input_handler())]).unwrap(),actions:ActionRegistry::new(ScopeId::new("dialog").unwrap(),Vec::new()).unwrap(),primary_action:None},view:OverlayView::new(move||element!(crate::controls::DialogFrame(title:"Dialog active".to_owned(),scroll:scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:vec![element!(Text(content:"Account: alpha")).into_any()],actions:vec![element!(Text(content:"Esc Close")).into_any()]) {#((1..=40).map(|index|element!(Text(content:format!("CONTENT {index}")))))}).into_any()),layout:OverlayLayout::CenteredCells {width:30,height:10}}).unwrap();
+        stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(vec![TargetSpec::new(TargetId::new("body").unwrap()).with_input(scroll.input_handler())]).unwrap(),actions:ActionRegistry::new(ScopeId::new("dialog").unwrap(),Vec::new()).unwrap(),primary_action:None},view:OverlayView::new(move||element!(crate::controls::DialogFrame(title:"Dialog active".to_owned(),scroll:scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:Some(crate::controls::PinnedContext::new("Account: alpha")),actions:vec![element!(Text(content:"Esc Close")).into_any()]) {#((1..=40).map(|index|element!(Text(content:format!("CONTENT {index}")))))}).into_any()),layout:OverlayLayout::CenteredCells {width:30,height:10}}).unwrap();
         opened.set(true);
     }
     if exit.get() {
