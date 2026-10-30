@@ -1,6 +1,6 @@
 use crate::dialog_test_frame::StaticDialogFrame as DialogFrame;
 use crate::*;
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use iocraft::prelude::*;
 use std::sync::{
     Arc,
@@ -162,7 +162,10 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
     tokio::pin!(canvases);
     let mut phase = 0;
     let journey = async {
-        while let Some(canvas) = canvases.next().await {
+        while let Some(mut canvas) = canvases.next().await {
+            while let Some(Some(current)) = canvases.next().now_or_never() {
+                canvas = current;
+            }
             let frame = canvas.to_string();
             match phase {
                 0 if frame.contains("80x24 Loading") => {
@@ -180,7 +183,7 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
                 }
                 2 if frame.contains("32x24 Loading") => {
                     assert!(
-                        frame.contains("Account: alpha") && frame.contains("Apply 0"),
+                        frame.contains("Account: al…") && frame.contains("Apply 0"),
                         "{frame}"
                     );
                     assert!(

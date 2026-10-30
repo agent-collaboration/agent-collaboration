@@ -65,8 +65,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `receipt-surface-after-close.patch` | The new top surface hides the overlay or parent that actually consumed the event. |
 | `receipt-before-callback.patch` | The receipt becomes visible before on_routed returns. |
 | `receipt-text-leak.patch` | Printable text is serialized instead of its payload-free category. |
-| `content-dialog-forced-percent.patch` | A content-sized form fills an intrinsic percentage rectangle and clips its fourth section. |
-| `content-dialog-no-measurement.patch` | Wrapped header/chrome is not accounted for in the measured content height, hiding fields below the fold. |
+| `content-dialog-forced-maximum.patch` | A fitting form fills its maximum height instead of sizing to current content. |
+| `content-dialog-retains-cross-body-height.patch` | Help's outer height persists after the original body is restored. |
 | `menu-uses-toolbar-label.patch` | Menu renders the toolbar-only short label in place of the action's full title. |
 | `toolbar-budget-uses-full-title.patch` | A short button drops off although its painted label and key fit. |
 | `toolbar-label-cached-at-install.patch` | A live toolbar label stops updating after the action is installed. |
@@ -92,6 +92,13 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `help-heading-accent-normal.patch` | Help section headings use Accent/Normal instead of the shipped Primary/Bold style. |
 | `dialog-heading-accent-normal.patch` | Dialog section headings lose their shipped Primary colour and bold hierarchy. |
 | `field-label-accent.patch` | Form labels use Accent instead of their shipped Primary colour at normal weight. |
+| `header-wrap-before-body.patch` | Wrapping header consumes the first body fact at 48x12. |
+| `header-keeps-help-hint.patch` | Help hint stays while context needs the space. |
+| `header-context-no-ellipsis.patch` | Clipped context loses its ellipsis. |
+| `header-title-no-ellipsis.patch` | Overlong title loses its ellipsis. |
+| `header-context-gap-starves-body.patch` | Pinned gap consumes the final body row at 48x10. |
+| `content-dialog-retains-help-padding.patch` | A restored form retains automatic padding selected from the previous Help frame. |
+| `header-stale-context-measurement.patch` | A removed context retains its old width or wrapping guard and keeps the fitting Help hint hidden. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
@@ -105,3 +112,11 @@ separate. Check each patch applies, then challenge it individually against the
 full package at its declared source target. Runtime assertion failures must
 identify the named defect. Compile errors, application errors, color setup
 failures, and entry/redraw timeouts do not establish sensitivity.
+
+The earlier `content-dialog-forced-percent.patch` and
+`content-dialog-no-measurement.patch` seeds were retired with the compact-header
+correction. Once the header occupies one row, both intrinsic percentage height
+and native Auto sizing preserve the existing form outcomes; those mutations no
+longer represent wrong behavior. Their replacements above exercise observable
+failures: forced maximum height and retaining a different body's measured height.
+The original form, section, overflow, action, and spacing assertions remain.

@@ -14,6 +14,9 @@ mod combo_filter_layout;
 #[path = "suites/control_editor.rs"]
 mod control_editor;
 #[cfg(test)]
+#[path = "suites/dialog_body_restore.rs"]
+mod dialog_body_restore;
+#[cfg(test)]
 #[path = "suites/dialog_content_sizing.rs"]
 mod dialog_content_sizing;
 #[cfg(test)]
@@ -22,6 +25,9 @@ mod dialog_context_spacing;
 #[cfg(test)]
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
+#[cfg(test)]
+#[path = "suites/dialog_header_layout.rs"]
+mod dialog_header_layout;
 #[cfg(test)]
 #[path = "suites/dialog_page_navigation.rs"]
 mod dialog_page_navigation;

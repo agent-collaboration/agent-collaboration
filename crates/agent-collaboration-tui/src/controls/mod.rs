@@ -42,6 +42,7 @@ pub use form_fields::{
     SelectableRowProps,
 };
 pub mod dialog_frame;
+mod dialog_header;
 pub use dialog_frame::{DialogFrame, DialogFrameProps};
 
 pub mod dialog_footer;
