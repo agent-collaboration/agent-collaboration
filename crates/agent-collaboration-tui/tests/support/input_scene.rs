@@ -29,6 +29,7 @@ fn action_id(value: &str) -> ActionId {
 }
 fn action(name: &str, key: &str, run: impl Fn(()) + Send + Sync + 'static) -> ActionDef {
     ActionDef {
+        toolbar_label: None,
         id: action_id(name),
         title: "Action".into(),
         keys: vec![key.parse().unwrap()],

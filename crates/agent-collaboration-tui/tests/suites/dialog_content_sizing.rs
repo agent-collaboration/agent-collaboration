@@ -53,6 +53,7 @@ mod tests {
         let mut opened = hooks.use_ref(|| false);
         if !opened.get() {
             let save = ActionDef {
+                toolbar_label: None,
                 id: action("save"),
                 title: "Save".into(),
                 keys: vec!["Ctrl+Enter".parse().unwrap()],
@@ -65,6 +66,7 @@ mod tests {
                 }),
             };
             let cancel = ActionDef {
+                toolbar_label: None,
                 id: action("cancel"),
                 title: "Cancel".into(),
                 keys: vec!["Esc".parse().unwrap()],
@@ -76,6 +78,7 @@ mod tests {
                 }),
             };
             let help = ActionDef {
+                toolbar_label: None,
                 id: action("help"),
                 title: "Help".into(),
                 keys: vec!["F1".parse().unwrap()],

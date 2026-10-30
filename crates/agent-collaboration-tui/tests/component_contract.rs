@@ -49,6 +49,9 @@ mod surface_exceptions;
 #[path = "suites/switch_controls.rs"]
 mod switch_controls;
 #[cfg(test)]
+#[path = "suites/toolbar_labels.rs"]
+mod toolbar_labels;
+#[cfg(test)]
 #[path = "suites/typography_coverage.rs"]
 mod typography_coverage;
 #[cfg(test)]

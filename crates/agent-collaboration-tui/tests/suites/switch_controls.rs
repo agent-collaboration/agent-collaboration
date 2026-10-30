@@ -33,6 +33,7 @@ mod tests {
         let all = hooks.use_state(|| false);
         let stack = use_surface_stack(&mut hooks, |stack| {
             let folder = ActionDef {
+                toolbar_label: None,
                 id: action("folder"),
                 title: "This folder".into(),
                 keys: vec!["F2".parse().unwrap()],
@@ -45,6 +46,7 @@ mod tests {
                 }),
             };
             let every = ActionDef {
+                toolbar_label: None,
                 id: action("all"),
                 title: "All sessions".into(),
                 keys: vec!["F3".parse().unwrap()],
@@ -57,6 +59,7 @@ mod tests {
                 }),
             };
             let menu = ActionDef {
+                toolbar_label: None,
                 id: action("menu"),
                 title: "Menu".into(),
                 keys: vec!["F10".parse().unwrap()],

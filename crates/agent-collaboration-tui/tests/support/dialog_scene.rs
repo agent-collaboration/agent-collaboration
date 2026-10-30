@@ -72,6 +72,7 @@ pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyE
         actions: ActionRegistry::new(
             ScopeId::new("screen").unwrap(),
             vec![ActionDef {
+                toolbar_label: None,
                 id: action("quit"),
                 title: "Quit".into(),
                 keys: vec!["Ctrl+C".parse().unwrap()],
@@ -121,6 +122,7 @@ fn dialog_spec(
     let scroll = ScrollHandle::new(stack);
     let group = GroupId::new("dialog-fields").unwrap();
     let open = ActionDef {
+        toolbar_label: None,
         id: action("client"),
         title: "Client".into(),
         keys: Vec::new(),
@@ -149,6 +151,7 @@ fn dialog_spec(
         }),
     };
     let start = ActionDef {
+        toolbar_label: None,
         id: action("start"),
         title: "Start".into(),
         keys: vec!["Ctrl+Enter".parse().unwrap()],
@@ -169,6 +172,7 @@ fn dialog_spec(
         }),
     };
     let close = ActionDef {
+        toolbar_label: None,
         id: action("close"),
         title: "Close".into(),
         keys: vec!["Esc".parse().unwrap()],
@@ -180,6 +184,7 @@ fn dialog_spec(
         }),
     };
     let help_action = ActionDef {
+        toolbar_label: None,
         id: action("help"),
         title: "Help".into(),
         keys: vec!["F1".parse().unwrap()],

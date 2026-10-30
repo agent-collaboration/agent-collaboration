@@ -32,6 +32,7 @@ mod tests {
         run: Handler<()>,
     ) -> ActionDef {
         ActionDef {
+            toolbar_label: None,
             id: id(name),
             title: title.into(),
             keys: vec![key.parse().unwrap()],

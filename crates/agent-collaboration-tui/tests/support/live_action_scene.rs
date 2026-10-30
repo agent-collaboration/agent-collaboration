@@ -61,6 +61,7 @@ pub struct LiveActionSceneProps {
 fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
     vec![
         ActionDef {
+            toolbar_label: None,
             id: action("filters"),
             title: ActionTitle::dynamic(move || format!("Filters: {}", ui.filter.get())),
             keys: vec!["F8".parse().unwrap()],
@@ -70,6 +71,7 @@ fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
             run: Handler::default(),
         },
         ActionDef {
+            toolbar_label: None,
             id: action("login"),
             title: "Log in again".into(),
             keys: vec!["F9".parse().unwrap()],
@@ -82,6 +84,7 @@ fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
             }),
         },
         ActionDef {
+            toolbar_label: None,
             id: action("close"),
             title: "Close".into(),
             keys: vec!["Esc".parse().unwrap()],

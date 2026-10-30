@@ -126,6 +126,7 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         actions: ActionRegistry::new(
             ScopeId::new("background").unwrap(),
             vec![ActionDef {
+                toolbar_label: None,
                 id: ActionId::new("quit").unwrap(),
                 title: "Quit".into(),
                 keys: vec!["q".parse().unwrap()],

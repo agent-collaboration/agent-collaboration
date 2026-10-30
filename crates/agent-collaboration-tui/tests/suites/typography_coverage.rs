@@ -207,6 +207,7 @@ mod tests {
             actions: ActionRegistry::new(
                 ScopeId::new("typography").unwrap(),
                 vec![ActionDef {
+                    toolbar_label: None,
                     id: ActionId::new("open-menu").unwrap(),
                     title: "Menu".into(),
                     keys: vec!["F10".parse().unwrap()],

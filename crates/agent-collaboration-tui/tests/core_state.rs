@@ -21,6 +21,7 @@ mod tests {
     }
     fn action(name: &str, chord: &str) -> ActionDef {
         ActionDef {
+            toolbar_label: None,
             id: ActionId::new(name).unwrap(),
             title: "Open".into(),
             keys: vec![chord.parse().unwrap()],

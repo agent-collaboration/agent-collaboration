@@ -86,6 +86,7 @@ mod tests {
         let mut system = hooks.use_context_mut::<SystemContext>();
         let stack = use_surface_stack(&mut hooks, |_| {
             let action = |name: &str, key: &str, run: Handler<()>| ActionDef {
+                toolbar_label: None,
                 id: ActionId::new(name).unwrap(),
                 title: "Probe".into(),
                 keys: vec![key.parse().unwrap()],

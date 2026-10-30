@@ -94,6 +94,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         .with_navigation_policy(props.navigation_policy);
         let mut targets = control.targets();
         let toolbar = ActionDef {
+            toolbar_label: None,
             id: action("toolbar"),
             title: "Toolbar".into(),
             keys: Vec::new(),
@@ -118,6 +119,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                 ScopeId::new("list-scene").unwrap(),
                 vec![
                     ActionDef {
+                        toolbar_label: None,
                         id: action("details"),
                         title: "Details".into(),
                         keys: Vec::new(),
@@ -143,6 +145,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                     },
                     toolbar,
                     ActionDef {
+                        toolbar_label: None,
                         id: action("cover"),
                         title: "Cover list".into(),
                         keys: vec!["F10".parse().unwrap()],

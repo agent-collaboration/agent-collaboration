@@ -113,6 +113,8 @@ pub enum Placement {
 pub struct ActionDef {
     pub id: ActionId,
     pub title: ActionTitle,
+    /// Only buttons may use this short label; other projections keep the title.
+    pub toolbar_label: Option<ActionTitle>,
     pub keys: Vec<KeyChord>,
     pub availability: AvailabilityFn,
     pub choice: Option<Checked>,
@@ -125,6 +127,7 @@ impl fmt::Debug for ActionDef {
             .debug_struct("ActionDef")
             .field("id", &self.id)
             .field("title", &self.title)
+            .field("toolbar_label", &self.toolbar_label)
             .field("keys", &self.keys)
             .field("availability", &self.availability)
             .field("choice", &self.choice)
@@ -137,6 +140,7 @@ impl fmt::Debug for ActionDef {
 pub struct ActionPresentation {
     pub id: ActionId,
     pub title: String,
+    pub toolbar_label: Option<String>,
     pub keys: Vec<KeyChord>,
     pub availability: Availability,
     pub checked: Option<bool>,
@@ -211,6 +215,7 @@ impl ActionRegistry {
             .map(|action| ActionPresentation {
                 id: action.id.clone(),
                 title: action.title.get(),
+                toolbar_label: action.toolbar_label.as_ref().map(ActionTitle::get),
                 keys: action.keys.clone(),
                 availability: action.availability.get(),
                 checked: action.choice.as_ref().map(Checked::get),

@@ -139,6 +139,7 @@ mod tests {
         let offset = hooks.use_state(|| 0u16);
         let stack = use_surface_stack(&mut hooks, |_| {
             let hit = ActionDef {
+                toolbar_label: None,
                 id: action_id("hit"),
                 title: "Hit".into(),
                 keys: vec!["Enter".parse().unwrap()],
@@ -153,6 +154,7 @@ mod tests {
                 }),
             };
             let move_action = ActionDef {
+                toolbar_label: None,
                 id: action_id("move"),
                 title: "Move".into(),
                 keys: vec!["m".parse().unwrap()],

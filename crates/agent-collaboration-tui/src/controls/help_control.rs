@@ -215,6 +215,7 @@ impl HelpControl {
         let close_id = ActionId::new(format!("{}:close-help", self.0.action.as_str()))
             .map_err(HelpError::Identity)?;
         let back = ActionDef {
+            toolbar_label: None,
             id: self.0.action.clone(),
             title: "Back".into(),
             keys: vec!["F1".parse().map_err(HelpError::Keys)?],
@@ -224,6 +225,7 @@ impl HelpControl {
             run: self.close_handler(),
         };
         let close = ActionDef {
+            toolbar_label: None,
             id: close_id.clone(),
             title: "Close Help".into(),
             keys: vec![

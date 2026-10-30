@@ -60,6 +60,7 @@ pub(crate) fn ReceiptScene(
             ScopeId::new("receipt-scene").unwrap(),
             vec![
                 ActionDef {
+                    toolbar_label: None,
                     id: action("inspect"),
                     title: "Inspect".into(),
                     keys: Vec::new(),
@@ -72,6 +73,7 @@ pub(crate) fn ReceiptScene(
                     }),
                 },
                 ActionDef {
+                    toolbar_label: None,
                     id: action("quit"),
                     title: "Quit".into(),
                     keys: vec!["Ctrl+C".parse().unwrap()],
@@ -141,6 +143,7 @@ fn receipt_overlay(
     kind: OverlayKind,
 ) -> OverlaySpec {
     let start = ActionDef {
+        toolbar_label: None,
         id: action("start"),
         title: "Start".into(),
         keys: vec!["Ctrl+Enter".parse().unwrap()],

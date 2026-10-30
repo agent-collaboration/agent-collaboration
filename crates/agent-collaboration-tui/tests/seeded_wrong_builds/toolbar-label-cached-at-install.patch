@@ -1,0 +1,9 @@
+diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
+--- a/crates/agent-collaboration-tui/src/actions.rs
++++ b/crates/agent-collaboration-tui/src/actions.rs
+@@ -173,3 +173,4 @@ impl ActionRegistry {
+     }
+-    pub fn new(scope: ScopeId, actions: Vec<ActionDef>) -> Result<Self, ActionError> {
++    pub fn new(scope: ScopeId, mut actions: Vec<ActionDef>) -> Result<Self, ActionError> {
++        for action in &mut actions {if let Some(label)=&action.toolbar_label {let saved=label.get();action.toolbar_label=Some(ActionTitle::dynamic(move||saved.clone()));}}
+         let mut identities = std::collections::HashSet::new();

@@ -93,6 +93,7 @@ mod tests {
                 stack,
             });
             let open = ActionDef {
+                toolbar_label: None,
                 id: action("help"),
                 title: "Help".into(),
                 keys: vec!["F1".parse().unwrap(), "Ctrl+7".parse().unwrap()],
@@ -105,6 +106,7 @@ mod tests {
                 ),
             };
             let execute = ActionDef {
+                toolbar_label: None,
                 id: action("execute"),
                 title: "Execute".into(),
                 keys: vec!["F8".parse().unwrap()],
@@ -131,6 +133,7 @@ mod tests {
             let mut actions = vec![open, execute];
             for (letter, title) in ('a'..='z').zip(TITLES) {
                 actions.push(ActionDef {
+                    toolbar_label: None,
                     id: action(title),
                     title: title.into(),
                     keys: vec![format!("Ctrl+Alt+{letter}").parse().unwrap()],

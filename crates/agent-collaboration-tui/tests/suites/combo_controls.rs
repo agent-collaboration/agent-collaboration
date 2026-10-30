@@ -132,6 +132,7 @@ mod tests {
             });
             *props.handle.0.lock().unwrap() = Some(control.clone());
             let open = ActionDef {
+                toolbar_label: None,
                 id: action(),
                 title: "Client".into(),
                 keys: vec!["F3".parse().unwrap()],

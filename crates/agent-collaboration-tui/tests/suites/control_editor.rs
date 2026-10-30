@@ -65,6 +65,7 @@ mod tests {
             actions: ActionRegistry::new(
                 ScopeId::new("editor").unwrap(),
                 vec![ActionDef {
+                    toolbar_label: None,
                     id: action("menu"),
                     title: "Menu".into(),
                     keys: vec!["F10".parse().unwrap()],
