@@ -114,14 +114,18 @@ export async function withTerminal<TResult>(options: {
 function fixedKeyAcknowledgement(
 	name: string,
 	surface: InputConsumptionExpectation['surface'],
-	action: string | null,
+	route: { readonly action: string | null; readonly target?: string },
 ): InputConsumptionExpectation {
 	return {
 		event: { kind: 'key', code: { kind: 'fixed', name }, modifiers: [], phase: 'press' },
 		surface,
-		target: null,
-		action,
+		target: route.target ?? null,
+		action: route.action,
 	};
+}
+// TargetId::child prefixes the parent's UTF-8 byte length, not its character count.
+function childTarget(parentTarget: string, suffix: string): string {
+	return `${Buffer.byteLength(parentTarget, 'utf8')}:${parentTarget}:${suffix}`;
 }
 export async function observeMainEscape(
 	plan: BaselinePlan,
@@ -142,6 +146,7 @@ export async function observeMainEscape(
 						)
 					: null;
 			const initial = gridLines(driver.grid());
+			const helpActionId = 'help';
 			const title = surface === 'quota' ? 'Quota Help' : 'Help';
 			const generation = driver.frameGeneration();
 			// Help is a real processing barrier after the ignored Esc; neither
@@ -153,12 +158,12 @@ export async function observeMainEscape(
 				// Legacy 1b 1b 4f 50 is ambiguous with Alt+F1. A decoded Esc
 				// acknowledgement, not a delay or a transport write, separates them.
 				await receipts.observeInput({
-					expected: [fixedKeyAcknowledgement('Esc', { kind: 'screen' }, 'escape')],
+					expected: [fixedKeyAcknowledgement('Esc', { kind: 'screen' }, { action: 'escape' })],
 					inject: () => driver.send(keyBytes(keys, 'escape')),
 					timeoutMs: 8_000,
 				});
 				await receipts.observeInput({
-					expected: [fixedKeyAcknowledgement('F1', { kind: 'screen' }, 'help')],
+					expected: [fixedKeyAcknowledgement('F1', { kind: 'screen' }, { action: helpActionId })],
 					inject: () => driver.send(keyBytes(keys, 'help')),
 					timeoutMs: 8_000,
 				});
@@ -172,7 +177,13 @@ export async function observeMainEscape(
 			if (receipts === null) await driver.send(keyBytes(keys, 'escape'));
 			else
 				await receipts.observeInput({
-					expected: [fixedKeyAcknowledgement('Esc', { kind: 'overlay', overlayId: '1' }, null)],
+					expected: [
+						fixedKeyAcknowledgement(
+							'Esc',
+							{ kind: 'overlay', overlayId: '1' },
+							{ action: null, target: childTarget(`action:${helpActionId}`, 'help-body') },
+						),
+					],
 					inject: () => driver.send(keyBytes(keys, 'escape')),
 					timeoutMs: 8_000,
 				});
