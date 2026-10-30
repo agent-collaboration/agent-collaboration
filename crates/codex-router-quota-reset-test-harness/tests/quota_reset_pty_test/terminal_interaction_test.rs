@@ -373,8 +373,10 @@ impl TerminalDriver {
         if recorded != pid {
             return Err("public wrapper PID differs from retained child".into());
         }
+        // The receipt writer pins LC_ALL=C too, so `lstart` bytes cannot differ by parent locale.
         let snapshot = std::process::Command::new("/bin/ps")
             .args(["-p", &pid.to_string(), "-o", "uid=,lstart=,command="])
+            .env("LC_ALL", "C")
             .output()?;
         let identity = std::fs::read(output.join("quota-wrapper.identity"))?;
         let command = String::from_utf8_lossy(&snapshot.stdout);

@@ -421,9 +421,11 @@ function processIdentityLine(pid: number): string {
 	if (owner.status !== 0 || owner.stdout.trim() !== String(process.getuid?.())) {
 		throw new FixtureLaunchRejected('public wrapper UID observation failed');
 	}
+	// LC_ALL=C on the writer and both readers keeps the `lstart` bytes locale-independent.
 	const identity = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'uid=,lstart=,command='], {
 		encoding: 'utf8',
 		timeout: 3000,
+		env: { ...process.env, LC_ALL: 'C' },
 	});
 	if (identity.status !== 0) {
 		throw new FixtureLaunchRejected('public wrapper UID observation failed');
