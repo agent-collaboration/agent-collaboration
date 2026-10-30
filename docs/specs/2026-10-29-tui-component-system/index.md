@@ -13,6 +13,6 @@ A reusable Rust component crate on iocraft that makes keys and clicks go to exac
 
 **Core.** The new components are the menu, the combo box (select) and the standard dialog. The rest are existing `codex-router-tui` pieces, moved and restyled. Underneath them sits the one owner of keys and clicks.
 
-**Open.** Where each screen's actions go (quota's bottom action bar, or ☰ menu and toolbar buttons) is an owner choice from mocks; the action contract is the same either way, and quota keeps its bar until the owner picks. Physical Ctrl+Enter in the owner's Ghostty (H2) is unproven until the owner check.
+**Open.** Where each screen's actions go (quota's bottom action bar, or ≡ menu and toolbar buttons) is an owner choice from mocks; the action contract is the same either way, and quota keeps its bar until the owner picks. Physical Ctrl+Enter in the owner's Ghostty (H2) is unproven until the owner check.
 
 **Status.** Written; independent review pending. Nothing here has been built or observed.

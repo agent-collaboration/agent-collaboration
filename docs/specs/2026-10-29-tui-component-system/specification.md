@@ -107,7 +107,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 ### commands
 
-**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ☰ menu item with the key on the right, action-bar item, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
+**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, action-bar item, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
 
 - it is drawn disabled in the menu, toolbar and action bar, with its reason shown;
 - its key and click do nothing;
@@ -117,9 +117,9 @@ What the action does once triggered, including any effect outside the UI, belong
 
 When it becomes available again, all of those places change back together. *Entities: E5, E6.*
 
-**R7 — Help from the definitions** (U7). Help opens on F1 or from the ☰ menu. Opened from a main screen, it is a dialog. Opened from inside a dialog, it replaces that dialog's body, and closing it returns the dialog with its query, focus and draft values unchanged: one visible dialog level, as the 2026-10-17 design requires. It lists every action of the scope it was opened from, with its keys, built from the action definitions. It scrolls with the arrow keys, Page Up, Page Down and the wheel, and Esc closes it. Its entries pair an action with its keys. No entry names a key the scope doesn't bind, and no bound action is missing an entry. Headings and explanatory lines may appear around the entries. *Entities: E5, E6, E2.*
+**R7 — Help from the definitions** (U7). Help opens on F1 or from the ≡ menu. Opened from a main screen, it is a dialog. Opened from inside a dialog, it replaces that dialog's body, and closing it returns the dialog with its query, focus and draft values unchanged: one visible dialog level, as the 2026-10-17 design requires. It lists every action of the scope it was opened from, with its keys, built from the action definitions. It scrolls with the arrow keys, Page Up, Page Down and the wheel, and Esc closes it. Its entries pair an action with its keys. No entry names a key the scope doesn't bind, and no bound action is missing an entry. Headings and explanatory lines may appear around the entries. *Entities: E5, E6, E2.*
 
-**R8 — visible settings** (U8). Scope is always visible as the This folder &#124; All switch, marking the current value. Runtime view and sort show their current value as checked items whenever the ☰ menu is open. Choosing a value applies it immediately and updates the mark. If a key also changes one of these settings, the mark changes with it. *Entities: E5, E4.*
+**R8 — visible settings** (U8). Scope is always visible as the This folder &#124; All switch, marking the current value. Runtime view and sort show their current value as checked items whenever the ≡ menu is open. Choosing a value applies it immediately and updates the mark. If a key also changes one of these settings, the mark changes with it. *Entities: E5, E4.*
 
 ### overlays
 
@@ -156,13 +156,15 @@ A form, such as New session, is as tall as its content, capped by the space avai
 
 **R13 — picker toolbar and menu** (U12, also serves `commands`). The session picker's top row shows, left to right:
 
-- ☰ Menu;
+- ≡ Menu;
 - a [+ New] button;
 - a [/ Filter…] text field;
 - a This folder &#124; All switch;
 - right-aligned, the session count and the machine.
 
-`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ☰ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8). *Entities: E1, E4, E5.*
+Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one cell wide both in the pinned renderer's width table and under current Unicode, so rows line up in the terminal exactly as the crate measured them. The menu icon is ≡, not ☰: U+2630 is wide under Unicode 16, while the pinned renderer counts it as one cell (probe worker, 2026-10-30).
+
+`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8). *Entities: E1, E4, E5.*
 
 **R14 — combo boxes** (U13). A field that picks one option shows its current value followed by ▾.
 

@@ -79,7 +79,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U9 Overlays cover cleanly | A dialog, menu and dropdown are opened over rows that start with 📂, ✉️ or 界 one cell left of the overlay. The terminal screen shows the full border and corners, with nothing from beneath. | Glyphs outside the tested set. |
 | U10 Closing and focus return | Esc closes one layer at a time. An outside click closes a menu or dropdown but not a dialog, and never clicks what's beneath. Focus returns to where it was, or to the first control if that item is gone. | — |
 | U11 Dialog look | Each dialog's text grid is checked: one blank row between sections, one before the buttons, exactly one primary button, status words present beside their colour, and forms sized to content. The owner judges the look in the gallery. | Visual taste beyond those rules: the owner's call in D. |
-| U12 Picker toolbar and menu | The picker's top row and ☰ menu are read and compared with the agreed list. `/`, F10, typing and Esc behave as agreed, and no shortcut footer appears. | — |
+| U12 Picker toolbar and menu | The picker's top row and ≡ menu are read and compared with the agreed list. `/`, F10, typing and Esc behave as agreed, and no shortcut footer appears. | — |
 | U13 Combo boxes | Each dropdown rule is driven: filter, pick, cancel, highlight through reorders and removals, unavailable options. | — |
 | U14 Same building blocks everywhere | The same control kinds on the picker and the quota screen go through the same behaviour tests and are compared in the gallery. | — |
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
@@ -234,12 +234,13 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Target and journey:* B on the picker. Lasting.
 - *Reference:* R13 text; mocks 1 and 2.
 - *Passes when:*
-  - The top row reads ☰ Menu, [+ New], [/ Filter…], [This folder | All], plus count and machine.
+  - The top row reads ≡ Menu, [+ New], [/ Filter…], [This folder | All], plus count and machine.
   - The menu lists exactly R13's items with their keys.
   - `/` focuses the filter, and typing filters live.
   - F10 opens the menu.
   - No row below the list shows key hints.
-- *Wrong build that fails:* Help or Quit on the toolbar, or a footer of shortcut hints.
+  - A test measures every crate-drawn glyph with the pinned renderer's width table and with current Unicode, and requires both to be one cell.
+- *Wrong build that fails:* Help or Quit on the toolbar, or a footer of shortcut hints. Or ☰ as the menu icon, which the second width table counts as two cells.
 - *Reuses:* none.
 - *Unverified:* —
 

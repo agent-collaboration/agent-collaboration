@@ -59,7 +59,7 @@ flowchart TB
 | ActionRegistry | Define each action once. | Action definitions per scope (name, keys, availability with reason, checked state, handler); key lookup per scope; projections to menu, toolbar, action bar, Help and dialog key hints. | R5, R6, R7, R8 |
 | OverlayHost | Draw overlays correctly. | Rendering open overlays as root-level siblings in stack order; the one-cell gutter to each overlay's left; the covered state that tells surfaces to draw dimmed. | R2 (drawing half), R10 |
 | Controls | Each building block's look and local behaviour. | Per-control state such as text buffer and cursor, highlight, segment and scroll offset, and its visual states. `DialogSection` owns the dialog section rhythm (one blank row between sections, none inside, one before the actions row) and an optional tinted group panel; `StatusValue` draws a status as text in its status colour. | R12, R13, R14, R15 |
-| Theme | Named colours. | Colour roles: base, raised, group panel, text, muted, accent, focused, primary, disabled, dimmed, and the status roles (good, warning, error). Each background role has a dimmed form for covered surfaces. | R2, R12, R15 |
+| Theme | Named colours and the crate's own glyphs, each one cell wide under both the pinned renderer's width table and current Unicode. | Colour roles: base, raised, group panel, text, muted, accent, focused, primary, disabled, dimmed, and the status roles (good, warning, error). Each background role has a dimmed form for covered surfaces. | R2, R12, R15 |
 
 **Dependency direction.** Consumers depend on the crate; the crate depends on iocraft and unicode-width only (C1). Inside the crate: Controls depend on FocusModel, HitRegions, ActionRegistry and Theme. InputOwner depends on SurfaceStack, FocusModel, HitRegions and ActionRegistry. OverlayHost depends on SurfaceStack and Theme. Nothing in the crate depends on a consumer. Forbidden: any control or consumer subscribing to terminal events (R5), detected by a structural check of the crate's own consumers.
 
@@ -208,7 +208,7 @@ Concurrency: a single event loop. Events are routed one at a time, against state
 | --- | --- | --- |
 | 1 | Rename `codex-router-tui` → `agent-collaboration-tui` in all four consumers; move the quota colour roles out. | Workspace builds; no reference to the old name remains; the crate has no codex-router dependency. |
 | 2 | Add SurfaceStack, FocusModel, HitRegions, InputOwner, ActionRegistry, OverlayHost, and the new controls; extend DialogFrame. | The crate's own tests cover R1-R15 at component level. |
-| 3 | Move the session picker onto the crate; delete `picker_input.rs`'s key chain, the per-dialog key maps and the hand-written Help; build the toolbar and ☰ menu. | Picker meets R1-R14 on a real terminal; no picker code subscribes to terminal events. |
+| 3 | Move the session picker onto the crate; delete `picker_input.rs`'s key chain, the per-dialog key maps and the hand-written Help; build the toolbar and ≡ menu. | Picker meets R1-R14 on a real terminal; no picker code subscribes to terminal events. |
 | 4 | Move the quota screen onto the crate's controls and InputOwner; keep its 2026-10-23 look and layout. | Quota meets R1–R11, R15 and R16 (its full preserved feature list, including pending-reset quit guards and the AccountId and effect guards); Esc no longer exits it, while Q and Ctrl+C do. Deleting its old key maps deletes no domain guard. |
 
 No phase leaves a second input path behind: each consumer cuts over completely in its phase. Planning decides how phases group into pull requests.
