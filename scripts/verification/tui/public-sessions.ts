@@ -101,6 +101,13 @@ export const publicLifecycleSchema = z
 	})
 	.readonly();
 
+/**
+ * The runtime `router-identity.json` record. Its producer is verification/observations/owned-runtime.ts
+ * (identityRecord of a process-table row), so both packages share one real-owner shape.
+ */
+export const routerIdentityRecordSchema = processIdentitySchema
+	.unwrap()
+	.extend({ parent: z.number().int() });
 const hostManifestSchema = z.looseObject({
 	serviceId: z.string(),
 	serviceEpoch: z.string(),
@@ -171,10 +178,9 @@ export async function qualifyPublicTarget(plan: PublicSessionsPlan): Promise<voi
 	verifyArtifact(plan.runtime_effect_evidence);
 	if (plan.runtime_plan.router_root !== plan.public_target.debug_router_root)
 		throw new Error('public Sessions runtime root mismatch');
-	const recorded = processIdentitySchema
-		.unwrap()
-		.extend({ parent: z.number().int() })
-		.parse(readJson(join(plan.runtime_plan.evidence, 'router-identity.json')));
+	const recorded = routerIdentityRecordSchema.parse(
+		readJson(join(plan.runtime_plan.evidence, 'router-identity.json')),
+	);
 	if (!sameIdentity(lookupProcessIdentity(recorded.pid), recorded))
 		throw new Error('live Router process identity mismatch');
 	const started = z

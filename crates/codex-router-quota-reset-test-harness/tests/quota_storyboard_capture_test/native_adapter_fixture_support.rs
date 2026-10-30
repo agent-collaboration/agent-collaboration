@@ -338,9 +338,11 @@ pub(super) fn process_group(pid: &str) -> TestResult<String> {
     Ok(String::from_utf8(result.stdout)?.trim().to_owned())
 }
 
+/// A stable before/after fingerprint: PID, real owner UID (`ruid`, the launching account even for
+/// a setuid utility), group, start time and command name. Effective UID is not part of it.
 pub(super) fn observe_process(pid: &str) -> TestResult<String> {
     let observed = Command::new("/bin/ps")
-        .args(["-p", pid.trim(), "-o", "pid=,uid=,pgid=,lstart=,comm="])
+        .args(["-p", pid.trim(), "-o", "pid=,ruid=,pgid=,lstart=,comm="])
         .output()?;
     if !observed.status.success() {
         return Err("controlled child identity unavailable".into());

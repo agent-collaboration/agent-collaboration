@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, test } from 'vitest';
 
@@ -14,12 +15,40 @@ import {
 	publicHostIdentitySchema,
 	publicLifecycleSchema,
 	publicTargetSchema,
+	routerIdentityRecordSchema,
 	publicSessionsChildConfiguration,
 	publicSessionsLaunchConfiguration,
 } from './public-sessions.ts';
 import type { PublicHostIdentity, PublicSessionsTarget } from './public-sessions.ts';
 import { protocolPlan, saveJson, temporaryRoot } from './receipt-fixtures.ts';
 import { captureArtifact, fileDigest, readJson, sourceBinding } from './source-binding.ts';
+// The actual producer of runtime router-identity.json: owned-runtime.ts saves identityRecord of its
+// process-table row. It runs in the verification package's own module context, never copied here.
+const VERIFICATION = fileURLToPath(new URL('../../../verification', import.meta.url));
+const PRODUCER =
+	"import { pathToFileURL } from 'node:url';" +
+	'const { identityRecord, processTable } = await import(pathToFileURL(process.argv[1]).href);' +
+	'const row = processTable().get(Number(process.argv[2]));' +
+	'if (row === undefined) process.exit(3);' +
+	'process.stdout.write(JSON.stringify(identityRecord(row)));';
+function verificationRouterIdentity(pid: number): Record<string, unknown> {
+	const result = spawnSync(
+		process.execPath,
+		[
+			'--input-type=module',
+			'-e',
+			PRODUCER,
+			join(VERIFICATION, 'observations/runtime-processes.ts'),
+			String(pid),
+		],
+		{ cwd: VERIFICATION, encoding: 'utf8', timeout: 10_000 },
+	);
+	if (result.status !== 0) throw new Error(`verification identity producer failed: `);
+	const produced: unknown = JSON.parse(result.stdout);
+	if (typeof produced !== 'object' || produced === null)
+		throw new Error('producer wrote no record');
+	return { ...produced };
+}
 const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -184,7 +213,14 @@ test('read-only Host qualification checks actual process binary manifest health 
 	mkdirSync(join(fixture.debug, 'agent-communication'));
 	const identity = lookupProcessIdentity(process.pid);
 	if (identity === null) throw new Error('controlled test process absent');
-	saveJson(join(evidence, 'router-identity.json'), { ...identity, parent: process.ppid });
+	// macOS: the producer and this reader both record `ps comm`, so the real producer seam closes here.
+	// Linux: the producer records `ps comm` while lookupProcessIdentity resolves /proc/<pid>/exe, a
+	// reported executable-field gap, so this reader's own record stands in there.
+	const produced =
+		process.platform === 'darwin'
+			? verificationRouterIdentity(process.pid)
+			: { ...identity, parent: process.ppid };
+	saveJson(join(evidence, 'router-identity.json'), produced);
 	saveJson(join(evidence, 'router-started.json'), {
 		binarySHA256: fileDigest(identity.executable),
 	});
@@ -260,13 +296,17 @@ test('read-only Host qualification checks actual process binary manifest health 
 		saveJson(join(evidence, 'router-started.json'), {
 			binarySHA256: fileDigest(identity.executable),
 		});
-		saveJson(join(evidence, 'router-identity.json'), {
-			...identity,
-			birth: 'reused pid',
-			parent: process.ppid,
-		});
+		saveJson(join(evidence, 'router-identity.json'), { ...produced, birth: 'reused pid' });
 		await expect(qualifyPublicTarget(plan)).rejects.toThrow('process identity');
-		saveJson(join(evidence, 'router-identity.json'), { ...identity, parent: process.ppid });
+		const {
+			realUid,
+			effectiveUid: _effective,
+			...rest
+		} = routerIdentityRecordSchema.parse(produced);
+		// A record from the earlier effective-UID collector is refused, never reinterpreted.
+		saveJson(join(evidence, 'router-identity.json'), { ...rest, uid: realUid });
+		await expect(qualifyPublicTarget(plan)).rejects.toThrow('realUid');
+		saveJson(join(evidence, 'router-identity.json'), produced);
 		writeFileSync(effect, 'changed effects');
 		await expect(qualifyPublicTarget(plan)).rejects.toThrow('artifact changed');
 	} finally {
@@ -277,4 +317,11 @@ test('read-only Host qualification checks actual process binary manifest health 
 			});
 		});
 	}
+});
+
+test('the verification runtime router identity record has the reader shape on every host', () => {
+	const produced = routerIdentityRecordSchema.parse(verificationRouterIdentity(process.pid));
+	expect(produced.realUid).toBe(process.getuid?.());
+	const { realUid, effectiveUid: _effective, ...rest } = produced;
+	expect(() => routerIdentityRecordSchema.parse({ ...rest, uid: realUid })).toThrow('realUid');
 });
