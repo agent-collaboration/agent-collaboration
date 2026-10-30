@@ -6,6 +6,8 @@ import { join } from 'node:path';
 
 import type { GhosttyCore } from '@wterm/ghostty';
 
+import type { TerminalInputModes } from './ghostty-input-encoding.ts';
+import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
 import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts';
 import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 
@@ -181,6 +183,10 @@ export class PtyGridDriver {
 	}
 	grid(): TerminalGrid {
 		return snapshotGrid(this.core);
+	}
+	/** Actual modes parsed from received PTY output; no assumed key-protocol flags. */
+	inputModes(): TerminalInputModes {
+		return readGhosttyInputModes(this.core);
 	}
 	bytes(): Buffer {
 		return Buffer.concat(this.raw);

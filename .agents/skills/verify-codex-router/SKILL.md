@@ -17,6 +17,8 @@ For Sessions/Quota presentation, follow [compiled TUI journeys](references/tui-j
 
 Future S9 toolbar/menu/dropdown/account-action/refresh cases are [authored new-entry drafts](references/s9-new-entry-journeys.md), explicitly absent at base until S6/S7. Their schema/oracle checks launch no TUI and establish no product pass. Claude stopped-session Details is Open-only under the 2026-10-30 correction; Open resumes the same session with saved settings and attaches.
 
+The [Ghostty input harness](references/ghostty-input-harness.md) stages layer C through actual PTY mode readback, a spec-derived key encoder and example Ghostty keybinds, plus SGR1006 press/release/wheel input. It remains unobserved on the S9 product; physical hardware, other app/OS keybinds and real Ghostty rendering remain outside its proof.
+
 **Observed locally:** genuine Claude Question/Approval callbacks, actual Session test decisions, marker execution, owning SQLite reopen and exact cleanup on Sunclaw. The first unreachable native-Approver case remains negative evidence. **Portable cold entry and Cursor remain draft:** endpoint/settings/tool parameterization has structural and retained-Claude qualification; no Cursor model input or callback run has happened. Use [Cursor qualification](references/cursor-provider.md) before its first input. No successful journey is rerun merely to refresh the recipe.
 
 ## Launch and readiness
