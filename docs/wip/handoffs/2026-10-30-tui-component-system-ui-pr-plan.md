@@ -273,8 +273,10 @@ The paired Verifier independently runs the S2–S4 layer-A suite at the declared
   - the Committing guard unchanged;
   - dialogs on DialogFrame and DialogSection (Account details, Pool details, options, floor, reset) with the rhythm, group panels and StatusValue;
   - the four 2026-10-23 groups and layout kept;
-  - a consumer `clippy.toml`.
-- **Writes:** `crates/codex-router-quota-tui/src/*`.
+  - a consumer `clippy.toml`;
+  - **"Log in again"** (U16/R17, owner 2026-10-30) in Account details and the ≡ menu: a quota terminal outcome carrying the account's label and provider; `codex-router-cli` runs `codex-router account login --provider <p> --label <l>` after teardown, then restarts quota on the same account; plain message on failure, no retry;
+  - Account details **Actions ▾** menu (R17): Log in again, Options…, Weekly floor…, Disable/Enable, Copy account ID, Remove account… (disabled accounts only, confirmed); the primary button follows the account's state.
+- **Writes:** `crates/codex-router-quota-tui/src/*` (renamed `agent-router-quota-tui`), plus the quota run loop in `codex-router-cli`.
 - **Earns:**
   - U4 · R4, quota part: `quota_account_options_test.rs:161-208` kept and passing. Committing ignores Ctrl+C; other phases keep `ExitPrecommit`.
   - U15 · R5, quota half: workspace clippy.
@@ -361,6 +363,7 @@ parallel S6 || S7       (advisory; separate worktree lanes on the one PR branch,
 | U14 · R15 | S7 (A, parameterised), S9 (D) | crate nextest; gallery |
 | U15 · R5 | S6, S7, S8 (E) | workspace clippy plus three negative controls |
 | 10-17 baseline · R16 | S9 (B, F) | existing journeys re-run; public-entry journeys |
+| U16 · R17 | S7, S9 (B, C) | quota "Log in again" journey with a recording login stand-in; owner's real re-login |
 
 Every slice also runs the package gates for what it touched: fmt, `cargo clippy --workspace --all-targets -- -D warnings`, file-size, the module-cycle ratchet and `cargo deny check`. The full workspace nextest runs once, at S8's head before S9, on Sunclaw. Per the owner's rule, any declared red must come from a full package run at that head.
 
