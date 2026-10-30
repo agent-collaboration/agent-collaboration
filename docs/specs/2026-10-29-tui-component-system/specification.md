@@ -107,7 +107,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 ### commands
 
-**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
+**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, keyboard shortcut, Help line, dialog key hint — shows that same name and key. The one definition may carry a short label that only a toolbar button shows, such as "+ New" for "New session…" (owner-approved toolbar, 2026-10-29); the key, availability and action are identical. When an action becomes unavailable, it becomes unavailable everywhere at once:
 
 - it is drawn disabled in the menu and toolbar, with its reason shown;
 - its key and click do nothing;
