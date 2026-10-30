@@ -30,7 +30,7 @@ flowchart TB
     hits["HitRegions<br/>clipped rectangles of targets, per frame"]
     registry["ActionRegistry<br/>action definitions per scope"]
     host["OverlayHost<br/>draws overlays as root siblings, gutter, dimming"]
-    controls["Controls<br/>Button, TextField, FilterField, ComboBox,<br/>SegmentedSwitch, ScrollList, MenuButton/MenuDropdown,<br/>Toolbar, ActionBar, DialogKeyHints, DialogFrame, DialogSection,<br/>StatusValue, FormFields, HelpDialog"]
+    controls["Controls<br/>Button, TextField, FilterField, ComboBox,<br/>SegmentedSwitch, ScrollList, MenuButton/MenuDropdown,<br/>Toolbar, DialogKeyHints, DialogFrame, DialogSection,<br/>StatusValue, FormFields, HelpDialog"]
     theme["Theme<br/>named colours"]
   end
   iocraft["iocraft 829ebd86<br/>render loop, layout, canvas, terminal events"]
@@ -55,8 +55,8 @@ flowchart TB
 | InputOwner | Decide where each input event goes. | The only `use_terminal_events` subscription in an application; event-time routing order; the two deliberate exceptions. | R1, R2 (input half), R4, R9 (key half), R11 (click half) |
 | SurfaceStack | Know what is open and on top. | Ordered stack of the screen and open overlays; each overlay's parent and the focus target to restore when it closes. | R1, R2, R11 |
 | FocusModel | Know what has focus on each surface. | Ordered focus targets per surface, their groups for arrow movement, enabled state with reason, current focus keyed by target identity. | R3, R9, R11 |
-| HitRegions | Map a mouse position to a target. | Each target's clipped on-screen rectangle, recorded while the frame is drawn. A crate hook on each target reads its position and size from iocraft's public draw-time geometry (`ComponentDrawer::canvas_position` and `size` in `pre_component_draw`), not from `use_component_rect`, whose value is one frame old. iocraft's own clip rectangle is private at the pin, so the crate intersects that rectangle with the clip areas it owns itself: root overlays and its own scroll viewports. The map is staged during the draw and published when the root finishes drawing, so it always describes the frame on screen. A resize invalidates it until the next frame is drawn. | R1, R3, R11 |
-| ActionRegistry | Define each action once. | Action definitions per scope (name, keys, availability with reason, checked state, handler); key lookup per scope; projections to menu, toolbar, action bar, Help and dialog key hints. | R5, R6, R7, R8 |
+| HitRegions | Map a mouse position to a target. | Each target's clipped on-screen rectangle, recorded while the frame is drawn. A crate hook on each target reads its position and size from iocraft's public draw-time geometry (`ComponentDrawer::canvas_position` and `size` in `pre_component_draw`), not from `use_component_rect`, whose value is one frame old. iocraft's clip rectangle is private at the pin, so the hook keeps only the cells for which `drawer.canvas().cell(x, y)` returns a cell. That is iocraft's own inherited clip from every ancestor, including consumers' plain `overflow: Hidden` views, with no ancestor list to maintain. The map is staged during the draw and published when the root finishes drawing, so it always describes the frame on screen. A resize invalidates it until the next frame is drawn. | R1, R3, R11 |
+| ActionRegistry | Define each action once. | Action definitions per scope (name, keys, availability with reason, checked state, handler); key lookup per scope; projections to menu, toolbar, Help and dialog key hints. | R5, R6, R7, R8 |
 | OverlayHost | Draw overlays correctly. | Rendering open overlays as root-level siblings in stack order; the one-cell gutter to each overlay's left; the covered state that tells surfaces to draw dimmed. | R2 (drawing half), R10 |
 | Controls | Each building block's look and local behaviour. | Per-control state such as text buffer and cursor, highlight, segment and scroll offset, and its visual states. `DialogSection` owns the dialog section rhythm (one blank row between sections, none inside, one before the actions row) and an optional tinted group panel; `StatusValue` draws a status as text in its status colour. | R12, R13, R14, R15 |
 | Theme | Named colours and the crate's own glyphs, each one cell wide under both the pinned renderer's width table and current Unicode. | Colour roles: base, raised, group panel, text, muted, accent, focused, primary, disabled, dimmed, and the status roles (good, warning, error). Each background role has a dimmed form for covered surfaces. | R2, R12, R15 |
@@ -71,7 +71,7 @@ flowchart TB
 | E2 Overlay | SurfaceStack | `surface_stack` module (new) | `Overlay { id: OverlayId, kind: OverlayKind, parent: SurfaceId, restore_focus: Option<TargetId>, scope: ScopeId }`, with `enum OverlayKind { Menu, Dropdown { field: TargetId }, Dialog }`. Help opened from a main screen is a `Dialog`. Help opened from a dialog is not a new overlay: the dialog swaps its body for Help and keeps its query, focus and draft state for the return (R7; 2026-10-17 one-level rule). |
 | E3 Surface | SurfaceStack | `surface_stack` (new) | `enum SurfaceId { Screen, Overlay(OverlayId) }`; the stack is an ordered list with the screen first; `top() -> SurfaceId`. |
 | E4 Focus target | FocusModel | `focus_model` (new) | `TargetId`: a stable key the consumer derives from its existing full identity for the item. That is the source-qualified session reference (endpoint plus native or managed id) or the AccountId, never a bare id that two sources could share. Plus `TargetSpec { group: GroupId, order: u16, enabled: Availability }`; the current focus is stored as a `TargetId`, never as an index. |
-| E5 Action | ActionRegistry | `actions` (new) | `ActionDef { id: ActionId, title, keys: Vec<KeyChord>, availability: AvailabilityFn, choice: Option<Checked>, placement: Placement, run: Handler }`, where `AvailabilityFn` is evaluated per routed event against the consumer's current state and returns `enum Availability { Available, Unavailable { reason } }` and `enum Placement { Toolbar, ActionBar, Menu { section }, Hidden }`. |
+| E5 Action | ActionRegistry | `actions` (new) | `ActionDef { id: ActionId, title, keys: Vec<KeyChord>, availability: AvailabilityFn, choice: Option<Checked>, placement: Placement, run: Handler }`, where `AvailabilityFn` is evaluated per routed event against the consumer's current state and returns `enum Availability { Available, Unavailable { reason } }` and `enum Placement { Toolbar, Menu { section }, Hidden }`. |
 | E6 Key binding | ActionRegistry | `actions` (new) | `KeyChord { code, modifiers }`, unique per `ScopeId`; a duplicate is rejected when the scope's actions are declared. |
 | E7 Input event | InputOwner | `input_owner` (new) | iocraft `TerminalEvent` (key with kind, paste, mouse, resize) received by the single subscription; routing result `enum Routed { Target(TargetId), Action(ActionId), Closed(OverlayId), Quit, Ignored }`. |
 | E8 Option | The control that lists it | `controls::combo_box`, `controls::scroll_list` (new) | `OptionKey` (stable key from the value it stands for) plus display text; highlight and current value are stored as `OptionKey`. |
@@ -107,9 +107,9 @@ sequenceDiagram
   O->>S: pop Menu; restore focus to the list row
   IO->>O: Enter
   O->>S: top() = Screen
-  O->>F: focused = list row → open selected session
-  F->>R: Screen scope action OpenSession
-  R->>C: run handler (Router call belongs to the consumer)
+  O->>F: focused = list row → Details of the selected session
+  F->>R: Screen scope action Details
+  R->>C: run handler (the consumer opens its Details dialog)
   IO->>IO: one render after the batch: dimming off, focus visible
 ```
 
@@ -147,7 +147,7 @@ pub fn open_overlay(stack: &SurfaceStackHandle, overlay: OverlaySpec) -> Overlay
 
 Guarantees to consumers: a handler runs only when its action is available at the moment the event is routed, re-checked per event so that a second Press in the same burst sees the first one's effect (R6); a control's `on_change` runs only for input routed to it (R1); `open_overlay` makes the new overlay the top surface before the next event is routed.
 
-Consumer obligations: call `.ignore_ctrl_c()` on the render loop (C3); declare a `TargetId` that stays the same for the same item across re-renders (E4); never call `use_terminal_events` (R5).
+Consumer obligations: call `.ignore_ctrl_c()` on the render loop (C3); declare a `TargetId` that stays the same for the same item across re-renders (E4); never call `use_terminal_events`, `use_local_terminal_events` or `use_terminal_size` (R5). The consumer passes the terminal's initial size from its launch boundary (`crossterm::terminal::size()`, already a dependency of both consumers) to the crate root, and InputOwner routes every later Resize; tests pass explicit dimensions. iocraft's `Hooks::terminal_size()` is crate-private at the pin, and `use_terminal_size` installs its own subscription, so neither is used.
 
 ## State
 
@@ -209,7 +209,7 @@ Concurrency: a single event loop. Events are routed one at a time, against state
 | 1 | Rename `codex-router-tui` → `agent-collaboration-tui` in all four consumers; move the quota colour roles out. | Workspace builds; no reference to the old name remains; the crate has no codex-router dependency. |
 | 2 | Add SurfaceStack, FocusModel, HitRegions, InputOwner, ActionRegistry, OverlayHost, and the new controls; extend DialogFrame. | The crate's own tests cover R1-R15 at component level. |
 | 3 | Move the session picker onto the crate; delete `picker_input.rs`'s key chain, the per-dialog key maps and the hand-written Help; build the toolbar and ≡ menu. | Picker meets R1-R14 on a real terminal; no picker code subscribes to terminal events. |
-| 4 | Move the quota screen onto the crate's controls and InputOwner; keep its 2026-10-23 look and layout. | Quota meets R1–R11, R15 and R16 (its full preserved feature list, including pending-reset quit guards and the AccountId and effect guards); Esc no longer exits it, while Q and Ctrl+C do. Deleting its old key maps deletes no domain guard. |
+| 4 | Move the quota screen onto the crate's controls and InputOwner; keep its 2026-10-23 look and layout, except that its bottom row of actions becomes the ≡ menu and toolbar (owner, option A). | Quota meets R1–R11, R15 and R16 (its full preserved feature list, including the reset workflow's quit behaviour (Ctrl+C ignored while committing, exit without commit before it) and the AccountId and effect guards); Esc no longer exits it, while Q and Ctrl+C do. Deleting its old key maps deletes no domain guard. |
 
 No phase leaves a second input path behind: each consumer cuts over completely in its phase. Planning decides how phases group into pull requests.
 
@@ -222,7 +222,7 @@ No phase leaves a second input path behind: each consumer cuts over completely i
 | U3 | R3 | E1 E3 E4 | FocusModel + HitRegions | Tab/arrows/click on registered targets | `TargetSpec`, `GroupId`; `focus_model` | current focus by `TargetId` | disabled target skipped | walk every target by Tab, arrows and click on each screen; canvas shows exactly one focus style |
 | U4 | R4 | E1 E5 E6 | InputOwner + ActionRegistry | main-screen rules; Ctrl+C global | `ActionDef` on the screen scope | search/filter state in consumer | Esc at defaults → no-op | key sequences on the real picker; Ctrl+C from screen and from an overlay with ignore_ctrl_c |
 | U15 | R5 | E1 E4 E5 | ActionRegistry + InputOwner | consumers declare only | crate API | — | a consumer subscribing itself | structural check that consumers don't call `use_terminal_events`, plus R6/R7 projections matching |
-| U6 | R6 | E5 E6 | ActionRegistry | projections: toolbar, menu, action bar, Help, dialog key hints, key lookup | `ActionDef`, `AvailabilityFn`; `actions` | availability evaluated per routed event | unavailable → not triggered | flip availability; compare all projections in one frame; send the key and click |
+| U6 | R6 | E5 E6 | ActionRegistry | projections: toolbar, menu, Help, dialog key hints, key lookup | `ActionDef`, `AvailabilityFn`; `actions` | availability evaluated per routed event | unavailable → not triggered | flip availability; compare all projections in one frame; send the key and click |
 | U7 | R7 | E2 E5 E6 | ActionRegistry + HelpDialog | Help generated from the scope's defs | `HelpDialog` in `controls` | — | — | compare Help entries with the scope's bound actions |
 | U8 | R8 | E4 E5 | ActionRegistry (checked) + SegmentedSwitch | `choice: Option<Checked>` | `actions`, `controls::segmented_switch` | consumer setting | — | change setting by click, menu, key; read marks |
 | U5 | R9 | E2 E4 E5 E6 | InputOwner + TextField + ComboBox | dialog key rules; Ctrl+Enter compound step | `controls::text_field`, `controls::combo_box` | dropdown open/closed; text buffer + cursor | no Ctrl+Enter → Tab+Enter | key sequences per dialog incl. dropdown + Ctrl+Enter; text editing keys; gap: physical Ctrl+Enter delivery (H2) |
@@ -230,7 +230,7 @@ No phase leaves a second input path behind: each consumer cuts over completely i
 | U10 | R11 | E2 E3 E4 E7 | SurfaceStack + InputOwner | close top; restore focus; click policy | `Overlay.restore_focus`; `surface_stack` | stack pop | target gone → first enabled | Esc and outside clicks on menu, dropdown, dialog; check focus after close incl. a removed target |
 | U11 | R12 | E2 E4 E5 | DialogFrame + DialogSection | title, Help, context id, section rhythm and group panels, label column, scrollbar, primary action, status colour with label, form content height | `controls::dialog_frame` (moved) | — | content taller than space → scrollbar | canvas layout of each dialog against R12's list |
 | U12 | R13 | E1 E4 E5 | Toolbar + MenuButton/MenuDropdown + FilterField | picker declares toolbar and menu actions | `controls::toolbar`, `controls::menu` | filter text in consumer | — | picker canvas + key/click sequences against R13 |
-| U13 | R14 | E2 E4 E8 | ComboBox | dropdown with filter, keyed highlight | `OptionKey`; `controls::combo_box` | highlight by `OptionKey`; matching and pickability kept apart | own typing hides it → first match; outside update removes it → no highlight until ↑/↓; none → "no match"; unavailable → highlightable, not pickable | filter/reorder/update while open; gap: highlight rules pending Probe 7 |
+| U13 | R14 | E2 E4 E8 | ComboBox | dropdown with filter, keyed highlight | `OptionKey`; `controls::combo_box` | highlight by `OptionKey`; matching and pickability kept apart | own typing hides it → first match; outside update removes it → no highlight until ↑/↓; none → "no match"; unavailable → highlightable, not pickable | filter/reorder/update while open; still-matching typing; outside removal; unavailable option |
 | U14 | R15 | E4 | Controls + Theme | same control kinds on both screens | `controls`, `theme` | — | — | same control kinds compared on picker and quota canvases |
 | 10-17 baseline | R16 | E1 E4 E5 | the consumer screens (picker, quota) keep their domain owners; the crate supplies input and controls | each preserved capability reached through crate controls and actions | consumer modules (unchanged domain owners); `TargetId` from the full existing identity | consumer state | domain guards stay with their owners: pending/unknown never auto-retried, one Start, no fabricated IDs | the existing compiled Sessions/Quota capture journeys at all six grid sizes plus same-child resize, with expectations from 2026-10-23 C1–C10 first, then 10-17, then this set |
 

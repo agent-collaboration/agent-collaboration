@@ -33,7 +33,7 @@ These are the nouns the obligations are written over. They name no type, module 
 | E2 | Overlay | One opening of a menu, dropdown or dialog. Closing and reopening the same menu makes a new overlay. | Opened from exactly one parent surface (a screen or another overlay); holds 1..n focus targets; a dropdown belongs to the field that opened it. | An overlay is always above its parent. | open-top, open-covered, closed | "dialog", "popup", "menu", "dropdown", "modal"; Help is a dialog | U1, U2, U5, U9, U10 |
 | E3 | Surface | A screen or an open overlay. The top surface is the one opened most recently that is still open, or the screen when none is. | The open surfaces form one ordered stack per application, the screen at the bottom. | Exactly one top surface at any moment. | top, covered | "layer", "what's on top" | U1, U2 |
 | E4 | Focus target | One thing on a surface the user can focus and activate: a button, field, list row, menu item, option, or switch segment. Identified within its surface by what it represents; the same row for the same session is the same target after a re-render. | Belongs to exactly one surface; may trigger one action (E5). | At most one focused target per surface; only targets on the top surface can be focused. | normal, focused, hovered, disabled (with a reason), and where it applies selected or checked | "control", "item", "row", "field", "button" | U3, U13, U14 |
-| E5 | Action | One named thing the user can do in a given scope: New, Open, Details, Fork, Refresh, Help, Quit, Start, Cancel, Sort: Updated, and so on. The same action shown as a button, a menu item and a key is one action. | Belongs to one scope (a screen or one kind of dialog); has 0..n key bindings (E6); presented in 0..n places (toolbar, menu, action bar, Help, dialog key hints). | Its name, keys and availability are the same in every place it is presented. | available, unavailable (with a reason), and for choice actions checked or unchecked | "command", "shortcut target", "menu item action" | U6, U7, U8, U15 |
+| E5 | Action | One named thing the user can do in a given scope: New, Open, Details, Fork, Refresh, Help, Quit, Start, Cancel, Sort: Updated, and so on. The same action shown as a button, a menu item and a key is one action. | Belongs to one scope (a screen or one kind of dialog); has 0..n key bindings (E6); presented in 0..n places (toolbar, menu, Help, dialog key hints). | Its name, keys and availability are the same in every place it is presented. | available, unavailable (with a reason), and for choice actions checked or unchecked | "command", "shortcut target", "menu item action" | U6, U7, U8, U15 |
 | E6 | Key binding | One key or key combination bound to one action in one scope. | Belongs to exactly one action and one scope. | Within one scope, one key triggers at most one action. | — | "shortcut", "hotkey" | U4, U5, U6 |
 | E7 | Input event | One key press, paste, mouse click or wheel movement as the terminal delivers it. Each arrival is a distinct event, including several arriving together. | Delivered to at most one surface, except the two deliberate exceptions in R1. | The surface it reaches is the top surface at the moment it is handled, after every earlier event's effect has applied (R1's exceptions aside). | delivered, ignored (no target) | "keystroke", "click", "input" | U1, U2 |
 | E8 | Option | One choosable value in a combo box or list (a client, a machine, a provider). Identified by the value it stands for, not its position. | Belongs to one combo box or list; at most one option is the current value of a single-choice field. | Reordering or filtering doesn't change which option is which. | current, highlighted, hidden by filter | "choice", "item in the dropdown" | U13 |
@@ -98,7 +98,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 - With focus on the list or in the filter field, Ctrl+Enter opens the selected session directly and Ctrl+Shift+Enter forks it, as the 2026-10-17 design already requires (10-17 R9). Where the terminal can't report these keys, Details offers the same actions.
 - Esc clears the search when it isn't empty, otherwise resets the filters when they aren't at their defaults, otherwise does nothing. Esc never quits.
 - Ctrl+C quits the application from any surface, including while an overlay is open, provided the application has opted in to receiving Ctrl+C. Opting in is a requirement on every application built with the crate (constraint C3).
-- Every quit path keeps the screen's existing quit guards, such as the quota screen's pending-reset confirmation.
+- Every quit path keeps the screen's existing quit behaviour. On the quota screen, Ctrl+C does nothing while a reset is being committed, and before the commit it exits without committing, as `reset_key_action` does today.
 - This applies to the quota screen too: Esc there no longer exits (owner, 2026-10-29: "esc doesn't quit, ctrl c does"). Q still quits the quota screen.
 
 *Entities: E1, E5, E6.*
@@ -107,9 +107,9 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 ### commands
 
-**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, action-bar item, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
+**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
 
-- it is drawn disabled in the menu, toolbar and action bar, with its reason shown;
+- it is drawn disabled in the menu and toolbar, with its reason shown;
 - its key and click do nothing;
 - it is never triggered.
 
@@ -154,7 +154,7 @@ A form, such as New session, is as tall as its content, capped by the space avai
 
 ### controls
 
-**R13 — picker toolbar and menu** (U12, also serves `commands`). The session picker's top row shows, left to right:
+**R13 — toolbars and menus** (U12, also serves `commands`). The session picker's top row shows, left to right:
 
 - ≡ Menu;
 - a [+ New] button;
@@ -164,7 +164,11 @@ A form, such as New session, is as tall as its content, capped by the space avai
 
 Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one cell wide both in the pinned renderer's width table and under current Unicode, so rows line up in the terminal exactly as the crate measured them. The menu icon is ≡, not ☰: U+2630 is wide under Unicode 16, while the pinned renderer counts it as one cell (probe worker, 2026-10-30).
 
-`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8). *Entities: E1, E4, E5.*
+`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8).
+
+The quota screen's top row shows, left to right: ≡ Menu; [Details]; [Filters: <current> ▾]; [Pool]; [Options]; [Floor] when the weekly floor is available; and, right-aligned, the account count and active clients. Its ≡ menu lists every quota action with its key (Details F4, Filters… F3, Pool details F5, Options… Ctrl+R, Weekly floor… Ctrl+E), then Help F1 and Quit Ctrl+C. The quota screen has no bottom row of actions.
+
+On either screen, when the row is too narrow for every button, buttons drop off the row from the right; every action stays in the menu. *Entities: E1, E4, E5.*
 
 **R14 — combo boxes** (U13). A field that picks one option shows its current value followed by ▾.
 
@@ -183,7 +187,7 @@ Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one 
 
 *Entities: E2, E4, E8.*
 
-**R15 — shared controls** (U14). On every screen built with the crate, the quota screen included, each kind of control behaves the same by keyboard and by mouse. Those kinds are: button, text field, filter field, combo box, segmented switch, scrolling list, form field, action bar, and dialog key-hint line. An action bar is one row of actions, each shown with its key and each clickable, built from the screen's actions; it never lists navigation keys. No screen shows a footer of key hints. Each shows the same visual states: normal, focused, hovered, disabled with a reason, and selected or checked where it applies. *Entities: E4.*
+**R15 — shared controls** (U14). On every screen built with the crate, the quota screen included, each kind of control behaves the same by keyboard and by mouse. Those kinds are: button, text field, filter field, combo box, segmented switch, scrolling list, form field, and dialog key-hint line. No screen shows a bottom row of keys or actions; a screen's actions live in its toolbar and its ≡ menu. Each shows the same visual states: normal, focused, hovered, disabled with a reason, and selected or checked where it applies. *Entities: E4.*
 
 ### Carried forward from the 2026-10-17 design
 
@@ -217,7 +221,7 @@ Quota keeps the 2026-10-23 contract, which governs where it changed 10-17:
 - reset inspection, review, confirmation and result;
 - inventory paging;
 - readable balances;
-- its pending-reset quit guards.
+- its reset workflow's quit behaviour (Ctrl+C ignored while committing; exit without commit before it).
 
 Field columns stay aligned with a reserved selector gutter, and dialogs keep the existing sizing contract. The identity and effect guards hold: source-qualified session identity and AccountId are captured exactly; drafts stay separate from committed filters; Start runs once; a pending or unknown outcome is never retried automatically; no ID is fabricated. Only these superseded rules change, each by owner decision: inline choices become dropdowns (R14), and Esc no longer exits the quota screen (R4). Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
 
@@ -253,14 +257,14 @@ Each states what decides pass or fail and what it is judged against. How each is
 | V3 | R3 | Each focus target on each screen and dialog is reachable by Tab, by the arrows within its group, and by click; exactly one is visibly focused; first draw focuses the first list item. | A target reachable by only one input method, more or fewer than one focused target, or focus invisible. | R3 text; the mocks |
 | V4 | R4, C3 | Enter opens Details; Ctrl+Enter opens the session and Ctrl+Shift+Enter forks it; Esc clears, then resets, then does nothing; Ctrl+C quits from the screen and from an open overlay. | Enter launching a session, Esc quitting, or Ctrl+C not reaching the application. | R4 text |
 | V5 | R5 | A screen built with the crate has no input handling of its own outside its declarations, and its keys, menu, Help and dialog key hints still match R6 and R7. | A screen listening for terminal input directly or routing keys itself. | R5 text |
-| V6 | R6 | For each action, the name and key match across toolbar, menu, action bar, Help and any dialog key hint; toggling availability changes all of them in one redraw; an unavailable action's key and click never trigger it. | Any mismatch, a stale presentation after a change, or an unavailable action being triggered. | R6 text |
+| V6 | R6 | For each action, the name and key match across toolbar, menu, Help and any dialog key hint; toggling availability changes all of them in one redraw; an unavailable action's key and click never trigger it. | Any mismatch, a stale presentation after a change, or an unavailable action being triggered. | R6 text |
 | V7 | R7 | Help's action-and-key entries equal the scope's bound actions and keys exactly; it scrolls and closes as stated. | A missing or extra entry, or a wrong key. | R7 text and the scope's action definitions |
 | V8 | R8 | The scope switch always marks the current scope; the menu's checked items match the current runtime view and sort whenever the menu is open; both update after a change by click, menu or key. | A shown mark that doesn't match the current setting. | R8 text |
 | V9 | R9 | Each dialog key does what R9 says, including Ctrl+Enter with a dropdown open and the text-field keys; the Ctrl+Enter fallback works where the key isn't reported. | Any dialog key doing something else, or the primary action unreachable without Ctrl+Enter. | R9 text; Requirements H2 |
 | V10 | R10 | What the terminal shows has the overlay's complete border, corners included, and no content from beneath inside or on it. This holds when a two-column character (emoji, CJK) starts one cell left of the overlay, on every row it covers. | A missing corner or border cell, or a character from beneath inside the overlay. | R10 text; the failing cases recorded in Probe 1 (2026-10-29) |
 | V11 | R11 | Esc closes only the top overlay; an outside click closes an open menu or dropdown and leaves a dialog open; no outside click activates anything beneath; focus returns as R11 says, including when the earlier target is gone. | Closing more than one overlay, an outside click closing a dialog or activating something beneath, or focus landing elsewhere. | R11 text |
 | V12 | R12 | Each dialog shows every R12 element and exactly one marked primary action; sections are separated by exactly one blank row, with one blank row before the actions row; status values carry a text label as well as colour; a form is as tall as its content when there is room. | A missing element; a missing or doubled gap between sections (as above Quota windows today); actions flush against the last row; colour as the only status signal; empty filler in a form; more or fewer than one primary action. | R12 text; the owner's quota "Account details" screenshot (2026-10-29) |
-| V13 | R13 | The picker's top row and menu contain exactly what R13 lists; `/`, F10, typing and Esc behave as stated; no shortcut footer is shown. | Anything missing, Help or Quit on the toolbar, or a shortcut footer on the main screen. | R13 text; mocks 1 and 2 |
+| V13 | R13 | Each screen's top row and menu contain exactly what R13 lists, with buttons dropping from the right when narrow; `/`, F10, typing and Esc behave as stated; neither screen shows a bottom row of keys or actions. | Anything missing, an action reachable only from a dropped button, Help or Quit on a toolbar, or a bottom row of keys or actions. | R13 text; mocks 1, 2, q2 and q3 |
 | V14 | R14 | Each R14 behaviour holds: the highlight follows its option through filtering, reordering and updates; own typing that hides it moves it to the first match; an outside removal leaves nothing highlighted and Enter picks nothing until ↑/↓; an unavailable option is highlightable but not pickable; nothing matching is said. | A highlight jumping to a different option by position; Enter picking an option after an outside removal; an unavailable option being picked; a cancelled dropdown changing the field. | R14 text; mock 3 |
 | V15 | R15 | Each control kind behaves and looks the same on the picker and the quota screen. | Any difference in behaviour or state for the same control kind. | R15 text |
 | V16 | R16 | Every capability in R16's list is reachable on the rebuilt screens by keyboard and by mouse, and behaves as the 10-17 design and its verification design specify. | Any listed capability missing, unreachable by one input method, or behaving differently. | 2026-10-17 Requirements, Specification and Verification Design; 2026-10-23 quota dialog visuals |

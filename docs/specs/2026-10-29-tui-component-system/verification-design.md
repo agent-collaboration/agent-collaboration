@@ -29,8 +29,10 @@ Each test sends terminal events in two ways:
 - as **one ready burst**, so several events arrive before any redraw. This is how a fast typist or a paste arrives, and it is where today's leaks happen.
 - **separated by observed frames**, so each event sees the previous redraw.
 
+The initial frame is drained first. An unchanged canvas produces no new frame, so an ignored key is confirmed by an event-processed counter rather than by waiting for a redraw. The mock loop has no terminal size and no Ctrl+C opt-in, so A uses fixed layout dimensions with the root's real resize handling. B owns real size changes and quitting.
+
 Each test reads two things back:
-- **the screen the terminal would show**: the bytes iocraft writes, fed through a terminal-screen parser into a cell grid of characters, colours and attributes. Reading iocraft's canvas alone is not enough. Probe 1 showed the canvas correct while the written bytes dropped an overlay's corner.
+- **the serialized frame**: iocraft's mock render loop yields each frame as a `Canvas`. The test serializes it with iocraft's own `Canvas::write_ansi` and feeds those bytes through a terminal-screen parser into a cell grid of characters, colours and attributes. That runs the serializer that dropped the overlay corner in Probe 1, which reading canvas cells alone would miss. It does not run the terminal backend's full, diff and resize writes; B covers those. The parser ignores the trailing CRLF that `write_ansi` appends.
 - **each surface's input state**: field text and cursor, selection, focus, a counter per surface, and a log of every action handler that ran with its target.
 
 Targets: Linux CI, and macOS arm64 on Sunclaw (owner: tests run on Sunclaw). Debug profile, signed through `scripts/cargo_debug_signing_runner.sh`.
@@ -44,7 +46,7 @@ This layer adds what A can't see: real key encodings arriving over a PTY. The dr
 - **legacy keys**: the driver doesn't answer the keyboard-protocol query;
 - **kitty keyboard protocol**: the driver answers `CSI ? u` and sends kitty-encoded keys.
 
-Bursts are sent as single PTY writes. Grids are the adopted six: 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24, plus a same-child resize. No tmux anywhere (owner rule); the driver owns the PTY directly. A journey runs only against a declared build, on Sunclaw.
+Bursts are sent as single PTY writes. A single write is a transport burst; it doesn't guarantee the decoded events reach one render batch, so A stays the decisive same-batch test. B is the proof of actual terminal output, including open, close, reopen and resize. Grids are the adopted six: 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24, plus a same-child resize. No tmux anywhere (owner rule); the driver owns the PTY directly. A journey runs only against a declared build, on Sunclaw.
 
 **C — owner's Ghostty check.** *One-time, temporary.* The owner runs the signed debug build in Ghostty on Sunbook, directly and inside an Agent Studio pane. They press the keys only a physical keyboard can prove:
 - Ctrl+Enter, and Ctrl+Shift+Enter;
@@ -55,11 +57,11 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 
 **D — before/after gallery.** *One-time per delivery.* B's original captures, before and after, go into a presentation-html gallery. The owner judges the look against the mocks and the dialog rules ("make sure html design is good"). Captures that show real session titles are never committed.
 
-**E — lint gate.** *Lasting.* The consumer crates (`agent-session-picker`, `codex-router-quota-tui`) get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. The crate's InputOwner is the only caller. It lives in `agent-collaboration-tui`, whose own configuration doesn't carry the entry, so no suppression is needed. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
+**E — lint gate.** *Lasting.* The consumer crates (`agent-session-picker`, `codex-router-quota-tui`) get a crate-local `clippy.toml` with `disallowed-methods` naming iocraft's `use_terminal_events`, `use_local_terminal_events` and `use_terminal_size`, which subscribes internally. The existing `clippy -D warnings` gate then fails any consumer that listens to the terminal directly. The crate's InputOwner is the only caller, and it also owns the root's terminal-size observation. It lives in `agent-collaboration-tui`, whose own configuration doesn't carry the entry, so no suppression is needed. The gate's negative control runs under the actual workspace CI command, so the per-crate configuration is shown to be picked up. It leaves unevaluated: a consumer re-deriving routing from data it already receives; A's Help/menu agreement tests catch the visible symptoms of that.
 
 ### Why this mix
 
-- A test that renders into iocraft's canvas but never parses the written bytes would pass the Probe 1 wide-glyph defect. A therefore reads the parsed screen.
+- A test that reads iocraft's canvas cells but never serializes and parses the frame would pass the Probe 1 wide-glyph defect. A therefore reads the serialized frame.
 - A test that sends events one per frame would pass today's leak, where text typed while a menu opens lands in the box behind. A therefore always also sends bursts.
 - A journey that only runs legacy keys never exercises the kitty path, where Ctrl+Enter is distinct. B therefore runs both.
 - No harness proves a physical Ghostty delivers Ctrl+Enter (Requirements H2). Only C can.
@@ -73,13 +75,13 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U3 Fully usable by keyboard alone and by mouse alone | On both screens and every dialog, each control is reached by Tab, by arrows and by click. Exactly one is visibly focused. | — |
 | U4 Main-screen keys | On the picker: Enter shows Details, Ctrl+Enter opens the session, Ctrl+Shift+Enter forks. Esc clears search, then filters, and never quits. Ctrl+C quits from anywhere, on the picker and the quota screen. | Ctrl+Enter from the owner's physical keyboard until check C runs. |
 | U5 Dialog keys | In New session, every dialog key is pressed, including Ctrl+Enter with a dropdown open, which starts with the fields unchanged. With a legacy-key terminal, Start is still reached by Tab and Enter and by click. | Same as U4. |
-| U6 One definition per action | For every action, the name and key are compared across toolbar, menu, action bar, Help and dialog hints on one screen. One action is switched off; it greys out everywhere in the same redraw, and its key and click do nothing. | — |
+| U6 One definition per action | For every action, the name and key are compared across toolbar, menu, Help and dialog hints on one screen. One action is switched off; it greys out everywhere in the same redraw, and its key and click do nothing. | — |
 | U7 Help never lies | Help's list is compared with the screen's actual actions and keys, entry by entry. Help is opened from a dialog and closed again; query, focus and draft come back unchanged. | — |
 | U8 Visible settings | Scope, runtime view and sort are changed by click, by menu and by key. The switch and the menu checkmarks always show the current setting. | — |
 | U9 Overlays cover cleanly | A dialog, menu and dropdown are opened over rows that start with 📂, ✉️ or 界 one cell left of the overlay. The terminal screen shows the full border and corners, with nothing from beneath. | Glyphs outside the tested set. |
 | U10 Closing and focus return | Esc closes one layer at a time. An outside click closes a menu or dropdown but not a dialog, and never clicks what's beneath. Focus returns to where it was, or to the first control if that item is gone. | — |
 | U11 Dialog look | Each dialog's text grid is checked: one blank row between sections, one before the buttons, exactly one primary button, status words present beside their colour, and forms sized to content. The owner judges the look in the gallery. | Visual taste beyond those rules: the owner's call in D. |
-| U12 Picker toolbar and menu | The picker's top row and ≡ menu are read and compared with the agreed list. `/`, F10, typing and Esc behave as agreed, and no shortcut footer appears. | — |
+| U12 Toolbars and menus | Both screens' top rows and ≡ menus are read and compared with the agreed lists, at every size. `/`, F10, typing and Esc behave as agreed, and no shortcut footer appears. | — |
 | U13 Combo boxes | Each dropdown rule is driven: filter, pick, cancel, highlight through reorders and removals, unavailable options. | — |
 | U14 Same building blocks everywhere | The same control kinds on the picker and the quota screen go through the same behaviour tests and are compared in the gallery. | — |
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
@@ -106,7 +108,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Reference:* R2 text.
 - *Passes when:*
   - With any overlay open, every key and click aimed beneath leaves the beneath surface's state unchanged.
-  - In the parsed screen, every beneath cell outside the overlay keeps its character, and its foreground and any background use the dimmed role.
+  - In the parsed screen, every beneath cell outside the overlay's painted footprint (the overlay and its one-cell gutter) keeps its character, and its foreground and any background use the dimmed role.
   - In the redraw that closes the overlay, the beneath cells return to their normal roles.
 - *Wrong build that fails:* one that hides the beneath text (characters gone), or one that dims without blocking input (state changes).
 - *Reuses:* none.
@@ -121,8 +123,10 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - Every declared target is reached by Tab/Shift+Tab, by the arrows within its group, and by a click at its drawn cells.
   - The parsed screen shows exactly one focused-role target after each step.
   - The first draw focuses the first list row.
-  - After a resize, a click before the settling redraw is ignored or lands on what is drawn there. Never on a target's old position (Advisor finding on HitRegions).
-- *Wrong build that fails:* one that builds the click map from `use_component_rect`'s one-frame-old value. A click right after a resize then hits the previous layout.
+  - At every completed frame, the published click map equals the target geometry independently observed in that frame's draw, clipped cells excluded.
+  - After a resize or scroll, clicks on a target's new visible cells activate it, and clicks on its old cells don't.
+  - Clipping cases: a fully hidden target; a partly visible one clicked on its visible and its hidden half; nested and bordered viewports; horizontal and vertical clipping separately. Hidden cells never activate and visible cells always do, so a build that ignores every click fails too.
+- *Wrong build that fails:* one that builds the click map from `use_component_rect`'s one-frame-old value, so the map disagrees with the frame's draw. Or one that clips only against the crate's own viewports and misses a consumer's `overflow: Hidden` view.
 - *Reuses:* none.
 - *Unverified:* —
 
@@ -134,9 +138,9 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Passes when:*
   - On the picker, Enter in the list or the filter field opens Details and records no launch. Ctrl+Enter yields the open outcome for the exact source-qualified session without opening Details. Ctrl+Shift+Enter opens the fork confirmation.
   - Esc clears a non-empty search, then resets non-default filters, then changes nothing, and the process is still running.
-  - Ctrl+C ends the process from the main screen and with an overlay open, on both screens.
-  - On quota, Q still quits, and a pending reset still asks first.
-- *Wrong build that fails:* Enter launching (the change I wrongly wrote and reverted), Esc quitting, or a render loop without `.ignore_ctrl_c()`, where iocraft swallows Ctrl+C before the app.
+  - Ctrl+C reaches the app: the app's own Quit action is logged, then the process ends, from the main screen and with an overlay open, on both screens. Observed in B only, because A's mock loop has no Ctrl+C opt-in.
+  - On quota, Q still quits, and each reset-workflow phase keeps its current quit behaviour: Ctrl+C does nothing while a reset is being committed, and before the commit it exits without committing (`reset_key_action`, protected by `quota_account_options_test.rs`).
+- *Wrong build that fails:* Enter launching (the change I wrongly wrote and reverted), or Esc quitting. Or a render loop without `.ignore_ctrl_c()`: iocraft then ends the loop itself before the app sees the key, so the process exits but no Quit action is logged, and the Committing guard is bypassed.
 - *Reuses:* `crates/agent-session-picker/src/session_picker/picker_details_navigation_tests.rs`. Read: it drives the real picker component with Enter, Ctrl+Enter and Ctrl+Shift+Enter and asserts the outcomes, including "ordinary Enter inspects; it cannot resume or create". It keeps the interaction real, with no mocked routing. Kept, migrated onto the crate's InputOwner.
 - *Unverified:* physical Ctrl+Enter delivery in Ghostty (H2) until C.
 
@@ -160,7 +164,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Target and journey:* A only; a pure projection rule plus routing. No app launch.
 - *Reference:* R6 text.
 - *Passes when:*
-  - For each action, the name and key text are equal in toolbar, menu, action bar, Help and dialog hint wherever the action is placed.
+  - For each action, the name and key text are equal in toolbar, menu, Help and dialog hint wherever the action is placed.
   - After availability flips, all of them show the disabled role and reason in the same redraw.
   - A burst of the action's key twice, where the first press makes it unavailable, runs the handler exactly once.
 - *Wrong build that fails:* availability cached per render, so the second press in the burst runs the handler again. Or a menu label hand-typed separately from the action.
@@ -192,11 +196,11 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 
 **U9 · R10** (overlays)
 - *Seam:* OverlayHost one-cell left gutter.
-- *Observation:* A with the parsed screen; B for the real terminal at all grids.
+- *Observation:* A with the serialized frame; B for the real terminal at all grids.
 - *Target and journey:* B scene "wide glyph under overlay", using fixture rows that start with 📂, ✉️ and 界 at overlay-left−1. Lasting.
 - *Reference:* R10 text; the Probe 1 failing cases.
 - *Passes when:* for every row the overlay covers, the parsed screen shows the overlay's border character at its left edge, its corners, and its background in every interior cell and in the gutter cell. No beneath character appears inside.
-- *Wrong build that fails:* no gutter. Probe 1's corner loss reappears in the written bytes even though the canvas looks right.
+- *Wrong build that fails:* no gutter. Probe 1's corner loss reappears in the serialized frame even though the canvas cells look right.
 - *Reuses:* the Probe 1 case, promoted from example to test.
 - *Unverified:* glyphs outside the tested set; other terminals' wide-glyph handling.
 
@@ -231,16 +235,18 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 **U12 · R13** (commands)
 - *Seam:* Toolbar; MenuButton/MenuDropdown.
 - *Observation:* A; B scenes "main screen" and "menu open".
-- *Target and journey:* B on the picker. Lasting.
-- *Reference:* R13 text; mocks 1 and 2.
+- *Target and journey:* B on both screens at all six grids. Lasting.
+- *Reference:* R13 text; mocks 1, 2, q2 and q3.
 - *Passes when:*
-  - The top row reads ≡ Menu, [+ New], [/ Filter…], [This folder | All], plus count and machine.
-  - The menu lists exactly R13's items with their keys.
-  - `/` focuses the filter, and typing filters live.
-  - F10 opens the menu.
-  - No row below the list shows key hints.
+  - The picker's top row reads ≡ Menu, [+ New], [/ Filter…], [This folder | All], plus count and machine.
+  - The quota screen's top row reads ≡ Menu, [Details], [Filters: … ▾], [Pool], [Options], [Floor] when available, plus account count and clients.
+  - Each menu lists exactly R13's items with their keys.
+  - At narrow grids, buttons drop from the right, and every dropped action is still in the menu.
+  - `/` focuses the picker's filter, and typing filters live.
+  - F10 opens the menu on both screens.
+  - Neither screen shows a bottom row of keys or actions.
   - A test measures every crate-drawn glyph with the pinned renderer's width table and with current Unicode, and requires both to be one cell.
-- *Wrong build that fails:* Help or Quit on the toolbar, or a footer of shortcut hints. Or ☰ as the menu icon, which the second width table counts as two cells.
+- *Wrong build that fails:* Help or Quit on a toolbar; quota keeping its bottom row of actions; a dropped button whose action isn't in the menu. Or ☰ as the menu icon, which the second width table counts as two cells.
 - *Reuses:* none.
 - *Unverified:* —
 
@@ -251,7 +257,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Reference:* R14 text; mock 3; Probe 7.
 - *Passes when:* each R14 bullet holds:
   - the highlight follows its option through reorder and update;
-  - own typing that hides it moves it to the first match;
+  - own typing that still matches it keeps it there, and typing that hides it moves it to the first match;
   - an outside removal leaves nothing highlighted, and Enter picks nothing until ↑/↓;
   - an unavailable option is highlightable but Enter or a click doesn't pick it;
   - Esc leaves the field unchanged;
@@ -265,8 +271,8 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Observation:* A, with each control kind's behaviour tests parameterised over both screens' instances; D comparison.
 - *Target and journey:* A; D. Lasting for A.
 - *Reference:* R15 text.
-- *Passes when:* each control kind's key, click and visual-state tests pass identically on the picker's and the quota screen's instances. The kinds are button, text field, filter field, combo box, switch, list, form field, action bar and key-hint line. The visual states are normal, focused, hovered, disabled with reason, and selected or checked.
-- *Wrong build that fails:* the quota screen keeping its own label-only action items (today only F4 Details is clickable).
+- *Passes when:* each control kind's key, click and visual-state tests pass identically on the picker's and the quota screen's instances. The kinds are button, text field, filter field, combo box, switch, list, form field and key-hint line. The visual states are normal, focused, hovered, disabled with reason, and selected or checked.
+- *Wrong build that fails:* the quota screen keeping its own bottom row of label-only actions (today only F4 Details there is clickable).
 - *Reuses:* none.
 - *Unverified:* —
 
@@ -275,7 +281,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Observation:* E; plus A's U6/U7 agreement tests on the real screens.
 - *Target and journey:* E in the existing clippy gate. Lasting.
 - *Reference:* R5 text.
-- *Passes when:* `clippy -D warnings` passes with `use_terminal_events` disallowed in both consumer crates, and fails on a deliberately added call (one control run when the gate is added).
+- *Passes when:* `clippy -D warnings` passes with `use_terminal_events`, `use_local_terminal_events` and `use_terminal_size` disallowed in both consumer crates. It fails on a deliberately added call, in a negative control run under the actual workspace CI command.
 - *Wrong build that fails:* a screen keeping its own `use_terminal_events` key chain, as `picker_input.rs` does today.
 - *Reuses:* the existing clippy gate.
 - *Unverified:* private routing by other means. It is caught only by its symptoms in U6/U7.
@@ -309,7 +315,12 @@ The 10-17 and 10-23 journeys are reused, with re-baselined checkpoints listed in
 
 ## Build order
 
-The Verifier builds A's harness pieces and B's new journeys first, against the current screens. They must fail where today's defects are real: the leak behind a menu, Esc quitting, Help lying, the dialog rhythm, and Probe 1's corner. Each failure is kept as the "before" evidence. The UI PR then lands only when every row passes on its declared head. That turns the owner's ask into a gate: a change that breaks any of these rows can't merge.
+The Verifier builds A's harness pieces and B's new journeys first. Two kinds of "before" evidence are kept apart:
+
+- **Baseline failures** on today's screens, through B's journeys and the retained Probe 1, 3 and 6 fixtures: the leak behind a menu, Esc quitting, Help lying, the dialog rhythm, and Probe 1's corner.
+- **Seeded wrong-build sensitivity**: each new A test is shown failing against its named wrong build before the right build passes.
+
+Neither is a real-terminal acceptance result. The UI PR then lands only when every row passes on its declared head. That turns the owner's ask into a gate: a change that breaks any of these rows can't merge.
 
 ## Limits
 
