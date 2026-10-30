@@ -1,0 +1,12 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -293,6 +293,6 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
+         }
+-        KeyCode::Down | KeyCode::Right if key.modifiers.is_empty() => {
++        KeyCode::Down | KeyCode::Right => {
+             Some((FocusDirection::Next, true))
+         }
+-        KeyCode::Up | KeyCode::Left if key.modifiers.is_empty() => {
++        KeyCode::Up | KeyCode::Left => {
+             Some((FocusDirection::Previous, true))
