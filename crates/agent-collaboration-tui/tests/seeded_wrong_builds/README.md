@@ -85,6 +85,10 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `empty-context-has-gap.patch` | An empty context leaves a redundant blank row and excess content height. |
 | `pages-only-consumes-arrows.patch` | Form arrows scroll the body instead of moving field focus. |
 | `pages-only-ignores-pages.patch` | Home and page keys cannot scroll back from a field revealed by focus. |
+| `button-focus-no-bold.patch` | A focused button loses its shipped bold label. |
+| `button-focus-no-underline.patch` | Focus loses its non-colour underline signal. |
+| `button-checked-style-ignored.patch` | A checked button loses yellow/bold emphasis when focus moves elsewhere. |
+| `button-unshipped-selection-background.patch` | Focus or checked state adds a selection background absent from the shipped buttons. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
