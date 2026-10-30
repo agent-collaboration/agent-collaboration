@@ -5,11 +5,13 @@ import {
 	compactJourney,
 	composedSkillText,
 	encodeCodexAction,
+	codexFixtureTitleSchema,
 	codexSkillDisplayName,
 	gridShowsCheckpoint,
 	interruptJourney,
 	modelJourney,
 	pickerOnlyJourney,
+	renameJourney,
 	reopenJourney,
 	requireCheckpointSequence,
 	skillJourney,
@@ -406,4 +408,53 @@ test('the default apply accepts only the declared honest refusal of the default 
 		gridShowsCheckpoint(['■ Failed to save default model: io error'], refused.checkpoint),
 	).toBe(false);
 	expect(() => modelJourney('cursor', [], 'default', [], 8_000)).toThrow();
+});
+
+// A placeholder refusal for the oracle; a real plan declares the endpoint's text from its source.
+const RENAME_REFUSAL = 'Renaming this thread is not supported here';
+
+test('rename waits for the drawn /rename line, then needs the refusal, an empty composer and no exit', () => {
+	const journey = renameJourney('cursor', 'Fixture Title', [RENAME_REFUSAL]);
+	expect(journey.name).toBe('codex-acp-j2-cursor-rename');
+	const [ready, refused] = journey.steps;
+	if (ready === undefined || refused === undefined) throw new Error('rename scene missing');
+	expect(ready.actions).toEqual([{ kind: 'text', text: '/rename Fixture Title' }]);
+	expect(refused.actions).toEqual([{ kind: 'key', key: 'Enter' }]);
+	// The popup is closed once a title follows the command, so the drawn composer line is the proof.
+	expect(gridShowsCheckpoint(['› /rename Fixture Title'], ready.checkpoint)).toBe(true);
+	expect(gridShowsCheckpoint(['› /rename Fixture'], ready.checkpoint)).toBe(false);
+	expect(gridShowsCheckpoint(['', ''], ready.checkpoint)).toBe(false);
+	const emptyComposer = `› Ask Codex to do anything${' '.repeat(94)}`;
+	expect(gridShowsCheckpoint([`■ ${RENAME_REFUSAL}`, '', emptyComposer], refused.checkpoint)).toBe(
+		true,
+	);
+	for (const screen of [
+		// The CLI exited or the screen is blank.
+		[],
+		['', ''],
+		// The command is still in the composer.
+		[`■ ${RENAME_REFUSAL}`, '› /rename Fixture Title'],
+		// A TUI-local error without the endpoint's refusal.
+		['■ Renaming is blocked while this thread is read-only', emptyComposer],
+		// The declared text outside an error cell.
+		['■ an earlier error cell', `• ${RENAME_REFUSAL}`, emptyComposer],
+		[`• ${RENAME_REFUSAL}`, emptyComposer],
+	])
+		expect(gridShowsCheckpoint(screen, refused.checkpoint), screen.join('|')).toBe(false);
+	expect(() => renameJourney('cursor', 'Fixture Title', [])).toThrow();
+});
+
+test('a fixture title cannot carry keys, controls or padding', () => {
+	expect(codexFixtureTitleSchema.parse('Fixture Title-2_a')).toBe('Fixture Title-2_a');
+	for (const title of [
+		'',
+		' Fixture',
+		'Fixture ',
+		'a\rb',
+		'a\u001b[Ab',
+		'/quit',
+		'a;b',
+		'x'.repeat(41),
+	])
+		expect(() => renameJourney('claude', title, [RENAME_REFUSAL]), JSON.stringify(title)).toThrow();
 });

@@ -9,9 +9,11 @@ import {
 	codexAcpRunPlanSchema,
 	codexChild,
 	codexJourneyFor,
+	driveCodexStep,
 	exitCodex,
 } from './codex-acp-run.ts';
 import type { CodexAcpRunPlan } from './codex-acp-run.ts';
+import { renameJourney } from './codex-acp-scenes.ts';
 import { targetFixture } from './codex-acp-test-fixtures.ts';
 import { controlledExecutable, initializedSourceRepository } from './controlled-child-fixtures.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
@@ -54,6 +56,12 @@ const REOPEN = {
 	provider: 'cursor',
 	prior_reply: ['ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED'],
 };
+const RENAME = {
+	kind: 'rename',
+	provider: 'cursor',
+	title: 'Fixture Title',
+	expected_refusal: ['Renaming this thread is not supported here'],
+};
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
@@ -85,6 +93,11 @@ test('each declared journey kind builds its scenes for the target provider only'
 	expect(codexJourneyFor(picker.plan).name).toBe('codex-acp-j1-cursor-picker-only');
 	const reopen = await runPlan(REOPEN);
 	expect(codexJourneyFor(reopen.plan).steps[0]?.checkpoint.require).toEqual(REOPEN.prior_reply);
+	const rename = await runPlan(RENAME);
+	expect(codexJourneyFor(rename.plan).steps.map((step) => step.checkpoint.scene)).toEqual([
+		'rename-command-ready',
+		'rename-refused',
+	]);
 	const model = await runPlan(MODEL);
 	expect(codexJourneyFor(model.plan).steps[2]?.actions).toEqual([
 		...MODEL.navigation,
@@ -115,6 +128,9 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 		{ ...MODEL, expected_outcome: [] },
 		{ ...MODEL, outcome_deadline_ms: 3_600_000 },
 		{ ...PICKER, skill: '' },
+		{ ...RENAME, title: 'Fixture\r/quit' },
+		{ ...RENAME, expected_refusal: [] },
+		{ ...RENAME, command: '/rename x' },
 	])
 		expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey })).toThrow();
 });
@@ -142,11 +158,17 @@ test('a PTY child that is not the declared Codex, or is gone, is refused', async
 // A stand-in for the drive_terminal line protocol that keeps Codex 0.165's composer rule for
 // typed text (chat_composer.rs handle_input_basic, paste_burst.rs): text written as one burst is
 // buffered until the next frame is drawn, and an Enter that arrives first becomes a newline, so
-// the PTY never ends. Enter after the drawn `/quit` row dispatches it and the PTY ends.
-const COMPOSER_STANDIN = `
+// the PTY never ends. Enter after the drawn rows dispatches the typed command and the PTY ends,
+// as /quit does, and as today's client does when a refused /rename takes the CodexOp fatal path.
+function composerStandInSource(typed: string, rows: readonly string[]): string {
+	const frame = Buffer.from(
+		`\u001b[?2026h\u001b[2J\u001b[H${rows.join('\r\n')}\u001b[?2026l`,
+	).toString('hex');
+	return `
 const { appendFileSync } = require('node:fs');
 let state = 'idle';
-const frame = Buffer.from('\\x1b[?2026h\\x1b[2J\\x1b[H› /quit\\r\\n  /quit     exit Codex\\x1b[?2026l').toString('hex');
+const typed = ${JSON.stringify(typed)};
+const frame = ${JSON.stringify(frame)};
 process.stdout.write('TUI_GRID READY 120 36\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
@@ -158,7 +180,7 @@ process.stdin.on('data', (chunk) => {
 		const [command, argument] = line.split(' ');
 		const bytes = command === 'write' ? Buffer.from(argument, 'hex').toString('utf8') : '';
 		let reply = 'OK';
-		if (command === 'write' && bytes === '/quit') state = 'buffered';
+		if (command === 'write' && bytes === typed) state = 'buffered';
 		else if (command === 'write' && bytes === '\\r') state = state === 'drawn' ? 'exiting' : 'newline';
 		else if (command === 'read') {
 			if (state === 'buffered') { state = 'drawn'; reply = 'BYTES ' + frame; }
@@ -172,10 +194,15 @@ process.stdin.on('data', (chunk) => {
 	}
 });
 `;
+}
+const QUIT_ROWS = ['› /quit', '  /quit     exit Codex'] as const;
 
-async function composerStandIn(): Promise<{ driver: PtyGridDriver; log: () => string[] }> {
+async function composerStandIn(
+	typed = '/quit',
+	rows: readonly string[] = QUIT_ROWS,
+): Promise<{ driver: PtyGridDriver; log: () => string[] }> {
 	const root = temporaryRoot();
-	const script = controlledExecutable(root, 'drive-terminal', COMPOSER_STANDIN);
+	const script = controlledExecutable(root, 'drive-terminal', composerStandInSource(typed, rows));
 	writeFileSync(join(root, 'commands.log'), '');
 	const driver = await PtyGridDriver.start({
 		repository: root,
@@ -214,6 +241,33 @@ test('an Enter sent with the still-buffered /quit never ends the PTY', async () 
 		await driver.send(Buffer.from('/quit'));
 		await driver.send(Buffer.from('\r'));
 		await expect(driver.waitForEof('codex /quit')).rejects.toThrow('timed out waiting on channel');
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('a client that exits on the refused /rename never reaches the recovery scene', async () => {
+	const journey = renameJourney('cursor', 'Fixture Title', [
+		'Renaming this thread is not supported here',
+	]);
+	const [ready, refused] = journey.steps;
+	if (ready === undefined || refused === undefined) throw new Error('rename scene missing');
+	const { driver, log } = await composerStandIn('/rename Fixture Title', [
+		'› /rename Fixture Title',
+	]);
+	try {
+		await driveCodexStep(driver, ready, 'legacy');
+		// The Enter dispatches the drawn command; this client then closes the PTY, as the CodexOp
+		// fatal path does today. An exit is never the recovery outcome.
+		await expect(driveCodexStep(driver, refused, 'legacy')).rejects.toThrow(
+			'grid checkpoint unreachable: rename-refused',
+		);
+		const commands = log();
+		const typed = commands.indexOf(`write ${Buffer.from('/rename Fixture Title').toString('hex')}`);
+		const enter = commands.indexOf('write 0d');
+		expect(commands.slice(typed + 1, enter).some((command) => command.startsWith('read '))).toBe(
+			true,
+		);
 	} finally {
 		await driver.stop();
 	}

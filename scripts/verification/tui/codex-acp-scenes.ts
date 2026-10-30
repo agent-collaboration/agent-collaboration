@@ -371,6 +371,65 @@ export function modelJourney(
 }
 
 /**
+ * A harmless fixture thread title: letters, digits, spaces, underscores and hyphens, at most 40
+ * characters, with no leading or trailing space. Codex trims the name it sends
+ * (chatwidget.rs:186-189), so the declared title is exactly the one requested, and the composed
+ * line fits one 120-column row with no key or control bytes in it.
+ */
+export const codexFixtureTitleSchema = z
+	.string()
+	.regex(
+		/^[A-Za-z0-9](?:[A-Za-z0-9 _-]{0,38}[A-Za-z0-9])?$/u,
+		'fixture title must be harmless text',
+	);
+
+/**
+ * J2 `/rename <title>` refused by the endpoint, with Codex still usable. Inline `/rename` with a
+ * title calls set_thread_name, a native thread/name/set (chatwidget/slash_dispatch.rs:917-927;
+ * app_event_sender.rs:80-82). Once the caret is past the command name the slash popup is closed
+ * (chat_composer.rs:3983-4020; slash_input.rs:585-606), so the drawn composer line is the
+ * ready proof before Enter. The deciding outcome is the endpoint's explicit refusal as an error
+ * cell (`■ ` then the declared leading text), the empty composer and, through CODEX_QUIT_STEP, a
+ * normal exit. A CLI that exits on the refusal never reaches that scene. TUI-local refusals such
+ * as thread_rename_block_message (interaction.rs:533-541) don't carry the declared text.
+ */
+export function renameJourney(
+	provider: 'claude' | 'cursor',
+	title: string,
+	expectedRefusal: readonly string[],
+): CodexJourney {
+	const fixtureTitle = codexFixtureTitleSchema.parse(title);
+	const [leadingRefusal, ...otherRefusal] = expectedRefusal;
+	if (leadingRefusal === undefined)
+		throw new Error('rename journey needs the declared refusal text');
+	const command = `/rename ${fixtureTitle}`;
+	return codexJourneySchema.parse({
+		name: `codex-acp-j2-${provider}-rename`,
+		steps: [
+			{
+				actions: [{ kind: 'text', text: command }],
+				checkpoint: {
+					scene: 'rename-command-ready',
+					require: [CODEX_0_165_TEXT.composerPrompt + command],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+			{
+				actions: [{ kind: 'key', key: 'Enter' }],
+				checkpoint: {
+					scene: 'rename-refused',
+					require: [CODEX_0_165_TEXT.errorPrefix + leadingRefusal, ...otherRefusal],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+					empty_composer: true,
+				},
+			},
+		],
+	});
+}
+
+/**
  * The normal exit: type `/quit`, then wait for its slash-popup row before Enter. Typed text
  * arrives as one PTY write, which Codex buffers as a paste burst; an Enter that arrives while
  * the burst is still buffered becomes a newline instead of dispatching the command

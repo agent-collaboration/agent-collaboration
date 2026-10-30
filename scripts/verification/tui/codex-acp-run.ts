@@ -17,12 +17,14 @@ import {
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
 	codexActionSchema,
+	codexFixtureTitleSchema,
 	compactJourney,
 	encodeCodexAction,
 	gridShowsCheckpoint,
 	interruptJourney,
 	modelJourney,
 	pickerOnlyJourney,
+	renameJourney,
 	reopenJourney,
 	requireCheckpointSequence,
 	skillJourney,
@@ -96,6 +98,14 @@ export const codexAcpRunPlanSchema = z
 				expected_outcome: z.array(z.string().min(1)).min(1),
 				outcome_deadline_ms: z.number().int().positive().max(600_000),
 			}),
+			// A harmless fixture title for inline /rename and the endpoint's declared refusal text:
+			// the first entry is the error cell's leading text, each entry fits one grid row.
+			z.strictObject({
+				kind: z.literal('rename'),
+				provider: providerSchema,
+				title: codexFixtureTitleSchema,
+				expected_refusal: z.array(z.string().min(1)).min(1),
+			}),
 		]),
 	})
 	.readonly();
@@ -120,6 +130,8 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 	if (journey.kind === 'interrupt') return interruptJourney(journey.provider, journey.prompt);
 	if (journey.kind === 'picker') return pickerOnlyJourney(journey.provider, journey.skill);
 	if (journey.kind === 'reopen') return reopenJourney(journey.provider, journey.prior_reply);
+	if (journey.kind === 'rename')
+		return renameJourney(journey.provider, journey.title, journey.expected_refusal);
 	return modelJourney(
 		journey.provider,
 		journey.navigation,
