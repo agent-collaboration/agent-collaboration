@@ -96,7 +96,14 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Feed the Rust PTY driver's bytes into it.
   - Port the existing scene checks in `scene-contracts.ts` and the Swift `verify_screen_*.swift` checks to grid assertions in TypeScript.
   - Add the original-image route in TypeScript: the exact PTY bytes rendered by `@wterm/dom` on the same libghostty core in headless Chrome over the DevTools protocol (no Playwright), saved as original PNGs bound to source, build, viewport and checkpoint. This replaces VHS and ttyd. Show one checkpoint matching its old VHS original's content at the same viewport.
-  - Remove the 13 Swift files, the VHS tapes and the `run_capture.sh` / `run_provider_filter_capture.sh` runners from `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/`.
+  - Remove the whole xterm.js path (owner: "make sure you remove xterm js"). Today's screenshots come from VHS → ttyd → xterm.js in headless Chrome. Remove from the 41 files that reference ttyd or VHS:
+    - the ttyd and VHS launch code, including `scripts/verification/tui/ttyd-adapter.ts` and the VHS tape builders and receipts in the capture harness;
+    - the `vhs_f4/` folder;
+    - the 13 Swift `verify_screen_*.swift` files;
+    - `run_capture.sh` and `run_provider_filter_capture.sh`;
+    - their sections of the `verify-codex-router` recipe.
+
+    At the end of S0, a one-time check `rg -i "ttyd|vhs|@xterm|xterm\.js"` over `scripts/verification`, the harness `tests/` and `.agents/skills/verify-codex-router` finds nothing. This is a check, not a permanent test. `TERM=xterm-256color` is the standard terminal-type name the PTY children use; it is unrelated to xterm.js and stays.
   - Show that every ported journey still fails on its existing wrong-scene and blank controls.
 - **Writes:**
   - `scripts/verification/tui/` scene contracts and tapes for: overlay isolation, focus traversal, main-screen keys, the New session dialog, and wide glyph under overlay;
