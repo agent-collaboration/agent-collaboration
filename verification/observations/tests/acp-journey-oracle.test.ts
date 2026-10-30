@@ -19,10 +19,9 @@ import {
 // Expected values are literals from Program Design's reference format and Specification C1-C3,
 // never computed by the code under test.
 const SESSION = "019a0000-0000-7000-8000-000000000001";
-const OTHER_SESSION = "019a0000-0000-7000-8000-000000000002";
 const CWD = "/work/repo";
 const TARGET = { endpointId: "claude-local", sessionId: SESSION, cwd: CWD };
-const FIXTURE_PATH = `/__codex_router_skill__/claude-local/${SESSION}/Zml4dHVyZS1za2lsbA`;
+const FIXTURE_PATH = `/__codex_router_skill__/claude-local/MDE5YTAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAx/Zml4dHVyZS1za2lsbA`;
 const MARKER = "SKILLFX_7Q2K";
 
 function skillRow(name: string, path: string, scope = "repo", enabled = true) {
@@ -38,7 +37,7 @@ const BOUND = list([
       skillRow("fixture-skill", FIXTURE_PATH),
       skillRow(
         "owner-skill",
-        `/__codex_router_skill__/claude-local/${SESSION}/b3duZXItc2tpbGw`,
+        `/__codex_router_skill__/claude-local/MDE5YTAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAx/b3duZXItc2tpbGw`,
         "user",
       ),
     ],
@@ -89,7 +88,12 @@ test("selection reference is the literal base64url-without-padding form", (): vo
   assert.equal(skillReferencePath("claude-local", SESSION, "fixture-skill"), FIXTURE_PATH);
   assert.equal(
     skillReferencePath("cursor-local", SESSION, "café-skill"),
-    `/__codex_router_skill__/cursor-local/${SESSION}/Y2Fmw6ktc2tpbGw`,
+    `/__codex_router_skill__/cursor-local/MDE5YTAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAx/Y2Fmw6ktc2tpbGw`,
+  );
+  // A legal session ID with slashes and dot segments stays one opaque component.
+  assert.equal(
+    skillReferencePath("claude-local", "sessions/../a b", "fixture-skill"),
+    "/__codex_router_skill__/claude-local/c2Vzc2lvbnMvLi4vYSBi/Zml4dHVyZS1za2lsbA",
   );
 });
 
@@ -148,7 +152,45 @@ const listedFailures: ReadonlyArray<[string, Partial<JourneyReadback>, string[],
           skills: [
             skillRow(
               "fixture-skill",
-              `/__codex_router_skill__/claude-local/${OTHER_SESSION}/Zml4dHVyZS1za2lsbA`,
+              `/__codex_router_skill__/claude-local/MDE5YTAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAy/Zml4dHVyZS1za2lsbA`,
+            ),
+          ],
+          errors: [],
+        },
+      ]),
+    },
+    [],
+    /does not address this session/,
+  ],
+  [
+    "an unencoded session component",
+    {
+      boundSkills: list([
+        {
+          cwd: CWD,
+          skills: [
+            skillRow(
+              "fixture-skill",
+              `/__codex_router_skill__/claude-local/${SESSION}/Zml4dHVyZS1za2lsbA`,
+            ),
+          ],
+          errors: [],
+        },
+      ]),
+    },
+    [],
+    /does not address this session/,
+  ],
+  [
+    "a padded name encoding",
+    {
+      boundSkills: list([
+        {
+          cwd: CWD,
+          skills: [
+            skillRow(
+              "fixture-skill",
+              `/__codex_router_skill__/claude-local/MDE5YTAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAx/Zml4dHVyZS1za2lsbA==`,
             ),
           ],
           errors: [],

@@ -11,15 +11,16 @@ import type {
 
 /**
  * The server-owned selection reference Program Design fixes for provider skills:
- * `/__codex_router_skill__/<endpoint>/<session>/<invocation name as UTF-8 base64url, no padding>`.
+ * `/__codex_router_skill__/<endpoint>/<encoded-session>/<encoded-name>`, where session ID and
+ * invocation name are each UTF-8 base64url without padding.
  */
 export function skillReferencePath(
   endpointId: string,
   sessionId: string,
   invocationName: string,
 ): string {
-  const encoded = Buffer.from(invocationName, "utf8").toString("base64url");
-  return `/__codex_router_skill__/${endpointId}/${sessionId}/${encoded}`;
+  const encode = (value: string): string => Buffer.from(value, "utf8").toString("base64url");
+  return `/__codex_router_skill__/${endpointId}/${encode(sessionId)}/${encode(invocationName)}`;
 }
 
 function onlyEntryFor(list: NativeSkillsList, cwd: string): NativeSkillsList["data"][number] {
