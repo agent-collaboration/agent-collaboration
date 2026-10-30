@@ -15,4 +15,4 @@ A reusable Rust component crate on iocraft that makes keys and clicks go to exac
 
 **Decided.** Both screens put their actions in a ≡ menu and toolbar buttons on top (owner, option A). **Open.** Physical Ctrl+Enter in the owner's Ghostty (H2) is unproven until the owner check.
 
-**Status.** Written; independent review pending. Nothing here has been built or observed.
+**Status.** Design-ready (2026-10-30). An independent four-document review found six issues, all corrected and verified by the same reviewer at `ff2629877`; the Lead accepted the set. Nothing here has been built or observed yet.
