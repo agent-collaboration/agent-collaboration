@@ -225,3 +225,15 @@ a fixed count of Down keys. Send End and require a completed Help frame in which
 the literal `never quit` row is visible. A missing row remains an observation
 failure. Controlled tests retain changed-grid, null-target and missing-legend
 negative cases, as well as exact four-event final ACK counts.
+
+### Details action label follows the row identity
+
+Lead push `01a18efe-6047-77f3-b070-704c1eb77225` corrects the over-broad
+legacy Details fallback. The declared initial fixture row is native Codex
+Alpha, so its resume action is `Resume`, not `Open`. Native Claude Details
+projects that action as `Open` (including the running native identity in the
+current product); managed provider actions remain source-capability qualified.
+The fallback chooses by the declared row kind and retains the exact single
+`resume:00000000-0000-4000-8000-000000000011` marker assertion. It does not
+infer an expected action from whichever button happens to be drawn. Controlled
+button-role grids reject the opposite row's label and missing Fork actions.
