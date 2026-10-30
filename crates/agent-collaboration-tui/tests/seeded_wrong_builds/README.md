@@ -80,6 +80,7 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `hover-reveals-partial-row.patch` | Hover selection scrolls to reveal a partially visible tall row. |
 | `hover-activates-row.patch` | Pointer motion invokes the selected row's action. |
 | `hover-enabled-by-default.patch` | A list that never opted in changes selection and focus on pointer motion. |
+| `modified-arrows-change-focus.patch` | Unbound modified arrows fall through to grouped focus traversal. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

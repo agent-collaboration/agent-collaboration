@@ -26,6 +26,7 @@ mod tests {
     struct SwitchSceneProps {
         #[iocraft(required)]
         journal: EventJournal,
+        declared_modified_arrow: bool,
     }
     #[component]
     fn SwitchScene(props: &SwitchSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -45,7 +46,7 @@ mod tests {
                     all.set(false);
                 }),
             };
-            let every = ActionDef {
+            let mut every = ActionDef {
                 toolbar_label: None,
                 id: action("all"),
                 title: "All sessions".into(),
@@ -58,6 +59,9 @@ mod tests {
                     all.set(true);
                 }),
             };
+            if props.declared_modified_arrow {
+                every.keys.push("Ctrl+Left".parse().unwrap());
+            }
             let menu = ActionDef {
                 toolbar_label: None,
                 id: action("menu"),
@@ -101,7 +105,7 @@ mod tests {
             }
         });
         let journal = props.journal.clone();
-        element!(InputOwner(stack,width:76u16,height:20u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,vec![u8::from(all.get())])]))) {OverlayHost {View {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu")) SegmentedSwitch(actions:vec![action("folder"),action("all")])}}})
+        element!(InputOwner(stack,width:76u16,height:20u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,vec![u8::from(all.get())]),(SurfaceId::Screen,stack.snapshot().top().focus.current().unwrap().as_str().as_bytes().to_vec())]))) {OverlayHost {View {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu")) SegmentedSwitch(actions:vec![action("folder"),action("all")])}}})
     }
     fn click_label(driver: &EventDriver, label: &str, menu: bool) -> TerminalEvent {
         let grid = driver.frames.last().unwrap();
@@ -150,6 +154,80 @@ mod tests {
                 .any(|row| row.contains('✓') && row.contains(label)),
             "{rows:?}"
         );
+    }
+    #[tokio::test]
+    async fn modified_arrows_require_a_declared_action_and_plain_arrows_keep_group_navigation() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            for declared in [false, true] {
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(SwitchScene(journal,declared_modified_arrow:declared));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                let scenario = async {
+                    driver.initial(&mut frames).await;
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
+                        .await;
+                    let modified = [
+                        (KeyCode::Left, KeyModifiers::CONTROL),
+                        (KeyCode::Up, KeyModifiers::ALT),
+                        (KeyCode::Right, KeyModifiers::SHIFT),
+                    ]
+                    .into_iter()
+                    .map(|(code, modifiers)| {
+                        let mut key = KeyEvent::new(KeyEventKind::Press, code);
+                        key.modifiers = modifiers;
+                        (TerminalEvent::Key(key), false)
+                    })
+                    .collect();
+                    driver
+                        .drive_checked(&mut frames, mode, modified, false, |ack| {
+                            assert_eq!(
+                                ack.snapshot.0[1].1, b"action:folder",
+                                "modified arrows cannot fall through to group focus navigation"
+                            );
+                            assert_eq!(
+                                ack.snapshot.0[0].1,
+                                [u8::from(declared)],
+                                "declared Ctrl+Left retains priority and runs its own action"
+                            );
+                        })
+                        .await;
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::Left), true)],
+                            true,
+                            |ack| {
+                                assert_eq!(
+                                    ack.snapshot.0[1].1, b"action:all",
+                                    "plain Left moves to the other grouped target"
+                                );
+                            },
+                        )
+                        .await;
+                    let mut reverse = KeyEvent::new(KeyEventKind::Press, KeyCode::Tab);
+                    reverse.modifiers = KeyModifiers::SHIFT;
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::Key(reverse), true)],
+                            true,
+                            |ack| {
+                                assert_eq!(
+                                    ack.snapshot.0[1].1, b"action:folder",
+                                    "Shift+Tab keeps reverse traversal"
+                                );
+                            },
+                        )
+                        .await;
+                };
+                tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+                    .await
+                    .unwrap();
+            }
+        }
     }
     #[tokio::test]
     async fn switch_selection_and_menu_checks_follow_pointer_menu_and_key_effects() {
