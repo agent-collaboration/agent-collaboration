@@ -37,5 +37,8 @@ mod surface_exceptions;
 #[path = "suites/switch_controls.rs"]
 mod switch_controls;
 #[cfg(test)]
+#[path = "suites/typography_coverage.rs"]
+mod typography_coverage;
+#[cfg(test)]
 #[path = "suites/wheel_isolation.rs"]
 mod wheel_isolation;

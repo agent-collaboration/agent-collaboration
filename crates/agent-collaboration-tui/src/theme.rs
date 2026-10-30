@@ -126,14 +126,7 @@ impl Theme {
         Self { covered: true }
     }
     pub const fn foreground(self, role: TextRole) -> Color {
-        if self.covered {
-            return Color::Rgb {
-                r: 142,
-                g: 150,
-                b: 163,
-            };
-        }
-        match role {
+        let color = match role {
             TextRole::Text => UiTextRole::Body.color(),
             TextRole::Muted => UiTextRole::Secondary.color(),
             TextRole::Accent => Color::Cyan,
@@ -144,7 +137,18 @@ impl Theme {
             TextRole::Good => UiTextRole::Success.color(),
             TextRole::Warning => UiTextRole::Warning.color(),
             TextRole::Error => UiTextRole::Error.color(),
+        };
+        self.foreground_color(color)
+    }
+    pub(crate) const fn foreground_color(self, color: Color) -> Color {
+        if self.covered {
+            return Color::Rgb {
+                r: 142,
+                g: 150,
+                b: 163,
+            };
         }
+        color
     }
     pub const fn background(self, role: SurfaceRole) -> Color {
         let color = match role {

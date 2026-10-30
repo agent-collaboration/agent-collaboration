@@ -50,6 +50,7 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `help-conventions-dropped.patch` | Help loses the consumer-supplied input conventions. |
 | `help-keeps-saved-base-model.patch` | A saved Help copy hides updates to the dialog's continuing model. |
 | `model-update-writes-help.patch` | Updating the dialog replaces Help's own routing model. |
+| `typography-ignores-covered-context.patch` | Shared headings, body text and column rules retain uncovered colors beneath an overlay. |
 
 These controls are implementation evidence; the independent S5 observation is
 separate. Check each patch applies, then challenge it individually against the

@@ -1,6 +1,13 @@
 //! Visual hierarchy is independent of selection and workflow state.
 pub use crate::theme::{UiSurface, UiTextRole};
+use crate::{surface_handle::SurfaceContext, theme::Theme};
 use iocraft::prelude::*;
+
+fn typography_theme(hooks: Hooks) -> Theme {
+    hooks
+        .try_use_context::<SurfaceContext>()
+        .map_or(Theme::default(), |context| context.theme())
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiHeadingLevel {
@@ -18,7 +25,8 @@ pub struct UiHeadingProps {
 }
 
 #[component]
-pub fn UiHeading(props: &UiHeadingProps) -> impl Into<AnyElement<'static>> {
+pub fn UiHeading(props: &UiHeadingProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let theme = typography_theme(hooks);
     let color = if props.inactive {
         Color::Grey
     } else {
@@ -28,6 +36,7 @@ pub fn UiHeading(props: &UiHeadingProps) -> impl Into<AnyElement<'static>> {
             UiHeadingLevel::Group => Color::Grey,
         }
     };
+    let color = theme.foreground_color(color);
     element!(Text(content: props.content.clone(), color, weight: Weight::Bold, wrap: TextWrap::NoWrap))
 }
 
@@ -40,8 +49,8 @@ pub struct UiTextProps {
 }
 
 #[component]
-pub fn UiText(props: &UiTextProps) -> impl Into<AnyElement<'static>> {
-    let color = props.role.color();
+pub fn UiText(props: &UiTextProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let color = typography_theme(hooks).foreground_color(props.role.color());
     let weight = if props.role == UiTextRole::Selected {
         Weight::Bold
     } else {
@@ -80,12 +89,16 @@ pub struct UiColumnHeadingProps {
     pub content: String,
 }
 #[component]
-pub fn UiColumnHeading(props: &UiColumnHeadingProps) -> impl Into<AnyElement<'static>> {
+pub fn UiColumnHeading(
+    props: &UiColumnHeadingProps,
+    hooks: Hooks,
+) -> impl Into<AnyElement<'static>> {
+    let theme = typography_theme(hooks);
     element! {
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,
             border_edges:Edges::Bottom,
-            border_style:BorderStyle::Single,border_color:UiTextRole::Rule.color()) {
-            Text(content:props.content.clone(),color:UiTextRole::Prominent.color(),weight:Weight::Bold,wrap:TextWrap::Wrap)
+            border_style:BorderStyle::Single,border_color:theme.foreground_color(UiTextRole::Rule.color())) {
+            Text(content:props.content.clone(),color:theme.foreground_color(UiTextRole::Prominent.color()),weight:Weight::Bold,wrap:TextWrap::Wrap)
         }
     }
 }

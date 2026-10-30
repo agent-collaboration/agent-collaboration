@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/typography.rs b/crates/agent-collaboration-tui/src/typography.rs
+--- a/crates/agent-collaboration-tui/src/typography.rs
++++ b/crates/agent-collaboration-tui/src/typography.rs
+@@ -8,3 +8,3 @@ fn typography_theme(hooks: Hooks) -> Theme {
+         .try_use_context::<SurfaceContext>()
+-        .map_or(Theme::default(), |context| context.theme())
++        .map_or(Theme::default(), |_| Theme::default())
+ }

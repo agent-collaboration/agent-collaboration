@@ -2,6 +2,8 @@ include!("quota_browse_compatibility_test.rs");
 include!("quota_browse_rendering_test.rs");
 include!("quota_presentation_support_test.rs");
 include!("quota_provider_filters_test.rs");
+#[path = "quota_static_typography_test.rs"]
+mod quota_static_typography_test;
 
 #[path = "quota_empty_state_test.rs"]
 mod quota_empty_state_test;
