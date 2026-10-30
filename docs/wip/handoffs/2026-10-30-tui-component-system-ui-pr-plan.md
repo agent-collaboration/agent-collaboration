@@ -152,7 +152,7 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Theme roles from the current shipped `codex-router-tui` roles (base, raised, group panel, text, muted, accent, focused, primary, disabled, dimmed, good/warning/error), each background with a dimmed form;
   - the glyph set;
   - the layer-A test support:
-    - burst and frame-separated event driver over `mock_terminal_render_loop`, with event-processed acknowledgements and the initial frame drained;
+    - burst and frame-separated event driver over iocraft's real render loop with a test-only recording backend (`ui.render_loop().backend(recording_backend).ignore_ctrl_c()`, public seams element.rs:439,457 at the pin), mirroring the pin's MockTerminal backend and yielding `Canvas` clones; event-processed acknowledgements and the initial frame drained. Correction 2026-10-30: `mock_terminal_render_loop` (render.rs:560-572) builds `Terminal::mock` with `ignore_ctrl_c=false` and exposes no builder, so it cannot earn the C3 Ctrl+C rows. Proof for the backend: frame parity with `mock_terminal_render_loop` on a scenario without Ctrl+C, and the Ctrl+C row failing when `.ignore_ctrl_c()` is removed;
     - serialized-frame reader;
     - per-surface state snapshot and handler log.
 - **Writes:** `agent-collaboration-tui/src/{surface_stack,focus_model,actions,theme}.rs` and `tests/support/`.
