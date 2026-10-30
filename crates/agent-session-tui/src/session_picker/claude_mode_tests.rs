@@ -42,7 +42,51 @@ fn claude_new_offers_explicit_foreground_and_background_choices() {
 }
 
 #[test]
-fn claude_stopped_details_offers_background_resume_without_global_options() {
+fn claude_background_new_returns_terminal_handoff_before_native_start() {
+    use crate::session_picker::new_session_client_inventory::{
+        CursorCreationAvailability, NewClientInventoryState, NewClientSourceCapabilities,
+    };
+    use crate::session_picker::new_session_form::NewSessionClient;
+    use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeLaunchAvailability;
+
+    let mut request = picker_request();
+    request.native_arguments = ["--model", "haiku", "--name", "literal --bg value"]
+        .map(std::ffi::OsString::from)
+        .to_vec();
+    let arguments = request.native_arguments.clone();
+    let mut model = SessionsPickerModel::new(request, 120);
+    model.open_new_form();
+    let source = binding();
+    let mut draft = model.new_session.take().expect("new draft");
+    draft.client = NewSessionClient::ClaudeNativeBackground;
+    draft.client_inventory =
+        NewClientInventoryState::Ready(Box::new(NewClientSourceCapabilities {
+            service_id: source.service_id,
+            service_epoch: source.service_epoch,
+            native_claude: SourceNativeLaunchAvailability::Ready {
+                capabilities: vec![],
+            },
+            cursor: CursorCreationAvailability::Unavailable("not used".to_owned()),
+        }));
+
+    model.begin_new_client_action(&draft);
+
+    let PickerClientAction::Terminal(captured, mode) = &model.client_action else {
+        panic!(
+            "background New must leave the picker before starting native Claude; got {:?}",
+            model.client_action
+        );
+    };
+    assert_eq!(*mode, agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::BackgroundThenAttach);
+    assert!(matches!(
+        &captured.effect,
+        SessionClientEffect::Native { action: SourceNativeClaudeAction::New { arguments: actual, .. }, .. }
+            if actual == &arguments
+    ));
+}
+
+#[test]
+fn claude_stopped_details_offers_open_without_background_resume() {
     let summary = serde_json::from_value(serde_json::json!({
         "origin":"claudeCodeBackground",
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"},
@@ -52,30 +96,17 @@ fn claude_stopped_details_offers_background_resume_without_global_options() {
     let mut dialog = SessionDetailsDialog::capture(&record);
     dialog.client_inventory =
         DetailsClientReadState::Ready(DetailsClientCapabilities::Native { source: binding() });
-    let action = dialog
-        .actions()
-        .into_iter()
-        .find(|action| action.label() == "Resume in background")
-        .expect("a stopped native session needs an explicit background action");
-    let mut request = picker_request();
-    request.native_arguments = ["--model", "claude-haiku-5-5", "--effort", "low"]
-        .map(std::ffi::OsString::from)
-        .to_vec();
-    let mut model = SessionsPickerModel::new(request, 120);
-    assert!(model.begin_details_client_action(&dialog, action));
-    let PickerClientAction::Queued(captured) = model.client_action else {
-        panic!("background resume stays in the picker");
-    };
-    let SessionClientEffect::Native {
-        action: SourceNativeClaudeAction::Resume { arguments, .. },
-        ..
-    } = captured.effect
-    else {
-        panic!("background resume keeps its captured identity");
-    };
+    let actions = dialog.actions();
     assert!(
-        arguments.is_empty(),
-        "global arguments must not make Claude start a copy"
+        actions
+            .iter()
+            .any(|action| dialog.action_label(*action) == "Open")
+    );
+    assert!(
+        actions
+            .iter()
+            .all(|action| dialog.action_label(*action) != "Resume in background"),
+        "stopped Claude sessions must use Open to resume and attach"
     );
 }
 

@@ -30,6 +30,7 @@ pub enum SessionsPickerOutcome {
     ),
     LaunchNativeClaude(
         Box<agent_session_inventory::sessions::source_client_action::CapturedClientAction>,
+        agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode,
     ),
     TerminalTooNarrow,
 }

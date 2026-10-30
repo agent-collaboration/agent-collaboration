@@ -183,42 +183,40 @@ async fn configured_resume_child() {
         std::env::var("SOURCE_SCENARIO").unwrap().as_str(),
         "wrong-service" | "stale-epoch" | "missing-member"
     );
-    for action in [DetailsAction::Resume, DetailsAction::ResumeBackground] {
-        let mut model = SessionsPickerModel::new(picker_request(), 120);
-        assert!(model.begin_details_client_action(&dialog, action));
-        let PickerClientAction::Queued(request) = model.client_action else {
-            panic!("configured action")
-        };
-        let result = execute_client_action(None, None, None, None, request.clone()).await;
-        if invalid_proof {
-            assert!(
-                result.is_err(),
-                "a stale or misattributed proof must not dispatch: {result:?}"
-            );
-        } else if guarded {
-            assert!(
-                matches!(result, Ok(SourceReply::NativeClaude { .. })),
-                "{result:?}"
-            );
-        } else {
-            assert!(
-                result.is_err(),
-                "an older executor must receive no mutation: {result:?}"
-            );
-            assert_eq!(
-                observation_lines(&request, &result),
-                [
-                    "Captured machine runs an older agent-collaboration that could start a copy of this session. Update it (brew upgrade codex-router), then open again."
-                ]
-            );
-        }
+    let mut model = SessionsPickerModel::new(picker_request(), 120);
+    assert!(model.begin_details_client_action(&dialog, DetailsAction::Resume));
+    let PickerClientAction::Queued(request) = model.client_action else {
+        panic!("configured action")
+    };
+    let result = execute_client_action(None, None, None, None, request.clone()).await;
+    if invalid_proof {
+        assert!(
+            result.is_err(),
+            "a stale or misattributed proof must not dispatch: {result:?}"
+        );
+    } else if guarded {
+        assert!(
+            matches!(result, Ok(SourceReply::NativeClaude { .. })),
+            "{result:?}"
+        );
+    } else {
+        assert!(
+            result.is_err(),
+            "an older executor must receive no mutation: {result:?}"
+        );
+        assert_eq!(
+            observation_lines(&request, &result),
+            [
+                "Captured machine runs an older agent-collaboration that could start a copy of this session. Update it (brew upgrade codex-router), then open again."
+            ]
+        );
     }
     let mutations = std::fs::read_to_string(std::env::var("SOURCE_SSH_COUNT").unwrap())
         .unwrap()
         .lines()
         .filter(|line| *line == "nativeClaude")
         .count();
-    assert_eq!(mutations, if guarded && !invalid_proof { 2 } else { 0 });
+    assert_eq!(mutations, if guarded && !invalid_proof { 1 } else { 0 });
     if !guarded {
         // Deliberate copies and New keep their existing dispatch policy.
         let target: SessionRef = serde_json::from_value(json!({"endpoint":{

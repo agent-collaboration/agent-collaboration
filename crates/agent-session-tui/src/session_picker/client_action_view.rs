@@ -180,7 +180,7 @@ pub(super) fn render_client_action(
     height: usize,
 ) -> Element<'static, View> {
     let (request, result) = match &model.client_action {
-        PickerClientAction::Terminal(request)
+        PickerClientAction::Terminal(request, _)
         | PickerClientAction::Queued(request)
         | PickerClientAction::Running(request) => (request, None),
         PickerClientAction::Finished {

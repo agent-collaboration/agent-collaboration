@@ -378,7 +378,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
                 effects.is_empty(),
                 "foreground Open must not execute inside the mounted picker"
             );
-            let Some(SessionsPickerOutcome::LaunchNativeClaude(retained)) = &outcome else {
+            let Some(SessionsPickerOutcome::LaunchNativeClaude(retained, agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::Foreground)) = &outcome else {
                 panic!("foreground Open must return the captured terminal action");
             };
             retained.as_ref()
@@ -431,7 +431,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
                 "opening keeps saved settings even with global arguments"
             );
             assert!(
-                matches!(&outcome,Some(SessionsPickerOutcome::LaunchNativeClaude(retained)) if retained.as_ref()==effect)
+                matches!(&outcome,Some(SessionsPickerOutcome::LaunchNativeClaude(retained, agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::Foreground)) if retained.as_ref()==effect)
             );
         }
     }
