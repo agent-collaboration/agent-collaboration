@@ -46,9 +46,11 @@ export function readPublicGridState(
 	const output = join(plan.output, 'cua-sessions');
 	const wrapperPid = Number(readFileSync(join(output, 'quota-wrapper.pid'), 'utf8').trim());
 	const wrapper = lookupProcessIdentity(wrapperPid);
+	// Same LC_ALL=C as the receipt writer, so the raw `lstart` bytes compare across locales.
 	const identity = spawnSync('/bin/ps', ['-p', String(wrapperPid), '-o', 'uid=,lstart=,command='], {
 		encoding: 'utf8',
 		timeout: 3000,
+		env: { ...process.env, LC_ALL: 'C' },
 	});
 	if (
 		wrapper === null ||
