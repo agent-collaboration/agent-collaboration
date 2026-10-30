@@ -29,6 +29,8 @@ export const codexCheckpointSchema = z.strictObject({
 	deadline_ms: z.number().int().positive().max(600_000),
 	// A selected `$` popup row: `› <display name>` then the `[Skill]` tag on the same grid line.
 	selected_skill_row: z.string().min(1).optional(),
+	// A grid line that is the empty composer alone: its prompt and placeholder, nothing typed.
+	empty_composer: z.literal(true).optional(),
 });
 export type CodexCheckpoint = z.infer<typeof codexCheckpointSchema>;
 
@@ -66,9 +68,12 @@ export const CODEX_0_165_TEXT = {
 	modelCommandRow: 'choose what model and reasoning effort to use',
 	// chatwidget/model_popups.rs:186 and :279, both model popup headers start with this.
 	modelPopupHeader: 'Select Model',
-	// bottom_pane/footer.rs:933-936: shown after Ctrl+C clears a non-empty draft
-	// (bottom_pane/mod.rs:1052-1059); the key label before it is platform-styled.
-	quitHintSuffix: ' again to quit',
+	// chatwidget.rs:2101, the normal composer placeholder, drawn after the composer prompt
+	// (chat_composer.rs:4879-4893) only while input is enabled and the textarea is empty
+	// (chat_composer.rs:4940-4943). No footer hint marks a cleared draft: the "again to quit"
+	// reminder is compiled off (bottom_pane/mod.rs:250,1333).
+	composerPrompt: '› ',
+	emptyComposerPlaceholder: 'Ask Codex to do anything',
 	// bottom_pane/chat_composer.rs:228-242: first local image placeholder.
 	localImage: '[Image #1]',
 	// chatwidget/compaction.rs:43, completed explicit compaction.
@@ -251,7 +256,9 @@ export function interruptJourney(provider: 'claude' | 'cursor', longPrompt: stri
 
 /**
  * R1 without model input: open the `$` picker on the selected skill row, clear the draft with
- * Ctrl+C (bottom_pane/mod.rs:1052-1059), then exit. Nothing is ever submitted to the provider.
+ * Ctrl+C (bottom_pane/mod.rs:1052-1059) back to the empty composer, then exit. Nothing is ever
+ * submitted to the provider. Ctrl+C follows only the picker frame, which proves a non-empty
+ * draft: on an empty composer it quits Codex at once (chatwidget/interaction.rs:624-635).
  */
 export function pickerOnlyJourney(provider: 'claude' | 'cursor', skill: string): CodexJourney {
 	return codexJourneySchema.parse({
@@ -271,9 +278,10 @@ export function pickerOnlyJourney(provider: 'claude' | 'cursor', skill: string):
 				actions: [{ kind: 'key', key: 'Ctrl+C' }],
 				checkpoint: {
 					scene: 'draft-cleared',
-					require: [CODEX_0_165_TEXT.quitHintSuffix],
+					require: [CODEX_0_165_TEXT.emptyComposerPlaceholder],
 					forbid: [CODEX_0_165_TEXT.skillPopupHint],
 					deadline_ms: UI_CHECKPOINT_MS,
+					empty_composer: true,
 				},
 			},
 		],
@@ -417,6 +425,15 @@ export function gridShowsSelectedSkillRow(lines: readonly string[], displayName:
 	return lines.some((line) => row.test(line));
 }
 
+/** One grid line that is the empty composer: the prompt, the placeholder and nothing else. */
+export function gridShowsEmptyComposer(lines: readonly string[]): boolean {
+	const row = new RegExp(
+		`^${escapeRegExp(CODEX_0_165_TEXT.composerPrompt + CODEX_0_165_TEXT.emptyComposerPlaceholder)}\\s*$`,
+		'u',
+	);
+	return lines.some((line) => row.test(line));
+}
+
 /** Whether one grid frame shows a checkpoint: every required text and no forbidden text. */
 export function gridShowsCheckpoint(
 	lines: readonly string[],
@@ -427,7 +444,8 @@ export function gridShowsCheckpoint(
 		checkpoint.require.every((text) => screen.includes(text)) &&
 		checkpoint.forbid.every((text) => !screen.includes(text)) &&
 		(checkpoint.selected_skill_row === undefined ||
-			gridShowsSelectedSkillRow(lines, checkpoint.selected_skill_row))
+			gridShowsSelectedSkillRow(lines, checkpoint.selected_skill_row)) &&
+		(checkpoint.empty_composer !== true || gridShowsEmptyComposer(lines))
 	);
 }
 

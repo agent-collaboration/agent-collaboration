@@ -293,15 +293,26 @@ test('the picker-only journey opens the selected row and clears the draft with n
 			picker.checkpoint,
 		),
 	).toBe(false);
-	// footer.rs:932-936: the key, then " again to quit", once Ctrl+C cleared the draft.
-	expect(gridShowsCheckpoint(['›', 'ctrl + c again to quit'], cleared.checkpoint)).toBe(true);
+	// The Claude 828 screen after Ctrl+C: history, the empty composer, the status line, no hint.
+	const reply = '• ACP_BRIDGE_CLAUDE_7FA28C|ALPHA|RED';
+	const emptyComposer = `› Ask Codex to do anything${' '.repeat(94)}`;
 	expect(
-		gridShowsCheckpoint(
-			[claudeRow, CODEX_0_165_TEXT.skillPopupHint, 'ctrl + c again to quit'],
-			cleared.checkpoint,
-		),
-	).toBe(false);
-	expect(gridShowsCheckpoint(['› '], cleared.checkpoint)).toBe(false);
+		gridShowsCheckpoint([reply, '', emptyComposer, '', '  Opus 5.5 high'], cleared.checkpoint),
+	).toBe(true);
+	for (const screen of [
+		// The 828 picker frame itself: popup open over a non-empty draft.
+		[reply, claudeRow, CODEX_0_165_TEXT.skillPopupHint, '› $bridge_probe_claude_01a18013'],
+		// The draft is still there, or typed text merely begins with the placeholder words.
+		['› $bridge_probe_claude_01a18013'],
+		['› Ask Codex to do anything else'],
+		// The placeholder words only in history, above a non-empty composer.
+		['• Ask Codex to do anything', '› $bridge_probe_claude_01a18013'],
+		// An empty composer while the popup hint is still drawn.
+		[emptyComposer, CODEX_0_165_TEXT.skillPopupHint],
+		// A side conversation's placeholder (chatwidget.rs:2102) is not this composer.
+		['› Ask a follow-up question'],
+	])
+		expect(gridShowsCheckpoint(screen, cleared.checkpoint), screen.join('|')).toBe(false);
 });
 
 test('reopen replays every declared prior reply line without new input', () => {
