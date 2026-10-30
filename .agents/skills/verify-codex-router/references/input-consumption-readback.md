@@ -253,3 +253,13 @@ including a live child that keeps producing bytes. Only PTY EOF followed by the
 Rust driver's successful child-exit/finish check permits an outcome assertion.
 Missing EOF or read failure throws an apparatus error; neither becomes a product
 pass or red. The enclosing retained driver's stop path still owns cleanup.
+
+Lead push `01a18f0c-b921-7222-8244-b724532935ef` corrects that Enter
+acknowledgement's target to `sessions-list`. `InputOwner::route_key` delivers to
+the focused enabled target first: consumed input and an unmodified Enter
+activation retain that target; action-registry shortcuts, primary Ctrl+Enter,
+global Quit and ignored events record null targets. Existing main Esc/F1/Quit
+expectations stay null under those actual routes, while Help-body Esc retains
+its consumed body target. Do not blanket-copy focus into every key receipt.
+The controlled Details bridge now uses the retained producer's list target and
+rejects the stale null-target record without relaxing event/surface/action.

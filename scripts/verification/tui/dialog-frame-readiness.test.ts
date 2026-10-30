@@ -16,6 +16,7 @@ async function bridge(options: {
 	readonly coalesced?: boolean;
 	readonly missingRedraw?: boolean;
 	readonly exit?: boolean;
+	readonly badTarget?: boolean;
 }): Promise<{ readonly driver: PtyGridDriver; readonly directory: string }> {
 	const directory = mkdtempSync(join(tmpdir(), 'dialog-readiness-'));
 	mkdirSync(join(directory, 'session-receipts'));
@@ -31,7 +32,7 @@ const dialog=row=>'\\x1b[2;2H┌────────────────
 let queue=[frame('Codex Alpha')];emit('READY 120 36');
 createInterface({input:process.stdin}).on('line',line=>{
 if(line.startsWith('write ')){
-fs.appendFileSync(receipt,JSON.stringify({sequence:1,event:{kind:'key',code:{kind:'fixed',name:'Return'},modifiers:[],phase:'press'},surface:{kind:'screen'},target:null,action:'details'})+'\\n');
+fs.appendFileSync(receipt,JSON.stringify({sequence:1,event:{kind:'key',code:{kind:'fixed',name:'Return'},modifiers:[],phase:'press'},surface:{kind:'screen'},target:${options.badTarget === true ? 'null' : "'sessions-list'"},action:'details'})+'\\n');
 const draws=[frame('Codex Alpha pending main draw'),frame(dialog(6)),...(${options.missingRedraw === true}?[]:[frame(dialog(5))])];queue.push(...(${options.coalesced === true}?[draws.join('')]:draws));emit('OK');
 }else if(line.startsWith('read ')){const next=queue.shift();emit(next===undefined?(${options.exit === true}?'EOF':${options.missingRedraw === true}?'READ_ERROR missing redraw':'BYTES 20'):'BYTES '+Buffer.from(next).toString('hex'));}
 else if(line==='finish'||line==='stop'){emit(line==='finish'?'FINISHED 0':'STOPPED 0');process.exit(0);}
@@ -83,6 +84,16 @@ test('exit drain requires EOF followed by successful driver finish', async () =>
 	const { driver } = await bridge({ keys: 'legacy', exit: true });
 	try {
 		expect(await driver.drainUntilExit()).toBe(0);
+	} finally {
+		await driver.stop();
+	}
+});
+test('a screen-level null target cannot stand in for the focused list activation', async () => {
+	const { driver, directory } = await bridge({ keys: 'legacy', badTarget: true });
+	try {
+		await expect(openMeasuredDetails(driver, directory, 'legacy')).rejects.toThrow(
+			'target mismatch',
+		);
 	} finally {
 		await driver.stop();
 	}
