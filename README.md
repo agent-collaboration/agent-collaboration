@@ -57,6 +57,14 @@ including when an account is idle or its quota is exhausted. A disabled account
 is not maintained until it is re-enabled. Re-login through device auth when
 account or quota status reports that renewal needs user action.
 
+To permanently delete an account, first run `codex-router account disable
+--account primary`, then `codex-router account remove --account primary`.
+Removal refuses enabled accounts and deletes all of the account's stored
+credential generations, quota history, routing policies, and session/affinity
+pins. It disappears from account list and Quota. You can add the same label
+again with `account login`. If credential cleanup fails, the account remains
+disabled so you can retry removal.
+
 Start the local router from the same persisted state:
 
 ```shell

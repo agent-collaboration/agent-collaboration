@@ -345,6 +345,18 @@ async fn save_pin(store: &AsyncSqliteStateStore, pin: &SessionAccountAffinity) {
         .unwrap_or_else(|error| panic!("pin should persist: {error}"));
 }
 
+pub(super) async fn save_claude_account(store: &AsyncSqliteStateStore, account: &AccountId) {
+    store
+        .upsert_account(&codex_router_state::account::AccountRecord::new(
+            Provider::Claude,
+            account.clone(),
+            account.as_str(),
+            codex_router_state::account::AccountStatus::Enabled,
+        ))
+        .await
+        .expect("pin fixture requires a parent account");
+}
+
 async fn assert_pin(
     store: &AsyncSqliteStateStore,
     session_id: &str,
@@ -393,6 +405,7 @@ async fn claude_success_only_creates_or_renews_the_authorized_pin() {
         .unwrap_or_else(|error| panic!("test state should open: {error}"));
     let cache = SessionAccountAffinityCache::shared(Duration::from_secs(4_500));
     let account = account_id("acct-success");
+    save_claude_account(&store, &account).await;
 
     for completion in [
         ClaudeResponseCompletion::Incomplete,
@@ -489,6 +502,9 @@ async fn stale_mismatched_expired_and_released_authority_is_unchanged() {
     let account_a = account_id("acct-a");
     let account_b = account_id("acct-b");
     let other_account = account_id("acct-other");
+    for account in [&account_a, &account_b, &other_account] {
+        save_claude_account(&store, account).await;
+    }
     let stale_pin = affinity("session-stale", Some(account_a.clone()), 5, 1_000);
     let expired_pin = affinity("session-expired", Some(account_a.clone()), 2, 1_000);
     let active_pin = affinity("session-released", Some(account_b.clone()), 7, 1_000);

@@ -15,7 +15,11 @@ impl AsyncSqliteStateStore {
     ) -> Result<(), StateStoreError> {
         let last_success = u64_to_i64(last_success_unix_seconds)?;
         let stale_after = u64_to_i64(stale_after_unix_seconds)?;
-        let mut transaction = self.pool.begin().await.map_err(sqlx_error)?;
+        let mut transaction = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(sqlx_error)?;
         record_refresh_success_status_in_transaction(
             &mut transaction,
             account_id,
@@ -37,6 +41,17 @@ pub(super) async fn record_refresh_success_status_in_transaction(
     stale_after: i64,
 ) -> Result<(), StateStoreError> {
     let account_id_value = account_id.as_str();
+    // Keep the existence check in the publication transaction: a service-level
+    // read would let removal commit before this delayed refresh writes again.
+    let account_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = ?1)")
+            .bind(account_id_value)
+            .fetch_one(&mut **transaction)
+            .await
+            .map_err(sqlx_error)?;
+    if !account_exists {
+        return Ok(());
+    }
     sqlx::query!(
         "INSERT INTO quota_refresh_status (
                account_id, route_band, last_success_unix_seconds,

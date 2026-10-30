@@ -125,6 +125,7 @@ async fn async_previous_response_affinity_owner_write_matches_sync_projection() 
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&async_store, Provider::Openai, &["acct_async_owner_write"]).await;
     let hash = affinity_hash('e');
     let responses_owner = PreviousResponseAffinityOwnerRecord::new(
         hash.clone(),
