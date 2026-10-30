@@ -85,7 +85,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 - Tab and Shift+Tab move focus through every enabled focus target in a fixed order and wrap around.
 - The arrow keys move focus within a group of targets (rows of a list, items of a menu, segments of a switch, fields of a dialog), except inside a text field (R9).
-- A click on an enabled target focuses it and activates it, the same as pressing Enter on it.
+- A click on an enabled target focuses it and activates it, the same as pressing Enter on it. Exception, kept from the shipped picker (`picker_list_view.rs:89`, `activates_on_click: false`): a click on a row of a scrolling list selects that row and focuses the list; Enter activates it. Rows of a choice list inside a dialog or dropdown still activate on click.
 - The wheel scrolls the scrollable area under the pointer.
 - Whenever the top surface has an enabled target, exactly one target is focused, and it is drawn visibly distinct from the rest.
 - On a screen's first draw, the first item of its main list is focused and selected when the list isn't empty.
