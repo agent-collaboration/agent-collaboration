@@ -22,10 +22,10 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
             "codex-router-proxy",
         ],
     ),
-    ("codex-router-tui", &[]),
+    ("agent-collaboration-tui", &[]),
     (
-        "codex-router-quota-tui",
-        &["codex-router-quota-service", "codex-router-tui"],
+        "agent-router-quota-tui",
+        &["codex-router-quota-service", "agent-collaboration-tui"],
     ),
     ("collaboration-contracts", &[]),
     ("collaboration-runtime", &["collaboration-contracts"]),
@@ -43,10 +43,10 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
         ],
     ),
     (
-        "agent-session-picker",
+        "agent-session-tui",
         &[
             "agent-session-inventory",
-            "codex-router-tui",
+            "agent-collaboration-tui",
             "collaboration-contracts",
             "collaboration-runtime",
             "collaboration-service",
@@ -56,8 +56,8 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
         "agent-collaboration",
         &[
             "agent-session-inventory",
-            "agent-session-picker",
-            "codex-router-tui",
+            "agent-session-tui",
+            "agent-collaboration-tui",
             "collaboration-contracts",
             "collaboration-runtime",
             "collaboration-service",
@@ -75,8 +75,8 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
         "codex-router-cli",
         &[
             "codex-router-quota-service",
-            "codex-router-quota-tui",
-            "codex-router-tui",
+            "agent-router-quota-tui",
+            "agent-collaboration-tui",
             "codex-router-host",
             "codex-router-proxy",
             "codex-router-selection",

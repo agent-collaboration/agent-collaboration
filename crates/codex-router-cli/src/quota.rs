@@ -30,13 +30,13 @@ use crate::CliError;
 use crate::credential_runtime::CliCredentialResolver;
 use crate::credential_runtime::CliCredentialResolverOpenError;
 use crate::router_root_or_default;
-use codex_router_quota_tui::CreditUsagePolicySaveError;
-use codex_router_quota_tui::CreditUsagePolicySaver;
-use codex_router_quota_tui::CreditUsageRefreshError;
-use codex_router_quota_tui::CreditUsageRefresher;
-use codex_router_quota_tui::WeeklyQuotaFloorSaveError;
-use codex_router_quota_tui::WeeklyQuotaFloorSaver;
-use codex_router_quota_tui::run_quota_status_view;
+use agent_router_quota_tui::CreditUsagePolicySaveError;
+use agent_router_quota_tui::CreditUsagePolicySaver;
+use agent_router_quota_tui::CreditUsageRefreshError;
+use agent_router_quota_tui::CreditUsageRefresher;
+use agent_router_quota_tui::WeeklyQuotaFloorSaveError;
+use agent_router_quota_tui::WeeklyQuotaFloorSaver;
+use agent_router_quota_tui::run_quota_status_view;
 
 pub(crate) mod quota_command_dispatch;
 mod quota_command_options;
@@ -44,12 +44,12 @@ mod quota_credential_resources;
 mod quota_refresh_command;
 mod quota_status_command;
 mod quota_status_rendering;
+use agent_router_quota_tui::quota_status_view_model_loader;
 use codex_router_quota_service::quota::{
     HttpQuotaRefreshProvider, current_unix_seconds,
     load_quota_status_report_with_availability_async, quota_status_view_model,
     refresh_quota_with_dependencies, write_quota_json, write_quota_plain,
 };
-use codex_router_quota_tui::quota_status_view_model_loader;
 pub(crate) use quota_command_dispatch::run_quota_command;
 #[cfg(test)]
 use quota_command_dispatch::should_run_interactive_quota;

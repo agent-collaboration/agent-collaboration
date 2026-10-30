@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-quota-reset-test-harness = ["dep:sqlx", "agent-session-picker/quota-reset-test-harness"]
+quota-reset-test-harness = ["dep:sqlx", "agent-session-tui/quota-reset-test-harness"]
 
 [[bin]]
 name = "agent-sessions"
@@ -17,7 +17,7 @@ path = "src/bin/agent-sessions.rs"
 
 [dependencies]
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
-agent-session-picker = { version = "0.1.105", path = "../agent-session-picker" }
+agent-session-tui = { version = "0.1.105", path = "../agent-session-tui" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 chrono.workspace = true
@@ -31,7 +31,7 @@ clap.workspace = true
 comfy-table.workspace = true
 crossterm = { workspace = true, features = ["osc52"] }
 iocraft.workspace = true
-codex-router-tui.workspace = true
+agent-collaboration-tui.workspace = true
 jsonc-parser.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client"] }

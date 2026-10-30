@@ -295,7 +295,7 @@ fn quota_list_unit_groups_keep_typed_notes_and_actual_narrow_lines() {
         let mut model = quota_status_view_model(&report, report.rows(), width);
         model.selected = None;
         let mut output = Vec::new();
-        must_ok(codex_router_quota_tui::write_quota_status_view(
+        must_ok(agent_router_quota_tui::write_quota_status_view(
             &mut output,
             model,
             false,
@@ -338,7 +338,7 @@ fn quota_list_unit_projection_preserves_measured_pace_graphics() {
         pace.multiple_label = "1.00x".to_owned();
         pace.semantic_label = "measured pace";
         let mut output = Vec::new();
-        must_ok(codex_router_quota_tui::write_quota_status_view(
+        must_ok(agent_router_quota_tui::write_quota_status_view(
             &mut output,
             model,
             false,

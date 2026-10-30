@@ -1,8 +1,8 @@
 //! Static quota renderer selection.
 use super::{QuotaCommandError, Write};
+use agent_router_quota_tui::write_quota_status_view;
 use codex_router_quota_service::quota::quota_status_projection::quota_status_view_model;
 use codex_router_quota_service::quota::quota_status_view_model::QuotaStatusReport;
-use codex_router_quota_tui::write_quota_status_view;
 #[cfg(test)]
 pub(super) fn write_quota_table(
     stdout: &mut impl Write,

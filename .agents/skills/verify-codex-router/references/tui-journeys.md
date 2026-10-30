@@ -37,7 +37,7 @@ Hashes bind artifacts; the producer must establish compilation provenance and
 that the driver embeds the nominated harness build.
 
 The driver is the prebuilt `quota_storyboard_capture_test` libtest, with exact
-entry `compiled_grid_terminal_observation`. Normal/hard require the Quota library
+entry `compiled_grid_terminal_observation`. Normal/hard require the `agent-router-quota-tui` library
 libtest containing
 `quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture`.
 A CLI libtest without that entry rejects before startup.
