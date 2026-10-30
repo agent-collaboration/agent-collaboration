@@ -22,6 +22,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "acp-provider-adapters"
+version = "0.1.114"
+dependencies = [
+ "acp-client-runtime",
+ "serde_json",
+ "session-event-model",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

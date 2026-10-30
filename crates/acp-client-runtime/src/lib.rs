@@ -37,6 +37,7 @@ mod agent_session_client;
 mod approval_presentation;
 mod external_permission_options;
 mod interaction_port;
+mod provider_behavior;
 mod provider_capability_report;
 mod provider_connection_activity;
 mod provider_item_projection;
@@ -61,6 +62,7 @@ pub(crate) use external_permission_options::map_permission_options;
 pub use interaction_port::{
     ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
 };
+pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
 pub use provider_model_picker::ProviderModelPicker;
 pub use provider_persistence_target::ProviderPersistenceTarget;

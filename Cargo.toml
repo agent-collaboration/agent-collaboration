@@ -10,6 +10,7 @@ members = [
     "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
+    "crates/acp-provider-adapters",
     "crates/message-board-storage",
     "crates/agent-automation",
     "crates/automation-storage",
