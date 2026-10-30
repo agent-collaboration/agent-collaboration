@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { CellData } from '@wterm/core';
 import { z } from 'zod';
 
 import { isMain, reportCliFailure } from './cli-arguments.ts';
@@ -48,8 +49,28 @@ const cellSchema = z
 		spacerHead: z.boolean().optional(),
 		fgRgb: z.number().optional(),
 		bgRgb: z.number().optional(),
+		underlineStyle: z.enum(['none', 'single', 'double', 'curly', 'dotted', 'dashed']).optional(),
+		underlineRgb: z.number().optional(),
+		linkUri: z.string().optional(),
+		linkId: z.string().optional(),
+		linkKey: z.string().optional(),
 	})
-	.passthrough();
+	.transform((value): CellData => ({
+		char: value.char,
+		['fg']: value.fg,
+		['bg']: value.bg,
+		flags: value.flags,
+		...(value.chars === undefined ? {} : { chars: value.chars }),
+		...(value.width === undefined ? {} : { width: value.width }),
+		...(value.spacerHead === undefined ? {} : { spacerHead: value.spacerHead }),
+		...(value.fgRgb === undefined ? {} : { fgRgb: value.fgRgb }),
+		...(value.bgRgb === undefined ? {} : { bgRgb: value.bgRgb }),
+		...(value.underlineStyle === undefined ? {} : { underlineStyle: value.underlineStyle }),
+		...(value.underlineRgb === undefined ? {} : { underlineRgb: value.underlineRgb }),
+		...(value.linkUri === undefined ? {} : { linkUri: value.linkUri }),
+		...(value.linkId === undefined ? {} : { linkId: value.linkId }),
+		...(value.linkKey === undefined ? {} : { linkKey: value.linkKey }),
+	}));
 const gridSchema = z.object({
 	columns: z.number(),
 	rows: z.number(),

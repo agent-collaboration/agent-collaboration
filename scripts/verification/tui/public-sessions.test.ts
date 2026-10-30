@@ -10,6 +10,7 @@ import { lookupProcessIdentity } from './process-identity.ts';
 import {
 	publicPlanSchema,
 	qualifyPublicTarget,
+	checkPublicCapture,
 	publicHostIdentitySchema,
 	publicLifecycleSchema,
 	publicTargetSchema,
@@ -173,6 +174,11 @@ test('read-only Host qualification checks actual process binary manifest health 
 	const repository = initializedSourceRepository();
 	roots.push(repository);
 	const base = protocolPlan(fixture.root);
+	const discovery = controlledExecutable(
+		fixture.root,
+		'capture-discovery',
+		"process.stdout.write('compiled_public_sessions_grid_observation: test\\n');",
+	);
 	const evidence = join(fixture.root, 'evidence');
 	mkdirSync(evidence);
 	mkdirSync(join(fixture.debug, 'agent-communication'));
@@ -208,6 +214,11 @@ test('read-only Host qualification checks actual process binary manifest health 
 		saveJson(manifest, declaredManifest);
 		const plan = publicPlanSchema.parse({
 			...base,
+			capture_driver: captureArtifact(discovery),
+			cua_artifact_scenes: ['browse'],
+			chrome: base.capture_driver,
+			keys: 'legacy',
+			actions: [{ kind: 'checkpoint', scene: 'browse', pattern: 'Sessions' }],
 			repository,
 			source: sourceBinding(repository),
 			harness_binary: fixture.target.binary,
@@ -231,6 +242,10 @@ test('read-only Host qualification checks actual process binary manifest health 
 			},
 		});
 		await qualifyPublicTarget(plan);
+		await checkPublicCapture(plan);
+		await expect(
+			checkPublicCapture({ ...plan, actions: [...plan.actions, ...plan.actions] }),
+		).rejects.toThrow('checkpoint sequence');
 		healthVersion = 'wrong-version';
 		await expect(qualifyPublicTarget(plan)).rejects.toThrow('Router version mismatch');
 		healthVersion = 'fixture-version';

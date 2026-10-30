@@ -10,7 +10,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::time::Duration;
 
-fn emit(line: &str) -> TestResult<()> {
+pub(super) fn emit(line: &str) -> TestResult<()> {
     let mut output = std::io::stdout().lock();
     writeln!(output, "TUI_GRID {line}")?;
     output.flush()?;
@@ -104,12 +104,56 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     } else {
         OsStr::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness"))
     };
-    let mut terminal = TerminalDriver::spawn_with_environment(
+    let terminal = TerminalDriver::spawn_with_environment(
         Path::new(binary),
         arguments,
         Path::new(env!("CARGO_MANIFEST_DIR")),
         &environment,
     )?;
+    let outcome = drive_terminal(terminal, protocol)?;
+    if component {
+        let receipt = std::fs::read_to_string(
+            receipt_path
+                .as_deref()
+                .ok_or("component receipt required")?,
+        )?;
+        let expected = if surface == "normal" {
+            "scenario=Normal"
+        } else {
+            "scenario=VisualHardCases"
+        };
+        ensure(
+            receipt.contains(expected)
+                && receipt.contains("external_requests=0 persisted_writes=0"),
+            "component fixture receipt mismatch",
+        )?;
+    }
+    fixture.assert_read_only()?;
+    let records = provider.finish()?;
+    ensure(
+        records.iter().all(|record| record.method == "GET"),
+        "read-only journey sent a write",
+    )?;
+    emit(&format!(
+        "{} {}",
+        if outcome.completed {
+            "FINISHED"
+        } else {
+            "STOPPED"
+        },
+        outcome.bytes
+    ))?;
+    Ok(())
+}
+
+pub(super) struct TerminalOutcome {
+    pub(super) completed: bool,
+    pub(super) bytes: usize,
+}
+pub(super) fn drive_terminal(
+    mut terminal: TerminalDriver,
+    protocol: KeyboardProtocol,
+) -> TestResult<TerminalOutcome> {
     emit("READY 120 36")?;
     for line in std::io::stdin().lock().lines() {
         let line = line?;
@@ -147,42 +191,17 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
             })?,
             Some("finish") => {
                 let transcript = terminal.finish(Duration::from_secs(8))?;
-                if component {
-                    let receipt = std::fs::read_to_string(
-                        receipt_path
-                            .as_deref()
-                            .ok_or("component receipt required")?,
-                    )?;
-                    let expected = if surface == "normal" {
-                        "scenario=Normal"
-                    } else {
-                        "scenario=VisualHardCases"
-                    };
-                    ensure(
-                        receipt.contains(expected)
-                            && receipt.contains("external_requests=0 persisted_writes=0"),
-                        "component fixture receipt mismatch",
-                    )?;
-                }
-                fixture.assert_read_only()?;
-                let records = provider.finish()?;
-                ensure(
-                    records.iter().all(|record| record.method == "GET"),
-                    "read-only journey sent a write",
-                )?;
-                emit(&format!("FINISHED {}", transcript.len()))?;
-                return Ok(());
+                return Ok(TerminalOutcome {
+                    completed: true,
+                    bytes: transcript.len(),
+                });
             }
             Some("stop") => {
                 let transcript = terminal.terminate_and_reap(Duration::from_secs(8))?;
-                fixture.assert_read_only()?;
-                let records = provider.finish()?;
-                ensure(
-                    records.iter().all(|record| record.method == "GET"),
-                    "read-only journey sent a write",
-                )?;
-                emit(&format!("STOPPED {}", transcript.len()))?;
-                return Ok(());
+                return Ok(TerminalOutcome {
+                    completed: false,
+                    bytes: transcript.len(),
+                });
             }
             _ => return Err("unknown grid driver command".into()),
         }

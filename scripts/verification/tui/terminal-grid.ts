@@ -4,6 +4,12 @@ import { readFileSync } from 'node:fs';
 import type { CellData, CursorState, TerminalRowMetadata, TerminalThemeColors } from '@wterm/core';
 import { GhosttyCore } from '@wterm/ghostty';
 
+export interface TerminalResize {
+	readonly byteOffset: number;
+	readonly columns: number;
+	readonly rows: number;
+}
+
 export interface TerminalGrid {
 	readonly columns: number;
 	readonly rows: number;
@@ -70,4 +76,21 @@ export function cellText(cell: CellData): string {
 
 export function gridLines(grid: TerminalGrid): readonly string[] {
 	return grid.cells.map((row) => row.map(cellText).join(''));
+}
+
+/** Replay PTY bytes with the actual kernel resize boundaries, in order. */
+export function replayTerminal(
+	core: GhosttyCore,
+	bytes: Uint8Array,
+	resizes: readonly TerminalResize[],
+): void {
+	let offset = 0;
+	for (const resize of resizes) {
+		if (resize.byteOffset < offset || resize.byteOffset > bytes.length)
+			throw new Error('invalid terminal resize boundary');
+		core.writeRaw(bytes.subarray(offset, resize.byteOffset));
+		core.resize(resize.columns, resize.rows);
+		offset = resize.byteOffset;
+	}
+	core.writeRaw(bytes.subarray(offset));
 }

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { GhosttyCore } from '@wterm/ghostty';
 
 import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts';
-import type { TerminalGrid } from './terminal-grid.ts';
+import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 
 export type KeyProtocol = 'legacy' | 'kitty';
 interface WaitingLine {
@@ -18,10 +18,18 @@ interface WaitingLine {
 export interface PtyGridTarget {
 	readonly repository: string;
 	readonly driver: string;
-	readonly surface: 'sessions' | 'sessions-filters' | 'quota' | 'quota-filters' | 'normal' | 'hard';
+	readonly surface:
+		| 'sessions'
+		| 'sessions-filters'
+		| 'quota'
+		| 'quota-filters'
+		| 'normal'
+		| 'hard'
+		| 'public-sessions';
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
+	readonly publicEnvironment?: NodeJS.ProcessEnv;
 }
 export class PtyGridDriver {
 	private readonly child: ChildProcessWithoutNullStreams;
@@ -30,6 +38,7 @@ export class PtyGridDriver {
 	private readonly lines: string[] = [];
 	private waiter: WaitingLine | null = null;
 	private readonly raw: Buffer[] = [];
+	private readonly resizes: TerminalResize[] = [];
 	private readonly commands: string[] = [];
 	private ended = false;
 	private readonly completion: Promise<number | null>;
@@ -40,7 +49,9 @@ export class PtyGridDriver {
 		this.child = spawn(
 			target.driver,
 			[
-				'compiled_grid_terminal_observation',
+				target.surface === 'public-sessions'
+					? 'compiled_public_sessions_grid_observation'
+					: 'compiled_grid_terminal_observation',
 				'--exact',
 				'--ignored',
 				'--nocapture',
@@ -50,6 +61,7 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
+					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
 					TUI_GRID_SURFACE: target.surface,
 					TUI_GRID_KEYS: target.keys,
 					...(target.componentBinary === undefined
@@ -143,6 +155,7 @@ export class PtyGridDriver {
 		const response = await this.command(`resize ${columns} ${rows}`);
 		if (response !== 'OK') throw new Error(response);
 		this.core.resize(columns, rows);
+		this.resizes.push({ byteOffset: this.bytes().length, columns, rows });
 	}
 	async receive(timeoutMillis = 8_000): Promise<'bytes' | 'eof'> {
 		const response = await this.command(`read ${timeoutMillis}`);
@@ -167,6 +180,9 @@ export class PtyGridDriver {
 	}
 	bytes(): Buffer {
 		return Buffer.concat(this.raw);
+	}
+	resizeHistory(): readonly TerminalResize[] {
+		return [...this.resizes];
 	}
 	frameGeneration(): number {
 		return this.core.synchronizedOutputGeneration();

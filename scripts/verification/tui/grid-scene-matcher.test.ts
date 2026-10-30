@@ -50,3 +50,12 @@ test('dialog detection does not borrow a title from a later nested frame', async
 	);
 	expect(findDialog(grid, 'Account details')).toEqual({ left: 9, top: 3, right: 44, bottom: 8 });
 });
+
+test('duplicate conflicting values for one dialog field are rejected', async () => {
+	const grid = await screen(
+		paint('Codex ▾')
+			.replace('\x1b[6;10H', '\x1b[6;10H│ Client Cursor ▾\x1b[8;10H')
+			.replace('\x1b[7;10H', '\x1b[9;10H'),
+	);
+	expect(observeGridScene(grid, 'compact-sessions-chooser').passed).toBe(false);
+});

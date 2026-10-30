@@ -11,11 +11,13 @@ import { z } from 'zod';
 
 import { ChromeDevtools } from './chrome-devtools.ts';
 import { isMain, reportCliFailure } from './cli-arguments.ts';
+import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 import {
 	createTerminalCore,
 	ghosttyWasmBytes,
 	gridLines,
 	snapshotGrid,
+	replayTerminal,
 	terminalTheme,
 } from './terminal-grid.ts';
 
@@ -28,6 +30,8 @@ export interface OriginalCapture {
 	readonly checkpoint: string;
 	readonly sourceHead: string;
 	readonly binarySha256: string;
+	readonly grid?: TerminalGrid;
+	readonly resizes?: readonly TerminalResize[];
 }
 const evaluationSchema = z.object({
 	result: z.object({ value: z.unknown().optional() }),
@@ -94,9 +98,14 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
 			).sessionId;
 		await chrome.send('Page.enable', {}, session);
 		const loaded = chrome.waitForEvent('Page.loadEventFired', session);
-		await chrome.send('Page.navigate', { url: `http://127.0.0.1:${address.port}/` }, session);
-		await loaded;
+		await Promise.all([
+			loaded,
+			chrome.send('Page.navigate', { url: `http://127.0.0.1:${address.port}/` }, session),
+		]);
 		const payload = Buffer.from(options.bytes).toString('base64');
+		const resizes = options.resizes ?? [];
+		const initialColumns = resizes.length === 0 ? options.columns : 120;
+		const initialRows = resizes.length === 0 ? options.rows : 36;
 		// Parsing is synchronous in GhosttyCore. Two animation frames drain
 		// WTerm's scheduled paint; no time-based screenshot delay is used.
 		const script = `(async()=>{
@@ -104,8 +113,8 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
  const {GhosttyCore}=await import('/ghostty/dist/index.js');
  await document.fonts.ready;
  const core=await GhosttyCore.load({wasmPath:'/ghostty/wasm/ghostty-vt.wasm',imageStorageLimit:0});
- const terminal=new WTerm(document.getElementById('terminal'),{core,cols:${options.columns},rows:${options.rows},autoResize:false,cursorBlink:false});
- await terminal.init(); terminal.setThemeColors(${JSON.stringify(terminalTheme)}); terminal.write(Uint8Array.from(atob(${JSON.stringify(payload)}),c=>c.charCodeAt(0)));
+ const terminal=new WTerm(document.getElementById('terminal'),{core,cols:${initialColumns},rows:${initialRows},autoResize:false,cursorBlink:false});
+ await terminal.init(); terminal.setThemeColors(${JSON.stringify(terminalTheme)}); const bytes=Uint8Array.from(atob(${JSON.stringify(payload)}),c=>c.charCodeAt(0));let offset=0;for(const resize of ${JSON.stringify(resizes)}){terminal.write(bytes.subarray(offset,resize.byteOffset));terminal.resize(resize.columns,resize.rows);offset=resize.byteOffset;}terminal.write(bytes.subarray(offset));
  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const rect=terminal.element.getBoundingClientRect();
  const lines=Array.from({length:core.getRows()},(_,row)=>Array.from({length:core.getCols()},(_,col)=>{const cell=core.getCell(row,col);return cell.width===0||cell.spacerHead?'':cell.chars??String.fromCodePoint(cell.char)}).join(''));
@@ -135,10 +144,14 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
 			.parse(evaluated.result.value);
 		if (rendered.columns !== options.columns || rendered.rows !== options.rows)
 			throw new Error('browser grid mismatch');
-		const headless = await createTerminalCore(options.columns, options.rows);
+		const headless = await createTerminalCore(initialColumns, initialRows);
 		try {
-			headless.writeRaw(options.bytes);
-			if (JSON.stringify(gridLines(snapshotGrid(headless))) !== JSON.stringify(rendered.lines))
+			replayTerminal(headless, options.bytes, resizes);
+			if (
+				JSON.stringify(gridLines(snapshotGrid(headless))) !== JSON.stringify(rendered.lines) ||
+				(options.grid !== undefined &&
+					JSON.stringify(gridLines(options.grid)) !== JSON.stringify(rendered.lines))
+			)
 				throw new Error('browser original content differs from the headless observation');
 		} finally {
 			headless.dispose();
@@ -164,6 +177,7 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
 			checkpoint: options.checkpoint,
 			viewport: { columns: options.columns, rows: options.rows },
 			ptySha256: hash(options.bytes),
+			resizes,
 			pngSha256: hash(png),
 			rendered,
 			chromeBinarySha256: hash(readFileSync(options.chrome)),

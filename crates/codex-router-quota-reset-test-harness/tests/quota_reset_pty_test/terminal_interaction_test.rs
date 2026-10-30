@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::io::Read;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -31,6 +31,7 @@ pub(super) struct TerminalDriver {
     reader_thread: Option<thread::JoinHandle<()>>,
     transcript: Vec<u8>,
     reached_eof: bool,
+    public_wrapper: Option<PathBuf>,
 }
 
 enum ReaderEvent {
@@ -106,7 +107,6 @@ impl TerminalDriver {
         current_directory: &Path,
         environment: &[(&str, &OsStr)],
     ) -> TestResult<Self> {
-        let pair = native_pty_system().openpty(INITIAL_SIZE)?;
         let mut command = CommandBuilder::new(program);
         command.args(arguments);
         command.env_clear();
@@ -127,6 +127,31 @@ impl TerminalDriver {
             command.env(key, value);
         }
         command.cwd(current_directory);
+        Self::spawn_prepared_command(command, None)
+    }
+
+    pub(super) fn spawn_public_wrapper(
+        node: &Path,
+        wrapper: &Path,
+        configuration: &Path,
+        output: &Path,
+    ) -> TestResult<Self> {
+        let mut command = CommandBuilder::new(node);
+        command.arg(wrapper);
+        command.arg(configuration);
+        // Public entry keeps the real inherited environment, including absent CODEX_HOME.
+        command.env("QUOTA_STORYBOARD_FIXTURE_COMMAND", configuration);
+        command.env("TERM", "xterm-256color");
+        command.env("LANG", "C.UTF-8");
+        command.cwd(output);
+        Self::spawn_prepared_command(command, Some(output.to_path_buf()))
+    }
+
+    fn spawn_prepared_command(
+        command: CommandBuilder,
+        public_wrapper: Option<PathBuf>,
+    ) -> TestResult<Self> {
+        let pair = native_pty_system().openpty(INITIAL_SIZE)?;
         let child = pair.slave.spawn_command(command)?;
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader()?;
@@ -162,6 +187,7 @@ impl TerminalDriver {
             reader_thread: Some(reader_thread),
             transcript: Vec::new(),
             reached_eof: false,
+            public_wrapper,
         })
     }
 
@@ -310,6 +336,9 @@ impl TerminalDriver {
     }
 
     pub(super) fn terminate_and_reap(mut self, timeout: Duration) -> TestResult<Vec<u8>> {
+        if self.public_wrapper.is_some() {
+            return self.terminate_public_wrapper(timeout);
+        }
         let child = self
             .child
             .as_mut()
@@ -339,6 +368,67 @@ impl TerminalDriver {
             if let ReaderEvent::Bytes(bytes) = event {
                 self.transcript.extend(bytes);
             }
+        }
+        Ok(std::mem::take(&mut self.transcript))
+    }
+
+    fn signal_public_wrapper(&mut self) -> TestResult<()> {
+        let output = self
+            .public_wrapper
+            .as_ref()
+            .ok_or("public wrapper binding absent")?;
+        let child = self.child.as_mut().ok_or("public wrapper child absent")?;
+        if child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        let pid = child.process_id().ok_or("public wrapper PID absent")?;
+        let recorded: u32 = std::fs::read_to_string(output.join("quota-wrapper.pid"))?
+            .trim()
+            .parse()?;
+        if recorded != pid {
+            return Err("public wrapper PID differs from retained child".into());
+        }
+        let snapshot = std::process::Command::new("/bin/ps")
+            .args(["-p", &pid.to_string(), "-o", "uid=,lstart=,command="])
+            .output()?;
+        let identity = std::fs::read(output.join("quota-wrapper.identity"))?;
+        let command = String::from_utf8_lossy(&snapshot.stdout);
+        if !snapshot.status.success()
+            || snapshot.stdout != identity
+            || !command.contains(
+                output
+                    .join("fixture-command.json")
+                    .to_string_lossy()
+                    .as_ref(),
+            )
+        {
+            return Err("public wrapper UID/birth/command changed; refusing signal".into());
+        }
+        let signal = std::process::Command::new("/bin/kill")
+            .args(["-TERM", &pid.to_string()])
+            .output()?;
+        if !signal.status.success() {
+            return Err("public wrapper SIGTERM failed".into());
+        }
+        Ok(())
+    }
+
+    fn terminate_public_wrapper(&mut self, timeout: Duration) -> TestResult<Vec<u8>> {
+        self.signal_public_wrapper()?;
+        self.wait_for_eof(timeout)?;
+        let child = self.child.as_mut().ok_or("public wrapper unavailable")?;
+        let deadline = Instant::now() + timeout;
+        while child.try_wait()?.is_none() {
+            if Instant::now() >= deadline {
+                return Err("public wrapper cleanup unsettled".into());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        self.child.take();
+        self.writer.take();
+        self.master.take();
+        if let Some(reader) = self.reader_thread.take() {
+            reader.join().map_err(|_| "public PTY reader panic")?;
         }
         Ok(std::mem::take(&mut self.transcript))
     }
@@ -514,6 +604,16 @@ fn find_sequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 impl Drop for TerminalDriver {
     fn drop(&mut self) {
+        if self.public_wrapper.is_some() && self.child.is_some() {
+            if let Err(error) = self.terminate_public_wrapper(Duration::from_secs(8)) {
+                if let Some(output) = self.public_wrapper.as_ref() {
+                    let _ = std::fs::write(output.join("cleanup-unsettled"), error.to_string());
+                }
+                self.child.take();
+                self.reader_thread.take();
+            }
+            return;
+        }
         if let Some(child) = self.child.as_mut() {
             if child.try_wait().ok().flatten().is_none() {
                 let _ = child.kill();
@@ -548,6 +648,7 @@ mod tests {
             reader_thread: None,
             transcript: Vec::new(),
             reached_eof: false,
+            public_wrapper: None,
         };
         assert_eq!(terminal.receive_bytes(Duration::ZERO)?, Some(bytes.clone()));
         assert_eq!(terminal.transcript, bytes);
@@ -579,6 +680,7 @@ mod tests {
             reader_thread: None,
             transcript: Vec::new(),
             reached_eof: false,
+            public_wrapper: None,
         };
 
         if terminal.transcript_len() != queued_frame.len() {
@@ -606,6 +708,7 @@ mod tests {
                 reader_thread: None,
                 transcript: b"\x1b[?2026hSave\x1b[?2026l".to_vec(),
                 reached_eof: false,
+                public_wrapper: None,
             };
             let action_start = terminal.transcript_len();
             output_sender.send(ReaderEvent::Bytes(current_output.to_vec()))?;

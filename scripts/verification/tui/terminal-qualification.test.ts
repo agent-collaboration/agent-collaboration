@@ -1,6 +1,12 @@
 import { expect, test } from 'vitest';
 
-import { createTerminalCore, gridCell, gridLines, snapshotGrid } from './terminal-grid.ts';
+import {
+	createTerminalCore,
+	gridCell,
+	gridLines,
+	snapshotGrid,
+	replayTerminal,
+} from './terminal-grid.ts';
 import { qualifyTerminal } from './terminal-qualification.ts';
 
 test('libghostty qualifies against independent grids, colours, Unicode, protocol and resize', async () => {
@@ -34,5 +40,27 @@ test('a combined startup chunk has two independent engine responses to drain', a
 		expect(core.getResponse()).toBe(null);
 	} finally {
 		core.dispose();
+	}
+});
+
+test('original replay applies actual resize boundaries to the same byte stream', async () => {
+	const live = await createTerminalCore(120, 36);
+	const replay = await createTerminalCore(120, 36);
+	try {
+		const first = Buffer.from('📂界 width before resize');
+		const second = Buffer.from('\x1b[2;1Hafter ✉️');
+		live.writeRaw(first);
+		live.resize(48, 12);
+		live.writeRaw(second);
+		replayTerminal(replay, Buffer.concat([first, second]), [
+			{ byteOffset: first.length, columns: 48, rows: 12 },
+		]);
+		expect(snapshotGrid(replay)).toEqual(snapshotGrid(live));
+		expect(() =>
+			replayTerminal(replay, first, [{ byteOffset: first.length + 1, columns: 48, rows: 12 }]),
+		).toThrow('resize boundary');
+	} finally {
+		live.dispose();
+		replay.dispose();
 	}
 });

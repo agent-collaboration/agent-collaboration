@@ -1,3 +1,4 @@
+import { dialogSemanticFailures } from './grid-dialog-checks.ts';
 import {
 	identityFailures,
 	selectedAccountText,
@@ -93,7 +94,8 @@ const dialogTitles = new Set([
 function fieldPair(lines: readonly string[], label: string, value: string): boolean {
 	const expectedLabel = normalizeGridText(label);
 	const expectedValue = normalizeGridText(value);
-	return lines.some((line, row) => {
+	const values: string[] = [];
+	for (const [row, line] of lines.entries()) {
 		const normalized = normalizeGridText(line.replace(/[│┃]/gu, ' '));
 		if (normalized.startsWith(`${expectedLabel} `) || normalized.startsWith(`${expectedLabel}: `)) {
 			const tail = normalized
@@ -101,12 +103,13 @@ function fieldPair(lines: readonly string[], label: string, value: string): bool
 				.replace(/^:\s*/u, '')
 				.trim()
 				.replace(/^[›❯]\s*/u, '');
-			return tail === expectedValue || tail === `${expectedValue} ▾`;
+			values.push(tail);
+			continue;
 		}
-		if (normalized !== expectedLabel && normalized !== `${expectedLabel}:`) return false;
-		const next = normalizeGridText((lines[row + 1] ?? '').replace(/[│┃]/gu, ' '));
-		return next === expectedValue || next === `${expectedValue} ▾`;
-	});
+		if (normalized === expectedLabel || normalized === `${expectedLabel}:`)
+			values.push(normalizeGridText((lines[row + 1] ?? '').replace(/[│┃]/gu, ' ')));
+	}
+	return values.length === 1 && (values[0] === expectedValue || values[0] === `${expectedValue} ▾`);
 }
 export function gridFieldPair(
 	grid: TerminalGrid,
@@ -195,6 +198,7 @@ export function observeGridScene(grid: TerminalGrid, checkpoint: string): GridSc
 	const dialog = title === undefined ? null : findDialog(grid, title);
 	const scoped = dialog === null ? lines : rectangleLines(grid, dialog);
 	const text = normalizeGridText(lines.join('\n'));
+	const scopedText = normalizeGridText(scoped.join('\n'));
 	const missing = contract.required.filter((required) => {
 		const marker = normalizeGridText(required);
 		if (marker === 'selected weekly pace unavailable glyph') return !selectedPaceUnavailable(grid);
@@ -208,10 +212,11 @@ export function observeGridScene(grid: TerminalGrid, checkpoint: string): GridSc
 		if (/^\d+\/\d+$/u.test(marker)) return !text.split(/[^\d/]/u).includes(marker);
 		if (marker.startsWith('› '))
 			return !scoped.some((line) => normalizeGridText(line).includes(marker));
-		return !text.includes(marker);
+		return !scopedText.includes(marker);
 	});
 	if (title !== undefined && dialog === null) missing.push(`active dialog ${title}`);
 	missing.push(...identityFailures(grid, checkpoint, dialog));
+	missing.push(...dialogSemanticFailures(grid, checkpoint, dialog));
 	const unexpected = contract.forbidden.filter((marker) =>
 		text.includes(normalizeGridText(marker)),
 	);

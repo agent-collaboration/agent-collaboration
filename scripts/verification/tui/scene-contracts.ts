@@ -1,4 +1,4 @@
-import type { ComponentPlan, TerminalViewport } from './evidence-schema.ts';
+import type { TerminalViewport } from './evidence-schema.ts';
 
 export const viewports: readonly TerminalViewport[] = [
 	{ columns: 120, rows: 36 },
@@ -233,34 +233,6 @@ export const normalComponentNegatives: readonly (readonly [string, string])[] = 
 	if (scene === undefined || wrong === undefined) throw new Error('incomplete negative pair');
 	return [`component-quota-${scene}`, wrong];
 });
-export function componentStates(plan: ComponentPlan, grid: TerminalViewport): readonly string[] {
-	if (plan.scenario === 'normal') return normalComponentStates;
-	return grid.columns === 48 && grid.rows === 12
-		? hardCaseShortStates
-		: grid.columns === 120 && grid.rows === 36
-			? hardCaseStates
-			: hardCasePartialStates;
-}
-export function componentNegatives(
-	plan: ComponentPlan,
-	grid: TerminalViewport,
-): readonly (readonly [string, string])[] {
-	return plan.scenario === 'normal'
-		? normalComponentNegatives
-		: grid.columns === 48 && grid.rows === 12
-			? hardCaseShortNegatives
-			: hardCaseNegatives;
-}
-export function componentWorkSeconds(plan: ComponentPlan): number {
-	return plan.grids.reduce(
-		(total, grid) =>
-			total +
-			240 +
-			30 * (componentStates(plan, grid).length + componentNegatives(plan, grid).length) +
-			40,
-		0,
-	);
-}
 export function componentDialog(state: string): string {
 	if (state.startsWith('hard-pool-details')) return 'Pool details';
 	if (state === 'hard-details') return 'Account details';
@@ -296,7 +268,7 @@ export function checkpointDialog(state: string): string {
 	return state === 'help' ? 'contextual-help' : 'browse';
 }
 export const proofLimits =
-	'Synthetic records and substituted external effects; no live discovery, provider launch, personal balances, account reset/save or Ghostty observation. OCR checks scene markers; visual inspection and offered-product-test sensitivity remain required.';
+	'Synthetic records and substituted external effects; no live discovery, provider launch, personal balances, account reset/save or Ghostty observation. Cell assertions check scene markers; visual inspection and offered-product-test sensitivity remain required.';
 export function coverageGaps(): string[] {
 	return [
 		'sessions/new',
