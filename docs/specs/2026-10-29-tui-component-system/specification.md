@@ -250,7 +250,7 @@ Field columns stay aligned with a reserved selector gutter, and dialogs keep the
 
 | ID | Constraint | Basis |
 | --- | --- | --- |
-| C1 | The crate contains no codex-router code and depends only on iocraft and libraries at its level, so it can move to its own repository. | Requirements goal boundary ("What may change") |
+| C1 | The crate contains no codex-router code and depends only on iocraft and libraries at its level, so it can move to its own repository. A test-support feature may add serde and serde_json for test receipts; normal and release builds keep the same dependency closure (2026-10-30). | Requirements goal boundary ("What may change") |
 | C2 | No new fork, pin or engine change to iocraft; the existing pinned fork stays as it is. | Requirements goal boundary ("Out", "Learn from") |
 | C3 | Every application built with the crate opts in to receiving Ctrl+C, so that R4's quit works. The crate states this as a requirement on its users; it does not own the application's render loop. | R4; the pinned iocraft quits on Ctrl+C before the application sees it unless the application opts in |
 | C4 | Target terminals: Ghostty, including inside Agent Studio panes; the keys must also work where the terminal only sends legacy key codes, except Ctrl+Enter (R9 fallback). macOS and Linux. | Requirements, who this is for; owner platform rule |
