@@ -1,6 +1,24 @@
 # Codex CLI over ACP: skills, commands and preservation (J1–J3)
 
-**Status: draft.** The Cursor J1 `skill` TUI path (picker rows, selection, composed input and the provider-owned effect) has been driven once on a real Host. Its normal exit and the supporting readback are not yet qualified. The `picker` journey, Claude J1, and all of J2 and J3 are unrun. Scene text not yet seen on a real screen comes from Codex source and stays unobserved until a declared run. Run records belong in the task evidence, not here.
+**Status: partially qualified; the journey set as a whole is still a draft.** These are qualified on an isolated Host with unchanged installed Codex 0.165 at 120×36 and legacy keys, each at the scope stated:
+
+- **J1 `skill`:** Cursor with two selected skills and Claude with one, each with an argument and an image. Covers picker rows, selection, composed input, the provider-owned effect, normal exit and the same-Session readback (`skills-listed`, `skill-effect`).
+- **J1 `picker`:** Claude and Cursor, with no model input. Covers the selected row, the cleared draft and normal exit.
+- **J3 `reopen`:** Claude, with no new prompt. The existing reply is replayed and Codex exits normally.
+- **J2 `model` with `apply: default`:** Claude. The popup changes the model, the honest default-save refusal is shown, and `effective-model` reads back the chosen model.
+- **J2 `compact` on Cursor:** an explicit unsupported error, with no compaction effect, unchanged history, a usable empty composer and normal exit. This needs a Router build that reports unsupported compaction without closing Codex; on an older build the refusal ends the CLI.
+- **Readback route:** the Claude J1 and J2 `model` readbacks, both picker readbacks and the Cursor compact readbacks ran through the observer's CLI entry (`acp-journey-observation.ts PLAN.json`).
+
+Not yet qualified:
+
+- J2: Claude `compact` (`Context compacted`), `model` with `apply: session`, and `model` on Cursor.
+- J3: `interrupt`, Cursor `reopen`, approval, active-turn refresh, and native and reverse control preservation.
+- A next valid prompt after a Cursor compact refusal; only a controlled Host test covers it.
+- Model-specific effort defaults. The bridge's catalog hardcodes every model's effort fields, so an applied effort may be that hardcoded default.
+- Provider context capacity. The footer shows the model only and says nothing about capacity.
+- Cursor J1 readback through the observer's CLI entry. That readback called the exported `runJourneyObservation` with a schema-validated plan instead.
+
+Nothing here is a release or PR readiness claim. Scene text not yet seen on a real screen comes from Codex source and stays unobserved until a declared run. Run records belong in the task evidence, not here.
 
 Use this journey when the change touches the app-server face's skills, slash commands or ACP provider bridge. Adopted outcomes: `docs/specs/2026-10-28-codex-acp-providers/`, Specification R1–R5 (C1–C3) and Verification Design U1–U4 (J1 skills, J2 commands, J3 preservation). A Claude pass is not a Cursor pass; qualify each provider separately.
 
@@ -68,6 +86,7 @@ Each of these is a failure:
 - **Bounds:** UI checkpoints use 8 s. Model-effect checkpoints use the declared bound (initially 120 s) and span several reads, each still bounded by 8 s.
 - **DA2:** Codex sends DA2 only over SSH. wterm leaves DA2 unanswered, which costs one 250 ms probe timeout.
 - **Picker variant:** when mentions-v2 is enabled, its popup may replace the legacy skill popup and its hint. This is unobserved.
+- **Row width:** at 120 columns a Claude skill row's trailing source suffix clips at the right edge. The selected-row oracle reads only the prompt, the display name and the `[Skill]` tag, so the clip doesn't change the verdict.
 - **`/model` service tier:** the picker's session apply carries no tier. `select_session_model` then sends whatever `service_tier_update_for_core` returns (`service_tier_resolution.rs:75-97`):
   - the effective tier, if any: a configured `service_tier`, `default` after a Fast opt-out notice, or the model's supported default tier, filtered by the enabled tier features;
   - otherwise, when the Fast or Ultrafast feature is enabled and the model is in the catalog, `serviceTier: "default"`, even with no configured tier;
