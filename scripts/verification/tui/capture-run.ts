@@ -283,12 +283,20 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 export async function captureMain(args: readonly string[]): Promise<void> {
 	const { values, positionals } = strictArguments(
 		args,
-		{ help: { type: 'boolean' }, check: { type: 'boolean' } },
+		{ help: { type: 'boolean' }, check: { type: 'boolean' }, showcase: { type: 'boolean' } },
 		true,
 	);
 	if (values.help) {
 		process.stdout.write(
-			'capture-run.ts PLAN.json [--check]: exact compiled fixture, key mode, viewport, libghostty cell assertions and optional original PNGs via Chrome DevTools.\n',
+			'capture-run.ts PLAN.json [--check]: exact compiled fixture, key mode, viewport, libghostty cell assertions and optional original PNGs via Chrome DevTools. Use --showcase with a component-showcase plan for SC01–SC27; prepare one with showcase/prepare-plan.ts.\n',
+		);
+		return;
+	}
+	if (values.showcase) {
+		const { runShowcaseJourneys } = await import('./showcase/run.ts');
+		await runShowcaseJourneys(
+			JSON.parse(readFileSync(planArgument(positionals), 'utf8')),
+			values.check === true,
 		);
 		return;
 	}

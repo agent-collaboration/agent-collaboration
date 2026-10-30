@@ -31,7 +31,7 @@ import {
 	writeSync,
 } from 'node:fs';
 import { constants as osConstants } from 'node:os';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
@@ -81,6 +81,7 @@ const PUBLIC_SESSIONS_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 const capturedTuiSurfaceSchema = z.enum([
+	'showcase',
 	'quota',
 	'sessions',
 	'quota-component',
@@ -242,6 +243,45 @@ function publicSessionsLaunch(configuration: FixtureCommand, binary: string): Ch
 	};
 }
 
+/** Local sample only. Public Sessions retains its separate Host/effect contract. */
+function showcaseLaunch(configuration: FixtureCommand, binary: string): ChildLaunch {
+	const fields = new Set([
+		'surface',
+		'binary',
+		'binary_sha256',
+		'approved_cwd',
+		'output',
+		'temporary_directory',
+		'receipt_directory',
+	]);
+	if (
+		Object.keys(configuration).length !== fields.size ||
+		Object.keys(configuration).some((field) => !fields.has(field))
+	)
+		throw new FixtureLaunchRejected('showcase launch fields differ from the fixed contract');
+	const digest = requiredText(configuration, 'binary_sha256');
+	if (
+		!isAbsolute(binary) ||
+		!realpathStable(binary) ||
+		basename(binary) !== 'component_showcase' ||
+		!statSync(binary).isFile() ||
+		!/^[a-f0-9]{64}$/u.test(digest) ||
+		fileSha256(binary) !== digest
+	)
+		throw new FixtureLaunchRejected('showcase binary path or hash changed');
+	const cwd = requiredText(configuration, 'approved_cwd');
+	if (!isAbsolute(cwd) || !realpathStable(cwd) || !statSync(cwd).isDirectory())
+		throw new FixtureLaunchRejected('showcase cwd must be the exact declared directory');
+	const receipts = requiredText(configuration, 'receipt_directory');
+	sessionsReceiptEnvironment(receipts, requiredText(configuration, 'output'));
+	const environment: Record<string, string> = { TERM: 'xterm-256color', LANG: 'C.UTF-8' };
+	for (const name of ['HOME', 'PATH', 'LC_ALL', 'TMPDIR', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH']) {
+		const value = process.env[name];
+		if (value !== undefined) environment[name] = value;
+	}
+	return { executable: binary, arguments: ['--receipt-directory', receipts], environment, cwd };
+}
+
 /** The exact child argv, environment and working directory for one surface. */
 export function childLaunchConfiguration(
 	configuration: FixtureCommand,
@@ -256,6 +296,7 @@ export function childLaunchConfiguration(
 	if (surface === 'public-sessions') {
 		return publicSessionsLaunch(configuration, binary);
 	}
+	if (surface === 'showcase') return showcaseLaunch(configuration, binary);
 	const temporary = requiredText(configuration, 'temporary_directory');
 	const environment: Record<string, string> = {
 		HOME: temporary,
@@ -457,7 +498,7 @@ async function main(): Promise<number> {
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));
-	if (surface === 'public-sessions' || surface === 'quota-component') {
+	if (surface === 'public-sessions' || surface === 'quota-component' || surface === 'showcase') {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
 	}
 	const child = spawn(launch.executable, [...launch.arguments], {
