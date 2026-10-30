@@ -48,6 +48,13 @@ pub async fn inspect_local_clients(
     Ok((manifest.service_id, reply))
 }
 
+pub async fn prepare_local_claude_terminal(
+    request: &SourceRequest,
+    home_directory: Option<&Path>,
+) -> Result<std::process::Command, super::SessionsCommandError> {
+    native_claude::prepare_terminal_command(request, home_directory).await
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SourceEntryFailure {
     #[error("{0}")]

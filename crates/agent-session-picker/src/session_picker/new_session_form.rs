@@ -25,6 +25,7 @@ pub(super) enum NewFormFocus {
 pub(super) enum NewSessionClient {
     #[default]
     CodexNative,
+    ClaudeNativeForeground,
     ClaudeNativeBackground,
     CursorManagedAcp,
 }
@@ -33,6 +34,7 @@ impl NewSessionClient {
     fn label(self) -> &'static str {
         match self {
             Self::CodexNative => "Codex",
+            Self::ClaudeNativeForeground => "Claude Code",
             Self::ClaudeNativeBackground => "Claude Code · background",
             Self::CursorManagedAcp => "Cursor · managed ACP",
         }
@@ -177,6 +179,7 @@ pub(super) fn active_new_choices(
     {
         [
             NewSessionClient::CodexNative,
+            NewSessionClient::ClaudeNativeForeground,
             NewSessionClient::ClaudeNativeBackground,
             NewSessionClient::CursorManagedAcp,
         ]
@@ -223,6 +226,11 @@ pub(super) fn client_availability(
     if draft.selected_source == PickerSourceContext::LocalCodex {
         return unavailable("Local mode supports Codex only".to_owned());
     }
+    if client == NewSessionClient::ClaudeNativeForeground
+        && draft.selected_source != PickerSourceContext::DefaultHosted
+    {
+        return unavailable("Foreground Claude is available on this machine only. Use background mode for this connection.".to_owned());
+    }
     match &draft.client_inventory {
         NewClientInventoryState::Unobserved => {
             unavailable("Selected source client capabilities have not been checked".to_owned())
@@ -233,12 +241,14 @@ pub(super) fn client_availability(
         NewClientInventoryState::Unavailable(reason) => unavailable(reason.clone()),
         NewClientInventoryState::Ready(capabilities) => match client {
             NewSessionClient::CodexNative => ChoiceAvailability::Available,
-            NewSessionClient::ClaudeNativeBackground => match &capabilities.native_claude {
-                SourceNativeLaunchAvailability::Ready => ChoiceAvailability::Available,
-                SourceNativeLaunchAvailability::Unavailable { message } => {
-                    unavailable(message.clone())
+            NewSessionClient::ClaudeNativeForeground | NewSessionClient::ClaudeNativeBackground => {
+                match &capabilities.native_claude {
+                    SourceNativeLaunchAvailability::Ready => ChoiceAvailability::Available,
+                    SourceNativeLaunchAvailability::Unavailable { message } => {
+                        unavailable(message.clone())
+                    }
                 }
-            },
+            }
             NewSessionClient::CursorManagedAcp if !draft.arguments.is_empty() => {
                 unavailable("Cursor creation does not accept these native arguments".to_owned())
             }

@@ -289,6 +289,14 @@ fn run_interactive_session(
                 description: request.unknown_description(),
             })
         }
+        SessionsPickerOutcome::LaunchNativeClaude(request) => {
+            agent_session_inventory::sessions::source_client_action::run_local_claude_terminal(
+                *request,
+                &crate::session_environment::collaboration_service_directory(context)?,
+                context.env_var("HOME").map(std::path::Path::new),
+                &command.codex_args,
+            )
+        }
     }
 }
 

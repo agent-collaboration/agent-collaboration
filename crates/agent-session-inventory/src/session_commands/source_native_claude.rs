@@ -81,8 +81,17 @@ pub async fn execute_native_claude(
     if !Path::new(directory.as_str()).is_dir() {
         return Err(SourceRejection::DirectoryUnavailable);
     }
+    if matches!(action, SourceNativeClaudeAction::Resume { .. }) && !arguments.is_empty() {
+        return Err(SourceRejection::InvalidRequest);
+    }
     if let Some(target) = target {
-        validate_native_target(request, service_epoch, target, directory.as_str()).await?;
+        let summary =
+            validate_native_target(request, service_epoch, target, directory.as_str()).await?;
+        if matches!(action, SourceNativeClaudeAction::Resume { .. })
+            && !matches!(summary, ProviderSessionSummary::ClaudeCodeBackground { state, peer: None, .. } if state.is_terminal())
+        {
+            return Err(SourceRejection::SessionUnavailable);
+        }
     }
     let environment = launch
         .routed_environment()
@@ -172,12 +181,83 @@ async fn validate_source(
     Ok(())
 }
 
+pub(super) async fn prepare_terminal_command(
+    request: &SourceRequest,
+    home_directory: Option<&Path>,
+) -> Result<std::process::Command, crate::sessions::SessionsCommandError> {
+    use crate::sessions::SessionsCommandError;
+    use crate::sessions::claude_terminal_launch::{
+        ClaudeTerminalAction, ClaudeTerminalRequest, prepare_claude_terminal,
+    };
+    let rejected = |reason: SourceRejection| {
+        SessionsCommandError::ClaudeLaunch(format!(
+            "Could not open Claude: {reason}. Refresh this source and try again."
+        ))
+    };
+    let SourceOperation::NativeClaude {
+        service_epoch,
+        action,
+    } = &request.operation
+    else {
+        return Err(rejected(SourceRejection::InvalidRequest));
+    };
+    let launch = ClaudeLaunchTarget::resolve_for_service(
+        home_directory,
+        PathBuf::from(request.service_directory.as_str()),
+    )?;
+    validate_source(&launch, &request.expected_service, service_epoch)
+        .await
+        .map_err(rejected)?;
+    let (directory, terminal_action, session_id) = match action {
+        SourceNativeClaudeAction::New {
+            directory,
+            arguments,
+        } => (directory, Some(arguments.as_slice()), None),
+        SourceNativeClaudeAction::Resume {
+            target,
+            directory,
+            arguments,
+        } if arguments.is_empty() => {
+            validate_native_target(request, service_epoch, target, directory.as_str())
+                .await
+                .map_err(rejected)?;
+            (
+                directory,
+                None,
+                Some(String::from(target.session_id.clone())),
+            )
+        }
+        _ => return Err(rejected(SourceRejection::InvalidRequest)),
+    };
+    if !Path::new(directory.as_str()).is_dir() {
+        return Err(rejected(SourceRejection::DirectoryUnavailable));
+    }
+    let environment = launch.routed_environment().await?;
+    validate_source(&launch, &request.expected_service, service_epoch)
+        .await
+        .map_err(rejected)?;
+    let action = match (terminal_action, session_id.as_deref()) {
+        (Some(arguments), None) => ClaudeTerminalAction::New { arguments },
+        (None, Some(session_id)) => ClaudeTerminalAction::Resume { session_id },
+        _ => return Err(rejected(SourceRejection::InvalidRequest)),
+    };
+    prepare_claude_terminal(
+        &launch,
+        ClaudeTerminalRequest {
+            action,
+            working_directory: Some(Path::new(directory.as_str())),
+        },
+        environment,
+    )
+    .await
+}
+
 async fn validate_native_target(
     request: &SourceRequest,
     epoch: &UuidIdentity,
     target: &SessionRef,
     directory: &str,
-) -> Result<(), SourceRejection> {
+) -> Result<ProviderSessionSummary, SourceRejection> {
     if target.endpoint.service_id != request.expected_service {
         return Err(SourceRejection::WrongService);
     }
@@ -203,8 +283,8 @@ async fn validate_native_target(
         crate::picker_runtime_status::NativeCatalogueView::Loaded,
         crate::picker_runtime_status::NativeCatalogueView::Stored,
     ] {
-        if native_target_in_view(&client, target, directory, view).await? {
-            return Ok(());
+        if let Some(summary) = native_target_in_view(&client, target, directory, view).await? {
+            return Ok(summary);
         }
     }
     Err(SourceRejection::SessionUnavailable)
@@ -215,12 +295,12 @@ async fn native_target_in_view(
     target: &SessionRef,
     directory: &str,
     view: crate::picker_runtime_status::NativeCatalogueView,
-) -> Result<bool, SourceRejection> {
+) -> Result<Option<ProviderSessionSummary>, SourceRejection> {
     use crate::sessions::source_inventory_failure::InventoryReadFailure;
     let mut cursor = None;
     let mut seen_cursors = BTreeSet::new();
     let mut seen_targets = BTreeSet::new();
-    let mut found = false;
+    let mut found = None;
     loop {
         let page = match client
             .list_provider_sessions(ProviderSessionListParams {
@@ -237,7 +317,7 @@ async fn native_target_in_view(
             Ok(page) => page,
             Err(error) => {
                 return match InventoryReadFailure::from_client(&error) {
-                    InventoryReadFailure::Unavailable(_) => Ok(false),
+                    InventoryReadFailure::Unavailable(_) => Ok(None),
                     InventoryReadFailure::Invalid { .. }
                     | InventoryReadFailure::InvalidNative { .. } => {
                         Err(SourceRejection::SessionUnavailable)
@@ -296,7 +376,7 @@ async fn native_target_in_view(
                 if String::from(working_directory.clone()) != directory || !eligible {
                     return Err(SourceRejection::SessionUnavailable);
                 }
-                found = true;
+                found = Some(summary.clone());
             }
         }
         match page.next_cursor {

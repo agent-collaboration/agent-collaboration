@@ -30,13 +30,16 @@ pub(super) fn apply_details_action(
         return None;
     }
     if dialog.record().identity.is_provider()
-        && matches!(action, DetailsAction::Load | DetailsAction::Resume)
+        && matches!(
+            action,
+            DetailsAction::Load | DetailsAction::Resume | DetailsAction::ResumeBackground
+        )
     {
         model.begin_details_client_action(&dialog, action);
         return None;
     }
     match action {
-        DetailsAction::Load => {}
+        DetailsAction::Load | DetailsAction::ResumeBackground => {}
         DetailsAction::Close => model.details_dialog = None,
         DetailsAction::Resume => {
             let record = dialog.record();

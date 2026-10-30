@@ -3,7 +3,9 @@
 use super::{SessionsPickerOutcome, picker_model::SessionsPickerModel};
 use agent_session_inventory::sessions::{
     source_client_action::{CapturedClientAction, SessionClientEffect, SessionClientExecutor},
-    source_ssh_protocol::{SourceReadError, SourceReply},
+    source_ssh_protocol::{
+        SourceNativeExitStatus, SourceNativeObservation, SourceReadError, SourceReply,
+    },
 };
 use iocraft::prelude::*;
 
@@ -43,13 +45,15 @@ impl SessionsPickerModel {
         };
         let effect = match draft.client {
             NewSessionClient::CodexNative => return,
-            NewSessionClient::ClaudeNativeBackground => SessionClientEffect::Native {
-                service_epoch: capabilities.service_epoch.clone(),
-                action: SourceNativeClaudeAction::New {
-                    directory,
-                    arguments: draft.arguments.clone(),
-                },
-            },
+            NewSessionClient::ClaudeNativeForeground | NewSessionClient::ClaudeNativeBackground => {
+                SessionClientEffect::Native {
+                    service_epoch: capabilities.service_epoch.clone(),
+                    action: SourceNativeClaudeAction::New {
+                        directory,
+                        arguments: draft.arguments.clone(),
+                    },
+                }
+            }
             NewSessionClient::CursorManagedAcp => {
                 let CursorCreationAvailability::Ready(binding) = &capabilities.cursor else {
                     return;
@@ -65,12 +69,17 @@ impl SessionsPickerModel {
             return;
         };
         self.next_client_generation = attempt;
-        self.client_action = PickerClientAction::Queued(CapturedClientAction {
+        let captured = CapturedClientAction {
             attempt,
             source: draft.selected_source.clone(),
             service_id: capabilities.service_id.clone(),
             effect,
-        });
+        };
+        self.client_action = if draft.client == NewSessionClient::ClaudeNativeForeground {
+            PickerClientAction::Terminal(captured)
+        } else {
+            PickerClientAction::Queued(captured)
+        };
         self.new_session = None;
         self.details_dialog = None;
     }
@@ -80,6 +89,7 @@ impl SessionsPickerModel {
 pub(super) enum PickerClientAction {
     #[default]
     Idle,
+    Terminal(CapturedClientAction),
     Queued(CapturedClientAction),
     Running(CapturedClientAction),
     Finished {
@@ -111,21 +121,47 @@ impl PickerClientAction {
     }
 }
 
-pub(super) fn use_client_actions(
-    hooks: &mut Hooks<'_, '_>,
-    mut model: State<SessionsPickerModel>,
-    executor: Option<SessionClientExecutor>,
-) {
+pub(super) struct ClientActionContext {
+    pub model: State<SessionsPickerModel>,
+    pub executor: Option<SessionClientExecutor>,
+    pub outcome: State<Option<SessionsPickerOutcome>>,
+    pub background_completed: std::sync::Arc<dyn Fn() + Send + Sync>,
+}
+
+pub(super) fn use_client_actions(hooks: &mut Hooks<'_, '_>, context: ClientActionContext) {
+    let ClientActionContext {
+        mut model,
+        executor,
+        mut outcome,
+        background_completed,
+    } = context;
     let has_executor = executor.is_some();
     let submit=hooks.use_async_handler(move |request:CapturedClientAction| {
         let executor=executor.clone();
+        let background_completed=background_completed.clone();
         async move {
             let Some(executor)=executor else {return};
             let result=executor(request.clone()).await;
             let current=matches!(&model.read().client_action,PickerClientAction::Running(current) if current.attempt==request.attempt);
-            if current {model.write().client_action=PickerClientAction::Finished {request,result,focus:ClientResultAction::Close};}
+            if current {
+                let background_started = matches!(&result, Ok(SourceReply::NativeClaude { result }) if matches!(&result.observation, SourceNativeObservation::Observed {status: SourceNativeExitStatus::Exited {code:0},stdout,..} if agent_session_inventory::sessions::claude_terminal_launch::parse_background_receipt(stdout).is_ok()));
+                model.write().client_action=PickerClientAction::Finished {request,result,focus:ClientResultAction::Close};
+                if background_started {
+                    background_completed();
+                }
+            }
         }
     });
+    let terminal = match &model.read().client_action {
+        PickerClientAction::Terminal(request) => Some(request.clone()),
+        _ => None,
+    };
+    if let Some(request) = terminal {
+        model.write().client_action = PickerClientAction::Idle;
+        outcome.set(Some(SessionsPickerOutcome::LaunchNativeClaude(Box::new(
+            request,
+        ))));
+    }
     let queued = if has_executor {
         match &model.read().client_action {
             PickerClientAction::Queued(request) => Some(request.clone()),
@@ -216,7 +252,7 @@ impl SessionsPickerModel {
             (
                 DetailsClientCapabilities::Native { source },
                 SessionPickerIdentity::NativeClaude(target),
-                DetailsAction::Resume,
+                DetailsAction::Resume | DetailsAction::ResumeBackground,
             ) => {
                 let Some(directory) = record
                     .cwd
@@ -232,7 +268,7 @@ impl SessionsPickerModel {
                         action: SourceNativeClaudeAction::Resume {
                             target: target.clone(),
                             directory,
-                            arguments: self.request.native_arguments.clone(),
+                            arguments: Vec::new(),
                         },
                     },
                 )
@@ -243,12 +279,20 @@ impl SessionsPickerModel {
             return false;
         };
         self.next_client_generation = attempt;
-        self.client_action = PickerClientAction::Queued(CapturedClientAction {
+        let foreground = matches!(&effect, SessionClientEffect::Native { .. })
+            && source == super::PickerSourceContext::DefaultHosted
+            && action == DetailsAction::Resume;
+        let captured = CapturedClientAction {
             attempt,
             source,
             service_id,
             effect,
-        });
+        };
+        self.client_action = if foreground {
+            PickerClientAction::Terminal(captured)
+        } else {
+            PickerClientAction::Queued(captured)
+        };
         self.details_dialog = None;
         true
     }
