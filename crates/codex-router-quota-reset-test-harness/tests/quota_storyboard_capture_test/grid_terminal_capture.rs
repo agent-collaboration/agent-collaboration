@@ -78,6 +78,14 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let release_path = std::env::var_os("TUI_GRID_COMPONENT_RELEASE");
     let component = matches!(surface.as_str(), "normal" | "hard");
     let mut environment: Vec<(&str, &OsStr)> = Vec::new();
+    let storyboard_variant = std::env::var_os("TUI_GRID_STORYBOARD_VARIANT");
+    if let Some(variant) = storyboard_variant.as_deref() {
+        ensure(
+            surface == "sessions-filters" && variant == OsStr::new("wide-glyph-left-border"),
+            "invalid grid storyboard variant or surface",
+        )?;
+        environment.push(("CODEX_ROUTER_TUI_STORYBOARD_VARIANT", variant));
+    }
     if component {
         environment.push((
             "QUOTA_COMPONENT_FIXTURE",

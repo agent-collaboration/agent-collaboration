@@ -118,6 +118,7 @@ impl TerminalDriver {
             if !matches!(
                 *key,
                 "NO_COLOR"
+                    | "CODEX_ROUTER_TUI_STORYBOARD_VARIANT"
                     | "QUOTA_COMPONENT_FIXTURE"
                     | "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"
                     | "QUOTA_COMPONENT_FIXTURE_RELEASE_FILE"
@@ -372,7 +373,7 @@ impl TerminalDriver {
         Ok(std::mem::take(&mut self.transcript))
     }
 
-    fn signal_public_wrapper(&mut self) -> TestResult<()> {
+    pub(super) fn signal_public_wrapper(&mut self) -> TestResult<()> {
         let output = self
             .public_wrapper
             .as_ref()

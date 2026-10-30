@@ -30,6 +30,7 @@ export interface PtyGridTarget {
 	readonly evidence: string;
 	readonly componentBinary?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
+	readonly storyboardVariant?: 'wide-glyph-left-border';
 }
 export class PtyGridDriver {
 	private readonly child: ChildProcessWithoutNullStreams;
@@ -64,6 +65,9 @@ export class PtyGridDriver {
 					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
 					TUI_GRID_SURFACE: target.surface,
 					TUI_GRID_KEYS: target.keys,
+					...(target.storyboardVariant === undefined
+						? {}
+						: { TUI_GRID_STORYBOARD_VARIANT: target.storyboardVariant }),
 					...(target.componentBinary === undefined
 						? {}
 						: {
