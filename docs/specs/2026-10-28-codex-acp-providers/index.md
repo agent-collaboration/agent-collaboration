@@ -8,7 +8,7 @@ Human entry: [Design documents](index.html).
 | What must happen? | [Specification](specification.md) | [Specification](specification.html) |
 | How do components and provider traits fit? | [Program Design](program-design.md) | [Program Design](program-design.html) |
 | How will each outcome be proved? | [Verification Design](verification-design.md) | [Verification Design](verification-design.html) |
-| What changes, in what order, with which proof gates? | [Implementation Plan](plans/2026-10-28-di-tui-implementation.md) | [Implementation Plan](implementation-plan.html) |
+| What changes, in what order, with which proof gates? | [Current delivery plan](../../../tmp/plan-workflows/2026-10-30-app-server-acp-shared-verifier.md) | [Implementation Plan](implementation-plan.html) |
 
 ## Through-line: skills
 
@@ -34,6 +34,6 @@ Human entry: [Design documents](index.html).
 ## Reading path: implement the design
 
 1. [Crates and injection](program-design.md#crates-and-injection)
-2. [Canonical plan](plans/2026-10-28-di-tui-implementation.md#canonical-planning-result)
-3. [Slices and gates](plans/2026-10-28-di-tui-implementation.md#order-and-integration-gates)
-4. [Obligation-to-proof map](plans/2026-10-28-di-tui-implementation.md#obligation-to-proof-map)
+2. [Canonical plan](../../../tmp/plan-workflows/2026-10-30-app-server-acp-shared-verifier.md#canonical-planning-result)
+3. [Slices and gates](../../../tmp/plan-workflows/2026-10-30-app-server-acp-shared-verifier.md#order-and-integration-gates)
+4. [Obligation-to-proof map](../../../tmp/plan-workflows/2026-10-30-app-server-acp-shared-verifier.md#obligation-to-proof-map)

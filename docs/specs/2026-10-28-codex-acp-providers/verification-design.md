@@ -14,10 +14,16 @@ The package currently supports **Quota and Sessions**. `capture-run.ts` exposes 
 | `driver-lifecycle.ts`, `public-lifecycle.ts` | Exact driver discovery, bounded launch/settlement, cooperative owned cleanup | Launch unchanged Codex through its real `--remote` session entry; no production replacement/config writes |
 | `cua-readback.ts`, `original-artifacts.ts` | Same-child/PTY identity and original capture/readback checks | Actual Codex keyboard scenarios and checkpoints, preserving original PTY/captures and matching native requests |
 | `scene-contracts.ts`, `capture-selection.ts` | Explicit scenes and accepted input/selection | Bounded Codex ACP scenario and checkpoint oracle; no generic second capture framework |
-| Existing native support in `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/` | Native capture/PTY ownership and fixed child adapter | Installed Codex launch/input target at this existing adapter boundary; TypeScript creates no second PTY or terminal emulator |
+| Shared `TerminalDriver` in `crates/codex-router-quota-reset-test-harness/tests/quota_reset_pty_test/terminal_interaction_test.rs` | Existing Rust PTY owner; shared backend supplies streaming reads, explicit-environment launch, keys, resize and exact-child cleanup | Keep Codex journeys in this harness crate and use its shared TS wterm bridge; no second PTY/renderer or generic support crate |
 | `verification/observations/acp-metadata-observation.ts` | Public target/session/native API/history readback | Supporting skill/command effect observation correlated with that same TUI child/session; it remains an observer, not the TUI driver |
 
 The extension is **needed**, not an existing option claimed to work. Actual keyboard selection, submitted native input, original artifacts and provider result must refer to the same declared child/session. Receipts alone establish neither visible UI nor a provider effect. Keep existing Quota/Sessions scenarios and rejection tests intact.
+
+### Shared capture backend
+
+Use the TS/Rust backend shared with the TUI component work: Rust TerminalDriver owns the unchanged installed Codex child; its output feeds the TS `@wterm/core`/`@wterm/ghostty` cell grid. Mechanical checkpoints assert on that grid. Original PNGs come from `@wterm/dom` rendering the **same exact PTY bytes**, bound to source/build/viewport/checkpoint and unchanged child identity. A picture reconstructed from cell data is diagnostic only. Qualify the shared engine on known colour/wide-glyph/query/resize fixtures before relying on it. Answer terminal queries from the emulator state; retain keyboard mode, raw offsets and checkpoint order.
+
+The common backend has one owner in the TUI workstream. Its pushed implementation and qualification are dependencies, **not code or proof claimed to exist on this branch**. Codex adds a guarded launch/scenario, grid predicates and same-session supporting observer. Preserve normal Codex home/trust/config, declared program/args/environment, session/endpoint/socket/cwd, original artifacts and owned cleanup. Real J1/J2/J3 wait for this shared driver and the candidate; no controlled stand-in closes them. Do not add VHS, ttyd, xterm.js, Swift or shell proof machinery, and do not duplicate the backend to avoid that dependency.
 
 ## What you will see
 
@@ -39,7 +45,7 @@ Drive live/reopened chat, interrupt and approval controls for both providers. Re
 
 ### U5 — Constructor DI supplies the right implementation
 
-Run the real consumer with differing implementations of the same ProviderBehavior trait and observe different literal classified/prepared results. Inspect constructor propagation, dependencies and shipped asset. Force qualified and unqualified Claude launch preparation; verify the exact resulting executable/arguments, preserved environment and immutable constructor input, plus source error and unsupported compact for the unqualified case. **Unverified until implementation:** both session-admission paths, session-state isolation and final normal-build graph.
+Run the real consumer with differing implementations of the same ProviderBehavior trait and observe different literal classified/prepared results. Native codec tests reject foreign endpoint/session or mismatched name/path before typed selection; actor tests revalidate invocation against its current addressed view after queue wait. Inspect constructor propagation, dependencies and shipped asset. Force qualified and unqualified Claude launch preparation; verify the exact resulting executable/arguments, preserved environment and immutable constructor input, plus source error and unsupported compact for the unqualified case. **Unverified until implementation:** both session-admission paths, session-state isolation and final normal-build graph.
 
 ## Target and lasting journeys
 
@@ -65,7 +71,7 @@ Take expected values from C1–C3/native schemas or checked producer fixtures, n
 
 | Wrong behavior | Valuable regression / independent oracle |
 | --- | --- |
-| Picker and submitted identity differ | Actual TUI selection and native request match the fixture's identity and provider-owned effect. Screenshot presence alone cannot pass. |
+| Picker and submitted identity differ | Actual TUI selection and native request match the fixture's identity and provider-owned effect. Native decoder rejects foreign endpoint/session and conflicting name/path; the existing target survives command/FIFO/admission. Domain/adapters carry invocation identity without a native path. Screenshot presence alone cannot pass. |
 | Wrong behavior injected | Actual consumer receives two scripted trait implementations with different literal outputs; assert emitted value/wire content, not only a constructor or method call count. |
 | Claude wrapper is never launched or qualification is ignored | Preparation tests qualify the checked official-bin/pnpm-shim fixture and reject custom/mismatched targets. Inspect actual rewritten launch/import identity; real original-launch integration yields source error, zero skill/compact prompts and working ordinary chat. J1 separately requires qualified real Claude success. |
 | Cursor command looks like a skill | Literal producer rows retain distinct terminal command/skill indicators. Cover mimicking titles, exact nested IDs, duplicate/unknown/uninvocable rows and valid rows alongside errors. |
