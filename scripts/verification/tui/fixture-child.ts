@@ -35,6 +35,11 @@ import { dirname, isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+	SESSIONS_RECEIPT_DIRECTORY,
+	sessionsReceiptEnvironment,
+} from './sessions-receipt-directory.ts';
+
 export const COMPONENT_TEST =
 	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 
@@ -238,7 +243,10 @@ function publicSessionsLaunch(configuration: FixtureCommand, binary: string): Ch
 }
 
 /** The exact child argv, environment and working directory for one surface. */
-export function childLaunchConfiguration(configuration: FixtureCommand): ChildLaunch {
+export function childLaunchConfiguration(
+	configuration: FixtureCommand,
+	launchEnvironment: NodeJS.ProcessEnv = {},
+): ChildLaunch {
 	const surfaceResult = capturedTuiSurfaceSchema.safeParse(requiredText(configuration, 'surface'));
 	if (!surfaceResult.success) {
 		throw new FixtureLaunchRejected('unknown captured TUI surface');
@@ -293,6 +301,13 @@ export function childLaunchConfiguration(configuration: FixtureCommand): ChildLa
 				cwd: undefined,
 			};
 		case 'sessions':
+			Object.assign(
+				environment,
+				sessionsReceiptEnvironment(
+					launchEnvironment[SESSIONS_RECEIPT_DIRECTORY],
+					requiredText(configuration, 'output'),
+				),
+			);
 			return {
 				executable: binary,
 				arguments: [
@@ -427,7 +442,7 @@ async function main(): Promise<number> {
 	const configuration = readFixtureCommand(
 		fixtureCommandPath(process.argv.slice(2), process.env['QUOTA_STORYBOARD_FIXTURE_COMMAND']),
 	);
-	const launch = childLaunchConfiguration(configuration);
+	const launch = childLaunchConfiguration(configuration, process.env);
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));

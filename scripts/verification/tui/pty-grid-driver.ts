@@ -8,6 +8,10 @@ import type { GhosttyCore } from '@wterm/ghostty';
 
 import type { TerminalInputModes } from './ghostty-input-encoding.ts';
 import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
+import {
+	SESSIONS_RECEIPT_DIRECTORY,
+	sessionsReceiptEnvironment,
+} from './sessions-receipt-directory.ts';
 import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts';
 import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 
@@ -31,6 +35,7 @@ export interface PtyGridTarget {
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
+	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly storyboardVariant?: 'wide-glyph-left-border';
 }
@@ -49,6 +54,16 @@ export class PtyGridDriver {
 	private constructor(target: PtyGridTarget, core: GhosttyCore) {
 		this.target = target;
 		this.core = core;
+		if (
+			target.sessionsReceiptDirectory !== undefined &&
+			!['sessions', 'sessions-filters'].includes(target.surface)
+		) {
+			throw new Error('sessions receipt directory requires a sessions fixture surface');
+		}
+		const receiptEnvironment = sessionsReceiptEnvironment(
+			target.sessionsReceiptDirectory,
+			target.evidence,
+		);
 		this.child = spawn(
 			target.driver,
 			[
@@ -64,6 +79,8 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
+					[SESSIONS_RECEIPT_DIRECTORY]: undefined,
+					...receiptEnvironment,
 					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
 					TUI_GRID_SURFACE: target.surface,
 					TUI_GRID_KEYS: target.keys,
