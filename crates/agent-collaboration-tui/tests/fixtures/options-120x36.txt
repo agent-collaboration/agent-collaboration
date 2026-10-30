@@ -1,0 +1,24 @@
+╭───────────────────────────────────────────────────────────────────────────────╮
+│                                                                               │
+│ Options · Resets 東京                                             [alpha-tag] │
+│                                                                               │
+│ Resets  Credits                                                             █ │
+│ Live eligibility                                                            █ │
+│ RESET_ROW_0                                                                 █ │
+│ RESET_ROW_1                                                                 █ │
+│ RESET_ROW_2                                                                 █ │
+│ RESET_ROW_3                                                                 █ │
+│ RESET_ROW_4                                                                 │ │
+│ RESET_ROW_5                                                                 │ │
+│ RESET_ROW_6                                                                 │ │
+│ RESET_ROW_7                                                                 │ │
+│ RESET_ROW_8                                                                 │ │
+│ RESET_ROW_9                                                                 │ │
+│ RESET_ROW_10                                                                │ │
+│ RESET_ROW_11                                                                │ │
+│ RESET_ROW_12                                                                │ │
+│ RESET_ROW_13                                                                │ │
+│                                                                               │
+│  Close Esc    Remove Fwd Del                                                  │
+│                                                                               │
+╰───────────────────────────────────────────────────────────────────────────────╯

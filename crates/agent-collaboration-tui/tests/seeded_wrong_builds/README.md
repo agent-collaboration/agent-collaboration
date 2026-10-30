@@ -103,6 +103,9 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `list-typeahead-moves-focus.patch` | Editing through a list moves focus to the field. |
 | `list-typeahead-drops-text.patch` | Typeahead consumes text or paste without editing the shared state. |
 | `list-typeahead-reserves-escape.patch` | Cancel receives Esc before a nonempty shared filter can clear. |
+| `pinned-context-truncated-with-room.patch` | Context is truncated beside the title even though its own row fits with three body rows. |
+| `pinned-context-body-minimum-two.patch` | A second pinned row steals the third body row. |
+| `pinned-context-clips-own-child.patch` | A separate context row clips the caller's multirow child layout. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

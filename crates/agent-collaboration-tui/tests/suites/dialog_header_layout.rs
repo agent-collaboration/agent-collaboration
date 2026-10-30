@@ -156,7 +156,7 @@ mod tests {
         element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(stack.snapshot().top_id(),Vec::new())]))) {OverlayHost})
     }
     #[tokio::test]
-    async fn six_details_grids_keep_header_on_one_row_body_fact_and_all_actions() {
+    async fn six_details_grids_keep_pinned_context_body_fact_and_all_actions() {
         for (width, height) in [
             (48u16, 12u16),
             (120, 36),
@@ -174,6 +174,13 @@ mod tests {
                 let scenario = async {
                     driver.initial(&mut frames).await;
                     let dialog = driver.frames.last().unwrap().round_frame_text();
+                    if width == 48 && height == 12 {
+                        assert_eq!(
+                            dialog,
+                            include_str!("../fixtures/details-48x12.txt").trim_end(),
+                            "48x12 is unchanged"
+                        );
+                    }
                     if width == 120 {
                         assert_eq!(
                             dialog,
@@ -194,10 +201,34 @@ mod tests {
                         .iter()
                         .position(|row| row.contains("Session ID:"))
                         .unwrap();
-                    assert!(
-                        first <= header + 2,
-                        "header is one row plus at most the pinned gap\n{dialog}"
-                    );
+                    if width <= 48 && height > 12 {
+                        assert!(
+                            rows[header + 1].contains("Feature"),
+                            "context moves under title when three body rows fit\n{dialog}"
+                        );
+                        let identity = rows[header + 1..first]
+                            .join("")
+                            .chars()
+                            .filter(|character| !character.is_whitespace() && *character != '│')
+                            .collect::<String>();
+                        assert!(
+                            identity.contains("Featuredesignsession·thread-a"),
+                            "full child identity remains visible\n{dialog}"
+                        );
+                        assert!(
+                            dialog.contains("HISTORY_ROW_0") && dialog.contains("HISTORY_ROW_1"),
+                            "at least three body rows remain\n{dialog}"
+                        );
+                        assert!(
+                            first >= header + 3 && first <= header + 4,
+                            "one title row, child layout and pinned gap\n{dialog}"
+                        );
+                    } else {
+                        assert!(
+                            first <= header + 2,
+                            "compact or fitting header plus at most pinned gap\n{dialog}"
+                        );
+                    }
                     if width == 120 {
                         assert!(
                             rows[header].contains("Feature design session · thread-a")
@@ -209,12 +240,12 @@ mod tests {
                             !dialog.contains("Help F1"),
                             "Help hint yields before context\n{dialog}"
                         );
-                        if width < 76 {
+                        if width < 76 && height <= 12 {
                             assert!(
                                 rows[header].contains('…'),
                                 "clipped context has an ellipsis\n{dialog}"
                             );
-                        } else {
+                        } else if width >= 76 {
                             assert!(
                                 rows[header].contains("Feature design session · thread-a"),
                                 "context wins before Help hint\n{dialog}"

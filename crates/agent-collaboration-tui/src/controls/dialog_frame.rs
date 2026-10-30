@@ -80,6 +80,7 @@ pub fn DialogFrame<'a>(
     let height = hooks.use_state(|| 0u16);
     hooks.use_hook(|| FrameMeasure(height)).0 = height;
     let footer_height = hooks.use_state(|| 0u16);
+    let header_height = hooks.use_state(|| 1u16);
     let frame_height = if content_height {
         Size::Auto
     } else {
@@ -114,7 +115,8 @@ pub fn DialogFrame<'a>(
     }
     let has_actions = !actions.is_empty() || !action_hints.is_empty();
     let border_style = props.border_style.unwrap_or(BorderStyle::Round);
-    let header_chrome = 1 + u16::from(border_style != BorderStyle::None) * 2;
+    let border_rows = u16::from(border_style != BorderStyle::None) * 2;
+    let header_chrome = header_height.get().saturating_add(border_rows);
     // Content padding follows the current body, never the previous Help frame.
     let content_extent = props
         .scroll
@@ -138,10 +140,21 @@ pub fn DialogFrame<'a>(
                 + if has_actions { footer_height.get() } else { 0 },
         );
     let context_gap = u16::from(has_context && body_budget > 1);
+    let available_rows = sizing
+        .map_or(u16::MAX, |sizing| sizing.max_height)
+        .saturating_sub(
+            border_rows
+                + padding.saturating_mul(2)
+                + if has_actions { footer_height.get() } else { 0 }
+                + context_gap,
+        );
+    let width_hint = sizing
+        .map_or(0, |sizing| sizing.max_width)
+        .saturating_sub(border_rows + padding.saturating_mul(2));
     element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
         border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
         View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
-            DialogHeader(title:props.title.clone(),theme,context:identity,help)
+            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,available_rows)
             ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
         }
         #(has_actions.then(||element!(MeasuredFooter(height:footer_height,children:actions,hints:action_hints))))

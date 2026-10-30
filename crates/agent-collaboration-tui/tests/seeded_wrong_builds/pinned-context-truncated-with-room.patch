@@ -1,0 +1,11 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
+@@ -126,6 +126,3 @@ pub(super) fn DialogHeader<'a>(
+     let fits_inline = identity_rows <= 1 && needed <= usize::from(available_width);
+-    let separate = has_context
+-        && !fits_inline
+-        && identity_width <= available_width
+-        && props.available_rows >= identity_rows.saturating_add(1 + MINIMUM_BODY_ROWS);
++    let separate = false;
+     let show_help = help.is_some()
