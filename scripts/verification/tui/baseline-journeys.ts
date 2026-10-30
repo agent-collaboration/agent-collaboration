@@ -38,7 +38,7 @@ interface BaselineResult {
 }
 function keyBytes(
 	protocol: KeyProtocol,
-	key: 'escape' | 'help' | 'new' | 'details' | 'tab' | 'down',
+	key: 'escape' | 'help' | 'new' | 'details' | 'tab' | 'down' | 'end',
 ): Buffer {
 	const legacy = {
 		escape: '\x1b',
@@ -47,6 +47,7 @@ function keyBytes(
 		details: '\x1bOS',
 		tab: '\t',
 		down: '\x1b[B',
+		end: '\x1b[F',
 	};
 	const kitty = {
 		escape: '\x1b[27u',
@@ -55,6 +56,7 @@ function keyBytes(
 		details: '\x1b[1;1S',
 		tab: '\x1b[9u',
 		down: '\x1b[1;1B',
+		end: '\x1b[1;1F',
 	};
 	return Buffer.from((protocol === 'legacy' ? legacy : kitty)[key]);
 }
@@ -105,6 +107,34 @@ export async function withTerminal<TResult>(options: {
 		await driver.waitForGrid('main', (grid) =>
 			hasText(grid, options.surface === 'quota' ? 'Quota status' : 'Codex Alpha'),
 		);
+		if (options.plan.pickerOnly && options.surface === 'sessions-filters') {
+			// The component fixture's first draw measures ScrollList; draw 2 paints
+			// those measurements. Bind to received completed frames, even if both
+			// arrived in one PTY chunk. Never ask for an arbitrary *next* frame.
+			await driver.waitForGrid(
+				'main after initial measurement',
+				(grid) => hasText(grid, 'Codex Alpha'),
+				1,
+			);
+			const serializedFrames = driver.bytes().toString('latin1').split('\x1b[?2026l').length - 1;
+			if (serializedFrames !== driver.frameGeneration())
+				throw new Error('received frame ordinal differs from terminal parser generation');
+			writeFileSync(
+				join(directory, 'entry-frame-binding.json'),
+				JSON.stringify(
+					{
+						kind: 'post-measurement-entry',
+						minimumCompletedFrame: 2,
+						receivedCompletedFrame: serializedFrames,
+						sourceHead: options.plan.productSourceHead,
+						product: options.plan.product,
+						driver: options.plan.driver,
+					},
+					null,
+					2,
+				),
+			);
+		}
 		saveCheckpoint(driver, directory, 'main');
 		return await options.observe(driver, directory);
 	} finally {
@@ -316,7 +346,7 @@ async function observeQuotaRhythm(plan: BaselinePlan, keys: KeyProtocol): Promis
 		},
 	});
 }
-async function observeIsolation(
+export async function observeIsolation(
 	plan: BaselinePlan,
 	keys: KeyProtocol,
 	surface: 'sessions-filters' | 'quota',
@@ -384,7 +414,7 @@ async function observeIsolation(
 					throw new Error('shared Help lacks its Sessions context');
 				if (!hasText(driver.grid(), 'never quit')) {
 					const beforeScroll = driver.frameGeneration();
-					await driver.send(Buffer.concat(Array.from({ length: 8 }, () => keyBytes(keys, 'down'))));
+					await driver.send(keyBytes(keys, 'end'));
 					await driver.waitForGrid(
 						'Esc legend visible',
 						(grid) => hasText(grid, 'never quit'),
