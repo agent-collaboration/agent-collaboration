@@ -275,7 +275,8 @@ The paired Verifier independently runs the S2–S4 layer-A suite at the declared
   - the four 2026-10-23 groups and layout kept;
   - a consumer `clippy.toml`;
   - **"Log in again"** (U16/R17, owner 2026-10-30) in Account details and the ≡ menu: a quota terminal outcome carrying the account's label and provider; `codex-router-cli` runs `codex-router account login --provider <p> --label <l>` after teardown, then restarts quota on the same account; plain message on failure, no retry;
-  - Account details **Actions ▾** menu (R17): Log in again, Options…, Weekly floor…, Disable/Enable, Copy account ID, Remove account… (disabled accounts only, confirmed); the primary button follows the account's state.
+  - Account details **Actions ▾** menu (R17): Log in again, Options…, Weekly floor…, Disable/Enable, Copy account ID, Remove account… (disabled accounts only, confirmed); the primary button follows the account's state;
+  - **Refresh** (U17/R18, owner 2026-10-30) in the quota ≡ menu and on R: an injected `QuotaRefresher` (CLI adapter over `refresh_quota_with_dependencies`), "Refreshing…" while it runs, one at a time, reload under the existing lock.
 - **Writes:** `crates/codex-router-quota-tui/src/*` (renamed `agent-router-quota-tui`), plus the quota run loop in `codex-router-cli`.
 - **Earns:**
   - U4 · R4, quota part: `quota_account_options_test.rs:161-208` kept and passing. Committing ignores Ctrl+C; other phases keep `ExitPrecommit`.
@@ -363,6 +364,7 @@ parallel S6 || S7       (advisory; separate worktree lanes on the one PR branch,
 | U14 · R15 | S7 (A, parameterised), S9 (D) | crate nextest; gallery |
 | U15 · R5 | S6, S7, S8 (E) | workspace clippy plus three negative controls |
 | 10-17 baseline · R16 | S9 (B, F) | existing journeys re-run; public-entry journeys |
+| U17 · R18 | S7 (A), S9 (B) | quota refresh component tests with a stand-in refresher; "Quota refresh" journey |
 | U16 · R17 | S7, S9 (B, C) | quota "Log in again" journey with a recording login stand-in; owner's real re-login |
 
 Every slice also runs the package gates for what it touched: fmt, `cargo clippy --workspace --all-targets -- -D warnings`, file-size, the module-cycle ratchet and `cargo deny check`. The full workspace nextest runs once, at S8's head before S9, on Sunclaw. Per the owner's rule, any declared red must come from a full package run at that head.
