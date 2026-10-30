@@ -43,6 +43,12 @@ test('wrapped field heights and status words keep physical origins and exact gap
 							[35, 7],
 						],
 					},
+					{
+						surface: 'overlay:1',
+						target: 'dialog-scroll',
+						kind: 'scrollArea',
+						cells: Array.from({ length: 13 }, (_value, row): [number, number] => [29, row + 3]),
+					},
 				],
 			},
 		} satisfies Pick<ShowcaseState, 'hitMap' | 'surface'>;
@@ -51,6 +57,11 @@ test('wrapped field heights and status words keep physical origins and exact gap
 		const good = terminalTheme.palette[2];
 		if (good === undefined) throw new Error('green status palette absent');
 		expect(coloredSurfaceWord(state, grid, good, 29)).toBe('Available');
+		core.writeString('\x1b[13;30H\x1b[32mx\x1b[0m');
+		expect(coloredSurfaceWord(state, snapshotGrid(core), good, 29)).not.toContain('Available');
+		core.writeString('\x1b[11;30H    ');
+		expect(() => inspectSectionGeometry(state, snapshotGrid(core))).toThrow('Available word');
+		core.writeString('\x1b[11;30H\x1b[32mAvai\x1b[13;30He\x1b[0m');
 		const shifted = {
 			...state,
 			hitMap: {
@@ -71,8 +82,8 @@ test('wrapped field heights and status words keep physical origins and exact gap
 		expect(() => inspectSectionGeometry(shifted, grid)).toThrow('value origin');
 		const missing = { ...state, hitMap: { ...state.hitMap, targets: [] } };
 		expect(() => inspectSectionGeometry(missing, grid)).toThrow('exposes no field');
-		core.writeString('\x1b[10;3H             \x1b[9;3HTinted status');
-		expect(() => inspectSectionGeometry(state, snapshotGrid(core))).toThrow();
+		core.writeString('\x1b[10;3H             \x1b[9;3HTinted status\x1b[10;30H\x1b[32mA\x1b[0m');
+		expect(() => inspectSectionGeometry(state, snapshotGrid(core))).toThrow('one blank row');
 	} finally {
 		core.dispose();
 	}

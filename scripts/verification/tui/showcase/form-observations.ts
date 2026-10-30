@@ -39,6 +39,17 @@ export function inspectSectionGeometry(state: DrawSurface, grid: TerminalGrid): 
 			'current form viewport cannot expose both section headings for the gap proof',
 		);
 	const availableRow = secondHeading + 1;
+	const body = state.hitMap?.targets.find(
+		(region) =>
+			region.surface === state.surface &&
+			region.kind === 'scrollArea' &&
+			region.target === 'dialog-scroll',
+	);
+	if (
+		body === undefined ||
+		!body.cells.some(([column, row]) => column === directory.column && row === availableRow)
+	)
+		throw new PrerequisiteGap('status value row is clipped outside the current form body');
 	const statusOrigin =
 		grid.cells[availableRow]?.findIndex(
 			(cell, column) =>
@@ -47,8 +58,11 @@ export function inspectSectionGeometry(state: DrawSurface, grid: TerminalGrid): 
 				cellText(cell) === 'A' &&
 				cell.fgRgb === terminalTheme.palette[2],
 		) ?? -1;
-	if (statusOrigin < 0)
-		throw new PrerequisiteGap('current form viewport cannot expose the status value origin');
+	requireObservation(
+		statusOrigin >= 0,
+		'declared Available word and status colour exist in the exposed value row',
+		{ availableRow, statusOrigin, directory, bounds },
+	);
 	requireObservation(
 		directory.column === option.column && option.column === statusOrigin,
 		'both sections share the physical value origin including the selector gutter',
@@ -123,8 +137,13 @@ export async function observeFormSections(rig: ShowcaseRig): Promise<void> {
 			);
 			return;
 		}
-		if (remaining === 0 || !(await advanceBody(rig)))
-			throw new PrerequisiteGap('sample form scroll could not expose every status word and colour');
+		if (remaining === 0)
+			throw new PrerequisiteGap('bounded form observation exhausted its scroll budget');
+		requireObservation(
+			await advanceBody(rig),
+			'declared status words remain observable before the actual form scroll ends',
+			{ seen: [...seen] },
+		);
 		await inspect(remaining - 1);
 	};
 	await inspect(128);
@@ -156,10 +175,13 @@ export async function observeTypography(rig: ShowcaseRig): Promise<void> {
 			);
 			return;
 		}
-		if (remaining === 0 || !(await advanceBody(rig)))
-			throw new PrerequisiteGap(
-				'sample body could not expose every declared public typography role',
-			);
+		if (remaining === 0)
+			throw new PrerequisiteGap('bounded typography observation exhausted its scroll budget');
+		requireObservation(
+			await advanceBody(rig),
+			'declared typography words remain observable before the actual body scroll ends',
+			{ seen: [...seen], required },
+		);
 		await inspect(remaining - 1);
 	};
 	await inspect(128);

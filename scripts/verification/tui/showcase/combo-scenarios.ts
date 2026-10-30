@@ -183,8 +183,11 @@ export async function comboUnavailable(rig: ShowcaseRig): Promise<void> {
 			throw new PrerequisiteGap('bounded option scroll could not expose every reason word');
 		await rig.capture('unavailable-reason-' + remaining);
 		const after = await rig.wheel(childTarget('choice', 'scroll'), 'down', false);
-		if (after.hitMap !== null)
-			throw new PrerequisiteGap('option reached scroll end before every reason word was visible');
+		requireObservation(
+			after.hitMap === null,
+			'every declared reason word is visible before the actual option scroll ends',
+			{ seen: [...seen] },
+		);
 		await rig.settleFrame();
 		await revealReason(remaining - 1);
 	};
