@@ -5,9 +5,9 @@ import { join } from 'node:path';
 
 import { z } from 'zod';
 
-import { encodeJourneyKey } from './capture-run.ts';
 import { cuaReadbackSchema } from './evidence-schema.ts';
 import type { CuaPtyReadback, TerminalViewport } from './evidence-schema.ts';
+import { encodeJourneyKey } from './journey-key.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { PublicSessionsPlan } from './public-sessions.ts';
