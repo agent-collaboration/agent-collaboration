@@ -15,6 +15,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const FIXTURE_SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const SHARED_SESSION: &str = "00000000-0000-4000-8000-000000000011";
 
+pub(super) fn apply_storyboard_variant(
+    mut request: SessionsPickerRequest,
+    variant: Option<&str>,
+) -> std::io::Result<SessionsPickerRequest> {
+    match variant {
+        None => Ok(request),
+        Some("wide-glyph-left-border") => {
+            // The title starts at x=7. Eight ASCII cells put the wide glyph at
+            // x=15, one cell left of the 120x36 dialog's measured left edge.
+            for (record, glyph) in request
+                .records
+                .iter_mut()
+                .zip(["📂", "✉️", "界"].into_iter().cycle())
+            {
+                record.title = format!("12345678{glyph} boundary-row");
+                record.full_title.clone_from(&record.title);
+            }
+            Ok(request)
+        }
+        Some(value) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("unknown storyboard variant: {value}"),
+        )),
+    }
+}
+
 pub(super) fn provider_filter_storyboard_request() -> std::io::Result<SessionsPickerRequest> {
     let mut request = picker_request();
     request.root = SessionsPickerRoot::Any;
@@ -190,13 +216,28 @@ fn provider_endpoint(
 
 #[cfg(test)]
 mod tests {
-    use super::provider_filter_storyboard_request;
+    use super::{apply_storyboard_variant, provider_filter_storyboard_request};
     use crate::session_picker::{
         picker_model::SessionsPickerModel, provider_filter_model::SessionProviderFilter,
     };
     use agent_session_inventory::session_provider_family::SessionProviderFamily;
     use agent_session_inventory::sessions::SessionPickerIdentity;
     use collaboration_client::protocol::ProviderKind;
+
+    #[test]
+    fn default_storyboard_variant_preserves_the_complete_request() {
+        let request = provider_filter_storyboard_request().unwrap();
+        assert_eq!(
+            apply_storyboard_variant(request.clone(), None).unwrap(),
+            request
+        );
+        assert_eq!(
+            apply_storyboard_variant(request, Some("unknown"))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidInput
+        );
+    }
 
     #[test]
     fn storyboard_fixture_keeps_native_and_managed_claude_in_the_same_partition() {

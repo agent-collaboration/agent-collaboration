@@ -2,6 +2,37 @@
 use super::*;
 use crate::session_picker::provider_filter_tests::mixed_request;
 
+#[cfg(feature = "quota-reset-test-harness")]
+#[tokio::test]
+async fn wide_glyph_storyboard_variant_seeds_the_measured_left_border_rows() {
+    use crate::session_picker::provider_filter_storyboard_fixture::{
+        apply_storyboard_variant, provider_filter_storyboard_request,
+    };
+    use unicode_width::UnicodeWidthStr;
+    let request = apply_storyboard_variant(
+        provider_filter_storyboard_request().unwrap(),
+        Some("wide-glyph-left-border"),
+    )
+    .unwrap();
+    let frame = render_picker_capture_at(request, 120, 36, vec![ctrl_key('d')]).await;
+    for glyph in ["📂", "✉️", "界"] {
+        let rows = frame
+            .lines()
+            .enumerate()
+            .filter_map(|(row, line)| {
+                line.split_once(glyph)
+                    .map(|(prefix, _)| (row, UnicodeWidthStr::width(prefix)))
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            rows.iter().any(|(row, column)| *row >= 9 && *column == 15),
+            "{glyph} must start at overlay-left minus one on a covered title row: {rows:?}\n{frame}"
+        );
+    }
+    // Row 8 is a separator. This fixture earns left-border coverage, not a corner claim.
+    assert!(!frame.lines().nth(8).unwrap().contains("boundary-"));
+}
+
 fn compact_request() -> SessionsPickerRequest {
     let mut request = mixed_request();
     // Literal ordering makes the two rows under test the first real records.

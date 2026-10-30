@@ -39,8 +39,16 @@ pub fn run_sessions_picker(
 pub fn run_sessions_picker_test_harness() -> io::Result<()> {
     use std::io::Write;
 
+    use super::super::provider_filter_storyboard_fixture::{
+        apply_storyboard_variant, provider_filter_storyboard_request,
+    };
+    let variant = match std::env::var("CODEX_ROUTER_TUI_STORYBOARD_VARIANT") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => return Err(io::Error::new(io::ErrorKind::InvalidInput, error)),
+    };
     let request =
-        super::super::provider_filter_storyboard_fixture::provider_filter_storyboard_request()?;
+        apply_storyboard_variant(provider_filter_storyboard_request()?, variant.as_deref())?;
 
     let outcome = run_sessions_picker(request, None, None)?;
     let marker = match outcome {
