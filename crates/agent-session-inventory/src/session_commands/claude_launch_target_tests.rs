@@ -394,7 +394,10 @@ async fn unreadable_claude_session_listing_keeps_resume_on_invoking_directory() 
         claude_projects_directory: Some(projects_path),
     };
 
-    let working_directory = launch_target.resume_working_directory(SESSION_ID).await;
+    let working_directory = launch_target
+        .resume_working_directory(SESSION_ID)
+        .await
+        .unwrap();
     let command = launch_target.command(
         Some(SESSION_ID),
         &[],

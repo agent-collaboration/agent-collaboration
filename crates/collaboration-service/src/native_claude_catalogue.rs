@@ -3,9 +3,10 @@ use crate::inventory_failures::ProviderInventoryFailure;
 use claude_code_peer_messaging::{NativeClaudeJobReadError, PeerSessionSummary};
 use collaboration_protocol::{
     ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
-    EndpointRef, NativeClaudeInventoryCoverage, NativeClaudeInventoryPart,
-    NativeClaudePeerObservation, NativeInventoryUnavailableReason, NativeSessionView,
-    ProviderSessionSummary, ProviderWorkingDirectory, SessionId, SessionRef,
+    EndpointRef, NativeClaudeConflictReason, NativeClaudeInventoryCoverage,
+    NativeClaudeInventoryPart, NativeClaudePeerObservation, NativeClaudeSessionConflict,
+    NativeInventoryInvalidReason, NativeInventorySource, NativeInventoryUnavailableReason,
+    NativeSessionView, ProviderSessionSummary, ProviderWorkingDirectory, SessionId, SessionRef,
 };
 use std::collections::BTreeMap;
 
@@ -15,8 +16,14 @@ pub(crate) struct NativeCatalogueRead {
     pub skipped_records: Option<u32>,
 }
 
-fn invalid() -> ProviderInventoryFailure {
-    ProviderInventoryFailure::InvalidRequest("invalid or conflicting native background inventory")
+fn invalid(
+    inventory_source: NativeInventorySource,
+    reason: NativeInventoryInvalidReason,
+) -> ProviderInventoryFailure {
+    ProviderInventoryFailure::InvalidNativeInventory {
+        inventory_source,
+        reason,
+    }
 }
 
 pub(crate) async fn read_native_catalogue(
@@ -54,6 +61,7 @@ pub(crate) async fn read_native_catalogue(
     let (peers, jobs) = tokio::join!(peers, jobs);
     let mut peer_rows =
         BTreeMap::<SessionId, (ProviderWorkingDirectory, PeerSessionSummary)>::new();
+    let mut conflicts = Vec::new();
     let (peer_coverage, mut skipped_records) = match peers {
         None => (NativeClaudeInventoryPart::NotRequested, None),
         Some(Err(())) => (
@@ -63,7 +71,18 @@ pub(crate) async fn read_native_catalogue(
             None,
         ),
         Some(Ok(peers)) => {
-            let mut skipped = peers.skipped_records;
+            conflicts = peers
+                .conflicting_session_claims()
+                .into_iter()
+                .map(|(session_id, claims)| NativeClaudeSessionConflict {
+                    target: SessionRef {
+                        endpoint: endpoint.clone(),
+                        session_id,
+                    },
+                    reason: NativeClaudeConflictReason::DuplicateLiveClaims { claims },
+                })
+                .collect();
+            let mut skipped = peers.unexplained_skipped_records();
             for peer in peers.sessions {
                 let directory = match ProviderWorkingDirectory::try_from(
                     peer.cwd.to_string_lossy().into_owned(),
@@ -78,37 +97,46 @@ pub(crate) async fn read_native_catalogue(
                     .insert(peer.session_id.clone(), (directory, peer))
                     .is_some()
                 {
-                    return Err(invalid());
+                    return Err(invalid(
+                        NativeInventorySource::PeerRegistry,
+                        NativeInventoryInvalidReason::DuplicateSessionIdentity,
+                    ));
                 }
+            }
+            if skipped > 0 {
+                return Err(invalid(
+                    NativeInventorySource::PeerRegistry,
+                    NativeInventoryInvalidReason::UnexplainedSkippedRecords,
+                ));
             }
             (NativeClaudeInventoryPart::Complete, Some(skipped))
         }
     };
     let mut sessions = Vec::new();
     let background_coverage = match jobs {
-        Err(NativeClaudeJobReadError::InvalidOutput) => return Err(invalid()),
+        Err(NativeClaudeJobReadError::InvalidOutput) => {
+            return Err(invalid(
+                NativeInventorySource::BackgroundJobs,
+                NativeInventoryInvalidReason::InvalidOutput,
+            ));
+        }
         Err(NativeClaudeJobReadError::Unavailable(reason)) => {
             NativeClaudeInventoryPart::Unavailable { reason }
         }
         Ok(inventory) => {
             for job in inventory.jobs {
-                let peer = peer_rows
-                    .remove(&job.session_id)
-                    .map(|(directory, peer)| {
-                        if directory != job.working_directory {
-                            return Err(invalid());
-                        }
-                        Ok(NativeClaudePeerObservation {
-                            name: peer.name,
-                            status: peer_status(&peer.status),
-                            started_at: peer.started_at,
-                            updated_at: peer.updated_at,
-                            status_updated_at: peer.status_updated_at,
-                            kind: peer.kind,
-                            entrypoint: peer.entrypoint,
-                        })
-                    })
-                    .transpose()?;
+                let peer = peer_rows.remove(&job.session_id).map(|(directory, peer)| {
+                    NativeClaudePeerObservation {
+                        working_directory: directory,
+                        name: peer.name,
+                        status: peer_status(&peer.status),
+                        started_at: peer.started_at,
+                        updated_at: peer.updated_at,
+                        status_updated_at: peer.status_updated_at,
+                        kind: peer.kind,
+                        entrypoint: peer.entrypoint,
+                    }
+                });
                 let visible = match view {
                     NativeSessionView::Stored => true,
                     NativeSessionView::Loaded => peer.is_some() || job.state.is_loaded(),
@@ -167,7 +195,7 @@ pub(crate) async fn read_native_catalogue(
             entrypoint: peer.entrypoint,
         });
     }
-    // Preserve the registry's existing independently published skipped count.
+    // Stored does not inspect peers; attributed conflict omissions live in coverage.
     if matches!(view, NativeSessionView::Stored) {
         skipped_records = None;
     }
@@ -176,6 +204,7 @@ pub(crate) async fn read_native_catalogue(
         coverage: NativeClaudeInventoryCoverage {
             peer: peer_coverage,
             background: background_coverage,
+            conflicts,
         },
         skipped_records,
     })

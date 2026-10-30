@@ -48,6 +48,7 @@ pub struct RoutedClaudeEnvironment {
 struct ActiveClaudeInventory {
     records: Vec<serde_json::Value>,
     notice: Option<String>,
+    conflicts: Vec<collaboration_client::protocol::NativeClaudeSessionConflict>,
 }
 
 impl ClaudeLaunchTarget {
@@ -160,11 +161,26 @@ impl ClaudeLaunchTarget {
         Ok((records, active_error))
     }
 
-    pub async fn resume_working_directory(&self, session_id: &str) -> Option<PathBuf> {
-        let Ok((records, _active_error)) = self.session_records(usize::MAX).await else {
-            return None;
+    pub async fn resume_working_directory(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<PathBuf>, SessionsCommandError> {
+        let Ok(inventory) = self.active_session_records(usize::MAX).await else {
+            return Ok(None);
         };
-        recorded_working_directory(&records, session_id)
+        if let Some(conflict) = inventory
+            .conflicts
+            .iter()
+            .find(|conflict| String::from(conflict.target.session_id.clone()) == session_id)
+        {
+            return Err(SessionsCommandError::ClaudeLaunch(format!(
+                "Native Claude {} / {}, session {session_id}: {}",
+                String::from(conflict.target.endpoint.service_id.clone()),
+                String::from(conflict.target.endpoint.endpoint_id.clone()),
+                conflict.reason.description()
+            )));
+        }
+        Ok(recorded_working_directory(&inventory.records, session_id))
     }
 
     pub fn command(
@@ -268,6 +284,7 @@ impl ClaudeLaunchTarget {
         let mut notice = None;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
+        let mut conflicts = Vec::new();
         while records.len() < limit {
             let page = client
                 .list_provider_sessions(ProviderSessionListParams {
@@ -280,14 +297,39 @@ impl ClaudeLaunchTarget {
                     cursor: cursor.clone(),
                 })
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| {
+                    super::source_inventory_failure::InventoryReadFailure::from_client(&error)
+                        .into_rejection()
+                        .to_string()
+                })?;
+            if page.native_coverage.as_ref().is_some_and(|coverage| {
+                coverage
+                    .conflicts
+                    .iter()
+                    .any(|conflict| conflict.target.endpoint != endpoint)
+            }) {
+                return Err("invalid native conflict endpoint".to_owned());
+            }
             let coverage = crate::picker_runtime_status::NativeLiveReadState::from_observation(
                 crate::picker_runtime_status::NativeCatalogueView::Loaded,
                 page.native_coverage,
             )
             .map_err(str::to_owned)?;
             if coverage.is_incomplete() {
-                notice = Some("Native Claude inventory incomplete".to_owned());
+                let mut warnings = coverage.read_warning_lines();
+                warnings.extend(coverage.conflicts().iter().map(|conflict| {
+                    format!(
+                        "Session {}: {}",
+                        String::from(conflict.target.session_id.clone()),
+                        conflict.reason.description()
+                    )
+                }));
+                notice = Some(format!(
+                    "{} / {}: {}",
+                    String::from(endpoint.service_id.clone()),
+                    String::from(endpoint.endpoint_id.clone()),
+                    warnings.join("; ")
+                ));
             }
             if page.endpoint != endpoint
                 || page.sessions.iter().any(|summary| {
@@ -297,11 +339,30 @@ impl ClaudeLaunchTarget {
                 return Err("invalid native Claude inventory".to_owned());
             }
             for session in page.sessions {
-                if let Some(record) = active_claude_session_record(session) {
+                let conflict = coverage
+                    .conflicts()
+                    .iter()
+                    .find(|conflict| &conflict.target == session.target());
+                if let Some(mut record) = active_claude_session_record(session) {
+                    if let Some(conflict) = conflict {
+                        record
+                            .as_object_mut()
+                            .ok_or_else(|| "invalid active Claude record".to_owned())?
+                            .insert(
+                                "nativeConflict".to_owned(),
+                                serde_json::to_value(&conflict.reason)
+                                    .map_err(|_| "invalid native conflict".to_owned())?,
+                            );
+                    }
                     records.push(record);
                     if records.len() >= limit {
                         break;
                     }
+                }
+            }
+            for conflict in coverage.conflicts() {
+                if !conflicts.contains(conflict) {
+                    conflicts.push(conflict.clone());
                 }
             }
             let Some(next_cursor) = page.next_cursor else {
@@ -312,7 +373,11 @@ impl ClaudeLaunchTarget {
             }
             cursor = Some(next_cursor);
         }
-        Ok(ActiveClaudeInventory { records, notice })
+        Ok(ActiveClaudeInventory {
+            records,
+            notice,
+            conflicts,
+        })
     }
 }
 
@@ -357,6 +422,7 @@ fn active_claude_session_record(session: ProviderSessionSummary) -> Option<serde
                 "source":"active","sessionId":String::from(target.session_id),
                 "jobHandle":String::from(job_handle),"backgroundState":state,
                 "name":peer_name.or(name),"workingDirectory":String::from(working_directory),
+                "liveWorkingDirectory":peer.as_ref().map(|peer|String::from(peer.working_directory.clone())),
                 "status":peer.as_ref().map(|peer|peer.status).or(status),
                 "startedAtUnixSeconds":peer.as_ref().map_or(started_at,|peer|peer.started_at),
                 "updatedAtUnixSeconds":peer.as_ref().map(|peer|peer.updated_at),
@@ -517,10 +583,15 @@ fn recorded_working_directory(records: &[serde_json::Value], session_id: &str) -
         .iter()
         .filter(|record| {
             record.get("sessionId").and_then(serde_json::Value::as_str) == Some(session_id)
+                && record
+                    .get("nativeConflict")
+                    .is_none_or(serde_json::Value::is_null)
         })
         .find_map(|record| {
             record
-                .get("workingDirectory")
+                .get("liveWorkingDirectory")
+                .filter(|value| !value.is_null())
+                .or_else(|| record.get("workingDirectory"))
                 .and_then(serde_json::Value::as_str)
                 .map(PathBuf::from)
                 .filter(|working_directory| working_directory.is_absolute())

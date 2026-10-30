@@ -97,6 +97,30 @@ pub(super) fn render_picker_view(
     if incomplete_native > 0 {
         filter_controls.push(element!(Text(content:fit_line(&format!("Native Claude inventory incomplete ({incomplete_native} reads)"),content_width),color:codex_router_tui::UiTextRole::Warning.color(),wrap:TextWrap::NoWrap)).into_any());
     }
+    for part in &model.native_live_coverage {
+        let warnings = part.state.read_warning_lines();
+        if warnings.is_empty() && part.state.conflicts().is_empty() {
+            continue;
+        }
+        let source = format!(
+            "Native Claude source: {} / {}",
+            String::from(part.endpoint.service_id.clone()),
+            String::from(part.endpoint.endpoint_id.clone())
+        );
+        for line in std::iter::once(source).chain(warnings) {
+            filter_controls.push(element!(Text(content:fit_line(&line,content_width),color:codex_router_tui::UiTextRole::Warning.color(),wrap:TextWrap::NoWrap)).into_any());
+        }
+        for conflict in part.state.conflicts() {
+            let session = format!(
+                "Session {}",
+                String::from(conflict.target.session_id.clone())
+            );
+            let reason = format!("Conflict: {}", conflict.reason.description());
+            for line in [session, reason] {
+                filter_controls.push(element!(Text(content:fit_line(&line,content_width),color:codex_router_tui::UiTextRole::Warning.color(),wrap:TextWrap::NoWrap)).into_any());
+            }
+        }
+    }
     if let Some(error) = super::super::source_action_view::source_error(model) {
         filter_controls.push(error);
     }

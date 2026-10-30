@@ -15,7 +15,27 @@ async fn configured_http_only_published_discovery_unavailability_is_recoverable(
     wrong_stage["stage"] = json!("response");
     let mut unsupported = adapter.clone();
     unsupported["data"]["kind"] = json!("unsupportedCapability");
+    let invalid_native = json!({"kind":"invalidNativeInventory","stage":"discovery","source":"backgroundJobs","reason":"invalidOutput","message":PRIVATE_SENTINEL});
+    let native_failure = InventoryReadFailure::InvalidNative {
+        inventory_source: collaboration_client::protocol::NativeInventorySource::BackgroundJobs,
+        reason: collaboration_client::protocol::NativeInventoryInvalidReason::InvalidOutput,
+    };
     let cases = [
+        (rpc(1, -32602, invalid_native.clone()), native_failure),
+        (
+            tool(
+                1,
+                json!({"mcpResult":"error","kind":"rejected","serviceKind":"unavailable","stage":"discovery","effect":"none","message":PRIVATE_SENTINEL,"code":-32602,"data":invalid_native}),
+            ),
+            native_failure,
+        ),
+        (
+            tool(
+                1,
+                json!({"mcpResult":"error","kind":"invalidNativeInventory","stage":"discovery","source":"backgroundJobs","reason":"invalidOutput","message":PRIVATE_SENTINEL}),
+            ),
+            native_failure,
+        ),
         (
             tool(1, adapter.clone()),
             InventoryReadFailure::Unavailable(NativeLiveUnavailableReason::ProviderUnavailable),

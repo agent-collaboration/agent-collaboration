@@ -14,7 +14,32 @@ const OPERATION_FAILED: i64 = -32050;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InventoryReadFailure {
     Unavailable(NativeLiveUnavailableReason),
-    Invalid { code: Option<i64> },
+    Invalid {
+        code: Option<i64>,
+    },
+    InvalidNative {
+        inventory_source: collaboration_client::protocol::NativeInventorySource,
+        reason: collaboration_client::protocol::NativeInventoryInvalidReason,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PublishedNativeInvalid {
+    #[serde(rename = "kind")]
+    _kind: PublishedNativeInvalidKind,
+    #[serde(rename = "stage")]
+    _stage: PublishedDiscoveryStage,
+    source: collaboration_client::protocol::NativeInventorySource,
+    reason: collaboration_client::protocol::NativeInventoryInvalidReason,
+    #[serde(rename = "message")]
+    _message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum PublishedNativeInvalidKind {
+    InvalidNativeInventory,
 }
 
 #[derive(Deserialize)]
@@ -83,11 +108,26 @@ impl InventoryReadFailure {
             };
             Self::published(code, failure.data.as_ref())
         } else {
-            Self::published(OPERATION_FAILED, Some(&structured))
+            let code =
+                if fields.get("kind").and_then(Value::as_str) == Some("invalidNativeInventory") {
+                    -32602
+                } else {
+                    OPERATION_FAILED
+                };
+            Self::published(code, Some(&structured))
         }
     }
 
     pub fn published(code: i64, data: Option<&Value>) -> Self {
+        if code == -32602
+            && let Some(data) = data
+            && let Ok(failure) = serde_json::from_value::<PublishedNativeInvalid>(data.clone())
+        {
+            return Self::InvalidNative {
+                inventory_source: failure.source,
+                reason: failure.reason,
+            };
+        }
         if code != OPERATION_FAILED {
             return Self::Invalid { code: Some(code) };
         }
@@ -103,6 +143,15 @@ impl InventoryReadFailure {
 
     pub fn into_client(self) -> ClientError {
         match self {
+            Self::InvalidNative {
+                inventory_source,
+                reason,
+            } => ClientError::Rejected {
+                code: -32602,
+                data: Some(
+                    serde_json::json!({"kind":"invalidNativeInventory","stage":"discovery","source":inventory_source,"reason":reason,"message":"Invalid native Claude inventory"}),
+                ),
+            },
             Self::Invalid { code: Some(code) } => ClientError::Rejected { code, data: None },
             Self::Invalid { code: None } => {
                 ClientError::Protocol("invalid source inventory response")
@@ -120,6 +169,21 @@ impl InventoryReadFailure {
                 std::io::ErrorKind::ConnectionAborted,
                 reason.description(),
             )),
+        }
+    }
+
+    pub fn into_rejection(self) -> crate::source_inventory_request::SourceInventoryRejection {
+        use crate::source_inventory_request::SourceInventoryRejection;
+        match self {
+            Self::InvalidNative {
+                inventory_source,
+                reason,
+            } => SourceInventoryRejection::InvalidNativeInventory {
+                inventory_source,
+                reason,
+            },
+            Self::Invalid { .. } => SourceInventoryRejection::InvalidInventory,
+            Self::Unavailable(_) => SourceInventoryRejection::SourceUnavailable,
         }
     }
 }

@@ -3,7 +3,7 @@ use super::*;
 use crate::sessions::router_connection_registry::RouterConnectionRegistry;
 use crate::source_inventory_request::PickerSourceContext;
 use crate::test_support::source_api_fixture::SourceApiFixture;
-use std::{net::Ipv4Addr, path::Path, sync::Arc};
+use std::{net::Ipv4Addr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 
 #[path = "configured_inventory_failure_tests.rs"]
@@ -131,22 +131,31 @@ async fn https_source_preserves_certificate_verification_and_trusted_api_reads()
             }
         }
     });
-    let empty_roots = tempfile::NamedTempFile::new().unwrap();
-    for (trusted, roots) in [
-        (false, empty_roots.path().to_path_buf()),
-        (true, Path::new(env!("CARGO_MANIFEST_DIR")).join("src/session_commands/test_support/configured_tls_fixture/localhost-certificate.pem")),
-    ] {
-        let output = tokio::time::timeout(Duration::from_secs(5),
+    for trusted in [false, true] {
+        let output = tokio::time::timeout(
+            Duration::from_secs(5),
             tokio::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", CHILD_PROBE, "--ignored", "--nocapture"])
-                .env("SSL_CERT_FILE", roots)
-                .env_remove("SSL_CERT_DIR")
                 .env("ROUTER_TLS_FIXTURE_ADDRESS", &address)
-                .env("ROUTER_TLS_FIXTURE_EXPECT_TRUST", if trusted { "yes" } else { "no" })
-                .kill_on_drop(true).output(),
-        ).await.unwrap().unwrap();
-        assert!(output.status.success(), "isolated HTTPS probe failed: {}", String::from_utf8_lossy(&output.stderr));
-        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"), "exact HTTPS probe must execute");
+                .env(
+                    "ROUTER_TLS_FIXTURE_EXPECT_TRUST",
+                    if trusted { "yes" } else { "no" },
+                )
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(
+            output.status.success(),
+            "isolated HTTPS probe failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+            "exact HTTPS probe must execute"
+        );
     }
     tokio::time::timeout(Duration::from_secs(2), relay)
         .await
@@ -165,10 +174,21 @@ async fn https_source_preserves_certificate_verification_and_trusted_api_reads()
 async fn https_source_probe() {
     let address = std::env::var("ROUTER_TLS_FIXTURE_ADDRESS").unwrap();
     let trusted = std::env::var("ROUTER_TLS_FIXTURE_EXPECT_TRUST").unwrap() == "yes";
-    let result = ConfiguredInventoryClient::new(&profile_for_address(&address))
+    let profile = profile_for_address(&address);
+    let result = if trusted {
+        HttpConfiguredInventoryClient::with_test_root(
+            &profile,
+            reqwest::Certificate::from_der(CERTIFICATE).unwrap(),
+        )
         .unwrap()
         .inventory()
-        .await;
+        .await
+    } else {
+        ConfiguredInventoryClient::new(&profile)
+            .unwrap()
+            .inventory()
+            .await
+    };
     if trusted {
         assert!(result.is_ok(), "verified HTTPS must read the genuine API");
     } else {
@@ -182,6 +202,21 @@ async fn https_source_probe() {
 #[test]
 fn ssh_source_read_failure_preserves_unavailable_and_invalid_categories() {
     use crate::sessions::source_ssh_protocol::{SourceReadError, SourceRejection};
+    let rejection = SourceRejection::InvalidNativeInventory {
+        inventory_source: collaboration_client::protocol::NativeInventorySource::PeerRegistry,
+        reason:
+            collaboration_client::protocol::NativeInventoryInvalidReason::UnexplainedSkippedRecords,
+    };
+    let wire = serde_json::to_value(rejection).unwrap();
+    assert_eq!(wire["invalidNativeInventory"]["source"], "peerRegistry");
+    let decoded = serde_json::from_value(wire).unwrap();
+    let classified = InventoryReadFailure::from_client(&source_read_client_error(
+        SourceReadError::Rejected(decoded),
+    ));
+    assert_eq!(
+        classified.into_rejection().to_string(),
+        "native Claude peer registry inventory: unexplained skipped records"
+    );
 
     // Availability failures must reach the loader as SourceUnavailable, as HTTP does.
     for failure in [

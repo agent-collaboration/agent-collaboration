@@ -257,6 +257,7 @@ pub async fn execute_read(
                             super::source_inventory_failure::InventoryReadFailure::Invalid {
                                 ..
                             } => SourceRejection::InvalidRequest,
+                            super::source_inventory_failure::InventoryReadFailure::InvalidNative { inventory_source, reason } => SourceRejection::InvalidNativeInventory { inventory_source, reason },
                         }
                     })?,
             })

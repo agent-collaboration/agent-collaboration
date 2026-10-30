@@ -70,6 +70,8 @@ pub(super) fn render_details(
                 Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
                 #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job handle: {}",String::from(job.job_handle.clone()))),color:Color::Grey,wrap))))
                 #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job state: {}",native_job_state_label(&job.state))),color:Color::Grey,wrap))))
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job directory: {}",String::from(job.working_directory.clone()))),color:Color::Grey,wrap))))
+                #(record.native_conflict.as_ref().map(|reason|element!(Text(content:display_line(format!("Conflict: {}",reason.description())),color:codex_router_tui::UiTextRole::Warning.color(),wrap))))
                 #(record.native_peer.as_ref().map(|peer|element!(Text(content:display_line(format!("Peer status: {:?}",peer.status)),color:Color::Grey,wrap))))
                 Text(content: display_line(format!("Endpoint: {endpoint}")), color: Color::Grey, wrap)
                 Text(content: display_line(format!("State: {state}")), color: Color::Grey, wrap)
@@ -199,6 +201,14 @@ fn render_structured_details(
                 native_job_state_label(&job.state),
                 true,
             ));
+            fields.push(field(
+                "Job directory:",
+                String::from(job.working_directory.clone()),
+                false,
+            ));
+        }
+        if let Some(reason) = &record.native_conflict {
+            fields.push(field("Conflict:", reason.description().to_owned(), false));
         }
         if let Some(peer) = &record.native_peer {
             fields.push(field("Peer status:", format!("{:?}", peer.status), true));

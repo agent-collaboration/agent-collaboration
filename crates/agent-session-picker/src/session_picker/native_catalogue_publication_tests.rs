@@ -11,6 +11,140 @@ fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
 
+#[derive(Clone, Copy, Debug)]
+enum NativeWarningCase {
+    ConflictingPeers,
+    InvalidJobs,
+    UnavailableJobs,
+}
+
+#[tokio::test]
+async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_warnings() {
+    const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+    const SESSION: &str = "00000000-0000-4000-8000-000000000042";
+    for warning_case in [
+        NativeWarningCase::ConflictingPeers,
+        NativeWarningCase::InvalidJobs,
+        NativeWarningCase::UnavailableJobs,
+    ] {
+        let mut job = serde_json::json!({"kind":"background","id":"known-job","sessionId":SESSION,"cwd":"/source/native","name":"Known native job","state":"blocked","startedAt":1790162100000_i64});
+        if matches!(warning_case, NativeWarningCase::InvalidJobs) {
+            job.as_object_mut().unwrap().remove("state");
+        }
+        let source =
+            SourceApiFixture::start_with_native_jobs(SERVICE, "source-model", vec![job]).await;
+        let mut live_claim = tokio::process::Command::new("/bin/cat")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        if matches!(warning_case, NativeWarningCase::ConflictingPeers) {
+            source.publish_native_peer(SESSION, "/source/current");
+            source.duplicate_native_peer_claim(live_claim.id().unwrap());
+        }
+        if matches!(warning_case, NativeWarningCase::UnavailableJobs) {
+            source.fail_native_jobs_after_history();
+        }
+        let PickerSourceContext::ConfiguredHosted(profile) =
+            source.request("Observed source").source_context
+        else {
+            panic!("configured source")
+        };
+        let mut request = picker_request();
+        request.root = SessionsPickerRoot::Any;
+        request.source = SessionsSource::All;
+        request.records.clear();
+        request.router_registry = RouterRegistryRead::Ready(agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry { routers: vec![profile] });
+        let actual = source.loader();
+        let loader: SessionsPickerRecordLoader = Arc::new(move |request| {
+            let actual = actual.clone();
+            Box::pin(async move {
+                if request.source_context == PickerSourceContext::DefaultHosted {
+                    SourceInventoryResult::Ready {
+                        request,
+                        binding: None,
+                        progress: InventoryPageProgress::Complete,
+                        snapshot: observed_records(Vec::new()),
+                    }
+                } else {
+                    actual(request).await
+                }
+            })
+        });
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        sender.send(key(KeyCode::F(2))).unwrap();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut phase = 0;
+        let mut last = String::new();
+        let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),width:132usize,height:60usize));
+        let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let journey = async {
+            while let Some(canvas) = frames.next().await {
+                let frame = canvas.to_string();
+                if phase == 0 && frame.contains("Choose machine") {
+                    sender.send(key(KeyCode::Down)).unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 1;
+                } else if phase == 1
+                    && matches!(warning_case, NativeWarningCase::ConflictingPeers)
+                    && frame.contains("multiple live peers claim this session")
+                {
+                    assert!(
+                        frame.contains(SERVICE)
+                            && frame.contains(SESSION)
+                            && frame.contains("claude-local"),
+                        "source and session must accompany the reason: {frame}"
+                    );
+                    assert!(
+                        frame.contains("Known native job"),
+                        "independent job facts remain visible: {frame}"
+                    );
+                    sender.send(ctrl_key('c')).unwrap();
+                    phase = 2;
+                } else if phase == 1
+                    && matches!(warning_case, NativeWarningCase::InvalidJobs)
+                    && frame.contains("native Claude background jobs inventory: invalid output")
+                {
+                    assert!(
+                        frame.contains("Observed source: Unavailable"),
+                        "failure must name the configured source: {frame}"
+                    );
+                    assert!(!frame.contains("session inventory does not match its source"));
+                    sender.send(ctrl_key('c')).unwrap();
+                    phase = 2;
+                } else if phase == 1
+                    && matches!(warning_case, NativeWarningCase::UnavailableJobs)
+                    && frame.contains("Observed source")
+                    && frame.contains("Native Claude inventory incomplete")
+                {
+                    assert!(
+                        frame.contains("Native Claude background jobs: read unavailable"),
+                        "partial native read must identify its source and reason: {frame}"
+                    );
+                    assert!(frame.contains(SERVICE) && frame.contains("claude-local"));
+                    assert!(frame.contains("Known native job"));
+                    sender.send(ctrl_key('c')).unwrap();
+                    phase = 2;
+                }
+                last = frame;
+            }
+        };
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), journey)
+                .await
+                .is_ok(),
+            "missing native warning, case={warning_case:?}, phase={phase}: {last}"
+        );
+        assert_eq!(phase, 2);
+        live_claim.kill().await.unwrap();
+        source.finish().await;
+    }
+}
+
 #[tokio::test]
 async fn actual_history_job_and_peer_only_loaded_observation_keep_both_facts() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
@@ -94,7 +228,7 @@ async fn actual_working_job_stays_active_with_idle_or_unreported_peer_metadata()
 async fn actual_native_peer_corroboration_keeps_actual_updated_time_and_job_identity() {
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
     let source=SourceApiFixture::start_with_native_jobs("00000000-0000-4000-8000-000000000001","source-model",vec![serde_json::json!({"kind":"background","id":"distinct-job-handle","sessionId":SESSION,"cwd":"/source/native","name":"Corroborated job","state":"working","startedAt":1790162100000_i64})]).await;
-    source.publish_native_peer(SESSION, "/source/native");
+    source.publish_native_peer(SESSION, "/source/resumed");
     let snapshot =
         agent_session_inventory::test_support::complete_source_reader::read_complete_source(
             source.loader(),
@@ -119,6 +253,11 @@ async fn actual_native_peer_corroboration_keeps_actual_updated_time_and_job_iden
     assert_eq!(row.session_id, SESSION);
     let job = row.native_background.as_ref().unwrap();
     assert_eq!(String::from(job.job_handle.clone()), "distinct-job-handle");
+    assert_eq!(
+        String::from(job.working_directory.clone()),
+        "/source/native"
+    );
+    assert_eq!(row.cwd.as_deref(), Some("/source/resumed"));
     assert_eq!(row.native_peer.as_ref().unwrap().updated_at, 1790162200_i64);
     source.finish().await;
 }

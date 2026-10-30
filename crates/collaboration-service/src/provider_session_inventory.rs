@@ -270,7 +270,8 @@ impl ProviderSessionInventory {
                             .map_or(*started_at, |peer| peer.updated_at)
                             .saturating_mul(1000),
                         name,
-                        working_directory,
+                        peer.as_ref()
+                            .map_or(working_directory, |peer| &peer.working_directory),
                         ProviderInventoryOrigin::NativeBackground,
                     ),
                     ProviderSessionSummary::HostedProvider { .. } => {

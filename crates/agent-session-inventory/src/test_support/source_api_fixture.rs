@@ -279,6 +279,19 @@ impl SourceApiFixture {
         self.publish_native_peer_with_status(session, directory, Some("busy"));
     }
 
+    pub fn duplicate_native_peer_claim(&self, process_id: u32) {
+        let peers = self._root.path().join("native-peers");
+        let original = peers.join(format!("{}.json", std::process::id()));
+        let mut peer: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(original).unwrap()).unwrap();
+        peer["pid"] = serde_json::json!(process_id);
+        std::fs::write(
+            peers.join(format!("{process_id}.json")),
+            serde_json::to_vec(&peer).unwrap(),
+        )
+        .unwrap();
+    }
+
     pub fn fail_native_jobs_after_history(&self) {
         let directory = self._root.path();
         let output = directory.join("native-output.json");

@@ -80,6 +80,35 @@ pub enum NativeLiveReadState {
 }
 
 impl NativeLiveReadState {
+    pub fn read_warning_lines(&self) -> Vec<String> {
+        use collaboration_client::protocol::{
+            NativeClaudeInventoryPart as Part, NativeInventorySource,
+        };
+        match self {
+            Self::Incomplete(coverage) => [
+                (NativeInventorySource::PeerRegistry, &coverage.peer),
+                (NativeInventorySource::BackgroundJobs, &coverage.background),
+            ]
+            .into_iter()
+            .filter_map(|(source, part)| match part {
+                Part::NotRequested | Part::Complete => None,
+                Part::Incomplete { unidentified_jobs } => Some(format!(
+                    "Native Claude {source}: {unidentified_jobs} records lack a session identity"
+                )),
+                Part::Unavailable { reason } => Some(format!("Native Claude {source}: {reason}")),
+            })
+            .collect(),
+            Self::Unavailable(reason) => vec![reason.description().to_owned()],
+            Self::Reading | Self::Complete => Vec::new(),
+        }
+    }
+
+    pub fn conflicts(&self) -> &[collaboration_client::protocol::NativeClaudeSessionConflict] {
+        match self {
+            Self::Incomplete(coverage) => &coverage.conflicts,
+            _ => &[],
+        }
+    }
     pub const fn is_incomplete(&self) -> bool {
         matches!(self, Self::Incomplete(_) | Self::Unavailable(_))
     }
@@ -89,6 +118,16 @@ impl NativeLiveReadState {
     ) -> Result<Self, &'static str> {
         use collaboration_client::protocol::NativeClaudeInventoryPart as Part;
         let coverage = coverage.ok_or("missing native inventory coverage")?;
+        let mut targets = std::collections::BTreeSet::new();
+        if coverage.conflicts.iter().any(|conflict| {
+            view == NativeCatalogueView::Stored
+                || !matches!(coverage.peer, Part::Complete)
+                || collaboration_client::protocol::UuidIdentity::try_from(String::from(conflict.target.session_id.clone())).is_err()
+                || !targets.insert(conflict.target.clone())
+                || matches!(conflict.reason, collaboration_client::protocol::NativeClaudeConflictReason::DuplicateLiveClaims { claims } if claims < 2)
+        }) {
+            return Err("invalid native inventory conflicts");
+        }
         if matches!(coverage.background, Part::NotRequested)
             || match view {
                 NativeCatalogueView::Stored => !matches!(coverage.peer, Part::NotRequested),
@@ -107,6 +146,7 @@ impl NativeLiveReadState {
         }
         if matches!(coverage.background, Part::Complete)
             && matches!(coverage.peer, Part::Complete | Part::NotRequested)
+            && coverage.conflicts.is_empty()
         {
             Ok(Self::Complete)
         } else {
@@ -125,6 +165,7 @@ pub enum PickerRuntimeStatus {
     Active,
     Idle,
     SystemError,
+    Conflict,
 }
 
 impl PickerRuntimeStatus {
@@ -166,6 +207,7 @@ impl PickerRuntimeStatus {
             Self::Active => "Active",
             Self::Idle => "Idle",
             Self::SystemError => "Error",
+            Self::Conflict => "Conflict",
         }
     }
 
@@ -177,6 +219,7 @@ impl PickerRuntimeStatus {
             Self::Active => "●",
             Self::Idle => "○",
             Self::SystemError => "!",
+            Self::Conflict => "!",
         }
     }
 }

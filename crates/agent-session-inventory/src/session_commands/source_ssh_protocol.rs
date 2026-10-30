@@ -406,6 +406,12 @@ pub struct PreparedSourceSession {
 pub enum SourceRejection {
     #[error("source request is invalid")]
     InvalidRequest,
+    #[error("native Claude {inventory_source} inventory: {reason}")]
+    InvalidNativeInventory {
+        #[serde(rename = "source")]
+        inventory_source: collaboration_client::protocol::NativeInventorySource,
+        reason: collaboration_client::protocol::NativeInventoryInvalidReason,
+    },
     #[error("source connection is unsupported")]
     UnsupportedConnection,
     #[error("selected Router service does not match")]

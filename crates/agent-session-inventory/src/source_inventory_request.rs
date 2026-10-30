@@ -32,6 +32,11 @@ pub enum SourceInventoryRejection {
     EndpointUnqualified,
     #[error("session inventory does not match its source")]
     InvalidInventory,
+    #[error("native Claude {inventory_source} inventory: {reason}")]
+    InvalidNativeInventory {
+        inventory_source: collaboration_client::protocol::NativeInventorySource,
+        reason: collaboration_client::protocol::NativeInventoryInvalidReason,
+    },
     #[error("session inventory reply does not match its request")]
     StaleSnapshot,
     #[error("source scope or filters are unsupported; choose Any scope/provider and All sources")]

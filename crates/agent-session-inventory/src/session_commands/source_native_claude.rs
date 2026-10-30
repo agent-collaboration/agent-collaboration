@@ -238,12 +238,20 @@ async fn native_target_in_view(
             Err(error) => {
                 return match InventoryReadFailure::from_client(&error) {
                     InventoryReadFailure::Unavailable(_) => Ok(false),
-                    InventoryReadFailure::Invalid { .. } => {
+                    InventoryReadFailure::Invalid { .. }
+                    | InventoryReadFailure::InvalidNative { .. } => {
                         Err(SourceRejection::SessionUnavailable)
                     }
                 };
             }
         };
+        if page.native_coverage.as_ref().is_some_and(|coverage| {
+            coverage.conflicts.iter().any(|conflict| {
+                conflict.target.endpoint != target.endpoint || conflict.target == *target
+            })
+        }) {
+            return Err(SourceRejection::SessionUnavailable);
+        }
         crate::picker_runtime_status::NativeLiveReadState::from_observation(
             view,
             page.native_coverage,
@@ -274,7 +282,8 @@ async fn native_target_in_view(
                         peer,
                         ..
                     } => (
-                        working_directory,
+                        peer.as_ref()
+                            .map_or(working_directory, |peer| &peer.working_directory),
                         !matches!(
                             state,
                             collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }
