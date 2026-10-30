@@ -11,6 +11,8 @@ import { z } from 'zod';
 
 import { isMain, reportCliFailure } from './cli-arguments.ts';
 import { findDialog } from './grid-scene-matcher.ts';
+import { InputConsumptionReadback } from './input-consumption-readback.ts';
+import type { InputConsumptionExpectation } from './input-consumption-schema.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { KeyProtocol } from './pty-grid-driver.ts';
 import { cellText, gridLines, terminalTheme } from './terminal-grid.ts';
@@ -109,6 +111,18 @@ export async function withTerminal<TResult>(options: {
 		await driver.stop();
 	}
 }
+function fixedKeyAcknowledgement(
+	name: string,
+	surface: InputConsumptionExpectation['surface'],
+	action: string | null,
+): InputConsumptionExpectation {
+	return {
+		event: { kind: 'key', code: { kind: 'fixed', name }, modifiers: [], phase: 'press' },
+		surface,
+		target: null,
+		action,
+	};
+}
 export async function observeMainEscape(
 	plan: BaselinePlan,
 	keys: KeyProtocol,
@@ -119,20 +133,49 @@ export async function observeMainEscape(
 		keys,
 		surface,
 		name: 'main-escape',
+		sessionsReceipts: surface === 'sessions-filters',
 		observe: async (driver, directory) => {
+			const receipts =
+				surface === 'sessions-filters'
+					? InputConsumptionReadback.open(
+							join(directory, 'session-receipts', 'input-dispatch.jsonl'),
+						)
+					: null;
 			const initial = gridLines(driver.grid());
 			const title = surface === 'quota' ? 'Quota Help' : 'Help';
 			const generation = driver.frameGeneration();
 			// Help is a real processing barrier after the ignored Esc; neither
 			// a stale grid nor a live PID establishes that Esc was handled.
-			await driver.send(Buffer.concat([keyBytes(keys, 'escape'), keyBytes(keys, 'help')]));
+			if (receipts === null) {
+				// Quota's producer is a separate S7 prerequisite; this is its retained baseline.
+				await driver.send(Buffer.concat([keyBytes(keys, 'escape'), keyBytes(keys, 'help')]));
+			} else {
+				// Legacy 1b 1b 4f 50 is ambiguous with Alt+F1. A decoded Esc
+				// acknowledgement, not a delay or a transport write, separates them.
+				await receipts.observeInput({
+					expected: [fixedKeyAcknowledgement('Esc', { kind: 'screen' }, 'escape')],
+					inject: () => driver.send(keyBytes(keys, 'escape')),
+					timeoutMs: 8_000,
+				});
+				await receipts.observeInput({
+					expected: [fixedKeyAcknowledgement('F1', { kind: 'screen' }, 'help')],
+					inject: () => driver.send(keyBytes(keys, 'help')),
+					timeoutMs: 8_000,
+				});
+			}
 			await driver.waitForGrid(
 				'Help after main Esc',
 				(grid) => findDialog(grid, title) !== null,
 				generation,
 			);
 			const opened = driver.frameGeneration();
-			await driver.send(keyBytes(keys, 'escape'));
+			if (receipts === null) await driver.send(keyBytes(keys, 'escape'));
+			else
+				await receipts.observeInput({
+					expected: [fixedKeyAcknowledgement('Esc', { kind: 'overlay', overlayId: '1' }, null)],
+					inject: () => driver.send(keyBytes(keys, 'escape')),
+					timeoutMs: 8_000,
+				});
 			await driver.waitForGrid(
 				'main restored after Help',
 				(grid) => findDialog(grid, title) === null,
@@ -141,13 +184,34 @@ export async function observeMainEscape(
 			const unchanged = JSON.stringify(gridLines(driver.grid())) === JSON.stringify(initial);
 			const running = await driver.running();
 			saveCheckpoint(driver, directory, 'after-escape');
-			await driver.send(Buffer.from(keys === 'legacy' ? '\x03' : '\x1b[99;5u'));
+			const quit = (): Promise<void> =>
+				driver.send(Buffer.from(keys === 'legacy' ? '\x03' : '\x1b[99;5u'));
+			if (receipts === null) await quit();
+			else
+				await receipts.observeInput({
+					expected: [
+						{
+							event: {
+								kind: 'key',
+								code: { kind: 'shortcut', key: 'c' },
+								modifiers: ['control'],
+								phase: 'press',
+							},
+							surface: { kind: 'screen' },
+							target: null,
+							action: 'quit',
+						},
+					],
+					inject: quit,
+					timeoutMs: 8_000,
+				});
 			const readExit = async (): Promise<void> => {
 				if ((await driver.receive()) !== 'eof') await readExit();
 			};
 			await readExit();
 			const transcript = driver.bytes().toString('utf8');
 			const exited = (await driver.finish()) === 0;
+			receipts?.assertComplete();
 			const outcomes = transcript.match(/SESSION_PICKER_OUTCOME [^\r\n]*/gu) ?? [];
 			const cancelled =
 				surface === 'quota' ||
@@ -162,6 +226,7 @@ export async function observeMainEscape(
 					running,
 					unchanged,
 					ctrlCExit: exited,
+					inputAcknowledgements: receipts?.sequence ?? null,
 					pickerOutcome: transcript.includes('SESSION_PICKER_OUTCOME canceled'),
 					terminalRestored: transcript.includes('\x1b[?1049l'),
 				},

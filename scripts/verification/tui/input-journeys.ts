@@ -20,7 +20,7 @@ import { encodeJourneyKey } from './journey-key.ts';
 import type { PtyGridDriver, KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding } from './source-binding.ts';
 import { newSessionRequestSchema, readSourceQualifiedOutcome } from './source-qualified-outcome.ts';
-import { cellText, gridLines } from './terminal-grid.ts';
+import { cellText, gridLines, terminalTheme } from './terminal-grid.ts';
 import type { TerminalGrid } from './terminal-grid.ts';
 export const inputJourneyPlanSchema = baselinePlanSchema.extend({
 	newRequest: newSessionRequestSchema.refine(
@@ -62,19 +62,28 @@ async function finish(driver: PtyGridDriver): Promise<string> {
 	if ((await driver.finish()) !== 0) throw new Error('input journey child failed');
 	return bytes;
 }
-function targetCell(
+export function targetCell(
 	grid: TerminalGrid,
 	title: string,
 	label: string,
 ): { readonly column: number; readonly row: number } {
 	const rect = findDialog(grid, title);
 	if (rect === null) throw new Error('dialog entry absent');
+	// Button projects Focused/Primary roles; generated key hints do not. A
+	// nonprimary sibling may share the actual primary button's actions row.
+	const primaryColor = 0x9cbcfb; // UiTextRole::Label / TextRole::Primary.
+	const hasButtonRole = (color: number | undefined): boolean =>
+		color !== undefined && (color === primaryColor || color === terminalTheme.palette[11]);
 	const matches = grid.cells.flatMap((row, rowIndex) =>
 		row.flatMap((_cell, column) =>
 			rowIndex > rect.top &&
 			rowIndex < rect.bottom &&
 			column > rect.left &&
 			column + label.length < rect.right &&
+			(row.slice(column, column + label.length).every((cell) => hasButtonRole(cell.fgRgb)) ||
+				row
+					.slice(rect.left + 1, rect.right)
+					.some((cell) => cellText(cell) === '●' && hasButtonRole(cell.fgRgb))) &&
 			row
 				.slice(column, column + label.length)
 				.map(cellText)

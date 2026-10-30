@@ -165,3 +165,31 @@ Controlled bridge tests qualify these observer changes in both key modes and
 reject changed main state; they are not product passes. S6b must merge this head,
 rebuild/sign its declared fixture and driver, retain source/artifact bindings,
 and run the actual picker journeys. S9's authored coverage is still not a run.
+
+### S6b first-run observer corrections
+
+Lead pushes `01a18e73-a614-7360-86de-8e72306008bf`,
+`01a18e74-e256-7ef0-80bb-e31bd79c7a35` and the source correction
+`01a18e76-00ff-74a3-b5cb-f25513a72d09` refine two apparatus steps:
+
+- On the S6 picker path, nominate receipts before entry. Send Esc alone and await
+  its exact decoded Press acknowledgement: screen, null target, action `escape`.
+  A bound action remains the recorded action when its handler changes nothing.
+  Then send F1 separately. Legacy bytes `1b 1b 4f 50` in one write are ambiguous
+  with Alt+F1; a transport OK, a sleep or a stale main frame cannot separate them.
+  Both key modes use this barrier. The subsequent F1, first Help overlay's Esc,
+  and Ctrl+C also have exact acknowledgements; after fixture exit, assert the
+  complete stream. Keep the Help round trip and unchanged main-grid comparison
+  as independent state/frame proof. Quota's producer remains an S7 prerequisite;
+  this correction does not qualify its retained baseline path.
+- `input-journeys.ts::targetCell` requires the Button's Focused or Primary role,
+  or its actual primary-button actions row, within the active dialog bounds.
+  The primary role is the shipped Label RGB `#9cbcfb`; Focused is the qualified
+  terminal palette's bright yellow. A generated `Ctrl+Enter Start` hint is not
+  a second button. Hint-only and duplicate real-role scenes must reject.
+
+Controlled VT/bridge tests qualify the observer and strict final counts. A replay
+against S6b's retained New grid located the real Start at zero-based (34,20),
+rejecting the hint at (28,21). This is retained-grid replay, not a fresh product
+journey or a physical-terminal input claim. Deliberate unambiguous input bursts
+in other journeys remain unchanged.

@@ -50,6 +50,12 @@ for (const keys of ['legacy', 'kitty'] as const) {
 				'controlled-bridge',
 				`
 const { createInterface } = require('node:readline');
+const fs = require('node:fs'); const path = require('node:path');
+const receiptDirectory=process.env.TUI_SESSIONS_FIXTURE_RECEIPT_DIR;
+const receiptPath=receiptDirectory && path.join(receiptDirectory,'input-dispatch.jsonl');
+if(receiptPath)fs.writeFileSync(receiptPath,'');
+let sequence=0;
+const ack=(code,modifiers,surface,action)=>{if(receiptPath)fs.appendFileSync(receiptPath,JSON.stringify({sequence:++sequence,event:{kind:'key',code,modifiers,phase:'press'},surface,target:null,action})+'\\n');};
 const emit = text => process.stdout.write('TUI_GRID ' + text + '\\n');
 const frame = text => '\\x1b[?2026h\\x1b[2J\\x1b[H' + text + '\\x1b[?2026l';
 const main = 'Codex Alpha';
@@ -60,11 +66,11 @@ createInterface({ input: process.stdin }).on('line', line => {
  if (line.startsWith('write ')) {
   const bytes = Buffer.from(line.slice(6), 'hex');
   const text = bytes.toString();
-  if (text.includes('\\x1b\\x1bOP') || text.includes('[27u')) escaped = true;
-  if (text.includes('\\x03') || text.includes('[99;5u')) { quit = true; queue.push('SESSION_PICKER_OUTCOME canceled\\r\\n\\x1b[?1049l'); }
-  else if (text.includes('OP') || text.includes('[1;1P')) { overlay = true; queue.push(frame(help)); }
-  else if (overlay) { overlay = false; queue.push(frame(main + (${changed} && escaped ? ' changed query' : ''))); }
-  else { escaped = true; }
+  if (text.includes('\\x1b\\x1bOP')) {emit('AMBIGUOUS_LEGACY_PREFIX');return;}
+  if (text.includes('\\x03') || text.includes('[99;5u')) { quit = true; ack({kind:'shortcut',key:'c'},['control'],{kind:'screen'},'quit'); queue.push('SESSION_PICKER_OUTCOME canceled\\r\\n\\x1b[?1049l'); }
+  else if (text.includes('OP') || text.includes('[1;1P')) { overlay = true; ack({kind:'fixed',name:'F1'},[],{kind:'screen'},'help'); queue.push(frame(help)); }
+  else if (overlay) { overlay = false; ack({kind:'fixed',name:'Esc'},[],{kind:'overlay',overlayId:'1'},null); queue.push(frame(main + (${changed} && escaped ? ' changed query' : ''))); }
+  else { escaped = true; ack({kind:'fixed',name:'Esc'},[],{kind:'screen'},'escape'); }
   emit('OK');
  } else if (line.startsWith('read ')) {
   const bytes = queue.shift();
@@ -86,12 +92,14 @@ createInterface({ input: process.stdin }).on('line', line => {
 				'sessions-filters',
 			);
 			expect(result.result).toBe(changed ? 'red' : 'pass');
+			expect(result.observed).toMatchObject({ inputAcknowledgements: 4 });
 			const commands: unknown = JSON.parse(
 				readFileSync(
 					join(output, `${keys}-sessions-filters-main-escape`, 'driver-commands.json'),
 					'utf8',
 				),
 			);
+			expect(commands).not.toContain('write 1b1b4f50');
 			expect(commands).toContain(
 				'write ' + Buffer.from(keys === 'legacy' ? '\x03' : '\x1b[99;5u').toString('hex'),
 			);
