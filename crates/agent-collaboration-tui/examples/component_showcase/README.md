@@ -69,6 +69,11 @@ and lets the active cases finish and clean up; an incomplete run returns exit 1.
 Resize cases retain the same child. Use a separate fresh plan/output with
 `--profile example-ghostty-keybinds` to retain consumed-key prerequisite findings.
 Raw VT supplements are labelled independently from delivered profile keys.
+Help checks find the actual `never quit` convention through real scrolling; at
+small heights neither its section heading nor that row must be visible at End.
+Receipt watches attach directly to both owned files after the initial received
+frame, retaining append-only identity checks. A coalesced directory creation
+notification is discovery evidence, not a separate readiness requirement.
 SC19 inspects actual completed-draw ordering between the opening key and outside
 press. A single PTY burst does not force both inputs to precede the first draw;
 that ordering gap is a prerequisite finding, never a product failure or a retry

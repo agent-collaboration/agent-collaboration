@@ -1,17 +1,18 @@
 /** Discover receipt creation, then retain file-write subscriptions for open writers. */
-import { lstatSync, watch } from 'node:fs';
+import { existsSync, lstatSync, watch } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 import { PrerequisiteGap } from './contracts.ts';
 export class ReceiptNotifications {
 	private readonly watcher: FSWatcher;
+	private readonly directory: string;
 	private readonly files = new Map<string, FSWatcher>();
 	private readonly listeners = new Set<() => void>();
-	private witnessed = false;
 	private failure: Error | null = null;
 	private readonly observations: { readonly kind: string; readonly detail: string }[] = [];
 	public constructor(directory: string) {
+		this.directory = directory;
 		const metadata = lstatSync(directory);
 		if (
 			!isAbsolute(directory) ||
@@ -24,25 +25,7 @@ export class ReceiptNotifications {
 			const file = name?.toString();
 			this.observations.push({ kind: 'notification', detail: String(file) });
 			if (file !== 'input-dispatch.jsonl' && file !== 'showcase-state.jsonl') return;
-			if (!this.files.has(file)) {
-				const path = join(directory, file);
-				const entry = lstatSync(path);
-				if (!entry.isFile() || entry.isSymbolicLink() || entry.uid !== process.getuid?.()) {
-					this.failure = new PrerequisiteGap('created receipt is not an owned regular file');
-					this.notify();
-					return;
-				}
-				const subscription = watch(path, { persistent: false }, () => {
-					this.observations.push({ kind: 'file-write', detail: file });
-					this.notify();
-				});
-				subscription.once('error', (error) => {
-					this.failure = error;
-					this.notify();
-				});
-				this.files.set(file, subscription);
-			}
-			this.witnessed = true;
+			this.subscribe(file);
 			this.notify();
 		});
 		this.watcher.once('error', (error) => {
@@ -50,13 +33,37 @@ export class ReceiptNotifications {
 			this.notify();
 		});
 	}
+	private subscribe(file: string): void {
+		if (this.files.has(file)) return;
+		const path = join(this.directory, file);
+		const entry = lstatSync(path);
+		if (!entry.isFile() || entry.isSymbolicLink() || entry.uid !== process.getuid?.()) {
+			this.failure = new PrerequisiteGap('created receipt is not an owned regular file');
+			return;
+		}
+		const subscription = watch(path, { persistent: false }, () => {
+			this.observations.push({ kind: 'file-write', detail: file });
+			this.notify();
+		});
+		subscription.once('error', (error) => {
+			this.failure = error;
+			this.notify();
+		});
+		this.files.set(file, subscription);
+		this.observations.push({ kind: 'subscribed', detail: file });
+	}
 	private notify(): void {
 		for (const listener of this.listeners) listener();
 	}
 	public async ready(): Promise<void> {
+		// The initial received frame proves the writer has started. macOS can
+		// coalesce its earlier directory creation event; attach to both actual
+		// files directly instead of demanding that optional discovery event.
+		for (const file of ['input-dispatch.jsonl', 'showcase-state.jsonl'])
+			if (existsSync(join(this.directory, file))) this.subscribe(file);
 		await this.wait({
-			description: 'actual startup filesystem notification',
-			matches: () => (this.witnessed ? true : null),
+			description: 'retained subscriptions to both owned receipt files',
+			matches: () => (this.files.size === 2 ? true : null),
 			inject: async () => {},
 		});
 	}
@@ -81,7 +88,7 @@ export class ReceiptNotifications {
 				if (!injected || settled) return;
 				try {
 					if (this.failure !== null) throw this.failure;
-					if (!this.witnessed) return;
+					if (this.files.size !== 2) return;
 					const result = options.matches();
 					this.observations.push({
 						kind: result === null ? 'pending' : 'matched',

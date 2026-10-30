@@ -1,4 +1,5 @@
 import { canonicalJson } from '../source-binding.ts';
+import { cellText } from '../terminal-grid.ts';
 import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
 import type { ShowcaseRegistry, ShowcaseState } from './contracts.ts';
 import type { ShowcaseRig } from './rig.ts';
@@ -114,4 +115,31 @@ export function surfaceBounds(state: ShowcaseState): {
 		top: Math.min(...cells.map((cell) => cell[1])),
 		bottom: Math.max(...cells.map((cell) => cell[1])),
 	};
+}
+
+export async function showHelpConvention(rig: ShowcaseRig, body: string): Promise<void> {
+	await rig.key('End', rig.route(null, body));
+	const reveal = async (remaining: number): Promise<void> => {
+		const bounds = surfaceBounds(rig.drawState());
+		const words = rig
+			.grid()
+			.cells.slice(bounds.top + 1, bounds.bottom)
+			.map((row) =>
+				row
+					.slice(bounds.left + 1, bounds.right)
+					.map(cellText)
+					.join('')
+					.trim()
+					.replace(/[│█]+$/u, '')
+					.trim(),
+			)
+			.join(' ')
+			.replace(/\s+/gu, ' ');
+		if (words.includes('never quit')) return;
+		if (remaining === 0)
+			throw new PrerequisiteGap('Help convention not found through bounded real scroll');
+		await rig.key('Up', rig.route(null, body));
+		await reveal(remaining - 1);
+	};
+	await reveal(256);
 }

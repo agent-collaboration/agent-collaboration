@@ -11,6 +11,7 @@ import {
 	openChoice,
 	openForm,
 	sameFields,
+	showHelpConvention,
 	visibleTarget,
 } from './scenario-helpers.ts';
 
@@ -85,8 +86,7 @@ export async function menuProjections(rig: ShowcaseRig): Promise<void> {
 	);
 	await rig.key('F1', rig.route('help'));
 	rig.requireText('Help');
-	await rig.key('End', rig.route(null, childTarget('action:help', 'help-body')));
-	rig.requireText('Input conventions');
+	await showHelpConvention(rig, childTarget('action:help', 'help-body'));
 	await escapeOverlay(rig);
 }
 export async function segmentedSettings(rig: ShowcaseRig): Promise<void> {

@@ -7,6 +7,7 @@ import {
 	escapeOverlay,
 	openForm,
 	sameFields,
+	showHelpConvention,
 	surfaceBounds,
 	visibleTarget,
 } from './scenario-helpers.ts';
@@ -163,8 +164,7 @@ export async function screenHelp(rig: ShowcaseRig): Promise<void> {
 	rig.requireText('Help');
 	rig.requireText('Main screen');
 	const body = childTarget('action:help', 'help-body');
-	await rig.key('End', rig.route(null, body));
-	rig.requireText('Input conventions');
+	await showHelpConvention(rig, body);
 	await rig.key('PageUp', rig.route(null, body));
 	await rig.wheel(childTarget('action:help', 'help-scroll'), 'up');
 	await rig.key('Home', rig.route(null, body));
