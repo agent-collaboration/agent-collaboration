@@ -1,7 +1,7 @@
 //! Dialog chrome measures content axes within OverlayHost's resolved bounds.
 use super::dialog_footer::DialogFooter;
 use super::dialog_header::DialogHeader;
-use super::{Button, ScrollHandle, ScrollList};
+use super::{Button, PinnedContext, ScrollHandle, ScrollList};
 use crate::{
     actions::Placement,
     focus_model::TargetId,
@@ -47,7 +47,7 @@ pub struct DialogFrameProps<'a> {
     pub border_style: Option<BorderStyle>,
     pub border_color: Option<Color>,
     pub help_action: Option<AnyElement<'a>>,
-    pub context: Vec<AnyElement<'a>>,
+    pub context: Option<PinnedContext>,
     pub children: Vec<AnyElement<'a>>,
     pub actions: Vec<AnyElement<'a>>,
     pub action_hints: Vec<AnyElement<'a>>,
@@ -90,8 +90,8 @@ pub fn DialogFrame<'a>(
     let mut actions = std::mem::take(&mut props.actions);
     let action_hints = std::mem::take(&mut props.action_hints);
     let help = props.help_action.take();
-    let identity = std::mem::take(&mut props.context);
-    let has_context = !identity.is_empty();
+    let identity = props.context.take();
+    let has_context = identity.is_some();
     if actions.is_empty()
         && let Some(context) = context
     {
@@ -132,6 +132,16 @@ pub fn DialogFrame<'a>(
         height.get()
     };
     let padding = props.padding.unwrap_or(u16::from(padding_height >= 16));
+    // Width-dependent wrapping can outgrow the native auto-height basis.
+    // Reserve the current measured body and chrome, without borrowing a prior
+    // body viewport or forcing the configured maximum.
+    let minimum_height = if content_height {
+        content_extent
+            .saturating_add(padding.saturating_mul(2))
+            .min(sizing.map_or(u16::MAX, |sizing| sizing.max_height))
+    } else {
+        0
+    };
     let body_budget = sizing
         .map_or(u16::MAX, |sizing| sizing.max_height)
         .saturating_sub(
@@ -151,10 +161,10 @@ pub fn DialogFrame<'a>(
     let width_hint = sizing
         .map_or(0, |sizing| sizing.max_width)
         .saturating_sub(border_rows + padding.saturating_mul(2));
-    element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
+    element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:minimum_height,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
         border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
         View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
-            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,available_rows)
+            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
             ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
         }
         #(has_actions.then(||element!(MeasuredFooter(height:footer_height,children:actions,hints:action_hints))))

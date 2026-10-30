@@ -33,6 +33,7 @@ mod tests {
     }
     #[derive(Props)]
     struct PinnedPanelProps {
+        custom_tag: Option<String>,
         #[iocraft(required)]
         credits: State<bool>,
         #[iocraft(required)]
@@ -46,15 +47,14 @@ mod tests {
         if props.help.is_active(surface.surface) {
             return element!(DialogFrame(title:"Help".to_owned(),scroll:props.help.scroll(surface.surface).unwrap(),scroll_target:props.help.scroll_target()) {HelpDialog(control:props.help.clone())}).into_any();
         }
-        let width = surface.stack.viewport().0.saturating_sub(18).clamp(17, 60);
-        // Same child layout as quota's captured identity: the caller reserves tag
-        // space; the frame must give this whole child an appropriate pinned row.
-        let identity=element!(View(width,max_width:100pct,column_gap:1,flex_shrink:0.0_f32) {
-            View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32,overflow:Overflow::Hidden) {Text(content:"東京",color:Color::White,wrap:TextWrap::NoWrap)}
-            View(flex_shrink:0.0_f32) {Text(content:"[alpha-tag]",color:Color::Grey,wrap:TextWrap::NoWrap)}
-        }).into_any();
+        let identity = agent_collaboration_tui::controls::PinnedContext::new("東京").with_tag(
+            props
+                .custom_tag
+                .clone()
+                .unwrap_or_else(|| "alpha-tag".to_owned()),
+        );
         let credits = props.credits.get();
-        element!(DialogFrame(title:if credits {"Options · Credits".to_owned()}else{"Options · Resets".to_owned()},scroll:props.scroll.clone(),scroll_target:body(),context:vec![identity],help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any())) {
+        element!(DialogFrame(title:if credits {"Options · Credits".to_owned()}else{"Options · Resets".to_owned()},scroll:props.scroll.clone(),scroll_target:body(),context:Some(identity),help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any())) {
             View(column_gap:2,flex_shrink:0.0_f32) {Text(content:"Resets") Text(content:"Credits")}
             Text(content:if credits {"Credit balance"}else{"Live eligibility"})
             #((0..40).map(|row|element!(Text(content:format!("{}_{row}",if credits {"CREDIT_ROW"}else{"RESET_ROW"})))))
@@ -62,6 +62,7 @@ mod tests {
     }
     #[derive(Props)]
     struct PinnedSceneProps {
+        custom_tag: Option<String>,
         #[iocraft(required)]
         journal: EventJournal,
         width: u16,
@@ -145,6 +146,7 @@ mod tests {
                         button_target(TargetId::for_action(&definition.id), definition)
                     }),
             );
+            let custom_tag = props.custom_tag.clone();
             stack
                 .open_overlay(OverlaySpec {
                     kind: OverlayKind::Dialog,
@@ -158,7 +160,7 @@ mod tests {
                         primary_action: None,
                     },
                     view: OverlayView::new(move || {
-                        element!(PinnedPanel(credits,scroll:scroll.clone(),help:help.clone()))
+                        element!(PinnedPanel(credits,scroll:scroll.clone(),help:help.clone(),custom_tag:custom_tag.clone()))
                             .into_any()
                     }),
                     layout: OverlayLayout::Dialog {
@@ -329,13 +331,10 @@ mod tests {
                 if separate {
                     assert_pinned(driver.frames.last().unwrap(), "Options · Resets", &fixture);
                 } else {
-                    let title = panel
-                        .lines()
-                        .find(|row| row.contains("Options · Resets"))
-                        .unwrap();
+                    let title = panel.lines().find(|row| row.contains("Options")).unwrap();
                     assert!(
-                        title.contains('…') && !panel.contains("[alpha-tag]"),
-                        "a second context row would steal the third body row\n{panel}"
+                        title.contains('…') && title.contains("[alpha-tag]"),
+                        "text yields to the whole tag without stealing the third body row\n{panel}"
                     );
                 }
             })
@@ -344,17 +343,59 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn wide_options_grid_is_unchanged() {
+    async fn a_tag_that_fits_the_row_yields_no_cells_to_a_title_or_name() {
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(PinnedScene(journal,width:32u16,height:12u16,custom_tag:Some("abcdefghijklmnopqrstuvwx".to_owned())));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            driver.initial(&mut frames).await;
+            let panel = driver.frames.last().unwrap().round_frame_text();
+            assert!(
+                panel.contains("[abcdefghijklmnopqrstuvwx]"),
+                "the whole26celltag fits before any title or name\n{panel}"
+            );
+            assert!(panel.contains("Live eligibility"), "{panel}");
+        })
+        .await
+        .unwrap();
+    }
+    #[tokio::test]
+    async fn short_and_phone_options_keep_the_whole_tag_and_initial_task_fact() {
+        for (width, height) in [(48u16, 12u16), (40, 24), (32, 24)] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(PinnedScene(journal, width, height));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let panel = driver.frames.last().unwrap().round_frame_text();
+                assert!(
+                    panel.contains("[alpha-tag]") && panel.contains("Live eligibility"),
+                    "whole identity and task fact at {width}x{height}\n{panel}"
+                );
+                assert!(
+                    panel.contains("Close") && panel.contains("Remove"),
+                    "{panel}"
+                );
+            })
+            .await
+            .unwrap();
+        }
+    }
+    #[tokio::test]
+    async fn wide_options_grid_sizes_to_typed_natural_context_and_retains_body_capacity() {
         let (mut driver, config, journal) = EventDriver::new();
         let mut ui = element!(PinnedScene(journal,width:120u16,height:36u16));
         let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             driver.initial(&mut frames).await;
             let panel = driver.frames.last().unwrap().round_frame_text();
+            assert_eq!(panel.lines().count(), 24);
+            assert!(panel.contains("RESET_ROW_13") && !panel.contains("RESET_ROW_14"));
+            assert!(panel.contains("Help F1") && panel.contains("[alpha-tag]"));
             assert_eq!(
                 panel,
                 include_str!("../fixtures/options-120x36.txt").trim_end(),
-                "120x36 Options grid unchanged"
+                "typed context removes artificial allocation; body capacity and actions remain"
             );
         })
         .await

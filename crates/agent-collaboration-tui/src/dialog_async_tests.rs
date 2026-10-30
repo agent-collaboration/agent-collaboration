@@ -146,7 +146,7 @@ fn AsyncDialogBody(props: &AsyncDialogBodyProps) -> impl Into<AnyElement<'static
     } else {
         "Loading"
     };
-    element!(crate::controls::DialogFrame(title:format!("{width}x{height} {status}"),scroll:props.scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:vec![element!(Text(content:"Account: alpha")).into_any()],actions:vec![element!(HitRegion(target:TargetId::for_action(&ActionId::new("apply").unwrap()),kind:HitRegionKind::Target) {Text(content:format!("Apply {}",props.clicks.get()))}).into_any()]) {Text(content:"Loading runs independently of dialog input")})
+    element!(crate::controls::DialogFrame(title:format!("{width}x{height} {status}"),scroll:props.scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:Some(crate::controls::PinnedContext::new("Account: alpha")),actions:vec![element!(HitRegion(target:TargetId::for_action(&ActionId::new("apply").unwrap()),kind:HitRegionKind::Target) {Text(content:format!("Apply {}",props.clicks.get()))}).into_any()]) {Text(content:"Loading runs independently of dialog input")})
 }
 
 #[tokio::test]

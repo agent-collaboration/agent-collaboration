@@ -98,14 +98,18 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `header-title-no-ellipsis.patch` | Overlong title loses its ellipsis. |
 | `header-context-gap-starves-body.patch` | Pinned gap consumes the final body row at 48x10. |
 | `content-dialog-retains-help-padding.patch` | A restored form retains automatic padding selected from the previous Help frame. |
-| `header-stale-context-measurement.patch` | A removed context retains its old width or wrapping guard and keeps the fitting Help hint hidden. |
 | `list-typeahead-inserts-actions.patch` | A printable action key is inserted into the shared filter instead of reaching its declared binding. |
 | `list-typeahead-moves-focus.patch` | Editing through a list moves focus to the field. |
 | `list-typeahead-drops-text.patch` | Typeahead consumes text or paste without editing the shared state. |
 | `list-typeahead-reserves-escape.patch` | Cancel receives Esc before a nonempty shared filter can clear. |
 | `pinned-context-truncated-with-room.patch` | Context is truncated beside the title even though its own row fits with three body rows. |
 | `pinned-context-body-minimum-two.patch` | A second pinned row steals the third body row. |
-| `pinned-context-clips-own-child.patch` | A separate context row clips the caller's multirow child layout. |
+
+| `pinned-context-measures-allocation.patch` | A short identity is measured as an allocated 60-cell child and moves to a second row despite fitting inline. |
+| `pinned-context-splits-tag.patch` | Name and tag truncate together, clipping a tag that fits the row. |
+| `pinned-context-omits-header-rows.patch` | Content sizing omits the second pinned header row and squeezes a fitting body. |
+| `content-dialog-ignores-measured-extent.patch` | Native auto-height alone squeezes wrapped body or footer rows while the bound has room. |
+| `content-dialog-retains-header-width.patch` | Content-sized chrome retains a narrow draw width and never restores fitting Help after resize. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
@@ -127,3 +131,12 @@ and native Auto sizing preserve the existing form outcomes; those mutations no
 longer represent wrong behavior. Their replacements above exercise observable
 failures: forced maximum height and retaining a different body's measured height.
 The original form, section, overflow, action, and spacing assertions remain.
+
+Pinned context now hard-cuts over to typed text and an optional tag. The shared
+crate owns natural measurement and rendering; caller elements and allocated
+widths are no longer accepted. The arbitrary-child clipping and stale child
+measurement seeds were retired with that contract, replaced by the allocation,
+whole-tag, measured-header and resize controls above. Narrow titles yield to a
+whole tag; long names use one ellipsized pinned row. The approved Options wide
+golden now uses its natural width with Help fitting, retaining its 24-row height,
+body capacity and actions. Existing wide and tiny Details goldens remain exact.

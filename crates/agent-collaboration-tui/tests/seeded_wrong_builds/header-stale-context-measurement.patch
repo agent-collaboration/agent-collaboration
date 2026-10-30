@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -118,3 +118,3 @@ pub(super) fn DialogHeader<'a>(
-     let help = props.help.take();
--    let identity_width = if has_context { context_width.get() } else { 0 };
-+    let identity_width = context_width.get();
-     let identity_rows = if has_context {

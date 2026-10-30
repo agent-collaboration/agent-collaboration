@@ -4,12 +4,14 @@ diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crate
 @@ -2,3 +2,2 @@
  use super::dialog_footer::DialogFooter;
 -use super::dialog_header::DialogHeader;
- use super::{Button, ScrollHandle, ScrollList};
-@@ -156,3 +155,6 @@ pub fn DialogFrame<'a>(
+ use super::{Button, PinnedContext, ScrollHandle, ScrollList};
+@@ -166,3 +165,8 @@ pub fn DialogFrame<'a>(
          View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
--            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,available_rows)
+-            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
 +            View(width:100pct,flex_shrink:0.0_f32,column_gap:1,flex_wrap:FlexWrap::Wrap) {
 +                View(flex_shrink:0.0_f32,max_width:100pct) {Text(content:props.title.clone(),color:theme.foreground(TextRole::Primary),weight:Weight::Bold)}
-+                View(margin_left:Margin::Auto,flex_shrink:0.0_f32,max_width:100pct,column_gap:1,flex_wrap:FlexWrap::Wrap) {#(identity) #(help)}
++                View(margin_left:Margin::Auto,flex_shrink:0.0_f32,max_width:100pct,column_gap:1,flex_wrap:FlexWrap::Wrap) {
++                    #(identity.map(|identity|element!(Text(content:identity.tag.map_or(identity.text.clone(),|tag|format!("{} [{tag}]",identity.text)))))) #(help)
++                }
 +            }
              ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)

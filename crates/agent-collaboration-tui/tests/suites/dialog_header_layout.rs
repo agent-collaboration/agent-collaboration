@@ -57,9 +57,11 @@ mod tests {
             .into_any()
         };
         let context = if props.clear_context_on_resize && surface.stack.viewport().0 < 48 {
-            Vec::new()
+            None
         } else {
-            vec![element!(Text(content:"Feature design session · thread-a")).into_any()]
+            Some(agent_collaboration_tui::controls::PinnedContext::new(
+                "Feature design session · thread-a",
+            ))
         };
         element!(DialogFrame(title:props.title.clone(),scroll,scroll_target,context,help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any())) {#(Some(body))})
     }
@@ -212,16 +214,20 @@ mod tests {
                             .filter(|character| !character.is_whitespace() && *character != '│')
                             .collect::<String>();
                         assert!(
-                            identity.contains("Featuredesignsession·thread-a"),
-                            "full child identity remains visible\n{dialog}"
+                            identity.contains(if width < 48 {
+                                "Featuredesignsession"
+                            } else {
+                                "Featuredesignsession·thread-a"
+                            }),
+                            "typed identity fits its own row with ellipsis when needed\n{dialog}"
                         );
                         assert!(
                             dialog.contains("HISTORY_ROW_0") && dialog.contains("HISTORY_ROW_1"),
                             "at least three body rows remain\n{dialog}"
                         );
                         assert!(
-                            first >= header + 3 && first <= header + 4,
-                            "one title row, child layout and pinned gap\n{dialog}"
+                            first == header + 3,
+                            "one title row, one identity row and pinned gap\n{dialog}"
                         );
                     } else {
                         assert!(
