@@ -5,8 +5,10 @@ use super::capture_support::{
 use super::grid_terminal_capture::{drive_terminal, emit};
 use super::isolated_fixture_test::{TestResult, ensure};
 use super::terminal_interaction_test::{KeyboardProtocol, TerminalDriver};
+use portable_pty::CommandBuilder;
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::path::Path;
 fn required_public_value(name: &str) -> TestResult<String> {
     let value = std::env::var(name)?;
     ensure(!value.is_empty(), "missing public target value")?;
@@ -97,4 +99,23 @@ pub(super) fn run_live_public_sessions() -> TestResult<()> {
     )?;
     emit(&format!("FINISHED {}", result.bytes))?;
     Ok(())
+}
+
+impl TerminalDriver {
+    pub(super) fn spawn_public_wrapper(
+        node: &Path,
+        wrapper: &Path,
+        configuration: &Path,
+        output: &Path,
+    ) -> TestResult<TerminalDriver> {
+        let mut command = CommandBuilder::new(node);
+        command.arg(wrapper);
+        command.arg(configuration);
+        // Public entry keeps the real inherited environment, including absent CODEX_HOME.
+        command.env("QUOTA_STORYBOARD_FIXTURE_COMMAND", configuration);
+        command.env("TERM", "xterm-256color");
+        command.env("LANG", "C.UTF-8");
+        command.cwd(output);
+        Self::spawn_prepared_command(command, Some(output.to_path_buf()))
+    }
 }

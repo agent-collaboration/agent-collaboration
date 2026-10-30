@@ -64,6 +64,30 @@ switch renderers or fabricate bytes to fill it.
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
 
+The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
+`baselinePlanSchema` with explicit `preparationProof`. It observes New's five
+base Tab targets and reverse wrap, Start through Tab/Enter and a click, one safe
+terminal outcome, main Enter/filter/Esc behavior, kitty modified Enter and legacy
+Details fallbacks, Ctrl+C on main/Help, and Quota Q. Its own coverage limits stay
+in the result: a UUID-only terminal marker is not full source-qualified identity;
+Quota exit is not its committing guard. Main toolbar/focus-model targets absent
+at base are recorded as absent, never a pass for full R3.
+
+For S0 use `{kind:"pending-s6"}`: Start's terminal outcome does not prove
+preparation dispatch. S6's agreed strict receipt is
+`{callCount:1,request:{client,machine,directory,runMode}}`, with stable client/
+machine identifiers and runMode `foreground` or `background`. The recorded
+step names a fresh relative JSON filename and the independently declared expected
+request. It rejects missing receipts, extra fields, any count other than one, and
+any changed committed field. S9 requires the real recorded step. Never accept
+`pending-s6` as dispatch proof.
+
+`wide-glyph-baseline.ts PLAN.json [--check]` extends `baselinePlanSchema` with
+optional Chrome. It selects the test-only `wide-glyph-left-border` variant and
+checks New/Details at120×36 in both key modes, requiring all three glyphs at
+overlay-left−1 on covered title rows. It measures left-border loss; row8 is a
+blank separator, so it claims no corner seed. Geometry or entry failure is a gap.
+
 Each transport burst is one write through the existing Rust driver. Legacy leaves
 the kitty query unanswered; kitty mode drains all emulator replies and encodes
 keys accordingly. Only layer A can prove deterministic same-update event batching.
@@ -84,9 +108,10 @@ and confirmation identity/risk/unique choices. Background text cannot supply a
 missing active field. CJK/grapheme continuations use cells. Tags preserve case
 and exact identifier length; names retain the adopted whitespace/case normalization.
 
-`grid-control-checks.ts CAPTURE_DIRECTORY JOURNEY` rechecks each positive before
+`grid-control-checks.ts CAPTURE_DIRECTORY JOURNEY [FRESH_OUTPUT.json]` rechecks each positive before
 requiring rejection of the retained wrong-scene and empty-core controls. Each
-positive also rejects blank. Preserve all wrong-scene pairs: top cannot prove
+positive also rejects blank. A supplemental audit writes a fresh output; it never
+overwrites an earlier control receipt. Preserve all wrong-scene pairs: top cannot prove
 bottom, Cancelled cannot prove Saved, foreign selected Beta cannot prove Alpha's
 lower facts. Oracle sensitivity is separate from S5's seeded wrong-build proof.
 

@@ -20,7 +20,9 @@ fn decode_hex(encoded: &str) -> TestResult<Vec<u8>> {
     ensure(encoded.len().is_multiple_of(2), "odd byte encoding")?;
     encoded
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let digits = std::str::from_utf8(pair)?;
             Ok(u8::from_str_radix(digits, 16)?)

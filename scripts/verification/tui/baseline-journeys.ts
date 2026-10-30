@@ -55,7 +55,7 @@ function keyBytes(
 	};
 	return Buffer.from((protocol === 'legacy' ? legacy : kitty)[key]);
 }
-function focusedWords(grid: TerminalGrid, title: string): readonly string[] {
+export function focusedWords(grid: TerminalGrid, title: string): readonly string[] {
 	const rect = findDialog(grid, title);
 	if (rect === null) throw new Error(`dialog entry missing: ${title}`);
 	return grid.cells
@@ -73,12 +73,12 @@ function focusedWords(grid: TerminalGrid, title: string): readonly string[] {
 function hasText(grid: TerminalGrid, text: string): boolean {
 	return gridLines(grid).some((line) => line.includes(text));
 }
-function saveCheckpoint(driver: PtyGridDriver, directory: string, name: string): void {
+export function saveCheckpoint(driver: PtyGridDriver, directory: string, name: string): void {
 	writeFileSync(join(directory, `${name}.ansi`), driver.bytes());
 	writeFileSync(join(directory, `${name}.grid.json`), JSON.stringify(driver.grid(), null, 2));
 	writeFileSync(join(directory, `${name}.txt`), `${gridLines(driver.grid()).join('\n')}\n`);
 }
-async function withTerminal<TResult>(options: {
+export async function withTerminal<TResult>(options: {
 	readonly plan: BaselinePlan;
 	readonly keys: KeyProtocol;
 	readonly name: string;

@@ -44,3 +44,6 @@ fn compiled_public_sessions_grid_observation() -> TestResult<()> {
 
 #[path = "quota_storyboard_capture_test/public_grid_transport_test.rs"]
 mod public_grid_transport_test;
+
+#[path = "quota_storyboard_capture_test/native_adapter_fixture_support.rs"]
+mod native_adapter_fixture_support;
