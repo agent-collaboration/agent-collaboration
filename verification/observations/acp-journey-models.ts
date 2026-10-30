@@ -80,7 +80,8 @@ export const journeyObservationPlanSchema = metadataObservationPlanSchema
     session_id: z.string().min(1),
     // Its native thread ID, the one Codex resumes; checked against the Router alias rule.
     native_thread_id: z.uuid(),
-    // The working directory the TUI bound with `--cd`; idle-bind binds it again.
+    // The Session's own working directory, which native thread/read and resume must report. The
+    // TUI may launch Codex in another trusted directory; idle-bind lists skills and resumes here.
     cwd: absolutePathSchema,
     mode: journeyModeSchema,
     checks: z.array(journeyCheckSchema).min(1),
@@ -127,6 +128,8 @@ export const nativeThreadItemSchema = z.looseObject({
 export type NativeThreadItem = z.infer<typeof nativeThreadItemSchema>;
 export const nativeThreadSchema = z.looseObject({
   id: z.string(),
+  // The Session's own working directory (v2/thread_data.rs Thread.cwd); a TUI may launch elsewhere.
+  cwd: z.string(),
   status: z.looseObject({ type: z.string() }),
   turns: z.array(
     z.looseObject({

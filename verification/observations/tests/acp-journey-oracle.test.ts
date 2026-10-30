@@ -50,7 +50,7 @@ const BOUND = list([
   },
 ]);
 function thread(turns: NativeThread["turns"]): NativeThread {
-  return { id: SESSION, status: { type: "idle" }, turns };
+  return { id: SESSION, cwd: CWD, status: { type: "idle" }, turns };
 }
 const userText = (id: string, text: string) => ({
   id,

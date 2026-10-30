@@ -24,6 +24,7 @@ import { readObservedJson } from "../evidence-models.ts";
 const SESSION = "chat/../a b";
 const ALIAS = "5756efda-4d21-59ce-aef2-2b68a02a6598";
 const CWD = "/work/repo with spaces";
+const LAUNCH_CWD = "/work/trusted launch repo";
 const BOUND_SKILL = {
   name: "fixture-skill",
   path: "/__codex_router_skill__/x",
@@ -65,6 +66,8 @@ async function nativeFixture(
       client.send(encode({ method: "skills/changed", params: {} }));
       const thread = {
         id: failure === "wrong-thread" ? "other" : ALIAS,
+        // A TUI launched in another trusted directory: the Session keeps its own cwd.
+        cwd: failure === "launch-cwd" ? LAUNCH_CWD : CWD,
         status: { type: threadStatus },
         turns: [{ id: "t1", status: "completed", items: [] }],
       };
@@ -75,7 +78,12 @@ async function nativeFixture(
       else if (frame.method === "thread/read") result = { thread };
       else {
         bound = true;
-        result = failure === "no-model" ? { thread } : { thread, model: "claude-haiku-5-5" };
+        const resumedThread =
+          failure === "resume-launch-cwd" ? { ...thread, cwd: LAUNCH_CWD } : thread;
+        result =
+          failure === "no-model"
+            ? { thread: resumedThread }
+            : { thread: resumedThread, model: "claude-haiku-5-5" };
       }
       client.send(
         encode(
@@ -122,7 +130,14 @@ const INITIALIZE = {
   params: { clientInfo: { name: "journey-verifier", version: "1" } },
 };
 
-for (const failure of ["none", "wrong-thread", "rpc-error", "no-model"]) {
+for (const failure of [
+  "none",
+  "wrong-thread",
+  "rpc-error",
+  "no-model",
+  "launch-cwd",
+  "resume-launch-cwd",
+]) {
   test(
     `idle-bind reads, binds its own connection by thread alias and retains raw responses: ${failure}`,
     { timeout: 5000 },
@@ -158,11 +173,14 @@ for (const failure of ["none", "wrong-thread", "rpc-error", "no-model"]) {
             ? /wrong thread/
             : failure === "no-model"
               ? /lacks an effective model/
-              : /thread\/read failed; raw response retained/,
+              : failure.endsWith("launch-cwd")
+                ? /thread cwd differs from the declared Session cwd/
+                : /thread\/read failed; raw response retained/,
         );
         assert.ok(existsSync(join(evidence, "app-server-2.json")));
-        // Neither a wrong thread nor a failed read ever reaches the resume.
-        if (failure !== "no-model")
+        // A wrong thread, a wrong Session cwd or a failed read never reaches the resume.
+        if (failure === "launch-cwd") assert.deepEqual(requests, [INITIALIZE, READ]);
+        if (failure !== "no-model" && failure !== "resume-launch-cwd")
           assert.equal(
             requests.some((request) => request["method"] === "thread/resume"),
             false,

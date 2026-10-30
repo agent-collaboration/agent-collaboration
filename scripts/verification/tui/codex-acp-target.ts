@@ -35,7 +35,8 @@ export const codexAcpTargetSchema = z
 		// The Router's native alias for it, the thread Codex resumes. The supporting observer plan
 		// checks this pair against the alias rule; this target only resumes and correlates it.
 		native_thread_id: z.uuid(),
-		// The trusted working directory the TUI passes with --cd; never created or trusted here.
+		// The trusted working directory the TUI passes with --cd; never created or trusted here. The
+		// Session keeps its own cwd, which the observer plan declares and checks against native reads.
 		cwd: absoluteDirectorySchema,
 		alternate_screen: z.boolean(),
 		viewport: viewportSchema,
@@ -89,7 +90,6 @@ const observerCorrelationSchema = z.looseObject({
 	endpoint_id: z.string(),
 	session_id: z.string(),
 	native_thread_id: z.string(),
-	cwd: z.string(),
 });
 
 function stableDirectory(path: string, label: string): void {
@@ -136,8 +136,7 @@ export function qualifyCodexAcpTarget(target: CodexAcpTarget): CodexLaunchRecord
 		observer.service_directory !== target.service_directory ||
 		observer.endpoint_id !== target.endpoint_id ||
 		observer.session_id !== target.provider_session_id ||
-		observer.native_thread_id !== target.native_thread_id ||
-		observer.cwd !== target.cwd
+		observer.native_thread_id !== target.native_thread_id
 	)
 		throw new Error('supporting observer plan addresses a different client or Session');
 	return codexLaunchRecord(target);

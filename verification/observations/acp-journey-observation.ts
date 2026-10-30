@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decode } from "../exact-json.ts";
+import { decode, decodeAuthoredJson } from "../exact-json.ts";
 import { prettyEvidenceJson, evidenceJson } from "../evidence-json.ts";
 import { hostManifestSchema, observedObject, readObservedJson } from "./evidence-models.ts";
 import { qualifyMetadataSource, saveRaw } from "./acp-metadata-observation.ts";
@@ -70,6 +70,8 @@ class NativeExchange {
   thread(result: Record<string, unknown>): NativeThread {
     const view = nativeThreadSchema.parse(observedObject(result.thread));
     if (view.id !== this.threadId) throw new Error("app-server returned the wrong thread");
+    if (view.cwd !== this.plan.cwd)
+      throw new Error("thread cwd differs from the declared Session cwd; raw response retained");
     return view;
   }
   async close(): Promise<void> {
@@ -250,6 +252,11 @@ export async function runJourneyObservation(
   return results;
 }
 
+/** The author-written plan file the CLI is given, validated before any socket is touched. */
+export function readJourneyObservationPlan(path: string): JourneyObservationPlan {
+  return journeyObservationPlanSchema.parse(decodeAuthoredJson(readFileSync(path, "utf8")));
+}
+
 export async function main(): Promise<void> {
   if (process.argv.slice(2).some((argument) => argument === "--help" || argument === "-h")) {
     console.log(
@@ -263,7 +270,7 @@ export async function main(): Promise<void> {
   const path = process.argv[2];
   if (process.argv.length !== 3 || path === undefined)
     throw new Error("usage: acp-journey-observation.ts PLAN.json");
-  const plan = journeyObservationPlanSchema.parse(decode(readFileSync(path, "utf8")));
+  const plan = readJourneyObservationPlan(path);
   console.log(prettyEvidenceJson(await runJourneyObservation(plan), false, false));
 }
 

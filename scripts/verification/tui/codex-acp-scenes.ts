@@ -61,6 +61,14 @@ export const CODEX_0_165_TEXT = {
 	skillTag: '[Skill]',
 	// slash_command.rs:110, the `/quit` command row in the slash popup.
 	quitCommandRow: 'exit Codex',
+	// slash_command.rs:99 and :135, the `/compact` and `/model` command rows in the slash popup.
+	compactCommandRow: 'summarize conversation to prevent hitting the context limit',
+	modelCommandRow: 'choose what model and reasoning effort to use',
+	// chatwidget/model_popups.rs:186 and :279, both model popup headers start with this.
+	modelPopupHeader: 'Select Model',
+	// bottom_pane/footer.rs:933-936: shown after Ctrl+C clears a non-empty draft
+	// (bottom_pane/mod.rs:1052-1059); the key label before it is platform-styled.
+	quitHintSuffix: ' again to quit',
 	// bottom_pane/chat_composer.rs:228-242: first local image placeholder.
 	localImage: '[Image #1]',
 	// chatwidget/compaction.rs:43, completed explicit compaction.
@@ -69,8 +77,8 @@ export const CODEX_0_165_TEXT = {
 	errorPrefix: '■ ',
 	// chatwidget/input_restore.rs:383, interrupted turn.
 	interrupted: '■ Conversation interrupted',
-	// chatwidget/model_popups.rs:279.
-	modelPopupTitle: 'Select Model and Effort',
+	// chatwidget/model_popups.rs:637, the reasoning popup that may follow a model row.
+	effortPopupTitle: 'Select Reasoning Level',
 	// bottom_pane/mod.rs:1306, default status header while a turn runs.
 	working: 'Working',
 } as const;
@@ -177,10 +185,16 @@ export function compactJourney(
 		name: `codex-acp-j2-${provider}-compact`,
 		steps: [
 			{
-				actions: [
-					{ kind: 'text', text: '/compact' },
-					{ kind: 'key', key: 'Enter' },
-				],
+				actions: [{ kind: 'text', text: '/compact' }],
+				checkpoint: {
+					scene: 'compact-command-ready',
+					require: [CODEX_0_165_TEXT.compactCommandRow],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+			{
+				actions: [{ kind: 'key', key: 'Enter' }],
 				checkpoint: supported
 					? {
 							scene: 'compact-completed',
@@ -205,10 +219,16 @@ export function interruptJourney(provider: 'claude' | 'cursor', longPrompt: stri
 		name: `codex-acp-j3-${provider}-interrupt`,
 		steps: [
 			{
-				actions: [
-					{ kind: 'text', text: longPrompt },
-					{ kind: 'key', key: 'Enter' },
-				],
+				actions: [{ kind: 'text', text: longPrompt }],
+				checkpoint: {
+					scene: 'prompt-composed',
+					require: [longPrompt],
+					forbid: [CODEX_0_165_TEXT.working],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+			{
+				actions: [{ kind: 'key', key: 'Enter' }],
 				checkpoint: {
 					scene: 'turn-running',
 					require: [CODEX_0_165_TEXT.working],
@@ -223,6 +243,119 @@ export function interruptJourney(provider: 'claude' | 'cursor', longPrompt: stri
 					require: [CODEX_0_165_TEXT.interrupted],
 					forbid: [],
 					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+		],
+	});
+}
+
+/**
+ * R1 without model input: open the `$` picker on the selected skill row, clear the draft with
+ * Ctrl+C (bottom_pane/mod.rs:1052-1059), then exit. Nothing is ever submitted to the provider.
+ */
+export function pickerOnlyJourney(provider: 'claude' | 'cursor', skill: string): CodexJourney {
+	return codexJourneySchema.parse({
+		name: `codex-acp-j1-${provider}-picker-only`,
+		steps: [
+			{
+				actions: [{ kind: 'text', text: `$${skill}` }],
+				checkpoint: {
+					scene: 'skill-picker-open-1',
+					require: [CODEX_0_165_TEXT.skillPopupHint],
+					forbid: [CODEX_0_165_TEXT.errorPrefix],
+					deadline_ms: UI_CHECKPOINT_MS,
+					selected_skill_row: codexSkillDisplayName(skill),
+				},
+			},
+			{
+				actions: [{ kind: 'key', key: 'Ctrl+C' }],
+				checkpoint: {
+					scene: 'draft-cleared',
+					require: [CODEX_0_165_TEXT.quitHintSuffix],
+					forbid: [CODEX_0_165_TEXT.skillPopupHint],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+		],
+	});
+}
+
+/** J3 reopen: resuming the same Session with no input replays its earlier reply. */
+export function reopenJourney(
+	provider: 'claude' | 'cursor',
+	priorReply: readonly string[],
+): CodexJourney {
+	return codexJourneySchema.parse({
+		name: `codex-acp-j3-${provider}-reopen`,
+		steps: [
+			{
+				actions: [],
+				// Earlier history may itself hold error cells, so nothing is forbidden here.
+				checkpoint: {
+					scene: 'history-replayed',
+					require: [...priorReply],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+		],
+	});
+}
+
+/** How a chosen popup row is applied (chatwidget/model_popups.rs:144-160). */
+export type CodexModelApply = 'session' | 'default';
+const MODEL_APPLY_ACTION: Record<CodexModelApply, CodexAction> = {
+	// session_model_selection.rs:53-98: plain `s` sends one thread/settings/update for this
+	// session and writes no config ("Model changed to … for this session only",
+	// app/model_defaults.rs:19-118; a refusal is "Failed to update thread settings: …").
+	session: { kind: 'text', text: 's' },
+	// The row's primary action also saves a default: "Model changed to … for this conversation",
+	// or "Failed to save default model: …" with the endpoint's refusal
+	// (app/event_dispatch.rs:2337-2357).
+	default: { kind: 'key', key: 'Enter' },
+};
+
+/**
+ * J2 `/model`: open the popup through its command row, move to the chosen row with the declared
+ * navigation keys, then apply it. The declared outcome is the text Codex shows for that apply,
+ * success or the endpoint's refusal, so errors are not forbidden; no popup may stay open. The
+ * effective model itself is decided by the same-session observer.
+ */
+export function modelJourney(
+	provider: 'claude' | 'cursor',
+	navigation: readonly CodexAction[],
+	apply: CodexModelApply,
+	expectedOutcome: readonly string[],
+	outcomeDeadlineMs: number,
+): CodexJourney {
+	return codexJourneySchema.parse({
+		name: `codex-acp-j2-${provider}-model-${apply}`,
+		steps: [
+			{
+				actions: [{ kind: 'text', text: '/model' }],
+				checkpoint: {
+					scene: 'model-command-ready',
+					require: [CODEX_0_165_TEXT.modelCommandRow],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+			{
+				actions: [{ kind: 'key', key: 'Enter' }],
+				checkpoint: {
+					scene: 'model-popup-open',
+					require: [CODEX_0_165_TEXT.modelPopupHeader],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+				},
+			},
+			{
+				actions: [...navigation, MODEL_APPLY_ACTION[apply]],
+				checkpoint: {
+					scene: 'model-applied',
+					require: [...expectedOutcome],
+					forbid: [CODEX_0_165_TEXT.modelPopupHeader, CODEX_0_165_TEXT.effortPopupTitle],
+					deadline_ms: outcomeDeadlineMs,
 				},
 			},
 		],

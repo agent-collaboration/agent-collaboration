@@ -8,6 +8,9 @@ import {
 	codexSkillDisplayName,
 	gridShowsCheckpoint,
 	interruptJourney,
+	modelJourney,
+	pickerOnlyJourney,
+	reopenJourney,
 	requireCheckpointSequence,
 	skillJourney,
 } from './codex-acp-scenes.ts';
@@ -124,9 +127,28 @@ test('the effect checkpoint needs every selected effect and rejects echo, error,
 	expect(gridShowsCheckpoint(['', '', ''], effect)).toBe(false);
 });
 
+// The slash popup row for a command (slash_command.rs:99,135), distinct from the composer echo.
+const COMPACT_ROW = '› /compact    summarize conversation to prevent hitting the context limit';
+const MODEL_ROW = '› /model      choose what model and reasoning effort to use';
+
+test('J2 Enter follows only the drawn command row, never the composer echo alone', () => {
+	for (const [journey, row, echo] of [
+		[compactJourney('cursor', 120_000), COMPACT_ROW, '› /compact'],
+		[modelJourney('cursor', [], 'session', ['Model changed'], 8_000), MODEL_ROW, '› /model'],
+	] as const) {
+		const [ready, submitted] = journey.steps;
+		if (ready === undefined || submitted === undefined) throw new Error('command scene missing');
+		expect(ready.checkpoint.scene).toMatch(/-command-ready$/u);
+		expect(ready.actions.every((action) => action.kind === 'text')).toBe(true);
+		expect(submitted.actions[0]).toEqual({ kind: 'key', key: 'Enter' });
+		expect(gridShowsCheckpoint([echo, row], ready.checkpoint)).toBe(true);
+		expect(gridShowsCheckpoint([echo], ready.checkpoint)).toBe(false);
+	}
+});
+
 test('J2 compaction succeeds only on Claude and Cursor must show an error without a compaction', () => {
-	const claude = compactJourney('claude', 120_000).steps[0]?.checkpoint;
-	const cursor = compactJourney('cursor', 120_000).steps[0]?.checkpoint;
+	const claude = compactJourney('claude', 120_000).steps[1]?.checkpoint;
+	const cursor = compactJourney('cursor', 120_000).steps[1]?.checkpoint;
 	if (claude === undefined || cursor === undefined) throw new Error('compaction scene missing');
 	expect(gridShowsCheckpoint(['• Context compacted · 3s'], claude)).toBe(true);
 	expect(gridShowsCheckpoint(['• Compacted the conversation.'], claude)).toBe(false);
@@ -136,9 +158,20 @@ test('J2 compaction succeeds only on Claude and Cursor must show an error withou
 });
 
 test('J3 needs a running turn before its interruption', () => {
-	const [running, interrupted] = interruptJourney('claude', 'count slowly to fifty').steps;
-	if (running === undefined || interrupted === undefined)
+	const [composed, running, interrupted] = interruptJourney(
+		'claude',
+		'count slowly to fifty',
+	).steps;
+	if (composed === undefined || running === undefined || interrupted === undefined)
 		throw new Error('interrupt scene missing');
+	// The prompt is drawn in the composer, and not yet running, before its Enter.
+	expect(composed.actions).toEqual([{ kind: 'text', text: 'count slowly to fifty' }]);
+	expect(gridShowsCheckpoint(['› count slowly to fifty'], composed.checkpoint)).toBe(true);
+	expect(gridShowsCheckpoint(['› count slowly'], composed.checkpoint)).toBe(false);
+	expect(
+		gridShowsCheckpoint(['› count slowly to fifty', '• Working (0s)'], composed.checkpoint),
+	).toBe(false);
+	expect(running.actions).toEqual([{ kind: 'key', key: 'Enter' }]);
 	expect(gridShowsCheckpoint(['• Working (3s • esc to interrupt)'], running.checkpoint)).toBe(true);
 	expect(
 		gridShowsCheckpoint(
@@ -235,4 +268,131 @@ test('the picker checkpoint needs the selected skill row, not the composer echo'
 		),
 	).toBe(false);
 	expect(gridShowsCheckpoint(['', '', ''], picker)).toBe(false);
+});
+
+test('the picker-only journey opens the selected row and clears the draft with no model input', () => {
+	const journey = pickerOnlyJourney('claude', 'bridge_probe_claude_01a18013');
+	expect(journey.steps.map((step) => step.checkpoint.scene)).toEqual([
+		'skill-picker-open-1',
+		'draft-cleared',
+	]);
+	// Nothing is submitted: no Enter, no Tab into the composer, no pasted image.
+	expect(journey.steps.flatMap((step) => step.actions)).toEqual([
+		{ kind: 'text', text: '$bridge_probe_claude_01a18013' },
+		{ kind: 'key', key: 'Ctrl+C' },
+	]);
+	const [picker, cleared] = journey.steps;
+	if (picker === undefined || cleared === undefined) throw new Error('picker scene missing');
+	const claudeRow = '› bridge_probe_claude_01a18013  [Skill] Emit';
+	expect(gridShowsCheckpoint([claudeRow, CODEX_0_165_TEXT.skillPopupHint], picker.checkpoint)).toBe(
+		true,
+	);
+	expect(
+		gridShowsCheckpoint(
+			['› $bridge_probe_claude_01a18013', CODEX_0_165_TEXT.skillPopupHint],
+			picker.checkpoint,
+		),
+	).toBe(false);
+	// footer.rs:932-936: the key, then " again to quit", once Ctrl+C cleared the draft.
+	expect(gridShowsCheckpoint(['›', 'ctrl + c again to quit'], cleared.checkpoint)).toBe(true);
+	expect(
+		gridShowsCheckpoint(
+			[claudeRow, CODEX_0_165_TEXT.skillPopupHint, 'ctrl + c again to quit'],
+			cleared.checkpoint,
+		),
+	).toBe(false);
+	expect(gridShowsCheckpoint(['› '], cleared.checkpoint)).toBe(false);
+});
+
+test('reopen replays every declared prior reply line without new input', () => {
+	const journey = reopenJourney('cursor', [
+		'ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED',
+		'ACP_BRIDGE_CURSOR_B_5D820A|ALPHA|RED',
+	]);
+	const [replayed] = journey.steps;
+	if (replayed === undefined || journey.steps.length !== 1) throw new Error('reopen scene');
+	expect(replayed.actions).toEqual([]);
+	expect(
+		gridShowsCheckpoint(
+			[
+				'• ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED ACP_BRIDGE_CURSOR_B_5D820A|ALPHA|RED',
+				'■ an earlier error cell',
+			],
+			replayed.checkpoint,
+		),
+	).toBe(true);
+	expect(gridShowsCheckpoint(['• ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED'], replayed.checkpoint)).toBe(
+		false,
+	);
+	// An empty expectation would pass on any screen.
+	expect(() => reopenJourney('cursor', [])).toThrow();
+});
+
+// The Router's refusal of a Codex default save (router_session_app_server_methods.rs, cd9668cd5).
+const ROUTER_SAVE_REFUSAL =
+	'Saving Codex configuration/defaults is not supported on this ACP endpoint';
+
+test('the session-only apply sends one plain s after the declared navigation', () => {
+	const navigation = [{ kind: 'key', key: 'Down' }] as const;
+	const session = modelJourney(
+		'claude',
+		navigation,
+		'session',
+		['Model changed to fixture-model', 'for this session only'],
+		8_000,
+	);
+	expect(session.name).toBe('codex-acp-j2-claude-model-session');
+	expect(session.steps.map((step) => step.checkpoint.scene)).toEqual([
+		'model-command-ready',
+		'model-popup-open',
+		'model-applied',
+	]);
+	const [, popup, applied] = session.steps;
+	if (popup === undefined || applied === undefined) throw new Error('model scene missing');
+	expect(applied.actions).toEqual([...navigation, { kind: 'text', text: 's' }]);
+	expect(encodeCodexAction({ kind: 'text', text: 's' }, 'kitty').toString()).toBe('s');
+	// model_popups.rs:186,279: either model popup opens.
+	expect(gridShowsCheckpoint(['  Select Model and Effort'], popup.checkpoint)).toBe(true);
+	expect(gridShowsCheckpoint(['  Select Model'], popup.checkpoint)).toBe(true);
+	expect(gridShowsCheckpoint(['› /model'], popup.checkpoint)).toBe(false);
+	// app/model_defaults.rs:103-118: model, optional effort and tier labels, then the suffix.
+	expect(
+		gridShowsCheckpoint(
+			['• Model changed to fixture-model high for this session only'],
+			applied.checkpoint,
+		),
+	).toBe(true);
+	// A default save, a popup left open (model or reasoning), or a refusal is not this outcome.
+	for (const screen of [
+		['• Model changed to fixture-model high for this conversation'],
+		['• Model changed to fixture-model high for this session only', '  Select Model and Effort'],
+		[
+			'• Model changed to fixture-model high for this session only',
+			'  Select Reasoning Level for fixture-model',
+		],
+		['■ Failed to update thread settings: serviceTier is not supported'],
+	])
+		expect(gridShowsCheckpoint(screen, applied.checkpoint)).toBe(false);
+});
+
+test('the default apply accepts only the declared honest refusal of the default save', () => {
+	const refused = modelJourney(
+		'cursor',
+		[],
+		'default',
+		['Failed to save default model', ROUTER_SAVE_REFUSAL],
+		8_000,
+	).steps[2];
+	if (refused === undefined) throw new Error('model refusal scene missing');
+	expect(refused.actions).toEqual([{ kind: 'key', key: 'Enter' }]);
+	expect(
+		gridShowsCheckpoint(
+			[`■ Failed to save default model: ${ROUTER_SAVE_REFUSAL}`],
+			refused.checkpoint,
+		),
+	).toBe(true);
+	expect(
+		gridShowsCheckpoint(['■ Failed to save default model: io error'], refused.checkpoint),
+	).toBe(false);
+	expect(() => modelJourney('cursor', [], 'default', [], 8_000)).toThrow();
 });

@@ -74,12 +74,11 @@ test('a symlinked trusted cwd is refused', async () => {
 	);
 });
 
-test('the observer must read the same client, raw Session, native alias and cwd', async () => {
+test('the observer must read the same client, raw Session and native alias', async () => {
 	const mismatches = [
 		['session_id', ALIAS],
 		['native_thread_id', '019a0000-0000-7000-8000-0000000000ab'],
 		['endpoint_id', 'claude-local'],
-		['cwd', '/elsewhere'],
 		['codex_sha256', '0'.repeat(64)],
 	] as const;
 	const fixtures = await Promise.all(mismatches.map(async () => targetFixture()));
@@ -95,6 +94,20 @@ test('the observer must read the same client, raw Session, native alias and cwd'
 			'supporting observer plan addresses a different client or Session',
 		);
 	}
+});
+
+test('the launch cwd may differ from the Session cwd the observer declares', async () => {
+	const { root, target, observerPlan } = await targetFixture();
+	// The provider Session runs in its private fixture workspace; Codex launches in the trusted repo.
+	writeFileSync(
+		join(root, 'observer-plan.json'),
+		JSON.stringify({ ...observerPlan, cwd: join(root, 'provider workspace') }),
+	);
+	const launch = qualifyCodexAcpTarget(target);
+	expect(launch.cwd).toBe(target.cwd);
+	expect(
+		launch.arguments.slice(launch.arguments.indexOf('--cd'), launch.arguments.indexOf('--cd') + 2),
+	).toEqual(['--cd', target.cwd]);
 });
 
 test('raw provider Session IDs stay opaque while the native alias must be a UUID', async () => {

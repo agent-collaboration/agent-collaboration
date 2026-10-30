@@ -16,10 +16,14 @@ import { z } from 'zod';
 import {
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
+	codexActionSchema,
 	compactJourney,
 	encodeCodexAction,
 	gridShowsCheckpoint,
 	interruptJourney,
+	modelJourney,
+	pickerOnlyJourney,
+	reopenJourney,
 	requireCheckpointSequence,
 	skillJourney,
 } from './codex-acp-scenes.ts';
@@ -71,6 +75,27 @@ export const codexAcpRunPlanSchema = z
 				provider: providerSchema,
 				prompt: z.string().min(1),
 			}),
+			// R1 without model input: the selected picker row, then the draft cleared.
+			z.strictObject({
+				kind: z.literal('picker'),
+				provider: providerSchema,
+				skill: z.string().min(1),
+			}),
+			// The reply this Session already holds, shown again on resume with no new prompt.
+			z.strictObject({
+				kind: z.literal('reopen'),
+				provider: providerSchema,
+				prior_reply: z.array(z.string().min(1)).min(1),
+			}),
+			// Keys moving to one advertised model row, how it is applied, and the text Codex shows.
+			z.strictObject({
+				kind: z.literal('model'),
+				provider: providerSchema,
+				navigation: z.array(codexActionSchema),
+				apply: z.enum(['session', 'default']),
+				expected_outcome: z.array(z.string().min(1)).min(1),
+				outcome_deadline_ms: z.number().int().positive().max(600_000),
+			}),
 		]),
 	})
 	.readonly();
@@ -92,7 +117,16 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 		});
 	if (journey.kind === 'compact')
 		return compactJourney(journey.provider, journey.effect_deadline_ms);
-	return interruptJourney(journey.provider, journey.prompt);
+	if (journey.kind === 'interrupt') return interruptJourney(journey.provider, journey.prompt);
+	if (journey.kind === 'picker') return pickerOnlyJourney(journey.provider, journey.skill);
+	if (journey.kind === 'reopen') return reopenJourney(journey.provider, journey.prior_reply);
+	return modelJourney(
+		journey.provider,
+		journey.navigation,
+		journey.apply,
+		journey.expected_outcome,
+		journey.outcome_deadline_ms,
+	);
 }
 
 /** Everything a run needs, checked without launching Codex. */

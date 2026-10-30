@@ -48,6 +48,21 @@ const CURSOR_SKILL = {
 	effect_deadline_ms: 120_000,
 };
 
+const PICKER = { kind: 'picker', provider: 'claude', skill: 'bridge_probe_claude_01a18013' };
+const REOPEN = {
+	kind: 'reopen',
+	provider: 'cursor',
+	prior_reply: ['ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED'],
+};
+const MODEL = {
+	kind: 'model',
+	provider: 'cursor',
+	navigation: [{ kind: 'key', key: 'Down' }],
+	apply: 'session',
+	expected_outcome: ['Model changed to fixture-model', 'for this session only'],
+	outcome_deadline_ms: 30_000,
+};
+
 test('each declared journey kind builds its scenes for the target provider only', async () => {
 	const { plan } = await runPlan(CURSOR_SKILL);
 	expect(codexJourneyFor(plan).name).toBe('codex-acp-j1-cursor-skill');
@@ -56,13 +71,25 @@ test('each declared journey kind builds its scenes for the target provider only'
 		provider: 'cursor',
 		effect_deadline_ms: 120_000,
 	});
-	expect(codexJourneyFor(compact.plan).steps[0]?.checkpoint.scene).toBe('compact-refused');
+	expect(codexJourneyFor(compact.plan).steps.map((step) => step.checkpoint.scene)).toEqual([
+		'compact-command-ready',
+		'compact-refused',
+	]);
 	const interrupt = await runPlan({
 		kind: 'interrupt',
 		provider: 'cursor',
 		prompt: 'count to fifty',
 	});
 	expect(codexJourneyFor(interrupt.plan).name).toBe('codex-acp-j3-cursor-interrupt');
+	const picker = await runPlan({ ...PICKER, provider: 'cursor' });
+	expect(codexJourneyFor(picker.plan).name).toBe('codex-acp-j1-cursor-picker-only');
+	const reopen = await runPlan(REOPEN);
+	expect(codexJourneyFor(reopen.plan).steps[0]?.checkpoint.require).toEqual(REOPEN.prior_reply);
+	const model = await runPlan(MODEL);
+	expect(codexJourneyFor(model.plan).steps[2]?.actions).toEqual([
+		...MODEL.navigation,
+		{ kind: 'text', text: 's' },
+	]);
 	// The fixture target is the Cursor endpoint; a Claude journey must not drive it.
 	const wrong = await runPlan({ ...CURSOR_SKILL, provider: 'claude' });
 	expect(() => codexJourneyFor(wrong.plan)).toThrow(
@@ -80,6 +107,16 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 			journey: { ...CURSOR_SKILL, effect_deadline_ms: 3_600_000 },
 		}),
 	).toThrow();
+	// A reopen with nothing to find, a model step with no keys or outcome, and an unbounded
+	// model outcome wait are refused like the other journeys.
+	for (const journey of [
+		{ ...REOPEN, prior_reply: [] },
+		{ ...MODEL, apply: 'global' },
+		{ ...MODEL, expected_outcome: [] },
+		{ ...MODEL, outcome_deadline_ms: 3_600_000 },
+		{ ...PICKER, skill: '' },
+	])
+		expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey })).toThrow();
 });
 
 test('a changed source head is refused before any binary or Codex is touched', async () => {
