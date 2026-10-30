@@ -246,6 +246,25 @@ export class PtyGridDriver {
 		if (!response.startsWith('FINISHED ')) throw new Error(response);
 		return this.release();
 	}
+	/** EOF and the Rust driver's child-exit check prove exit; time only fails it. */
+	async drainUntilExit(timeoutMillis = 8_000): Promise<number | null> {
+		if (!Number.isSafeInteger(timeoutMillis) || timeoutMillis <= 0 || timeoutMillis > 30_000)
+			throw new Error('apparatus exit deadline must be within 1..30000 milliseconds');
+		const deadline = Date.now() + timeoutMillis;
+		const drain = async (): Promise<number | null> => {
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) throw new Error('apparatus exit deadline: no child EOF');
+			try {
+				if ((await this.receive(remaining)) === 'eof') return this.finish();
+			} catch (error) {
+				throw new Error('apparatus exit drain failed before confirmed child exit', {
+					cause: error,
+				});
+			}
+			return drain();
+		};
+		return drain();
+	}
 	async stop(): Promise<number | null> {
 		if (!this.ended) {
 			try {
