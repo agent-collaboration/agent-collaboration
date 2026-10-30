@@ -9,10 +9,10 @@ import type { CellData } from '@wterm/core';
 import { z } from 'zod';
 
 import { baselinePlanSchema, checkBaselineTarget } from './baseline-journeys.ts';
-import { encodeJourneyKey } from './capture-run.ts';
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
 import type { GridRectangle } from './grid-scene-matcher.ts';
 import { findDialog } from './grid-scene-matcher.ts';
+import { encodeJourneyKey } from './journey-key.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding } from './source-binding.ts';
