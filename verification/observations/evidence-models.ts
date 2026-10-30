@@ -47,10 +47,13 @@ export const harnessClaimsSchema = z.looseObject({
   details: z.record(z.string(), z.string()),
   scope: z.string(),
 });
+// Ownership follows the launching account's real UID (ps `ruid`, Node `process.getuid()`); the
+// effective UID (ps `uid`) is evidence only, because a user-launched setuid utility changes it.
 export const processIdentitySchema = z.object({
   pid: z.coerce.number().int(),
   parent: z.coerce.number().int(),
-  uid: z.coerce.number().int(),
+  realUid: z.coerce.number().int(),
+  effectiveUid: z.coerce.number().int(),
   group: z.coerce.number().int(),
   birth: z.string(),
   executable: z.string(),
