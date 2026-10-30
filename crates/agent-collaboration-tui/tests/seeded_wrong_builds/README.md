@@ -81,6 +81,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `hover-activates-row.patch` | Pointer motion invokes the selected row's action. |
 | `hover-enabled-by-default.patch` | A list that never opted in changes selection and focus on pointer motion. |
 | `modified-arrows-change-focus.patch` | Unbound modified arrows fall through to grouped focus traversal. |
+| `pinned-context-gap-omitted.patch` | Pinned dialog context touches the scrolling body without its one blank row. |
+| `empty-context-has-gap.patch` | An empty context leaves a redundant blank row and excess content height. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

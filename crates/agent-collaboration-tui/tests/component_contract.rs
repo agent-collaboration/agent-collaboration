@@ -14,6 +14,9 @@ mod control_editor;
 #[path = "suites/dialog_content_sizing.rs"]
 mod dialog_content_sizing;
 #[cfg(test)]
+#[path = "suites/dialog_context_spacing.rs"]
+mod dialog_context_spacing;
+#[cfg(test)]
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]

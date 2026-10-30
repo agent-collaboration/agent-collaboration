@@ -81,6 +81,7 @@ pub fn DialogFrame<'a>(
     let action_hints = std::mem::take(&mut props.action_hints);
     let help = props.help_action.take();
     let identity = std::mem::take(&mut props.context);
+    let has_context = !identity.is_empty();
     if actions.is_empty()
         && let Some(context) = context
     {
@@ -105,11 +106,13 @@ pub fn DialogFrame<'a>(
     let has_actions = !actions.is_empty() || !action_hints.is_empty();
     element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
         border_style:props.border_style.unwrap_or(BorderStyle::Round),border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
-        View(width:100pct,flex_shrink:0.0_f32,column_gap:1,flex_wrap:FlexWrap::Wrap) {
-            View(flex_shrink:0.0_f32,max_width:100pct) {Text(content:props.title.clone(),color:theme.foreground(TextRole::Primary),weight:Weight::Bold)}
-            View(margin_left:Margin::Auto,flex_shrink:0.0_f32,max_width:100pct,column_gap:1,flex_wrap:FlexWrap::Wrap) {#(identity) #(help)}
+        View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:u16::from(has_context)) {
+            View(width:100pct,flex_shrink:0.0_f32,column_gap:1,flex_wrap:FlexWrap::Wrap) {
+                View(flex_shrink:0.0_f32,max_width:100pct) {Text(content:props.title.clone(),color:theme.foreground(TextRole::Primary),weight:Weight::Bold)}
+                View(margin_left:Margin::Auto,flex_shrink:0.0_f32,max_width:100pct,column_gap:1,flex_wrap:FlexWrap::Wrap) {#(identity) #(help)}
+            }
+            ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
         }
-        ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
         #(has_actions.then(||element!(DialogFooter(children:actions,hints:action_hints))))
     })
 }
