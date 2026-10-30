@@ -1,3 +1,4 @@
+use super::demo_shell_choices::ChoicePickerState;
 use iocraft::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,6 +93,21 @@ impl DialogFocus {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DetailsFocus {
+    Close,
+    Open,
+    Fork,
+}
+impl DetailsFocus {
+    pub fn advance(self, reverse: bool) -> Self {
+        match (self, reverse) {
+            (Self::Close, false) | (Self::Fork, true) => Self::Open,
+            (Self::Open, false) | (Self::Close, true) => Self::Fork,
+            (Self::Fork, false) | (Self::Open, true) => Self::Close,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShellFocus {
     Menu,
     New,
@@ -118,9 +134,10 @@ pub enum DemoOverlay {
     NewSession {
         focus: DialogFocus,
     },
-    ChoicePicker {
-        query: String,
-        selected: DialogChoice,
+    ChoicePicker(ChoicePickerState),
+    Details {
+        session: SessionKey,
+        focus: DetailsFocus,
     },
     Help,
 }
@@ -151,20 +168,26 @@ pub fn overlay_rectangle(overlay: &DemoOverlay) -> CellRectangle {
             left: 17,
             top: 5,
             width: 52,
-            height: 12,
+            height: 15,
         },
-        DemoOverlay::ChoicePicker { selected, .. } => CellRectangle {
+        DemoOverlay::ChoicePicker(picker) => CellRectangle {
             left: 20,
-            top: match selected {
-                DialogChoice::Client(_) => 8,
-                DialogChoice::Machine(_) => 9,
-                DialogChoice::Directory(_) => 10,
+            top: match picker.anchor {
+                DialogChoice::Client(_) => 9,
+                DialogChoice::Machine(_) => 10,
+                DialogChoice::Directory(_) => 11,
             },
             width: 40,
-            height: 9,
+            height: 7,
+        },
+        DemoOverlay::Details { .. } => CellRectangle {
+            left: 9,
+            top: 4,
+            width: 58,
+            height: 18,
         },
         DemoOverlay::Help => CellRectangle {
-            left: 12,
+            left: 5,
             top: 4,
             width: 66,
             height: 13,

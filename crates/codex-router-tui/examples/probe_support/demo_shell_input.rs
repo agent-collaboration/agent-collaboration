@@ -1,5 +1,6 @@
 use super::demo_shell_state::{
-    DemoOverlay, DemoShellState, DialogFocus, SessionSort, ShellFocus, overlay_rectangle,
+    DemoOverlay, DemoShellState, DetailsFocus, DialogFocus, FAKE_SESSIONS, SessionKey, SessionSort,
+    ShellFocus, overlay_rectangle,
 };
 use iocraft::prelude::*;
 
@@ -28,13 +29,23 @@ impl DemoShellState {
         };
         self.selected_session = sessions.get(next).map(|session| session.key);
     }
-    fn open_session(&mut self) {
-        if let Some(session) = self
-            .visible_sessions()
-            .iter()
-            .find(|session| Some(session.key) == self.selected_session)
-        {
-            self.last_action = format!("Opened {}", session.title);
+    fn show_details(&mut self) {
+        if let Some(key) = self.selected_session {
+            self.overlays.push(DemoOverlay::Details {
+                session: key,
+                focus: DetailsFocus::Open,
+            });
+            self.last_action = "Details opened".to_owned();
+        }
+    }
+    pub(super) fn pretend_session_action(&mut self, key: SessionKey, fork: bool) {
+        if let Some(session) = FAKE_SESSIONS.iter().find(|session| session.key == key) {
+            self.last_action = format!(
+                "would {} {}",
+                if fork { "fork" } else { "open" },
+                session.title
+            );
+            self.overlays.clear();
         }
     }
     pub(super) fn start_session(&mut self) {
@@ -96,7 +107,7 @@ impl DemoShellState {
                 }
                 .to_owned();
             }
-            ShellFocus::List => self.open_session(),
+            ShellFocus::List => self.show_details(),
         }
     }
     pub fn handle_event(&mut self, event: TerminalEvent) {
@@ -110,7 +121,7 @@ impl DemoShellState {
                     self.quit_requested = true;
                     return;
                 }
-                if self.width < 96 || self.height < 24 {
+                if self.width < 76 || self.height < 24 {
                     return;
                 }
                 match self.overlays.last().cloned() {
@@ -128,7 +139,7 @@ impl DemoShellState {
             TerminalEvent::FullscreenMouse(mouse)
                 if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) =>
             {
-                if self.width < 96 || self.height < 24 {
+                if self.width < 76 || self.height < 24 {
                     return;
                 }
                 match self.overlays.last().cloned() {
@@ -153,6 +164,15 @@ impl DemoShellState {
         self.last_action = format!("Filtered: {}", self.filter_query);
     }
     fn background_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Enter
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(self.focus, ShellFocus::List | ShellFocus::Filter)
+        {
+            if let Some(session) = self.selected_session {
+                self.pretend_session_action(session, key.modifiers.contains(KeyModifiers::SHIFT));
+            }
+            return;
+        }
         if key.code == KeyCode::Esc {
             if !self.filter_query.is_empty() {
                 self.filter_query.clear();
@@ -199,7 +219,7 @@ impl DemoShellState {
                 self.last_action = format!("Filtered: {}", self.filter_query);
             }
             KeyCode::Enter if self.focus == ShellFocus::Filter => {
-                self.open_session();
+                self.show_details();
                 self.focus = ShellFocus::List;
             }
             KeyCode::Char(character)
@@ -267,7 +287,7 @@ impl DemoShellState {
         {
             self.selected_session = Some(session.key);
             self.focus = ShellFocus::List;
-            self.open_session();
+            self.show_details();
         }
     }
     fn overlay_click(&mut self, overlay: DemoOverlay, mouse: FullscreenMouseEvent) {
@@ -275,7 +295,7 @@ impl DemoShellState {
         if !rect.contains(&mouse) {
             if matches!(
                 overlay,
-                DemoOverlay::Menu { .. } | DemoOverlay::ChoicePicker { .. }
+                DemoOverlay::Menu { .. } | DemoOverlay::ChoicePicker(_)
             ) {
                 self.overlays.pop();
                 self.last_action = "Overlay dismissed".to_owned();
@@ -289,13 +309,13 @@ impl DemoShellState {
                 self.run_menu_item(usize::from(row - 2))
             }
             DemoOverlay::NewSession { .. } => {
-                if (3..6).contains(&row) && (3..49).contains(&column) {
+                if (4..7).contains(&row) && (3..49).contains(&column) {
                     self.open_choice(match row {
-                        3 => DialogFocus::Client,
-                        4 => DialogFocus::Machine,
+                        4 => DialogFocus::Client,
+                        5 => DialogFocus::Machine,
                         _ => DialogFocus::Directory,
                     });
-                } else if row == 9 {
+                } else if row == 12 {
                     if (3..25).contains(&column) {
                         self.overlays.pop();
                         self.last_action = "New session cancelled".to_owned();
@@ -304,11 +324,27 @@ impl DemoShellState {
                     }
                 }
             }
-            DemoOverlay::ChoicePicker { query, selected } if row >= 3 => {
-                if let Some(choice) = selected.matching(&query).get(usize::from(row - 3)) {
-                    self.pick_choice(*choice);
+            DemoOverlay::ChoicePicker(picker) if row >= 3 => {
+                if let Some(option) = picker.visible_options().get(usize::from(row - 3)) {
+                    if let Some(DemoOverlay::ChoicePicker(current)) = self.overlays.last_mut() {
+                        current.highlight =
+                            super::demo_shell_choices::ChoiceHighlight::Item(option.key);
+                    }
+                    if option.availability
+                        == super::demo_shell_choices::ChoiceAvailability::Available
+                    {
+                        self.pick_choice(option.key);
+                    }
                 }
             }
+            DemoOverlay::Details { session, .. } if row == 16 => match column {
+                3..=12 => {
+                    self.overlays.pop();
+                }
+                16..=31 => self.pretend_session_action(session, false),
+                35..=50 => self.pretend_session_action(session, true),
+                _ => {}
+            },
             _ => {}
         }
     }

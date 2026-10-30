@@ -1,4 +1,7 @@
-use super::demo_shell_state::{DemoOverlay, DemoShellState, DialogChoice, DialogFocus};
+use super::demo_shell_choices::ChoicePickerState;
+use super::demo_shell_state::{
+    DemoOverlay, DemoShellState, DetailsFocus, DialogChoice, DialogFocus,
+};
 use iocraft::prelude::*;
 
 impl DemoShellState {
@@ -9,10 +12,8 @@ impl DemoShellState {
             DialogFocus::Directory => DialogChoice::Directory(self.selected_directory),
             DialogFocus::Cancel | DialogFocus::Start => return,
         };
-        self.overlays.push(DemoOverlay::ChoicePicker {
-            query: String::new(),
-            selected,
-        });
+        self.overlays
+            .push(DemoOverlay::ChoicePicker(ChoicePickerState::new(selected)));
     }
     pub(super) fn pick_choice(&mut self, choice: DialogChoice) {
         match choice {
@@ -24,11 +25,8 @@ impl DemoShellState {
         self.last_action = format!("{}: {}", choice.field_label(), choice.label());
     }
     pub(super) fn append_choice_query(&mut self, text: &str) {
-        if let Some(DemoOverlay::ChoicePicker { query, selected }) = self.overlays.last_mut() {
-            query.extend(text.chars().filter(|character| !character.is_control()));
-            if let Some(first) = selected.matching(query).first() {
-                *selected = *first;
-            }
+        if let Some(DemoOverlay::ChoicePicker(picker)) = self.overlays.last_mut() {
+            picker.append_query(text);
         }
     }
     pub(super) fn dialog_key(&mut self, overlay: DemoOverlay, key: KeyEvent) {
@@ -67,7 +65,7 @@ impl DemoShellState {
                 },
                 _ => {}
             },
-            DemoOverlay::ChoicePicker { query, selected } => match key.code {
+            DemoOverlay::ChoicePicker(picker) => match key.code {
                 KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     self.overlays.pop();
                     self.start_session();
@@ -77,37 +75,18 @@ impl DemoShellState {
                     self.last_action = "Choice list closed".to_owned();
                 }
                 KeyCode::Up | KeyCode::Down => {
-                    let options = selected.matching(&query);
-                    let current = options
-                        .iter()
-                        .position(|choice| *choice == selected)
-                        .unwrap_or(0);
-                    let next = if key.code == KeyCode::Up {
-                        current.saturating_sub(1)
-                    } else {
-                        current
-                            .saturating_add(1)
-                            .min(options.len().saturating_sub(1))
-                    };
-                    if let (Some(choice), Some(DemoOverlay::ChoicePicker { selected, .. })) =
-                        (options.get(next), self.overlays.last_mut())
-                    {
-                        *selected = *choice;
+                    if let Some(DemoOverlay::ChoicePicker(picker)) = self.overlays.last_mut() {
+                        picker.move_highlight(key.code == KeyCode::Down);
                     }
                 }
                 KeyCode::Enter => {
-                    if selected.matching(&query).contains(&selected) {
-                        self.pick_choice(selected);
+                    if let Some(choice) = picker.pickable_key() {
+                        self.pick_choice(choice);
                     }
                 }
                 KeyCode::Backspace => {
-                    if let Some(DemoOverlay::ChoicePicker { query, selected }) =
-                        self.overlays.last_mut()
-                    {
-                        query.pop();
-                        if let Some(first) = selected.matching(query).first() {
-                            *selected = *first;
-                        }
+                    if let Some(DemoOverlay::ChoicePicker(picker)) = self.overlays.last_mut() {
+                        picker.backspace_query();
                     }
                 }
                 KeyCode::Char(character)
@@ -117,6 +96,32 @@ impl DemoShellState {
                 {
                     self.append_choice_query(&character.to_string())
                 }
+                _ => {}
+            },
+            DemoOverlay::Details { session, focus } => match key.code {
+                KeyCode::Esc => {
+                    self.overlays.pop();
+                    self.last_action = "Details closed".to_owned();
+                }
+                KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => self
+                    .pretend_session_action(session, key.modifiers.contains(KeyModifiers::SHIFT)),
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Left | KeyCode::Right => {
+                    if let Some(DemoOverlay::Details { focus: current, .. }) =
+                        self.overlays.last_mut()
+                    {
+                        *current = focus.advance(
+                            matches!(key.code, KeyCode::BackTab | KeyCode::Left)
+                                || key.modifiers.contains(KeyModifiers::SHIFT),
+                        );
+                    }
+                }
+                KeyCode::Enter => match focus {
+                    DetailsFocus::Close => {
+                        self.overlays.pop();
+                    }
+                    DetailsFocus::Open => self.pretend_session_action(session, false),
+                    DetailsFocus::Fork => self.pretend_session_action(session, true),
+                },
                 _ => {}
             },
             DemoOverlay::Menu { .. } | DemoOverlay::Help => {}
