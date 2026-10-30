@@ -291,8 +291,12 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
         KeyCode::Tab if key.modifiers == KeyModifiers::SHIFT => {
             Some((FocusDirection::Previous, false))
         }
-        KeyCode::Down | KeyCode::Right => Some((FocusDirection::Next, true)),
-        KeyCode::Up | KeyCode::Left => Some((FocusDirection::Previous, true)),
+        KeyCode::Down | KeyCode::Right if key.modifiers.is_empty() => {
+            Some((FocusDirection::Next, true))
+        }
+        KeyCode::Up | KeyCode::Left if key.modifiers.is_empty() => {
+            Some((FocusDirection::Previous, true))
+        }
         _ => None,
     };
     if let Some((direction, group)) = direction {

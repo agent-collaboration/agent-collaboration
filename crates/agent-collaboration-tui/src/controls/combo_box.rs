@@ -67,7 +67,10 @@ pub(crate) fn ComboDropdown(
     let state = props.value.read().clone();
     let matching = state.matching();
     element!(View(width:100pct,height:100pct,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
-        HitRegion(target:props.field.child("filter"),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted)) super::text_field::EditorLine(value:state.query().clone(),focused:true)}}
+        HitRegion(target:props.field.child("filter"),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
+            View(flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap)}
+            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true)}
+        }}
         ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
         #(matching.into_iter().map(|option|{let highlighted=Some(&option.key)==state.highlight();let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {

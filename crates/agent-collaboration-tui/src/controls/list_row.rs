@@ -27,7 +27,7 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<
         props.control.row_target(&props.row),
         HitRegionKind::Target,
     );
-    use_scroll_reveal(&mut hooks, selected);
+    use_scroll_reveal(&mut hooks, selected && props.control.reveals_selection());
     let theme = context.theme();
     let children = std::mem::take(&mut props.children);
     element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if selected {SurfaceRole::Selected}else{context.surface_role()})) {

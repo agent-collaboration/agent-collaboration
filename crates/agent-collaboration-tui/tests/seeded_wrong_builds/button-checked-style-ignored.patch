@@ -1,0 +1,13 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/button.rs b/crates/agent-collaboration-tui/src/controls/button.rs
+--- a/crates/agent-collaboration-tui/src/controls/button.rs
++++ b/crates/agent-collaboration-tui/src/controls/button.rs
+@@ -43,3 +43,3 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
+     let checked = action.checked == Some(true);
+-    let label_emphasized = available && (focused || checked);
++    let label_emphasized = available && focused;
+     let primary = context
+@@ -51,3 +51,3 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
+         TextRole::Disabled
+-    } else if focused || checked {
++    } else if focused {
+         TextRole::Focused

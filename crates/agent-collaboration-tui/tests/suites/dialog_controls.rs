@@ -47,7 +47,7 @@ mod tests {
                 assert_eq!(
                     bottom - top + 1,
                     if form {
-                        12usize.min(usize::from(height) - 2)
+                        13usize.min(usize::from(height) - 2)
                     } else {
                         usize::from(expected_height)
                     },
@@ -79,6 +79,13 @@ mod tests {
                     let directory = row(&driver, "Directory");
                     let status = row(&driver, "Status");
                     let available = row(&driver, "Available");
+                    if form {
+                        assert_eq!(
+                            connection,
+                            title + 2,
+                            "one blank row separates pinned context from the form body"
+                        );
+                    }
                     assert_eq!(client, connection + 1);
                     assert_eq!(directory, client + 1);
                     assert_eq!(status, directory + 2);

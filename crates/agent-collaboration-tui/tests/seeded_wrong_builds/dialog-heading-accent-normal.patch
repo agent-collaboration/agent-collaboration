@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_section.rs b/crates/agent-collaboration-tui/src/controls/dialog_section.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_section.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_section.rs
+@@ -31,3 +31,3 @@ pub fn DialogSection<'a>(
+     element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,background_color:props.surface.map(|role|theme.background(role))) {
+-        #((!props.heading.is_empty()).then(||element!(Text(content:props.heading.clone(),color:theme.foreground(TextRole::Primary),weight:Weight::Bold))))
++        #((!props.heading.is_empty()).then(||element!(Text(content:props.heading.clone(),color:theme.foreground(TextRole::Accent)))))
+         #(children)

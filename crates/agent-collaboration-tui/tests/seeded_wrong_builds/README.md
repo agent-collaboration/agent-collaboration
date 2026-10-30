@@ -73,6 +73,25 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `quit-alias-dropped-in-help.patch` | A declared screen quit alias is ignored by the real Help surface. |
 | `quit-alias-hardcodes-control-d.patch` | Ctrl+D globally quits an undeclared scope and steals its own domain binding. |
 | `raw-control-c-not-normalized.patch` | Raw U+0003 misses the shared Ctrl+C chord and cannot quit from a dialog. |
+| `combo-filter-editor-full-width.patch` | The filter editor measures the whole row rather than its remaining width and clips the query tail/cursor. |
+| `menu-no-widen.patch` | A requested narrow menu clips its title instead of expanding into available viewport space. |
+| `menu-auxiliary-starves-title.patch` | Unbounded key/reason columns force an action title to wrap at a narrow viewport. |
+| `menu-all-aliases.patch` | Menu paints the full alias list instead of the primary key; Help is the complete alias projection. |
+| `hover-reveals-partial-row.patch` | Hover selection scrolls to reveal a partially visible tall row. |
+| `hover-activates-row.patch` | Pointer motion invokes the selected row's action. |
+| `hover-enabled-by-default.patch` | A list that never opted in changes selection and focus on pointer motion. |
+| `modified-arrows-change-focus.patch` | Unbound modified arrows fall through to grouped focus traversal. |
+| `pinned-context-gap-omitted.patch` | Pinned dialog context touches the scrolling body without its one blank row. |
+| `empty-context-has-gap.patch` | An empty context leaves a redundant blank row and excess content height. |
+| `pages-only-consumes-arrows.patch` | Form arrows scroll the body instead of moving field focus. |
+| `pages-only-ignores-pages.patch` | Home and page keys cannot scroll back from a field revealed by focus. |
+| `button-focus-no-bold.patch` | A focused button loses its shipped bold label. |
+| `button-focus-no-underline.patch` | Focus loses its non-colour underline signal. |
+| `button-checked-style-ignored.patch` | A checked button loses yellow/bold emphasis when focus moves elsewhere. |
+| `button-unshipped-selection-background.patch` | Focus or checked state adds a selection background absent from the shipped buttons. |
+| `help-heading-accent-normal.patch` | Help section headings use Accent/Normal instead of the shipped Primary/Bold style. |
+| `dialog-heading-accent-normal.patch` | Dialog section headings lose their shipped Primary colour and bold hierarchy. |
+| `field-label-accent.patch` | Form labels use Accent instead of their shipped Primary colour at normal weight. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

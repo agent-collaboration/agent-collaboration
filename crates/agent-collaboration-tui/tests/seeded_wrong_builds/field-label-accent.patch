@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/form_fields.rs b/crates/agent-collaboration-tui/src/controls/form_fields.rs
+--- a/crates/agent-collaboration-tui/src/controls/form_fields.rs
++++ b/crates/agent-collaboration-tui/src/controls/form_fields.rs
+@@ -94,3 +94,3 @@ pub fn FormField<'a>(props: &mut FormFieldProps<'a>, hooks: Hooks) -> impl Into<
+             View(width: if columns.stacked { Size::Auto } else { Size::Length(columns.label_width) }, flex_shrink: 0.0_f32) {
+-                Text(content: props.label.clone(), color: theme.foreground(TextRole::Primary))
++                Text(content: props.label.clone(), color: theme.foreground(TextRole::Accent))
+             }

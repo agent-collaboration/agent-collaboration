@@ -38,15 +38,18 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         return element!(View).into_any();
     };
     let theme = context.theme();
-    let focused = context.is_focused(&props.id);
+    let available = action.availability.is_available();
+    let focused = available && context.is_focused(&props.id);
+    let checked = action.checked == Some(true);
+    let label_emphasized = available && (focused || checked);
     let primary = context
         .stack
         .snapshot()
         .surface(context.surface)
         .is_some_and(|surface| surface.primary_action.as_ref() == Some(&props.action));
-    let role = if !action.availability.is_available() {
+    let role = if !available {
         TextRole::Disabled
-    } else if focused {
+    } else if focused || checked {
         TextRole::Focused
     } else if primary {
         TextRole::Primary
@@ -57,11 +60,11 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         Availability::Available => None,
         Availability::Unavailable { reason } => Some(reason),
     };
-    element! {View(padding_left:1,padding_right:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if focused||action.checked==Some(true) {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+    element! {View(padding_left:1,padding_right:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
         #((action.checked==Some(true)).then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Accent)))))
         #(props.glyph.map(|glyph|element!(Text(content:glyph.text(),color:theme.foreground(role)))))
         #(primary.then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Primary)))))
-        Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role))
+        Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::Underline}else{TextDecoration::None})
         #(action.keys.first().map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
         #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
     }}.into_any()

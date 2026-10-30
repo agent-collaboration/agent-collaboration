@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+@@ -63,3 +63,3 @@ impl ListSelectionControl {
+             navigation_policy: ListNavigationPolicy::default(),
+-            hover_selection: false,
++            hover_selection: true,
+             selection_reveal: Arc::new(Mutex::new(SelectionReveal::FollowSelection)),

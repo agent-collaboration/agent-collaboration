@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/list_row.rs b/crates/agent-collaboration-tui/src/controls/list_row.rs
+--- a/crates/agent-collaboration-tui/src/controls/list_row.rs
++++ b/crates/agent-collaboration-tui/src/controls/list_row.rs
+@@ -29,3 +29,3 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<
+     );
+-    use_scroll_reveal(&mut hooks, selected && props.control.reveals_selection());
++    use_scroll_reveal(&mut hooks, selected || props.control.reveals_selection() && false);
+     let theme = context.theme();
