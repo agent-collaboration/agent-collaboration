@@ -63,11 +63,24 @@ impl DemoShellState {
         self.focus = ShellFocus::Filter;
         self.last_action = "Filter focused".to_owned();
     }
+    fn open_menu(&mut self) {
+        self.overlays.push(DemoOverlay::Menu {
+            selected: 0,
+            return_focus: self.focus,
+        });
+        self.focus = ShellFocus::Menu;
+        self.last_action = "Menu opened".to_owned();
+    }
+    fn close_menu(&mut self) {
+        if let Some(DemoOverlay::Menu { return_focus, .. }) = self.overlays.pop() {
+            self.focus = return_focus;
+        }
+    }
     fn run_menu_item(&mut self, selected: usize) {
         match selected {
             0 => self.open_dialog(),
             1 => {
-                self.overlays.pop();
+                self.close_menu();
                 self.focus_filter();
             }
             2 | 3 => {
@@ -77,24 +90,21 @@ impl DemoShellState {
                     SessionSort::Name
                 };
                 self.last_action = format!("Sort: {:?}", self.sort);
-                self.overlays.pop();
+                self.close_menu();
             }
             4 => {
                 self.overlays.push(DemoOverlay::Help);
                 self.last_action = "Help opened".to_owned();
             }
             _ => {
-                self.overlays.pop();
+                self.close_menu();
                 self.last_action = "Menu closed".to_owned();
             }
         }
     }
     fn activate_focus(&mut self) {
         match self.focus {
-            ShellFocus::Menu => {
-                self.overlays.push(DemoOverlay::Menu { selected: 0 });
-                self.last_action = "Menu opened".to_owned();
-            }
+            ShellFocus::Menu => self.open_menu(),
             ShellFocus::New => self.open_dialog(),
             ShellFocus::Filter => self.focus_filter(),
             ShellFocus::Scope => {
@@ -126,7 +136,7 @@ impl DemoShellState {
                 }
                 match self.overlays.last().cloned() {
                     None => self.background_key(key),
-                    Some(DemoOverlay::Menu { selected }) => self.menu_key(selected, key),
+                    Some(DemoOverlay::Menu { selected, .. }) => self.menu_key(selected, key),
                     Some(DemoOverlay::Help) => {
                         if matches!(key.code, KeyCode::Esc | KeyCode::F(1) | KeyCode::Enter) {
                             self.overlays.pop();
@@ -201,10 +211,7 @@ impl DemoShellState {
             return;
         }
         match key.code {
-            KeyCode::F(10) => {
-                self.focus = ShellFocus::Menu;
-                self.activate_focus();
-            }
+            KeyCode::F(10) => self.open_menu(),
             KeyCode::F(1) => {
                 self.overlays.push(DemoOverlay::Help);
                 self.last_action = "Help opened".to_owned();
@@ -244,7 +251,7 @@ impl DemoShellState {
     fn menu_key(&mut self, selected: usize, key: KeyEvent) {
         match key.code {
             KeyCode::Esc | KeyCode::F(10) => {
-                self.overlays.pop();
+                self.close_menu();
                 self.last_action = "Menu closed".to_owned();
             }
             KeyCode::F(1) => {
@@ -256,7 +263,7 @@ impl DemoShellState {
                 } else {
                     selected.saturating_add(1).min(5)
                 };
-                if let Some(DemoOverlay::Menu { selected }) = self.overlays.last_mut() {
+                if let Some(DemoOverlay::Menu { selected, .. }) = self.overlays.last_mut() {
                     *selected = next;
                 }
             }
@@ -270,11 +277,14 @@ impl DemoShellState {
     }
     fn background_click(&mut self, mouse: FullscreenMouseEvent) {
         if mouse.row == 0 {
+            if (2..=11).contains(&mouse.column) {
+                self.open_menu();
+                return;
+            }
             self.focus = match mouse.column {
-                2..=9 => ShellFocus::Menu,
-                11..=19 => ShellFocus::New,
-                21..=33 => ShellFocus::Filter,
-                35..=57 => ShellFocus::Scope,
+                13..=21 => ShellFocus::New,
+                23..=35 => ShellFocus::Filter,
+                37..=57 => ShellFocus::Scope,
                 _ => return,
             };
             self.activate_focus();
@@ -297,7 +307,11 @@ impl DemoShellState {
                 overlay,
                 DemoOverlay::Menu { .. } | DemoOverlay::ChoicePicker(_)
             ) {
-                self.overlays.pop();
+                if matches!(overlay, DemoOverlay::Menu { .. }) {
+                    self.close_menu();
+                } else {
+                    self.overlays.pop();
+                }
                 self.last_action = "Overlay dismissed".to_owned();
             }
             return;

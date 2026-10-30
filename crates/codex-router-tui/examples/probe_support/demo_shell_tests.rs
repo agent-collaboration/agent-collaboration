@@ -125,7 +125,7 @@ fn button_gaps_and_repeat_commands_do_not_activate_actions() {
 #[test]
 fn menu_shortcut_uses_the_right_edge_of_the_panel() {
     use crate::demo_shell_surfaces::OverlaySurface;
-    let canvas = element!(View(width: 110, height: 30) { OverlaySurface(overlay: DemoOverlay::Menu { selected: 0 }, machine: MachineChoice::Sunclaw, client: ClientChoice::Codex, directory: DirectoryChoice::Atlas, sort: SessionSort::Updated) }).render(Some(110));
+    let canvas = element!(View(width: 110, height: 30) { OverlaySurface(overlay: DemoOverlay::Menu { selected: 0, return_focus: ShellFocus::Menu }, machine: MachineChoice::Sunclaw, client: ClientChoice::Codex, directory: DirectoryChoice::Atlas, sort: SessionSort::Updated) }).render(Some(110));
     assert_eq!(canvas.cell(33, 3).and_then(CanvasCell::text), Some("N"));
 }
 
@@ -388,4 +388,92 @@ fn unavailable_pointer_target_can_highlight_without_picking() {
     assert!(
         matches!(state.overlays.last(), Some(DemoOverlay::ChoicePicker(picker)) if picker.highlighted_key() == Some(DialogChoice::Machine(MachineChoice::BuildBox)))
     );
+}
+
+#[test]
+fn menu_escape_restores_the_target_for_each_opening_path() {
+    for initial_focus in [ShellFocus::List, ShellFocus::Filter] {
+        for by_click in [false, true] {
+            let mut state = DemoShellState::new(76, 30);
+            state.focus = initial_focus;
+            state.handle_event(if by_click {
+                TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                    MouseEventKind::Down(MouseButton::Left),
+                    4,
+                    0,
+                ))
+            } else {
+                press(KeyCode::F(10))
+            });
+            assert!(matches!(
+                state.overlays.last(),
+                Some(DemoOverlay::Menu { .. })
+            ));
+            state.handle_event(press(KeyCode::Esc));
+            assert!(state.overlays.is_empty());
+            assert_eq!(state.focus, initial_focus, "click={by_click}");
+        }
+    }
+    let mut state = DemoShellState::new(76, 30);
+    state.handle_event(press(KeyCode::Tab));
+    assert_eq!(state.focus, ShellFocus::Menu);
+    state.handle_event(press(KeyCode::Enter));
+    assert!(matches!(
+        state.overlays.last(),
+        Some(DemoOverlay::Menu { .. })
+    ));
+    state.handle_event(press(KeyCode::Esc));
+    assert!(state.overlays.is_empty());
+    assert_eq!(state.focus, ShellFocus::Menu);
+    state.handle_event(press(KeyCode::Char('/')));
+    state.handle_event(press(KeyCode::Tab));
+    assert_eq!(state.focus, ShellFocus::Scope);
+    for _ in 0..2 {
+        state.handle_event(press(KeyCode::Tab));
+    }
+    assert_eq!(state.focus, ShellFocus::Menu);
+    state.handle_event(press(KeyCode::Enter));
+    assert!(matches!(
+        state.overlays.last(),
+        Some(DemoOverlay::Menu { .. })
+    ));
+    state.handle_event(press(KeyCode::Esc));
+    assert_eq!(state.focus, ShellFocus::Menu);
+}
+
+#[test]
+fn menu_button_exposes_a_muted_f10_at_both_owner_sizes() {
+    for (width, height) in [(120, 36), (76, 30)] {
+        let canvas = crate::render_demo_canvas(DemoShellState::new(width, height));
+        assert_eq!(canvas.get_text(2, 0, 10, 1), "≡ Menu F10");
+        assert_eq!(
+            canvas.cell(9, 0).unwrap().text_style().unwrap().color,
+            Some(codex_router_tui::UiTextRole::Secondary.color())
+        );
+    }
+}
+
+#[test]
+fn demo_reuses_the_shipped_surface_and_status_roles() {
+    use crate::demo_shell_theme::{BackgroundRole, StatusRole};
+    use codex_router_tui::{UiSurface, UiTextRole};
+    for (demo, shipped) in [
+        (BackgroundRole::Base, UiSurface::Base),
+        (BackgroundRole::Surface, UiSurface::Base),
+        (BackgroundRole::Group, UiSurface::Raised),
+        (BackgroundRole::Focused, UiSurface::Selected),
+        (BackgroundRole::Primary, UiSurface::Header),
+    ] {
+        assert_eq!(demo.color(false), shipped.color());
+        assert_ne!(demo.color(true), shipped.color());
+    }
+    assert_eq!(
+        StatusRole::Available.color(false),
+        UiTextRole::Success.color()
+    );
+    assert_eq!(
+        StatusRole::Warning.color(false),
+        UiTextRole::Warning.color()
+    );
+    assert_eq!(StatusRole::Error.color(false), UiTextRole::Error.color());
 }

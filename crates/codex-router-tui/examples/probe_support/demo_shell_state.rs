@@ -130,6 +130,7 @@ impl ShellFocus {
 pub enum DemoOverlay {
     Menu {
         selected: usize,
+        return_focus: ShellFocus,
     },
     NewSession {
         focus: DialogFocus,

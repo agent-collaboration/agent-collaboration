@@ -15,11 +15,43 @@ pub fn owner_scenes(width: u16, height: u16) -> Vec<(&'static str, DemoShellStat
     new_session.handle_event(press(KeyCode::Char('n'), KeyModifiers::CONTROL));
     new_session.handle_event(press(KeyCode::Down, KeyModifiers::empty()));
     new_session.handle_event(press(KeyCode::Enter, KeyModifiers::empty()));
-    vec![
-        ("main", main),
+    let mut scenes = vec![
+        ("main", main.clone()),
         ("details", details),
         ("new-dropdown", new_session),
-    ]
+    ];
+    let mut f10 = main.clone();
+    f10.handle_event(press(KeyCode::F(10), KeyModifiers::empty()));
+    scenes.push(("f10-open", f10.clone()));
+    f10.handle_event(press(KeyCode::Esc, KeyModifiers::empty()));
+    scenes.push(("f10-escape-list", f10));
+    let mut button = main.clone();
+    button.handle_event(press(KeyCode::Tab, KeyModifiers::empty()));
+    scenes.push(("list-tab-menu", button.clone()));
+    button.handle_event(press(KeyCode::Enter, KeyModifiers::empty()));
+    scenes.push(("enter-open", button.clone()));
+    button.handle_event(press(KeyCode::Esc, KeyModifiers::empty()));
+    scenes.push(("enter-escape-menu", button));
+    let mut filter = main;
+    filter.handle_event(press(KeyCode::Char('/'), KeyModifiers::empty()));
+    let mut click = filter.clone();
+    click.handle_event(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+        MouseEventKind::Down(MouseButton::Left),
+        4,
+        0,
+    )));
+    scenes.push(("click-open", click.clone()));
+    click.handle_event(press(KeyCode::Esc, KeyModifiers::empty()));
+    scenes.push(("click-escape-filter", click));
+    filter.handle_event(press(KeyCode::Tab, KeyModifiers::empty()));
+    scenes.push(("filter-tab-toolbar", filter.clone()));
+    for _ in 0..2 {
+        filter.handle_event(press(KeyCode::Tab, KeyModifiers::empty()));
+    }
+    scenes.push(("filter-tab-cycle-menu", filter.clone()));
+    filter.handle_event(press(KeyCode::Enter, KeyModifiers::empty()));
+    scenes.push(("filter-cycle-enter-open", filter));
+    scenes
 }
 pub fn capture_owner_frames() -> io::Result<()> {
     use unicode_width::UnicodeWidthStr;
@@ -46,8 +78,12 @@ pub fn capture_owner_frames() -> io::Result<()> {
     println!("{glyph_note}");
     for (width, height) in [(120, 36), (76, 30)] {
         for (name, state) in owner_scenes(width, height) {
-            let canvas = crate::render_demo_canvas(state);
             let label = format!("{width}x{height}-{name}");
+            fs::write(
+                output.join(format!("{label}.state")),
+                format!("{state:#?}\n"),
+            )?;
+            let canvas = crate::render_demo_canvas(state);
             fs::write(output.join(format!("{label}.txt")), canvas.to_string())?;
             let mut ansi = Vec::new();
             canvas.write_ansi(&mut ansi)?;

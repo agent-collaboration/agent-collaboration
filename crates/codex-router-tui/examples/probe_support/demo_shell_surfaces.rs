@@ -4,10 +4,25 @@ use super::demo_shell_state::{
     FAKE_SESSIONS, MachineChoice, SessionSort, overlay_rectangle,
 };
 use super::demo_shell_theme::{BackgroundRole, StatusRole};
+use codex_router_tui::UiTextRole;
 use iocraft::prelude::*;
 
 pub fn shell_text(content: impl Into<String>, dimmed: bool) -> AnyElement<'static> {
-    element!(Text(content: content.into(), color: if dimmed { Color::DarkGrey } else { Color::White }, weight: if dimmed { Weight::Light } else { Weight::Normal })).into_any()
+    shell_role_text(content, UiTextRole::Body, dimmed)
+}
+pub fn shell_role_text(
+    content: impl Into<String>,
+    role: UiTextRole,
+    dimmed: bool,
+) -> AnyElement<'static> {
+    let color = if !dimmed {
+        role.color()
+    } else if role == UiTextRole::Secondary {
+        Color::DarkGrey
+    } else {
+        UiTextRole::Disabled.color()
+    };
+    element!(Text(content: content.into(), color, weight: if dimmed { Weight::Light } else if role == UiTextRole::Selected { Weight::Bold } else { Weight::Normal })).into_any()
 }
 #[derive(Props)]
 struct MenuRowProps {
@@ -23,7 +38,7 @@ fn MenuRow(props: &MenuRowProps) -> impl Into<AnyElement<'static>> {
         View(height: 1, flex_direction: FlexDirection::Row, padding_left: 1, padding_right: 1, gap: 1,
             background_color: props.selected.then_some(BackgroundRole::Focused.color(props.dimmed))) {
             View(width: 1) { #(Some(shell_text(if props.checked { "✓" } else { "" }, props.dimmed))) }
-            #(Some(shell_text(props.title.clone(), props.dimmed)))
+            #(Some(shell_role_text(props.title.clone(), if props.selected { UiTextRole::Selected } else { UiTextRole::Body }, props.dimmed)))
             View(flex_grow: 1.0_f32) {}
             #(Some(shell_text(props.shortcut.clone(), props.dimmed)))
         }
@@ -74,7 +89,7 @@ fn ActionButton(props: &ActionButtonProps) -> impl Into<AnyElement<'static>> {
     };
     element!(View(width: u32::from(props.width), height: 1, flex_direction: FlexDirection::Row, gap: 1, background_color: role.color(props.dimmed)) {
         View(width: 1) { #(Some(shell_text(if props.focused { "❯" } else { "" }, props.dimmed))) }
-        #(Some(shell_text(props.label.clone(), props.dimmed)))
+        #(Some(shell_role_text(props.label.clone(), if props.focused { UiTextRole::Selected } else if props.primary { UiTextRole::Body } else { UiTextRole::Secondary }, props.dimmed)))
     })
 }
 #[derive(Props)]
@@ -96,7 +111,7 @@ pub fn OverlaySurface(props: &OverlaySurfaceProps) -> impl Into<AnyElement<'stat
     let rect = overlay_rectangle(&props.overlay);
     let dimmed = props.dimmed;
     let contents: AnyElement<'static> = match &props.overlay {
-        DemoOverlay::Menu { selected } => element! {
+        DemoOverlay::Menu { selected, .. } => element! {
             View(flex_direction: FlexDirection::Column) {
                 #(Some(shell_text("Menu", dimmed)))
                 MenuRow(title: "New session", shortcut: "Ctrl+N", selected: *selected == 0, dimmed)

@@ -1,3 +1,4 @@
+use codex_router_tui::{UiSurface, UiTextRole};
 use iocraft::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,19 +11,22 @@ pub enum BackgroundRole {
 }
 impl BackgroundRole {
     pub fn color(self, dimmed: bool) -> Color {
-        let (r, g, b) = match (self, dimmed) {
-            (Self::Base, false) => (12, 17, 25),
-            (Self::Base, true) => (6, 9, 14),
-            (Self::Surface, false) => (21, 28, 39),
-            (Self::Surface, true) => (10, 14, 20),
-            (Self::Group, false) => (30, 41, 56),
-            (Self::Group, true) => (14, 20, 28),
-            (Self::Focused, false) => (43, 79, 120),
-            (Self::Focused, true) => (17, 29, 43),
-            (Self::Primary, false) => (24, 87, 83),
-            (Self::Primary, true) => (11, 30, 29),
+        let surface = match self {
+            Self::Base | Self::Surface => UiSurface::Base,
+            Self::Group => UiSurface::Raised,
+            Self::Focused => UiSurface::Selected,
+            Self::Primary => UiSurface::Header,
         };
-        Color::Rgb { r, g, b }
+        // Covered backgrounds still dim, deriving from the shipped palette
+        // rather than maintaining a second, independently chosen palette.
+        match (surface.color(), dimmed) {
+            (Color::Rgb { r, g, b }, true) => Color::Rgb {
+                r: r / 2,
+                g: g / 2,
+                b: b / 2,
+            },
+            (color, _) => color,
+        }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,11 +38,18 @@ pub enum StatusRole {
 impl StatusRole {
     pub fn color(self, dimmed: bool) -> Color {
         match (self, dimmed) {
-            (Self::Available, false) => Color::Green,
+            (Self::Available, false) => UiTextRole::Success.color(),
             (Self::Available, true) => Color::DarkGreen,
-            (Self::Warning, false) => Color::Yellow,
-            (Self::Warning, true) => Color::DarkYellow,
-            (Self::Error, false) => Color::Red,
+            (Self::Warning, false) => UiTextRole::Warning.color(),
+            (Self::Warning, true) => match UiTextRole::Warning.color() {
+                Color::Rgb { r, g, b } => Color::Rgb {
+                    r: r / 2,
+                    g: g / 2,
+                    b: b / 2,
+                },
+                color => color,
+            },
+            (Self::Error, false) => UiTextRole::Error.color(),
             (Self::Error, true) => Color::DarkRed,
         }
     }

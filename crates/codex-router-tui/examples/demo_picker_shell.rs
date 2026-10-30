@@ -14,8 +14,9 @@ mod demo_shell_surfaces;
 #[path = "probe_support/demo_shell_theme.rs"]
 mod demo_shell_theme;
 
+use codex_router_tui::UiTextRole;
 use demo_shell_state::{DemoShellState, ShellFocus};
-use demo_shell_surfaces::{OverlaySurface, shell_text};
+use demo_shell_surfaces::{OverlaySurface, shell_role_text, shell_text};
 use demo_shell_theme::{BackgroundRole, MENU_ICON};
 use iocraft::prelude::*;
 
@@ -59,10 +60,13 @@ fn DemoPickerFrame(props: &DemoPickerFrameProps) -> impl Into<AnyElement<'static
     element! {
         View(width: u32::from(state.width), height: u32::from(state.height), flex_direction: FlexDirection::Column, overflow: Overflow::Hidden, background_color: BackgroundRole::Base.color(dimmed)) {
             View(height: 1, flex_shrink: 0.0_f32, padding_left: 2, padding_right: 2, flex_direction: FlexDirection::Row, gap: 1) {
-                View(width: 8, flex_shrink: 0.0_f32, background_color: (state.focus == ShellFocus::Menu).then_some(BackgroundRole::Focused.color(dimmed))) { #(Some(shell_text(format!("{MENU_ICON} Menu"), dimmed))) }
+                View(width: 10, flex_shrink: 0.0_f32, gap: 1, background_color: (state.focus == ShellFocus::Menu).then_some(BackgroundRole::Focused.color(dimmed))) {
+                    #(Some(shell_role_text(format!("{MENU_ICON} Menu"), if state.focus == ShellFocus::Menu { UiTextRole::Selected } else { UiTextRole::Body }, dimmed)))
+                    #(Some(shell_role_text("F10", UiTextRole::Secondary, dimmed)))
+                }
                 View(width: 9, flex_shrink: 0.0_f32, background_color: (state.focus == ShellFocus::New).then_some(BackgroundRole::Focused.color(dimmed))) { #(Some(shell_text("[ + New ]", dimmed))) }
                 View(width: 13, flex_shrink: 0.0_f32, overflow: Overflow::Hidden, background_color: (state.focus == ShellFocus::Filter).then_some(BackgroundRole::Focused.color(dimmed))) { #(Some(shell_text(if state.focus == ShellFocus::Filter && !dimmed { format!("[ {}▏ ]", state.filter_query) } else if state.filter_query.is_empty() { "[ / Filter… ]".to_owned() } else { format!("[ {} ]", state.filter_query) }, dimmed))) }
-                View(width: 23, flex_shrink: 0.0_f32, background_color: (state.focus == ShellFocus::Scope).then_some(BackgroundRole::Focused.color(dimmed))) { #(Some(shell_text(if state.this_folder { "[ This folder | all ]" } else { "[ this folder | All ]" }, dimmed))) }
+                View(width: 21, flex_shrink: 0.0_f32, background_color: (state.focus == ShellFocus::Scope).then_some(BackgroundRole::Focused.color(dimmed))) { #(Some(shell_text(if state.this_folder { "[ This folder | all ]" } else { "[ this folder | All ]" }, dimmed))) }
                 View(flex_grow: 1.0_f32) {}
                 #(Some(shell_text(format!("Sessions · {}/6", sessions.len()), dimmed)))
             }
