@@ -4,11 +4,76 @@ use crate::{
     actions::{ActionError, ActionRegistry, Availability, Placement},
     focus_model::{FocusError, FocusModel, GroupId, TargetId, TargetSpec},
     hit_regions::{HitRegion, HitRegionKind},
+    overlay_host::SurfaceSizing,
     surface_handle::{SurfaceContext, SurfaceStackHandle},
     surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
     theme::{SurfaceRole, TextRole, UiGlyph},
 };
 use iocraft::prelude::*;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+fn menu_layout(
+    registry: &ActionRegistry,
+    layout: OverlayLayout,
+    viewport: (u16, u16),
+) -> OverlayLayout {
+    let preferred = ActionProjections::from_registry(registry)
+        .menu
+        .iter()
+        .map(|action| {
+            let key = action.keys.first().map_or(0, |key| key.to_string().width());
+            let reason = match &action.availability {
+                Availability::Available => 0,
+                Availability::Unavailable { reason } => reason.width() + 1,
+            };
+            action.title.width() + key + reason + 6
+        })
+        .max()
+        .unwrap_or(0);
+    let preferred = u16::try_from(preferred).unwrap_or(u16::MAX);
+    match layout {
+        OverlayLayout::AtCells {
+            left,
+            top,
+            width,
+            height,
+        } => {
+            let width = width.max(preferred);
+            OverlayLayout::AtCells {
+                left: left.min(viewport.0.saturating_sub(width)),
+                top,
+                width,
+                height,
+            }
+        }
+        OverlayLayout::CenteredCells { width, height } => OverlayLayout::CenteredCells {
+            width: width.max(preferred),
+            height,
+        },
+        layout @ OverlayLayout::Dialog { .. } => layout,
+    }
+}
+
+fn ellipsize(content: &str, width: usize) -> String {
+    if content.width() <= width {
+        return content.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut result = String::new();
+    let mut used = 0;
+    for character in content.chars() {
+        let cells = character.width().unwrap_or(0);
+        if used + cells >= width {
+            break;
+        }
+        result.push(character);
+        used += cells;
+    }
+    result.push_str(UiGlyph::Ellipsis.text());
+    result
+}
 #[derive(Debug)]
 pub enum MenuModelError {
     Actions(ActionError),
@@ -26,6 +91,7 @@ pub fn menu_overlay(
     registry: &ActionRegistry,
     layout: OverlayLayout,
 ) -> Result<OverlaySpec, MenuModelError> {
+    let layout = menu_layout(registry, layout, stack.viewport());
     let actions = registry
         .definitions()
         .iter()
@@ -78,6 +144,8 @@ pub struct MenuDropdownProps {
 #[component]
 pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let context = *hooks.use_context::<SurfaceContext>();
+    let sizing = *hooks.use_context::<SurfaceSizing>();
+    let body_width = usize::from(sizing.max_width.saturating_sub(3));
     let theme = context.theme();
     let entries = context
         .stack
@@ -95,12 +163,19 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
         #(entries.into_iter().map(|action|{
             let id=TargetId::for_action(&action.id);let focused=context.is_focused(&id);let available=action.availability.is_available();
             let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};
+            let key=action.keys.first().map(ToString::to_string).unwrap_or_default();
+            let remaining=body_width.saturating_sub(action.title.width()+3);
+            let key_width=key.width().min(if reason.is_some(){remaining.saturating_sub(2)}else{remaining});
+            let gap=u16::from(reason.is_some()&&key_width>0);
+            let reason=ellipsize(reason.as_deref().unwrap_or_default(),remaining.saturating_sub(key_width+usize::from(gap)));
+            let key=ellipsize(&key,key_width);
             element!(ScrollReveal(focused) {HitRegion(target:id.clone(),kind:HitRegionKind::Target) {View(width:100pct,min_height:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&id){SurfaceRole::Alternate}else{SurfaceRole::Raised})) {
                 View(width:1,flex_shrink:0.0_f32) {Text(content:if action.checked==Some(true){UiGlyph::Checked.text()}else if focused {UiGlyph::Focus.text()}else{""},color:theme.foreground(TextRole::Focused))}
-                Text(content:action.title,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))
-                #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
-                View(flex_grow:1.0_f32)
-                Text(content:action.keys.iter().map(ToString::to_string).collect::<Vec<_>>().join(" / "),color:theme.foreground(TextRole::Muted))
+                View(flex_shrink:0.0_f32) {Text(content:action.title,wrap:TextWrap::NoWrap,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))}
+                View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0,column_gap:gap) {
+                    View(flex_grow:1.0_f32,min_width:0) {Text(content:reason,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Disabled))}
+                    View(flex_shrink:0.0_f32) {Text(content:key,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))}
+                }
             }}}).into_any()
         }))
         }
