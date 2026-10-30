@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_box.rs b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_box.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+@@ -71,3 +71,3 @@ pub(crate) fn ComboDropdown(
+             View(flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap)}
+-            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true)}
++            View(width:100pct,flex_shrink:0.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true)}
+         }}

@@ -5,6 +5,9 @@ mod action_controls;
 #[path = "suites/combo_controls.rs"]
 mod combo_controls;
 #[cfg(test)]
+#[path = "suites/combo_filter_layout.rs"]
+mod combo_filter_layout;
+#[cfg(test)]
 #[path = "suites/control_editor.rs"]
 mod control_editor;
 #[cfg(test)]
