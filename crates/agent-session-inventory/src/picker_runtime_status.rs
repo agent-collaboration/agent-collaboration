@@ -80,6 +80,19 @@ pub enum NativeLiveReadState {
 }
 
 impl NativeLiveReadState {
+    /// Attributed conflicts do not make evidence about other sessions incomplete.
+    pub const fn reads_are_complete(&self) -> bool {
+        use collaboration_client::protocol::NativeClaudeInventoryPart as Part;
+        match self {
+            Self::Complete => true,
+            Self::Incomplete(coverage) => {
+                matches!(coverage.peer, Part::Complete | Part::NotRequested)
+                    && matches!(coverage.background, Part::Complete)
+            }
+            Self::Reading | Self::Unavailable(_) => false,
+        }
+    }
+
     pub fn read_warning_lines(&self) -> Vec<String> {
         use collaboration_client::protocol::{
             NativeClaudeInventoryPart as Part, NativeInventorySource,

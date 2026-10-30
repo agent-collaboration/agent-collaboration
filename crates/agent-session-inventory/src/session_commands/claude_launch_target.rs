@@ -49,11 +49,25 @@ pub struct RoutedClaudeEnvironment {
 
 pub(crate) struct NativeClaudeInventory {
     pub(crate) sessions: Vec<ProviderSessionSummary>,
-    pub(crate) notice: Option<String>,
+    pub(crate) read_notice: Option<String>,
     pub(crate) conflicts: Vec<collaboration_client::protocol::NativeClaudeSessionConflict>,
 }
 
 impl NativeClaudeInventory {
+    fn listing_notice(&self) -> Option<String> {
+        let mut notices: Vec<String> = self.read_notice.iter().cloned().collect();
+        notices.extend(self.conflicts.iter().map(|conflict| {
+            format!(
+                "{} / {}: Session {}: {}",
+                String::from(conflict.target.endpoint.service_id.clone()),
+                String::from(conflict.target.endpoint.endpoint_id.clone()),
+                String::from(conflict.target.session_id.clone()),
+                conflict.reason.description()
+            )
+        }));
+        (!notices.is_empty()).then(|| notices.join("; "))
+    }
+
     fn into_records(self) -> Result<Vec<serde_json::Value>, SessionsCommandError> {
         self.sessions
             .into_iter()
@@ -179,7 +193,7 @@ impl ClaudeLaunchTarget {
             .await
         {
             Ok(inventory) => {
-                let notice = inventory.notice.clone();
+                let notice = inventory.listing_notice();
                 (inventory.into_records()?, notice)
             }
             Err(error) => (Vec::new(), Some(error)),
@@ -393,15 +407,8 @@ impl ClaudeLaunchTarget {
                 page.native_coverage,
             )
             .map_err(str::to_owned)?;
-            if coverage.is_incomplete() {
-                let mut warnings = coverage.read_warning_lines();
-                warnings.extend(coverage.conflicts().iter().map(|conflict| {
-                    format!(
-                        "Session {}: {}",
-                        String::from(conflict.target.session_id.clone()),
-                        conflict.reason.description()
-                    )
-                }));
+            if !coverage.reads_are_complete() {
+                let warnings = coverage.read_warning_lines();
                 notice = Some(format!(
                     "{} / {}: {}",
                     String::from(endpoint.service_id.clone()),
@@ -437,7 +444,7 @@ impl ClaudeLaunchTarget {
         }
         Ok(NativeClaudeInventory {
             sessions,
-            notice,
+            read_notice: notice,
             conflicts,
         })
     }

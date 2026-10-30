@@ -279,11 +279,20 @@ async fn validate_native_target(
     }
     UuidIdentity::try_from(String::from(target.session_id.clone()))
         .map_err(|_| SourceRejection::SessionUnavailable)?;
+    let require_complete_loaded = matches!(
+        &request.operation,
+        SourceOperation::NativeClaude {
+            action: SourceNativeClaudeAction::Resume { .. },
+            ..
+        }
+    );
     for view in [
         crate::picker_runtime_status::NativeCatalogueView::Loaded,
         crate::picker_runtime_status::NativeCatalogueView::Stored,
     ] {
-        if let Some(summary) = native_target_in_view(&client, target, directory, view).await? {
+        if let Some(summary) =
+            native_target_in_view(&client, target, directory, view, require_complete_loaded).await?
+        {
             return Ok(summary);
         }
     }
@@ -295,6 +304,7 @@ async fn native_target_in_view(
     target: &SessionRef,
     directory: &str,
     view: crate::picker_runtime_status::NativeCatalogueView,
+    require_complete_loaded: bool,
 ) -> Result<Option<ProviderSessionSummary>, SourceRejection> {
     use crate::sessions::source_inventory_failure::InventoryReadFailure;
     let mut cursor = None;
@@ -317,6 +327,13 @@ async fn native_target_in_view(
             Ok(page) => page,
             Err(error) => {
                 return match InventoryReadFailure::from_client(&error) {
+                    InventoryReadFailure::Unavailable(_)
+                        if require_complete_loaded
+                            && view
+                                == crate::picker_runtime_status::NativeCatalogueView::Loaded =>
+                    {
+                        Err(SourceRejection::SessionUnavailable)
+                    }
                     InventoryReadFailure::Unavailable(_) => Ok(None),
                     InventoryReadFailure::Invalid { .. }
                     | InventoryReadFailure::InvalidNative { .. } => {
@@ -332,11 +349,17 @@ async fn native_target_in_view(
         }) {
             return Err(SourceRejection::SessionUnavailable);
         }
-        crate::picker_runtime_status::NativeLiveReadState::from_observation(
+        let coverage = crate::picker_runtime_status::NativeLiveReadState::from_observation(
             view,
             page.native_coverage,
         )
         .map_err(|_| SourceRejection::SessionUnavailable)?;
+        if require_complete_loaded
+            && view == crate::picker_runtime_status::NativeCatalogueView::Loaded
+            && !coverage.reads_are_complete()
+        {
+            return Err(SourceRejection::SessionUnavailable);
+        }
         if page.endpoint != target.endpoint
             || page.sessions.len() > 100
             || page.skipped_records.unwrap_or(0) > 0

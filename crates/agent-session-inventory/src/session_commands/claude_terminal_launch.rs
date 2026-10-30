@@ -162,7 +162,7 @@ async fn resume_target(
                 _ => Err(SessionsCommandError::ClaudeLaunch("This Claude session is already open without an attachable background job. Use its current terminal, or stop it before opening it here.".to_owned())),
             };
         }
-        if let Some(notice) = inventory.notice {
+        if let Some(notice) = inventory.read_notice {
             return Err(SessionsCommandError::ClaudeLaunch(format!(
                 "Claude discovery is incomplete: {notice}. Check claude agents before opening this session."
             )));

@@ -8,6 +8,9 @@ use serde_json::json;
 const SESSION: &str = "00000000-0000-4000-8000-000000000042";
 const RECEIPT: &str = include_str!("claude_bg_2_1_312.txt");
 
+#[path = "resume_read_safety_tests.rs"]
+mod resume_read_safety_tests;
+
 fn attach_command(fixture: &ClaudeProcessFixture) -> Command {
     let mut command = fixture.command();
     command
