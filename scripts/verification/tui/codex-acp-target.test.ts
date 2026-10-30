@@ -25,6 +25,8 @@ test('the launch resumes the native alias over the endpoint socket with hooks of
 			join(root, 'trusted worktree'),
 			'-c',
 			'features.hooks=false',
+			'-c',
+			'tui.status_line=["model-with-reasoning"]',
 			'resume',
 			ALIAS,
 		],

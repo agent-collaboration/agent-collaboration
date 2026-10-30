@@ -14,6 +14,8 @@ import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 import {
+	CODEX_QUIT_STEP,
+	UI_CHECKPOINT_MS,
 	compactJourney,
 	encodeCodexAction,
 	gridShowsCheckpoint,
@@ -28,8 +30,10 @@ import { artifactBindingSchema } from './evidence-schema.ts';
 import type { ProcessIdentity } from './evidence-schema.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
+import type { KeyProtocol } from './pty-grid-driver.ts';
 import { sourceBinding, verifyArtifact } from './source-binding.ts';
 import { gridLines } from './terminal-grid.ts';
+import type { TerminalGrid } from './terminal-grid.ts';
 import { renderOriginal } from './terminal-original.ts';
 import { qualifyTerminal } from './terminal-qualification.ts';
 
@@ -125,6 +129,33 @@ export function codexChild(output: string, target: CodexAcpTarget): ProcessIdent
 	return identity;
 }
 
+/** Writes one step's actions in order (one write each), then waits for its checkpoint frame. */
+export async function driveCodexStep(
+	driver: PtyGridDriver,
+	step: CodexJourney['steps'][number],
+	keys: KeyProtocol,
+): Promise<TerminalGrid> {
+	const after = driver.frameGeneration();
+	await step.actions.reduce<Promise<void>>(async (sent, action) => {
+		await sent;
+		await driver.send(encodeCodexAction(action, keys));
+	}, Promise.resolve());
+	const { checkpoint } = step;
+	return driver.waitForGrid(
+		checkpoint.scene,
+		(candidate) => gridShowsCheckpoint(gridLines(candidate), checkpoint),
+		after,
+		checkpoint.deadline_ms,
+	);
+}
+
+/** Codex's own normal exit: `/quit` once its command row is ready, Enter, then PTY EOF. */
+export async function exitCodex(driver: PtyGridDriver, keys: KeyProtocol): Promise<void> {
+	await driveCodexStep(driver, CODEX_QUIT_STEP, keys);
+	await driver.send(encodeCodexAction({ kind: 'key', key: 'Enter' }, keys));
+	await driver.waitForEof('codex /quit', UI_CHECKPOINT_MS);
+}
+
 export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 	const journey = await checkCodexAcp(plan);
 	if (existsSync(plan.output)) throw new Error('fresh Codex ACP output required');
@@ -161,19 +192,8 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 		if (columns !== 120 || rows !== 36) await driver.resize(columns, rows);
 		await journey.steps.reduce<Promise<void>>(async (previous, step) => {
 			await previous;
-			const after = driver.frameGeneration();
-			// Keys reach the PTY in order, one write per action.
-			await step.actions.reduce<Promise<void>>(async (sent, action) => {
-				await sent;
-				await driver.send(encodeCodexAction(action, plan.keys));
-			}, Promise.resolve());
+			const grid = await driveCodexStep(driver, step, plan.keys);
 			const { checkpoint } = step;
-			const grid = await driver.waitForGrid(
-				checkpoint.scene,
-				(candidate) => gridShowsCheckpoint(gridLines(candidate), checkpoint),
-				after,
-				checkpoint.deadline_ms,
-			);
 			const current = codexChild(plan.output, plan.target);
 			if (child !== null && !sameIdentity(current, child))
 				throw new Error('Codex PTY child was replaced during the journey');
@@ -196,12 +216,7 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 			);
 		}, Promise.resolve());
 		requireCheckpointSequence(observed, journey);
-		await driver.send(encodeCodexAction({ kind: 'text', text: '/quit' }, plan.keys));
-		await driver.send(encodeCodexAction({ kind: 'key', key: 'Enter' }, plan.keys));
-		const drain = async (): Promise<void> => {
-			if ((await driver.receive()) !== 'eof') await drain();
-		};
-		await drain();
+		await exitCodex(driver, plan.keys);
 		if ((await driver.finish()) !== 0) throw new Error('Codex ACP driver failed');
 	} finally {
 		await driver.stop();

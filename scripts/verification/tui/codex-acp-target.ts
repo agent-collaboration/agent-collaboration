@@ -70,6 +70,10 @@ export function codexLaunchRecord(target: CodexAcpTarget): CodexLaunchRecord {
 			target.cwd,
 			'-c',
 			'features.hooks=false',
+			// Per-launch footer: the model alone. A user status line may add context-window-size, which
+			// Codex fills from its local config when the provider reports no window (Cursor reports none).
+			'-c',
+			'tui.status_line=["model-with-reasoning"]',
 			'resume',
 			target.native_thread_id,
 		],

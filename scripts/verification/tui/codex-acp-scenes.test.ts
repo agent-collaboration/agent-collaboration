@@ -5,6 +5,7 @@ import {
 	compactJourney,
 	composedSkillText,
 	encodeCodexAction,
+	codexSkillDisplayName,
 	gridShowsCheckpoint,
 	interruptJourney,
 	requireCheckpointSequence,
@@ -121,14 +122,6 @@ test('the effect checkpoint needs every selected effect and rejects echo, error,
 		),
 	).toBe(false);
 	expect(gridShowsCheckpoint(['', '', ''], effect)).toBe(false);
-	const picker = checkpoint(skillJourney(CURSOR_INPUT), 'skill-picker-open-1');
-	expect(
-		gridShowsCheckpoint(
-			['  bridge_probe_cursor_a_01a18013  Emit', CODEX_0_165_TEXT.skillPopupHint],
-			picker,
-		),
-	).toBe(true);
-	expect(gridShowsCheckpoint(['• ACP_BRIDGE_CURSOR_A_9C31E4|ALPHA|RED'], picker)).toBe(false);
 });
 
 test('J2 compaction succeeds only on Claude and Cursor must show an error without a compaction', () => {
@@ -182,4 +175,64 @@ test('actions encode as the exact PTY bytes for each key protocol', () => {
 		'\u001b[99;5u',
 	);
 	expect(encodeCodexAction({ kind: 'key', key: 'Tab' }, 'legacy').toString()).toBe('\t');
+});
+
+// Codex 0.165 row text: "› " or two spaces, the display name, padding, then "[Skill]" and the
+// description (skill_popup.rs:156-178, selection_row_layout.rs:116-180).
+const ROW_A_SELECTED =
+	"› bridge_probe_cursor_a_01a...  [Skill] Emit this verification skill's response only when explicitly selected.";
+const ROW_B_UNSELECTED =
+	"  bridge_probe_cursor_b_01a...  [Skill] Emit this verification skill's response only when explicitly selected.";
+const COMPOSER_ECHO = '› $bridge_probe_cursor_a_01a18013';
+
+test('popup display names follow the pinned 28-grapheme rule', () => {
+	expect(codexSkillDisplayName('bridge_probe_cursor_a_01a18013')).toBe(
+		'bridge_probe_cursor_a_01a...',
+	);
+	expect(codexSkillDisplayName('bridge_probe_claude_01a18013')).toBe(
+		'bridge_probe_claude_01a18013',
+	);
+	// Graphemes, not code units: a 29-grapheme name with an emoji keeps 25 graphemes.
+	expect(codexSkillDisplayName(`📂${'x'.repeat(28)}`)).toBe(`📂${'x'.repeat(24)}...`);
+});
+
+test('the picker checkpoint needs the selected skill row, not the composer echo', () => {
+	const picker = checkpoint(skillJourney(CURSOR_INPUT), 'skill-picker-open-1');
+	expect(picker.selected_skill_row).toBe('bridge_probe_cursor_a_01a...');
+	expect(
+		gridShowsCheckpoint(
+			[ROW_A_SELECTED, ROW_B_UNSELECTED, CODEX_0_165_TEXT.skillPopupHint, COMPOSER_ECHO],
+			picker,
+		),
+	).toBe(true);
+	// The retained wrong screen at c4 (picker-no-matches-at-c4.log) must be rejected.
+	expect(
+		gridShowsCheckpoint(['  no matches', 'enter insert · esc close', COMPOSER_ECHO], picker),
+	).toBe(false);
+	// The right name only in the composer, an unselected row, a row without the skill tag, the
+	// untruncated name the popup never shows, or a blank screen are all rejected.
+	expect(gridShowsCheckpoint([CODEX_0_165_TEXT.skillPopupHint, COMPOSER_ECHO], picker)).toBe(false);
+	expect(
+		gridShowsCheckpoint(
+			[
+				ROW_A_SELECTED.replace('› ', '  '),
+				'› bridge_probe_cursor_b_01a...  [Skill] Emit',
+				CODEX_0_165_TEXT.skillPopupHint,
+			],
+			picker,
+		),
+	).toBe(false);
+	expect(
+		gridShowsCheckpoint(
+			['› bridge_probe_cursor_a_01a...  Emit', CODEX_0_165_TEXT.skillPopupHint],
+			picker,
+		),
+	).toBe(false);
+	expect(
+		gridShowsCheckpoint(
+			['› bridge_probe_cursor_a_01a18013  [Skill] Emit', CODEX_0_165_TEXT.skillPopupHint],
+			picker,
+		),
+	).toBe(false);
+	expect(gridShowsCheckpoint(['', '', ''], picker)).toBe(false);
 });

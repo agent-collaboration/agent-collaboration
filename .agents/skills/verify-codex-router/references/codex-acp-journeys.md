@@ -1,6 +1,6 @@
 # Codex CLI over ACP: skills, commands and preservation (J1–J3)
 
-**Status: draft.** The apparatus is built and passes its controlled tests, but no journey has driven a real Host, provider or installed Codex yet. Every scene's expected text comes from Codex source and is unobserved until the first declared run.
+**Status: draft.** The Cursor J1 TUI path (picker rows, selection, composed input and the provider-owned effect) has been driven once on a real Host. Its normal exit and the supporting readback are not yet qualified. Claude J1 and all of J2 and J3 are unrun. Scene text not yet seen on a real screen comes from Codex source and stays unobserved until a declared run. Run records belong in the task evidence, not here.
 
 Use this journey when the change touches the app-server face's skills, slash commands or ACP provider bridge. Adopted outcomes: `docs/specs/2026-10-28-codex-acp-providers/`, Specification R1–R5 (C1–C3) and Verification Design U1–U4 (J1 skills, J2 commands, J3 preservation). A Claude pass is not a Cursor pass; qualify each provider separately.
 
@@ -10,10 +10,11 @@ The user path is unchanged installed Codex 0.165:
 
 ```text
 codex [--no-alt-screen] --remote unix://<service>/router-sessions/<endpoint>.sock \
-  --cd <trusted cwd> -c features.hooks=false resume <native thread alias>
+  --cd <trusted cwd> -c features.hooks=false \
+  -c 'tui.status_line=["model-with-reasoning"]' resume <native thread alias>
 ```
 
-It runs on the shared Rust `TerminalDriver` PTY, behind the existing public wrapper, so HOME and CODEX_HOME stay the user's own. The screen is read through the wterm/libghostty grid. Original PNGs are rendered from the same PTY bytes.
+It runs on the shared Rust `TerminalDriver` PTY, behind the existing public wrapper, so HOME and CODEX_HOME stay the user's own. The `tui.status_line` override applies to this launch only and leaves global config untouched. A user status line may include `context-window-size`, which Codex fills from local config when the provider reports no window, and Cursor reports none. The footer then shows the model alone. This is a presentation choice; it does not stop Codex using that fallback. The screen is read through the wterm/libghostty grid. Original PNGs are rendered from the same PTY bytes.
 
 Declare these before any input:
 
@@ -33,9 +34,10 @@ Declare these before any input:
    - **J1:** for each selected skill, `skill-picker-open-N` (the skill row and `enter insert · esc close`), then Tab to `skill-selected-N` (`$skill`). Then `skill-input-composed`: the exact composed text, and `[Image #1]` after a bracketed paste of the image path. Then Enter to `skill-effect`: every expected effect, and no `■ `. Claude takes exactly one selection; Cursor takes one or more distinct ones.
    - **J2:** `/compact`. Claude must reach `Context compacted`. Cursor must show a `■ ` error and no compaction.
    - **J3:** a long prompt reaches `Working`; Escape reaches `■ Conversation interrupted`.
-   - Every journey ends with `/quit`. The Codex child must stay one process, and checkpoints must arrive in declared order.
+   - Every journey ends with Codex's own exit: type `/quit`, wait for its slash-popup row (`exit Codex`), then Enter, then a bounded wait for PTY EOF. Typed text arrives as one write and is buffered as a paste burst, so an Enter sent straight after `/quit` becomes a newline and Codex stays open. The Codex child must stay one process, and checkpoints must arrive in declared order.
 4. Read back the same Session:
    `node verification/observations/acp-journey-observation.ts OBSERVER_PLAN.json`.
+   Run it directly. Its own bounds cover every wait: `events observe` 20 s, WebSocket handshake 10 s, 15 s per response. Do not wrap it in `timeout`, which macOS lacks.
    - `idle-bind`, only after the TUI step is idle, checks `skills-listed`, `skill-effect`, `compacted` / `compact-refused` and `effective-model`.
    - `active-read-only`, during a running turn, checks only `turn-in-progress`. It never resumes or lists skills.
 

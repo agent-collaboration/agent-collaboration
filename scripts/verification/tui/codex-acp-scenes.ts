@@ -27,6 +27,8 @@ export const codexCheckpointSchema = z.strictObject({
 	forbid: z.array(z.string().min(1)),
 	// The declared bound for this checkpoint; the wait itself ends on a matching grid frame.
 	deadline_ms: z.number().int().positive().max(600_000),
+	// A selected `$` popup row: `› <display name>` then the `[Skill]` tag on the same grid line.
+	selected_skill_row: z.string().min(1).optional(),
 });
 export type CodexCheckpoint = z.infer<typeof codexCheckpointSchema>;
 
@@ -53,6 +55,12 @@ export type CodexJourney = z.infer<typeof codexJourneySchema>;
 export const CODEX_0_165_TEXT = {
 	// bottom_pane/skill_popup.rs:267-273 with key_hint.rs:109 (Enter) and lowercase Esc.
 	skillPopupHint: 'enter insert · esc close',
+	// skill_popup.rs:156-178 with selection_row_layout.rs:116-180: the selected-row prefix and the
+	// skill category tag rendered after the name on the same line.
+	selectedRowPrefix: '› ',
+	skillTag: '[Skill]',
+	// slash_command.rs:110, the `/quit` command row in the slash popup.
+	quitCommandRow: 'exit Codex',
 	// bottom_pane/chat_composer.rs:228-242: first local image placeholder.
 	localImage: '[Image #1]',
 	// chatwidget/compaction.rs:43, completed explicit compaction.
@@ -110,8 +118,10 @@ export function skillJourney(input: SkillJourneyInput): CodexJourney {
 			actions: [{ kind: 'text' as const, text: `${index === 0 ? input.prefix : ''}$${skill}` }],
 			checkpoint: {
 				scene: `skill-picker-open-${index + 1}`,
-				require: [skill, CODEX_0_165_TEXT.skillPopupHint],
+				// The composer already echoes the typed name, so only a selected popup row decides R1.
+				require: [CODEX_0_165_TEXT.skillPopupHint],
 				forbid: [CODEX_0_165_TEXT.errorPrefix],
+				selected_skill_row: codexSkillDisplayName(skill),
 				deadline_ms: UI_CHECKPOINT_MS,
 			},
 		},
@@ -219,6 +229,23 @@ export function interruptJourney(provider: 'claude' | 'cursor', longPrompt: stri
 	});
 }
 
+/**
+ * The normal exit: type `/quit`, then wait for its slash-popup row before Enter. Typed text
+ * arrives as one PTY write, which Codex buffers as a paste burst; an Enter that arrives while
+ * the burst is still buffered becomes a newline instead of dispatching the command
+ * (chat_composer.rs handle_input_basic, paste_burst.rs). The popup row proves the text reached
+ * the composer, so the Enter that follows dispatches `/quit`.
+ */
+export const CODEX_QUIT_STEP: CodexJourney['steps'][number] = {
+	actions: [{ kind: 'text', text: '/quit' }],
+	checkpoint: {
+		scene: 'quit-command-ready',
+		require: [CODEX_0_165_TEXT.quitCommandRow],
+		forbid: [],
+		deadline_ms: UI_CHECKPOINT_MS,
+	},
+};
+
 /** The exact bytes one action writes to the PTY in the declared key protocol. */
 export function encodeCodexAction(action: CodexAction, protocol: KeyProtocol): Buffer {
 	if (action.kind === 'key') return encodeJourneyKey(action.key, protocol);
@@ -226,6 +253,35 @@ export function encodeCodexAction(action: CodexAction, protocol: KeyProtocol): B
 		action.kind === 'paste' ? `\u001b[200~${action.text}\u001b[201~` : action.text,
 		'utf8',
 	);
+}
+
+/**
+ * The name Codex 0.165 shows in a `$` popup row: at most 28 graphemes, otherwise the first 25 and
+ * "..." (skill_popup.rs:87,165 with text_formatting.rs:70-93). Assumes a viewport wide enough
+ * that the row layout does not shorten it further.
+ */
+export function codexSkillDisplayName(name: string): string {
+	const graphemes = Array.from(
+		new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(name),
+	);
+	if (graphemes.length <= 28) return name;
+	return `${graphemes
+		.slice(0, 25)
+		.map((part) => part.segment)
+		.join('')}...`;
+}
+
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/gu, (character) => `\\${character}`);
+}
+
+/** One grid line that is the selected popup row for this display name, tagged as a skill. */
+export function gridShowsSelectedSkillRow(lines: readonly string[], displayName: string): boolean {
+	const row = new RegExp(
+		`^\\s*${escapeRegExp(CODEX_0_165_TEXT.selectedRowPrefix + displayName)}\\s+${escapeRegExp(CODEX_0_165_TEXT.skillTag)}(?:\\s|$)`,
+		'u',
+	);
+	return lines.some((line) => row.test(line));
 }
 
 /** Whether one grid frame shows a checkpoint: every required text and no forbidden text. */
@@ -236,7 +292,9 @@ export function gridShowsCheckpoint(
 	const screen = lines.join('\n');
 	return (
 		checkpoint.require.every((text) => screen.includes(text)) &&
-		checkpoint.forbid.every((text) => !screen.includes(text))
+		checkpoint.forbid.every((text) => !screen.includes(text)) &&
+		(checkpoint.selected_skill_row === undefined ||
+			gridShowsSelectedSkillRow(lines, checkpoint.selected_skill_row))
 	);
 }
 

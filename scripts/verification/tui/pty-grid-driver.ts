@@ -197,10 +197,29 @@ export class PtyGridDriver {
 		return this.core.synchronizedOutputGeneration();
 	}
 	/**
-	 * Waits for a matching frame. A checkpoint longer than the 8 s default (a real model reply)
-	 * spans successive reads, each still bounded by 8 s; a read that only times out quietly
-	 * before that checkpoint's deadline waits again instead of failing it.
+	 * One native read bounded by 8 s and by the wait's deadline. A wait longer than the 8 s
+	 * default (a real model reply, Codex exit) treats a read that only timed out quietly before
+	 * its deadline as "no bytes yet"; every other reply, and every default-length wait, keeps
+	 * the existing behaviour.
 	 */
+	private async boundedRead(
+		deadline: number,
+		waitMillis: number,
+	): Promise<'bytes' | 'eof' | 'quiet'> {
+		try {
+			return await this.receive(Math.max(1, Math.min(deadline - Date.now(), READ_INTERVAL_MILLIS)));
+		} catch (error) {
+			if (
+				waitMillis > READ_INTERVAL_MILLIS &&
+				Date.now() < deadline &&
+				error instanceof Error &&
+				error.message === QUIET_READ
+			)
+				return 'quiet';
+			throw error;
+		}
+	}
+	/** Waits for a matching frame within one checkpoint bound, as boundedRead describes. */
 	async waitForGrid(
 		name: string,
 		matches: (grid: TerminalGrid) => boolean,
@@ -208,26 +227,13 @@ export class PtyGridDriver {
 		checkpointMillis = READ_INTERVAL_MILLIS,
 	): Promise<TerminalGrid> {
 		const deadline = Date.now() + checkpointMillis;
-		const quietRead = async (): Promise<'bytes' | 'eof' | 'quiet'> => {
-			try {
-				return await this.receive(
-					Math.max(1, Math.min(deadline - Date.now(), READ_INTERVAL_MILLIS)),
-				);
-			} catch (error) {
-				if (
-					checkpointMillis > READ_INTERVAL_MILLIS &&
-					Date.now() < deadline &&
-					error instanceof Error &&
-					error.message === QUIET_READ
-				)
-					return 'quiet';
-				throw error;
-			}
-		};
 		const nextFrame = async (): Promise<TerminalGrid> => {
 			if (!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid()))
 				return this.grid();
-			if (Date.now() >= deadline || (await quietRead()) === 'eof') {
+			if (
+				Date.now() >= deadline ||
+				(await this.boundedRead(deadline, checkpointMillis)) === 'eof'
+			) {
 				throw new Error(
 					`grid checkpoint unreachable: ${name}\n${gridLines(this.grid()).join('\n')}`,
 				);
@@ -235,6 +241,16 @@ export class PtyGridDriver {
 			return nextFrame();
 		};
 		return nextFrame();
+	}
+	/** Waits for the child to close the PTY (EOF) within one bound, as boundedRead describes. */
+	async waitForEof(name: string, waitMillis = READ_INTERVAL_MILLIS): Promise<void> {
+		const deadline = Date.now() + waitMillis;
+		const nextRead = async (): Promise<void> => {
+			if (Date.now() >= deadline)
+				throw new Error(`PTY did not end: ${name}\n${gridLines(this.grid()).join('\n')}`);
+			if ((await this.boundedRead(deadline, waitMillis)) !== 'eof') await nextRead();
+		};
+		await nextRead();
 	}
 	async running(): Promise<boolean> {
 		return (await this.command('running')) === 'RUNNING';
