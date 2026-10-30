@@ -386,7 +386,8 @@ async fn native_target_in_view(
                         ..
                     } => (
                         peer.as_ref()
-                            .map_or(working_directory, |peer| &peer.working_directory),
+                            .and_then(|peer| peer.working_directory.as_ref())
+                            .unwrap_or(working_directory),
                         !matches!(
                             state,
                             collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }

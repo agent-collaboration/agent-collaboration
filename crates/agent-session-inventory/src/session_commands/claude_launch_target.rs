@@ -491,7 +491,7 @@ fn active_claude_session_record(session: ProviderSessionSummary) -> Option<serde
                 "source":"active","sessionId":String::from(target.session_id),
                 "jobHandle":String::from(job_handle),"backgroundState":state,
                 "name":peer_name.or(name),"workingDirectory":String::from(working_directory),
-                "liveWorkingDirectory":peer.as_ref().map(|peer|String::from(peer.working_directory.clone())),
+                "liveWorkingDirectory":peer.as_ref().and_then(|peer|peer.working_directory.clone()).map(String::from),
                 "status":peer.as_ref().map(|peer|peer.status).or(status),
                 "startedAtUnixSeconds":peer.as_ref().map_or(started_at,|peer|peer.started_at),
                 "updatedAtUnixSeconds":peer.as_ref().map(|peer|peer.updated_at),

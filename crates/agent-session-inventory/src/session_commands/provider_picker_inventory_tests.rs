@@ -11,6 +11,51 @@ fn background_observation(target: &Value, peer: Value) -> Value {
 }
 
 #[tokio::test]
+async fn older_peer_without_working_directory_decodes_and_projects_the_job_directory() {
+    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
+    let live = background_observation(
+        &target,
+        json!({"name":"Older live peer","status":"idle","startedAt":2,"updatedAt":3,"statusUpdatedAt":3,"kind":"interactive","entrypoint":"cli"}),
+    );
+    let _decoded =
+        serde_json::from_value::<collaboration_client::protocol::ProviderSessionSummary>(
+            live.clone(),
+        )
+        .expect("an older producer's peer must decode without workingDirectory");
+    let stored = background_observation(&target, Value::Null);
+    let (mut client, serving) = connect_fixture(vec![
+        ("endpoints_list", inventory_with_provider()),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([stored]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([live]), false),
+        ),
+        ("endpoints_list", inventory_with_provider()),
+    ])
+    .await;
+    let (_, rows, _) = load_provider_records(&mut client)
+        .await
+        .expect("the older source must remain readable");
+    serving.await.unwrap();
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.cwd.as_deref(), Some("/historical/job"));
+    assert!(
+        row.native_peer.is_some(),
+        "the peer observation must survive decoding"
+    );
+    assert_eq!(row.runtime_status, PickerRuntimeStatus::Idle);
+    assert!(row.native_restore_eligible());
+}
+
+#[tokio::test]
 async fn resumed_native_peer_projects_current_directory_and_retains_historical_job_facts() {
     let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
     let stored = background_observation(&target, Value::Null);

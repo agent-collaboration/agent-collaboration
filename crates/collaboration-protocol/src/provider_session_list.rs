@@ -132,7 +132,8 @@ pub enum ClaudeCodeInteractiveStatus {
 #[derive(JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeClaudePeerObservation {
-    pub working_directory: ProviderWorkingDirectory,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<ProviderWorkingDirectory>,
     pub name: Option<String>,
     pub status: ClaudeCodeInteractiveStatus,
     pub started_at: i64,

@@ -431,7 +431,7 @@ impl SessionPickerRecord {
                 ..
             } => Some(
                 collaboration_client::protocol::NativeClaudePeerObservation {
-                    working_directory: working_directory.clone(),
+                    working_directory: Some(working_directory.clone()),
                     name: name.clone(),
                     status: *status,
                     started_at: *started_at,
@@ -495,7 +495,8 @@ impl SessionPickerRecord {
             } => (
                 target,
                 peer.as_ref()
-                    .map_or(working_directory, |peer| &peer.working_directory),
+                    .and_then(|peer| peer.working_directory.as_ref())
+                    .unwrap_or(working_directory),
                 peer.as_ref().map(|peer| peer.updated_at),
                 None,
                 name.clone(),

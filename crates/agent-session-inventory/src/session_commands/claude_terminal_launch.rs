@@ -152,7 +152,7 @@ async fn resume_target(
                     if peer.is_some() && !state.is_loaded() {
                         return Err(SessionsCommandError::ClaudeLaunch("This Claude session is already open without an attachable background job. Use its current terminal, or stop it before opening it here.".to_owned()));
                     }
-                    let directory = PathBuf::from(String::from(peer.map_or(working_directory, |peer| peer.working_directory)));
+                    let directory = PathBuf::from(String::from(peer.and_then(|peer| peer.working_directory).unwrap_or(working_directory)));
                     match state {
                         NativeClaudeBackgroundState::Working | NativeClaudeBackgroundState::Blocked => Ok(Some((directory, Some(job_handle)))),
                         NativeClaudeBackgroundState::Done | NativeClaudeBackgroundState::Failed | NativeClaudeBackgroundState::Stopped => Ok(Some((directory, None))),

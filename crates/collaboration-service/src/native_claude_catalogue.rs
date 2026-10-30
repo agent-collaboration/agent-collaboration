@@ -127,7 +127,7 @@ pub(crate) async fn read_native_catalogue(
             for job in inventory.jobs {
                 let peer = peer_rows.remove(&job.session_id).map(|(directory, peer)| {
                     NativeClaudePeerObservation {
-                        working_directory: directory,
+                        working_directory: Some(directory),
                         name: peer.name,
                         status: peer_status(&peer.status),
                         started_at: peer.started_at,
