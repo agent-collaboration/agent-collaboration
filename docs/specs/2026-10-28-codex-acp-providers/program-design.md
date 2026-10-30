@@ -23,6 +23,25 @@ At merged source `b6c30d62d` (includes main `f6d68f174`), `collaboration-runtime
 
 These are missing adaptations, not a missing transport. Current native Codex traffic and the reverse `codex-acp-adapter` stay on their existing paths. The proposed changes are native list/input/compact admission, a typed selection envelope through the existing queue, provider-specific preparation, and typed effect/error projection. The native handler must contain no Claude/Cursor branches.
 
+### Provider routing and separate sockets
+
+**Design requirement: one app-server connection is bound to exactly one configured provider endpoint for its lifetime.** Keep the existing segregated sockets to make that selection when the unchanged Codex CLI connects. The bridge implementation is shared; the Host supplies the endpoint context and injected behavior for each instance. Session routing then happens in code within that endpoint. Never infer the provider from a working directory, model name or most recently used session.
+
+```mermaid
+flowchart TD
+  CLI["Unchanged Codex CLI<br/>selects its remote socket"] --> Native["codex-native.sock<br/>existing native Codex app-server"]
+  CLI --> ClaudeFace["router-sessions/claude-local.sock<br/>shared app-server face, Claude context"]
+  CLI --> CursorFace["router-sessions/cursor-local.sock<br/>shared app-server face, Cursor context"]
+  ClaudeFace --> Claude["Claude ACP<br/>provider-owned conversation"]
+  CursorFace --> Cursor["Cursor ACP<br/>provider-owned conversation"]
+```
+
+These provider sockets speak **Codex app-server protocol**. ACP is the backend protocol. `acp-local.sock` is therefore neither a required name nor a generic selector in this design. A single shared socket is technically possible, but it would need an explicit provider selection before startup operations: `model/list`, `skills/list` and a new `thread/start` cannot choose an existing provider session by thread ID. Per-session requests alone cannot supply that initial context.
+
+Chosen tradeoff: reuse one socket per configured ACP endpoint and the existing Host listener/cleanup ownership. This avoids a new provider-selection handshake or client convention; maintainers carry one additional local socket per endpoint, and the eventual picker hides its path behind the selected provider/client. Revisit only when a supported unchanged-client contract can select a provider before those unscoped operations. A unified socket must not quietly introduce global-current-provider state. Separate sockets are a deliberate routing choice, not a protocol necessity or a claim of separate security sandboxes.
+
+Source: `codex-router-host/src/collaboration_runtime/startup_composition.rs` constructs one endpoint-bound RouterSessionAppServerContext and listener per provider. Specification C1 already fixes the provider at the connection endpoint; this section makes its structural realization explicit. Native Codex remains on its existing endpoint.
+
 | Path | Current | Proposed / result back to caller |
 | --- | --- | --- |
 | Read skills | Native face returns empty | Face reads current session skill view; existing `skills/changed` invalidates it |

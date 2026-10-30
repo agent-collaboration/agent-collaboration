@@ -28,7 +28,7 @@ Human entry: [Design documents](index.html).
 
 1. [U5](requirements.md#what-you-need)
 2. [R5](specification.md#r5--inject-the-differences-keep-one-bridge-c5-v5)
-3. [Crates and trait](program-design.md#crates-and-injection), [constructor path](program-design.md#where-the-dependency-is-constructed-and-passed), [rationale](program-design.md#why-this-much-and-no-more)
+3. [Provider routing and sockets](program-design.md#provider-routing-and-separate-sockets), [crates and trait](program-design.md#crates-and-injection), [constructor path](program-design.md#where-the-dependency-is-constructed-and-passed), [rationale](program-design.md#why-this-much-and-no-more)
 4. [U5 proof](verification-design.md#u5--constructor-di-supplies-the-right-implementation)
 
 ## Reading path: implement the design
