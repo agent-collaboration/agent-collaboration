@@ -140,7 +140,7 @@ mod tests {
         let stack = use_surface_stack(&mut hooks, |_| {
             let hit = ActionDef {
                 id: action_id("hit"),
-                title: "Hit",
+                title: "Hit".into(),
                 keys: vec!["Enter".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,
@@ -154,7 +154,7 @@ mod tests {
             };
             let move_action = ActionDef {
                 id: action_id("move"),
-                title: "Move",
+                title: "Move".into(),
                 keys: vec!["m".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,

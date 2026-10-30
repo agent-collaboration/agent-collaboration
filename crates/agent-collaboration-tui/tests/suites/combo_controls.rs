@@ -133,7 +133,7 @@ mod tests {
             *props.handle.0.lock().unwrap() = Some(control.clone());
             let open = ActionDef {
                 id: action(),
-                title: "Client",
+                title: "Client".into(),
                 keys: vec!["F3".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,

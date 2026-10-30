@@ -23,6 +23,9 @@ mod hit_geometry;
 #[path = "suites/input_isolation.rs"]
 mod input_isolation;
 #[cfg(test)]
+#[path = "suites/live_actions.rs"]
+mod live_actions;
+#[cfg(test)]
 #[path = "suites/scroll_geometry.rs"]
 mod scroll_geometry;
 #[cfg(test)]

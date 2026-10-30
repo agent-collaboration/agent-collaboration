@@ -33,7 +33,7 @@ mod tests {
     ) -> ActionDef {
         ActionDef {
             id: id(name),
-            title,
+            title: title.into(),
             keys: vec![key.parse().unwrap()],
             placement,
             run,
@@ -60,7 +60,10 @@ mod tests {
                 "Help",
                 "F1",
                 Placement::Menu { section: "Help" },
-                help.open_handler(Handler::from(|error| panic!("{error}"))),
+                help.open_handler(
+                    agent_collaboration_tui::controls::HelpContent::default,
+                    Handler::from(|error| panic!("{error}")),
+                ),
             );
             let mut start = definition(
                 "start",
@@ -282,7 +285,7 @@ mod tests {
             assert_eq!(
                 projection
                     .iter()
-                    .map(|action| (action.title, action.keys[0].to_string()))
+                    .map(|action| (action.title.as_str(), action.keys[0].to_string()))
                     .collect::<Vec<_>>(),
                 [
                     ("First action", "F4".into()),

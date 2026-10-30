@@ -127,7 +127,7 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             ScopeId::new("background").unwrap(),
             vec![ActionDef {
                 id: ActionId::new("quit").unwrap(),
-                title: "Quit",
+                title: "Quit".into(),
                 keys: vec!["q".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,

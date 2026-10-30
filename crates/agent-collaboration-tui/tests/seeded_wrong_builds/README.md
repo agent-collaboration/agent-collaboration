@@ -43,8 +43,16 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `cached-help-availability.patch` | Help no longer reflects the source action's live unavailable reason. |
 | `focused-button-enter-inert.patch` | Enter no longer activates the focused primary button. |
 
+| `title-cached-at-install.patch` | An installed title remains frozen after consumer state changes. |
+| `primary-update-discarded.patch` | An open model update fails to change the primary action. |
+| `model-update-resets-focus.patch` | Rebuilding an open model loses its prior focused TargetId. |
+| `closed-model-update-calls-updater.patch` | An update invokes consumer code after its overlay closed. |
+| `help-conventions-dropped.patch` | Help loses the consumer-supplied input conventions. |
+| `help-keeps-saved-base-model.patch` | A saved Help copy hides updates to the dialog's continuing model. |
+| `model-update-writes-help.patch` | Updating the dialog replaces Help's own routing model. |
+
 These controls are implementation evidence; the independent S5 observation is
 separate. Check each patch applies, then challenge it individually against the
-full package at the declared S5 source target. Runtime assertion failures must
+full package at its declared source target. Runtime assertion failures must
 identify the named defect. Compile errors, application errors, color setup
 failures, and entry/redraw timeouts do not establish sensitivity.

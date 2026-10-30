@@ -45,12 +45,50 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
             .max(1),
     )
     .unwrap_or(u32::MAX);
-    element!(HitRegion(target:props.control.body_target(),kind:HitRegionKind::Target) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+    let content = props.control.content(context.surface).unwrap_or_default();
+    let context_width = u32::try_from(
+        content
+            .context
+            .iter()
+            .map(|line| line.label.width())
+            .max()
+            .unwrap_or(0),
+    )
+    .unwrap_or(u32::MAX);
+    let convention_width = u32::try_from(
+        content
+            .conventions
+            .iter()
+            .map(|row| row.key.width())
+            .max()
+            .unwrap_or(0),
+    )
+    .unwrap_or(u32::MAX);
+    let context_block=(!content.context.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        Text(content:"Context",color:theme.foreground(TextRole::Accent))
+        #(content.context.into_iter().map(|line|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
+            View(width:context_width,flex_shrink:0.0_f32) {Text(content:line.label,color:theme.foreground(TextRole::Muted))}
+            View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32) {Text(content:line.value,color:theme.foreground(TextRole::Text))}
+        }).into_any()))
+    }).into_any());
+    let conventions_block=(!content.conventions.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        Text(content:"Input conventions",color:theme.foreground(TextRole::Accent))
+        #(content.conventions.into_iter().map(|row|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
+            View(width:convention_width,flex_shrink:0.0_f32) {Text(content:row.key,color:theme.foreground(TextRole::Muted))}
+            View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32) {Text(content:row.description,color:theme.foreground(TextRole::Text))}
+        }).into_any()))
+    }).into_any());
+    element!(HitRegion(target:props.control.body_target(),kind:HitRegionKind::Target) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:1) {
+        #(context_block)
+        View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        Text(content:"Actions",color:theme.foreground(TextRole::Accent))
         #(entries.into_iter().map(|(action,keys)| {let available=action.availability.is_available();let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
             View(width:key_width,flex_shrink:0.0_f32) {Text(content:if keys.is_empty(){"—".to_owned()}else{keys},color:theme.foreground(TextRole::Muted))}
             Text(content:action.title,color:theme.foreground(if available {TextRole::Text}else{TextRole::Disabled}))
             #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
         }).into_any()}))
+        }
+        #(conventions_block)
     }})
 }
 

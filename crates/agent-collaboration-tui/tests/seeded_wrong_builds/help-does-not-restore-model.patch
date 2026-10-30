@@ -1,8 +1,8 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
---- a/crates/agent-collaboration-tui/src/controls/help_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
-@@ -181,3 +181,3 @@ impl HelpControl {
-                 if let Some(model) = stack.surface_mut(surface) {
--                    *model = saved;
-+                    let _=(model,saved);
-                     true
+diff --git a/crates/agent-collaboration-tui/src/surface_stack.rs b/crates/agent-collaboration-tui/src/surface_stack.rs
+--- a/crates/agent-collaboration-tui/src/surface_stack.rs
++++ b/crates/agent-collaboration-tui/src/surface_stack.rs
+@@ -281,3 +281,3 @@ impl SurfaceStack {
+         };
+-        overlay.model = model;
++        let _=model;
+         true

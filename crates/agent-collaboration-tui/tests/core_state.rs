@@ -22,7 +22,7 @@ mod tests {
     fn action(name: &str, chord: &str) -> ActionDef {
         ActionDef {
             id: ActionId::new(name).unwrap(),
-            title: "Open",
+            title: "Open".into(),
             keys: vec![chord.parse().unwrap()],
             availability: AvailabilityFn::default(),
             choice: None,

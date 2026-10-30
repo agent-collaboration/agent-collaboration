@@ -5,10 +5,7 @@ use crate::{
     theme::TextRole,
 };
 use iocraft::prelude::*;
-pub fn hint_pairs(
-    actions: &[ActionPresentation],
-    wanted: &[ActionId],
-) -> Vec<(String, &'static str)> {
+pub fn hint_pairs(actions: &[ActionPresentation], wanted: &[ActionId]) -> Vec<(String, String)> {
     wanted
         .iter()
         .filter_map(|id| actions.iter().find(|action| action.id == *id))
@@ -21,7 +18,7 @@ pub fn hint_pairs(
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(" / "),
-                action.title,
+                action.title.clone(),
             )
         })
         .collect()
@@ -53,7 +50,7 @@ pub fn DialogKeyHints(props: &DialogKeyHintsProps, hooks: Hooks) -> impl Into<An
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(" / ");
-        let title = action.title;
+        let title = action.title.clone();
         let reason = match &action.availability {
             Availability::Available => None,
             Availability::Unavailable { reason } => Some(reason.clone()),

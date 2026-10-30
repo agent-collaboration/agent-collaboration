@@ -37,7 +37,9 @@ pub mod dialog_frame;
 pub use dialog_frame::{DialogFrame, DialogFrameProps};
 
 pub mod dialog_footer;
+pub mod help_content;
 pub mod help_control;
+pub use help_content::{HelpContent, HelpContextLine, HelpInputConvention};
 pub mod help_dialog;
 pub use help_control::{HelpControl, HelpError};
 pub use help_dialog::{HelpDialog, HelpDialogProps};

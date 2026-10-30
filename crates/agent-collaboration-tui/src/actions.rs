@@ -4,6 +4,9 @@ use std::{fmt, sync::Arc};
 #[path = "key_chord.rs"]
 mod key_chord;
 pub use key_chord::{KeyChord, KeyChordError};
+#[path = "action_title.rs"]
+mod action_title;
+pub use action_title::ActionTitle;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentifierError;
@@ -109,7 +112,7 @@ pub enum Placement {
 #[derive(Clone)]
 pub struct ActionDef {
     pub id: ActionId,
-    pub title: &'static str,
+    pub title: ActionTitle,
     pub keys: Vec<KeyChord>,
     pub availability: AvailabilityFn,
     pub choice: Option<Checked>,
@@ -133,7 +136,7 @@ impl fmt::Debug for ActionDef {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActionPresentation {
     pub id: ActionId,
-    pub title: &'static str,
+    pub title: String,
     pub keys: Vec<KeyChord>,
     pub availability: Availability,
     pub checked: Option<bool>,
@@ -207,7 +210,7 @@ impl ActionRegistry {
             .iter()
             .map(|action| ActionPresentation {
                 id: action.id.clone(),
-                title: action.title,
+                title: action.title.get(),
                 keys: action.keys.clone(),
                 availability: action.availability.get(),
                 checked: action.choice.as_ref().map(Checked::get),

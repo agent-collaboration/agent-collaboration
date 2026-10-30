@@ -66,7 +66,7 @@ mod tests {
                 ScopeId::new("editor").unwrap(),
                 vec![ActionDef {
                     id: action("menu"),
-                    title: "Menu",
+                    title: "Menu".into(),
                     keys: vec!["F10".parse().unwrap()],
                     availability: AvailabilityFn::default(),
                     choice: None,

@@ -34,7 +34,7 @@ mod tests {
         let stack = use_surface_stack(&mut hooks, |stack| {
             let folder = ActionDef {
                 id: action("folder"),
-                title: "This folder",
+                title: "This folder".into(),
                 keys: vec!["F2".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: Some(Checked::new(move || !all.get())),
@@ -46,7 +46,7 @@ mod tests {
             };
             let every = ActionDef {
                 id: action("all"),
-                title: "All sessions",
+                title: "All sessions".into(),
                 keys: vec!["F3".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: Some(Checked::new(move || all.get())),
@@ -58,7 +58,7 @@ mod tests {
             };
             let menu = ActionDef {
                 id: action("menu"),
-                title: "Menu",
+                title: "Menu".into(),
                 keys: vec!["F10".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,

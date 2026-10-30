@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_dialog.rs b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_dialog.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+@@ -90,3 +90,3 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
+         }
+-        #(conventions_block)
++        #(conventions_block.filter(|_|false))
+     }})

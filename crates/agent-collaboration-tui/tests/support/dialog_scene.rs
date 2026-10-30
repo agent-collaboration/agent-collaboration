@@ -73,7 +73,7 @@ pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyE
             ScopeId::new("screen").unwrap(),
             vec![ActionDef {
                 id: action("quit"),
-                title: "Quit",
+                title: "Quit".into(),
                 keys: vec!["Ctrl+C".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,
@@ -122,7 +122,7 @@ fn dialog_spec(
     let group = GroupId::new("dialog-fields").unwrap();
     let open = ActionDef {
         id: action("client"),
-        title: "Client",
+        title: "Client".into(),
         keys: Vec::new(),
         availability: AvailabilityFn::default(),
         choice: None,
@@ -150,7 +150,7 @@ fn dialog_spec(
     };
     let start = ActionDef {
         id: action("start"),
-        title: "Start",
+        title: "Start".into(),
         keys: vec!["Ctrl+Enter".parse().unwrap()],
         availability: AvailabilityFn::new(move || {
             if data.starts.get() == 0 {
@@ -170,7 +170,7 @@ fn dialog_spec(
     };
     let close = ActionDef {
         id: action("close"),
-        title: "Close",
+        title: "Close".into(),
         keys: vec!["Esc".parse().unwrap()],
         availability: AvailabilityFn::default(),
         choice: None,
@@ -181,12 +181,30 @@ fn dialog_spec(
     };
     let help_action = ActionDef {
         id: action("help"),
-        title: "Help",
+        title: "Help".into(),
         keys: vec!["F1".parse().unwrap()],
         availability: AvailabilityFn::default(),
         choice: None,
         placement: Placement::Hidden,
-        run: help.open_handler(Handler::from(|error| panic!("{error}"))),
+        run: help.open_handler(
+            || agent_collaboration_tui::controls::HelpContent {
+                context: vec![agent_collaboration_tui::controls::HelpContextLine {
+                    label: "Session".into(),
+                    value: "fixture-42".into(),
+                }],
+                conventions: vec![
+                    agent_collaboration_tui::controls::HelpInputConvention {
+                        key: "Arrows".into(),
+                        description: "Move field focus".into(),
+                    },
+                    agent_collaboration_tui::controls::HelpInputConvention {
+                        key: "Typing".into(),
+                        description: "Edit a draft value".into(),
+                    },
+                ],
+            },
+            Handler::from(|error| panic!("{error}")),
+        ),
     };
     let targets = vec![
         button_target(target("client"), &open).in_group(group.clone()),

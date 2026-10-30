@@ -87,7 +87,7 @@ mod tests {
         let stack = use_surface_stack(&mut hooks, |_| {
             let action = |name: &str, key: &str, run: Handler<()>| ActionDef {
                 id: ActionId::new(name).unwrap(),
-                title: "Probe",
+                title: "Probe".into(),
                 keys: vec![key.parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,

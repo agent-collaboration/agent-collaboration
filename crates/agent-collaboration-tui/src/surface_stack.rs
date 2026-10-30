@@ -167,6 +167,7 @@ pub struct Overlay {
     pub restore_focus: Option<TargetId>,
     pub view: OverlayView,
     pub layout: OverlayLayout,
+    suspended_model: Option<SurfaceModel>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -243,6 +244,44 @@ impl SurfaceStack {
                 .map(|overlay| &mut overlay.model),
         }
     }
+    pub(crate) fn overlay_base_model(&self, id: OverlayId) -> Option<&SurfaceModel> {
+        self.overlays
+            .iter()
+            .find(|overlay| overlay.id == id)
+            .map(|overlay| overlay.suspended_model.as_ref().unwrap_or(&overlay.model))
+    }
+    pub(crate) fn overlay_base_model_mut(&mut self, id: OverlayId) -> Option<&mut SurfaceModel> {
+        self.overlays
+            .iter_mut()
+            .find(|overlay| overlay.id == id)
+            .map(|overlay| {
+                overlay
+                    .suspended_model
+                    .as_mut()
+                    .unwrap_or(&mut overlay.model)
+            })
+    }
+    pub(crate) fn suspend_dialog_model(&mut self, id: OverlayId, help: SurfaceModel) -> bool {
+        let Some(overlay) = self.overlays.iter_mut().find(|overlay| {
+            overlay.id == id
+                && overlay.kind == OverlayKind::Dialog
+                && overlay.suspended_model.is_none()
+        }) else {
+            return false;
+        };
+        overlay.suspended_model = Some(std::mem::replace(&mut overlay.model, help));
+        true
+    }
+    pub(crate) fn restore_dialog_model(&mut self, id: OverlayId) -> bool {
+        let Some(overlay) = self.overlays.iter_mut().find(|overlay| overlay.id == id) else {
+            return false;
+        };
+        let Some(model) = overlay.suspended_model.take() else {
+            return false;
+        };
+        overlay.model = model;
+        true
+    }
     pub fn is_covered(&self, id: SurfaceId) -> bool {
         self.surface(id).is_some() && self.top_id() != id
     }
@@ -264,6 +303,7 @@ impl SurfaceStack {
             restore_focus,
             view: spec.view,
             layout: spec.layout,
+            suspended_model: None,
         });
         self.next_identity = next;
         Ok(id)

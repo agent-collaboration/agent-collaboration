@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
 --- a/crates/agent-collaboration-tui/src/actions.rs
 +++ b/crates/agent-collaboration-tui/src/actions.rs
-@@ -204,2 +204,7 @@ impl ActionRegistry {
+@@ -207,2 +207,7 @@ impl ActionRegistry {
      }
 +    pub(crate) fn freeze_availability(&self) -> Self {
 +        let mut frozen=self.clone();
@@ -12,8 +12,24 @@ diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collab
 diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
 --- a/crates/agent-collaboration-tui/src/controls/help_control.rs
 +++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
-@@ -121,3 +121,3 @@ impl HelpControl {
-         }
--        let source = stack.top().actions.clone();
-+        let source = stack.top().actions.freeze_availability();
-         let scroll = ScrollHandle::new(self.0.stack);
+@@ -43,2 +43,3 @@ impl HelpPresentation {
+ struct HelpSession {
++    source: ActionRegistry,
+     presentation: HelpPresentation,
+@@ -71,11 +72,3 @@ impl HelpControl {
+     }
+-    pub fn source(&self, surface: SurfaceId) -> Option<ActionRegistry> {
+-        let session = self.session(surface)?;
+-        let stack = self.0.stack.snapshot();
+-        match session.presentation {
+-            HelpPresentation::WithinDialog(id) => stack.overlay_base_model(id),
+-            HelpPresentation::OwnDialog(_) => stack.surface(SurfaceId::Screen),
+-        }
+-        .map(|model| model.actions.clone())
+-    }
++    pub fn source(&self, surface: SurfaceId) -> Option<ActionRegistry> {self.session(surface).map(|session|session.source)}
+     pub fn scroll(&self, surface: SurfaceId) -> Option<ScrollHandle> {
+@@ -174,2 +167,3 @@ impl HelpControl {
+             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(HelpSession {
++            source: stack.top().actions.freeze_availability(),
+             presentation,

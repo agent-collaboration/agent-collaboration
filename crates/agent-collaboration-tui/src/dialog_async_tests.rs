@@ -51,7 +51,7 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
     if !opened.get() {
         let apply = ActionDef {
             id: ActionId::new("apply").unwrap(),
-            title: "Apply",
+            title: "Apply".into(),
             keys: Vec::new(),
             availability: AvailabilityFn::default(),
             choice: None,

@@ -9,7 +9,9 @@ mod tests {
         actions::{
             ActionDef, ActionId, ActionRegistry, Availability, AvailabilityFn, Placement, ScopeId,
         },
-        controls::{Button, HelpControl, button_target},
+        controls::{
+            Button, HelpContent, HelpContextLine, HelpControl, HelpInputConvention, button_target,
+        },
         focus_model::{FocusModel, TargetId},
         input_owner::InputOwner,
         overlay_host::OverlayHost,
@@ -46,6 +48,7 @@ mod tests {
         #[iocraft(required)]
         journal: EventJournal,
         handle: HelpHandle,
+        content: HelpContent,
     }
     const TITLES: [&str; 26] = [
         "Alpha action",
@@ -79,6 +82,7 @@ mod tests {
     fn HelpScene(props: &HelpSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         record_draw(&mut hooks, &props.journal);
         let enabled = hooks.use_state(|| true);
+        let content = props.content.clone();
         let stack = use_surface_stack(&mut hooks, |stack| {
             let help = HelpControl::new(stack, action("help"));
             *props.handle.0.lock().unwrap() = Some(HelpFixture {
@@ -87,16 +91,19 @@ mod tests {
             });
             let open = ActionDef {
                 id: action("help"),
-                title: "Help",
+                title: "Help".into(),
                 keys: vec!["F1".parse().unwrap()],
                 availability: AvailabilityFn::default(),
                 choice: None,
                 placement: Placement::Toolbar,
-                run: help.open_handler(Handler::from(|error| panic!("{error}"))),
+                run: help.open_handler(
+                    move || content.clone(),
+                    Handler::from(|error| panic!("{error}")),
+                ),
             };
             let execute = ActionDef {
                 id: action("execute"),
-                title: "Execute",
+                title: "Execute".into(),
                 keys: vec!["F8".parse().unwrap()],
                 availability: AvailabilityFn::new(move || {
                     if enabled.get() {
@@ -122,7 +129,7 @@ mod tests {
             for (letter, title) in ('a'..='z').zip(TITLES) {
                 actions.push(ActionDef {
                     id: action(title),
-                    title,
+                    title: title.into(),
                     keys: vec![format!("Ctrl+Alt+{letter}").parse().unwrap()],
                     availability: AvailabilityFn::default(),
                     choice: None,
@@ -333,5 +340,108 @@ mod tests {
                 .await
                 .unwrap();
         }
+    }
+    #[tokio::test]
+    async fn context_and_input_conventions_scroll_with_the_generated_action_list() {
+        let content = HelpContent {
+            context: vec![
+                HelpContextLine {
+                    label: "Account".into(),
+                    value: "account-42".into(),
+                },
+                HelpContextLine {
+                    label: "Label".into(),
+                    value: "Full captured label for this account".into(),
+                },
+            ],
+            conventions: vec![
+                HelpInputConvention {
+                    key: "Arrows".into(),
+                    description: "Move selection".into(),
+                },
+                HelpInputConvention {
+                    key: "PgUp / PgDn".into(),
+                    description: "Move a page".into(),
+                },
+                HelpInputConvention {
+                    key: "Home / End".into(),
+                    description: "First or last choice".into(),
+                },
+                HelpInputConvention {
+                    key: "Typing".into(),
+                    description: "Filter the list".into(),
+                },
+                HelpInputConvention {
+                    key: "Backspace".into(),
+                    description: "Edit the query".into(),
+                },
+                HelpInputConvention {
+                    key: "id: / b: / repo:".into(),
+                    description: "Search syntax".into(),
+                },
+                HelpInputConvention {
+                    key: "Esc ladder".into(),
+                    description: "Clear, close, return".into(),
+                },
+            ],
+        };
+        let handle = HelpHandle::default();
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(HelpScene(journal,handle:handle.clone(),content));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        let scenario = async {
+            driver.initial(&mut frames).await;
+            let opened = driver
+                .drive(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::F(1)), true)],
+                    true,
+                )
+                .await;
+            let first = text(&driver);
+            assert!(first.contains("account-42"), "{first}");
+            assert!(
+                first.contains("Full captured label for this account"),
+                "{first}"
+            );
+            let fixture = handle.0.lock().unwrap().clone().unwrap();
+            let scroll = fixture
+                .control
+                .scroll(opened.last().unwrap().snapshot.0[1].0)
+                .unwrap();
+            assert!(scroll.position().maximum() > 0);
+            let mut pages = vec![first];
+            for _ in 0..scroll
+                .position()
+                .maximum()
+                .div_ceil(scroll.position().viewport_height.max(1))
+            {
+                driver
+                    .drive(
+                        &mut frames,
+                        InputMode::Burst,
+                        vec![(key(KeyCode::PageDown), true)],
+                        true,
+                    )
+                    .await;
+                pages.push(text(&driver));
+            }
+            let all = pages.join("\n");
+            assert!(all.contains("Input conventions"), "{all}");
+            assert!(all.contains("Esc ladder"), "{all}");
+            assert!(all.contains("Clear, close, return"), "{all}");
+            assert!(all.contains("Search syntax"), "{all}");
+            for title in TITLES {
+                assert!(all.contains(title), "generated action missing: {title}");
+            }
+            assert!(
+                all.lines()
+                    .any(|line| line.contains("F8") && line.contains("Execute"))
+            );
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+            .await
+            .unwrap();
     }
 }

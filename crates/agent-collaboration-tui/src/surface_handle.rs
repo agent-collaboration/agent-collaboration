@@ -59,6 +59,25 @@ impl SurfaceStackHandle {
     pub fn close_top(self) -> Option<OverlayId> {
         self.update(SurfaceStack::close_top)
     }
+    /// Update the continuing model without remounting its view, scroll or draft state.
+    /// While Help replaces a dialog, the update applies to its suspended base model.
+    /// Focus follows the prior TargetId, falling back only when it is no longer enabled.
+    pub fn update_overlay_if_open(
+        mut self,
+        overlay: OverlayId,
+        update: impl FnOnce(&mut SurfaceModel),
+    ) -> bool {
+        let mut next = self.snapshot();
+        let Some(model) = next.overlay_base_model_mut(overlay) else {
+            return false;
+        };
+        let focused = model.focus.current().cloned();
+        update(model);
+        model.focus.restore(focused.as_ref());
+        self.regions.invalidate();
+        self.stack.set(next);
+        true
+    }
     pub fn focus(self, surface: SurfaceId, target: &TargetId) -> bool {
         self.update(|stack| {
             stack

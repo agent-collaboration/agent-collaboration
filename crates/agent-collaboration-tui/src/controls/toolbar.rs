@@ -19,7 +19,7 @@ pub fn toolbar_actions(registry: &ActionRegistry, available: u16) -> Vec<ActionP
             Availability::Unavailable { reason } => reason.width() + 1,
         };
         let checked = usize::from(action.checked == Some(true)) * 2;
-        let width = UnicodeWidthStr::width(action.title) + key + reason + checked + 3;
+        let width = UnicodeWidthStr::width(action.title.as_str()) + key + reason + checked + 3;
         if width > remaining {
             break;
         }
