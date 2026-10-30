@@ -61,6 +61,9 @@ mod list_hover;
 #[path = "suites/list_navigation_policy.rs"]
 mod list_navigation_policy;
 #[cfg(test)]
+#[path = "suites/list_typeahead.rs"]
+mod list_typeahead;
+#[cfg(test)]
 #[path = "suites/live_actions.rs"]
 mod live_actions;
 #[path = "suites/menu_layout.rs"]

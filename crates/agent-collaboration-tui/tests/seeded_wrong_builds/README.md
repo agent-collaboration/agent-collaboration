@@ -99,6 +99,10 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `header-context-gap-starves-body.patch` | Pinned gap consumes the final body row at 48x10. |
 | `content-dialog-retains-help-padding.patch` | A restored form retains automatic padding selected from the previous Help frame. |
 | `header-stale-context-measurement.patch` | A removed context retains its old width or wrapping guard and keeps the fitting Help hint hidden. |
+| `list-typeahead-inserts-actions.patch` | A printable action key is inserted into the shared filter instead of reaching its declared binding. |
+| `list-typeahead-moves-focus.patch` | Editing through a list moves focus to the field. |
+| `list-typeahead-drops-text.patch` | Typeahead consumes text or paste without editing the shared state. |
+| `list-typeahead-reserves-escape.patch` | Cancel receives Esc before a nonempty shared filter can clear. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

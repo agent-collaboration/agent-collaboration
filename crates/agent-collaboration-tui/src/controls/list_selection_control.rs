@@ -54,6 +54,7 @@ pub struct ListSelectionControl {
     navigation_policy: ListNavigationPolicy,
     hover_selection: bool,
     selection_reveal: Arc<Mutex<SelectionReveal>>,
+    typeahead_input: Option<TargetInputHandler>,
 }
 impl ListSelectionControl {
     pub fn new(binding: ListSelectionBinding) -> Self {
@@ -63,6 +64,7 @@ impl ListSelectionControl {
             navigation_policy: ListNavigationPolicy::default(),
             hover_selection: false,
             selection_reveal: Arc::new(Mutex::new(SelectionReveal::FollowSelection)),
+            typeahead_input: None,
         }
     }
     pub fn with_navigation_policy(mut self, policy: ListNavigationPolicy) -> Self {
@@ -72,6 +74,11 @@ impl ListSelectionControl {
     /// Opt in to selection/focus on pointer motion, preserving the viewport.
     pub fn with_hover_selection(mut self, enabled: bool) -> Self {
         self.hover_selection = enabled;
+        self
+    }
+    /// Share a filter's editor handler while keeping keyboard focus on this list.
+    pub fn with_typeahead(mut self, input: TargetInputHandler) -> Self {
+        self.typeahead_input = Some(input);
         self
     }
     pub(crate) fn reveals_selection(&self) -> bool {
@@ -186,11 +193,46 @@ impl ListSelectionControl {
         }
         Ok(replaced)
     }
+    fn accepts_typeahead(&self, event: &TerminalEvent) -> bool {
+        match event {
+            TerminalEvent::BracketedPaste(_) => true,
+            TerminalEvent::Key(key)
+                if key.kind != KeyEventKind::Release
+                    && (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT) =>
+            {
+                if key.code == KeyCode::Esc {
+                    return true;
+                }
+                let editable = match key.code {
+                    KeyCode::Char(character) => !character.is_control(),
+                    KeyCode::Backspace => true,
+                    _ => false,
+                };
+                editable
+                    && !self
+                        .binding
+                        .parent
+                        .stack
+                        .snapshot()
+                        .top()
+                        .actions
+                        .definitions()
+                        .iter()
+                        .any(|action| action.keys.iter().any(|chord| chord.matches(key)))
+            }
+            _ => false,
+        }
+    }
     fn input_handler(&self) -> TargetInputHandler {
         let control = self.clone();
         TargetInputHandler::new(move |event| {
             if control.binding.parent.stack.snapshot().top_id() != control.binding.parent.surface {
                 return InputUse::Unused;
+            }
+            if let Some(input) = &control.typeahead_input
+                && control.accepts_typeahead(&event)
+            {
+                return input.call(event);
             }
             let (code, wheel) = match &event {
                 TerminalEvent::Key(key)

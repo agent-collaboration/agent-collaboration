@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
+@@ -234,2 +234,4 @@ impl ListSelectionControl {
+             {
++                let destination=control.binding.parent.stack.snapshot().top().focus.targets().iter().find(|target|target.id!=control.binding.id&&target.can_focus()).map(|target|target.id.clone());
++                if let Some(destination)=destination {control.binding.parent.stack.focus(control.binding.parent.surface,&destination);}
+                 return input.call(event);
