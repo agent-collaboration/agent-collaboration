@@ -193,3 +193,14 @@ against S6b's retained New grid located the real Start at zero-based (34,20),
 rejecting the hint at (28,21). This is retained-grid replay, not a fresh product
 journey or a physical-terminal input claim. Deliberate unambiguous input bursts
 in other journeys remain unchanged.
+
+### Focused Help body acknowledgement
+
+Lead push `01a18ec2-f6e6-7f71-abc6-1a2588048578` supplies the actual S6b
+main-Esc receipt: the third event is Esc Press, overlay `1`, null action,
+target `11:action:help:help-body`. `HelpControl::body_target()` constructs the
+action target's `help-body` child. The observer derives the UTF-8 parent byte
+length by the same `TargetId::child` rule. It no longer expects a null target
+for a key consumed by that focused Help body. The other fields, four-event
+final count, Help round trip and unchanged-grid assertion remain exact.
+Controlled bridge cases in both modes must reject the stale null target.
