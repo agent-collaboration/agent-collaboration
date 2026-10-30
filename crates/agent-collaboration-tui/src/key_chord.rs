@@ -19,11 +19,15 @@ impl fmt::Display for KeyChordError {
 impl std::error::Error for KeyChordError {}
 
 impl KeyChord {
-    fn normalized(code: KeyCode, mut modifiers: KeyModifiers) -> Self {
+    pub(crate) fn normalized(code: KeyCode, mut modifiers: KeyModifiers) -> Self {
         let code = match code {
             KeyCode::Char('\u{1f}') => {
                 modifiers |= KeyModifiers::CONTROL;
                 KeyCode::Char('7')
+            }
+            KeyCode::Char('\u{3}') if modifiers.is_empty() => {
+                modifiers |= KeyModifiers::CONTROL;
+                KeyCode::Char('c')
             }
             KeyCode::Char(character) => KeyCode::Char(character.to_ascii_lowercase()),
             KeyCode::BackTab => {

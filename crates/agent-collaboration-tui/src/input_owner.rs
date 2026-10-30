@@ -25,6 +25,8 @@ pub struct InputOwnerProps<'a> {
     pub height: u16,
     #[iocraft(required)]
     pub quit_action: ActionId,
+    /// Extra bindings of the screen's quit action that are active on every surface.
+    pub global_quit_aliases: Vec<crate::actions::KeyChord>,
     pub on_routed: Handler<Routed>,
     #[cfg(all(feature = "test-support", debug_assertions))]
     pub dispatch_receipt: Option<crate::input_dispatch_receipt::InputDispatchReceiptSink>,
@@ -43,6 +45,7 @@ pub fn InputOwner<'a>(
     }
     use_frame_publication(&mut hooks, stack.hit_regions());
     let quit_action = props.quit_action.clone();
+    let global_quit_aliases = props.global_quit_aliases.clone();
     let on_routed = props.on_routed.clone();
     #[cfg(all(feature = "test-support", debug_assertions))]
     let dispatch_receipt = props.dispatch_receipt.clone();
@@ -50,7 +53,7 @@ pub fn InputOwner<'a>(
         #[cfg(all(feature = "test-support", debug_assertions))]
         let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
         let snapshot = stack.snapshot();
-        let decision = route_event(stack, &snapshot, &quit_action, event);
+        let decision = route_event(stack, &snapshot, &quit_action, &global_quit_aliases, event);
         on_routed(decision.routed);
         #[cfg(all(feature = "test-support", debug_assertions))]
         if let Some(sink) = &dispatch_receipt {
@@ -112,6 +115,7 @@ fn route_event(
     handle: SurfaceStackHandle,
     stack: &SurfaceStack,
     quit: &ActionId,
+    aliases: &[crate::actions::KeyChord],
     event: TerminalEvent,
 ) -> RouteDecision {
     match event {
@@ -127,8 +131,12 @@ fn route_event(
         }
         TerminalEvent::Key(key)
             if key.kind == KeyEventKind::Press
-                && key.modifiers == KeyModifiers::CONTROL
-                && matches!(key.code,KeyCode::Char(character) if character.eq_ignore_ascii_case(&'c')) =>
+                && (crate::actions::KeyChord::normalized(
+                    KeyCode::Char('c'),
+                    KeyModifiers::CONTROL,
+                )
+                .matches(&key)
+                    || declared_quit_alias(stack, quit, aliases, &key)) =>
         {
             if let Some(handler) = stack
                 .surface(SurfaceId::Screen)
@@ -147,6 +155,19 @@ fn route_event(
         TerminalEvent::FullscreenMouse(mouse) => route_mouse(handle, stack, mouse),
         _ => RouteDecision::ignored(stack.top_id()),
     }
+}
+fn declared_quit_alias(
+    stack: &SurfaceStack,
+    quit: &ActionId,
+    aliases: &[crate::actions::KeyChord],
+    key: &KeyEvent,
+) -> bool {
+    aliases.iter().any(|alias| alias.matches(key))
+        && stack.surface(SurfaceId::Screen).is_some_and(|screen| {
+            screen.actions.definitions().iter().any(|action| {
+                action.id == *quit && action.keys.iter().any(|binding| binding.matches(key))
+            })
+        })
 }
 fn repeatable(code: KeyCode) -> bool {
     matches!(

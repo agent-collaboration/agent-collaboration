@@ -70,6 +70,9 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `menu-uses-toolbar-label.patch` | Menu renders the toolbar-only short label in place of the action's full title. |
 | `toolbar-budget-uses-full-title.patch` | A short button drops off although its painted label and key fit. |
 | `toolbar-label-cached-at-install.patch` | A live toolbar label stops updating after the action is installed. |
+| `quit-alias-dropped-in-help.patch` | A declared screen quit alias is ignored by the real Help surface. |
+| `quit-alias-hardcodes-control-d.patch` | Ctrl+D globally quits an undeclared scope and steals its own domain binding. |
+| `raw-control-c-not-normalized.patch` | Raw U+0003 misses the shared Ctrl+C chord and cannot quit from a dialog. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

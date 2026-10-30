@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
 --- a/crates/agent-collaboration-tui/src/input_owner.rs
 +++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -309,6 +309,4 @@ fn route_mouse(
+@@ -330,6 +330,4 @@ fn route_mouse(
          {
 -            return handle.close_top().map_or_else(
 -                || RouteDecision::ignored(surface),

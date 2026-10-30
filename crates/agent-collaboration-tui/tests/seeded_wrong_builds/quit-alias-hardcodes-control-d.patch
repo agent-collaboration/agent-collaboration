@@ -1,0 +1,20 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -158,15 +158,3 @@ fn route_event(
+ }
+-fn declared_quit_alias(
+-    stack: &SurfaceStack,
+-    quit: &ActionId,
+-    aliases: &[crate::actions::KeyChord],
+-    key: &KeyEvent,
+-) -> bool {
+-    aliases.iter().any(|alias| alias.matches(key))
+-        && stack.surface(SurfaceId::Screen).is_some_and(|screen| {
+-            screen.actions.definitions().iter().any(|action| {
+-                action.id == *quit && action.keys.iter().any(|binding| binding.matches(key))
+-            })
+-        })
+-}
++fn declared_quit_alias(_stack:&SurfaceStack,_quit:&ActionId,_aliases:&[crate::actions::KeyChord],key:&KeyEvent)->bool {key.modifiers==KeyModifiers::CONTROL&&key.code==KeyCode::Char('d')}
+ fn repeatable(code: KeyCode) -> bool {

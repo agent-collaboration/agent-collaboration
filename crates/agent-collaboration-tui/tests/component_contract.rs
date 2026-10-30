@@ -14,6 +14,9 @@ mod dialog_content_sizing;
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]
+#[path = "suites/global_quit_aliases.rs"]
+mod global_quit_aliases;
+#[cfg(test)]
 #[path = "suites/harness_contract.rs"]
 mod harness_contract;
 #[cfg(test)]
