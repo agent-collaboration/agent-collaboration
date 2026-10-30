@@ -326,6 +326,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - Quota then returns with the same account selected.
   - A stand-in exit with failure returns to quota with a plain message, and no second invocation.
   - The action is the primary one for an account whose status is re-login required, and ordinary otherwise.
+  - The Actions ▾ menu lists exactly R17's items with their keys, and each acts on the dialog's account: Options and Weekly floor open their existing dialogs for it; Disable/Enable flips its status; Copy puts its ID on the clipboard stand-in. Remove is absent for an enabled account. For a disabled one, it runs `account remove` only after the confirmation is accepted, and cancelling changes nothing.
 - *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login.
 - *Reuses:* none.
 - *Unverified:* the real OAuth flows (C).
