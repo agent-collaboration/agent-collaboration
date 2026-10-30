@@ -147,6 +147,121 @@ fn remote_trust_read_is_narrow_and_trust_write_is_refused() -> Result<(), Box<dy
     Ok(())
 }
 
+/// Oracle: pinned Codex 0.165 tui/src/config_update.rs:87-104,155-171
+/// and the read-only ACP configuration boundary.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+fn default_model_batch_write_is_refused_without_project_trust_advice()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: the native model picker persists model and effort together.
+    let directory = tempfile::tempdir()?;
+    let config_path = directory.path().join("config.toml");
+    let original = "model = \"original-model\"\n";
+    std::fs::write(&config_path, original)?;
+    let lookup = codex_native_integration::CodexHomeProjectTrust::new(directory.path().into());
+    for effort in [json!("medium"), Value::Null] {
+        // Act through the same handler that receives the native batch request.
+        let response = handle_app_server_request(
+            json!("tui-config-write-model"),
+            "config/batchWrite",
+            &json!({
+                "edits": [
+                    {"keyPath":"model","value":"haiku","mergeStrategy":"replace"},
+                    {"keyPath":"model_reasoning_effort","value":effort,"mergeStrategy":"replace"}
+                ],
+                "filePath":config_path,
+                "expectedVersion":null,
+                "reloadUserConfig":true
+            }),
+            &[],
+            Some(&lookup),
+        );
+
+        // Assert: refuse persistence honestly without suggesting a trust change.
+        assert_eq!(response["id"], "tui-config-write-model");
+        assert_eq!(response["error"]["code"], -32000);
+        assert_eq!(
+            response["error"]["message"],
+            "Saving Codex configuration/defaults is not supported on this ACP endpoint"
+        );
+        assert!(response.get("result").is_none());
+        assert_eq!(std::fs::read_to_string(&config_path)?, original);
+    }
+    Ok(())
+}
+
+/// Oracle: pinned Codex 0.165 tui/src/config_update.rs:77-104. Only
+/// project-trust edits warrant instructions to change project trust in Codex.
+#[test]
+fn configuration_write_refusals_only_give_trust_advice_for_project_trust_edits() {
+    for (key_path, trust_edit) in [
+        (r#"projects."/workspace/a.b".trust_level"#, true),
+        (
+            r#"projects."/workspace/a\"quoted\"\\directory".trust_level"#,
+            true,
+        ),
+        ("model", false),
+        ("model_reasoning_effort", false),
+        ("service_tier", false),
+        (r#"projects."".trust_level"#, false),
+        (r#"projects."/workspace".trust_level.extra"#, false),
+        (r#"projects."/workspace.trust_level".model"#, false),
+        (r#"projects."/workspace"."other".trust_level"#, false),
+    ] {
+        let edit = json!({"keyPath":key_path,"value":"trusted","mergeStrategy":"replace"});
+        for (method, params) in [
+            ("config/batchWrite", json!({"edits":[edit.clone()]})),
+            ("config/write", edit),
+        ] {
+            let response = handle_app_server_request(json!(1), method, &params, &[], None);
+            assert_eq!(response["error"]["code"], -32000);
+            assert!(response.get("result").is_none());
+            let expected = if trust_edit {
+                "Provider session trust is read-only here; trust this project in Codex itself"
+            } else {
+                "Saving Codex configuration/defaults is not supported on this ACP endpoint"
+            };
+            assert_eq!(
+                response["error"]["message"], expected,
+                "{method}: {key_path}"
+            );
+        }
+    }
+
+    // A mixed, empty or malformed batch must not describe every refusal as trust.
+    for params in [
+        json!({"edits":[
+            {"keyPath":"projects.\"/workspace\".trust_level","value":"trusted","mergeStrategy":"replace"},
+            {"keyPath":"model","value":"haiku","mergeStrategy":"replace"}
+        ]}),
+        json!({"edits":[]}),
+        json!({"edits":[{"value":"projects.\"/workspace\".trust_level"}]}),
+        json!({"edits":"projects.\"/workspace\".trust_level"}),
+    ] {
+        let response = handle_app_server_request(json!(2), "config/batchWrite", &params, &[], None);
+        assert_eq!(response["error"]["code"], -32000);
+        assert_eq!(
+            response["error"]["message"],
+            "Saving Codex configuration/defaults is not supported on this ACP endpoint"
+        );
+        assert!(response.get("result").is_none());
+    }
+    // This repair adds no new write method or changes its existing RPC code.
+    assert_eq!(
+        handle_app_server_request(
+            json!(3),
+            "config/value/write",
+            &json!({"keyPath":"model","value":"haiku","mergeStrategy":"replace"}),
+            &[],
+            None
+        )["error"]["code"],
+        -32601
+    );
+}
+
 /// Oracle: Codex tui/src/config_update.rs:235-261,294-375. A remote TUI
 /// needs a project layer whenever the trusted key differs from its literal cwd.
 #[test]

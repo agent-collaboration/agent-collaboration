@@ -80,7 +80,22 @@ pub(super) fn handle_app_server_request(
             Some(json!({"config":{"projects":projects},"origins":{},"layers":layers}))
         }
         "config/batchWrite" | "config/write" => {
-            return json!({"id":id,"error":{"code":-32000,"message":"Provider session trust is read-only here; trust this project in Codex itself"}});
+            let trust_only =
+                match method {
+                    "config/batchWrite" => params
+                        .get("edits")
+                        .and_then(Value::as_array)
+                        .is_some_and(|edits| {
+                            !edits.is_empty() && edits.iter().all(is_project_trust_edit)
+                        }),
+                    _ => is_project_trust_edit(params),
+                };
+            let message = if trust_only {
+                "Provider session trust is read-only here; trust this project in Codex itself"
+            } else {
+                "Saving Codex configuration/defaults is not supported on this ACP endpoint"
+            };
+            return json!({"id":id,"error":{"code":-32000,"message":message}});
         }
         "collaborationMode/list" | "hooks/list" => Some(json!({"data":[],"nextCursor":null})),
         _ => None,
@@ -89,6 +104,20 @@ pub(super) fn handle_app_server_request(
         Some(result) => json!({"id":id,"result":result}),
         None => json!({"id":id,"error":{"code":-32601,"message":"Method not found"}}),
     }
+}
+
+fn is_project_trust_edit(edit: &Value) -> bool {
+    let Some(project_key) = edit
+        .get("keyPath")
+        .and_then(Value::as_str)
+        .and_then(|key| key.strip_prefix("projects."))
+        .and_then(|key| key.strip_suffix(".trust_level"))
+    else {
+        return false;
+    };
+    // Codex's trust setter quotes the project path and escapes quotes/backslashes.
+    // Decode that single key, so dots or trust-like text inside it are not fields.
+    serde_json::from_str::<String>(project_key).is_ok_and(|project| !project.is_empty())
 }
 
 pub(super) async fn handle_app_server_thread_request(
