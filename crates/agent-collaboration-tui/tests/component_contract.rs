@@ -2,6 +2,9 @@
 #[path = "suites/action_controls.rs"]
 mod action_controls;
 #[cfg(test)]
+#[path = "suites/button_focus_style.rs"]
+mod button_focus_style;
+#[cfg(test)]
 #[path = "suites/combo_controls.rs"]
 mod combo_controls;
 #[cfg(test)]

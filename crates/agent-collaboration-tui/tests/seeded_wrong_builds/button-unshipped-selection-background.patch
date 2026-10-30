@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/button.rs b/crates/agent-collaboration-tui/src/controls/button.rs
+--- a/crates/agent-collaboration-tui/src/controls/button.rs
++++ b/crates/agent-collaboration-tui/src/controls/button.rs
+@@ -62,3 +62,3 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
+     };
+-    element! {View(padding_left:1,padding_right:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
++    element! {View(padding_left:1,padding_right:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if focused||checked {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+         #((action.checked==Some(true)).then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Accent)))))
