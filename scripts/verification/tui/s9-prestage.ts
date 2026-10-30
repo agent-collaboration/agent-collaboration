@@ -3,6 +3,11 @@
  * Entries stay absent-at-base until their S6/S7 target and fixture seams are declared.
  */
 import { isMain, reportCliFailure, strictArguments, usageFailure } from './cli-arguments.ts';
+import {
+	layerCKeyboardKeys,
+	layerCProfiles,
+	layerCPointerJourneys,
+} from './layer-c-harness-journeys.ts';
 import { s9JourneySchema, s9DesignHead } from './s9-journey-definition.ts';
 import type { S9Journey } from './s9-journey-definition.ts';
 import { accountActionJourneys } from './s9-journeys/account-actions.ts';
@@ -72,6 +77,12 @@ export function s9PrestageMain(args: readonly string[]): void {
 				})),
 				admissionInputs: s9AuthoredJourneys.flatMap((journey) => journey.admissionInputs),
 				productPasses: 0,
+				layerCHarness: {
+					state: 'authored-not-driven',
+					keyboardKeys: layerCKeyboardKeys,
+					profiles: layerCProfiles,
+					pointerJourneys: layerCPointerJourneys,
+				},
 			},
 			null,
 			2,

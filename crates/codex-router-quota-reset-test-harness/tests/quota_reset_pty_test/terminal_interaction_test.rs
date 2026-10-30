@@ -118,6 +118,7 @@ impl TerminalDriver {
             if !matches!(
                 *key,
                 "NO_COLOR"
+                    | "TUI_SESSIONS_FIXTURE_RECEIPT_DIR"
                     | "CODEX_ROUTER_TUI_STORYBOARD_VARIANT"
                     | "QUOTA_COMPONENT_FIXTURE"
                     | "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"
