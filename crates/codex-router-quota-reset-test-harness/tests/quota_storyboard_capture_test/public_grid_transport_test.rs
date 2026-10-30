@@ -1,16 +1,11 @@
 //! Controlled public transport proof, without a Router, Host or provider runtime.
 use super::isolated_fixture_test::{TestResult, ensure};
 use super::terminal_interaction_test::TerminalDriver;
+use crate::native_adapter_fixture_support as fixture_support;
+use fixture_support::{NativeFixture, require_process_absent};
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-#[path = "native_adapter_fixture_support.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture also exposes the original native adapter control API"
-)]
-mod fixture_support;
-use fixture_support::{NativeFixture, require_process_absent};
 
 #[test]
 fn public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child() -> TestResult<()> {
