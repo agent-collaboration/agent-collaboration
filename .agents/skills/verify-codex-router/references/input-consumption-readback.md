@@ -204,3 +204,24 @@ length by the same `TargetId::child` rule. It no longer expects a null target
 for a key consumed by that focused Help body. The other fields, four-event
 final count, Help round trip and unchanged-grid assertion remain exact.
 Controlled bridge cases in both modes must reject the stale null target.
+
+### Post-measurement entry and generated Help length
+
+Lead push `01a18ec9-d0c5-7281-ad4d-dce399064080` corrects S6 component
+entry settlement and Help scrolling. On the `pickerOnly` Sessions path, the
+first draw measures the list and the next completed draw paints its scrollbar
+focus marker. The before snapshot therefore requires received completed frame
+ordinal 2 or later, not the first title-bearing frame or an arbitrary next
+frame. Record `entry-frame-binding.json`, and cross-check the parser generation
+against the actual synchronized-output end markers in retained PTY bytes.
+This works when frames arrive separately or in one chunk; elapsed time cannot
+satisfy it. Keep the entire before/after grid comparison, including query,
+selection, title and the scrollbar marker. The retained legacy and kitty
+`s0-baseline-help-ack-current` frame-2 grids match the corresponding restored
+main grids; the explicitly unvalidated sibling run is not evidence.
+
+Help generates Actions above Input conventions, so its scroll distance is not
+a fixed count of Down keys. Send End and require a completed Help frame in which
+the literal `never quit` row is visible. A missing row remains an observation
+failure. Controlled tests retain changed-grid, null-target and missing-legend
+negative cases, as well as exact four-event final ACK counts.
