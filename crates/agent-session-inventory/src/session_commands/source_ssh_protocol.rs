@@ -106,8 +106,20 @@ pub enum SourceReply {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum SourceNativeLaunchAvailability {
-    Ready,
-    Unavailable { message: String },
+    Ready {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        capabilities: Vec<SourceNativeClaudeCapability>,
+    },
+    Unavailable {
+        message: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceNativeClaudeCapability {
+    /// Resume refuses running jobs and live peers, and requires complete Loaded reads.
+    GuardedResume,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -444,4 +456,6 @@ pub enum SourceReadError {
     ReadUnavailable,
     #[error("source reply is invalid")]
     InvalidReply,
+    #[error("source does not advertise guarded native Claude resume")]
+    UnguardedNativeResume,
 }

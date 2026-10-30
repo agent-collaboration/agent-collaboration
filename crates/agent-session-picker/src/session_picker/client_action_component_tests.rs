@@ -32,7 +32,9 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
         let capabilities = NewClientSourceCapabilities {
             service_id: binding.endpoint.service_id.clone(),
             service_epoch: binding.generation.service_epoch.clone(),
-            native_claude: SourceNativeLaunchAvailability::Ready,
+            native_claude: SourceNativeLaunchAvailability::Ready {
+                capabilities: vec![],
+            },
             cursor: CursorCreationAvailability::Ready(binding.clone()),
         };
         let loader: crate::session_picker::NewClientInventoryLoader = Arc::new(move |_| {

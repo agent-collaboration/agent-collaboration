@@ -314,7 +314,9 @@ fn source_read_client_error(error: super::source_ssh_protocol::SourceReadError) 
                 "configured SSH read unavailable",
             ))
         }
-        SourceReadError::InvalidReply | SourceReadError::Rejected(_) => {
+        SourceReadError::InvalidReply
+        | SourceReadError::Rejected(_)
+        | SourceReadError::UnguardedNativeResume => {
             ClientError::Protocol("configured SSH read failed")
         }
     }

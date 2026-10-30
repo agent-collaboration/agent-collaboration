@@ -243,7 +243,7 @@ pub(super) fn client_availability(
             NewSessionClient::CodexNative => ChoiceAvailability::Available,
             NewSessionClient::ClaudeNativeForeground | NewSessionClient::ClaudeNativeBackground => {
                 match &capabilities.native_claude {
-                    SourceNativeLaunchAvailability::Ready => ChoiceAvailability::Available,
+                    SourceNativeLaunchAvailability::Ready { .. } => ChoiceAvailability::Available,
                     SourceNativeLaunchAvailability::Unavailable { message } => {
                         unavailable(message.clone())
                     }

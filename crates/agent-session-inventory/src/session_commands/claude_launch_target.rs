@@ -116,7 +116,11 @@ impl ClaudeLaunchTarget {
             };
         }
         match self.routed_environment().await {
-            Ok(_) => SourceNativeLaunchAvailability::Ready,
+            Ok(_) => SourceNativeLaunchAvailability::Ready {
+                capabilities: vec![
+                    super::source_ssh_protocol::SourceNativeClaudeCapability::GuardedResume,
+                ],
+            },
             Err(error) => SourceNativeLaunchAvailability::Unavailable {
                 message: error.to_string(),
             },

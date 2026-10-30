@@ -43,7 +43,13 @@ pub(crate) fn run() -> io::Result<()> {
                     "availability":{"state":"unavailable","observedAt":"2026-10-29T00:00:00Z","reason":"managed channel absent"}
                 }]
             })).map_err(|_| SourceReadError::InvalidReply)?;
-                qualify_capabilities(&service, inventory, SourceNativeLaunchAvailability::Ready)
+                qualify_capabilities(
+                    &service,
+                    inventory,
+                    SourceNativeLaunchAvailability::Ready {
+                        capabilities: vec![],
+                    },
+                )
             })
         }),
         executor: Arc::new(|_| {

@@ -19,6 +19,10 @@ use iocraft::prelude::*;
 #[path = "claude_mode_tests.rs"]
 mod claude_mode_tests;
 
+#[cfg(test)]
+#[path = "configured_claude_resume_tests.rs"]
+mod configured_claude_resume_tests;
+
 pub(super) fn finish_or_detach(
     mut model: State<SessionsPickerModel>,
     mut outcome: State<Option<SessionsPickerOutcome>>,
@@ -117,6 +121,7 @@ fn observation_lines(
     use collaboration_client::protocol::ConversationCreateOutcome;
     let mut lines = Vec::new();
     match result {
+        Err(agent_session_inventory::sessions::source_ssh_protocol::SourceReadError::UnguardedNativeResume)=>lines.push(format!("{} runs an older agent-collaboration that could start a copy of this session. Update it (brew upgrade codex-router), then open again.", request.source_label())),
         Err(agent_session_inventory::sessions::source_ssh_protocol::SourceReadError::Rejected(agent_session_inventory::sessions::source_ssh_protocol::SourceRejection::InvalidRequest))=>lines.push("Source rejected this request. Update agent-sessions on both machines before trying this action.".to_owned()),
         Err(error) if matches!(request.effect,SessionClientEffect::Native {..})=>lines.push(format!("Could not complete this Claude action: {error}. Refresh the list, or use its existing terminal if it is already running.")),
         Err(error)=>lines.push(error.to_string()),
