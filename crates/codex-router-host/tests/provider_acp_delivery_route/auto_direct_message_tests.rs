@@ -60,10 +60,12 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("prompt observer");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime =
-        ExternalProviderRuntime::initialize(loadable_provider_fixture(&capture, &event_socket))
-            .await
-            .expect("provider initialized without loading a session");
+    let runtime = ExternalProviderRuntime::initialize(
+        loadable_provider_fixture(&capture, &event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("provider initialized without loading a session");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await

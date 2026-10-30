@@ -38,9 +38,12 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
     let root = tempfile::tempdir().expect("provider root");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(two_block_fixture())
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        two_block_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -101,7 +104,9 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
             target.clone(),
             other_actor.clone().into(),
             InputId::generate(),
-            vec![PromptContent::image("image/png".into(), "aGVsbG8=".into(), None).expect("image")],
+            session_event_model::ProviderSubmission::plain(vec![
+                PromptContent::image("image/png".into(), "aGVsbG8=".into(), None).expect("image"),
+            ]),
         )
         .await;
     assert!(matches!(
@@ -117,7 +122,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
             target.clone(),
             other_actor.into(),
             InputId::generate(),
-            contents(),
+            session_event_model::ProviderSubmission::plain(contents()),
         )
         .await
         .expect("two blocks admitted");
@@ -159,9 +164,12 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
     let dispatch_log = root.path().join("cancel.log");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(cancellable_prompt_fixture(&dispatch_log))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        cancellable_prompt_fixture(&dispatch_log),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await

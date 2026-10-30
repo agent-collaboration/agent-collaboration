@@ -100,7 +100,6 @@ pub(crate) async fn read_bounded_prompt(
             }
         }
     };
-    item_projection.finish().map_err(projection_error)?;
     #[cfg(any(test, feature = "test-observation"))]
     {
         *test_tool_calls
@@ -158,7 +157,7 @@ pub(crate) async fn observe_idle_session_update(
                 .await
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
             item_projection
-                .observe(&parsed.update)
+                .observe(&parsed.update, update)
                 .map_err(projection_error)
         }
         Dispatch::Notification(_) | Dispatch::Response(_, _) => Ok(()),
@@ -276,6 +275,12 @@ async fn record_prompt_update(
                 }
                 return Ok(None);
             }
+            let raw_update = match &dispatch {
+                Dispatch::Notification(notification) => {
+                    notification.params().get("update").cloned()
+                }
+                _ => None,
+            };
             let mut sink_closed = false;
             let handled = MatchDispatch::new(dispatch)
                 .if_notification(async |notification: SessionNotification| {
@@ -291,7 +296,7 @@ async fn record_prompt_update(
                     }
                     if let Err(error) = session_context
                         .item_projection
-                        .observe(&notification.update)
+                        .observe(&notification.update, raw_update.as_ref())
                     {
                         match error {
                             ItemProjectionError::OutputLimit => {

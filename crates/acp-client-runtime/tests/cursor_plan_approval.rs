@@ -1,5 +1,7 @@
 //! Cursor create_plan is a blocking Approval with a preceding plan Item.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -86,6 +88,14 @@ struct PlanEventSink {
     order: Arc<Mutex<Vec<&'static str>>>,
 }
 impl SessionEventSink for PlanEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -148,6 +158,7 @@ async fn run_plan_case(
         },
         port.clone(),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -157,10 +168,15 @@ async fn run_plan_case(
         .expect("session opens");
     tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("Plan".to_owned()).expect("text prompt")],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Plan".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         ),

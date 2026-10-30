@@ -30,7 +30,7 @@ pub struct CreateSessionCommand {
 pub struct PromptSessionCommand {
     pub target: SessionRef,
     pub input_id: session_event_model::InputId,
-    pub content: Vec<CommandContent>,
+    pub submission: session_event_model::ProviderSubmission,
     pub actor: Identity,
 }
 
@@ -39,14 +39,14 @@ pub struct SteerSessionCommand {
     pub target: SessionRef,
     pub input_id: session_event_model::InputId,
     pub expected_turn_id: String,
-    pub content: Vec<CommandContent>,
+    pub submission: session_event_model::ProviderSubmission,
     pub actor: Identity,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueueInputCommand {
     pub target: SessionRef,
-    pub content: Vec<CommandContent>,
+    pub submission: session_event_model::ProviderSubmission,
     pub actor: Identity,
 }
 
@@ -86,6 +86,8 @@ pub struct SetSessionSettingCommand {
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum CommandFailure {
+    #[error("skill selection is invalid or stale")]
+    InvalidSelection,
     #[error("session not found")]
     SessionNotFound,
     #[error("operation is unsupported")]
@@ -117,6 +119,7 @@ pub trait SessionCommandPort: Send + Sync {
     /// Activates a stored Session without historical replay.
     fn resume_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()>;
     fn prompt(&self, command: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle>;
+    fn compact(&self, command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle>;
     fn steer(&self, command: SteerSessionCommand) -> CommandFuture<'_, SessionSteerOutcome>;
     fn queue_add(&self, command: QueueInputCommand) -> CommandFuture<'_, QueuedSessionInput>;
     fn queue_list(
@@ -167,6 +170,13 @@ mod tests {
     }
 
     impl SessionCommandPort for ScriptedCommandPort {
+        fn compact(&self, _command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
+            Box::pin(async {
+                Ok(SessionTurnHandle {
+                    turn_id: "compact-turn".into(),
+                })
+            })
+        }
         fn create(&self, command: CreateSessionCommand) -> CommandFuture<'_, SessionRef> {
             self.record(RecordedCommand::Create(command));
             let session = self.created_session.clone();
@@ -274,7 +284,7 @@ mod tests {
         port.prompt(PromptSessionCommand {
             target: session.clone(),
             input_id: session_event_model::InputId::new("input-prompt").expect("input id"),
-            content: content.clone(),
+            submission: session_event_model::ProviderSubmission::plain(content.clone()),
             actor: actor.clone(),
         })
         .await
@@ -285,14 +295,14 @@ mod tests {
             target: session.clone(),
             input_id: session_event_model::InputId::new("input-steer").expect("input id"),
             expected_turn_id: "turn-1".into(),
-            content: content.clone(),
+            submission: session_event_model::ProviderSubmission::plain(content.clone()),
             actor: actor.clone(),
         })
         .await
         .expect("steer");
         port.queue_add(QueueInputCommand {
             target: session.clone(),
-            content,
+            submission: session_event_model::ProviderSubmission::plain(content),
             actor: actor.clone(),
         })
         .await

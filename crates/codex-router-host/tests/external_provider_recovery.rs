@@ -215,9 +215,11 @@ async fn crash_child_records_durable_boundary() -> TestResult {
     } else {
         "session/load"
     };
-    let runtime =
-        ExternalProviderRuntime::initialize(held_dispatch_fixture(&dispatch_log, expected_method))
-            .await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        held_dispatch_fixture(&dispatch_log, expected_method),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(&database_path, runtime).await?;
     let actor = requester()?;
     if mode == "create" {
@@ -302,8 +304,11 @@ async fn reopened_supervisor(
     database_path: &Path,
     replay_log: &Path,
 ) -> TestResult<ExternalProviderSupervisor> {
-    let runtime =
-        ExternalProviderRuntime::initialize(reopened_provider_fixture(replay_log)).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        reopened_provider_fixture(replay_log),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     supervisor_with_binding(database_path, runtime, restarted_binding()?).await
 }
 

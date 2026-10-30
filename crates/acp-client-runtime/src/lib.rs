@@ -54,6 +54,12 @@ mod provider_transport_diagnostics;
 mod provider_update_kind;
 mod session_event_sink;
 
+#[cfg(test)]
+extern crate self as acp_client_runtime;
+#[cfg(test)]
+#[path = "../tests/support/provider_behavior.rs"]
+mod test_behavior;
+
 pub use acp_protocol_version::AcpProtocolVersion;
 pub use agent_session_client::*;
 pub(crate) use approval_presentation::reviewed_approval_fields;

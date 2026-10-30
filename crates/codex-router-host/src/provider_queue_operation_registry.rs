@@ -215,6 +215,24 @@ impl ProviderQueueOperationRegistry {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(operation_id);
+        #[cfg(test)]
+        self.changed.notify_one();
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn wait_for_cleared(&self, operation_id: &OperationId) {
+        loop {
+            let changed = self.changed.notified();
+            if !self
+                .operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains_key(operation_id)
+            {
+                return;
+            }
+            changed.await;
+        }
     }
 
     pub(crate) fn snapshot(

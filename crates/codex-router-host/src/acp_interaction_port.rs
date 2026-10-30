@@ -432,6 +432,14 @@ fn approval_receiver_outcome(
 pub(crate) struct NoopSessionEventSink;
 
 impl SessionEventSink for NoopSessionEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(
         &self,
         _session_id: &str,
@@ -498,6 +506,14 @@ mod provider_actor_tests {
     struct RecordedInteractionSink(std::sync::Mutex<Vec<SessionEvent>>);
 
     impl SessionEventSink for RecordedInteractionSink {
+        fn publish_skill_view(
+            &self,
+            _session_id: &str,
+            _view: session_event_model::SkillView,
+        ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+            Ok(())
+        }
+
         fn begin_history_replay(&self, _: &str) -> acp_client_runtime::HistoryReplayFuture<'_> {
             Box::pin(async { Ok(()) })
         }

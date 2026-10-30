@@ -84,9 +84,12 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
     let marker = root.path().join("prompt.sock");
     let listener = tokio::net::UnixListener::bind(&marker).expect("prompt event listener");
     let runtime = std::sync::Arc::new(
-        ExternalProviderRuntime::initialize(steering_fixture(&marker))
-            .await
-            .expect("provider runtime"),
+        ExternalProviderRuntime::initialize(
+            steering_fixture(&marker),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("provider runtime"),
     );
     assert!(runtime.admission().supports_steering);
     runtime
@@ -336,9 +339,12 @@ async fn resource_not_found_from_session_load_is_session_not_found() {
         .expect_request("load", "session/load", serde_json::json!({"sessionId": "missing-session"}))
         .respond_error("load", -32002)
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let error = runtime
         .load_session("missing-session".to_owned(), PathBuf::from("/tmp"))
         .await

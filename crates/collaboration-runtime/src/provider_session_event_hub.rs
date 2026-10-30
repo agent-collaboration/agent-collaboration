@@ -7,7 +7,7 @@ use session_event_model::{
     PendingInteraction, PendingInteractions, SessionEvent, SessionSettings, SessionState,
     TurnLostReason, TurnOutcome,
 };
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, broadcast, watch};
 
 use collaboration_contracts::HubEvent;
 
@@ -30,6 +30,7 @@ pub struct ProviderSessionEventHub {
 }
 
 struct SessionHistory {
+    skill_view: watch::Sender<session_event_model::SkillView>,
     replay_epoch: u64,
     next_sequence: u64,
     events: BTreeMap<u64, HubEvent>,
@@ -62,6 +63,7 @@ impl SessionHistory {
     fn new(subscriber_capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(subscriber_capacity);
         Self {
+            skill_view: watch::channel(session_event_model::SkillView::Unknown).0,
             replay_epoch: 0,
             next_sequence: 1,
             events: BTreeMap::new(),
@@ -146,6 +148,10 @@ impl SessionHistory {
                     return Err(HubProjectionDiagnostic::PendingStateConflict);
                 }
                 self.state = state.clone();
+                if matches!(state, SessionState::Unloaded | SessionState::Closed) {
+                    self.skill_view
+                        .send_replace(session_event_model::SkillView::Unknown);
+                }
                 match state {
                     SessionState::Running => self.turn_running = true,
                     SessionState::RequiresAction { .. } => {}
@@ -195,6 +201,29 @@ impl SessionHistory {
 }
 
 impl ProviderSessionEventHub {
+    pub async fn publish_skill_view(
+        &self,
+        session: SessionRef,
+        view: session_event_model::SkillView,
+    ) -> Result<(), SessionEventHubError> {
+        let history = self
+            .histories
+            .lock()
+            .await
+            .entry(session)
+            .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
+            .clone();
+        let history = history.lock().await;
+        history.skill_view.send_if_modified(|current| {
+            if *current == view {
+                false
+            } else {
+                *current = view;
+                true
+            }
+        });
+        Ok(())
+    }
     #[must_use]
     pub fn new(store: Arc<Mutex<ProviderOperationStore>>) -> Self {
         Self::with_capacity(store, 256)
@@ -300,6 +329,9 @@ impl ProviderSessionEventHub {
         if history.state != SessionState::Unloaded {
             return Err(SessionEventHubError::Unavailable);
         }
+        history
+            .skill_view
+            .send_replace(session_event_model::SkillView::Unknown);
         let replay_epoch = history
             .replay_epoch
             .checked_add(1)
@@ -378,6 +410,35 @@ impl ProviderSessionEventHub {
 }
 
 impl SessionEventHub for ProviderSessionEventHub {
+    fn skill_view(
+        &self,
+        session: SessionRef,
+        cwd: std::path::PathBuf,
+    ) -> HubFuture<'_, collaboration_contracts::SkillViewAttachment> {
+        Box::pin(async move {
+            if !self
+                .sessions(session.endpoint.clone())
+                .await?
+                .iter()
+                .any(|summary| summary.session == session && summary.working_directory == cwd)
+            {
+                return Err(SessionEventHubError::SessionNotFound);
+            }
+            let history = self
+                .histories
+                .lock()
+                .await
+                .entry(session)
+                .or_insert_with(|| {
+                    Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity)))
+                })
+                .clone();
+            let history = history.lock().await;
+            let receiver = history.skill_view.subscribe();
+            let snapshot = receiver.borrow().clone();
+            Ok(collaboration_contracts::SkillViewAttachment { snapshot, receiver })
+        })
+    }
     fn attach(&self, session: SessionRef) -> HubFuture<'_, SessionEventAttachment> {
         Box::pin(async move {
             let already_loaded = self.histories.lock().await.contains_key(&session);
@@ -551,68 +612,5 @@ pub async fn receive_hub_event(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{sync::Arc, time::Duration};
-
-    use message_board::SessionRef;
-    use session_event_model::{SessionEvent, SessionItem, SessionItemKind};
-    use tokio::sync::Mutex;
-
-    use super::ProviderSessionEventHub;
-    use crate::ProviderOperationStore;
-
-    #[tokio::test]
-    async fn locked_attach_on_one_session_does_not_stall_another_publish() {
-        let root = tempfile::tempdir().expect("temp root");
-        let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
-            .await
-            .expect("store");
-        let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
-        let first: SessionRef = serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
-            "sessionId":"first"
-        })).expect("first session");
-        let second: SessionRef = serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
-            "sessionId":"second"
-        })).expect("second session");
-        for target in [&first, &second] {
-            hub.publish(
-                target.clone(),
-                SessionEvent::ItemStarted {
-                    item: SessionItem {
-                        item_id: "one".into(),
-                        kind: SessionItemKind::UserMessage,
-                        text: Some("hello".into()),
-                    },
-                },
-            )
-            .await
-            .expect("seed item");
-        }
-        let first_history = hub
-            .histories
-            .lock()
-            .await
-            .get(&first)
-            .cloned()
-            .expect("first history");
-        let _held_attach_lock = first_history.lock().await;
-        tokio::time::timeout(
-            Duration::from_millis(250),
-            hub.publish(
-                second,
-                SessionEvent::ItemStarted {
-                    item: SessionItem {
-                        item_id: "two".into(),
-                        kind: SessionItemKind::UserMessage,
-                        text: Some("world".into()),
-                    },
-                },
-            ),
-        )
-        .await
-        .expect("independent publish must not wait")
-        .expect("publish");
-    }
-}
+#[path = "provider_session_event_hub_tests.rs"]
+mod tests;

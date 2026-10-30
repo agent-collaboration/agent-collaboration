@@ -56,6 +56,14 @@ pub struct SettingsSink {
 }
 
 impl SessionEventSink for SettingsSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -140,12 +148,18 @@ impl AcpWireFixture {
                     "http://127.0.0.1:1/mcp",
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
+                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
                 )
                 .await
             }
             ClientInitialization::Standard => {
-                AgentSessionClient::initialize(launch, Arc::new(NoopInteractionPort), sink.clone())
-                    .await
+                AgentSessionClient::initialize(
+                    launch,
+                    Arc::new(NoopInteractionPort),
+                    sink.clone(),
+                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+                )
+                .await
             }
             #[cfg(feature = "test-observation")]
             ClientInitialization::CursorWithoutMcp => {
@@ -154,6 +168,7 @@ impl AcpWireFixture {
                     acp_client_runtime::ProviderModelPicker::CursorParameterized,
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
+                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
                 )
                 .await
             }

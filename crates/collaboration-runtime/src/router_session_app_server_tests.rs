@@ -20,7 +20,9 @@ async fn scripted_exchange(
                 .into(),
         ))
         .await?;
-    let reply = client.next().await.ok_or("missing reply")??;
+    let reply = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("missing reply")??;
     let value: Value = serde_json::from_str(reply.to_text()?)?;
     assert!(value.get("jsonrpc").is_none());
     assert_eq!(value["id"], 7);
@@ -74,12 +76,7 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
     )
     .await?;
     scripted_exchange(&socket_path, "config/read", None).await?;
-    scripted_exchange(
-        &socket_path,
-        "skills/list",
-        Some(json!({"data":[],"nextCursor":null})),
-    )
-    .await?;
+    scripted_exchange(&socket_path, "skills/list", Some(json!({"data":[]}))).await?;
     scripted_exchange(
         &socket_path,
         "hooks/list",
@@ -108,7 +105,9 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
                 .into(),
         ))
         .await?;
-    let reply = client.next().await.ok_or("missing model reply")??;
+    let reply = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("missing model reply")??;
     let value: Value = serde_json::from_str(reply.to_text()?)?;
     assert_eq!(value["id"], "model");
     assert_eq!(
@@ -446,7 +445,9 @@ async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dy
         actor
     );
     assert_eq!(
-        backend.prompt_commands.lock().expect("test lock")[0].content,
+        backend.prompt_commands.lock().expect("test lock")[0]
+            .submission
+            .content,
         vec![collaboration_contracts::CommandContent::text(
             "hello".into()
         )?]
@@ -550,8 +551,12 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
             .into(),
         ))
         .await?;
-    let started: Value =
-        serde_json::from_str(client.next().await.ok_or("thread reply")??.to_text()?)?;
+    let started: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("thread reply")??
+            .to_text()?,
+    )?;
     let thread_id = started["result"]["thread"]["id"]
         .as_str()
         .ok_or("thread id")?;
@@ -563,8 +568,12 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
             .into(),
         ))
         .await?;
-    let listed: Value =
-        serde_json::from_str(client.next().await.ok_or("thread list")??.to_text()?)?;
+    let listed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("thread list")??
+            .to_text()?,
+    )?;
     assert_eq!(listed["result"]["data"][0]["id"], thread_id);
     client
         .send(Message::Text(
@@ -574,7 +583,12 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
             .into(),
         ))
         .await?;
-    let read: Value = serde_json::from_str(client.next().await.ok_or("thread read")??.to_text()?)?;
+    let read: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("thread read")??
+            .to_text()?,
+    )?;
     assert_eq!(read["result"]["thread"]["id"], thread_id);
     client
         .send(Message::Text(
@@ -584,8 +598,12 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
             .into(),
         ))
         .await?;
-    let resumed: Value =
-        serde_json::from_str(client.next().await.ok_or("thread resume")??.to_text()?)?;
+    let resumed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("thread resume")??
+            .to_text()?,
+    )?;
     assert_eq!(resumed["result"]["thread"]["id"], thread_id);
     assert_eq!(resumed["result"]["approvalPolicy"], "on-request");
     assert_eq!(resumed["result"]["approvalsReviewer"], "user");
@@ -598,16 +616,22 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
         ))
         .await?;
     let first: Value = serde_json::from_str(
-        timeout(Duration::from_secs(1), client.next())
-            .await?
-            .ok_or("turn frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(1),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn frame")??
+        .to_text()?,
     )?;
     let second: Value = serde_json::from_str(
-        timeout(Duration::from_secs(1), client.next())
-            .await?
-            .ok_or("turn frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(1),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn frame")??
+        .to_text()?,
     )?;
     let [start_reply, started_notification] = if first.get("id") == Some(&json!(2)) {
         [first, second]
@@ -627,16 +651,22 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
         ))
         .await?;
     let first: Value = serde_json::from_str(
-        timeout(Duration::from_secs(1), client.next())
-            .await?
-            .ok_or("interrupt frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(1),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("interrupt frame")??
+        .to_text()?,
     )?;
     let second: Value = serde_json::from_str(
-        timeout(Duration::from_secs(1), client.next())
-            .await?
-            .ok_or("interrupt frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(1),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("interrupt frame")??
+        .to_text()?,
     )?;
     let [interrupted, completed_notification] = if first.get("id") == Some(&json!(3)) {
         [first, second]
@@ -710,7 +740,9 @@ async fn request_model_list(socket_path: &Path) -> Result<Value, Box<dyn std::er
             .into(),
         ))
         .await?;
-    let response = client.next().await.ok_or("model response missing")??;
+    let response = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("model response missing")??;
     let value = serde_json::from_str(response.to_text()?)?;
     client.close(None).await?;
     Ok(value)

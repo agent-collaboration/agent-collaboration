@@ -142,3 +142,89 @@ fn replay_preserves_output_before_its_first_user_message() {
     assert_eq!(turns.len(), 1);
     assert_eq!(turns[0].items, replay);
 }
+
+#[test]
+fn confirmed_compaction_promotes_same_item_id_without_duplicate_start_or_completion() {
+    use crate::app_server_event_forwarding::AppServerEventForwarding;
+    use collaboration_contracts::HubEvent;
+    use session_event_model::{InputId, SessionEvent, StopReason, TurnOutcome};
+    let session: message_board::SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"compact-session"})).expect("session");
+    let actor = message_board::Identity::Session {
+        session: session.clone(),
+    };
+    let mut forwarding = AppServerEventForwarding::new(actor, None);
+    let provisional = item(
+        "compact-tool",
+        SessionItemKind::ToolCall {
+            tool_kind: "think".into(),
+            status: ToolCallStatus::Completed,
+        },
+        Some("Compact conversation"),
+    );
+    let confirmed = item(
+        "compact-tool",
+        SessionItemKind::ToolCall {
+            tool_kind: "contextCompaction".into(),
+            status: ToolCallStatus::Completed,
+        },
+        Some("Compact conversation"),
+    );
+    let mut frames = Vec::new();
+    for (sequence, event) in [
+        SessionEvent::TurnStarted {
+            turn_id: "compact-turn".into(),
+            input_id: InputId::generate(),
+        },
+        SessionEvent::ItemStarted { item: provisional },
+        SessionEvent::ItemUpdated { item: confirmed },
+        SessionEvent::ItemCompleted {
+            item_id: "compact-tool".into(),
+        },
+        SessionEvent::TurnEnded {
+            turn_id: "compact-turn".into(),
+            outcome: TurnOutcome::Ended {
+                stop_reason: StopReason::EndTurn,
+                local_cause: None,
+            },
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        frames.extend(forwarding.project(
+            &session,
+            &HubEvent {
+                sequence: sequence as u64 + 1,
+                event,
+            },
+        ));
+    }
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|frame| frame["method"] == "item/started")
+            .count(),
+        1
+    );
+    let completed = frames
+        .iter()
+        .filter(|frame| frame["method"] == "item/completed")
+        .collect::<Vec<_>>();
+    assert_eq!(completed.len(), 1);
+    assert_eq!(
+        completed[0]["params"]["item"],
+        serde_json::json!({"type":"contextCompaction","id":"compact-tool"})
+    );
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|frame| frame["method"] == "turn/completed")
+            .count(),
+        1
+    );
+    assert!(
+        !frames
+            .iter()
+            .any(|frame| frame["method"] == "item/mcpToolCall/progress")
+    );
+}

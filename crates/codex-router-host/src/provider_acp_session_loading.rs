@@ -357,9 +357,12 @@ mod tests {
             })
             .await
             .expect("record");
-        let runtime = ExternalProviderRuntime::initialize(fixture_launch(&event_path, false))
-            .await
-            .expect("runtime");
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture_launch(&event_path, false),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("runtime");
         let supervisor = ExternalProviderSupervisor::new(
             vec![ExternalProviderBinding {
                 identity: binding(&target),
@@ -417,9 +420,12 @@ mod tests {
             })
             .await
             .expect("record");
-        let runtime = ExternalProviderRuntime::initialize(fixture_launch(&event_path, false))
-            .await
-            .expect("runtime");
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture_launch(&event_path, false),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("runtime");
         let supervisor = ExternalProviderSupervisor::new(
             vec![ExternalProviderBinding {
                 identity: binding(&target),
@@ -471,9 +477,12 @@ mod tests {
             })
             .await
             .expect("record");
-        let runtime = ExternalProviderRuntime::initialize(fixture_launch(&event_path, true))
-            .await
-            .expect("runtime");
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture_launch(&event_path, true),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("runtime");
         let supervisor = ExternalProviderSupervisor::new(
             vec![ExternalProviderBinding {
                 identity: binding(&target),

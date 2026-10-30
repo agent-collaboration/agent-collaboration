@@ -169,6 +169,34 @@ pub(super) fn runtime_failure(
     error: ExternalProviderRuntimeError,
 ) -> ConversationOperationFailure {
     match error {
+        ExternalProviderRuntimeError::Behavior(error) => {
+            let kind = match error {
+                acp_client_runtime::ProviderError::InvalidSelection
+                | acp_client_runtime::ProviderError::MalformedMetadata => {
+                    ConversationOperationFailureKind::InvalidRequest
+                }
+                acp_client_runtime::ProviderError::Unsupported
+                | acp_client_runtime::ProviderError::SourceUnavailable => {
+                    ConversationOperationFailureKind::UnsupportedCapability
+                }
+            };
+            failure(
+                kind,
+                ConversationOperationFailureStage::Dispatch,
+                ProviderOperationEffect::None,
+                &error.to_string(),
+                operation_id,
+                target,
+            )
+        }
+        ExternalProviderRuntimeError::CompactionUnconfirmed => failure(
+            ConversationOperationFailureKind::ProviderRejected,
+            ConversationOperationFailureStage::Settlement,
+            ProviderOperationEffect::Applied,
+            "explicit compaction was not confirmed",
+            operation_id,
+            target,
+        ),
         ExternalProviderRuntimeError::LocalBusy => failure(
             ConversationOperationFailureKind::Busy,
             ConversationOperationFailureStage::Validation,

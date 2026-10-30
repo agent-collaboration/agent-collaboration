@@ -2,6 +2,8 @@
 
 #[path = "cursor_model_settings/acp_wire_fixture.rs"]
 mod acp_wire_fixture;
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 
 use acp_client_runtime::{
     ExternalProviderRuntimeError, ProviderConfigValue, ProviderSettingKind,

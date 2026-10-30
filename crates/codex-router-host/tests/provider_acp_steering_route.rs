@@ -129,9 +129,12 @@ async fn prepared_route(
     let target = target();
     let binding = binding(&target);
     let generation = binding.generation.clone();
-    let runtime = ExternalProviderRuntime::initialize(launch)
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        launch,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -390,7 +393,9 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
             target.clone(),
             non_creator_agent(&target).into(),
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("follow-up".into()).expect("typed text")],
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("follow-up".into()).expect("typed text"),
+            ]),
         )
         .await
         .expect("non-creator typed steer");

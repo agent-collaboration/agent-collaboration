@@ -23,11 +23,15 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.114"
+version = "0.1.118"
 dependencies = [
  "acp-client-runtime",
+ "serde",
  "serde_json",
  "session-event-model",
+ "tempfile",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -1383,6 +1387,7 @@ name = "codex-router-host"
 version = "0.1.118"
 dependencies = [
  "acp-client-runtime",
+ "acp-provider-adapters",
  "agent-automation",
  "agent-client-protocol",
  "automation-storage",

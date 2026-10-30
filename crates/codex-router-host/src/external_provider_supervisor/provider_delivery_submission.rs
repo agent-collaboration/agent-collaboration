@@ -16,6 +16,7 @@ pub(crate) enum ProviderPromptDispatch {
     NotSubmitted,
     Existing,
     Uncertain,
+    Refused(acp_client_runtime::ProviderDispatchRefusal),
 }
 
 impl ExternalProviderSupervisor {
@@ -56,10 +57,10 @@ impl ExternalProviderSupervisor {
         let completion_operation_id = operation_id.clone();
         self.spawn_operation(operation_id, live, async move {
             match runtime
-                .prompt_contents_with_approval_dispatch_for_input(
+                .submit_with_approval_dispatch_for_input(
                     provider_session_id,
                     input_id,
-                    request.contents,
+                    request.input,
                     approval_context,
                     Some(dispatched),
                 )
@@ -98,6 +99,9 @@ impl ExternalProviderSupervisor {
                 }
                 Ok(Ok(ProviderPromptDispatchObservation::NotSubmitted)) => {
                     ProviderPromptDispatch::NotSubmitted
+                }
+                Ok(Ok(ProviderPromptDispatchObservation::Refused(reason))) => {
+                    ProviderPromptDispatch::Refused(reason)
                 }
                 Ok(Err(_)) | Err(_) => ProviderPromptDispatch::Uncertain,
             },

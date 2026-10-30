@@ -1,5 +1,7 @@
 //! Provider Input and Turn identity at the scripted ACP boundary.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{
@@ -80,6 +82,14 @@ impl InteractionPort for NoopInteractionPort {
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
 impl SessionEventSink for CaptureEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -103,6 +113,7 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -116,10 +127,14 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
     ));
     let prompt_input = InputId::new("prompt-input").expect("input ID");
     let steer_input = InputId::new("steer-input").expect("input ID");
-    let prompt = client.prompt_contents_with_approval_dispatch_for_input(
+    let prompt = client.submit_with_approval_dispatch_for_input(
         session_id.clone(),
         prompt_input.clone(),
-        vec![session_event_model::PromptContent::text("First".to_owned()).expect("text prompt")],
+        acp_client_runtime::ProviderTurnInput::Prompt(
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("First".to_owned()).expect("text prompt"),
+            ]),
+        ),
         (),
         None,
     );
@@ -144,9 +159,9 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
         .steer_contents_with_input(
             session_id.clone(),
             steer_input.clone(),
-            vec![
+            session_event_model::ProviderSubmission::plain(vec![
                 session_event_model::PromptContent::text("Second".to_owned()).expect("text steer"),
-            ],
+            ]),
         )
         .await
         .expect("steer accepted");
@@ -191,6 +206,7 @@ async fn started_new_turn_uses_the_steer_input_id() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -207,7 +223,9 @@ async fn started_new_turn_uses_the_steer_input_id() {
         .steer_contents_with_input(
             session_id,
             input_id.clone(),
-            vec![session_event_model::PromptContent::text("Begin".to_owned()).expect("text steer")],
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("Begin".to_owned()).expect("text steer"),
+            ]),
         )
         .await
         .expect("steer accepted");
@@ -269,6 +287,7 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -285,7 +304,9 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         .steer_contents_with_input(
             session_id.clone(),
             input_id.clone(),
-            vec![session_event_model::PromptContent::text("Hello".to_owned()).expect("text steer")],
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("Hello".to_owned()).expect("text steer"),
+            ]),
         )
         .await
         .expect("steer response");
@@ -294,12 +315,15 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         acp_client_runtime::ProviderSteeringOutcome::PromptRequired
     );
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             session_id,
             input_id.clone(),
-            vec![
-                session_event_model::PromptContent::text("Hello".to_owned()).expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Hello".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -338,6 +362,7 @@ async fn text_and_thought_chunks_publish_ordered_items() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -346,12 +371,15 @@ async fn text_and_thought_chunks_publish_ordered_items() {
         .await
         .expect("session opens");
     let outcome = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Begin".to_owned()).expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Begin".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )

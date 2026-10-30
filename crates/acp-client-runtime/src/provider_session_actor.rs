@@ -39,6 +39,7 @@ pub enum ProviderSteeringOutcome<OperationId> {
 pub enum ProviderPromptDispatchObservation {
     Submitted,
     NotSubmitted,
+    Refused(crate::ProviderDispatchRefusal),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,6 +51,7 @@ pub enum ProviderSessionActivity {
 
 #[derive(Clone)]
 pub(crate) struct ProviderSessionRuntimeHandles {
+    pub(crate) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(crate) event_sink: Arc<dyn SessionEventSink>,
     pub(crate) sink_closed: CancellationToken,
     pub(crate) tool_registry: Arc<ProviderConnectionActivity>,
@@ -78,7 +80,7 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     Prompt {
         input_id: InputId,
         operation_id: Option<P::OperationId>,
-        prompt: ProviderPromptContent,
+        prompt: crate::ProviderTurnInput,
         turn_cancellation: Option<ProviderTurnCancellation<P>>,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
         reply: tokio::sync::oneshot::Sender<
@@ -125,12 +127,19 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
         std::sync::Mutex<Vec<ExternalProviderToolCall>>,
     >,
 ) {
+    let needs_admission = initial_projection.is_none();
     let mut item_projection = initial_projection.unwrap_or_else(|| {
         ProviderItemProjection::new(
             session.session_id().to_string(),
             Arc::clone(&runtime_handles.event_sink),
+            Arc::clone(&runtime_handles.behavior),
         )
     });
+    if needs_admission && item_projection.admit().is_err() {
+        runtime_handles.sink_closed.cancel();
+        shutdown.cancel();
+        return;
+    }
     loop {
         tokio::select! {
             // Drain updates already received for the previous Turn before admitting
@@ -161,13 +170,50 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                     ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply } => {
                         if runtime_handles.settings_unresolved.read().await.contains_key(session.session_id().0.as_ref()) {
                             if let Some(dispatch) = dispatch {
-                                let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
                             }
                             let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                             continue;
                         }
                         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
-                        let submitted_text = prompt.single_text().map(str::to_owned);
+                        let explicit_compact = matches!(&prompt, crate::ProviderTurnInput::Compact);
+                        let submitted_text = match &prompt {
+                            crate::ProviderTurnInput::Prompt(submission) => match submission.content.as_slice() {
+                                [session_event_model::PromptContent::Text { text }] => Some(text.as_str().to_owned()),
+                                _ => None,
+                            },
+                            crate::ProviderTurnInput::Compact => None,
+                        };
+                        let prepared = match prompt {
+                            crate::ProviderTurnInput::Prompt(submission) if !item_projection.validates(&submission) => Err(crate::ProviderError::InvalidSelection),
+                            crate::ProviderTurnInput::Prompt(submission) => runtime_handles.behavior.prepare(submission),
+                            crate::ProviderTurnInput::Compact => runtime_handles.behavior.compact().map(|prepared| match prepared { crate::PreparedCompact::Prompt(content) => content }),
+                        };
+                        let prepared = match prepared {
+                            Ok(prepared) => prepared,
+                            Err(error) => {
+                                if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Behavior(error))); }
+                                let _result = reply.send(Err(ExternalProviderRuntimeError::Behavior(error)));
+                                continue;
+                            }
+                        };
+                        let capabilities = runtime_handles.session_capabilities.read().await.get(session.session_id().0.as_ref()).cloned();
+                        let Some(capabilities) = capabilities else {
+                            if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted); }
+                            let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
+                            continue;
+                        };
+                        let prompt = match ProviderPromptContent::new(crate::provider_prompt_content::acp_blocks_from_prompt_content(prepared), &capabilities) {
+                            Ok(prompt) => prompt,
+                            Err(error) => {
+                                if let Some(dispatch) = dispatch {
+                                    let observation = match &error { ExternalProviderRuntimeError::UnsupportedContent { content_type } => ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::UnsupportedContent(content_type)), _ => ProviderPromptDispatchObservation::NotSubmitted };
+                                    let _result = dispatch.send(observation);
+                                }
+                                let _result = reply.send(Err(error));
+                                continue;
+                            }
+                        };
                         let prompt_request = PromptRequest::new(
                             session.session_id().clone(),
                             prompt.into_blocks(),
@@ -273,6 +319,19 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                                 }
                                 result = &mut prompt_result => {
                                     drop(prompt_result);
+                                    let actual_terminal = result.is_ok();
+                                    let result = match result {
+                                        Ok(outcome) if explicit_compact && outcome.stop_reason != session_event_model::StopReason::Cancelled && (outcome.stop_reason != session_event_model::StopReason::EndTurn || !item_projection.compact_confirmed()) => Err(ExternalProviderRuntimeError::CompactionUnconfirmed),
+                                        other => other,
+                                    };
+                                    let result = if actual_terminal {
+                                        let promotion = if explicit_compact && matches!(&result, Ok(outcome) if outcome.stop_reason == session_event_model::StopReason::EndTurn) { item_projection.promote_compaction() } else { Ok(()) };
+                                        match promotion.and_then(|()| item_projection.finish()) {
+                                            Ok(()) => result,
+                                            Err(crate::provider_item_projection::ItemProjectionError::SinkClosed) => Err(ExternalProviderRuntimeError::SinkClosed),
+                                            Err(crate::provider_item_projection::ItemProjectionError::OutputLimit) => Err(ExternalProviderRuntimeError::PromptOutputLimitExceeded),
+                                        }
+                                    } else { result };
                                     if result.is_err() {
                                         item_projection.discard_turn_local_cursors();
                                     }
@@ -294,6 +353,7 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                                             stop_reason: prompt.stop_reason.clone(),
                                             local_cause: output_limit_cancelled.then_some(LocalCause::OutputOverflow),
                                         },
+                                        Err(ExternalProviderRuntimeError::CompactionUnconfirmed) => TurnOutcome::Lost { reason: TurnLostReason::EndNotObservable },
                                         Err(ExternalProviderRuntimeError::TransportFailure) => TurnOutcome::Lost { reason: TurnLostReason::ProviderRetired },
                                         Err(_) => TurnOutcome::Lost { reason: TurnLostReason::ProviderTurnFailed },
                                     };
@@ -333,7 +393,8 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                                             };
                                             let _result = reply.send(result);
                                         }
-                                        Some(ProviderSessionCommand::Prompt { reply, .. }) => {
+                                        Some(ProviderSessionCommand::Prompt { reply, dispatch, .. }) => {
+                                            if let Some(dispatch) = dispatch { let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy)); }
                                             let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                         }
                                         Some(ProviderSessionCommand::Steer { input_id, prompt, reply }) => {

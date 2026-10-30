@@ -2,12 +2,15 @@ use super::*;
 
 #[tokio::test]
 async fn missing_executable_fails_before_runtime_admission() {
-    let error = ExternalProviderRuntime::initialize(ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/definitely/missing/codex-router-acp-provider"),
-        arguments: vec![],
-        environment: vec![],
-    })
+    let error = ExternalProviderRuntime::initialize(
+        ExternalProviderLaunch {
+            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+            executable: PathBuf::from("/definitely/missing/codex-router-acp-provider"),
+            arguments: vec![],
+            environment: vec![],
+        },
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect_err("missing executable must fail");
 
@@ -17,9 +20,12 @@ async fn missing_executable_fails_before_runtime_admission() {
 #[cfg(unix)]
 #[tokio::test]
 async fn stable_v1_initialize_admits_runtime_and_capabilities() {
-    let runtime = ExternalProviderRuntime::initialize(initialization_fixture(1, None))
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        initialization_fixture(1, None),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
 
     assert_eq!(
         runtime.admission(),
@@ -55,15 +61,19 @@ async fn initialize_advertises_exact_supported_client_capabilities() {
         .respond("initialize", serde_json::json!({"protocolVersion": 1, "agentCapabilities": {}, "agentInfo": {"name": "initialize-fixture", "version": "1"}}))
         .record_diagnostics(root.path().join("fixture-diagnostics.txt"))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_secs(2))
-        .await
-        .unwrap_or_else(|error| {
-            panic!(
-                "initialize failed: {error}; wire diff: {}",
-                std::fs::read_to_string(root.path().join("fixture-diagnostics.txt"))
-                    .unwrap_or_default()
-            )
-        });
+    let runtime = ExternalProviderRuntime::initialize_with_timeout(
+        fixture,
+        Duration::from_secs(2),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .unwrap_or_else(|error| {
+        panic!(
+            "initialize failed: {error}; wire diff: {}",
+            std::fs::read_to_string(root.path().join("fixture-diagnostics.txt"))
+                .unwrap_or_default()
+        )
+    });
     runtime.shutdown().await;
 }
 
@@ -101,9 +111,12 @@ async fn capability_report_uses_initialize_and_session_advertisements() {
             }),
         )
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let before = runtime.capability_report("fixture-session").await;
     assert!(before.supports_load);
     assert!(before.supports_resume);
@@ -222,9 +235,12 @@ async fn text_prompt_reaches_agent_without_optional_prompt_capabilities() {
         )
         .respond("prompt", serde_json::json!({"stopReason": "end_turn"}))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let session_id = runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -245,6 +261,7 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
         acp_client_runtime::ProviderModelPicker::Standard,
         "router-collaboration",
         "http://127.0.0.1:19090/mcp",
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("create fixture initializes");
@@ -263,6 +280,7 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
         acp_client_runtime::ProviderModelPicker::Standard,
         "router-collaboration",
         "http://127.0.0.1:19090/mcp",
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("load fixture initializes");
@@ -279,10 +297,12 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
 async fn unsupported_protocol_version_is_rejected() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let error =
-        ExternalProviderRuntime::initialize(initialization_fixture(0, Some(&process_id_path)))
-            .await
-            .expect_err("v0 must not be admitted");
+    let error = ExternalProviderRuntime::initialize(
+        initialization_fixture(0, Some(&process_id_path)),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect_err("v0 must not be admitted");
 
     assert_eq!(
         error.to_string(),
@@ -300,12 +320,15 @@ async fn unsupported_protocol_version_is_rejected() {
 #[cfg(unix)]
 #[tokio::test]
 async fn clean_eof_before_initialize_is_a_typed_failure() {
-    let error = ExternalProviderRuntime::initialize(ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/bin/sh"),
-        arguments: vec!["-c".to_owned(), "exit 0".to_owned()],
-        environment: vec![],
-    })
+    let error = ExternalProviderRuntime::initialize(
+        ExternalProviderLaunch {
+            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+            executable: PathBuf::from("/bin/sh"),
+            arguments: vec!["-c".to_owned(), "exit 0".to_owned()],
+            environment: vec![],
+        },
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect_err("EOF must fail initialization");
 
@@ -326,9 +349,12 @@ async fn stdout_eof_after_initialize_retires_live_provider() {
             close_marker.to_string_lossy().into_owned(),
         ],
     );
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes before stdout closes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes before stdout closes");
     std::fs::write(&close_marker, b"close").expect("signal fixture to close stdout");
 
     tokio::time::timeout(Duration::from_secs(2), runtime.retirement().cancelled())
@@ -392,10 +418,13 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
         let process_id_path = process_id_path.clone();
         move || wait_for_recorded_process_id(&process_id_path)
     });
-    let error =
-        ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_millis(100))
-            .await
-            .expect_err("held initialize must time out");
+    let error = ExternalProviderRuntime::initialize_with_timeout(
+        fixture,
+        Duration::from_millis(100),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect_err("held initialize must time out");
 
     assert!(
         fixture_recorded_process_id
@@ -423,9 +452,13 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
             MAX_ACP_FRAME_BYTES.to_string(),
         ],
     );
-    let error = ExternalProviderRuntime::initialize_with_timeout(fixture, Duration::from_secs(2))
-        .await
-        .expect_err("oversized frame must fail initialization");
+    let error = ExternalProviderRuntime::initialize_with_timeout(
+        fixture,
+        Duration::from_secs(2),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect_err("oversized frame must fail initialization");
 
     assert!(
         matches!(error, ExternalProviderRuntimeError::Initialize(_)),
@@ -439,10 +472,12 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
 async fn dropping_admitted_runtime_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let runtime =
-        ExternalProviderRuntime::initialize(initialization_fixture(1, Some(&process_id_path)))
-            .await
-            .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        initialization_fixture(1, Some(&process_id_path)),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
 
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(2), async {
@@ -468,9 +503,12 @@ async fn dropping_admitted_runtime_reaps_owned_process() {
 #[cfg(unix)]
 #[tokio::test]
 async fn host_owned_connection_creates_and_prompts_through_official_sdk() {
-    let runtime = ExternalProviderRuntime::initialize(conversation_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        conversation_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
 
     let provider_session_id = runtime
         .create_session(PathBuf::from("/tmp"))
@@ -490,9 +528,12 @@ async fn host_owned_connection_creates_and_prompts_through_official_sdk() {
 #[cfg(unix)]
 #[tokio::test]
 async fn explicit_cancel_remains_responsive_while_prompt_is_active() {
-    let runtime = ExternalProviderRuntime::initialize(cancellation_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        cancellation_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -521,9 +562,12 @@ async fn explicit_cancel_remains_responsive_while_prompt_is_active() {
 #[cfg(unix)]
 #[tokio::test]
 async fn unavailable_broker_refuses_permission_once_without_payload_retention() {
-    let runtime = ExternalProviderRuntime::initialize(permission_request_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_request_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime.set_endpoint_id("cursor-local".to_owned()).await;
     runtime
         .create_session(PathBuf::from("/tmp"))

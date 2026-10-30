@@ -59,6 +59,10 @@ impl ProviderAcpDeliveryRoute {
             ProviderQueuedPrompt::Contents {
                 request: prompt, ..
             } => {
+                let acp_client_runtime::ProviderTurnInput::Prompt(submission) = &prompt.input
+                else {
+                    return Err(collaboration_contracts::DeliveryContractError::InvalidEvidence);
+                };
                 self.supervisor
                     .queued_operation_registry()
                     .record_queued_contents(
@@ -66,7 +70,7 @@ impl ProviderAcpDeliveryRoute {
                         request.target.clone(),
                         binding.clone(),
                         input_id,
-                        &prompt.contents,
+                        &submission.content,
                     );
             }
         }

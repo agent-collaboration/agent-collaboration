@@ -5,7 +5,7 @@ use crate::{
     ApprovalPortOutcome, EventSinkClosed, HistoryReplayFuture, InteractionFuture,
     RefusedApprovalOffer, SessionEventSink,
 };
-use agent_client_protocol::schema::v1::ContentBlock;
+use session_event_model::PromptContent;
 use session_event_model::{ApprovalRequest, InputId, SessionEvent};
 use std::{
     path::PathBuf,
@@ -92,6 +92,14 @@ struct GatedEventSink {
 }
 
 impl SessionEventSink for GatedEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), crate::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -150,6 +158,7 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
                 events: event_sender,
                 gate: Arc::clone(&gate),
             }),
+            std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
         )
         .await
         .expect("fixture initializes"),
@@ -167,7 +176,9 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
                 first_session,
                 InputId::generate(),
                 None,
-                vec![text_block("overflow")],
+                crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(
+                    vec![text_block("overflow")],
+                )),
                 None,
             )
             .await
@@ -176,9 +187,10 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
         .await
         .expect("first Turn reached terminal publication");
     let (second_reply, second) = tokio::sync::oneshot::channel();
-    let capabilities = client.capability_report(&session_id).await;
-    let second_prompt = ProviderPromptContent::new(vec![text_block("next")], &capabilities)
-        .expect("successor prompt content");
+    let second_prompt =
+        crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
+            text_block("next"),
+        ]));
     client
         .commands
         .send(ProviderCommand::Prompt {
@@ -280,6 +292,6 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
     );
 }
 
-fn text_block(text: &str) -> ContentBlock {
+fn text_block(text: &str) -> PromptContent {
     serde_json::from_value(serde_json::json!({"type":"text","text":text})).expect("text block")
 }

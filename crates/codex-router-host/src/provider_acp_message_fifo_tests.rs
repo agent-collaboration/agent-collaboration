@@ -105,10 +105,12 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = binding(&target);
-    let runtime =
-        ExternalProviderRuntime::initialize(close_and_load_fixture(&close_marker, &load_marker))
-            .await
-            .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        close_and_load_fixture(&close_marker, &load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     assert_eq!(
         runtime
             .create_session(root.path().to_owned())
@@ -170,7 +172,10 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
             target.clone(),
             binding.clone(),
             input_id.clone(),
-            &contents.contents,
+            match &contents.input {
+                acp_client_runtime::ProviderTurnInput::Prompt(submission) => &submission.content,
+                acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
+            },
         );
     let (sender, receiver) = mpsc::channel(1);
     sender
@@ -205,6 +210,7 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         Arc::clone(&store),
         Arc::new(NoLivePeer),
         CancellationToken::new(),
+        Arc::new(tokio::sync::Notify::new()),
     ));
     tokio::time::timeout(std::time::Duration::from_secs(2), worker)
         .await
@@ -287,10 +293,12 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let provider_binding = binding(&target);
-    let runtime =
-        ExternalProviderRuntime::initialize(close_and_load_fixture(&close_marker, &load_marker))
-            .await
-            .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        close_and_load_fixture(&close_marker, &load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     assert_eq!(
         runtime
             .create_session(root.path().to_owned())
@@ -417,4 +425,199 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
     );
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
+}
+
+#[tokio::test]
+async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_prompt() {
+    use session_event_model::{
+        InputId, PromptContent, ProviderSubmission, SelectedSkill, SkillInvocationName,
+    };
+    let root = tempfile::tempdir().expect("root");
+    let receipt = root.path().join("wire.jsonl");
+    let mut target = target();
+    target.session_id = SessionId::try_from("session-1".to_owned()).expect("session ID");
+    let binding = binding(&target);
+    let runtime = ExternalProviderRuntime::initialize(
+        ExternalProviderLaunch {
+            executable: "node".into(),
+            arguments: vec![
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../acp-client-runtime/tests/support/behavior-agent.ts"
+                )
+                .into(),
+                receipt.display().to_string(),
+                "remove-on-cancel".into(),
+            ],
+            environment: vec![],
+            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+        },
+        Arc::new(acp_provider_adapters::CursorAcpBehavior),
+    )
+    .await
+    .expect("provider");
+    runtime
+        .create_session(root.path().into())
+        .await
+        .expect("session");
+    let selected = || ProviderSubmission {
+        content: vec![PromptContent::text("$review exact args".into()).expect("text")],
+        selected: vec![SelectedSkill {
+            invocation_name: SkillInvocationName::new("review").expect("name"),
+        }],
+    };
+    let context = crate::ExternalProviderApprovalContext {
+        requester: target.clone().into(),
+        approver: target.clone().into(),
+        target: target.clone(),
+        operation_id: OperationId::generate(),
+        binding_generation: binding.generation.clone(),
+        binding_retirement: runtime.retirement(),
+    };
+    runtime
+        .submit_with_approval_dispatch_for_input(
+            "session-1".into(),
+            InputId::generate(),
+            acp_client_runtime::ProviderTurnInput::Prompt(selected()),
+            context,
+            None,
+        )
+        .await
+        .expect("skill is initially current and invocable");
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("store"),
+    ));
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: ProviderWorkingDirectory::try_from(
+                root.path().display().to_string(),
+            )
+            .expect("cwd"),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 1,
+        })
+        .await
+        .expect("record session");
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: binding.clone(),
+                runtime,
+            }],
+            store.clone(),
+        )
+        .expect("supervisor"),
+    );
+    let held_operation = OperationId::generate();
+    supervisor
+        .prompt(collaboration_protocol::ConversationPromptRequest {
+            operation_id: held_operation.clone(),
+            input_id: None,
+            target: target.clone(),
+            generation: None,
+            requested_by: target.clone().into(),
+            approver: target.clone().into(),
+            prompt: collaboration_protocol::MessageContent::HumanUser {
+                text: MessageText::try_from("hold".to_owned()).expect("held prompt"),
+            },
+        })
+        .await
+        .expect("held prompt dispatched");
+    let queue =
+        ProviderAcpMessageFifo::new(supervisor.clone(), store.clone(), Arc::new(NoLivePeer));
+    let queued_operation = OperationId::generate();
+    let input_id = InputId::generate();
+    let submission = selected();
+    supervisor
+        .queued_operation_registry()
+        .record_queued_contents(
+            queued_operation.clone(),
+            target.clone(),
+            binding.clone(),
+            input_id.clone(),
+            &submission.content,
+        );
+    queue
+        .reserve(&target)
+        .expect("queue capacity")
+        .send(ProviderQueuedPrompt::Contents {
+            request: crate::external_provider_supervisor::ProviderPromptContentsRequest {
+                operation_id: queued_operation.clone(),
+                input_id,
+                target: target.clone(),
+                requested_by: target.clone().into(),
+                approver: target.clone().into(),
+                input: acp_client_runtime::ProviderTurnInput::Prompt(submission),
+            },
+            load_policy: LoadPolicy::MayLoad,
+        });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        queue.wait_started.notified(),
+    )
+    .await
+    .expect("FIFO reached its idle wait while the peer turn is held");
+    supervisor
+        .runtime_for(&target.endpoint)
+        .expect("runtime")
+        .cancel_active_prompt("session-1".into())
+        .await
+        .expect("release held turn, emitting skill removal before its terminal");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        supervisor
+            .queued_operation_registry()
+            .wait_for_cleared(&queued_operation),
+    )
+    .await
+    .expect("queued actor refusal settles");
+    let rejected = supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: queued_operation.clone(),
+            timeout_seconds: PositiveSeconds::try_from(1).expect("bound"),
+        })
+        .await
+        .expect_err("stale selection is a closed failure");
+    assert_eq!(
+        rejected.kind,
+        collaboration_protocol::ConversationOperationFailureKind::InvalidRequest
+    );
+    assert_eq!(
+        rejected.effect,
+        collaboration_protocol::ProviderOperationEffect::None
+    );
+    let stored = store
+        .lock()
+        .await
+        .inspect(&queued_operation)
+        .await
+        .expect("stored result")
+        .expect("admitted queued operation");
+    assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+    let wire = std::fs::read_to_string(&receipt)
+        .expect("wire receipt")
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("wire JSON"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        wire.len(),
+        2,
+        "only initially valid skill and held prompt, no stale queued send"
+    );
+    assert_eq!(wire[0]["params"]["prompt"][0]["text"], "/review exact args");
+    assert_eq!(wire[1]["params"]["prompt"][0]["text"], "hold");
+    queue.shutdown().await;
+    supervisor
+        .shutdown()
+        .await
+        .expect("owned provider shutdown");
 }

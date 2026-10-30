@@ -20,6 +20,10 @@ use tokio::{
 };
 
 enum HubCommand {
+    SkillView {
+        session: SessionRef,
+        view: session_event_model::SkillView,
+    },
     Publish {
         session: SessionRef,
         event: SessionEvent,
@@ -60,6 +64,14 @@ impl HubSessionEventSink {
             while let Some(command) = receiver.recv().await {
                 consumer_backlog.fetch_sub(1, Ordering::Relaxed);
                 match command {
+                    HubCommand::SkillView { session, view } => {
+                        if hub.publish_skill_view(session.clone(), view).await.is_err() {
+                            consumer_failures
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .insert(session.session_id.as_str().to_owned());
+                        }
+                    }
                     HubCommand::Publish {
                         session,
                         event,
@@ -239,6 +251,15 @@ impl HubSessionEventSink {
 }
 
 impl SessionEventSink for HubSessionEventSink {
+    fn publish_skill_view(
+        &self,
+        session_id: &str,
+        view: session_event_model::SkillView,
+    ) -> Result<(), EventSinkClosed> {
+        let session = self.session(session_id).map_err(|_| EventSinkClosed)?;
+        self.enqueue(session_id, HubCommand::SkillView { session, view })
+    }
+
     fn begin_history_replay(&self, session_id: &str) -> HistoryReplayFuture<'_> {
         let session = self.session(session_id);
         let session_id = session_id.to_owned();

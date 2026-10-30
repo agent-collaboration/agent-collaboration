@@ -109,9 +109,12 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             generation: generation.clone(),
             capabilities: capabilities.clone(),
         };
-        let runtime = ExternalProviderRuntime::initialize(one_prompt_fixture(&event_socket))
-            .await
-            .expect("fixture provider");
+        let runtime = ExternalProviderRuntime::initialize(
+            one_prompt_fixture(&event_socket),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("fixture provider");
         runtime
             .create_session(PathBuf::from("/tmp"))
             .await

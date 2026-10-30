@@ -57,9 +57,12 @@ async fn unknown_agent_stop_reason_settles_with_typed_value() {
         .respond("prompt", serde_json::json!({"stopReason": "future_reason"}))
         .launch();
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(root.path().to_owned())
         .await

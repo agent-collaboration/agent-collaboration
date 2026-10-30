@@ -16,6 +16,11 @@ pub type HistoryReplayFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), HistoryReplayUnavailable>> + Send + 'a>>;
 
 pub trait SessionEventSink: Send + Sync + 'static {
+    fn publish_skill_view(
+        &self,
+        session_id: &str,
+        view: session_event_model::SkillView,
+    ) -> Result<(), EventSinkClosed>;
     /// Reset hub history before the agent can publish replayed updates.
     fn begin_history_replay(&self, session_id: &str) -> HistoryReplayFuture<'_>;
 
@@ -31,6 +36,14 @@ mod tests {
     struct ReplaySink;
 
     impl SessionEventSink for ReplaySink {
+        fn publish_skill_view(
+            &self,
+            _session_id: &str,
+            _view: session_event_model::SkillView,
+        ) -> Result<(), crate::EventSinkClosed> {
+            Ok(())
+        }
+
         fn begin_history_replay(&self, _session_id: &str) -> super::HistoryReplayFuture<'_> {
             Box::pin(async { Ok(()) })
         }

@@ -72,10 +72,13 @@ async fn lag_replays_missed_item_and_turn_completion() -> Result<(), Box<dyn std
         ))
         .await?;
     let reply: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("resume reply")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("resume reply")??
+        .to_text()?,
     )?;
     assert_eq!(reply["id"], 1);
     timeout(
@@ -112,16 +115,22 @@ async fn lag_replays_missed_item_and_turn_completion() -> Result<(), Box<dyn std
         })?;
     }
     let completed_item: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("item completion")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("item completion")??
+        .to_text()?,
     )?;
     let completed_turn: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn completion")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn completion")??
+        .to_text()?,
     )?;
     assert_eq!(completed_item["method"], "item/completed");
     assert_eq!(completed_turn["method"], "turn/completed");
@@ -144,6 +153,13 @@ struct ObservedConcreteHub {
 }
 
 impl SessionEventHub for ObservedConcreteHub {
+    fn skill_view(
+        &self,
+        session: SessionRef,
+        cwd: std::path::PathBuf,
+    ) -> collaboration_contracts::HubFuture<'_, collaboration_contracts::SkillViewAttachment> {
+        self.inner.skill_view(session, cwd)
+    }
     fn attach(
         &self,
         session: SessionRef,
@@ -251,7 +267,12 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
             .into(),
         ))
         .await?;
-    let resumed: Value = serde_json::from_str(client.next().await.ok_or("resume")??.to_text()?)?;
+    let resumed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("resume")??
+            .to_text()?,
+    )?;
     assert_eq!(resumed["id"], 1);
     observed.attachment_created.notified().await;
     hub.begin_history_unavailable(backend.session.clone())
@@ -270,10 +291,13 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
     )
     .await?;
     let started: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn/started")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn/started")??
+        .to_text()?,
     )?;
     assert_eq!(started["method"], "turn/started");
     assert_eq!(started["params"]["turn"]["id"], "after-epoch-reset");
@@ -358,7 +382,12 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
             .into(),
         ))
         .await?;
-    let resumed: Value = serde_json::from_str(client.next().await.ok_or("resume")??.to_text()?)?;
+    let resumed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("resume")??
+            .to_text()?,
+    )?;
     assert_eq!(resumed["result"]["thread"]["turns"][0]["id"], "turn-1");
     assert_eq!(
         resumed["result"]["thread"]["turns"][0]["status"],
@@ -372,10 +401,13 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
         },
     })?;
     let delta: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("delta")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("delta")??
+        .to_text()?,
     )?;
     assert_eq!(delta["method"], "item/agentMessage/delta");
     assert_eq!(delta["params"]["delta"], " second");
@@ -391,10 +423,13 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
         ))
         .await?;
     let steered: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn/steer")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn/steer")??
+        .to_text()?,
     )?;
     assert_eq!(steered["id"], 2);
     assert_eq!(steered["result"]["turnId"], "turn-1");
@@ -408,16 +443,22 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
         ))
         .await?;
     let first: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("interrupt frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("interrupt frame")??
+        .to_text()?,
     )?;
     let second: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("interrupt frame")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("interrupt frame")??
+        .to_text()?,
     )?;
     assert!([&first, &second].iter().any(|frame| frame["id"] == 3));
     assert!(
@@ -477,7 +518,12 @@ async fn resync_reattaches_and_forwards_the_next_turn() -> Result<(), Box<dyn st
             .into(),
         ))
         .await?;
-    let resumed: Value = serde_json::from_str(client.next().await.ok_or("resume")??.to_text()?)?;
+    let resumed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("resume")??
+            .to_text()?,
+    )?;
     assert_eq!(resumed["id"], 1);
     backend.attachment_created.notified().await;
     backend.events.send(HubEvent {
@@ -497,10 +543,13 @@ async fn resync_reattaches_and_forwards_the_next_turn() -> Result<(), Box<dyn st
         },
     })?;
     let started: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn/started")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn/started")??
+        .to_text()?,
     )?;
     assert_eq!(started["method"], "turn/started");
     assert_eq!(started["params"]["turn"]["id"], "after-resync");
@@ -552,8 +601,12 @@ async fn turn_events_keep_flowing_while_prompt_submission_is_in_flight()
             .into(),
         ))
         .await?;
-    let started: Value =
-        serde_json::from_str(client.next().await.ok_or("thread/start")??.to_text()?)?;
+    let started: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut client)
+            .await
+            .ok_or("thread/start")??
+            .to_text()?,
+    )?;
     let thread_id = started["result"]["thread"]["id"]
         .as_str()
         .ok_or("thread id")?;
@@ -568,18 +621,24 @@ async fn turn_events_keep_flowing_while_prompt_submission_is_in_flight()
         .await?;
     backend.prompt_submitted.notified().await;
     let event: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn/started")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn/started")??
+        .to_text()?,
     )?;
     assert_eq!(event["method"], "turn/started");
     gate.notify_one();
     let reply: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), client.next())
-            .await?
-            .ok_or("turn/start reply")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut client),
+        )
+        .await?
+        .ok_or("turn/start reply")??
+        .to_text()?,
     )?;
     assert_eq!(reply["id"], 2);
     client.close(None).await?;
@@ -651,8 +710,12 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
                 .into(),
         ))
         .await?;
-    let started: Value =
-        serde_json::from_str(first.next().await.ok_or("thread/start")??.to_text()?)?;
+    let started: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut first)
+            .await
+            .ok_or("thread/start")??
+            .to_text()?,
+    )?;
     let thread_id = started["result"]["thread"]["id"]
         .as_str()
         .ok_or("thread id")?
@@ -717,8 +780,12 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
                 .into(),
         ))
         .await?;
-    let resumed: Value =
-        serde_json::from_str(second.next().await.ok_or("thread/resume")??.to_text()?)?;
+    let resumed: Value = serde_json::from_str(
+        super::test_support::next_non_skill_frame(&mut second)
+            .await
+            .ok_or("thread/resume")??
+            .to_text()?,
+    )?;
     assert_eq!(resumed["id"], 2);
     second
         .send(Message::Text(
@@ -728,10 +795,13 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
         ))
         .await?;
     let next: Value = serde_json::from_str(
-        timeout(Duration::from_secs(2), second.next())
-            .await?
-            .ok_or("thread/list")??
-            .to_text()?,
+        timeout(
+            Duration::from_secs(2),
+            super::test_support::next_non_skill_frame(&mut second),
+        )
+        .await?
+        .ok_or("thread/list")??
+        .to_text()?,
     )?;
     assert_eq!(
         next["id"], 3,

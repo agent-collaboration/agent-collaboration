@@ -106,6 +106,28 @@ pub(crate) async fn compose_provider_startup(
                     service_id: service_id.clone(),
                     endpoint_id: binding.endpoint_id.clone(),
                 };
+                let behavior: Arc<dyn acp_client_runtime::ProviderBehavior> = match binding.provider
+                {
+                    ProviderKind::Cursor => Arc::new(acp_provider_adapters::CursorAcpBehavior),
+                    ProviderKind::ClaudeCode => {
+                        let prepared = acp_provider_adapters::prepare_claude_launch(launch).await;
+                        match &prepared.qualification {
+                            Ok(identity) => tracing::info!(
+                                node = %identity.node.display(), node_version = %identity.node_version,
+                                library = %identity.library.display(), sdk = %identity.sdk.display(),
+                                "qualified Claude ACP metadata launch"
+                            ),
+                            Err(reason) => tracing::debug!(
+                                ?reason,
+                                "Claude skill metadata launch is unqualified"
+                            ),
+                        }
+                        launch = prepared.launch;
+                        Arc::new(acp_provider_adapters::ClaudeAcpBehavior::new(
+                            prepared.skill_source,
+                        ))
+                    }
+                };
                 let hub_endpoint = message_board::SessionEndpointRef {
                     service_id: message_board::ServiceId::try_from(String::from(
                         service_id.clone(),
@@ -125,6 +147,7 @@ pub(crate) async fn compose_provider_startup(
                         io::Error::other("provider Session hub unavailable for configured launch")
                     })?),
                     hub_endpoint,
+                    behavior,
                 )
                 .await;
                 match runtime {

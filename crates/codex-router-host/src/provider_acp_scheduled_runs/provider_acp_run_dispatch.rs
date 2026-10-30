@@ -150,10 +150,12 @@ impl ProviderAcpScheduledRuns {
                 target: run.target.clone(),
                 requested_by: record.created_by,
                 approver: record.approver,
-                contents: vec![
-                    session_event_model::PromptContent::text(task_input.as_str().to_owned())
-                        .map_err(|_| DeliveryContractError::ClientOperation)?,
-                ],
+                input: acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![
+                        session_event_model::PromptContent::text(task_input.as_str().to_owned())
+                            .map_err(|_| DeliveryContractError::ClientOperation)?,
+                    ]),
+                ),
             },
             _ => return Err(DeliveryContractError::InvalidEvidence),
         };
@@ -184,7 +186,7 @@ impl ProviderAcpScheduledRuns {
                     },
                 }))
             }
-            Ok(ProviderPromptDispatch::NotSubmitted) => {
+            Ok(ProviderPromptDispatch::NotSubmitted | ProviderPromptDispatch::Refused(_)) => {
                 effect.submission = SubmissionEffect::NotDispatched;
                 rejected(
                     DeliveryRejectionReason::EndpointUnavailable,

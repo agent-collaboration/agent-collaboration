@@ -3,8 +3,8 @@
 use super::turn_admission_tests::NoopInteractionPort;
 use super::*;
 use crate::{EventSinkClosed, HistoryReplayFuture, SessionEventSink};
-use agent_client_protocol::schema::v1::ContentBlock;
 use serde_json::json;
+use session_event_model::PromptContent;
 use session_event_model::{SessionEvent, SessionItemKind};
 use std::{path::PathBuf, sync::Mutex, time::Duration};
 
@@ -27,6 +27,14 @@ struct SubmittedEventSink {
 }
 
 impl SessionEventSink for SubmittedEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), crate::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -81,6 +89,7 @@ impl PromptFixture {
                 },
                 Arc::new(NoopInteractionPort),
                 sink.clone(),
+                std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
             ),
         )
         .await
@@ -101,7 +110,7 @@ impl PromptFixture {
 
     async fn prompt(
         &self,
-        blocks: Vec<ContentBlock>,
+        blocks: Vec<PromptContent>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
         tokio::time::timeout(
             BOUND,
@@ -109,7 +118,9 @@ impl PromptFixture {
                 self.session_id.clone(),
                 InputId::generate(),
                 None,
-                blocks,
+                crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(
+                    blocks,
+                )),
                 None,
             ),
         )
@@ -132,7 +143,7 @@ impl PromptFixture {
     }
 }
 
-fn text_block(text: &str) -> ContentBlock {
+fn text_block(text: &str) -> PromptContent {
     serde_json::from_value(json!({"type":"text","text":text})).expect("text block")
 }
 
@@ -213,8 +224,8 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
     }
 
     let fixture = PromptFixture::open("none", None).await;
-    let resource: ContentBlock = serde_json::from_value(
-        json!({"type":"resource_link","uri":"file:///reference","name":"reference"}),
+    let resource: PromptContent = serde_json::from_value(
+        json!({"type":"resourceLink","uri":"file:///reference","name":"reference"}),
     )
     .expect("resource block");
     for blocks in [

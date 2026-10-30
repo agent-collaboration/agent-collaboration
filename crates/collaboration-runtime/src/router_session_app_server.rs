@@ -17,7 +17,6 @@ use collaboration_contracts::SessionEventHubError;
 use collaboration_contracts::SessionSettingsCommand;
 use collaboration_contracts::SessionSteerOutcome;
 use collaboration_contracts::SessionTargetCommand;
-use collaboration_contracts::SetSessionSettingCommand;
 use collaboration_contracts::SteerSessionCommand;
 use futures_util::{SinkExt, StreamExt};
 use message_board::{Identity, SessionEndpointRef, SessionRef};
@@ -135,6 +134,12 @@ impl RouterSessionAppServerListener {
 
 #[derive(Debug, thiserror::Error)]
 enum ThreadMethodError {
+    #[error("skill selection is invalid or stale")]
+    InvalidSelection,
+    #[error("provider operation is unsupported")]
+    Unsupported,
+    #[error("provider session is busy")]
+    Busy,
     #[error("invalid thread parameters")]
     InvalidParams,
     #[error("launch the Codex TUI with --cd <project> to choose where this provider session works")]
@@ -166,6 +171,7 @@ pub enum AppServerConnectionError {
 }
 
 struct HandledAppServerRequest {
+    binding_attempt: Option<u64>,
     method: String,
     response: Value,
     resume_attachment: Option<(SessionRef, SessionEventAttachment)>,
@@ -194,6 +200,9 @@ pub async fn serve_router_session_app_server_connection(
         }
     });
     let mut attached_sessions = HashSet::new();
+    let mut skill_bindings = skill_binding::NativeSkillBindings::default();
+    let mut skill_subscriptions = HashMap::<PathBuf, AbortHandle>::new();
+    let (skill_sender, mut skill_receiver) = mpsc::channel::<(PathBuf, SessionRef)>(64);
     let mut subscriptions = HashMap::<SessionRef, AbortHandle>::new();
     let mut delivered_sequences = HashMap::<SessionRef, (u64, u64)>::new();
     let mut forwarding =
@@ -213,6 +222,25 @@ pub async fn serve_router_session_app_server_connection(
                 let Some(handled) = handled else { break; };
                 let mut handled = handled?;
                 websocket.send(Message::Text(handled.response.to_string().into())).await?;
+                if let Some(attempt) = handled.binding_attempt {
+                    let bound = skill_binding::bound_response(&handled.response, context.events.as_ref(), &context.endpoint).await;
+                    if let Some(change) = skill_bindings.complete(attempt, bound) {
+                        let cwd = change.cwd;
+                        let watcher = change.watcher;
+                        if let Some(previous) = skill_subscriptions.remove(&cwd) { previous.abort(); }
+                        if let Some((session, mut receiver)) = watcher {
+                            let sender = skill_sender.clone();
+                            let watched_cwd = cwd.clone();
+                            let task = event_tasks.spawn(async move {
+                                while receiver.changed().await.is_ok() {
+                                    if sender.send((watched_cwd.clone(), session.clone())).await.is_err() { break; }
+                                }
+                            });
+                            skill_subscriptions.insert(cwd, task);
+                        }
+                        websocket.send(Message::Text(json!({"method":"skills/changed","params":{}}).to_string().into())).await?;
+                    }
+                }
                 if matches!(handled.method.as_str(), "thread/start" | "thread/read" | "thread/resume")
                     && handled.response.get("result").is_some()
                     && let Some(thread_id) = handled.response.pointer("/result/thread/id").and_then(Value::as_str)
@@ -281,6 +309,13 @@ pub async fn serve_router_session_app_server_connection(
                 }
                 continue;
             }
+            changed = skill_receiver.recv() => {
+                let Some((cwd, session)) = changed else { break; };
+                if skill_bindings.changed(&cwd, &session) {
+                    websocket.send(Message::Text(json!({"method":"skills/changed","params":{}}).to_string().into())).await?;
+                }
+                continue;
+            }
         };
         let Some(frame) = frame else {
             break;
@@ -304,9 +339,29 @@ pub async fn serve_router_session_app_server_connection(
         if request.get("id").is_none() {
             continue;
         }
+        if request.get("method").and_then(Value::as_str) == Some("skills/list") {
+            let id = request.get("id").cloned().unwrap_or(Value::Null);
+            let response = match skill_bindings.list(request.get("params").unwrap_or(&Value::Null))
+            {
+                Ok(result) => json!({"id":id,"result":result}),
+                Err(()) => {
+                    json!({"id":id,"error":{"code":-32602,"message":"invalid skills/list parameters"}})
+                }
+            };
+            websocket
+                .send(Message::Text(response.to_string().into()))
+                .await?;
+            continue;
+        }
         if matches!(
             request.get("method").and_then(Value::as_str),
-            Some("turn/start" | "turn/steer" | "turn/interrupt")
+            Some(
+                "turn/start"
+                    | "turn/steer"
+                    | "turn/interrupt"
+                    | "thread/compact/start"
+                    | "thread/settings/update"
+            )
         ) {
             match turn_sender.try_send(request) {
                 Ok(()) => {}
@@ -329,9 +384,20 @@ pub async fn serve_router_session_app_server_connection(
             continue;
         }
         let request_context = Arc::clone(&context);
+        let binding_attempt = matches!(
+            request.get("method").and_then(Value::as_str),
+            Some("thread/start" | "thread/resume")
+        )
+        .then(|| skill_bindings.begin());
         let response_sender = response_sender.clone();
         request_tasks.spawn(async move {
-            let result = handle_app_server_rpc(request_context, request).await;
+            let result =
+                handle_app_server_rpc(request_context, request)
+                    .await
+                    .map(|mut handled| {
+                        handled.binding_attempt = binding_attempt;
+                        handled
+                    });
             let _sent = response_sender.send(result).await;
         });
     }
@@ -342,138 +408,9 @@ pub async fn serve_router_session_app_server_connection(
     Ok(())
 }
 
-async fn handle_app_server_rpc(
-    context: Arc<RouterSessionAppServerContext>,
-    request: Value,
-) -> Result<HandledAppServerRequest, AppServerConnectionError> {
-    let id = request.get("id").cloned().unwrap_or(Value::Null);
-    let method = request
-        .get("method")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_owned();
-    let catalog = context.model_catalog.borrow().clone();
-    let mut response = if matches!(
-        method.as_str(),
-        "thread/start"
-            | "thread/list"
-            | "thread/read"
-            | "thread/resume"
-            | "turn/start"
-            | "turn/steer"
-            | "turn/interrupt"
-    ) {
-        let mut params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-        // The connection owns the resume snapshot and its receiver.
-        if method == "thread/resume"
-            && let Some(object) = params.as_object_mut()
-        {
-            object.insert("excludeTurns".into(), Value::Bool(true));
-        }
-        let result = if method.starts_with("thread/") {
-            handle_app_server_thread_request(
-                &method,
-                params,
-                Arc::clone(&context.commands),
-                Arc::clone(&context.events),
-                context.endpoint.clone(),
-                context.actor.clone(),
-                &catalog,
-            )
-            .await
-        } else {
-            handle_app_server_turn_request(
-                &method,
-                params,
-                Arc::clone(&context.commands),
-                Arc::clone(&context.events),
-                context.endpoint.clone(),
-                context.actor.clone(),
-                &catalog,
-            )
-            .await
-        };
-        match result {
-            Ok(result) => json!({"id":id,"result":result}),
-            Err(error) => {
-                let code = match error {
-                    ThreadMethodError::InvalidParams
-                    | ThreadMethodError::WorkingDirectoryRequired
-                    | ThreadMethodError::ImageUnreadable
-                    | ThreadMethodError::ImageTooLarge
-                    | ThreadMethodError::PromptTooLarge
-                    | ThreadMethodError::ImageUnsupportedType => -32602,
-                    ThreadMethodError::NotFound => -32002,
-                    ThreadMethodError::Unavailable => -32000,
-                };
-                json!({"id":id,"error":{"code":code,"message":error.to_string()}})
-            }
-        }
-    } else if method == "config/read" {
-        let params = request.get("params").cloned().unwrap_or(Value::Null);
-        let trust_lookup = context.project_trust.clone();
-        tokio::task::spawn_blocking(move || {
-            handle_app_server_request(
-                id,
-                "config/read",
-                &params,
-                &catalog,
-                trust_lookup.as_deref(),
-            )
-        })
-        .await
-        .map_err(|_| AppServerConnectionError::RequestWorkerUnavailable)?
-    } else {
-        handle_app_server_request(
-            id,
-            &method,
-            request.get("params").unwrap_or(&Value::Null),
-            &catalog,
-            context.project_trust.as_deref(),
-        )
-    };
-    let mut resume_attachment = None;
-    if method == "thread/resume"
-        && response.get("result").is_some()
-        && let Some(thread_id) = response
-            .pointer("/result/thread/id")
-            .and_then(Value::as_str)
-        && let Some(session) = context
-            .events
-            .sessions(context.endpoint.clone())
-            .await
-            .map_err(|_| AppServerConnectionError::HubUnavailable)?
-            .into_iter()
-            .find(|summary| thread_alias(&summary.session) == thread_id)
-            .map(|summary| summary.session)
-    {
-        let attachment = context
-            .events
-            .attach(session.clone())
-            .await
-            .map_err(|_| AppServerConnectionError::HubUnavailable)?;
-        if request
-            .pointer("/params/excludeTurns")
-            .and_then(Value::as_bool)
-            != Some(true)
-        {
-            let thread = response
-                .pointer_mut("/result/thread")
-                .and_then(Value::as_object_mut)
-                .ok_or(AppServerConnectionError::RequestWorkerUnavailable)?;
-            thread.insert(
-                "turns".into(),
-                json!(historical_turns(&session, &attachment.snapshot)),
-            );
-        }
-        resume_attachment = Some((session, attachment));
-    }
-    Ok(HandledAppServerRequest {
-        method,
-        response,
-        resume_attachment,
-    })
-}
+#[path = "native_request_dispatch.rs"]
+mod request_dispatch;
+use request_dispatch::handle_app_server_rpc;
 
 async fn attach_session_events(
     session: SessionRef,
@@ -528,6 +465,11 @@ async fn attach_session_events(
 
 #[path = "router_session_app_server_methods.rs"]
 mod methods;
+#[path = "native_skill_binding.rs"]
+mod skill_binding;
+#[cfg(test)]
+#[path = "native_skill_binding_tests.rs"]
+mod skill_binding_tests;
 pub(crate) use methods::thread_alias;
 use methods::{
     handle_app_server_request, handle_app_server_thread_request, handle_app_server_turn_request,
@@ -548,6 +490,9 @@ mod multichoice_tui_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_order_tests.rs"]
 mod order_tests;
+#[cfg(test)]
+#[path = "native_provider_settings_tests.rs"]
+mod provider_settings_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_reattach_tests.rs"]
 mod reattach_tests;

@@ -69,9 +69,12 @@ fn oversized_active_frame_fixture() -> ExternalProviderLaunch {
 #[cfg(unix)]
 #[tokio::test]
 async fn provider_prompt_observes_more_than_the_old_update_limit_and_settles() {
-    let runtime = ExternalProviderRuntime::initialize(many_prompt_updates_fixture(4097))
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        many_prompt_updates_fixture(4097),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -93,9 +96,12 @@ async fn provider_prompt_observes_more_than_the_old_update_limit_and_settles() {
 #[cfg(unix)]
 #[tokio::test]
 async fn load_replay_drains_more_than_the_old_update_limit_without_leaking_history() {
-    let runtime = ExternalProviderRuntime::initialize(replay_fixture(4097))
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        replay_fixture(4097),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
         .await
@@ -113,9 +119,12 @@ async fn load_replay_drains_more_than_the_old_update_limit_without_leaking_histo
 #[cfg(unix)]
 #[tokio::test]
 async fn load_replay_accepts_the_old_exact_update_boundary_without_history_leak() {
-    let runtime = ExternalProviderRuntime::initialize(replay_fixture(4096))
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        replay_fixture(4096),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
         .await
@@ -136,10 +145,12 @@ async fn output_limit_cancels_and_settles_before_late_updates_can_reach_next_pro
     let root = tempfile::tempdir().expect("fixture root");
     let control_path = root.path().join("late-output.sock");
     let control_listener = tokio::net::UnixListener::bind(&control_path).expect("control socket");
-    let runtime =
-        ExternalProviderRuntime::initialize(output_limit_and_late_update_fixture(&control_path))
-            .await
-            .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        output_limit_and_late_update_fixture(&control_path),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let (mut control, _) =
         tokio::time::timeout(std::time::Duration::from_secs(2), control_listener.accept())
             .await
@@ -179,9 +190,12 @@ async fn output_limit_cancels_and_settles_before_late_updates_can_reach_next_pro
 #[cfg(unix)]
 #[tokio::test]
 async fn unknown_session_requests_are_rejected_idle_and_during_prompt() {
-    let runtime = ExternalProviderRuntime::initialize(unknown_request_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        unknown_request_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -206,9 +220,12 @@ async fn unknown_session_requests_are_rejected_idle_and_during_prompt() {
 #[cfg(unix)]
 #[tokio::test]
 async fn unknown_sessionless_requests_receive_method_not_found() {
-    let runtime = ExternalProviderRuntime::initialize(sessionless_unknown_request_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        sessionless_unknown_request_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -240,9 +257,12 @@ async fn request_naming_unknown_session_receives_method_not_found() {
         .exit()
         .record_diagnostics(root.path().join("fixture-diagnostics.txt"))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(root.path().to_owned())
         .await
@@ -276,9 +296,12 @@ async fn implemented_permission_request_during_load_replay_is_answered() {
         .expect_message(serde_json::json!({"jsonrpc": "2.0", "id": 91, "result": {"outcome": {"outcome": "cancelled"}}}))
         .respond("load", serde_json::json!({}))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     tokio::time::timeout(
         std::time::Duration::from_secs(5),
         runtime.load_session("fixture-session".to_owned(), PathBuf::from("/tmp")),
@@ -312,9 +335,12 @@ async fn unknown_update_kind_does_not_discard_later_prompt_output() {
         .send(serde_json::json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "fixture-session", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "after"}}}}))
         .respond("prompt", serde_json::json!({"stopReason": "end_turn"}))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -341,9 +367,12 @@ async fn unknown_stop_reason_has_sanitized_terminal_projection() {
         .expect_request("prompt", "session/prompt", serde_json::json!({"sessionId": "fixture-session"}))
         .respond("prompt", serde_json::json!({"stopReason": "future_reason"}))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -375,9 +404,12 @@ async fn malformed_known_update_and_future_tool_status_do_not_end_turn() {
         .send(serde_json::json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "fixture-session", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "after errors"}}}}))
         .respond("prompt", serde_json::json!({"stopReason": "end_turn"}))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -409,9 +441,12 @@ async fn permission_request_naming_unknown_session_receives_method_not_found() {
         .exit()
         .record_diagnostics(root.path().join("fixture-diagnostics.txt"))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture)
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(root.path().to_owned())
         .await
@@ -435,9 +470,12 @@ async fn permission_request_naming_unknown_session_receives_method_not_found() {
 #[cfg(unix)]
 #[tokio::test]
 async fn large_tool_update_and_result_do_not_retire_other_provider_sessions() {
-    let runtime = ExternalProviderRuntime::initialize(large_provider_frames_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        large_provider_frames_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -465,9 +503,12 @@ async fn large_tool_update_and_result_do_not_retire_other_provider_sessions() {
 #[cfg(unix)]
 #[tokio::test]
 async fn large_permission_request_frame_is_accepted_and_answered() {
-    let runtime = ExternalProviderRuntime::initialize(large_permission_frame_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        large_permission_frame_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -484,9 +525,12 @@ async fn large_permission_request_frame_is_accepted_and_answered() {
 #[cfg(unix)]
 #[tokio::test]
 async fn frame_limit_breach_returns_a_safe_typed_failure() {
-    let runtime = ExternalProviderRuntime::initialize(oversized_active_frame_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        oversized_active_frame_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await

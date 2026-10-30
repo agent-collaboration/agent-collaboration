@@ -17,9 +17,12 @@ async fn current_generation_uncertainty_names_all_blocking_operations() {
 async fn assert_uncertainty_admission(targetless: bool, previous_generation: bool) {
     // Arrange: genuine stored terminal Unknown operations, not fabricated outcomes.
     let root = tempfile::tempdir().unwrap();
-    let runtime = ExternalProviderRuntime::initialize(create_fixture())
-        .await
-        .unwrap();
+    let runtime = ExternalProviderRuntime::initialize(
+        create_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .unwrap();
     let mut store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .unwrap();

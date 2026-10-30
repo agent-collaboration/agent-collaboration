@@ -13,10 +13,10 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         let root = tempfile::tempdir()?;
         let provider_endpoint = endpoint("cursor-local")?;
         let creator = actor(provider_endpoint.clone(), "creator")?;
-        let runtime = ExternalProviderRuntime::initialize(launch(
-            "supervisor-settings-create-agent.ts",
-            vec![mode.to_owned()],
-        ))
+        let runtime = ExternalProviderRuntime::initialize(
+            launch("supervisor-settings-create-agent.ts", vec![mode.to_owned()]),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
         .await?;
         let backend = supervisor(
             &root,

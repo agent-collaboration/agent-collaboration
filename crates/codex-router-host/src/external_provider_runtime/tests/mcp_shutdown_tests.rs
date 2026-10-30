@@ -6,11 +6,10 @@ async fn observe_mcp_fixture(
     response_text: &str,
     split_result_before_status: bool,
 ) -> (Vec<ExternalProviderToolCall>, ExternalProviderPromptOutcome) {
-    let runtime = ExternalProviderRuntime::initialize(named_mcp_tool_call_fixture(
-        raw_output,
-        response_text,
-        split_result_before_status,
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        named_mcp_tool_call_fixture(raw_output, response_text, split_result_before_status),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("fixture initializes");
     runtime
@@ -142,9 +141,12 @@ fn echoed_router_marker_without_typed_tool_event_is_not_native_execution() {
 #[cfg(unix)]
 #[tokio::test]
 async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it() {
-    let runtime = ExternalProviderRuntime::initialize(cancellation_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        cancellation_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -182,9 +184,12 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_joins_runtime_and_settles_held_prompt() {
-    let runtime = ExternalProviderRuntime::initialize(cancellation_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        cancellation_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -205,9 +210,12 @@ async fn shutdown_joins_runtime_and_settles_held_prompt() {
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_records_runtime_owner_join_failure() {
-    let runtime = ExternalProviderRuntime::initialize(conversation_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        conversation_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime.abort_owner_for_test().await;
     runtime.shutdown().await;
     assert!(runtime.shutdown_failed());
@@ -220,10 +228,10 @@ async fn shutdown_drains_more_than_completion_channel_capacity_of_held_loads() {
     let admission_log = root.path().join("load-admissions.log");
     let process_id_path = root.path().join("provider.pid");
     let runtime = Arc::new(
-        ExternalProviderRuntime::initialize(saturated_load_admission_fixture(
-            &admission_log,
-            &process_id_path,
-        ))
+        ExternalProviderRuntime::initialize(
+            saturated_load_admission_fixture(&admission_log, &process_id_path),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
         .await
         .expect("fixture initializes"),
     );
@@ -265,10 +273,10 @@ async fn shutdown_drains_more_than_completion_channel_capacity_of_held_loads() {
 async fn prompt_cancel_remains_responsive_during_create_admission() {
     let root = tempfile::tempdir().expect("temporary root");
     let observed = root.path().join("create-observed");
-    let runtime = ExternalProviderRuntime::initialize(concurrent_admission_cancel_fixture(
-        "session/new",
-        &observed,
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        concurrent_admission_cancel_fixture("session/new", &observed),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("fixture initializes");
     runtime
@@ -312,10 +320,10 @@ async fn prompt_cancel_remains_responsive_during_create_admission() {
 async fn prompt_cancel_remains_responsive_during_load_admission() {
     let root = tempfile::tempdir().expect("temporary root");
     let observed = root.path().join("load-observed");
-    let runtime = ExternalProviderRuntime::initialize(concurrent_admission_cancel_fixture(
-        "session/load",
-        &observed,
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        concurrent_admission_cancel_fixture("session/load", &observed),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("fixture initializes");
     runtime
@@ -358,9 +366,12 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
 #[cfg(unix)]
 #[tokio::test]
 async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
-    let runtime = ExternalProviderRuntime::initialize(successor_prompt_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        successor_prompt_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -402,9 +413,12 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
 #[cfg(unix)]
 #[tokio::test]
 async fn aggregate_prompt_output_is_bounded_across_valid_frames() {
-    let runtime = ExternalProviderRuntime::initialize(aggregate_output_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        aggregate_output_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -425,9 +439,12 @@ async fn aggregate_prompt_output_is_bounded_across_valid_frames() {
 #[cfg(unix)]
 #[tokio::test]
 async fn load_history_replay_is_not_returned_as_the_next_prompt_output() {
-    let runtime = ExternalProviderRuntime::initialize(load_replay_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        load_replay_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
         .await
@@ -461,9 +478,12 @@ async fn live_external_provider_create_and_prompt() {
         arguments,
         environment: Vec::new(),
     };
-    let runtime = ExternalProviderRuntime::initialize(launch.clone())
-        .await
-        .expect("provider initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        launch.clone(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("provider initializes");
     eprintln!("provider admission: {:?}", runtime.admission());
     let provider_session_id = runtime
         .create_session(cwd.clone())
@@ -484,9 +504,12 @@ async fn live_external_provider_create_and_prompt() {
     assert_eq!(outcome.output.trim(), "PR2_LIVE_PROVIDER_OK");
     runtime.shutdown().await;
 
-    let resumed = ExternalProviderRuntime::initialize(launch)
-        .await
-        .expect("provider reinitializes for load");
+    let resumed = ExternalProviderRuntime::initialize(
+        launch,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("provider reinitializes for load");
     resumed
         .load_session(provider_session_id.clone(), cwd)
         .await
@@ -523,12 +546,15 @@ async fn live_external_provider_explicit_cancel() {
     let cwd = std::env::var_os("CODEX_ROUTER_TEST_EXTERNAL_ACP_CWD")
         .map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().expect("current directory"));
-    let runtime = ExternalProviderRuntime::initialize(ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable,
-        arguments,
-        environment: Vec::new(),
-    })
+    let runtime = ExternalProviderRuntime::initialize(
+        ExternalProviderLaunch {
+            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+            executable,
+            arguments,
+            environment: Vec::new(),
+        },
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("provider initializes");
     let provider_session_id = runtime

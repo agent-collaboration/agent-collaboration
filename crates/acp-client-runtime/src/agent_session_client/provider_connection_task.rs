@@ -29,6 +29,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         configured_mcp_servers: Vec<McpServer>,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let agent = AcpAgent::new(launch.sdk_config());
         let persistence_target = launch.persistence_target;
@@ -87,6 +88,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
         let task_runtime_handles = ProviderSessionRuntimeHandles {
+            behavior: Arc::clone(&behavior),
             event_sink: Arc::clone(&event_sink),
             sink_closed: sink_closed.clone(),
             tool_registry: Arc::clone(&tool_registry),
@@ -501,6 +503,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             } else {
                                                 known_sessions.track(provider_session_id.clone()).await;
                                                 let inputs = provider_session_restore::RestoreAdmissionInputs {
+                                                    behavior: Arc::clone(&task_runtime_handles.behavior),
                                                     connection: connection.clone(),
                                                     provider_session_id,
                                                     cwd,
@@ -550,14 +553,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
                                             if pending_closes.contains(&provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy));
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
                                             if task_settings_unresolved.read().await.contains_key(&provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                                                 continue;

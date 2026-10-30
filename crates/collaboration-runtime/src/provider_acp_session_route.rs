@@ -542,7 +542,9 @@ async fn serve_provider_sessions(
                                 let command = PromptSessionCommand {
                                     target: session.clone(),
                                     input_id: session_event_model::InputId::generate(),
-                                    content,
+                                    submission: session_event_model::ProviderSubmission::plain(
+                                        content,
+                                    ),
                                     actor,
                                 };
                                 match route.commands.prompt(command).await {
@@ -582,7 +584,9 @@ async fn serve_provider_sessions(
                                     target: session,
                                     input_id: session_event_model::InputId::generate(),
                                     expected_turn_id,
-                                    content,
+                                    submission: session_event_model::ProviderSubmission::plain(
+                                        content,
+                                    ),
                                     actor,
                                 })
                                 .await
@@ -616,7 +620,7 @@ async fn serve_provider_sessions(
                         .commands
                         .queue_add(QueueInputCommand {
                             target: session,
-                            content,
+                            submission: session_event_model::ProviderSubmission::plain(content),
                             actor,
                         })
                         .await

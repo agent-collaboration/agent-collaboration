@@ -16,6 +16,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         model_picker: crate::ProviderModelPicker,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_with_timeout_and_mcp_servers(
             launch,
@@ -24,6 +25,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             Vec::new(),
             interaction_port,
             event_sink,
+            behavior,
         )
         .await
     }
@@ -32,6 +34,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         launch: ExternalProviderLaunch,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_with_timeout_and_mcp_servers(
             launch,
@@ -40,6 +43,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             Vec::new(),
             interaction_port,
             event_sink,
+            behavior,
         )
         .await
     }
@@ -51,6 +55,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         server_url: impl Into<String>,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_with_timeout_and_mcp_servers(
             launch,
@@ -59,6 +64,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             vec![McpServer::Http(McpServerHttp::new(server_name, server_url))],
             interaction_port,
             event_sink,
+            behavior,
         )
         .await
     }
@@ -69,6 +75,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         initialize_timeout: Duration,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         Self::initialize_with_timeout_and_mcp_servers(
             launch,
@@ -77,6 +84,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             Vec::new(),
             interaction_port,
             event_sink,
+            behavior,
         )
         .await
     }

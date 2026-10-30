@@ -146,7 +146,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         input_id: InputId,
         operation_id: Option<P::OperationId>,
-        prompt: ProviderPromptContent,
+        prompt: crate::ProviderTurnInput,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError>,

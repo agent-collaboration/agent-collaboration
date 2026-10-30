@@ -13,7 +13,6 @@ use super::{
 };
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use agent_client_protocol::schema::v1::ContentBlock;
-use session_event_model::PromptContent;
 
 /// Until the Close command enters the connection queue, dropping its caller
 /// must release the admission mark. The connection task clears it afterward.
@@ -377,12 +376,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         input_id: InputId,
-        contents: Vec<PromptContent>,
+        submission: session_event_model::ProviderSubmission,
     ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+        if !submission.selected.is_empty() {
+            return Err(ExternalProviderRuntimeError::Behavior(
+                crate::ProviderError::Unsupported,
+            ));
+        }
         self.steer_acp_blocks_with_input(
             provider_session_id,
             input_id,
-            acp_blocks_from_prompt_content(contents),
+            acp_blocks_from_prompt_content(submission.content),
         )
         .await
     }

@@ -58,6 +58,7 @@ async fn failed_tool_plan_cursors_are_not_successor_turn_items() {
                 },
                 Arc::new(NoopInteractionPort),
                 Arc::new(CapturedEventSink(event_sender)),
+                std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
             ),
         )
         .await
@@ -83,10 +84,14 @@ async fn failed_tool_plan_cursors_are_not_successor_turn_items() {
     let sent_first_input = first_input.clone();
     let first = tokio::spawn(async move {
         first_client
-            .prompt_contents_with_approval_dispatch_for_input(
+            .submit_with_approval_dispatch_for_input(
                 first_session,
                 sent_first_input,
-                vec![text_prompt_content("FIRST_REQUEST")],
+                acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![text_prompt_content(
+                        "FIRST_REQUEST",
+                    )]),
+                ),
                 101,
                 None,
             )
@@ -123,10 +128,14 @@ async fn failed_tool_plan_cursors_are_not_successor_turn_items() {
     let sent_second_input = second_input.clone();
     let second = tokio::spawn(async move {
         second_client
-            .prompt_contents_with_approval_dispatch_for_input(
+            .submit_with_approval_dispatch_for_input(
                 session_id,
                 sent_second_input,
-                vec![text_prompt_content("SECOND_REQUEST")],
+                acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![text_prompt_content(
+                        "SECOND_REQUEST",
+                    )]),
+                ),
                 202,
                 None,
             )

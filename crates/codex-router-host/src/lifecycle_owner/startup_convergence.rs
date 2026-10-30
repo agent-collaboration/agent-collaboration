@@ -315,9 +315,12 @@ mod tests {
         ];
         claude_binding.launch.arguments.extend(fixture_arguments);
 
-        let runtime = crate::ExternalProviderRuntime::initialize(claude_binding.launch)
-            .await
-            .expect("isolated Claude ACP fixture initializes through the Host runtime");
+        let runtime = crate::ExternalProviderRuntime::initialize(
+            claude_binding.launch,
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("isolated Claude ACP fixture initializes through the Host runtime");
         let claude_observed_token_result = std::fs::read_to_string(&claude_token_observation_path);
         runtime.shutdown().await;
 

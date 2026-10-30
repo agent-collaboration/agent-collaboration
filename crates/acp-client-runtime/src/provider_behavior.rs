@@ -8,6 +8,20 @@ pub trait ProviderBehavior: Send + Sync {
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderTurnInput {
+    Prompt(ProviderSubmission),
+    Compact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderDispatchRefusal {
+    Behavior(ProviderError),
+    Busy,
+    SettingsUnresolved,
+    UnsupportedContent(&'static str),
+}
+
 #[derive(Clone, Debug)]
 pub enum ProviderUpdate {
     SessionAdmitted,

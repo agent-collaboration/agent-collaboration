@@ -195,7 +195,11 @@ async fn scripted_acp_error_categories_reach_real_runtime_and_host_projection() 
                 )
                 .respond_error_with_data("prompt", -32603, kind_data(input_kind))
                 .launch();
-        let runtime = ExternalProviderRuntime::initialize(fixture).await?;
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture,
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await?;
         let result = async {
             runtime.create_session(PathBuf::from("/tmp")).await?;
             let error = match runtime
@@ -232,7 +236,11 @@ async fn scripted_load_not_found_keeps_session_mapping_and_safe_category() -> Te
         )
         .respond_error_with_data("load", -32002, kind_data("authentication_failed"))
         .launch();
-    let runtime = ExternalProviderRuntime::initialize(fixture).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let result = async {
         let error = match runtime.load_session("missing-session".to_owned(), PathBuf::from("/tmp")).await {
             Err(error) => error,

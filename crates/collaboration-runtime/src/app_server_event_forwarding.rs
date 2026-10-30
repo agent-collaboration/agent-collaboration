@@ -277,6 +277,11 @@ impl AppServerEventForwarding {
                                 })
                                 .unwrap_or_default()
                         }
+                        session_event_model::SessionItemKind::ToolCall { tool_kind, .. }
+                            if tool_kind == "contextCompaction" =>
+                        {
+                            Vec::new()
+                        }
                         session_event_model::SessionItemKind::ToolCall { .. } => item
                             .text
                             .as_deref()

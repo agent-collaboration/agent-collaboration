@@ -1,5 +1,7 @@
 //! Cursor's connection requests must retain their originating Session.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -73,6 +75,14 @@ impl InteractionPort for NoopInteractionPort {
 #[derive(Default)]
 struct CaptureEventSink(Mutex<Vec<(String, SessionEvent)>>);
 impl SessionEventSink for CaptureEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -109,6 +119,7 @@ async fn concurrent_cursor_todos_publish_to_their_observed_sessions() {
         },
         Arc::new(NoopInteractionPort),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -123,23 +134,27 @@ async fn concurrent_cursor_todos_publish_to_their_observed_sessions() {
     let (first_result, second_result) =
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
             tokio::join!(
-                client.prompt_contents_with_approval_dispatch_for_input(
+                client.submit_with_approval_dispatch_for_input(
                     first.clone(),
                     session_event_model::InputId::generate(),
-                    vec![
-                        session_event_model::PromptContent::text("One".to_owned())
-                            .expect("text prompt")
-                    ],
+                    acp_client_runtime::ProviderTurnInput::Prompt(
+                        session_event_model::ProviderSubmission::plain(vec![
+                            session_event_model::PromptContent::text("One".to_owned())
+                                .expect("text prompt")
+                        ])
+                    ),
                     (),
                     None
                 ),
-                client.prompt_contents_with_approval_dispatch_for_input(
+                client.submit_with_approval_dispatch_for_input(
                     second.clone(),
                     session_event_model::InputId::generate(),
-                    vec![
-                        session_event_model::PromptContent::text("Two".to_owned())
-                            .expect("text prompt")
-                    ],
+                    acp_client_runtime::ProviderTurnInput::Prompt(
+                        session_event_model::ProviderSubmission::plain(vec![
+                            session_event_model::PromptContent::text("Two".to_owned())
+                                .expect("text prompt")
+                        ])
+                    ),
                     (),
                     None
                 )
@@ -187,6 +202,7 @@ async fn a_single_running_turn_routes_an_unobserved_cursor_todo() {
         },
         Arc::new(NoopInteractionPort),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -196,10 +212,14 @@ async fn a_single_running_turn_routes_an_unobserved_cursor_todo() {
         .expect("session opens");
     tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             session_id.clone(),
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("Go".to_owned()).expect("text prompt")],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Go".to_owned()).expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         ),

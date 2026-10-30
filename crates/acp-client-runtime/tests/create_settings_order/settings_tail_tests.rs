@@ -9,6 +9,7 @@ async fn explicit_setting_rejection_does_not_gate_session() {
         setting_response_launch("rejected"),
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -32,13 +33,15 @@ async fn explicit_setting_rejection_does_not_gate_session() {
     );
     assert!(!client.settings_unresolved(&session_id).await);
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -62,6 +65,7 @@ async fn malformed_legacy_set_mode_response_is_outcome_unknown() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -94,6 +98,7 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
         setting_response_launch("disconnect"),
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");

@@ -441,7 +441,11 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime = ExternalProviderRuntime::initialize(permission_dispatch_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_dispatch_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let (broker, approval_notice) =
         approval_broker_fixture(&root, &service_id, &generation).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -516,8 +520,11 @@ async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> Tes
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime =
-        ExternalProviderRuntime::initialize(permission_cancellation_fixture("expired")).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_cancellation_fixture("expired"),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     runtime.set_endpoint_id("cursor-local".to_owned()).await;
     runtime.create_session(PathBuf::from("/tmp")).await?;
     let root = tempfile::tempdir()?;
@@ -572,9 +579,10 @@ async fn peer_cancellation_and_binding_retirement_settle_permission_history_once
             service_epoch: service_id.clone(),
             generation: GenerationNumber::try_from(1)?,
         };
-        let runtime = ExternalProviderRuntime::initialize(permission_cancellation_fixture(
-            cancellation_source,
-        ))
+        let runtime = ExternalProviderRuntime::initialize(
+            permission_cancellation_fixture(cancellation_source),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
         .await?;
         let (broker, approval_notice) =
             approval_broker_fixture(&root, &service_id, &generation).await?;
@@ -635,7 +643,11 @@ async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult 
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime = ExternalProviderRuntime::initialize(permission_during_steer_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_during_steer_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let (broker, approval_notice) =
         approval_broker_fixture(&root, &service_id, &generation).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -701,7 +713,11 @@ async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestR
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime = ExternalProviderRuntime::initialize(permission_during_cancel_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_during_cancel_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let (broker, approval_notice) =
         approval_broker_fixture(&root, &service_id, &generation).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -755,7 +771,11 @@ async fn permission_arriving_after_router_cancel_is_answered_cancelled() -> Test
         generation: GenerationNumber::try_from(1)?,
     };
     let runtime = Arc::new(
-        ExternalProviderRuntime::initialize(permission_after_cancel_fixture(&event_socket)).await?,
+        ExternalProviderRuntime::initialize(
+            permission_after_cancel_fixture(&event_socket),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await?,
     );
     let (broker, _notice) = approval_broker_fixture(&root, &service_id, &generation).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;

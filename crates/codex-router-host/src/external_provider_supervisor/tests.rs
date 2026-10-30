@@ -169,9 +169,12 @@ impl crate::LiveSessionOwnershipCheck for NoLivePeer {
 #[tokio::test]
 async fn delivery_prompt_reports_submission_before_turn_settles() {
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(pending_prompt_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        pending_prompt_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -218,9 +221,12 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
 #[tokio::test]
 async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(create_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        create_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .expect("operation store");
@@ -276,6 +282,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         "http://127.0.0.1:1/mcp",
         Arc::clone(&hub),
         hub_endpoint,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -333,7 +340,10 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
             target.clone(),
             binding(),
             input_id.clone(),
-            &contents.contents,
+            match &contents.input {
+                acp_client_runtime::ProviderTurnInput::Prompt(submission) => &submission.content,
+                acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
+            },
         );
         permit.send(
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
@@ -377,9 +387,12 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
 #[tokio::test]
 async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(pending_prompt_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        pending_prompt_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -447,7 +460,10 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         target.clone(),
         binding(),
         queued_input.clone(),
-        &queued_contents.contents,
+        match &queued_contents.input {
+            acp_client_runtime::ProviderTurnInput::Prompt(submission) => &submission.content,
+            acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
+        },
     );
     queue.reserve(&target).expect("queue capacity").send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
@@ -475,9 +491,12 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     // Specification R5: queued Inputs of a lost Session become notSubmitted
     // with providerRetired and are never sent to a successor connection.
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(pending_prompt_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        pending_prompt_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -544,7 +563,10 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         target.clone(),
         binding(),
         queued_input_id.clone(),
-        &queued_contents.contents,
+        match &queued_contents.input {
+            acp_client_runtime::ProviderTurnInput::Prompt(submission) => &submission.content,
+            acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
+        },
     );
     permit.send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
@@ -578,9 +600,12 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
 #[tokio::test]
 async fn concurrent_admission_precedes_reconcile_live_state_check() {
     let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(create_fixture())
-        .await
-        .expect("fixture initializes");
+    let runtime = ExternalProviderRuntime::initialize(
+        create_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture initializes");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .expect("operation store opens");
@@ -795,9 +820,12 @@ async fn provider_error_code_fixtures_project_without_agent_text() {
             .expect_request("prompt", "session/prompt", serde_json::json!({"sessionId": "fixture-session"}))
             .respond_error("prompt", code)
             .launch();
-        let runtime = ExternalProviderRuntime::initialize(fixture)
-            .await
-            .expect("fixture initializes");
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture,
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("fixture initializes");
         runtime
             .create_session(PathBuf::from("/tmp"))
             .await

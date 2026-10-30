@@ -6,7 +6,11 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
     let root = tempfile::tempdir()?;
     let dispatch_log = root.path().join("dispatch.log");
     let endpoint = endpoint("claude-local")?;
-    let runtime = ExternalProviderRuntime::initialize(cancel_fixture(&dispatch_log)).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        cancel_fixture(&dispatch_log),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(&root, vec![(binding(endpoint.clone(), "claude")?, runtime)]).await?;
     let requester = actor(endpoint.clone(), "requester")?;
     let operation_id = OperationId::generate();
@@ -119,9 +123,11 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
 async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult {
     let root = tempfile::tempdir()?;
     let provider_endpoint = endpoint("claude-local")?;
-    let runtime =
-        ExternalProviderRuntime::initialize(cancel_fixture(&root.path().join("shutdown.log")))
-            .await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        cancel_fixture(&root.path().join("shutdown.log")),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![(binding(provider_endpoint.clone(), "claude")?, runtime)],
@@ -186,10 +192,10 @@ async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unk
     let admission_log = root.path().join("load-admissions.log");
     let process_id_path = root.path().join("provider.pid");
     let provider_endpoint = endpoint("claude-local")?;
-    let runtime = ExternalProviderRuntime::initialize(saturated_load_fixture(
-        &admission_log,
-        &process_id_path,
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        saturated_load_fixture(&admission_log, &process_id_path),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await?;
     let backend = supervisor(
         &root,
@@ -251,7 +257,11 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
     let provider_endpoint = endpoint("cursor-local")?;
     let requester = actor(provider_endpoint.clone(), "requester")?;
     let approver = actor(endpoint("codex-local")?, "approver")?;
-    let runtime = ExternalProviderRuntime::initialize(permission_allow_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_allow_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
@@ -390,7 +400,11 @@ async fn retired_provider_binding_cancels_pending_approval_before_selection() ->
     let provider_endpoint = endpoint("cursor-local")?;
     let requester = actor(provider_endpoint.clone(), "requester")?;
     let approver = actor(endpoint("codex-local")?, "approver")?;
-    let runtime = ExternalProviderRuntime::initialize(permission_cancel_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        permission_cancel_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let binding_retirement = runtime.retirement();
     let backend = supervisor(
         &root,
@@ -511,8 +525,16 @@ async fn load_and_multiple_endpoint_bindings_are_supported() -> TestResult {
     let root = tempfile::tempdir()?;
     let claude_endpoint = endpoint("claude-local")?;
     let cursor_endpoint = endpoint("cursor-local")?;
-    let claude_runtime = ExternalProviderRuntime::initialize(load_fixture()).await?;
-    let cursor_runtime = ExternalProviderRuntime::initialize(load_fixture()).await?;
+    let claude_runtime = ExternalProviderRuntime::initialize(
+        load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
+    let cursor_runtime = ExternalProviderRuntime::initialize(
+        load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![
@@ -570,7 +592,11 @@ async fn resume_and_close_are_durable_operations_and_resume_requires_advertiseme
         &root,
         vec![(
             binding(provider_endpoint.clone(), "cursor")?,
-            ExternalProviderRuntime::initialize(load_fixture()).await?,
+            ExternalProviderRuntime::initialize(
+                load_fixture(),
+                std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            )
+            .await?,
         )],
     )
     .await?;
@@ -595,7 +621,11 @@ async fn resume_and_close_are_durable_operations_and_resume_requires_advertiseme
         &root,
         vec![(
             binding(provider_endpoint, "cursor")?,
-            ExternalProviderRuntime::initialize(resume_close_fixture()).await?,
+            ExternalProviderRuntime::initialize(
+                resume_close_fixture(),
+                std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            )
+            .await?,
         )],
     )
     .await?;
@@ -650,10 +680,10 @@ async fn resume_and_close_are_durable_operations_and_resume_requires_advertiseme
 async fn response_loss_is_unknown_and_reconciliation_never_replays() -> TestResult {
     let root = tempfile::tempdir()?;
     let endpoint = endpoint("claude-local")?;
-    let runtime = ExternalProviderRuntime::initialize(launch(
-        "supervisor-integration-agent.ts",
-        vec!["loss".to_owned()],
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        launch("supervisor-integration-agent.ts", vec!["loss".to_owned()]),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await?;
     let backend = supervisor(&root, vec![(binding(endpoint.clone(), "claude")?, runtime)]).await?;
     let requester = actor(endpoint.clone(), "requester")?;
@@ -695,8 +725,11 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     let root = tempfile::tempdir()?;
     let provider_endpoint = endpoint("cursor-local")?;
     let requester = actor(provider_endpoint.clone(), "requester")?;
-    let classification_runtime =
-        ExternalProviderRuntime::initialize(authentication_then_create_fixture()).await?;
+    let classification_runtime = ExternalProviderRuntime::initialize(
+        authentication_then_create_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let classification = classification_runtime
         .create_session(PathBuf::from("/tmp"))
         .await;
@@ -712,7 +745,11 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
         return Err(format!("unexpected authentication classification: {classification:?}").into());
     }
     classification_runtime.shutdown().await;
-    let runtime = ExternalProviderRuntime::initialize(authentication_then_create_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        authentication_then_create_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
@@ -792,7 +829,11 @@ async fn prompt_authentication_required_is_no_effect_and_fresh_prompt_retains_fi
     let root = tempfile::tempdir()?;
     let provider_endpoint = endpoint("cursor-local")?;
     let requester = actor(provider_endpoint.clone(), "requester")?;
-    let runtime = ExternalProviderRuntime::initialize(authentication_then_prompt_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        authentication_then_prompt_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
@@ -871,7 +912,11 @@ async fn provider_prompt_error_text_cannot_become_a_local_no_effect_rejection() 
     let root = tempfile::tempdir()?;
     let provider_endpoint = endpoint("cursor-local")?;
     let requester = actor(provider_endpoint.clone(), "requester")?;
-    let runtime = ExternalProviderRuntime::initialize(provider_prompt_rejection_fixture()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        provider_prompt_rejection_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let backend = supervisor(
         &root,
         vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],

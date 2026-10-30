@@ -47,10 +47,44 @@ impl ProviderAcpDeliveryRoute {
         target: SessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: session_event_model::ProviderSubmission,
     ) -> Result<collaboration_protocol::ConversationOperationSubmission, ProviderPromptContentsError>
     {
-        if contents.is_empty() {
+        self.submit_input(
+            target,
+            actor,
+            input_id,
+            acp_client_runtime::ProviderTurnInput::Prompt(contents),
+        )
+        .await
+    }
+
+    pub async fn compact(
+        &self,
+        target: SessionRef,
+        actor: ProviderIdentity,
+        input_id: session_event_model::InputId,
+    ) -> Result<collaboration_protocol::ConversationOperationSubmission, ProviderPromptContentsError>
+    {
+        self.submit_input(
+            target,
+            actor,
+            input_id,
+            acp_client_runtime::ProviderTurnInput::Compact,
+        )
+        .await
+    }
+
+    async fn submit_input(
+        &self,
+        target: SessionRef,
+        actor: ProviderIdentity,
+        input_id: session_event_model::InputId,
+        input: acp_client_runtime::ProviderTurnInput,
+    ) -> Result<collaboration_protocol::ConversationOperationSubmission, ProviderPromptContentsError>
+    {
+        if matches!(&input, acp_client_runtime::ProviderTurnInput::Prompt(submission) if submission.content.is_empty())
+        {
             return Err(ProviderQueueAdmissionError::EmptyContent.into());
         }
         if !self.serves(&target) {
@@ -112,7 +146,9 @@ impl ProviderAcpDeliveryRoute {
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))
             .await;
-        if let Some(content_type) = unsupported_content_type(&contents, &capabilities) {
+        if let acp_client_runtime::ProviderTurnInput::Prompt(submission) = &input
+            && let Some(content_type) = unsupported_content_type(&submission.content, &capabilities)
+        {
             return Err(ProviderQueueAdmissionError::UnsupportedContent { content_type }.into());
         }
         self.supervisor
@@ -122,7 +158,7 @@ impl ProviderAcpDeliveryRoute {
                 target,
                 requested_by: actor,
                 approver: record.approver,
-                contents,
+                input,
             })
             .await
             .map_err(|failure| ProviderPromptContentsError::Operation(Box::new(failure)))
@@ -133,9 +169,9 @@ impl ProviderAcpDeliveryRoute {
         target: SessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: session_event_model::ProviderSubmission,
     ) -> Result<ProviderSteeringOutcome, ProviderSteerContentsError> {
-        if contents.is_empty() {
+        if contents.content.is_empty() {
             return Err(ProviderQueueAdmissionError::EmptyContent.into());
         }
         if !self.serves(&target) {
@@ -176,7 +212,7 @@ impl ProviderAcpDeliveryRoute {
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))
             .await;
-        if let Some(content_type) = unsupported_content_type(&contents, &capabilities) {
+        if let Some(content_type) = unsupported_content_type(&contents.content, &capabilities) {
             return Err(ProviderQueueAdmissionError::UnsupportedContent { content_type }.into());
         }
         let outcome = runtime
@@ -200,9 +236,9 @@ impl ProviderAcpDeliveryRoute {
         &self,
         target: SessionRef,
         actor: ProviderIdentity,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: session_event_model::ProviderSubmission,
     ) -> Result<crate::ProviderQueuedInput, ProviderQueueAdmissionError> {
-        if contents.is_empty() {
+        if contents.content.is_empty() {
             return Err(ProviderQueueAdmissionError::EmptyContent);
         }
         if !self.serves(&target) {
@@ -241,7 +277,7 @@ impl ProviderAcpDeliveryRoute {
         let capabilities = runtime
             .capability_report(&String::from(target.session_id.clone()))
             .await;
-        if let Some(content_type) = unsupported_content_type(&contents, &capabilities) {
+        if let Some(content_type) = unsupported_content_type(&contents.content, &capabilities) {
             return Err(ProviderQueueAdmissionError::UnsupportedContent { content_type });
         }
         let binding = self
@@ -262,7 +298,7 @@ impl ProviderAcpDeliveryRoute {
                 target.clone(),
                 binding,
                 input_id.clone(),
-                &contents,
+                &contents.content,
             );
         permit.send(ProviderQueuedPrompt::Contents {
             request: ProviderPromptContentsRequest {
@@ -271,7 +307,7 @@ impl ProviderAcpDeliveryRoute {
                 target,
                 requested_by: actor,
                 approver: record.approver,
-                contents,
+                input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
             },
             load_policy: LoadPolicy::MayLoad,
         });

@@ -111,11 +111,11 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
         let steers = backend.steer_commands.lock().expect("test lock");
         assert_eq!(steers.len(), 2);
         assert_eq!(
-            steers[0].content,
+            steers[0].submission.content,
             vec![CommandContent::text("first".into())?]
         );
         assert_eq!(
-            steers[1].content,
+            steers[1].submission.content,
             vec![CommandContent::text("second".into())?]
         );
     }
@@ -164,5 +164,89 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
     );
     client.close(None).await?;
     server.await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions reject reordered commands; setup errors propagate."
+)]
+async fn settings_update_settles_before_dependent_turn_on_the_same_socket()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let socket_path = directory.path().join("settings.sock");
+    let listener = UnixListener::bind(&socket_path)?;
+    let backend = ScriptedSessionBackend::new()?;
+    let catalog = vec![ProviderModelEntry::try_new(
+        "new".into(),
+        "New".into(),
+        String::new(),
+    )?];
+    let context = Arc::new(RouterSessionAppServerContext::new(
+        backend.endpoint.clone(),
+        ScriptedSessionBackend::actor()?,
+        backend.clone(),
+        backend.clone(),
+        tokio::sync::watch::channel(catalog).1,
+    ));
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept client");
+        serve_router_session_app_server_connection(stream, context).await
+    });
+    let (mut client, _) = client_async(
+        "ws://localhost/rpc",
+        UnixStream::connect(&socket_path).await?,
+    )
+    .await?;
+    client
+        .send(Message::Text(
+            json!({"id":1,"method":"thread/start","params":{"cwd":directory.path()}})
+                .to_string()
+                .into(),
+        ))
+        .await?;
+    let started = receive_reply(&mut client, 1).await?;
+    let thread = &started["result"]["thread"]["id"];
+    let gate = Arc::new(Notify::new());
+    *backend.setting_gate.lock().expect("gate") = Some(gate.clone());
+    client.send(Message::Text(json!({"id":2,"method":"thread/settings/update","params":{"threadId":thread,"model":"new","effort":"high"}}).to_string().into())).await?;
+    backend.setting_started.notified().await;
+    client.send(Message::Text(json!({"id":3,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":"after settings"}]}}).to_string().into())).await?;
+    client
+        .send(Message::Text(
+            json!({"id":4,"method":"thread/list","params":{}})
+                .to_string()
+                .into(),
+        ))
+        .await?;
+    receive_reply(&mut client, 4).await?;
+    assert!(backend.prompt_commands.lock().expect("prompts").is_empty());
+    assert_eq!(backend.setting_commands.lock().expect("settings").len(), 1);
+    gate.notify_one();
+    assert_eq!(receive_reply(&mut client, 2).await?["result"], json!({}));
+    receive_reply(&mut client, 3).await?;
+    assert_eq!(
+        backend.effective_model.lock().expect("model").as_deref(),
+        Some("new")
+    );
+    assert_eq!(
+        backend.effective_effort.lock().expect("effort").as_deref(),
+        Some("high")
+    );
+    assert_eq!(backend.prompt_commands.lock().expect("prompts").len(), 1);
+    client
+        .send(Message::Text(
+            json!({"id":5,"method":"thread/read","params":{"threadId":thread}})
+                .to_string()
+                .into(),
+        ))
+        .await?;
+    assert_eq!(
+        receive_reply(&mut client, 5).await?["result"]["thread"]["model"],
+        "new"
+    );
+    client.close(None).await?;
+    server.await??;
     Ok(())
 }

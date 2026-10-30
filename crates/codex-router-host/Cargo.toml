@@ -45,6 +45,7 @@ fleet-sync-tokio-runner.workspace = true
 fleet-sync-writer.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
+acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.118" }
 session-event-model = { path = "../session-event-model", version = "0.1.40" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 futures-util.workspace = true

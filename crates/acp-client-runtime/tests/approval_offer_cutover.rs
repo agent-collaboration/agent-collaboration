@@ -1,5 +1,7 @@
 //! Scripted ACP permission exchanges over a real stdio subprocess.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -95,6 +97,14 @@ impl InteractionPort for CaptureInteractionPort {
 struct NoopEventSink;
 
 impl SessionEventSink for NoopEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -124,6 +134,7 @@ async fn run_permission_fixture(mode: &str) -> (Arc<CaptureInteractionPort>, ser
         },
         Arc::clone(&port),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -132,12 +143,15 @@ async fn run_permission_fixture(mode: &str) -> (Arc<CaptureInteractionPort>, ser
         .await
         .expect("session opens");
     let result = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Run it".to_owned()).expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Run it".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )

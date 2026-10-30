@@ -344,9 +344,11 @@ async fn fixture_acp_permission_notice_reaches_approver_and_allow_executes_comma
     };
     for endpoint_id in ["cursor-local", "claude-local"] {
         let root = tempfile::tempdir()?;
-        let runtime =
-            ExternalProviderRuntime::initialize(fixture_acp_permission_request_agent(endpoint_id))
-                .await?;
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture_acp_permission_request_agent(endpoint_id),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await?;
         let (broker, mut approver_task) =
             approval_broker_fixture(&root, &service_id, &approver).await?;
         runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -449,8 +451,11 @@ async fn reject_only_offer_reaches_approver_and_returns_selected_id() -> TestRes
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime =
-        ExternalProviderRuntime::initialize(fixture_acp_permission_without_allow_agent()).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture_acp_permission_without_allow_agent(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let (broker, mut approver_task) =
         approval_broker_fixture(&root, &service_id, &approver).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -604,6 +609,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
         acp_client_runtime::ProviderModelPicker::CursorParameterized,
         "router-collaboration",
         manifest.mcp.url,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await;
     let runtime = match runtime {

@@ -66,7 +66,11 @@ async fn provider_option_sets_keep_order_scope_and_selected_id() -> TestResult {
             .expect_message(serde_json::json!({"jsonrpc":"2.0","id":91,"result":{"outcome":{"outcome":"selected","optionId":selected_id}}}))
             .respond("prompt", serde_json::json!({"stopReason":"end_turn"}))
             .launch();
-            let runtime = ExternalProviderRuntime::initialize(fixture).await?;
+            let runtime = ExternalProviderRuntime::initialize(
+                fixture,
+                std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+            )
+            .await?;
             let (broker, approval_notice) =
                 approval_broker_fixture(&root, &service_id, &generation).await?;
             runtime.install_approval_broker(Arc::clone(&broker)).await;
@@ -149,6 +153,7 @@ async fn output_limit_cancels_pending_permission() -> TestResult {
     };
     let runtime = ExternalProviderRuntime::initialize(
         output_limit_with_pending_permission_fixture(&event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
     let (broker, approval_notice) =
@@ -219,7 +224,11 @@ async fn provider_exit_cancels_pending_permission_as_provider_retired() -> TestR
         service_epoch: service_id.clone(),
         generation: GenerationNumber::try_from(1)?,
     };
-    let runtime = ExternalProviderRuntime::initialize(fixture).await?;
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
     let (broker, approval_notice) =
         approval_broker_fixture(&root, &service_id, &generation).await?;
     runtime.install_approval_broker(Arc::clone(&broker)).await;

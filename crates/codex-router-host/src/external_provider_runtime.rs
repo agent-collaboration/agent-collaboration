@@ -133,12 +133,14 @@ impl std::fmt::Debug for ExternalProviderRuntime {
 impl ExternalProviderRuntime {
     pub async fn initialize(
         launch: ExternalProviderLaunch,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -153,6 +155,7 @@ impl ExternalProviderRuntime {
         model_picker: acp_client_runtime::ProviderModelPicker,
         server_name: impl Into<String>,
         server_url: impl Into<String>,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize_with_mcp_http(
@@ -162,6 +165,7 @@ impl ExternalProviderRuntime {
             server_url,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -178,6 +182,7 @@ impl ExternalProviderRuntime {
         server_url: impl Into<String>,
         hub: Arc<ProviderSessionEventHub>,
         endpoint: SessionEndpointRef,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
@@ -192,6 +197,7 @@ impl ExternalProviderRuntime {
             server_url,
             Arc::clone(&interaction_port),
             published_sink,
+            behavior,
         )
         .await;
         let client = match result {
@@ -212,6 +218,7 @@ impl ExternalProviderRuntime {
     async fn initialize_with_timeout(
         launch: ExternalProviderLaunch,
         initialize_timeout: Duration,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize_with_timeout(
@@ -219,6 +226,7 @@ impl ExternalProviderRuntime {
             initialize_timeout,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -431,7 +439,11 @@ impl ExternalProviderRuntime {
         prompt: String,
     ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
         self.client
-            .steer_contents_with_input(provider_session_id, input_id, text_contents(prompt)?)
+            .steer_contents_with_input(
+                provider_session_id,
+                input_id,
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            )
             .await
     }
 
@@ -439,7 +451,7 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: session_event_model::ProviderSubmission,
     ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
         self.client
             .steer_contents_with_input(provider_session_id, input_id, contents)
@@ -566,27 +578,29 @@ impl ExternalProviderRuntime {
         prompt: String,
         context: ExternalProviderApprovalContext,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_contents_with_approval_dispatch_for_input(
+        self.submit_with_approval_dispatch_for_input(
             provider_session_id,
             input_id,
-            text_contents(prompt)?,
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            ),
             context,
             None,
         )
         .await
     }
 
-    pub(crate) async fn prompt_contents_with_approval_dispatch_for_input(
+    pub(crate) async fn submit_with_approval_dispatch_for_input(
         &self,
         provider_session_id: String,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: acp_client_runtime::ProviderTurnInput,
         context: ExternalProviderApprovalContext,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
         host_prompt_outcome(
             self.client
-                .prompt_contents_with_approval_dispatch_for_input(
+                .submit_with_approval_dispatch_for_input(
                     provider_session_id,
                     input_id,
                     contents,
@@ -605,10 +619,12 @@ impl ExternalProviderRuntime {
         prompt: String,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_contents_with_approval_dispatch_for_input(
+        self.submit_with_approval_dispatch_for_input(
             provider_session_id.clone(),
             session_event_model::InputId::generate(),
-            text_contents(prompt)?,
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            ),
             test_approval_context(&provider_session_id, operation_id),
             dispatch,
         )

@@ -97,6 +97,14 @@ jobs:
       - name: Test TypeScript tooling, fixtures and observations
         id: verification_tests
         run: pnpm --dir verification test
+      - name: Check embedded Claude ACP metadata package
+        run: |
+          pnpm --dir providers/claude-acp install --frozen-lockfile
+          pnpm --dir providers/claude-acp check
+          pnpm --dir providers/claude-acp lint
+          pnpm --dir providers/claude-acp format:check
+          pnpm --dir providers/claude-acp test
+          pnpm --dir providers/claude-acp build:check
       # Complete verification on its declared Node before switching to TUI's.
       - uses: actions/setup-node@v5
         with:
@@ -218,7 +226,9 @@ jobs:
         with:
           package_json_file: verification/package.json
       - name: Install TypeScript fixture dependencies
-        run: pnpm --dir verification install --frozen-lockfile
+        run: |
+          pnpm --dir verification install --frozen-lockfile
+          pnpm --dir providers/claude-acp install --frozen-lockfile
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'

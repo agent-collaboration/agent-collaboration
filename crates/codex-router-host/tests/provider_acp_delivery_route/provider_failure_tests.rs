@@ -10,10 +10,12 @@ async fn provider_process_transport_failure_remains_retryable() {
         .await
         .expect("exit release listener");
     let release_address = release_listener.local_addr().expect("exit release address");
-    let runtime =
-        ExternalProviderRuntime::initialize(exited_provider_fixture(&exit_marker, release_address))
-            .await
-            .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        exited_provider_fixture(&exit_marker, release_address),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     // Only an accepted initialization can release the synthetic process exit.
     let (mut release_peer, _) =
         tokio::time::timeout(Duration::from_secs(2), release_listener.accept())
@@ -108,9 +110,12 @@ async fn live_peer_recheck_prevents_provider_load() {
     let load_marker = root.path().join("load-method.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker, -32002))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        refusing_load_fixture(&load_marker, -32002),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await

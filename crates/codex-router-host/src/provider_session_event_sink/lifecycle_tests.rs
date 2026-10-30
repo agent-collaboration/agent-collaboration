@@ -66,6 +66,7 @@ async fn fixture_with_script(script: &str, arguments: &[&str]) -> Fixture {
         "http://127.0.0.1:1/mcp",
         Arc::clone(&hub),
         endpoint,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("runtime");
