@@ -11,7 +11,10 @@ import { qualifyTerminal } from './terminal-qualification.ts';
 
 test('libghostty qualifies against independent grids, colours, Unicode, protocol and resize', async () => {
 	const receipt = await qualifyTerminal();
-	expect(receipt.checks).toHaveLength(6);
+	expect(receipt.checks).toHaveLength(7);
+	expect(receipt.checks).toContain(
+		'DSR 6n, DA1 and OSC 10/11 replies come from the engine; DA2 is unanswered',
+	);
 	expect(receipt.wasmSha256).toMatch(/^[a-f0-9]{64}$/u);
 });
 

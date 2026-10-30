@@ -10,6 +10,10 @@ import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts'
 import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 
 export type KeyProtocol = 'legacy' | 'kitty';
+// One native read's bound, and the default checkpoint bound for every existing consumer.
+const READ_INTERVAL_MILLIS = 8_000;
+// drive_terminal's reply when a bounded read saw no bytes (std RecvTimeoutError::Timeout).
+const QUIET_READ = 'READ_ERROR timed out waiting on channel';
 interface WaitingLine {
 	readonly resolve: (line: string) => void;
 	readonly reject: (error: Error) => void;
@@ -25,7 +29,8 @@ export interface PtyGridTarget {
 		| 'quota-filters'
 		| 'normal'
 		| 'hard'
-		| 'public-sessions';
+		| 'public-sessions'
+		| 'codex-acp';
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
@@ -51,7 +56,9 @@ export class PtyGridDriver {
 			[
 				target.surface === 'public-sessions'
 					? 'compiled_public_sessions_grid_observation'
-					: 'compiled_grid_terminal_observation',
+					: target.surface === 'codex-acp'
+						? 'compiled_codex_acp_grid_observation'
+						: 'compiled_grid_terminal_observation',
 				'--exact',
 				'--ignored',
 				'--nocapture',
@@ -61,7 +68,9 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
-					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
+					...(target.surface === 'public-sessions' || target.surface === 'codex-acp'
+						? target.publicEnvironment
+						: {}),
 					TUI_GRID_SURFACE: target.surface,
 					TUI_GRID_KEYS: target.keys,
 					...(target.componentBinary === undefined
@@ -187,19 +196,38 @@ export class PtyGridDriver {
 	frameGeneration(): number {
 		return this.core.synchronizedOutputGeneration();
 	}
+	/**
+	 * Waits for a matching frame. A checkpoint longer than the 8 s default (a real model reply)
+	 * spans successive reads, each still bounded by 8 s; a read that only times out quietly
+	 * before that checkpoint's deadline waits again instead of failing it.
+	 */
 	async waitForGrid(
 		name: string,
 		matches: (grid: TerminalGrid) => boolean,
 		after = -1,
+		checkpointMillis = READ_INTERVAL_MILLIS,
 	): Promise<TerminalGrid> {
-		const deadline = Date.now() + 8_000;
+		const deadline = Date.now() + checkpointMillis;
+		const quietRead = async (): Promise<'bytes' | 'eof' | 'quiet'> => {
+			try {
+				return await this.receive(
+					Math.max(1, Math.min(deadline - Date.now(), READ_INTERVAL_MILLIS)),
+				);
+			} catch (error) {
+				if (
+					checkpointMillis > READ_INTERVAL_MILLIS &&
+					Date.now() < deadline &&
+					error instanceof Error &&
+					error.message === QUIET_READ
+				)
+					return 'quiet';
+				throw error;
+			}
+		};
 		const nextFrame = async (): Promise<TerminalGrid> => {
 			if (!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid()))
 				return this.grid();
-			if (
-				Date.now() >= deadline ||
-				(await this.receive(Math.max(1, deadline - Date.now()))) === 'eof'
-			) {
+			if (Date.now() >= deadline || (await quietRead()) === 'eof') {
 				throw new Error(
 					`grid checkpoint unreachable: ${name}\n${gridLines(this.grid()).join('\n')}`,
 				);

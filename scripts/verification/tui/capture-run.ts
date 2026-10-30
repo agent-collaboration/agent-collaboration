@@ -8,7 +8,14 @@ import { join } from 'node:path';
 
 import { z } from 'zod';
 
-import { isMain, reportCliFailure, strictArguments, planArgument } from './cli-arguments.ts';
+import {
+	isMain,
+	reportCliFailure,
+	strictArguments,
+	planArgument,
+	usageFailure,
+} from './cli-arguments.ts';
+import { codexAcpMain } from './codex-acp-run.ts';
 import { checkGridControls } from './grid-control-checks.ts';
 import { gridFieldPair, observeGridScene } from './grid-scene-matcher.ts';
 import { journeyCatalogue } from './journey-catalogue.ts';
@@ -249,13 +256,26 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 export async function captureMain(args: readonly string[]): Promise<void> {
 	const { values, positionals } = strictArguments(
 		args,
-		{ help: { type: 'boolean' }, check: { type: 'boolean' } },
+		{
+			help: { type: 'boolean' },
+			check: { type: 'boolean' },
+			'codex-acp-only': { type: 'boolean' },
+			'codex-acp-plan': { type: 'string' },
+		},
 		true,
 	);
 	if (values.help) {
 		process.stdout.write(
-			'capture-run.ts PLAN.json [--check]: exact compiled fixture, key mode, viewport, libghostty cell assertions and optional original PNGs via Chrome DevTools.\n',
+			'capture-run.ts PLAN.json [--check]: exact compiled fixture, key mode, viewport, libghostty cell assertions and optional original PNGs via Chrome DevTools.\n' +
+				'capture-run.ts --codex-acp-only --codex-acp-plan PLAN.json [--check]: one declared installed-Codex ACP journey (J1 skills, J2 commands, J3 preservation) on the same PTY driver and grid.\n',
 		);
+		return;
+	}
+	if (values['codex-acp-only'] === true || values['codex-acp-plan'] !== undefined) {
+		const codexPlan = values['codex-acp-plan'];
+		if (values['codex-acp-only'] !== true || codexPlan === undefined || positionals.length > 0)
+			usageFailure('--codex-acp-only needs exactly --codex-acp-plan PLAN.json');
+		await codexAcpMain(codexPlan, values.check === true);
 		return;
 	}
 	const plan = gridCapturePlanSchema.parse(

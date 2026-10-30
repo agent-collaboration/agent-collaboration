@@ -89,6 +89,18 @@ export async function qualifyTerminal(): Promise<EmulatorQualification> {
 		assert.equal(core.getResponse(), '\x1b[?1u');
 		assert.equal(core.getResponse(), null);
 		checks.push('kitty CSI ? u replies from the engine before/after negotiation');
+		// The Codex 0.165 startup probe (tui/src/terminal_probe.rs:277-296) asks for the cursor
+		// position, primary device attributes and default colours; DA2 only over SSH.
+		core.writeString('\x1b[0m\x1b[3;5H\x1b[6n');
+		assert.equal(core.getResponse(), '\x1b[3;5R');
+		core.writeString('\x1b[c');
+		assert.equal(core.getResponse(), '\x1b[?1;2c');
+		core.writeString('\x1b]10;?\x1b\\\x1b]11;?\x1b\\');
+		assert.equal(core.getResponse(), '\x1b]10;rgb:eeee/eeee/eeee\x1b\\');
+		assert.equal(core.getResponse(), '\x1b]11;rgb:1111/1111/1111\x1b\\');
+		core.writeString('\x1b[>c');
+		assert.equal(core.getResponse(), null);
+		checks.push('DSR 6n, DA1 and OSC 10/11 replies come from the engine; DA2 is unanswered');
 		core.resize(12, 6);
 		core.writeString('\x1b[2J\x1b[6;12HZ');
 		grid = snapshotGrid(core);

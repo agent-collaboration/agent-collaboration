@@ -35,6 +35,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import { codexChildLaunch } from './codex-child-launch.ts';
+
 export const COMPONENT_TEST =
 	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 
@@ -80,6 +82,7 @@ const capturedTuiSurfaceSchema = z.enum([
 	'sessions',
 	'quota-component',
 	'public-sessions',
+	'codex-acp',
 ]);
 type CapturedTuiSurface = z.infer<typeof capturedTuiSurfaceSchema>;
 
@@ -247,6 +250,13 @@ export function childLaunchConfiguration(configuration: FixtureCommand): ChildLa
 	const binary = requiredText(configuration, 'binary');
 	if (surface === 'public-sessions') {
 		return publicSessionsLaunch(configuration, binary);
+	}
+	if (surface === 'codex-acp') {
+		try {
+			return codexChildLaunch(configuration);
+		} catch (error) {
+			throw new FixtureLaunchRejected(error instanceof Error ? error.message : String(error));
+		}
 	}
 	const temporary = requiredText(configuration, 'temporary_directory');
 	const environment: Record<string, string> = {
@@ -442,7 +452,7 @@ async function main(): Promise<number> {
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));
-	if (surface === 'public-sessions' || surface === 'quota-component') {
+	if (surface === 'public-sessions' || surface === 'quota-component' || surface === 'codex-acp') {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
 	}
 	const child = spawn(launch.executable, [...launch.arguments], {

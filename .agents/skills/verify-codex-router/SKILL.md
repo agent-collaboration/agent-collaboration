@@ -1,6 +1,6 @@
 ---
 name: verify-codex-router
-description: Use when verifying a declared debug Codex Router, board-upgrade CLI or central runtime, including stored pushes, provider callbacks, board records, owning store reopen, local central conformance and original compiled Sessions/Quota PTY captures. Not for delivery acceptance or uncommissioned staging execution.
+description: Use when verifying a declared debug Codex Router, board-upgrade CLI or central runtime, including stored pushes, provider callbacks, board records, owning store reopen, local central conformance and original compiled Sessions/Quota PTY captures, and Codex CLI ACP skills/commands journeys. Not for delivery acceptance or uncommissioned staging execution.
 ---
 
 # Verify Codex Router
@@ -46,6 +46,7 @@ It checks recorded PID/UID/birth/group/executable, binary hash, health version a
 | Journey | Driver and deciding evidence |
 | --- | --- |
 | ACP metadata presentation | [ACP metadata](references/acp-metadata.md): installed Codex live/reopened PTYs, real Claude/Cursor ACP, original metadata through bounded public observation, and independent `thread/read`/resume. `acp-metadata-observation.ts` checks exact declared target/build and retained-metadata versus visible-prose controls. Qualify each provider separately; unemitted usage remains an explicit gap. |
+| Codex ACP skills, commands and preservation (draft, unobserved) | [Codex ACP journeys](references/codex-acp-journeys.md): `capture-run.ts --codex-acp-only --codex-acp-plan` drives unchanged installed Codex over the endpoint socket on the shared PTY and wterm grid (J1 `$` picker selection to provider-owned effect, J2 `/compact`, J3 interrupt). `acp-journey-observation.ts` reads the same raw Session and native alias back: skills, effect, history, compaction, effective model, and an active-turn read-only mode. No real run yet. |
 | Board upgrade (lasting; local CLI/Tokio route) | [Board upgrade](references/board-upgrade.md): Rust `upgrade_binary_e2e` owns retained preparation, publication, replay and restart cases. Separately commissioned sealed real-copy Mac import uses `verification/import-run.ts`. Real copies need a commission; external and staging obligations remain separately mapped. |
 | Message cutover and first-attempt Auto policy (lasting; local store/service cases) | [Cutover checks](references/board-upgrade.md#message-cutover-and-delivery-policy): retained importer tests cover copy-before-drop, owning reopen, activity ranges, expiry origins, strict released receipts, unmapped identity refusal and crash/retry (1049–1052). Service tests cover fresh Auto, attempted replay and readiness-released Held nonloading (1057/1062). These are synthetic/local boundaries; live-source cutover and vendor behavior require their own commission. |
 | Board journey wire setup | Current Rust CLI/DTO coverage lives in `crates/agent-collaboration/tests/board_cli.rs`, `board_model_cli.rs` and the retained process journeys. The former wrapper/decoder command retired in 0.1.102. Static/wire checks alone supply no G3 behavior credit. |
