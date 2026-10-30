@@ -37,7 +37,10 @@ export interface PtyGridTarget {
 	readonly componentBinary?: string;
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
-	readonly storyboardVariant?: 'wide-glyph-left-border';
+	readonly storyboardVariant?:
+		| 'wide-glyph-left-border'
+		| 'source-qualified-outcome'
+		| 'configured-source-new';
 }
 export class PtyGridDriver {
 	private readonly child: ChildProcessWithoutNullStreams;

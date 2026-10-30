@@ -1,7 +1,9 @@
 # Adopted S6 causal input acknowledgement
 
 **Adopted by Lead push `01a18d2a-8b01-7c03-b2c3-f7b720df0252`, including
-the fifth field `event`; no product producer or reader is added here.** Grounded in
+the fifth field `event`. The [reader recipe](input-consumption-readback.md) now
+tracks the published core serializer and the qualified reader; real S6b fixture
+binding remains pending. This document retains the adopted proposal.** Grounded in
 published InputOwner source at `53df30c4fb274315c47806080958ab8dff5a7ca0`,
 inspected for this proposal; that read is not a declared S4 observation target.
 
@@ -16,7 +18,7 @@ flushed JSON line to `input-dispatch.jsonl` in the harness's existing owned
 receipt directory. No normal/release producer, sink, environment switch or
 terminal subscription; no extra event injection path.
 
-The eventual reader belongs at
+The reader now belongs at
 `scripts/verification/tui/input-consumption-readback.ts`. Bind it to the same
 retained child and capture source/build receipt. A fresh process uses a fresh
 file; never accept another child's receipt, concatenate runs or overwrite old

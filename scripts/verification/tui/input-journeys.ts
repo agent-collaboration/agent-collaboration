@@ -1,6 +1,6 @@
-/** S0 main/New input baselines, plus the future S6 preparation-readback step.
+/** Main/New input journeys bound to the returned S6 fixture outcome.
  * node scripts/verification/tui/input-journeys.ts PLAN.json [--check]
- * Extends baselinePlanSchema with required preparationProof: pending-s6 or recorded.
+ * Requires the independently declared newRequest; pickerOnly excludes quota.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,13 +17,16 @@ import {
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
 import { findDialog } from './grid-scene-matcher.ts';
 import { encodeJourneyKey } from './journey-key.ts';
-import { preparationProofSchema, readPreparationReadback } from './preparation-readback.ts';
 import type { PtyGridDriver, KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding } from './source-binding.ts';
+import { newSessionRequestSchema, readSourceQualifiedOutcome } from './source-qualified-outcome.ts';
 import { cellText, gridLines } from './terminal-grid.ts';
 import type { TerminalGrid } from './terminal-grid.ts';
 export const inputJourneyPlanSchema = baselinePlanSchema.extend({
-	preparationProof: preparationProofSchema,
+	newRequest: newSessionRequestSchema.refine(
+		(request) => !request.machine.startsWith('configured:'),
+		'local/default New only; configured New uses the counted preparation journey',
+	),
 });
 type InputJourneyPlan = z.infer<typeof inputJourneyPlanSchema>;
 interface InputResult {
@@ -94,6 +97,7 @@ async function newStart(
 		keys,
 		name: 'new-' + activation,
 		surface: 'sessions-filters',
+		sessionsReceipts: true,
 		observe: async (driver, directory) => {
 			await press(driver, keys, 'Ctrl+N');
 			await driver.waitForGrid('New entry', (grid) => findDialog(grid, 'New session') !== null);
@@ -114,14 +118,14 @@ async function newStart(
 					canonicalJson(states.at(-1)) !== canonicalJson(initial) ||
 					new Set(states.map((state) => canonicalJson(state))).size !== 5
 				)
-					throw new Error('New Tab cycle did not reach five distinct base targets and wrap');
+					throw new Error('New Tab cycle did not reach five distinct Codex targets and wrap');
 				await press(driver, keys, 'Shift+Tab');
 				const reverse = focusedWords(driver.grid(), 'New session');
 				await press(driver, keys, 'Tab');
 				if (canonicalJson(focusedWords(driver.grid(), 'New session')) !== canonicalJson(initial))
 					throw new Error('New reverse Tab did not restore focus');
 				focusStates.push(...states, [...reverse]);
-				// Source baseline starts on Start. Reach it by its visible focus rather than assuming its index in later builds.
+				// Reach the drawn Start control without assuming its index.
 				const reach = async (remaining: number): Promise<void> => {
 					if (focusedWords(driver.grid(), 'New session').includes('Start')) return;
 					if (remaining === 0) throw new Error('Start not reachable by Tab');
@@ -142,11 +146,10 @@ async function newStart(
 			const outcomes = transcript.match(/SESSION_PICKER_OUTCOME [^\r\n]*/gu) ?? [];
 			if (outcomes.length !== 1 || outcomes[0] !== 'SESSION_PICKER_OUTCOME start-new')
 				throw new Error('Start did not produce its single safe terminal outcome');
-			if (plan.preparationProof.kind === 'recorded')
-				readPreparationReadback(
-					join(directory, plan.preparationProof.relativePath),
-					plan.preparationProof.expected,
-				);
+			const returned = readSourceQualifiedOutcome(
+				join(directory, 'session-receipts', 'picker-outcome.json'),
+				{ kind: 'new', request: plan.newRequest },
+			);
 			return {
 				name: 'New ' + activation,
 				keys,
@@ -156,10 +159,7 @@ async function newStart(
 					focusStates,
 					outcomes,
 					terminalRestored: transcript.includes('\x1b[?1049l'),
-					preparation:
-						plan.preparationProof.kind === 'recorded'
-							? 'verified'
-							: 'pending-s6: terminal outcome does not prove invocation count or fields',
+					returned,
 				},
 			};
 		},
@@ -222,7 +222,7 @@ async function quit(
 				await press(driver, keys, 'F1');
 				await driver.waitForGrid(
 					'Help entry',
-					(grid) => findDialog(grid, surface === 'quota' ? 'Quota Help' : 'Sessions Help') !== null,
+					(grid) => findDialog(grid, surface === 'quota' ? 'Quota Help' : 'Help') !== null,
 				);
 				saveCheckpoint(driver, directory, 'help');
 			}
@@ -271,7 +271,7 @@ async function pickerDirectAction(
 				const cell = targetCell(
 					driver.grid(),
 					'Session details',
-					action === 'resume' ? 'Resume' : 'Fork',
+					action === 'resume' ? 'Open' : 'Fork',
 				);
 				await driver.send(
 					Buffer.from(
@@ -352,28 +352,20 @@ export async function runInputJourneys(plan: InputJourneyPlan): Promise<readonly
 		results.push(await pickerEnterAndEsc(plan, keys));
 		results.push(await pickerDirectAction(plan, keys, 'resume'));
 		results.push(await pickerDirectAction(plan, keys, 'fork'));
-		results.push(await quotaQuitKey(plan, keys));
-		await (['sessions-filters', 'quota'] as const).reduce<Promise<void>>(
-			async (previous, surface) => {
-				await previous;
-				results.push(await quit(plan, keys, surface, false));
-				results.push(await quit(plan, keys, surface, true));
-			},
-			Promise.resolve(),
-		);
+		if (!plan.pickerOnly) results.push(await quotaQuitKey(plan, keys));
+		await (
+			plan.pickerOnly ? (['sessions-filters'] as const) : (['sessions-filters', 'quota'] as const)
+		).reduce<Promise<void>>(async (previous, surface) => {
+			await previous;
+			results.push(await quit(plan, keys, surface, false));
+			results.push(await quit(plan, keys, surface, true));
+		}, Promise.resolve());
 		results.push({
 			name: 'main toolbar, menu and new focus-model traversal',
 			keys,
 			result: 'absent-at-base',
 			observation: 'S6/S7 targets absent; no full R3 claim',
 		});
-		if (plan.preparationProof.kind === 'pending-s6')
-			results.push({
-				name: 'Start once with committed values',
-				keys,
-				result: 'pending-s6',
-				observation: 'Reader step exists; producer readback is the S6 seam, required at S9.',
-			});
 	};
 	try {
 		await mode('legacy');
@@ -388,18 +380,19 @@ export async function runInputJourneys(plan: InputJourneyPlan): Promise<readonly
 export async function inputJourneysMain(args: readonly string[]): Promise<void> {
 	const { values, positionals } = strictArguments(
 		args,
-		{ help: { type: 'boolean' }, check: { type: 'boolean' } },
+		{ help: { type: 'boolean' }, check: { type: 'boolean' }, 'picker-only': { type: 'boolean' } },
 		true,
 	);
 	if (values.help) {
 		process.stdout.write(
-			'input-journeys.ts PLAN.json [--check]: New Tab/click safe outcome, main Enter/Esc/Ctrl+C and future recording preparation proof. Explicit pending-s6 is never invocation proof.\n',
+			'input-journeys.ts PLAN.json [--check] [--picker-only]: New returned request, main Enter/Esc/Ctrl+C. newRequest is independently declared; configured preparation is a separate counted proof.\n',
 		);
 		return;
 	}
-	const plan = inputJourneyPlanSchema.parse(
-		JSON.parse(readFileSync(planArgument(positionals), 'utf8')),
-	);
+	const plan = inputJourneyPlanSchema.parse({
+		...JSON.parse(readFileSync(planArgument(positionals), 'utf8')),
+		...(values['picker-only'] ? { pickerOnly: true } : {}),
+	});
 	if (values.check) await checkBaselineTarget(plan);
 	else await runInputJourneys(plan);
 }

@@ -15,10 +15,12 @@ import { accountLoginJourneys } from './s9-journeys/account-login.ts';
 import { claudeDetailsJourneys } from './s9-journeys/claude-details.ts';
 import { newDialogJourneys } from './s9-journeys/new-dialog.ts';
 import { quotaRefreshJourneys } from './s9-journeys/quota-refresh.ts';
+import { sourceQualifiedJourneys } from './s9-journeys/source-qualified-selection.ts';
 import { toolbarMenuJourneys } from './s9-journeys/toolbar-menus.ts';
 export const s9AuthoredJourneys: readonly S9Journey[] = [
 	...toolbarMenuJourneys,
 	...claudeDetailsJourneys,
+	...sourceQualifiedJourneys,
 	...newDialogJourneys,
 	...accountLoginJourneys,
 	...accountActionJourneys,
@@ -36,7 +38,7 @@ export function validateS9Journeys(): void {
 		if (new Set(checkpoints).size !== checkpoints.length)
 			throw new Error('duplicate checkpoint ' + journey.journeyId);
 	}
-	for (const requirement of ['U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])
+	for (const requirement of ['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])
 		for (const keys of ['legacy', 'kitty'])
 			if (
 				!s9AuthoredJourneys.some(

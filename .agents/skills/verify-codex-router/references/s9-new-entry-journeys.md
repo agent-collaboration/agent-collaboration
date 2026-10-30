@@ -3,7 +3,7 @@
 These B cases are a **draft**, not an operable product driver. They adopt the
 four-document TUI component design at
 `76803a480b21cad31dc32db1b6fbc86c31aab61b` (including the Open-only correction
-at `014e25e08`). All 19 cases are explicitly
+at `014e25e08`). All 27 cases are explicitly
 `absent-at-base` at `e23f28aff392d7c09905fe65ae64628ddaba81a4`, awaiting S6/S7
 entries and their real fixture seams. An absent entry is neither a product pass
 nor a product failure. The Lead declares the later exact target before a run.
@@ -11,7 +11,7 @@ nor a product failure. The Lead declares the later exact target before a run.
 The later [Ghostty input harness extension](ghostty-input-harness.md) adds a
 separate layer-C keyboard/pointer matrix to `s9-prestage.ts` output. It uses the
 same existing PTY owner, opt-in input profiles and actual modes; its authored
-matrix and apparatus qualification add no product passes to these 19 B cases.
+matrix and apparatus qualification add no product passes to these 27 B cases.
 
 From the repository root:
 
@@ -69,10 +69,7 @@ Ok/all-failed/setup-read-error are distinct inputs; stdout and old stored rows
 cannot supply them. Hold/release and duplicate input acknowledgments are causal
 events, not delays. The focused tests qualify oracle sensitivity only.
 
-For New use the already adopted strict preparation receipt:
-`{callCount:1,request:{client,machine,directory,runMode}}`. The expected committed
-request is declared independently; highlighted-but-uncommitted dropdown values
-must not leak into it. `pending-s6` is never effect proof.
+For New use the [returned-outcome and input reader recipe](input-consumption-readback.md). Local/default New requires one real returned new request, with exact client, machine, directory and foreground/backgroundThenAttach run mode; no separate preparer count. Configured-source New retains the counted preparation stand-in. The three activation routes now cover each of default/local/configured (nine U5 drafts). A missing or duplicate outcome, wrong client or run mode, and uncommitted dropdown highlight must fail. Real S6b binding stays pending.
 
 The [source-qualified outcome readback](source-qualified-outcome-proposal.md)
 was adopted by Lead push `01a18ce0-eea3-7eb3-b6bb-18b1df4f05d5` for the
