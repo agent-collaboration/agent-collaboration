@@ -3,7 +3,30 @@ use crate::{
     actions::{ActionId, ActionRegistry},
     focus_model::{FocusModel, TargetId},
 };
+use iocraft::prelude::*;
 use std::fmt;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct OverlayView(Arc<dyn Fn() -> AnyElement<'static> + Send + Sync>);
+impl OverlayView {
+    pub fn new(render: impl Fn() -> AnyElement<'static> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(render))
+    }
+    pub fn render(&self) -> AnyElement<'static> {
+        (self.0)()
+    }
+}
+impl Default for OverlayView {
+    fn default() -> Self {
+        Self::new(|| element!(View).into_any())
+    }
+}
+impl fmt::Debug for OverlayView {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("OverlayView")
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct OverlayId(u64);
@@ -37,6 +60,57 @@ pub struct SurfaceModel {
 pub struct OverlaySpec {
     pub kind: OverlayKind,
     pub model: SurfaceModel,
+    pub view: OverlayView,
+    pub layout: OverlayLayout,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OverlayLayout {
+    CenteredCells {
+        width: u16,
+        height: u16,
+    },
+    AtCells {
+        left: u16,
+        top: u16,
+        width: u16,
+        height: u16,
+    },
+}
+impl Default for OverlayLayout {
+    fn default() -> Self {
+        Self::CenteredCells {
+            width: 40,
+            height: 12,
+        }
+    }
+}
+impl OverlayLayout {
+    pub fn resolve(self, viewport: (u16, u16)) -> (u16, u16, u16, u16) {
+        match self {
+            Self::CenteredCells { width, height } => {
+                let width = width.min(viewport.0);
+                let height = height.min(viewport.1);
+                (
+                    (viewport.0 - width) / 2,
+                    (viewport.1 - height) / 2,
+                    width,
+                    height,
+                )
+            }
+            Self::AtCells {
+                left,
+                top,
+                width,
+                height,
+            } => (
+                left,
+                top,
+                width.min(viewport.0.saturating_sub(left)),
+                height.min(viewport.1.saturating_sub(top)),
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +120,8 @@ pub struct Overlay {
     pub kind: OverlayKind,
     pub model: SurfaceModel,
     pub restore_focus: Option<TargetId>,
+    pub view: OverlayView,
+    pub layout: OverlayLayout,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,6 +140,13 @@ pub struct SurfaceStack {
     next_identity: u64,
 }
 impl SurfaceStack {
+    pub(crate) fn empty() -> Self {
+        Self::new(SurfaceModel {
+            focus: FocusModel::empty(),
+            actions: ActionRegistry::empty(),
+            primary_action: None,
+        })
+    }
     pub fn new(screen: SurfaceModel) -> Self {
         Self {
             screen,
@@ -128,6 +211,8 @@ impl SurfaceStack {
             kind: spec.kind,
             model: spec.model,
             restore_focus,
+            view: spec.view,
+            layout: spec.layout,
         });
         self.next_identity = next;
         Ok(id)

@@ -1,9 +1,14 @@
 #[cfg(test)]
-mod support;
-#[cfg(test)]
 mod tests {
-    use super::support;
-    use agent_collaboration_tui::surface_stack::SurfaceId;
+    use crate::support;
+    use crate::support::recording_backend::recording_terminal_render_loop;
+    use agent_collaboration_tui::{
+        actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+        focus_model::FocusModel,
+        input_owner::InputOwner,
+        surface_handle::use_surface_stack,
+        surface_stack::{SurfaceId, SurfaceModel},
+    };
     use iocraft::prelude::*;
     use support::{
         event_driver::{EventDriver, EventJournal, InputMode, SurfaceSnapshot, record_draw},
@@ -76,45 +81,108 @@ mod tests {
     #[component]
     fn HarnessProbe(props: &HarnessProbeProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         record_draw(&mut hooks, &props.journal);
-        let mut count = hooks.use_state(|| 0usize);
-        let mut quit = hooks.use_state(|| false);
+        let count = hooks.use_state(|| 0usize);
+        let quit = hooks.use_state(|| false);
         let mut system = hooks.use_context_mut::<SystemContext>();
-        hooks.use_terminal_events({
+        let stack = use_surface_stack(&mut hooks, |_| {
+            let action = |name: &str, key: &str, run: Handler<()>| ActionDef {
+                id: ActionId::new(name).unwrap(),
+                title: "Probe",
+                keys: vec![key.parse().unwrap()],
+                availability: AvailabilityFn::default(),
+                choice: None,
+                placement: Placement::Hidden,
+                run,
+            };
             let journal = props.journal.clone();
-            move |event| {
-                match event {
-                    TerminalEvent::Key(key) if key.code == KeyCode::Char('a') => {
-                        count.set(count.get() + 1);
-                        journal.log_handler("increment");
-                    }
-                    TerminalEvent::Key(key)
-                        if key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(KeyModifiers::CONTROL) =>
-                    {
-                        quit.set(true)
-                    }
-                    _ => {}
-                }
-                journal.processed(SurfaceSnapshot(vec![(
-                    SurfaceId::Screen,
-                    count.get().to_le_bytes().to_vec(),
-                )]));
+            SurfaceModel {
+                focus: FocusModel::new(Vec::new()).unwrap(),
+                actions: ActionRegistry::new(
+                    ScopeId::new("probe").unwrap(),
+                    vec![
+                        action(
+                            "increment",
+                            "a",
+                            Handler::from(move |()| {
+                                let mut count = count;
+                                count.set(count.get() + 1);
+                                journal.log_handler("increment");
+                            }),
+                        ),
+                        action(
+                            "quit",
+                            "Ctrl+C",
+                            Handler::from(move |()| {
+                                let mut quit = quit;
+                                quit.set(true);
+                            }),
+                        ),
+                    ],
+                )
+                .unwrap(),
+                primary_action: None,
             }
         });
         if quit.get() {
             system.exit();
         }
-        element!(View(width: 20, height: 2) { Text(content: format!("Count {}", count.get())) })
+        let journal = props.journal.clone();
+        element!(InputOwner(stack,width:20u16,height:2u16,quit_action:ActionId::new("quit").unwrap(),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,count.get().to_le_bytes().to_vec())]))) {
+            View(width:20,height:2,background_color:Color::Rgb {r:4,g:5,b:6}) {
+                Text(content: format!("Count {}", count.get()),color:Color::Cyan,weight:Weight::Bold)
+            }
+        })
     }
     fn key(code: KeyCode) -> TerminalEvent {
         TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
+    }
+
+    async fn parity_frames(recording: bool, mode: InputMode) -> Vec<FrameGrid> {
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(HarnessProbe(journal));
+        let mut frames: std::pin::Pin<Box<dyn futures_util::Stream<Item = iocraft::Canvas> + '_>> =
+            if recording {
+                Box::pin(recording_terminal_render_loop(&mut ui, config))
+            } else {
+                // The sole A use of the old mock is its reference-parity observation.
+                Box::pin(ui.mock_terminal_render_loop(config))
+            };
+        driver.initial(&mut frames).await;
+        driver
+            .drive(
+                &mut frames,
+                mode,
+                vec![
+                    (key(KeyCode::Char('a')), true),
+                    (key(KeyCode::F(12)), false),
+                    (key(KeyCode::Char('a')), true),
+                ],
+                true,
+            )
+            .await;
+        driver.frames
+    }
+    #[tokio::test]
+    async fn recording_backend_has_frame_parity_with_the_pinned_mock_without_ctrl_c() {
+        let scenario = async {
+            for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+                assert_eq!(
+                    parity_frames(true, mode).await,
+                    parity_frames(false, mode).await,
+                    "{mode:?}"
+                );
+            }
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
     async fn burst_driver_delivers_all_events_before_any_redraw() {
         let (mut driver, config, journal) = EventDriver::new();
         let mut ui = element!(HarnessProbe(journal: journal.clone()));
-        let mut frames = Box::pin(ui.mock_terminal_render_loop(config));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
         let scenario = async {
             driver.initial(&mut frames).await;
             let initial_frames = journal.draw_count();
@@ -152,7 +220,7 @@ mod tests {
     async fn separated_driver_uses_processed_ack_for_an_ignored_event_without_waiting_for_redraw() {
         let (mut driver, config, journal) = EventDriver::new();
         let mut ui = element!(HarnessProbe(journal: journal.clone()));
-        let mut frames = Box::pin(ui.mock_terminal_render_loop(config));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
         let scenario = async {
             driver.initial(&mut frames).await;
             let acknowledgements = driver

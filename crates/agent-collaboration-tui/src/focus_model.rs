@@ -1,7 +1,36 @@
 //! Ordered traversal adapted from CometixTUI focus.rs, MIT, ec7c0615.
 //! Identity and groups replace its render-time registration and sibling scopes.
 use crate::actions::{AvailabilityFn, IdentifierError, validate_identifier};
+use iocraft::TerminalEvent;
+use std::sync::Arc;
 use std::{collections::HashSet, fmt};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InputUse {
+    Unused,
+    Used,
+    Scrolled,
+}
+#[derive(Clone)]
+pub struct TargetInputHandler(Arc<dyn Fn(TerminalEvent) -> InputUse + Send + Sync>);
+impl TargetInputHandler {
+    pub fn new(callback: impl Fn(TerminalEvent) -> InputUse + Send + Sync + 'static) -> Self {
+        Self(Arc::new(callback))
+    }
+    pub fn call(&self, event: TerminalEvent) -> InputUse {
+        (self.0)(event)
+    }
+}
+impl Default for TargetInputHandler {
+    fn default() -> Self {
+        Self::new(|_| InputUse::Unused)
+    }
+}
+impl fmt::Debug for TargetInputHandler {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TargetInputHandler")
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TargetId(String);
@@ -34,6 +63,8 @@ pub struct TargetSpec {
     pub id: TargetId,
     pub group: Option<GroupId>,
     pub availability: AvailabilityFn,
+    pub input: TargetInputHandler,
+    pub activation: Option<crate::actions::ActionId>,
 }
 impl TargetSpec {
     pub fn new(id: TargetId) -> Self {
@@ -41,10 +72,20 @@ impl TargetSpec {
             id,
             group: None,
             availability: AvailabilityFn::default(),
+            input: TargetInputHandler::default(),
+            activation: None,
         }
     }
     pub fn in_group(mut self, group: GroupId) -> Self {
         self.group = Some(group);
+        self
+    }
+    pub fn with_input(mut self, input: TargetInputHandler) -> Self {
+        self.input = input;
+        self
+    }
+    pub fn with_activation(mut self, action: crate::actions::ActionId) -> Self {
+        self.activation = Some(action);
         self
     }
     pub fn with_availability(mut self, availability: AvailabilityFn) -> Self {
@@ -83,6 +124,12 @@ pub struct FocusModel {
     current: Option<TargetId>,
 }
 impl FocusModel {
+    pub(crate) fn empty() -> Self {
+        Self {
+            targets: Vec::new(),
+            current: None,
+        }
+    }
     pub fn new(targets: Vec<TargetSpec>) -> Result<Self, FocusError> {
         validate_targets(&targets)?;
         let current = targets

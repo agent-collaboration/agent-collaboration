@@ -1,6 +1,98 @@
 //! The shipped palette, with a dimmed form for each semantic role and surface.
-use crate::{UiSurface, UiTextRole};
 use iocraft::Color;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiTextRole {
+    Body,
+    Prominent,
+    Label,
+    Rule,
+    Secondary,
+    Disabled,
+    Selected,
+    Success,
+    Warning,
+    Error,
+}
+
+impl UiTextRole {
+    /// Shared semantic palette; yellow belongs only to active focus or selection.
+    pub const fn color(self) -> Color {
+        match self {
+            Self::Body => Color::White,
+            Self::Prominent => Color::Rgb {
+                r: 237,
+                g: 240,
+                b: 245,
+            },
+            Self::Label => Color::Rgb {
+                r: 156,
+                g: 188,
+                b: 251,
+            },
+            Self::Rule => Color::Rgb {
+                r: 119,
+                g: 200,
+                b: 187,
+            },
+            Self::Secondary => Color::Grey,
+            Self::Disabled => Color::Rgb {
+                r: 166,
+                g: 175,
+                b: 189,
+            },
+            Self::Selected => Color::Yellow,
+            Self::Success => Color::Green,
+            Self::Warning => Color::Rgb {
+                r: 255,
+                g: 165,
+                b: 0,
+            },
+            Self::Error => Color::Red,
+        }
+    }
+}
+
+/// Solid presentation surfaces; no selection or hover state lives in the palette.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiSurface {
+    Base,
+    Alternate,
+    Raised,
+    Header,
+    Selected,
+}
+impl UiSurface {
+    pub const fn color(self) -> Color {
+        match self {
+            Self::Base => Color::Rgb {
+                r: 39,
+                g: 44,
+                b: 52,
+            },
+            Self::Alternate => Color::Rgb {
+                r: 43,
+                g: 48,
+                b: 57,
+            },
+            Self::Raised => Color::Rgb {
+                r: 48,
+                g: 54,
+                b: 65,
+            },
+            Self::Header => Color::Rgb {
+                r: 54,
+                g: 65,
+                b: 83,
+            },
+            Self::Selected => Color::Rgb {
+                r: 52,
+                g: 59,
+                b: 70,
+            },
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextRole {

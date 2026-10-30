@@ -1,0 +1,22 @@
+diff --git a/crates/agent-collaboration-tui/src/hit_regions.rs b/crates/agent-collaboration-tui/src/hit_regions.rs
+--- a/crates/agent-collaboration-tui/src/hit_regions.rs
++++ b/crates/agent-collaboration-tui/src/hit_regions.rs
+@@ -35,2 +35,3 @@ pub(crate) fn visible_cells(drawer: &mut ComponentDrawer<'_>) -> Vec<(u16, u16)>
+ struct TargetGeometryHook {
++    previous_cells: Vec<(u16,u16)>,
+     regions: HitRegions,
+@@ -46,3 +47,3 @@ impl Hook for TargetGeometryHook {
+             kind: self.kind,
+-            cells: visible_cells(drawer),
++            cells: self.previous_cells.clone(),
+         });
+@@ -56,3 +57,5 @@ pub(crate) fn use_target_geometry(
+ ) {
++    let previous_cells=hooks.use_component_rect().map_or_else(Vec::new,|rect| (rect.top..rect.bottom).flat_map(|row|(rect.left..rect.right).filter_map(move |column|Some((u16::try_from(column).ok()?,u16::try_from(row).ok()?)))).collect());
+     let hook = hooks.use_hook(|| TargetGeometryHook {
++        previous_cells:Vec::new(),
+         regions: context.stack.hit_regions(),
+@@ -66,2 +69,3 @@ pub(crate) fn use_target_geometry(
+     hook.kind = kind;
++    hook.previous_cells=previous_cells;
+ }

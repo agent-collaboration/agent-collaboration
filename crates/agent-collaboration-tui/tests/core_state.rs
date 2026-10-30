@@ -230,6 +230,8 @@ mod tests {
             let mut stack = SurfaceStack::new(surface(&["alpha", "beta"]));
             let first_id = stack
                 .open_overlay(OverlaySpec {
+                    view: Default::default(),
+                    layout: Default::default(),
                     kind: OverlayKind::Menu,
                     model: surface(&["menu-item"]),
                 })
@@ -252,6 +254,8 @@ mod tests {
             assert!(!stack.is_covered(SurfaceId::Screen));
             let second_id = stack
                 .open_overlay(OverlaySpec {
+                    view: Default::default(),
+                    layout: Default::default(),
                     kind: OverlayKind::Dialog,
                     model: surface(&["close"]),
                 })
@@ -261,6 +265,8 @@ mod tests {
         let mut stack = SurfaceStack::new(surface(&["alpha", "beta"]));
         stack
             .open_overlay(OverlaySpec {
+                view: Default::default(),
+                layout: Default::default(),
                 kind: OverlayKind::Menu,
                 model: surface(&["item"]),
             })

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -128,3 +128,3 @@ fn deliver(handle: SurfaceStackHandle, target: &TargetSpec, event: TerminalEvent
+         InputUse::Scrolled => {
+-            handle.hit_regions().invalidate();
++            let _=handle;
+             true

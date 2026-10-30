@@ -1,4 +1,4 @@
-//! Drives the real mock render loop; acknowledgements distinguish ignored input
+//! Drives the real iocraft render loop; acknowledgements distinguish ignored input
 //! from a missing redraw. No sleep, polling timer, or redraw timeout is an oracle.
 use super::frame_grid::FrameGrid;
 use agent_collaboration_tui::surface_stack::SurfaceId;
@@ -102,6 +102,17 @@ impl EventDriver {
         steps: Vec<(TerminalEvent, bool)>,
         burst_redraw: bool,
     ) -> Vec<EventAck> {
+        self.drive_checked(canvases, mode, steps, burst_redraw, |_| {})
+            .await
+    }
+    pub async fn drive_checked(
+        &mut self,
+        canvases: &mut (impl Stream<Item = Canvas> + Unpin),
+        mode: InputMode,
+        steps: Vec<(TerminalEvent, bool)>,
+        burst_redraw: bool,
+        mut verify_processed: impl FnMut(&EventAck),
+    ) -> Vec<EventAck> {
         match mode {
             InputMode::Burst => {
                 let count = steps.len();
@@ -112,7 +123,9 @@ impl EventDriver {
                 }
                 let mut acknowledgements = Vec::new();
                 for _ in 0..count {
-                    acknowledgements.push(self.wait_ack(canvases).await);
+                    let acknowledgement = self.wait_ack(canvases).await;
+                    verify_processed(&acknowledgement);
+                    acknowledgements.push(acknowledgement);
                 }
                 if burst_redraw && self.frames.len() == before {
                     self.next_frame(canvases).await;
@@ -120,19 +133,24 @@ impl EventDriver {
                 self.drain_ready(canvases);
                 acknowledgements
             }
-            InputMode::FrameSeparated => self.separated(canvases, steps).await,
+            InputMode::FrameSeparated => {
+                self.separated(canvases, steps, &mut verify_processed).await
+            }
         }
     }
     async fn separated(
         &mut self,
         canvases: &mut (impl Stream<Item = Canvas> + Unpin),
         steps: Vec<(TerminalEvent, bool)>,
+        verify_processed: &mut impl FnMut(&EventAck),
     ) -> Vec<EventAck> {
         let mut acknowledgements = Vec::new();
         for (event, redraw) in steps {
             let before = self.frames.len();
             self.sender.send(event).unwrap();
-            acknowledgements.push(self.wait_ack(canvases).await);
+            let acknowledgement = self.wait_ack(canvases).await;
+            verify_processed(&acknowledgement);
+            acknowledgements.push(acknowledgement);
             if redraw && self.frames.len() == before {
                 self.next_frame(canvases).await;
             }

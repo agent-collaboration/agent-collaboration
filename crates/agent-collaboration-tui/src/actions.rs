@@ -38,6 +38,9 @@ impl ActionId {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ScopeId(String);
 impl ScopeId {
+    pub(crate) fn screen() -> Self {
+        Self("screen".into())
+    }
     pub fn new(value: impl Into<String>) -> Result<Self, IdentifierError> {
         let value = value.into();
         validate_identifier(&value)?;
@@ -155,6 +158,12 @@ pub struct ActionRegistry {
     actions: Vec<ActionDef>,
 }
 impl ActionRegistry {
+    pub(crate) fn empty() -> Self {
+        Self {
+            scope: ScopeId::screen(),
+            actions: Vec::new(),
+        }
+    }
     pub fn new(scope: ScopeId, actions: Vec<ActionDef>) -> Result<Self, ActionError> {
         let mut identities = std::collections::HashSet::new();
         let mut bindings = std::collections::HashSet::new();

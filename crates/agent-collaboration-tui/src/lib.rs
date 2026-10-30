@@ -2,6 +2,11 @@
 pub mod actions;
 mod dialog_sizing;
 pub mod focus_model;
+pub mod hit_regions;
+mod hit_regions_model;
+pub mod input_owner;
+pub mod overlay_host;
+pub mod surface_handle;
 pub mod surface_stack;
 pub mod theme;
 pub use dialog_sizing::{
