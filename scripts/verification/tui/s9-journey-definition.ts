@@ -20,6 +20,8 @@ export const s9CheckSchema = z.enum([
 	'captured-session-outcome',
 	'dropdown-highlight-uncommitted',
 	'compound-start-once',
+	'returned-new-once',
+	'configured-start-once',
 	'legacy-start-fallback',
 	'login-primary-by-status',
 	'exact-login-command',
@@ -73,7 +75,7 @@ export const s9StepSchema = z.discriminatedUnion('kind', [
 ]);
 export const s9JourneySchema = z.strictObject({
 	journeyId: z.string().regex(/^[a-z0-9-]+$/u),
-	requirements: z.array(z.enum(['U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])).min(1),
+	requirements: z.array(z.enum(['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])).min(1),
 	surface: z.enum(['sessions', 'quota']),
 	availability: z.strictObject({
 		state: z.literal('absent-at-base'),
