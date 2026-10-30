@@ -141,6 +141,13 @@ export const showcaseStateSchema = z.strictObject({
 		dialog: nonnegative.nullable(),
 		detail: nonnegative.nullable(),
 	}),
+	mainScrollLayout: z
+		.strictObject({
+			naturalHeight: nonnegative.max(65535),
+			viewportHeight: nonnegative.max(65535),
+			viewportTop: z.number().int().min(-32768).max(32767),
+		})
+		.nullable(),
 	viewport: z.tuple([nonnegative, nonnegative]),
 	hitMap: z
 		.strictObject({

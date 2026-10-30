@@ -100,7 +100,7 @@ export async function openChoice(rig: ShowcaseRig, field = 'choice'): Promise<vo
 export function dropdownFilter(field = 'choice'): string {
 	return childTarget(field, 'filter');
 }
-export function surfaceBounds(state: ShowcaseState): {
+export function surfaceBounds(state: Pick<ShowcaseState, 'hitMap' | 'surface'>): {
 	readonly left: number;
 	readonly right: number;
 	readonly top: number;

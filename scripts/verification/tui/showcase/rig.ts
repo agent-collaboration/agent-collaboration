@@ -24,7 +24,7 @@ import type { ShowcasePlan, ShowcaseState } from './contracts.ts';
 import { pointForTarget, pointForScroll, pointOutsideSurface } from './hit-map-points.ts';
 import { expectedInput, expectedKey, expectedClick } from './input-expectations.ts';
 import type { ExpectedRoute } from './input-expectations.ts';
-import { needsMeasurementDraw, viewScope } from './measurement-binding.ts';
+import { mainMeasurementFollowUp, needsMeasurementDraw, viewScope } from './measurement-binding.ts';
 import { ReceiptNotifications } from './receipt-notifications.ts';
 import { actionPresentation, currentRegistry, visibleTarget } from './scenario-helpers.ts';
 import { observeState, ShowcaseJournal, serializedState } from './state-reader.ts';
@@ -225,6 +225,7 @@ export class ShowcaseRig {
 	): Promise<ShowcaseState> {
 		const before = this.reader.sequence;
 		const previousState = this.state();
+		const previousReceivedFrame = serializedFrameCount(this.driver.bytes());
 		const previousFrame = this.journal.read().serializations.at(-1)?.sequence ?? 0;
 		try {
 			await this.reader.observeInput({
@@ -292,6 +293,21 @@ export class ShowcaseRig {
 				scope: viewScope(state),
 			});
 			painted = await this.observeDraw({ inputOrdinal, minimumFrame: first.sequence + 1 });
+		}
+		const journal = this.journal.read();
+		const minimumMeasuredFrame = mainMeasurementFollowUp(
+			journal.serializations.map((frame) => ({
+				sequence: frame.sequence,
+				layout: journal.states[frame.drawObservation - 1]?.mainScrollLayout ?? null,
+			})),
+			previousReceivedFrame,
+		);
+		if (minimumMeasuredFrame > 0) {
+			this.observations.push({
+				kind: 'main-measurement-follow-up',
+				minimumFrame: minimumMeasuredFrame,
+			});
+			painted = await this.observeDraw({ inputOrdinal, minimumFrame: minimumMeasuredFrame });
 		}
 		return painted;
 	}

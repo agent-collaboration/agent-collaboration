@@ -21,6 +21,10 @@ New measured views require the actual follow-up draw that uses their first width
 viewport measurement. Uncovering an existing parent does not request an arbitrary
 extra frame. Callback snapshots and the draw bound to each image are retained
 separately, and a newer serialized producer frame prevents accepting an older grid.
+The debug journal also records the main list's public `ScrollPosition` dimensions.
+When an actual draw changes those measurements, require that draw's follow-up;
+an intermediate draw inside a multi-key burst can already satisfy it. Do not infer
+readiness from row counts or demand an arbitrary extra frame after the final key.
 
 For controlled completions, choose a Stage action from Menu, open the relevant
 form/dropdown/Help, then use the Menu's Apply action or let the owned verifier

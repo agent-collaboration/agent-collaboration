@@ -37,6 +37,7 @@ function frame(): ShowcaseState {
 		focusTargets: [],
 		overlays: [],
 		scroll: { main: null, dialog: null, detail: null },
+		mainScrollLayout: null,
 		viewport: [120, 36],
 		hitMap: null,
 		registries: { screen: null, overlays: [] },

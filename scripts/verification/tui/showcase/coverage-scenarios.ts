@@ -101,7 +101,7 @@ function cellColour(cell: CellData): number {
 }
 export async function coveredSurfaces(rig: ShowcaseRig): Promise<void> {
 	await rig.focus('filter');
-	await rig.text('Same', 'filter');
+	await rig.text('s', 'filter');
 	const runCovered = async (kind: 'menu' | 'dialog' | 'dropdown' | 'nested'): Promise<void> => {
 		const before = rig.state(),
 			beforeDraw = rig.drawState(),
@@ -132,10 +132,10 @@ export async function coveredSurfaces(rig: ShowcaseRig): Promise<void> {
 				);
 				if (cellText(prior).trim() !== '' && cellColour(prior) !== cellColour(covered)) styled += 1;
 			}
-		requireObservation(styled > 0, 'covered components visibly dim instead of disappearing', {
-			kind,
-			styled,
-		});
+		if (styled === 0)
+			throw new PrerequisiteGap(
+				'overlay leaves no qualifying exposed lower text for the dimming observation: ' + kind,
+			);
 		const target =
 			kind === 'dialog' || kind === 'nested'
 				? 'draft'

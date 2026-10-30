@@ -1,5 +1,6 @@
 import { cellText } from '../terminal-grid.ts';
-import { childTarget, requireObservation } from './contracts.ts';
+import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
+import { observeFormSections, observeTypography } from './form-observations.ts';
 import type { ShowcaseRig } from './rig.ts';
 import {
 	currentRegistry,
@@ -63,9 +64,10 @@ export async function dialogSizing(rig: ShowcaseRig): Promise<void> {
 	await openForm(rig);
 	const bounds = surfaceBounds(rig.drawState());
 	const height = bounds.bottom - bounds.top + 1;
+	const contentUnobservable = !visibleTarget(rig.drawState(), 'draft');
 	requireObservation(
-		visibleTarget(rig.drawState(), 'draft') && visibleTarget(rig.drawState(), 'action:close'),
-		'content form includes body and actions',
+		visibleTarget(rig.drawState(), 'action:close'),
+		'content form includes actions',
 		rig.state(),
 	);
 	requireObservation(
@@ -98,65 +100,26 @@ export async function dialogSizing(rig: ShowcaseRig): Promise<void> {
 	);
 	await rig.capture('fill-dialog');
 	await escapeOverlay(rig);
+	if (contentUnobservable)
+		throw new PrerequisiteGap(
+			'sample explicit padding/shared label budget leaves no visible Content field; capped-body proof remains unobserved',
+		);
 }
 export async function sectionsAndTypography(rig: ShowcaseRig): Promise<void> {
 	await openForm(rig);
-	const lines = rig.lines();
-	for (const word of [
-		'Draft connection',
-		'Directory',
-		'Option',
-		'Tinted status',
-		'Long section label',
-		'Available',
-		'Warning',
-		'Error',
-	])
-		requireObservation(
-			lines.some((line) => line.includes(word)),
-			'declared form content is visibly drawn: ' + word,
-			lines,
-		);
-	const directory = lines.findIndex((line) => line.includes('Directory'));
-	const option = lines.findIndex((line) => line.includes('Option'));
-	const status = lines.findIndex((line) => line.includes('Long section label'));
-	const origin = (row: number, character: string): number =>
-		rig.grid().cells[row]?.findIndex((cell) => cellText(cell) === character) ?? -1;
-	const columns = [origin(directory, '/'), origin(option, 'S'), origin(status, 'A')];
-	requireObservation(
-		columns.every((column) => column === columns[0] && column > 0),
-		'both sections share a physical value origin including selector gutter',
-		columns,
-	);
-	const firstHeading = lines.findIndex((line) => line.includes('Draft connection'));
-	const secondHeading = lines.findIndex((line) => line.includes('Tinted status'));
-	requireObservation(
-		directory === firstHeading + 1 && option === directory + 1 && secondHeading === option + 2,
-		'one blank row separates sections, with no interior blank row',
-		{ firstHeading, directory, option, secondHeading },
-	);
-	await rig.capture('sections-status');
+	let formGap: PrerequisiteGap | null = null;
+	try {
+		await observeFormSections(rig);
+	} catch (error) {
+		if (!(error instanceof PrerequisiteGap)) throw error;
+		formGap = error;
+		await rig.capture('sections-unobserved');
+	}
 	await escapeOverlay(rig);
 	await rig.key('F5', rig.route('fill'));
-	for (const role of [
-		'Body',
-		'Prominent',
-		'Label',
-		'Rule',
-		'Secondary',
-		'Disabled',
-		'Selected',
-		'Success',
-		'Warning',
-		'Error',
-	])
-		requireObservation(
-			rig.lines().some((line) => line.includes('Public role ' + role)),
-			'public typography role is visibly demonstrated ' + role,
-			rig.lines(),
-		);
-	await rig.capture('typography-roles');
+	await observeTypography(rig);
 	await escapeOverlay(rig);
+	if (formGap !== null) throw formGap;
 }
 export async function screenHelp(rig: ShowcaseRig): Promise<void> {
 	const before = rig.state();

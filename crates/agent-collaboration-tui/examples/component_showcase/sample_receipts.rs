@@ -28,8 +28,8 @@ struct ReceiptWriter {
 pub use super::sample_readback::ObservationCause;
 use super::sample_readback::{
     EffectReadback, FocusTargetReadback, HitMapReadback, OverlayReadback, OverlayRegistryReadback,
-    RegistriesReadback, RegistryReadback, ScrollReadback, SettingReadback, ShowcaseRecord,
-    StateReadback, SurfaceReadback, TargetRoleReadback,
+    RegistriesReadback, RegistryReadback, ScrollLayoutReadback, ScrollReadback, SettingReadback,
+    ShowcaseRecord, StateReadback, SurfaceReadback, TargetRoleReadback,
 };
 fn append_record(file: &mut File, record: &ShowcaseRecord<'_>) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(record).map_err(io::Error::other)?;
@@ -217,6 +217,14 @@ impl SampleReceipts {
                     .map(|control| control.scroll().position().offset),
             },
             viewport: stack.viewport(),
+            main_scroll_layout: data.main_scroll.read().as_ref().map(|scroll| {
+                let position = scroll.position();
+                ScrollLayoutReadback {
+                    natural_height: position.natural_height,
+                    viewport_height: position.viewport_height,
+                    viewport_top: position.viewport_top,
+                }
+            }),
             hit_map: stack.hit_regions().published().map(HitMapReadback::from),
             registries: RegistriesReadback {
                 screen: snapshot

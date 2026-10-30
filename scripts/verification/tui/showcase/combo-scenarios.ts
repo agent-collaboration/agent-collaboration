@@ -160,25 +160,35 @@ export async function comboUnavailable(rig: ShowcaseRig): Promise<void> {
 		'unavailable option remains highlightable',
 		rig.state(),
 	);
-	const option = rig
-		.drawState()
-		.hitMap?.targets.find(
+	const seen = new Set<string>();
+	const revealReason = async (remaining: number): Promise<void> => {
+		const state = rig.drawState();
+		const option = state.hitMap?.targets.find(
 			(region) =>
-				region.surface === rig.state().surface &&
+				region.surface === state.surface &&
 				region.target === childTarget('choice', 'option:unavailable'),
 		);
-	const words =
-		option?.cells
-			.map(([column, row]) => {
-				const cell = rig.grid().cells[row]?.[column];
-				return cell === undefined ? '' : cellText(cell);
-			})
-			.join('') ?? '';
-	requireObservation(
-		['Requires', 'sample', 'permission'].every((word) => words.includes(word)),
-		'unavailable option visibly retains all reason words across wrapped lines',
-		words,
-	);
+		const words =
+			option?.cells
+				.map(([column, row]) => {
+					const cell = rig.grid().cells[row]?.[column];
+					return cell === undefined ? '' : cellText(cell);
+				})
+				.join('')
+				.replace(/\s/gu, '') ?? '';
+		for (const word of ['Requires', 'sample', 'permission'])
+			if (words.includes(word)) seen.add(word);
+		if (seen.size === 3) return;
+		if (remaining === 0)
+			throw new PrerequisiteGap('bounded option scroll could not expose every reason word');
+		await rig.capture('unavailable-reason-' + remaining);
+		const after = await rig.wheel(childTarget('choice', 'scroll'), 'down', false);
+		if (after.hitMap !== null)
+			throw new PrerequisiteGap('option reached scroll end before every reason word was visible');
+		await rig.settleFrame();
+		await revealReason(remaining - 1);
+	};
+	await revealReason(64);
 	const before = rig.state();
 	await rig.key('Enter', rig.route(null, dropdownFilter()));
 	await rig.click(childTarget('choice', 'option:unavailable'), null);

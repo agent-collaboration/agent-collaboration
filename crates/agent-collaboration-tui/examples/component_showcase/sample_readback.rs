@@ -139,6 +139,13 @@ pub struct ScrollReadback {
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ScrollLayoutReadback {
+    pub natural_height: u16,
+    pub viewport_height: u16,
+    pub viewport_top: i16,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum HitKindReadback {
     Target,
     ScrollArea,
@@ -220,6 +227,7 @@ pub struct StateReadback {
     pub focus_targets: Vec<FocusTargetReadback>,
     pub overlays: Vec<OverlayReadback>,
     pub scroll: ScrollReadback,
+    pub main_scroll_layout: Option<ScrollLayoutReadback>,
     pub viewport: (u16, u16),
     pub hit_map: Option<HitMapReadback>,
     pub registries: RegistriesReadback,
