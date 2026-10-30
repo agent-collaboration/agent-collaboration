@@ -21,8 +21,12 @@ pub(super) struct NativeFixture {
 }
 impl NativeFixture {
     pub(super) fn prepare(mode: &str) -> TestResult<Self> {
+        let namespace = module_path!()
+            .rsplit("::")
+            .nth(1)
+            .ok_or("native fixture namespace missing")?;
         let root = std::env::temp_dir().join(format!(
-            "2026-10-native-adapter-{}-{}",
+            "2026-10-native-adapter-{namespace}-{}-{}",
             std::process::id(),
             NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
         ));

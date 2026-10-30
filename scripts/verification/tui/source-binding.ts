@@ -102,14 +102,7 @@ export function verifySourceFiles(repository: string, binding: SourceBinding): v
 export function verifyTarget(plan: CapturePlan): void {
 	if (canonicalJson(sourceBinding(plan.repository)) !== canonicalJson(plan.source))
 		throw new Error('declared product source changed; stop and re-pin');
-	for (const binding of [
-		plan.node,
-		plan.capture_driver,
-		plan.harness_binary,
-		plan.vhs,
-		plan.ttyd,
-		plan.image_verifier,
-	])
+	for (const binding of [plan.node, plan.capture_driver, plan.harness_binary])
 		verifyArtifact(binding);
 	if (process.version !== 'v26.12.1') throw new Error('capture requires pinned Node v26.12.1');
 	if (realpathSync(process.execPath) !== plan.node.path)

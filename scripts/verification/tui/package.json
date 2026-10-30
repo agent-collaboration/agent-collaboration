@@ -10,6 +10,9 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"@wterm/core": "0.5.7",
+		"@wterm/dom": "0.5.7",
+		"@wterm/ghostty": "0.5.7",
 		"zod": "4.4.3"
 	},
 	"devDependencies": {
