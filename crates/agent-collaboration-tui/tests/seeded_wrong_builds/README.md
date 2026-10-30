@@ -83,6 +83,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `modified-arrows-change-focus.patch` | Unbound modified arrows fall through to grouped focus traversal. |
 | `pinned-context-gap-omitted.patch` | Pinned dialog context touches the scrolling body without its one blank row. |
 | `empty-context-has-gap.patch` | An empty context leaves a redundant blank row and excess content height. |
+| `pages-only-consumes-arrows.patch` | Form arrows scroll the body instead of moving field focus. |
+| `pages-only-ignores-pages.patch` | Home and page keys cannot scroll back from a field revealed by focus. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

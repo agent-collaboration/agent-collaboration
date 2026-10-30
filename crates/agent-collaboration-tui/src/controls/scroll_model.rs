@@ -132,4 +132,23 @@ impl ScrollHandle {
         let scroll = self.clone();
         TargetInputHandler::new(move |event| scroll.handle_event(&event))
     }
+    /// Scroll form bodies with pages, bounds and the wheel; arrows remain focus navigation.
+    pub fn pages_input_handler(&self) -> TargetInputHandler {
+        let scroll = self.clone();
+        TargetInputHandler::new(move |event| {
+            let accepts = match &event {
+                TerminalEvent::Key(key) => matches!(
+                    key.code,
+                    KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End
+                ),
+                TerminalEvent::FullscreenMouse(_) => true,
+                _ => false,
+            };
+            if accepts {
+                scroll.handle_event(&event)
+            } else {
+                InputUse::Unused
+            }
+        })
+    }
 }

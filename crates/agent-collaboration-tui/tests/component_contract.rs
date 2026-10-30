@@ -20,6 +20,9 @@ mod dialog_context_spacing;
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]
+#[path = "suites/dialog_page_navigation.rs"]
+mod dialog_page_navigation;
+#[cfg(test)]
 #[path = "suites/global_quit_aliases.rs"]
 mod global_quit_aliases;
 #[cfg(test)]
