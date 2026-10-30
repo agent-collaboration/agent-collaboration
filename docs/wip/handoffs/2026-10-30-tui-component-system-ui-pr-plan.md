@@ -110,7 +110,11 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Account details has no gap above "Quota windows";
   - the wide-glyph corner is lost.
   Command: `capture-run.ts <plan> --check`, then the run, on Sunclaw. Runs first, in parallel with S1–S4.
-- **Pre-change signal:** each journey fails today for exactly its named defect. A journey that passes on today's build proves nothing and is reworked before S9.
+- **Pre-change signal** (clarified 2026-10-30 after the Verifier's admission check), three kinds of baseline:
+  - **Known defects** must fail today, each for exactly its named defect: Esc quitting the main screen; Help listing Esc wrongly; New session ignoring ↓ and starting focus on Start; Account details with no gap above Quota windows; the wide-glyph corner lost under an existing dialog opened over 📂 rows.
+  - **Isolation on overlays that exist today** (Help, New, Details, the filter choosers, quota Account and Pool details): bursts of text, paste, arrows and clicks aimed beneath. Record red or pass per overlay. A pass is a valid baseline, and the journey then guards against regressions.
+  - **Entries that are new in this PR** (the ≡ menu, toolbar, dropdowns): record "absent at base", neither red nor pass. Their sensitivity comes from S5's seeded wrong builds; their first green is at S6/S7.
+  - An entry timeout is never counted as a red.
 - **Existing tests:** the compact Sessions and Quota tapes are kept unchanged here. They are re-baselined only in S9, for the three owner-decided changes.
 - **Stop:** a needed journey can't reach its entry through the fixture harness. Return a `verification-design-gap` with the row.
 
