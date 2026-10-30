@@ -1,7 +1,7 @@
 /**
  * Launch only the declared fixture on the inherited real PTY; preserve teardown.
  *
- * ttyd (through ttyd-adapter.ts) or a capture driver starts this file with
+ * The Rust-owned PTY driver starts this file with
  * QUOTA_STORYBOARD_FIXTURE_COMMAND naming its launch record and the same path
  * as the only argument, so each owned wrapper's command line names its own
  * capture output. The fixture child
@@ -71,7 +71,6 @@ const PUBLIC_SESSIONS_FIELDS: ReadonlySet<string> = new Set([
 	'expected_service_id',
 	'expected_service_epoch',
 	'output',
-	'ttyd',
 	'temporary_directory',
 	'dynamic_library_path',
 ]);
@@ -472,7 +471,7 @@ async function main(): Promise<number> {
 		}
 	}
 	writeFileSync(join(output, 'quota-child.exit'), String(exitCode));
-	// The component marker stays on VHS's current line after PTY scrollback.
+	// The component marker stays on the terminal current line after PTY scrollback.
 	writeSync(
 		1,
 		surface === 'quota-component'

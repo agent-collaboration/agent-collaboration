@@ -1,0 +1,7 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
+@@ -147,3 +147,2 @@ impl ComboBoxControl {
+                 TargetSpec::new(binding.field.child(&format!("option:{}", key.as_str())))
+-                    .pointer_only()
+                     .with_input(TargetInputHandler::new(move |event| {

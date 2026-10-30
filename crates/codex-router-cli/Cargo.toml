@@ -14,7 +14,7 @@ default = []
 quota-reset-test-harness = [
     "keychain-test-support",
     "codex-router-quota-service/quota-reset-test-harness",
-    "codex-router-quota-tui/quota-reset-test-harness",
+    "agent-router-quota-tui/quota-reset-test-harness",
 ]
 keychain-test-support = [
     "codex-router-secret-store/keychain-test-guard",
@@ -27,7 +27,7 @@ workspace = true
 
 [dependencies]
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service" }
-codex-router-quota-tui = { version = "0.1.105", path = "../codex-router-quota-tui" }
+agent-router-quota-tui = { version = "0.1.105", path = "../agent-router-quota-tui" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 base64.workspace = true
 chrono.workspace = true
@@ -53,7 +53,7 @@ comfy-table.workspace = true
 crossterm.workspace = true
 indicatif.workspace = true
 iocraft.workspace = true
-codex-router-tui.workspace = true
+agent-collaboration-tui.workspace = true
 nix = { workspace = true, features = ["event"] }
 opentelemetry.workspace = true
 opentelemetry-appender-tracing.workspace = true
