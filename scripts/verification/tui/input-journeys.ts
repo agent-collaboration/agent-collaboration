@@ -14,9 +14,9 @@ import {
 	saveCheckpoint,
 	withTerminal,
 } from './baseline-journeys.ts';
-import { encodeJourneyKey } from './capture-run.ts';
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
 import { findDialog } from './grid-scene-matcher.ts';
+import { encodeJourneyKey } from './journey-key.ts';
 import { preparationProofSchema, readPreparationReadback } from './preparation-readback.ts';
 import type { PtyGridDriver, KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding } from './source-binding.ts';

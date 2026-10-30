@@ -48,10 +48,13 @@ export const viewportSchema = z
 	.readonly();
 
 export type TerminalViewport = z.infer<typeof viewportSchema>;
+// Same shape as the verification runtime's identity records: ownership follows the real UID (ps
+// `ruid`, Node `process.getuid()`); the effective UID (ps `uid`) is evidence only.
 export const processIdentitySchema = z
 	.strictObject({
 		pid: z.number().int(),
-		uid: z.number().int(),
+		realUid: z.number().int(),
+		effectiveUid: z.number().int(),
 		group: z.number().int(),
 		birth: z.string(),
 		executable: z.string(),

@@ -1,15 +1,25 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { test } from "node:test";
 import { createFixtureDirectory } from "../../test-support/fixture-directory.ts";
 import { objectSchema } from "../../exact-json.ts";
-import { readObservedJson, processIdentitySchema } from "../evidence-models.ts";
+import {
+  readObservedJson,
+  processIdentitySchema,
+  type ProcessIdentity,
+} from "../evidence-models.ts";
 import { readCarrierCorrelation } from "../native-correlation.ts";
-import { lookupProcessIdentity } from "../process-ownership.ts";
-import { observeChild, processOperations, stopOwned } from "../runtime-processes.ts";
+import { lookupProcessIdentity, sameIdentity } from "../process-ownership.ts";
+import {
+  identityRecord,
+  observeChild,
+  observeOwned,
+  processOperations,
+  stopOwned,
+} from "../runtime-processes.ts";
 import { saveRecord, waitForProcess } from "../runtime-plan.ts";
 import { settleInventory } from "../process-inventory.ts";
 import { LifecycleFixture, harmlessChild, releaseHarmlessChild } from "./lifecycle-fixture.ts";
@@ -243,5 +253,48 @@ test(
     assert.equal(result.supported, true);
     assert.equal(child.exitCode, 0);
     await waitForProcess(child, 5000);
+  },
+);
+
+// macOS installs /bin/ps setuid root, so a user-launched ps runs with effective UID 0 and the
+// launching account's real UID. Hosts without that split cannot exercise this case through ps.
+function setuidSystemPsUnavailable(): string | false {
+  const status = statSync("/bin/ps");
+  return status.uid === 0 && (status.mode & 0o4000) !== 0
+    ? false
+    : "host /bin/ps is not setuid root, so no effective/real UID split is observable";
+}
+
+test(
+  "a user-launched setuid system utility stays owned by its real user in table, lookup and guard",
+  { timeout: 15_000, skip: setuidSystemPsUnavailable() },
+  async (): Promise<void> => {
+    // Repeated comm columns exceed what the pipe holds, so the actual setuid ps stays blocked in
+    // write until drained; only backpressure matters here, not other processes' arguments.
+    const held = spawn(
+      "/bin/ps",
+      ["-axww", ...Array.from({ length: 40 }, () => ["-o", "comm="]).flat()],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const [firstChunk] = await once(held.stdout, "data");
+    held.stdout.pause();
+    assert.ok(Buffer.isBuffer(firstChunk));
+    if (held.pid === undefined) throw new Error("held setuid utility PID unavailable");
+    try {
+      const known = new Map<number, ProcessIdentity>();
+      observeOwned(process.pid, known);
+      const admitted = known.get(held.pid);
+      assert.ok(admitted !== undefined, "held setuid utility was not admitted as owned");
+      assert.equal(admitted.realUid, process.getuid?.());
+      assert.equal(admitted.effectiveUid, 0);
+      const lookup = lookupProcessIdentity(held.pid);
+      assert.equal(lookup?.realUid, process.getuid?.());
+      assert.equal(lookup?.effectiveUid, 0);
+      assert.equal(sameIdentity(lookup, identityRecord(admitted)), true);
+    } finally {
+      held.stdout.resume();
+      await once(held, "close");
+    }
+    assert.equal(held.exitCode, 0);
   },
 );
