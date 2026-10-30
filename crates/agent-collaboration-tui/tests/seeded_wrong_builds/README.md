@@ -89,6 +89,9 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `button-focus-no-underline.patch` | Focus loses its non-colour underline signal. |
 | `button-checked-style-ignored.patch` | A checked button loses yellow/bold emphasis when focus moves elsewhere. |
 | `button-unshipped-selection-background.patch` | Focus or checked state adds a selection background absent from the shipped buttons. |
+| `help-heading-accent-normal.patch` | Help section headings use Accent/Normal instead of the shipped Primary/Bold style. |
+| `dialog-heading-accent-normal.patch` | Dialog section headings lose their shipped Primary colour and bold hierarchy. |
+| `field-label-accent.patch` | Form labels use Accent instead of their shipped Primary colour at normal weight. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

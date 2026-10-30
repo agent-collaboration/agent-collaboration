@@ -32,6 +32,9 @@ mod global_quit_aliases;
 #[path = "suites/harness_contract.rs"]
 mod harness_contract;
 #[cfg(test)]
+#[path = "suites/heading_style.rs"]
+mod heading_style;
+#[cfg(test)]
 #[path = "suites/help_controls.rs"]
 mod help_controls;
 #[cfg(test)]
