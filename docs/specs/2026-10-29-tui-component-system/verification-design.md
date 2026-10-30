@@ -337,6 +337,20 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Reuses:* the existing removal owner tests for the real refusal and retention: `account_removal_tests.rs:162-173` (enabled refusal, credentials and rows intact), `289-321` (a target re-enabled before the writer → `RequiresDisabled`), and the compiled `account_removal_cli.rs:126-139`.
 - *Unverified:* the real OAuth flows (C).
 
+**U17 · R18** (commands)
+- *Seam:* the quota `Refresh` action; the injected `QuotaRefresher`; the existing view-model reload under its lock.
+- *Observation:* A, with a stand-in `QuotaRefresher` that changes fixture values and counts calls. B, the quota binary with its fixture provider, at 120x36 in legacy and kitty modes.
+- *Target and journey:* B, `needed:` "Quota refresh". Lasting.
+- *Reference:* R18; U17.
+- *Passes when:*
+  - R and the menu item each start exactly one refresh. A second R during it does nothing, and the stand-in counts 1.
+  - "Refreshing…" shows in the top row while it runs, and the menu shows Refresh disabled with that reason.
+  - After it ends, the grid shows the changed values for the same selected account. An open Details shows them too.
+  - A stand-in failure shows one plain sentence (per account where it applies), with no second call.
+- *Wrong build that fails:* a double refresh; stale values after success; leaving or blanking the screen to refresh; a silent failure.
+- *Reuses:* the existing quota refresh command tests, for the fetch rules themselves.
+- *Unverified:* real provider latency and real provider errors.
+
 ## Journeys still needed
 
 | Journey | Layer | Lifetime | Entry and what it reads |
