@@ -27,7 +27,7 @@ export async function openMeasuredDetails(
 					phase: 'press',
 				},
 				surface: { kind: 'screen' },
-				target: null,
+				target: 'sessions-list',
 				action: 'details',
 			},
 		],
