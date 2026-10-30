@@ -41,6 +41,9 @@ pub async fn read_complete_source(
                         rows.push(row);
                     }
                 }
+                for part in &snapshot.native_live_coverage {
+                    SessionPickerRecord::apply_native_conflicts(&mut rows, part);
+                }
                 match progress {
                     InventoryPageProgress::Complete => {
                         return SourceInventoryResult::Ready {

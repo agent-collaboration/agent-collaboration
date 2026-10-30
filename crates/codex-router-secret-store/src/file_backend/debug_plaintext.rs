@@ -21,6 +21,31 @@ const DECLARATION_FILE: &str = "debug-plaintext.marker";
 const DECLARATION_VALUE: &[u8] = b"debug-plaintext-v1\n";
 
 impl FileSecretStore {
+    #[cfg(debug_assertions)]
+    pub(crate) fn remove_plaintext_account_credentials(
+        &self,
+        provider: codex_router_core::provider::Provider,
+        account_id: &codex_router_core::ids::AccountId,
+    ) -> Result<(), SecretStoreError> {
+        let scope_key = AccountCredentialKey::new(provider, account_id.clone(), 1)?.secret_key()?;
+        let _lock = self.authorize_plaintext_credential_operation(&scope_key)?;
+        for secret_key in self.list_pooled_credential_files("secret")? {
+            if let Some(key) = AccountCredentialKey::parse(&secret_key)?
+                && key.provider() == provider
+                && key.account_id() == account_id
+            {
+                let path = self.secret_path(&secret_key);
+                reject_symlink_path(&path)?;
+                match fs::remove_file(&path) {
+                    Ok(()) => self.record_file_removed(&path),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(source) => return Err(SecretStoreError::Filesystem { path, source }),
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Refuses a declared plaintext root before encrypted key retrieval, in every build.
     pub fn reject_debug_plaintext_declaration(root: &Path) -> Result<(), SecretStoreError> {
         if read_declaration(root)? {

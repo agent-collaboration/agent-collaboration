@@ -129,6 +129,9 @@ mod account_import_tests;
 #[path = "cli_contract_tests/account_login_tests.rs"]
 mod account_login_tests;
 
+#[path = "cli_contract_tests/account_removal_tests.rs"]
+mod account_removal_tests;
+
 #[cfg(target_os = "macos")]
 #[path = "cli_contract_tests/account_login_sandbox_tests.rs"]
 mod account_login_sandbox_tests;

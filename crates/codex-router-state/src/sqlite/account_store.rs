@@ -150,7 +150,7 @@ impl AsyncSqliteStateStore {
     ) -> Result<(), StateStoreError> {
         let active_generation = u64_to_i64(active_credential_generation)?;
         let mut transaction = self.pool.begin().await.map_err(sqlx_error)?;
-        sqlx::query(
+        let update = sqlx::query(
             "UPDATE accounts
                 SET status = ?2,
                     active_credential_generation = ?3
@@ -162,6 +162,10 @@ impl AsyncSqliteStateStore {
         .execute(&mut *transaction)
         .await
         .map_err(sqlx_error)?;
+        if update.rows_affected() == 0 {
+            transaction.rollback().await.map_err(sqlx_error)?;
+            return Ok(());
+        }
         crate::credit_store::invalidate_credit_observation_after_credential_mutation(
             &mut transaction,
             account_id,

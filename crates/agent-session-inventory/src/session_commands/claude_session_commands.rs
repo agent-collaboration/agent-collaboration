@@ -1,5 +1,9 @@
 //! `agent-sessions --provider claude` list and launch commands.
 
+use super::claude_terminal_launch::{
+    ClaudeTerminalAction, ClaudeTerminalRequest, RESUME_OVERRIDES_MESSAGE, prepare_claude_terminal,
+    run_claude_terminal,
+};
 use super::{
     SessionsCommand, SessionsCommandError, SessionsFormat, claude_launch_target::ClaudeLaunchTarget,
 };
@@ -16,8 +20,16 @@ pub fn run_claude_sessions_command<W: Write>(
         return write_claude_session_listing(stdout, command, &launch_target);
     }
     let session_id = command.id.as_deref();
+    if session_id.is_some() && !command.codex_args.is_empty() {
+        return Err(SessionsCommandError::ClaudeLaunch(
+            RESUME_OVERRIDES_MESSAGE.to_owned(),
+        ));
+    }
     if command.dry_run {
-        let arguments = launch_target.launch_arguments(session_id, &command.codex_args);
+        let arguments = session_id.map_or_else(
+            || command.codex_args.clone(),
+            |session_id| launch_target.launch_arguments(Some(session_id), &[]),
+        );
         return write_claude_dry_run(stdout, arguments.as_slice());
     }
 
@@ -25,27 +37,23 @@ pub fn run_claude_sessions_command<W: Write>(
         .enable_all()
         .build()
         .map_err(SessionsCommandError::Runtime)?;
-    let working_directory = session_id.and_then(|session_id| {
-        runtime.block_on(launch_target.resume_working_directory(session_id))
-    });
     let environment = runtime.block_on(launch_target.routed_environment())?;
-    let status = launch_target
-        .command(
-            session_id,
-            &command.codex_args,
-            working_directory.as_deref(),
-            environment,
-        )
-        .status()
-        .map_err(|error| {
-            SessionsCommandError::ClaudeLaunch(format!("failed to launch Claude Code: {error}"))
-        })?;
-    if !status.success() {
-        return Err(SessionsCommandError::ClaudeExit {
-            status: status.to_string(),
-        });
-    }
-    Ok(())
+    let action = session_id.map_or(
+        ClaudeTerminalAction::New {
+            arguments: &command.codex_args,
+        },
+        |session_id| ClaudeTerminalAction::Resume { session_id },
+    );
+    let attach = runtime.block_on(prepare_claude_terminal(
+        &launch_target,
+        ClaudeTerminalRequest {
+            action,
+            working_directory: None,
+        },
+        environment,
+    ))?;
+    drop(runtime);
+    run_claude_terminal(attach)
 }
 
 fn write_claude_session_listing<W: Write>(
@@ -59,7 +67,7 @@ fn write_claude_session_listing<W: Write>(
         .map_err(SessionsCommandError::Runtime)?;
     let (records, active_error) = runtime.block_on(launch_target.session_records(command.limit))?;
     if let Some(error) = active_error {
-        eprintln!("agent-sessions: active Claude session discovery unavailable: {error}");
+        eprintln!("agent-sessions: Claude session discovery: {error}");
     }
     match command.format {
         SessionsFormat::Json => {

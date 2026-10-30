@@ -88,7 +88,8 @@ pub(crate) async fn insert_quota_history_observation_in_async_transaction(
             window_status, effective, refresh_source, refresh_success,
             refresh_error_class, reset_credits_available
          )
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
+          WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)",
     )
     .bind(observation.account_id().as_str())
     .bind(observation.account_label())

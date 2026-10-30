@@ -165,6 +165,16 @@ async fn session_affinity_cleanup_hint_deletes_old_sqlite_rows() {
         1_000,
     );
     for affinity in [&old_affinity, &cutoff_affinity] {
+        let account = affinity.account_id().expect("fixture pin is active");
+        store
+            .upsert_account(&codex_router_state::account::AccountRecord::new(
+                affinity.provider(),
+                account.clone(),
+                account.as_str(),
+                codex_router_state::account::AccountStatus::Enabled,
+            ))
+            .await
+            .expect("affinity cleanup fixture requires a parent account");
         AsyncSessionAccountAffinityRepository::upsert_session_account_affinity(&store, affinity)
             .await
             .unwrap_or_else(|error| panic!("test affinity should persist: {error}"));
@@ -219,6 +229,15 @@ async fn active_session_history_compaction_hint_deletes_completed_old_sqlite_eve
         .unwrap_or_else(|error| panic!("test state store should open: {error}"));
     let account = AccountId::new("acct_compaction")
         .unwrap_or_else(|error| panic!("test account should validate: {error}"));
+    store
+        .upsert_account(&codex_router_state::account::AccountRecord::new(
+            Provider::Openai,
+            account.clone(),
+            account.as_str(),
+            codex_router_state::account::AccountStatus::Enabled,
+        ))
+        .await
+        .expect("compaction fixture requires a parent account");
     let reservation = ReservationId::new("reservation-compaction");
     store
         .record_active_client_acquired("responses", "process", &reservation, &account, 100, 1)

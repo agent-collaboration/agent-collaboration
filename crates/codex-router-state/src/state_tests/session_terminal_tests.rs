@@ -8,6 +8,7 @@ async fn sqlx_active_session_history_schema_matches_spec_terminal_counters() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_schema_spec"]).await;
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&format!("sqlite://{}", database_path.display()))
@@ -101,6 +102,7 @@ async fn sqlx_active_session_stale_prune_records_terminal_event_and_rollup() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_stale_session"]).await;
     let account = account_id("acct_stale_session");
     let reservation_id = ReservationId::new("reservation_stale_1");
 
@@ -285,6 +287,7 @@ async fn sqlx_current_schema_repairs_partial_v10_active_session_columns() {
         Ok(store) => store,
         Err(error) => panic!("partial v10 state store should open and repair: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_partial_v10"]).await;
     let account = account_id("acct_partial_v10");
     let reservation = ReservationId::new("reservation-partial-v10");
 
@@ -312,6 +315,7 @@ async fn sqlx_active_session_rollup_retention_purges_old_buckets() {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_rollup_retention"]).await;
     let account = account_id("acct_rollup_retention");
     let reservation_id = ReservationId::new("reservation_retention_1");
 

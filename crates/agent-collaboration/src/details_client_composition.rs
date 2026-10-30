@@ -61,7 +61,7 @@ pub(crate) fn production_inspector(context: CliContext) -> DetailsClientInspecto
                         ));
                     }
                     match native_claude {
-                        SourceNativeLaunchAvailability::Ready => {
+                        SourceNativeLaunchAvailability::Ready { .. } => {
                             Ok(DetailsClientCapabilities::Native {
                                 source: SourceNativeBinding {
                                     service_id: expected,

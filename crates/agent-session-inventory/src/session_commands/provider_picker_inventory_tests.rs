@@ -6,6 +6,151 @@ fn native_catalogue_page(sessions: Value, stored: bool) -> Value {
         "nativeCoverage":{"peer":{"kind":if stored {"notRequested"}else {"complete"}},"background":{"kind":"complete"}}})
 }
 
+fn background_observation(target: &Value, peer: Value) -> Value {
+    json!({"origin":"claudeCodeBackground","target":target,"workingDirectory":"/historical/job","jobHandle":"separate-job-handle","name":"Historical job","startedAt":1,"state":{"kind":"blocked"},"status":null,"peer":peer})
+}
+
+#[tokio::test]
+async fn older_peer_without_working_directory_decodes_and_projects_the_job_directory() {
+    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
+    let live = background_observation(
+        &target,
+        json!({"name":"Older live peer","status":"idle","startedAt":2,"updatedAt":3,"statusUpdatedAt":3,"kind":"interactive","entrypoint":"cli"}),
+    );
+    let _decoded =
+        serde_json::from_value::<collaboration_client::protocol::ProviderSessionSummary>(
+            live.clone(),
+        )
+        .expect("an older producer's peer must decode without workingDirectory");
+    let stored = background_observation(&target, Value::Null);
+    let (mut client, serving) = connect_fixture(vec![
+        ("endpoints_list", inventory_with_provider()),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([stored]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([live]), false),
+        ),
+        ("endpoints_list", inventory_with_provider()),
+    ])
+    .await;
+    let (_, rows, _) = load_provider_records(&mut client)
+        .await
+        .expect("the older source must remain readable");
+    serving.await.unwrap();
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.cwd.as_deref(), Some("/historical/job"));
+    assert!(
+        row.native_peer.is_some(),
+        "the peer observation must survive decoding"
+    );
+    assert_eq!(row.runtime_status, PickerRuntimeStatus::Idle);
+    assert!(row.native_restore_eligible());
+}
+
+#[tokio::test]
+async fn resumed_native_peer_projects_current_directory_and_retains_historical_job_facts() {
+    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
+    let stored = background_observation(&target, Value::Null);
+    let live = background_observation(
+        &target,
+        json!({"workingDirectory":"/current/peer","name":"Live peer","status":"idle","startedAt":2,"updatedAt":3,"statusUpdatedAt":3,"kind":"interactive","entrypoint":"cli"}),
+    );
+    let (mut client, serving) = connect_fixture(vec![
+        ("endpoints_list", inventory_with_provider()),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([stored]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([live]), false),
+        ),
+        ("endpoints_list", inventory_with_provider()),
+    ])
+    .await;
+    let (_, rows, _) = load_provider_records(&mut client).await.unwrap();
+    serving.await.unwrap();
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.cwd.as_deref(), Some("/current/peer"));
+    assert_eq!(
+        String::from(
+            row.native_background
+                .as_ref()
+                .unwrap()
+                .working_directory
+                .clone()
+        ),
+        "/historical/job"
+    );
+    assert_eq!(row.runtime_status, PickerRuntimeStatus::Idle);
+    assert!(row.native_restore_eligible());
+}
+
+#[tokio::test]
+async fn native_conflict_marks_only_its_session_and_unexplained_skips_still_reject() {
+    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
+    let other =
+        json!({"endpoint":target["endpoint"],"sessionId":"00000000-0000-4000-8000-000000000043"});
+    for skipped in [0, 1] {
+        let jobs = json!([
+            background_observation(&target, Value::Null),
+            background_observation(&other, Value::Null)
+        ]);
+        let mut loaded = native_catalogue_page(jobs.clone(), false);
+        loaded["nativeCoverage"]["conflicts"] =
+            json!([{"target":target,"reason":{"kind":"duplicateLiveClaims","claims":2}}]);
+        loaded["skippedRecords"] = json!(skipped);
+        let mut replies = vec![
+            ("endpoints_list", inventory_with_provider()),
+            (
+                "provider_sessions_list",
+                native_catalogue_page(json!([]), true),
+            ),
+            ("provider_sessions_list", native_catalogue_page(jobs, true)),
+            ("provider_sessions_list", loaded),
+        ];
+        if skipped == 0 {
+            replies.push(("endpoints_list", inventory_with_provider()));
+        }
+        let (mut client, serving) = connect_fixture(replies).await;
+        let result = load_provider_records(&mut client).await;
+        serving.await.unwrap();
+        if skipped > 0 {
+            assert!(result.is_err());
+            continue;
+        }
+        let (_, rows, coverage) = result.unwrap();
+        assert_eq!(rows.len(), 2);
+        let conflicted = rows
+            .iter()
+            .find(|row| row.session_id.ends_with("42"))
+            .unwrap();
+        assert_eq!(conflicted.runtime_status, PickerRuntimeStatus::Conflict);
+        assert!(!conflicted.native_restore_eligible());
+        assert!(conflicted.native_peer.is_none());
+        let other = rows
+            .iter()
+            .find(|row| row.session_id.ends_with("43"))
+            .unwrap();
+        assert_eq!(other.runtime_status, PickerRuntimeStatus::Blocked);
+        assert!(other.native_restore_eligible());
+        assert_eq!(coverage[1].state.conflicts().len(), 1);
+    }
+}
+
 #[tokio::test]
 async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
     let provider_page = json!({

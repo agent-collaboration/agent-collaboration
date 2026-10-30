@@ -28,5 +28,8 @@ pub enum SessionsPickerOutcome {
     InterruptedClientAction(
         Box<agent_session_inventory::sessions::source_client_action::CapturedClientAction>,
     ),
+    LaunchNativeClaude(
+        Box<agent_session_inventory::sessions::source_client_action::CapturedClientAction>,
+    ),
     TerminalTooNarrow,
 }

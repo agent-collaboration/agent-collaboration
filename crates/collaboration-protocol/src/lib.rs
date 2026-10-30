@@ -84,14 +84,15 @@ pub use permission_diagnostic::{
 };
 pub use provider_session_list::{
     ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
-    HostedProviderOrigin, ProviderSessionListParams, ProviderSessionListResult,
+    HostedProviderOrigin, NativeClaudeInventoryCoverage, NativeClaudePeerObservation,
+    NativeClaudeSessionConflict, ProviderSessionListParams, ProviderSessionListResult,
     ProviderSessionState, ProviderSessionSummary,
 };
 mod native_claude_inventory;
 pub use native_claude_inventory::{
-    NativeClaudeBackgroundState, NativeClaudeInventoryCoverage, NativeClaudeInventoryPart,
-    NativeClaudeJobHandle, NativeClaudePeerObservation, NativeClaudeStateName,
-    NativeInventoryUnavailableReason,
+    NativeClaudeBackgroundState, NativeClaudeConflictReason, NativeClaudeInventoryPart,
+    NativeClaudeJobHandle, NativeClaudeStateName, NativeInventoryInvalidReason,
+    NativeInventorySource, NativeInventoryUnavailableReason,
 };
 pub use question_contract::{
     QuestionAnswerParams, QuestionAnswerResult, QuestionAnswerValue, QuestionFieldView,

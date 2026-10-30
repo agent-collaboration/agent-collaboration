@@ -32,7 +32,8 @@ impl AsyncSqliteStateStore {
                route_band, process_run_id, reservation_id, account_id,
                acquired_unix_seconds, active_pressure
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?4)
              ON CONFLICT(route_band, process_run_id, reservation_id) DO UPDATE SET
                account_id = excluded.account_id,
                acquired_unix_seconds = excluded.acquired_unix_seconds,
@@ -136,7 +137,8 @@ impl AsyncSqliteStateStore {
                event_kind, event_unix_seconds, session_started_unix_seconds,
                session_ended_unix_seconds, transport_kind
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+              WHERE EXISTS (SELECT 1 FROM accounts WHERE account_id = ?1)",
         )
         .bind(event.account_id.as_str())
         .bind(event.route_band)

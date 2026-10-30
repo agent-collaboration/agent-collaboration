@@ -106,8 +106,20 @@ pub enum SourceReply {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum SourceNativeLaunchAvailability {
-    Ready,
-    Unavailable { message: String },
+    Ready {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        capabilities: Vec<SourceNativeClaudeCapability>,
+    },
+    Unavailable {
+        message: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceNativeClaudeCapability {
+    /// Resume refuses running jobs and live peers, and requires complete Loaded reads.
+    GuardedResume,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -406,6 +418,12 @@ pub struct PreparedSourceSession {
 pub enum SourceRejection {
     #[error("source request is invalid")]
     InvalidRequest,
+    #[error("native Claude {inventory_source} inventory: {reason}")]
+    InvalidNativeInventory {
+        #[serde(rename = "source")]
+        inventory_source: collaboration_client::protocol::NativeInventorySource,
+        reason: collaboration_client::protocol::NativeInventoryInvalidReason,
+    },
     #[error("source connection is unsupported")]
     UnsupportedConnection,
     #[error("selected Router service does not match")]
@@ -438,4 +456,6 @@ pub enum SourceReadError {
     ReadUnavailable,
     #[error("source reply is invalid")]
     InvalidReply,
+    #[error("source does not advertise guarded native Claude resume")]
+    UnguardedNativeResume,
 }

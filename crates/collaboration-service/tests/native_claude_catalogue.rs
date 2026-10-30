@@ -188,21 +188,183 @@ async fn native_peer_job_corroboration_and_equal_managed_identity_survive_page_b
             .await
             .is_err()
     );
+    fixture.api.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn resumed_peer_directory_does_not_invalidate_other_native_sessions() {
+    let fixture = CatalogueFixture::start(true).await.unwrap();
     fixture
-        .write_peer(SESSION, "/conflicting/native-directory", "idle")
+        .write_jobs(vec![
+            job("historical-job", SESSION, "blocked"),
+            job(
+                "unrelated-working-job",
+                "00000000-0000-4000-8000-000000000043",
+                "working",
+            ),
+        ])
+        .unwrap();
+    fixture
+        .write_peer(SESSION, "/source/resumed-in-another-directory", "idle")
+        .unwrap();
+    let registry =
+        claude_code_peer_messaging::ClaudeCodeSessionRegistry::new(fixture.peers.clone());
+    let peers = registry.live_sessions().unwrap();
+    assert_eq!(
+        peers.sessions.len(),
+        1,
+        "fixture peer must be live before exercising the join: skipped={}, lookup={:?}",
+        peers.skipped_records,
+        registry.lookup(&fixture.target.session_id)
+    );
+
+    let loaded = fixture
+        .client
+        .list_provider_sessions(query(
+            &fixture,
+            NativeSessionView::Loaded,
+            NativeSessionSource::Interactive,
+        ))
+        .await
+        .expect("a resumed peer's current directory must not invalidate the catalogue");
+
+    assert_eq!(loaded.sessions.len(), 2);
+    let resumed = loaded
+        .sessions
+        .iter()
+        .find(|summary| summary.target() == &fixture.target)
+        .unwrap();
+    let wire = serde_json::to_value(resumed).unwrap();
+    assert_eq!(wire["workingDirectory"], "/source/native");
+    assert_eq!(
+        wire["peer"]["workingDirectory"],
+        "/source/resumed-in-another-directory"
+    );
+    assert_eq!(wire["state"]["kind"], "blocked");
+    assert_eq!(wire["peer"]["status"], "idle");
+    let mut scoped = query(
+        &fixture,
+        NativeSessionView::Loaded,
+        NativeSessionSource::Interactive,
+    );
+    scoped.scope = NativeSessionScope::Cwd {
+        path: "/source/resumed-in-another-directory".into(),
+    };
+    let scoped = fixture.client.list_provider_sessions(scoped).await.unwrap();
+    assert_eq!(scoped.sessions.len(), 1);
+    assert_eq!(scoped.sessions[0].target(), &fixture.target);
+    let stored = fixture
+        .client
+        .list_provider_sessions(query(
+            &fixture,
+            NativeSessionView::Stored,
+            NativeSessionSource::Interactive,
+        ))
+        .await
+        .unwrap();
+    let stored = stored
+        .sessions
+        .iter()
+        .find(|summary| summary.target() == &fixture.target)
         .unwrap();
     assert!(
-        fixture
-            .client
-            .list_provider_sessions(query(
-                &fixture,
-                NativeSessionView::Loaded,
-                NativeSessionSource::Interactive
-            ))
-            .await
-            .is_err(),
-        "same UUID with conflicting directories is invalid, never index-deduplicated"
+        matches!(stored,ProviderSessionSummary::ClaudeCodeBackground { peer:None,working_directory,.. } if String::from(working_directory.clone())=="/source/native")
     );
+    let active = fixture
+        .client
+        .list_provider_sessions(query(
+            &fixture,
+            NativeSessionView::Active,
+            NativeSessionSource::Interactive,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(active.sessions.len(), 1);
+    assert_ne!(active.sessions[0].target(), &fixture.target);
+    fixture.api.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn duplicate_live_claims_are_attributed_without_erasing_known_jobs_or_other_sessions() {
+    let fixture = CatalogueFixture::start(true).await.unwrap();
+    fixture
+        .write_jobs(vec![
+            job("known-job", SESSION, "blocked"),
+            job(
+                "other-job",
+                "00000000-0000-4000-8000-000000000043",
+                "working",
+            ),
+        ])
+        .unwrap();
+    fixture
+        .write_peer(SESSION, "/source/native", "busy")
+        .unwrap();
+    let original = fixture.peers.join(format!("{}.json", std::process::id()));
+    let mut duplicate: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(original).unwrap()).unwrap();
+    let mut duplicate_process = tokio::process::Command::new("/bin/cat")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let second_pid = duplicate_process.id().unwrap();
+    duplicate["pid"] = json!(second_pid);
+    duplicate["cwd"] = json!("/other/live-claim");
+    std::fs::write(
+        fixture.peers.join(format!("{second_pid}.json")),
+        serde_json::to_vec(&duplicate).unwrap(),
+    )
+    .unwrap();
+
+    let page = fixture
+        .client
+        .list_provider_sessions(query(
+            &fixture,
+            NativeSessionView::Loaded,
+            NativeSessionSource::All,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        page.sessions.len(),
+        3,
+        "managed record, historical job and unrelated job survive"
+    );
+    assert_eq!(
+        page.skipped_records,
+        Some(0),
+        "duplicate claims are explained by typed coverage"
+    );
+    let coverage = page.native_coverage.unwrap();
+    assert_eq!(coverage.conflicts.len(), 1);
+    assert_eq!(coverage.conflicts[0].target, fixture.target);
+    assert_eq!(
+        coverage.conflicts[0].reason,
+        collaboration_protocol::NativeClaudeConflictReason::DuplicateLiveClaims { claims: 2 }
+    );
+    assert!(page.sessions.iter().any(|summary| matches!(summary,ProviderSessionSummary::ClaudeCodeBackground { target, peer:None,.. } if target==&fixture.target)));
+
+    std::fs::write(
+        fixture.peers.join(format!("{}.json", std::process::id())),
+        "PRIVATE_INVALID_REGISTRY_OUTPUT",
+    )
+    .unwrap();
+    let error = fixture
+        .client
+        .list_provider_sessions(query(
+            &fixture,
+            NativeSessionView::Loaded,
+            NativeSessionSource::Interactive,
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, collaboration_client::ClientError::Rejected { code: -32602, data: Some(ref data) } if data["source"]=="peerRegistry" && data["reason"]=="unexplainedSkippedRecords")
+    );
+    assert!(!format!("{error:?}").contains("PRIVATE_INVALID_REGISTRY_OUTPUT"));
+    duplicate_process.kill().await.unwrap();
     fixture.api.stop().await.unwrap();
 }
 
@@ -307,7 +469,7 @@ async fn native_peer_and_job_unavailability_empty_and_invalid_results_stay_disti
         .unwrap_err();
     assert!(matches!(
         error,
-        collaboration_client::ClientError::Rejected { code: -32602, .. }
+        collaboration_client::ClientError::Rejected { code: -32602, data: Some(ref data) } if data["source"]=="backgroundJobs" && data["reason"]=="invalidOutput"
     ));
     assert!(!format!("{error:?}").contains("PRIVATE_INVALID_VENDOR_OUTPUT"));
     fixture.api.stop().await.unwrap();

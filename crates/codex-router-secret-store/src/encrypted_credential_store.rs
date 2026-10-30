@@ -60,6 +60,29 @@ enum CredentialStoreState {
 }
 
 impl EncryptedCredentialStore {
+    /// Removes every generation for one provider account while retaining the shared data key.
+    /// The caller holds the account credential lock and has checked its disabled state.
+    pub fn remove_account_credentials(
+        &self,
+        provider: Provider,
+        account_id: &AccountId,
+    ) -> Result<(), SecretStoreError> {
+        let _ = self.ready_data_key()?;
+        let _store_lock = CredentialStoreLock::acquire(
+            self.file_store.root(),
+            CredentialStoreLockMode::Exclusive,
+        )?;
+        for secret_key in self.file_store.list_pooled_credential_files("v2")? {
+            if let Some(key) = AccountCredentialKey::parse(&secret_key)?
+                && key.provider() == provider
+                && key.account_id() == account_id
+            {
+                self.file_store.delete_credential_envelope(&secret_key)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Opens the pooled credential store through the production Keychain entry point.
     pub fn open_production_for_process(
         secret_root: impl AsRef<std::path::Path>,
