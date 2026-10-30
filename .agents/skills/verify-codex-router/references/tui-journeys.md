@@ -63,6 +63,7 @@ switch renderers or fabricate bytes to fill it.
 | `hard-` | Exact `visual-hard-cases` fixture: known Alpha windows, stale selected Beta weekly/Extra, Pool census/locked-credentials notice, close and Beta Details. Short height has distinct identity/window poses. |
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
+| S9 new entries (authored/absent) | [New-entry drafts](s9-new-entry-journeys.md), `s9-prestage.ts --check`: 19 authored B cases awaiting S6/S7, with scene/effect oracle checks. This command launches no product and reports zero product passes. |
 
 The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
 `baselinePlanSchema` with explicit `preparationProof`. It observes New's five

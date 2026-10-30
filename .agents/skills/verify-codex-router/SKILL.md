@@ -15,6 +15,8 @@ For model-free private Tailnet MCP/board verification, follow the separate [Tail
 
 For Sessions/Quota presentation, follow [compiled TUI journeys](references/tui-journeys.md). Reusable source-bound drivers use prebuilt compiled PTY fixtures and retain original wterm DOM PNGs from actual PTY bytes without starting a Host/provider session. Declare exact source/build/tools, plan, viewport and owned cleanup; fixture evidence is not public/provider proof. Narrow-width and short-height desktop proxies are the adopted phone scope; actual iPhone hardware is waived. Run results/history belong in the task evidence under `tmp/tui-verification/`, not this recipe.
 
+Future S9 toolbar/menu/dropdown/account-action/refresh cases are [authored new-entry drafts](references/s9-new-entry-journeys.md), explicitly absent at base until S6/S7. Their schema/oracle checks launch no TUI and establish no product pass. Claude stopped-session Details is Open-only under the 2026-10-30 correction; Open resumes the same session with saved settings and attaches.
+
 **Observed locally:** genuine Claude Question/Approval callbacks, actual Session test decisions, marker execution, owning SQLite reopen and exact cleanup on Sunclaw. The first unreachable native-Approver case remains negative evidence. **Portable cold entry and Cursor remain draft:** endpoint/settings/tool parameterization has structural and retained-Claude qualification; no Cursor model input or callback run has happened. Use [Cursor qualification](references/cursor-provider.md) before its first input. No successful journey is rerun merely to refresh the recipe.
 
 ## Launch and readiness
