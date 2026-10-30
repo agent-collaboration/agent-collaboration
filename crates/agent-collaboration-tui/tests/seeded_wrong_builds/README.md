@@ -56,6 +56,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `list-navigation-in-consumer.patch` | A consumer input chain changes the covered list beneath an overlay. |
 | `form-minimum-label-width-ignored.patch` | Separate sections place their values at different columns despite the shared minimum. |
 | `raw-unit-separator-not-normalized.patch` | The raw Help key misses Ctrl+7 and can produce an unprintable chord label. |
+| `content-scroll-pages-selection.patch` | ContentScroll page/wheel input changes the selected key instead of only scrolling content. |
+| `list-marker-offset-ignored.patch` | A folded group's marker is drawn on its heading rather than the configured row. |
 
 These controls are implementation evidence; the independent S5 observation is
 separate. Check each patch applies, then challenge it individually against the

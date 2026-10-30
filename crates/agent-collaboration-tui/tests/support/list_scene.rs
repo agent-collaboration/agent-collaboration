@@ -4,8 +4,8 @@ use agent_collaboration_tui::{
         ActionDef, ActionId, ActionRegistry, Availability, AvailabilityFn, Placement, ScopeId,
     },
     controls::{
-        Button, ListRow, ListRowKey, ListSelectionBinding, ListSelectionControl,
-        ListSelectionState, ScrollList, button_target,
+        Button, ListNavigationPolicy, ListRow, ListRowKey, ListSelectionBinding,
+        ListSelectionControl, ListSelectionState, ScrollList, button_target,
     },
     focus_model::{FocusModel, TargetId},
     input_owner::InputOwner,
@@ -52,6 +52,9 @@ pub struct ListSceneProps {
     pub activated: Arc<Mutex<Vec<String>>>,
     pub selections: Arc<Mutex<Vec<Option<String>>>>,
     pub handle: ListHandle,
+    pub navigation_policy: ListNavigationPolicy,
+    pub marker_offset: u16,
+    pub viewport_rows: Option<u16>,
 }
 #[component]
 pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -87,7 +90,8 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                     .push(key.map(|key| key.as_str().to_owned()))
             }),
             page_rows: Arc::new(|| 2),
-        });
+        })
+        .with_navigation_policy(props.navigation_policy);
         let mut targets = control.targets();
         let toolbar = ActionDef {
             id: action("toolbar"),
@@ -179,11 +183,12 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     });
     let control = handle.get().control;
     let journal = props.journal.clone();
-    element!(InputOwner(stack,width:76u16,height:24u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,format!("{}|{}",value.read().selected().map_or("-",ListRowKey::as_str),stack.snapshot().top().focus.current().map_or("-",TargetId::as_str)).into_bytes())]))) {
+    let scroll = control.scroll();
+    element!(InputOwner(stack,width:76u16,height:24u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,format!("{}|{}",value.read().selected().map_or("-",ListRowKey::as_str),stack.snapshot().top().focus.current().map_or("-",TargetId::as_str)).into_bytes()), (SurfaceId::Screen,scroll.position().offset.to_string().into_bytes())]))) {
         OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
             Text(content:format!("Details calls {}",calls.get()))
-            View(height:2) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("list")),scroll:control.scroll(),grow:true) {
-                #(control.rows().into_iter().map(|row|element!(ListRow(key:row.as_str().to_owned(),control:control.clone(),row:row.clone()) {Text(content:row.as_str().to_owned())}).into_any()))
+            View(height:props.viewport_rows.unwrap_or(2)) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("list")),scroll:control.scroll(),grow:true) {
+                #(control.rows().into_iter().map(|row|element!(ListRow(key:row.as_str().to_owned(),control:control.clone(),row:row.clone(),marker_offset:props.marker_offset) {Text(content:row.as_str().to_owned())}).into_any()))
             }}
             Button(id:target("toolbar"),action:action("toolbar"))
         }}

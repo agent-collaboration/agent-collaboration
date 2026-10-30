@@ -9,6 +9,13 @@ use crate::{
 use iocraft::prelude::*;
 use std::{collections::HashSet, sync::Arc};
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ListNavigationPolicy {
+    #[default]
+    RowPaging,
+    ContentScroll,
+}
+
 #[derive(Clone)]
 pub struct ListSelectionBinding {
     pub parent: SurfaceContext,
@@ -35,13 +42,19 @@ impl std::error::Error for ListControlError {}
 pub struct ListSelectionControl {
     binding: ListSelectionBinding,
     scroll: ScrollHandle,
+    navigation_policy: ListNavigationPolicy,
 }
 impl ListSelectionControl {
     pub fn new(binding: ListSelectionBinding) -> Self {
         Self {
             scroll: ScrollHandle::new(binding.parent.stack),
             binding,
+            navigation_policy: ListNavigationPolicy::default(),
         }
+    }
+    pub fn with_navigation_policy(mut self, policy: ListNavigationPolicy) -> Self {
+        self.navigation_policy = policy;
+        self
     }
     pub fn id(&self) -> &TargetId {
         &self.binding.id
@@ -147,7 +160,7 @@ impl ListSelectionControl {
             if control.binding.parent.stack.snapshot().top_id() != control.binding.parent.surface {
                 return InputUse::Unused;
             }
-            let (code, wheel) = match event {
+            let (code, wheel) = match &event {
                 TerminalEvent::Key(key)
                     if key.kind != KeyEventKind::Release && key.modifiers.is_empty() =>
                 {
@@ -168,6 +181,15 @@ impl ListSelectionControl {
                 },
                 _ => return InputUse::Unused,
             };
+            if control.navigation_policy == ListNavigationPolicy::ContentScroll
+                && (wheel
+                    || matches!(
+                        code,
+                        KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End
+                    ))
+            {
+                return control.scroll.handle_event(&event);
+            }
             let mut next = control.binding.value.read().clone();
             let changed = next.navigate(code, (control.binding.page_rows)());
             if changed {

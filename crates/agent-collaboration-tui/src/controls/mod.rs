@@ -24,7 +24,9 @@ pub mod list_row;
 pub mod list_selection_control;
 pub mod list_selection_state;
 pub use list_row::{ListRow, ListRowProps};
-pub use list_selection_control::{ListControlError, ListSelectionBinding, ListSelectionControl};
+pub use list_selection_control::{
+    ListControlError, ListNavigationPolicy, ListSelectionBinding, ListSelectionControl,
+};
 pub use list_selection_state::{ListRowKey, ListSelectionError, ListSelectionState};
 pub mod dialog_key_hints;
 pub mod dialog_section;

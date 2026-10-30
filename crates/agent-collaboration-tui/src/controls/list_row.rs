@@ -13,6 +13,7 @@ pub struct ListRowProps<'a> {
     pub control: ListSelectionControl,
     #[iocraft(required)]
     pub row: ListRowKey,
+    pub marker_offset: u16,
     pub children: Vec<AnyElement<'a>>,
 }
 #[component]
@@ -30,7 +31,9 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<
     let theme = context.theme();
     let children = std::mem::take(&mut props.children);
     element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if selected {SurfaceRole::Selected}else{context.surface_role()})) {
-            Text(content:if focused {UiGlyph::Focus.text()}else if selected {UiGlyph::Current.text()}else{" "},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted}))
+            View(width:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,padding_top:props.marker_offset) {
+                Text(content:if focused {UiGlyph::Focus.text()}else if selected {UiGlyph::Current.text()}else{" "},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted}))
+            }
             View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {#(children)}
     })
 }

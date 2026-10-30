@@ -26,6 +26,9 @@ mod input_isolation;
 #[path = "suites/list_controls.rs"]
 mod list_controls;
 #[cfg(test)]
+#[path = "suites/list_navigation_policy.rs"]
+mod list_navigation_policy;
+#[cfg(test)]
 #[path = "suites/live_actions.rs"]
 mod live_actions;
 #[cfg(test)]
