@@ -3,7 +3,7 @@ use agent_session_inventory::sessions::{
     source_client_action::SessionClientEffect,
     source_ssh_protocol::{SourceNativeLaunchAvailability, SourceReadError},
 };
-use agent_session_picker::session_picker::{
+use agent_session_tui::session_picker::{
     SessionClientPorts, SessionsPickerOutcome, SessionsPickerRequest,
     new_session_client_inventory::qualify_capabilities, run_sessions_picker,
 };
