@@ -99,6 +99,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U14 Same building blocks everywhere | The same control kinds on the picker and the quota screen go through the same behaviour tests and are compared in the gallery. | — |
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
 | 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. The real `agent-sessions` entry is driven through to Claude and Cursor actions on local and remote machines, and they still work. | Any case those routes haven't observed yet stays open, named, not waived. |
+| U16 Log in again from Details | From an account's Details, "Log in again" runs exactly that account's `account login` command after the quota screen has handed back the terminal, then quota returns on the same account. | The real OAuth login (browser or device code) is checked by you once. |
 
 ## Coverage rows
 
@@ -313,6 +314,21 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Wrong build that fails:* a capability that silently disappears in the move, such as a Sessions filter or a quota reset step. Or a picker whose components and fixture outcomes work while the public executable dispatches the wrong client, retargets the source, or no longer launches native Claude.
 - *Reuses:* the existing journeys and the PTY tests `compiled_quota_filters_real_stored_providers_and_disabled_intersections` and `compiled_sessions_atomic_paste_searches_literal_id_and_restores_terminal_modes`. Both are named in the journey reference as real PTY tests on the compiled fixture.
 - *Unverified:* whatever those journeys already list.
+
+**U16 · R17** (controls)
+- *Seam:* the quota Details action; the quota terminal outcome; the CLI's restart.
+- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. C, once: the owner logs in again for real from Details.
+- *Target and journey:* B, `needed:` "Log in again" on the quota binary, legacy and kitty modes. Lasting. C is temporary.
+- *Reference:* R17; U16.
+- *Passes when:*
+  - The stand-in records exactly one invocation with `account login --provider <that account's provider> --label <that account's label>` and the same Router root.
+  - The invocation happens after the quota screen restored terminal modes; the grid shows the stand-in's output on a normal screen, not inside the quota frame.
+  - Quota then returns with the same account selected.
+  - A stand-in exit with failure returns to quota with a plain message, and no second invocation.
+  - The action is the primary one for an account whose status is re-login required, and ordinary otherwise.
+- *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login.
+- *Reuses:* none.
+- *Unverified:* the real OAuth flows (C).
 
 ## Journeys still needed
 
