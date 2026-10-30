@@ -332,7 +332,7 @@ mod tests {
             let menu = text(&driver);
             assert!(
                 menu.lines()
-                    .any(|line| line.contains("Help") && line.contains("Ctrl+7")),
+                    .any(|line| line.contains("Help") && line.contains("F1")),
                 "{menu}"
             );
             assert!(

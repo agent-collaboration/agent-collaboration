@@ -74,6 +74,9 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `quit-alias-hardcodes-control-d.patch` | Ctrl+D globally quits an undeclared scope and steals its own domain binding. |
 | `raw-control-c-not-normalized.patch` | Raw U+0003 misses the shared Ctrl+C chord and cannot quit from a dialog. |
 | `combo-filter-editor-full-width.patch` | The filter editor measures the whole row rather than its remaining width and clips the query tail/cursor. |
+| `menu-no-widen.patch` | A requested narrow menu clips its title instead of expanding into available viewport space. |
+| `menu-auxiliary-starves-title.patch` | Unbounded key/reason columns force an action title to wrap at a narrow viewport. |
+| `menu-all-aliases.patch` | Menu paints the full alias list instead of the primary key; Help is the complete alias projection. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and

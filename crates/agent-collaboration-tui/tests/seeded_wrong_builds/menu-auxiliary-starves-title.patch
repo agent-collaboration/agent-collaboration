@@ -1,0 +1,16 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
+--- a/crates/agent-collaboration-tui/src/controls/menu.rs
++++ b/crates/agent-collaboration-tui/src/controls/menu.rs
+@@ -169,8 +169,8 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
+             let gap=u16::from(reason.is_some()&&key_width>0);
+-            let reason=ellipsize(reason.as_deref().unwrap_or_default(),remaining.saturating_sub(key_width+usize::from(gap)));
+-            let key=ellipsize(&key,key_width);
++            let reason=reason.unwrap_or_default();
++            let key=ellipsize(&key,usize::MAX);
+             element!(ScrollReveal(focused) {HitRegion(target:id.clone(),kind:HitRegionKind::Target) {View(width:100pct,min_height:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&id){SurfaceRole::Alternate}else{SurfaceRole::Raised})) {
+                 View(width:1,flex_shrink:0.0_f32) {Text(content:if action.checked==Some(true){UiGlyph::Checked.text()}else if focused {UiGlyph::Focus.text()}else{""},color:theme.foreground(TextRole::Focused))}
+-                View(flex_shrink:0.0_f32) {Text(content:action.title,wrap:TextWrap::NoWrap,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))}
+-                View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0,column_gap:gap) {
++                View(flex_shrink:1.0_f32) {Text(content:action.title,wrap:TextWrap::Wrap,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))}
++                View(flex_grow:1.0_f32,flex_shrink:0.0_f32,column_gap:gap) {
+                     View(flex_grow:1.0_f32,min_width:0) {Text(content:reason,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Disabled))}
