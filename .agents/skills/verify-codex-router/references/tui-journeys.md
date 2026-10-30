@@ -63,7 +63,7 @@ switch renderers or fabricate bytes to fill it.
 | `hard-` | Exact `visual-hard-cases` fixture: known Alpha windows, stale selected Beta weekly/Extra, Pool census/locked-credentials notice, close and Beta Details. Short height has distinct identity/window poses. |
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
-| S9 new entries (authored/absent) | [New-entry drafts](s9-new-entry-journeys.md), `s9-prestage.ts --check`: 19 authored B cases awaiting S6/S7, with scene/effect oracle checks. This command launches no product and reports zero product passes. |
+| S9 new entries (authored/absent) | [New-entry drafts](s9-new-entry-journeys.md), `s9-prestage.ts --check`: 27 authored B cases awaiting S6/S7, with scene/effect oracle checks. This command launches no product and reports zero product passes. |
 
 The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
 `baselinePlanSchema` with explicit `preparationProof`. It observes New's five
@@ -80,7 +80,9 @@ preparation dispatch. S6's agreed strict receipt is
 machine identifiers and runMode `foreground` or `background`. The recorded
 step names a fresh relative JSON filename and the independently declared expected
 request. It rejects missing receipts, extra fields, any count other than one, and
-any changed committed field. S9 requires the real recorded step. Never accept
+any changed committed field. That historical S0 preparer placeholder is superseded for local/default New by
+the [returned-outcome reader](input-consumption-readback.md); only configured
+New retains a counted preparer. Never accept
 `pending-s6` as dispatch proof.
 
 `wide-glyph-baseline.ts PLAN.json [--check]` extends `baselinePlanSchema` with

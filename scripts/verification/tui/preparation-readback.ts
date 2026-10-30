@@ -1,15 +1,14 @@
-/** S6's recording fixture is required before this can prove Start dispatch. */
+/** Counted configured-source New preparation only; local/default use returned New outcomes. */
 import { readFileSync } from 'node:fs';
 
 import { z } from 'zod';
 
 import { canonicalJson } from './source-binding.ts';
-export const preparationRequestSchema = z.strictObject({
-	client: z.string().min(1),
-	machine: z.string().min(1),
-	directory: z.string().min(1),
-	runMode: z.enum(['foreground', 'background']),
-});
+import { newSessionRequestSchema } from './source-qualified-outcome.ts';
+export const preparationRequestSchema = newSessionRequestSchema.refine(
+	(request) => request.machine.startsWith('configured:'),
+	'counted preparation requires a configured source',
+);
 export type PreparationRequest = z.infer<typeof preparationRequestSchema>;
 export const preparationReceiptSchema = z.strictObject({
 	callCount: z.literal(1),

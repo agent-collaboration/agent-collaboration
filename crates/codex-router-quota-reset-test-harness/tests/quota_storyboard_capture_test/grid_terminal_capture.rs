@@ -100,7 +100,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let storyboard_variant = std::env::var_os("TUI_GRID_STORYBOARD_VARIANT");
     if let Some(variant) = storyboard_variant.as_deref() {
         ensure(
-            surface == "sessions-filters" && variant == OsStr::new("wide-glyph-left-border"),
+            valid_storyboard_variant(&surface, variant),
             "invalid grid storyboard variant or surface",
         )?;
         environment.push(("CODEX_ROUTER_TUI_STORYBOARD_VARIANT", variant));
@@ -171,6 +171,37 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         outcome.bytes
     ))?;
     Ok(())
+}
+
+fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {
+    surface == "sessions-filters"
+        && [
+            "wide-glyph-left-border",
+            "source-qualified-outcome",
+            "configured-source-new",
+        ]
+        .iter()
+        .any(|candidate| variant == OsStr::new(candidate))
+}
+
+#[test]
+fn storyboard_variants_are_explicit_and_sessions_only() {
+    for variant in [
+        "wide-glyph-left-border",
+        "source-qualified-outcome",
+        "configured-source-new",
+    ] {
+        assert!(valid_storyboard_variant(
+            "sessions-filters",
+            OsStr::new(variant)
+        ));
+        assert!(!valid_storyboard_variant("quota", OsStr::new(variant)));
+        assert!(!valid_storyboard_variant("sessions", OsStr::new(variant)));
+    }
+    assert!(!valid_storyboard_variant(
+        "sessions-filters",
+        OsStr::new("unknown")
+    ));
 }
 
 pub(super) struct TerminalOutcome {

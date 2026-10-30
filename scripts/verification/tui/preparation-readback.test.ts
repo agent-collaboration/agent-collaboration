@@ -2,8 +2,8 @@ import { expect, test } from 'vitest';
 
 import { checkPreparationReadback, preparationProofSchema } from './preparation-readback.ts';
 const expected = {
-	client: 'codex-native',
-	machine: 'local',
+	client: 'codex',
+	machine: 'configured:Fixture remote',
 	directory: '/repo/project-a',
 	runMode: 'foreground',
 } satisfies import('./preparation-readback.ts').PreparationRequest;
@@ -13,10 +13,15 @@ test('Start proof requires exactly one recorded invocation and every committed f
 	).not.toThrow();
 	for (const callCount of [0, 2])
 		expect(() => checkPreparationReadback({ callCount, request: expected }, expected)).toThrow();
-	for (const field of ['client', 'machine', 'directory'])
+	for (const [field, foreign] of Object.entries({
+		client: 'claudeCode',
+		machine: 'configured:Foreign',
+		directory: '/foreign',
+		runMode: 'backgroundThenAttach',
+	}))
 		expect(() =>
 			checkPreparationReadback(
-				{ callCount: 1, request: { ...expected, [field]: 'foreign' } },
+				{ callCount: 1, request: { ...expected, [field]: foreign } },
 				expected,
 			),
 		).toThrow('committed fields');

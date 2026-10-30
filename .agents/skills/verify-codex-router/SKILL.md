@@ -15,6 +15,8 @@ For model-free private Tailnet MCP/board verification, follow the separate [Tail
 
 For Sessions/Quota presentation, follow [compiled TUI journeys](references/tui-journeys.md). Reusable source-bound drivers use prebuilt compiled PTY fixtures and retain original wterm DOM PNGs from actual PTY bytes without starting a Host/provider session. Declare exact source/build/tools, plan, viewport and owned cleanup; fixture evidence is not public/provider proof. Narrow-width and short-height desktop proxies are the adopted phone scope; actual iPhone hardware is waived. Run results/history belong in the task evidence under `tmp/tui-verification/`, not this recipe.
 
+The [input-consumption and returned-outcome readers](references/input-consumption-readback.md) validate the published core wire and U4/U5 source split. Reader sensitivity is qualified; actual S6b producer-byte integration remains pending.
+
 The [optional sessions fixture receipt transport](references/sessions-fixture-receipts.md) forwards one explicitly owned directory through both fixture launch paths. Transport qualification does not establish S6 producer contents or product input/effect outcomes.
 
 Future S9 toolbar/menu/dropdown/account-action/refresh cases are [authored new-entry drafts](references/s9-new-entry-journeys.md), explicitly absent at base until S6/S7. Their schema/oracle checks launch no TUI and establish no product pass. Claude stopped-session Details is Open-only under the 2026-10-30 correction; Open resumes the same session with saved settings and attaches.

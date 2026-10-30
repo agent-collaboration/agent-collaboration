@@ -23,6 +23,7 @@ export const baselinePlanSchema = z.object({
 	driver: z.object({ path: z.string(), sha256: z.string().length(64) }),
 	product: z.object({ path: z.string(), sha256: z.string().length(64) }),
 	output: z.string(),
+	pickerOnly: z.boolean().default(false),
 });
 export type BaselinePlan = z.infer<typeof baselinePlanSchema>;
 interface BaselineResult {
@@ -83,16 +84,20 @@ export async function withTerminal<TResult>(options: {
 	readonly keys: KeyProtocol;
 	readonly name: string;
 	readonly surface: 'sessions-filters' | 'quota';
+	readonly sessionsReceipts?: boolean;
 	readonly observe: (driver: PtyGridDriver, directory: string) => Promise<TResult>;
 }): Promise<TResult> {
 	const directory = join(options.plan.output, `${options.keys}-${options.surface}-${options.name}`);
 	mkdirSync(directory);
+	const receipts = options.sessionsReceipts ? join(directory, 'session-receipts') : undefined;
+	if (receipts !== undefined) mkdirSync(receipts);
 	const driver = await PtyGridDriver.start({
 		repository: options.plan.repository,
 		driver: options.plan.driver.path,
 		surface: options.surface,
 		keys: options.keys,
 		evidence: directory,
+		...(receipts === undefined ? {} : { sessionsReceiptDirectory: receipts }),
 	});
 	try {
 		await driver.waitForGrid('main', (grid) =>
@@ -104,7 +109,7 @@ export async function withTerminal<TResult>(options: {
 		await driver.stop();
 	}
 }
-async function observeMainEscape(
+export async function observeMainEscape(
 	plan: BaselinePlan,
 	keys: KeyProtocol,
 	surface: 'sessions-filters' | 'quota',
@@ -115,22 +120,48 @@ async function observeMainEscape(
 		surface,
 		name: 'main-escape',
 		observe: async (driver, directory) => {
+			const initial = gridLines(driver.grid());
+			const title = surface === 'quota' ? 'Quota Help' : 'Help';
+			const generation = driver.frameGeneration();
+			// Help is a real processing barrier after the ignored Esc; neither
+			// a stale grid nor a live PID establishes that Esc was handled.
+			await driver.send(Buffer.concat([keyBytes(keys, 'escape'), keyBytes(keys, 'help')]));
+			await driver.waitForGrid(
+				'Help after main Esc',
+				(grid) => findDialog(grid, title) !== null,
+				generation,
+			);
+			const opened = driver.frameGeneration();
 			await driver.send(keyBytes(keys, 'escape'));
+			await driver.waitForGrid(
+				'main restored after Help',
+				(grid) => findDialog(grid, title) === null,
+				opened,
+			);
+			const unchanged = JSON.stringify(gridLines(driver.grid())) === JSON.stringify(initial);
+			const running = await driver.running();
+			saveCheckpoint(driver, directory, 'after-escape');
+			await driver.send(Buffer.from(keys === 'legacy' ? '\x03' : '\x1b[99;5u'));
 			const readExit = async (): Promise<void> => {
 				if ((await driver.receive()) !== 'eof') await readExit();
 			};
 			await readExit();
-			const running = await driver.running();
-			saveCheckpoint(driver, directory, 'after-escape');
 			const transcript = driver.bytes().toString('utf8');
+			const exited = (await driver.finish()) === 0;
+			const outcomes = transcript.match(/SESSION_PICKER_OUTCOME [^\r\n]*/gu) ?? [];
+			const cancelled =
+				surface === 'quota' ||
+				(outcomes.length === 1 && outcomes[0] === 'SESSION_PICKER_OUTCOME canceled');
 			return {
 				name: `${surface} Esc never quits`,
 				keys,
 				kind: 'known-defect',
-				result: running ? 'pass' : 'red',
+				result: running && unchanged && exited && cancelled ? 'pass' : 'red',
 				expected: 'main remains running at default filters',
 				observed: {
 					running,
+					unchanged,
+					ctrlCExit: exited,
 					pickerOutcome: transcript.includes('SESSION_PICKER_OUTCOME canceled'),
 					terminalRestored: transcript.includes('\x1b[?1049l'),
 				},
@@ -263,17 +294,28 @@ async function observeIsolation(
 					);
 				});
 			let helpLegend: string | undefined;
-			if (surface === 'sessions-filters' && title === 'Sessions Help') {
-				const beforeScroll = driver.frameGeneration();
-				await driver.send(Buffer.concat(Array.from({ length: 8 }, () => keyBytes(keys, 'down'))));
-				await driver.waitForGrid(
-					'Esc legend visible',
-					(grid) => hasText(grid, 'Clear search or go back'),
-					beforeScroll,
-				);
-				helpLegend = gridLines(driver.grid()).find((line) =>
-					line.includes('Clear search or go back'),
-				);
+			if (surface === 'sessions-filters' && title === 'Help') {
+				const helpText = covered.cells
+					.slice(rect.top, rect.bottom + 1)
+					.map((row) =>
+						row
+							.slice(rect.left, rect.right + 1)
+							.map(cellText)
+							.join(''),
+					)
+					.join('\n');
+				if (!helpText.includes('Surface') || !helpText.includes('Sessions'))
+					throw new Error('shared Help lacks its Sessions context');
+				if (!hasText(driver.grid(), 'never quit')) {
+					const beforeScroll = driver.frameGeneration();
+					await driver.send(Buffer.concat(Array.from({ length: 8 }, () => keyBytes(keys, 'down'))));
+					await driver.waitForGrid(
+						'Esc legend visible',
+						(grid) => hasText(grid, 'never quit'),
+						beforeScroll,
+					);
+				}
+				helpLegend = gridLines(driver.grid()).find((line) => line.includes('never quit'));
 				saveCheckpoint(driver, directory, 'help-escape-legend');
 			}
 			const close = driver.frameGeneration();
@@ -309,17 +351,17 @@ async function observeIsolation(
 					observed: { dimmed, exposedCells: exposed.length },
 				},
 			];
-			if (surface === 'sessions-filters' && title === 'Sessions Help') {
+			if (surface === 'sessions-filters' && title === 'Help') {
 				if (helpLegend === undefined) throw new Error('named Esc Help legend not reached');
 				observations.push({
-					name: 'Help Esc legend disagrees with observed default Esc exit',
+					name: 'Help describes Esc as never quitting',
 					keys,
 					kind: 'known-defect',
-					result: 'red',
+					result: 'pass',
 					expected: 'Help names the actual main-screen Esc behaviour',
 					observed: {
 						legend: helpLegend.trim(),
-						actualAtDefaults: 'process exits (separate main-escape observation)',
+						actualAtDefaults: 'checked separately through Help barrier and Ctrl+C outcome',
 					},
 				});
 			}
@@ -333,17 +375,11 @@ export async function runBaseline(plan: BaselinePlan): Promise<readonly Baseline
 	const results: BaselineResult[] = [];
 	const runMode = async (keys: KeyProtocol): Promise<void> => {
 		results.push(await observeMainEscape(plan, keys, 'sessions-filters'));
-		results.push(await observeMainEscape(plan, keys, 'quota'));
+		if (!plan.pickerOnly) results.push(await observeMainEscape(plan, keys, 'quota'));
 		results.push(await observeNewFocus(plan, keys));
-		results.push(await observeQuotaRhythm(plan, keys));
+		if (!plan.pickerOnly) results.push(await observeQuotaRhythm(plan, keys));
 		results.push(
-			...(await observeIsolation(
-				plan,
-				keys,
-				'sessions-filters',
-				'Sessions Help',
-				keyBytes(keys, 'help'),
-			)),
+			...(await observeIsolation(plan, keys, 'sessions-filters', 'Help', keyBytes(keys, 'help'))),
 		);
 		results.push(
 			...(await observeIsolation(
@@ -372,21 +408,24 @@ export async function runBaseline(plan: BaselinePlan): Promise<readonly Baseline
 				Buffer.from(keys === 'legacy' ? '\x06' : '\x1b[102;5u'),
 			)),
 		);
-		results.push(
-			...(await observeIsolation(plan, keys, 'quota', 'Quota Help', keyBytes(keys, 'help'))),
-		);
-		results.push(
-			...(await observeIsolation(
-				plan,
-				keys,
-				'quota',
-				'Account details',
-				keyBytes(keys, 'details'),
-			)),
-		);
-		results.push(
-			...(await observeIsolation(plan, keys, 'quota', 'Pool details', Buffer.from('\x1b[15~'))),
-		);
+		if (!plan.pickerOnly)
+			results.push(
+				...(await observeIsolation(plan, keys, 'quota', 'Quota Help', keyBytes(keys, 'help'))),
+			);
+		if (!plan.pickerOnly)
+			results.push(
+				...(await observeIsolation(
+					plan,
+					keys,
+					'quota',
+					'Account details',
+					keyBytes(keys, 'details'),
+				)),
+			);
+		if (!plan.pickerOnly)
+			results.push(
+				...(await observeIsolation(plan, keys, 'quota', 'Pool details', Buffer.from('\x1b[15~'))),
+			);
 		for (const entry of ['≡ menu and toolbar', 'ComboBox dropdown'])
 			results.push({
 				name: entry,

@@ -121,3 +121,27 @@ test('PtyGridDriver forwards only its explicitly nominated sessions receipt dire
 		expect(readFileSync(join(output, 'observed-directory'), 'utf8')).toBe(nominated ?? 'absent');
 	}, Promise.resolve());
 });
+
+// Each variant uses the same driver environment route; these are transport facts only.
+test.each(['wide-glyph-left-border', 'source-qualified-outcome', 'configured-source-new'] as const)(
+	'PtyGridDriver forwards the explicit storyboard variant %s',
+	async (storyboardVariant) => {
+		const output = ownedRoot();
+		const bridge = join(output, 'variant-bridge.mjs');
+		writeFileSync(
+			bridge,
+			`#!${process.execPath}\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(output, 'variant'))}, process.env.TUI_GRID_STORYBOARD_VARIANT ?? 'absent');\nprocess.stdout.write('TUI_GRID READY 120 36\\n');\nprocess.stdin.on('data', () => { process.stdout.write('TUI_GRID STOPPED 0\\n'); process.exit(0); });\n`,
+			{ mode: 0o700 },
+		);
+		const driver = await PtyGridDriver.start({
+			repository: output,
+			driver: bridge,
+			surface: 'sessions-filters',
+			keys: 'legacy',
+			evidence: output,
+			storyboardVariant,
+		});
+		expect(await driver.stop()).toBe(0);
+		expect(readFileSync(join(output, 'variant'), 'utf8')).toBe(storyboardVariant);
+	},
+);
