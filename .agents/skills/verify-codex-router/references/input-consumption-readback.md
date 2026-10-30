@@ -237,3 +237,19 @@ The fallback chooses by the declared row kind and retains the exact single
 `resume:00000000-0000-4000-8000-000000000011` marker assertion. It does not
 infer an expected action from whichever button happens to be drawn. Controlled
 button-role grids reject the opposite row's label and missing Fork actions.
+
+### Measured Details and a bounded exit drain
+
+Lead push `01a18f06-903c-7bb2-99be-2ff6b9ced3d7` requires the Details
+fallback to observe Enter's exact screen/details acknowledgement before choosing
+a click target. Replay actual received synchronized frames individually to locate
+the first Details paint, then require its subsequent completed measurement redraw.
+A pending main redraw does not count, and coalesced first/second dialog frames
+must work. Retain `details-frame-binding.json` with the acknowledgement and frame
+ordinals. The click comes from the latest settled grid, not the first title match.
+
+The input journey exit drain uses one 8-second failure deadline across all reads,
+including a live child that keeps producing bytes. Only PTY EOF followed by the
+Rust driver's successful child-exit/finish check permits an outcome assertion.
+Missing EOF or read failure throws an apparatus error; neither becomes a product
+pass or red. The enclosing retained driver's stop path still owns cleanup.
