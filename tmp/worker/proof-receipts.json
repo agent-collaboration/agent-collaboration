@@ -1,7 +1,7 @@
 {
-  "stage": "Repaired-source CI comparison green; maincb01 integrated in checkpoint, combined-head CI pending; local builds held",
+  "stage": "119sourcepublicationcheckpoint;orderedlocalsteps1-4complete;finalCIandnewLead-authorizedopt0measurementpending",
   "base": "881f778c77b4d5532ef1be32f0bd2f44daaf73f5",
-  "workspaceVersion": "0.1.118",
+  "workspaceVersion": "0.1.119",
   "nativeGatePackages": [
     "acp-client-runtime",
     "agent-collaboration",
@@ -240,20 +240,20 @@
     "compileTiming": "Not a cold-compile comparison"
   },
   "unverified": [
-    "Local cancellation old-behavior red then exact restored green; initial compile interrupted before tests at30GiBfloor",
-    "Scoped all-target/all-feature Clippy for the repaired files after explicit local resume",
-    "One authorized archive stage breakdown; CI PASS39.804s does not provide the requested breakdown",
-    "Final main/version119 integration and its required release check/current-head CI",
-    "Ignored/manual disposable Host matrix journey; staging/live-provider/cross-machine claims remain outside obtained proof",
-    "Final-head Researcher PR body,Lead independent review and current-head comments/threads/readiness; no merge authority"
+    "Final119CIterminalresultandcompleteper-testnamereconciliation",
+    "Newlyauthorizedsingleopt0measurementandpre-submitattribution(afterpush/CIstart)",
+    "Ignored/manualdisposableHostmatrix,staging/liveprovider/cross-machineoutsideobtainedproof",
+    "Lead-ownedPR-bodyResearcher,independentreviewandacceptanceafterFINALhandback;nomergeauthority"
   ],
   "sourceProofHead": "819789a4572ff6f874eb30e28136d295a400a66f",
   "versionAssignment": {
-    "current": "0.1.118",
+    "current": "0.1.119",
     "target": "0.1.119",
-    "order": "PR193 released117;PR195 Claude fix118;PR194119",
-    "bump": "Deferred until Lead says next to merge",
-    "mergeMain": "cb01dffd3e60b29e814495fd676844690b07e313 integrated in checkpoint"
+    "status": "applied",
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18c3c-ecfd-7161-b944-f0b14067ceac",
+    "workspaceUpdates": 49,
+    "externalLockChanges": 0,
+    "receipt": "version119-update-receipt.json"
   },
   "ciComparison": {
     "run": 41004749636,
@@ -409,38 +409,33 @@
     ]
   },
   "localCancellation": {
-    "at": "2026-10-30T05:11:33.753Z",
-    "head": "819789a4572ff6f874eb30e28136d295a400a66f",
-    "path": "crates/codex-router-host/tests/support/controlled_host_wake_clock.rs",
-    "originalSha256": "6233eda0582fc0e489ff64566202b0c3bdd759ccde3c2c21e913b15f43b1a069",
-    "mutantSha256": "d248f2f8cf5301e495446f824b45a6298160bd7460d3dafdd28a30953b9c138d",
-    "mutation": "Restore pre-repair explicit resume after awaited advance, preserving permanent regression",
+    "receipt": "cancellation-regression-control.json",
     "red": {
-      "status": "unrun",
-      "commandExit": 130,
-      "testsExecuted": 0,
-      "reason": "Disk-floor guard interrupted compilation at32146333696bytes free before any Nextest Starting or Summary",
-      "log": "cancellation-red.log-receipt.json",
-      "disk": "cancellation-red-disk.json"
+      "status": "expected failure",
+      "commandExit": 100,
+      "passed": 0,
+      "failed": 1,
+      "skipped": 1,
+      "suiteSeconds": 0.211,
+      "oracle": "time is already frozen",
+      "rawPrefix": "cancellation-red-resumed",
+      "logSha256": "87b31ec5832130d47deaa7c5e8a00bb0b1289bc85a209e92dc160608ed56cb37"
     },
     "green": {
-      "status": "unrun",
-      "reason": "Red never executed; all local Cargo held"
+      "status": "pass",
+      "commandExit": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 1,
+      "suiteSeconds": 0.269,
+      "rawPrefix": "cancellation-green-resumed",
+      "logSha256": "d79ae603b28b4d87f6b55ea46815ba24b69d1ea575ac43ed8ff2d5627e9d9d20"
     },
-    "restoration": {
-      "at": "2026-10-30T05:26:47.090Z",
-      "sha256": "6233eda0582fc0e489ff64566202b0c3bdd759ccde3c2c21e913b15f43b1a069",
-      "exact": true
+    "sourceRestored": {
+      "at": "2026-10-30T10:09:26.116Z",
+      "exact": true,
+      "sha256": "6233eda0582fc0e489ff64566202b0c3bdd759ccde3c2c21e913b15f43b1a069"
     }
-  },
-  "activeHold": {
-    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18b58-2167-7f10-b5c8-83e4d9ebb52d",
-    "scope": "All local builds until explicit Lead resume",
-    "pending": [
-      "cancellation old-behavior red and restored green",
-      "scoped all-target all-feature Clippy for repaired files",
-      "one archive stage breakdown with temporary logging removed afterward"
-    ]
   },
   "retiredLocalMeasurement": {
     "script": "tmp/worker/run-native-package-gate.sh",
@@ -467,18 +462,125 @@
     "status": "Superseded by explicit Lead01a18b08 CI method; no valid local baseline outcomes; retained history only"
   },
   "mainIntegration": {
-    "main": "cb01dffd3e60b29e814495fd676844690b07e313",
-    "sourceProofHead": "819789a4572ff6f874eb30e28136d295a400a66f",
-    "validation": {
-      "manifestAndLockVersionConflicts": 50,
-      "currentVersion": "0.1.118",
-      "targetVersion": "0.1.119 remains deferred",
-      "combinedSqliteModule": "both incoming account_removal module/export and W1 observer preserved",
-      "proxyDeltaToMain": 0,
-      "directRustfmtExit": 0,
-      "diffCheckExit": 0,
-      "cargoBuild": "unrun; explicit Lead hold",
-      "integratedHeadCI": "pending"
-    }
+    "latestMain": "7af23abe970a6d2f7d503be452730fb30d7bb0c9",
+    "mergeCommit": "52686c970416828728bdbf5fb90ebf0ba61741ea",
+    "priorMain": "cb01dffd3e60b29e814495fd676844690b07e313",
+    "nativeClaudeTests": "newmaincataloguecasesandW1controlleddeadlinebothpreserved",
+    "conflicts": 0
+  },
+  "finalLocalQuality": {
+    "source": "52686c97Rustsourceplus119manifest/lockonly",
+    "nativeClippy": {
+      "packages": 17,
+      "includesCLI": true,
+      "allTargets": true,
+      "allFeatures": true,
+      "denyWarnings": true,
+      "exit": 0,
+      "seconds": 305,
+      "prefix": "final-scoped-clippy"
+    },
+    "wasmClippy": {
+      "allFeatures": true,
+      "target": "wasm32-unknown-unknown",
+      "exit": 0,
+      "seconds": 56.48,
+      "prefix": "final-wasm-clippy"
+    },
+    "releaseCheck": {
+      "version": "0.1.119",
+      "command": "cargo check --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins",
+      "exit": 0,
+      "seconds": 46.14,
+      "prefix": "final119-release-check"
+    },
+    "formatExit": 0,
+    "diffCheckExit": 0
+  },
+  "archiveOpt1": {
+    "head": "52686c970416828728bdbf5fb90ebf0ba61741ea",
+    "run": "90334ae0-de54-4a6d-a0c8-82d9f3cd027c",
+    "environment": "native macOS,Rust1.98.1,opt1,debugassertionsON,debug-info0,incremental0,jobs2",
+    "commandExit": 0,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 2,
+    "suiteSeconds": 17.061,
+    "caseSeconds": 17.042,
+    "archiveRequest": "01a18c61-31c1-7133-ba1c-c3034ef584fe",
+    "frame": "01a18c61-5908-7901-bef9-c57bb95afe40",
+    "intervalMicroseconds": {
+      "cliTotal": 11373126,
+      "cliStartToFleetSubmit": 10053768,
+      "admissionMutex": 12,
+      "outboxEnqueue": 571,
+      "sdkQueueFramePreparationAndSerialization": 60,
+      "socketSendToCentralAdmission": 501,
+      "centralAdmission": 19,
+      "fleetDispatchToTransaction": 102,
+      "transactionEntryIncludingNativeMutexAndBegin": 25,
+      "transactionTotal": 1274990,
+      "highWater": 53,
+      "snapshot": 11310,
+      "pureDecision": 2250,
+      "decisionApply": 60313,
+      "archiveCompletion": 1194583,
+      "notices": 4413,
+      "commitReturn": 2043,
+      "centralAnswerSendToTransportReceive": 3201,
+      "sdkRoundTrip": 1282518,
+      "cacheRefresh": 25157,
+      "finishSync": 4
+    },
+    "completeBoards": 258,
+    "boardSnapshotTotalMicroseconds": 1176160,
+    "boardTotalMicroseconds": 1176453,
+    "transportParseOverheadMicroseconds": 350,
+    "answer": {
+      "kind": "decided",
+      "matchingFrame": true,
+      "sdkErrorsObserved": 0,
+      "lateDecidedAfterAnswerLost": "Not observed: no AnswerLost occurred in this one run; no added observation waits"
+    },
+    "unattributed": [
+      "10.054s before FleetClient.submit includes CLI startup/IPC/API preparation; not assigned to SDK queue",
+      "Native transaction-entry bound includes mutex/BEGIN/setup; no separately isolated lease-wait claim",
+      "This Mac opt1 pass does not reproduce or explain the Linux opt0 CI PendingUnreachable failure"
+    ],
+    "sourceProvenance": "14archive-path files byte-identical to881f; this is source evidence,not a complete causal exclusion of surrounding changes",
+    "restoration": {
+      "files": 8,
+      "exact": true
+    },
+    "rawPrefix": "archive-measured-focused",
+    "stages": "archive-request-stages.jsonl"
+  },
+  "integratedCIFailure": {
+    "run": 41011565013,
+    "head": "05b6944cda248ae3f788829400c7a2a9184f96c0",
+    "passed": 5751,
+    "failed": 1,
+    "skipped": 96,
+    "suiteSeconds": 2228.519,
+    "onlyFailure": "archiveCLI PendingUnreachable vsAccepted",
+    "failureSeconds": 49.317,
+    "otherActiveJobs": "success",
+    "index": "pr194-integrated-ci-outcomes.index.json"
+  },
+  "activeGrant": {
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18c3c-ecfd-7161-b944-f0b14067ceac",
+    "floorGiB": 60,
+    "hold": false
+  },
+  "additionalArchiveOpt0": {
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18c67-8ba2-7d31-b1d2-b872eb147e02",
+    "status": "pendingafter119pushandCIstart",
+    "scope": "samecase,defaultdevopt0;attributepre-submitgap;temporaryloggingonly;restoreallfiles",
+    "noFix": true
+  },
+  "ciFailureHandling": {
+    "decision": "router://8b61218b-d5f3-4ae9-a2db-d2fb4075dbc2/push/01a18c67-8ba2-7d31-b1d2-b872eb147e02",
+    "archiveOnly": "Lead-knownseparateflakeLane;reportandDONOTrerun",
+    "otherFailures": "boundeddiagnosisrequired"
   }
 }
