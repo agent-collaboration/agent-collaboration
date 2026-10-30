@@ -238,12 +238,12 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Target and journey:* B on both screens at all six grids. Lasting.
 - *Reference:* R13 text; mocks 1, 2, q2 and q3.
 - *Passes when:*
-  - The picker's top row reads ≡ Menu, [+ New], [/ Filter…], [This folder | All], plus count and machine.
-  - The quota screen's top row reads ≡ Menu, [Details], [Filters: … ▾], [Pool], [Options], [Floor] when available, plus account count and clients.
+  - The picker's top row reads ≡ Menu F10, [+ New], [/ Filter…], [This folder | All], plus count and machine.
+  - The quota screen's top row reads ≡ Menu F10, [Details], [Filters: … ▾], [Pool], [Options], [Floor] when available, plus account count and clients.
   - Each menu lists exactly R13's items with their keys.
   - At narrow grids, buttons drop from the right, and every dropped action is still in the menu.
   - `/` focuses the picker's filter, and typing filters live.
-  - F10 opens the menu on both screens.
+  - F10 opens the menu on both screens, and Tab from the list reaches the menu button, where Enter opens it.
   - Neither screen shows a bottom row of keys or actions.
   - A test measures every crate-drawn glyph with the pinned renderer's width table and with current Unicode, and requires both to be one cell.
 - *Wrong build that fails:* Help or Quit on a toolbar; quota keeping its bottom row of actions; a dropped button whose action isn't in the menu. Or ☰ as the menu icon, which the second width table counts as two cells.

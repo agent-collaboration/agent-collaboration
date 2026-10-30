@@ -156,7 +156,7 @@ A form, such as New session, is as tall as its content, capped by the space avai
 
 **R13 — toolbars and menus** (U12, also serves `commands`). The session picker's top row shows, left to right:
 
-- ≡ Menu;
+- ≡ Menu, with its key shown beside it in muted text (F10);
 - a [+ New] button;
 - a [/ Filter…] text field;
 - a This folder &#124; All switch;
@@ -166,9 +166,9 @@ Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one 
 
 `/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8).
 
-The quota screen's top row shows, left to right: ≡ Menu; [Details]; [Filters: <current> ▾]; [Pool]; [Options]; [Floor] when the weekly floor is available; and, right-aligned, the account count and active clients. Its ≡ menu lists every quota action with its key (Details F4, Filters… F3, Pool details F5, Options… Ctrl+R, Weekly floor… Ctrl+E), then Help F1 and Quit Ctrl+C. The quota screen has no bottom row of actions.
+The quota screen's top row shows, left to right: ≡ Menu with its key (F10); [Details]; [Filters: <current> ▾]; [Pool]; [Options]; [Floor] when the weekly floor is available; and, right-aligned, the account count and active clients. Its ≡ menu lists every quota action with its key (Details F4, Filters… F3, Pool details F5, Options… Ctrl+R, Weekly floor… Ctrl+E), then Help F1 and Quit Ctrl+C. The quota screen has no bottom row of actions.
 
-On either screen, when the row is too narrow for every button, buttons drop off the row from the right; every action stays in the menu. *Entities: E1, E4, E5.*
+On either screen, Tab from the list reaches the toolbar, and the menu button is one of its targets. When the row is too narrow for every button, buttons drop off the row from the right; every action stays in the menu. *Entities: E1, E4, E5.*
 
 **R14 — combo boxes** (U13). A field that picks one option shows its current value followed by ▾.
 
