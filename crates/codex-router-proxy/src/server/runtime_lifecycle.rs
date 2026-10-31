@@ -25,7 +25,7 @@ pub(super) fn active_session_event_compaction_before(now_unix_seconds: u64) -> u
     now_unix_seconds.saturating_sub(ACTIVE_SESSION_EVENT_RETENTION_SECONDS)
 }
 
-pub(super) fn claim_session_affinity_cleanup_day(
+pub(super) fn claim_maintenance_cleanup_utc_day(
     last_attempted_utc_day: &AtomicU64,
     now_unix_seconds: u64,
 ) -> bool {

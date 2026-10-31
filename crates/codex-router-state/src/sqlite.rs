@@ -109,6 +109,9 @@ use crate::session_account_affinity::SessionAccountAffinity;
 
 const CURRENT_SCHEMA_VERSION: i64 = 13;
 
+/// Maximum previous-response affinity owner rows deleted by one retention batch.
+pub const PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE: i64 = 500;
+
 /// SQLite state store failure.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum StateStoreError {

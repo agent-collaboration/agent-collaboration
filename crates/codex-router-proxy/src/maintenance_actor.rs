@@ -10,6 +10,7 @@ use std::sync::mpsc::Sender as TestCompletionSender;
 
 use codex_router_core::routes::RouteBand;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
+use codex_router_state::sqlite::PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE;
 use codex_router_state::sqlite::StateStoreError;
 use futures_util::future::BoxFuture;
 use thiserror::Error;
@@ -24,6 +25,7 @@ use crate::telemetry::record_maintenance_lag_observed;
 /// Default bounded capacity for coalesced maintenance hints.
 pub const MAINTENANCE_QUEUE_CAPACITY: usize = 32;
 
+const PREVIOUS_RESPONSE_AFFINITY_OWNER_MAX_BATCHES_PER_PASS: usize = 4_096;
 const PREVIOUS_RESPONSE_AFFINITY_OWNER_RETENTION_SECONDS: u64 = 30 * 86_400;
 
 pub(crate) const fn previous_response_affinity_owner_retention_cutoff(
@@ -206,9 +208,28 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                 MaintenanceHint::PrunePreviousResponseAffinityOwners {
                     created_before_unix_seconds,
                 } => {
-                    let _deleted_rows = self
-                        .prune_previous_response_owners_before(created_before_unix_seconds)
-                        .await?;
+                    let mut rows_deleted = 0_u64;
+                    let mut batch_count = 0_u64;
+                    for _batch_index in 0..PREVIOUS_RESPONSE_AFFINITY_OWNER_MAX_BATCHES_PER_PASS {
+                        let deleted_in_batch = self
+                            .prune_previous_response_owners_before(created_before_unix_seconds)
+                            .await?;
+                        rows_deleted = rows_deleted.saturating_add(deleted_in_batch);
+                        batch_count = batch_count.saturating_add(1);
+                        let batch_was_full = i64::try_from(deleted_in_batch).ok()
+                            == Some(PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE);
+                        if !batch_was_full {
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                    tracing::info!(
+                        maintenance.class = "previous_response_affinity_owner_retention",
+                        route_band = "all",
+                        maintenance.rows_deleted = rows_deleted,
+                        maintenance.batch_count = batch_count,
+                        "codex_router.maintenance_completed"
+                    );
                 }
             }
             Ok(())

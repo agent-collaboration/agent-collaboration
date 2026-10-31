@@ -1,12 +1,11 @@
 //! SQLite affinity store responsibilities.
 use super::{
-    AccountId, AffinityKeyHash, AffinitySourceTransport, AsyncSqliteStateStore, PinObservation,
+    AccountId, AffinityKeyHash, AffinitySourceTransport, AsyncSqliteStateStore,
+    PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE, PinObservation,
     PreviousResponseAffinityOwnerLookup, PreviousResponseAffinityOwnerRecord, Provider, RouteBand,
     Row, SessionAccountAffinity, StateStoreError, i64_to_u64, i64_to_u64_account_generation,
     sqlx_error, u64_to_i64,
 };
-
-const PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE: i64 = 500;
 
 impl AsyncSqliteStateStore {
     /// Writes a previous-response owner record through the async state pool.

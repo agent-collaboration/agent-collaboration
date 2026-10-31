@@ -1,21 +1,33 @@
 use super::{
-    AsyncHttpAffinityOwnerRecorder, AsyncProviderErrorObserver, AsyncSqliteStateStore, BoxFuture,
-    DbWriteActor, DbWriteCommand, DbWriteEnqueueResult, HttpProxyError,
-    PreviousResponseAffinityOwnerRecord, ProviderErrorClassification,
-    ProviderErrorObservationError, RouteBand, RouteBandPostExhaustionOutcomeInput,
-    RouteBandQueueHealth, RouteBandReservationBooks, RouteBandRuntimeExhaustions, RouteProfile,
+    Arc, AsyncHttpAffinityOwnerRecorder, AsyncProviderErrorObserver, AsyncSqliteStateStore,
+    AtomicU64, BoxFuture, DbWriteActor, DbWriteCommand, DbWriteEnqueueResult, HttpProxyError,
+    MaintenanceActor, MaintenanceHint, PreviousResponseAffinityOwnerRecord,
+    ProviderErrorClassification, ProviderErrorObservationError, RouteBand,
+    RouteBandPostExhaustionOutcomeInput, RouteBandQueueHealth, RouteBandReservationBooks,
+    RouteBandRuntimeExhaustions, RouteProfile, claim_maintenance_cleanup_utc_day,
     mark_runtime_quota_exhausted, record_provider_error_observation,
     route_band_post_exhaustion_outcome,
 };
+use crate::maintenance_actor::previous_response_affinity_owner_retention_cutoff;
 
 #[derive(Clone, Debug)]
 pub(super) struct DbWriteAffinityOwnerRecorder {
     pub(super) db_write_actor: DbWriteActor,
+    maintenance_actor: MaintenanceActor,
+    last_cleanup_utc_day: Arc<AtomicU64>,
 }
 
 impl DbWriteAffinityOwnerRecorder {
-    pub(super) const fn new(db_write_actor: DbWriteActor) -> Self {
-        Self { db_write_actor }
+    pub(super) fn new(
+        db_write_actor: DbWriteActor,
+        maintenance_actor: MaintenanceActor,
+        last_cleanup_utc_day: Arc<AtomicU64>,
+    ) -> Self {
+        Self {
+            db_write_actor,
+            maintenance_actor,
+            last_cleanup_utc_day,
+        }
     }
 }
 
@@ -25,11 +37,27 @@ impl AsyncHttpAffinityOwnerRecorder for DbWriteAffinityOwnerRecorder {
         owner: PreviousResponseAffinityOwnerRecord,
     ) -> BoxFuture<'a, Result<(), HttpProxyError>> {
         Box::pin(async move {
+            let now_unix_seconds = owner.created_unix_seconds();
             match self
                 .db_write_actor
                 .try_enqueue(DbWriteCommand::previous_response_affinity_owner(owner))
             {
-                DbWriteEnqueueResult::Enqueued => Ok(()),
+                DbWriteEnqueueResult::Enqueued => {
+                    if claim_maintenance_cleanup_utc_day(
+                        &self.last_cleanup_utc_day,
+                        now_unix_seconds,
+                    ) {
+                        let _retention_enqueue_result = self.maintenance_actor.try_enqueue(
+                            MaintenanceHint::PrunePreviousResponseAffinityOwners {
+                                created_before_unix_seconds:
+                                    previous_response_affinity_owner_retention_cutoff(
+                                        now_unix_seconds,
+                                    ),
+                            },
+                        );
+                    }
+                    Ok(())
+                }
                 DbWriteEnqueueResult::FullDegraded | DbWriteEnqueueResult::ClosedDegraded => {
                     Err(HttpProxyError::Selection {
                         reason:

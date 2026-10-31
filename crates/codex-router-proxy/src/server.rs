@@ -190,7 +190,7 @@ use protocol_handler::{
 pub(crate) use response_body::*;
 pub use runtime_config::*;
 use runtime_lifecycle::{
-    active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    active_session_event_compaction_before, claim_maintenance_cleanup_utc_day,
     store_connection_join_error, store_optional_connection_join_error,
     supervise_detached_connection_handler,
 };

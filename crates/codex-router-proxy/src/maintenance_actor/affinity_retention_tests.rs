@@ -21,6 +21,7 @@ use super::MaintenanceCompletion;
 use super::MaintenanceEnqueueResult;
 use super::MaintenanceHint;
 use super::previous_response_affinity_owner_retention_cutoff;
+use crate::test_log_capture::capture_log_output_async;
 
 static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -38,97 +39,132 @@ fn previous_response_affinity_owner_retention_cutoff_uses_injected_clock() {
 #[tokio::test]
 async fn maintenance_actor_prunes_old_response_affinity_owner_retention_and_keeps_cutoff_row() {
     const INJECTED_NOW_UNIX_SECONDS: u64 = 90 * 86_400;
+    const OLD_ROW_COUNT: u64 = 1_201;
     let cutoff_unix_seconds =
         previous_response_affinity_owner_retention_cutoff(INJECTED_NOW_UNIX_SECONDS);
-    let database_path = test_database_path();
-    let store = AsyncSqliteStateStore::open(&database_path)
-        .await
-        .unwrap_or_else(|error| panic!("test state store should open: {error}"));
-    let account_id = AccountId::new("acct_affinity_retention")
-        .unwrap_or_else(|error| panic!("test account should validate: {error}"));
-    store
-        .upsert_account(&AccountRecord::new(
-            Provider::Openai,
+    let (rendered_log, ()) = capture_log_output_async(async {
+        let database_path = test_database_path();
+        let store = AsyncSqliteStateStore::open(&database_path)
+            .await
+            .unwrap_or_else(|error| panic!("test state store should open: {error}"));
+        let account_id = AccountId::new("acct_affinity_retention")
+            .unwrap_or_else(|error| panic!("test account should validate: {error}"));
+        store
+            .upsert_account(&AccountRecord::new(
+                Provider::Openai,
+                account_id.clone(),
+                account_id.as_str(),
+                AccountStatus::Enabled,
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("retention fixture account should persist: {error}"));
+        for row_index in 0..OLD_ROW_COUNT {
+            let affinity_key_hash = AffinityKeyHash::new(format!("{row_index:064x}"))
+                .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
+            let owner = PreviousResponseAffinityOwnerRecord::new(
+                affinity_key_hash,
+                account_id.clone(),
+                1,
+                RouteBand::Responses,
+                AffinitySourceTransport::HttpSse,
+                cutoff_unix_seconds - 1,
+            );
+            AsyncAffinityRepository::write_previous_response_owner(&store, &owner)
+                .await
+                .unwrap_or_else(|error| panic!("old owner fixture should persist: {error}"));
+        }
+        let cutoff_hash = AffinityKeyHash::new("a".repeat(64))
+            .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
+        let newer_hash = AffinityKeyHash::new("b".repeat(64))
+            .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
+        let cutoff_owner = PreviousResponseAffinityOwnerRecord::new(
+            cutoff_hash.clone(),
             account_id.clone(),
-            account_id.as_str(),
-            AccountStatus::Enabled,
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("retention fixture account should persist: {error}"));
-    let old_hash = AffinityKeyHash::new("a".repeat(64))
-        .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
-    let cutoff_hash = AffinityKeyHash::new("b".repeat(64))
-        .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
-    let old_owner = PreviousResponseAffinityOwnerRecord::new(
-        old_hash.clone(),
-        account_id.clone(),
-        1,
-        RouteBand::Responses,
-        AffinitySourceTransport::HttpSse,
-        cutoff_unix_seconds - 1,
-    );
-    let cutoff_owner = PreviousResponseAffinityOwnerRecord::new(
-        cutoff_hash.clone(),
-        account_id,
-        1,
-        RouteBand::Responses,
-        AffinitySourceTransport::HttpSse,
-        cutoff_unix_seconds,
-    );
-    AsyncAffinityRepository::write_previous_response_owner(&store, &old_owner)
-        .await
-        .unwrap_or_else(|error| panic!("old owner fixture should persist: {error}"));
-    AsyncAffinityRepository::write_previous_response_owner(&store, &cutoff_owner)
-        .await
-        .unwrap_or_else(|error| panic!("cutoff owner fixture should persist: {error}"));
+            1,
+            RouteBand::Responses,
+            AffinitySourceTransport::HttpSse,
+            cutoff_unix_seconds,
+        );
+        let newer_owner = PreviousResponseAffinityOwnerRecord::new(
+            newer_hash.clone(),
+            account_id,
+            1,
+            RouteBand::Responses,
+            AffinitySourceTransport::HttpSse,
+            cutoff_unix_seconds + 1,
+        );
+        for owner in [&cutoff_owner, &newer_owner] {
+            AsyncAffinityRepository::write_previous_response_owner(&store, owner)
+                .await
+                .unwrap_or_else(|error| panic!("retained owner fixture should persist: {error}"));
+        }
 
-    let actor = MaintenanceActor::start(store.clone(), 8);
-    let (completion_sender, completion_receiver) = mpsc::channel::<MaintenanceCompletion>();
-    actor.register_completion_sender(completion_sender);
-    assert_eq!(
-        actor.try_enqueue(MaintenanceHint::PrunePreviousResponseAffinityOwners {
-            created_before_unix_seconds: cutoff_unix_seconds,
-        }),
-        MaintenanceEnqueueResult::Enqueued
-    );
-    let completion = tokio::task::spawn_blocking(move || completion_receiver.recv())
-        .await
-        .unwrap_or_else(|error| panic!("maintenance completion receiver should join: {error}"))
-        .unwrap_or_else(|error| {
-            panic!("maintenance actor should report its completed hint: {error}")
-        });
-    assert_eq!(
-        completion.maintenance_class(),
-        "previous_response_affinity_owner_retention"
-    );
-    assert_eq!(completion.route_band(), "all");
+        let actor = MaintenanceActor::start(store.clone(), 8);
+        let (completion_sender, completion_receiver) = mpsc::channel::<MaintenanceCompletion>();
+        actor.register_completion_sender(completion_sender);
+        assert_eq!(
+            actor.try_enqueue(MaintenanceHint::PrunePreviousResponseAffinityOwners {
+                created_before_unix_seconds: cutoff_unix_seconds,
+            }),
+            MaintenanceEnqueueResult::Enqueued
+        );
+        let completion = tokio::task::spawn_blocking(move || completion_receiver.recv())
+            .await
+            .unwrap_or_else(|error| panic!("maintenance completion receiver should join: {error}"))
+            .unwrap_or_else(|error| {
+                panic!("maintenance actor should report its completed hint: {error}")
+            });
+        assert_eq!(
+            completion.maintenance_class(),
+            "previous_response_affinity_owner_retention"
+        );
+        assert_eq!(completion.route_band(), "all");
 
-    assert_eq!(
-        AsyncAffinityRepository::load_previous_response_owner(
-            &store,
-            &old_hash,
-            RouteBand::Responses.as_str(),
-        )
-        .await,
-        Ok(PreviousResponseAffinityOwnerLookup::Missing)
-    );
-    assert_eq!(
-        AsyncAffinityRepository::load_previous_response_owner(
-            &store,
-            &cutoff_hash,
-            RouteBand::Responses.as_str(),
-        )
-        .await,
-        Ok(PreviousResponseAffinityOwnerLookup::Found(cutoff_owner))
-    );
+        for row_index in 0..OLD_ROW_COUNT {
+            let old_hash = AffinityKeyHash::new(format!("{row_index:064x}"))
+                .unwrap_or_else(|error| panic!("test affinity hash should validate: {error}"));
+            assert_eq!(
+                AsyncAffinityRepository::load_previous_response_owner(
+                    &store,
+                    &old_hash,
+                    RouteBand::Responses.as_str(),
+                )
+                .await,
+                Ok(PreviousResponseAffinityOwnerLookup::Missing)
+            );
+        }
+        assert_eq!(
+            AsyncAffinityRepository::load_previous_response_owner(
+                &store,
+                &cutoff_hash,
+                RouteBand::Responses.as_str(),
+            )
+            .await,
+            Ok(PreviousResponseAffinityOwnerLookup::Found(cutoff_owner))
+        );
+        assert_eq!(
+            AsyncAffinityRepository::load_previous_response_owner(
+                &store,
+                &newer_hash,
+                RouteBand::Responses.as_str(),
+            )
+            .await,
+            Ok(PreviousResponseAffinityOwnerLookup::Found(newer_owner))
+        );
 
-    actor.shutdown().await;
-    store
-        .close()
-        .await
-        .unwrap_or_else(|error| panic!("test state store should close: {error}"));
-    std::fs::remove_file(&database_path)
-        .unwrap_or_else(|error| panic!("test state database should be removed: {error}"));
+        actor.shutdown().await;
+        store
+            .close()
+            .await
+            .unwrap_or_else(|error| panic!("test state store should close: {error}"));
+        std::fs::remove_file(&database_path)
+            .unwrap_or_else(|error| panic!("test state database should be removed: {error}"));
+    })
+    .await;
+
+    assert!(rendered_log.contains("codex_router.maintenance_completed"));
+    assert!(rendered_log.contains("maintenance.rows_deleted=1201"));
+    assert!(rendered_log.contains("maintenance.batch_count=3"));
 }
 
 fn test_database_path() -> PathBuf {
