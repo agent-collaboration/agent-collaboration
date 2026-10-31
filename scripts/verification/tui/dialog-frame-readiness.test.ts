@@ -29,12 +29,12 @@ const receipt=path.join(process.env.TUI_SESSIONS_FIXTURE_RECEIPT_DIR,'input-disp
 const emit=t=>process.stdout.write('TUI_GRID '+t+'\\n');
 const frame=t=>'\\x1b[?2026h\\x1b[2J\\x1b[H'+t+'\\x1b[?2026l';
 const dialog=row=>'\\x1b[2;2H┌────────────────────────────────────────┐\\x1b[3;2H│ Session details                        │\\x1b['+row+';4H\\x1b[93m● Resume\\x1b[0m\\x1b[8;2H└────────────────────────────────────────┘';
-let queue=[frame('Codex Alpha')];emit('READY 120 36');
+let queue=[frame('Codex Alpha')];const flush=()=>{for(const bytes of queue)emit('BYTES '+Buffer.from(bytes).toString('hex'));queue=[];};emit('READY 120 36 STREAM');flush();if(${options.exit === true})emit('EOF');
 createInterface({input:process.stdin}).on('line',line=>{
 if(line.startsWith('write ')){
 fs.appendFileSync(receipt,JSON.stringify({sequence:1,event:{kind:'key',code:{kind:'fixed',name:'Return'},modifiers:[],phase:'press'},surface:{kind:'screen'},target:${options.badTarget === true ? 'null' : "'sessions-list'"},action:'details'})+'\\n');
-const draws=[frame('Codex Alpha pending main draw'),frame(dialog(6)),...(${options.missingRedraw === true}?[]:[frame(dialog(5))])];queue.push(...(${options.coalesced === true}?[draws.join('')]:draws));emit('OK');
-}else if(line.startsWith('read ')){const next=queue.shift();emit(next===undefined?(${options.exit === true}?'EOF':${options.missingRedraw === true}?'READ_ERROR missing redraw':'BYTES 20'):'BYTES '+Buffer.from(next).toString('hex'));}
+const draws=[frame('Codex Alpha pending main draw'),frame(dialog(6)),...(${options.missingRedraw === true}?[]:[frame(dialog(5))])];queue.push(...(${options.coalesced === true}?[draws.join('')]:draws));emit('OK');flush();if(${options.missingRedraw === true})emit('READ_ERROR missing redraw');
+}else if(line.startsWith('read ')){emit('OK');}
 else if(line==='finish'||line==='stop'){emit(line==='finish'?'FINISHED 0':'STOPPED 0');process.exit(0);}
 else emit('OK');});`,
 	);

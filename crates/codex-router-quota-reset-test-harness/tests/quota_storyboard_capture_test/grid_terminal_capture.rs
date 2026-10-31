@@ -212,7 +212,27 @@ pub(super) fn drive_terminal(
     mut terminal: TerminalDriver,
     protocol: KeyboardProtocol,
 ) -> TestResult<TerminalOutcome> {
-    emit("READY 120 36")?;
+    // Handshake precedes unsolicited output, including terminal queries that
+    // can make the observer issue a reply command immediately.
+    emit("READY 120 36 STREAM")?;
+    let forwarding = terminal.forward_output(|bytes| {
+        emit(&match bytes {
+            Some(bytes) => format!("BYTES {}", encode_hex(bytes)),
+            None => "EOF".to_owned(),
+        })
+        .map_err(|error| std::io::Error::other(error.to_string()))
+    });
+    let outcome = drive_commands(terminal, protocol);
+    // The original TerminalDriver still owns/reaps the child; join the output
+    // publisher before FINISHED/STOPPED so no bytes can follow settlement.
+    forwarding.recv()??;
+    outcome
+}
+
+fn drive_commands(
+    mut terminal: TerminalDriver,
+    protocol: KeyboardProtocol,
+) -> TestResult<TerminalOutcome> {
     for line in std::io::stdin().lock().lines() {
         let line = line?;
         let mut words = line.split_whitespace();
@@ -220,11 +240,9 @@ pub(super) fn drive_terminal(
             Some("read") => {
                 let milliseconds: u64 = words.next().ok_or("read deadline required")?.parse()?;
                 ensure(milliseconds <= 30_000, "read deadline too long")?;
-                match terminal.receive_bytes(Duration::from_millis(milliseconds)) {
-                    Ok(Some(bytes)) => emit(&format!("BYTES {}", encode_hex(&bytes)))?,
-                    Ok(None) => emit("EOF")?,
-                    Err(error) => emit(&format!("READ_ERROR {error}"))?,
-                }
+                // Output is unsolicited now. A read command is an immediate
+                // barrier acknowledgement, never a blocking PTY receive.
+                emit("OK")?;
             }
             Some("write" | "reply") => {
                 let bytes = decode_hex(words.next().ok_or("bytes required")?)?;
@@ -239,8 +257,12 @@ pub(super) fn drive_terminal(
             Some("resize") => {
                 let cols = words.next().ok_or("columns required")?.parse()?;
                 let rows = words.next().ok_or("rows required")?.parse()?;
+                // Serialize the geometry boundary with stream publication.
+                let mut output = std::io::stdout().lock();
                 terminal.resize(rows, cols)?;
-                emit("OK")?;
+                writeln!(output, "TUI_GRID RESIZED {cols} {rows}")?;
+                writeln!(output, "TUI_GRID OK")?;
+                output.flush()?;
             }
             Some("running") => emit(if terminal.child_is_running()? {
                 "RUNNING"

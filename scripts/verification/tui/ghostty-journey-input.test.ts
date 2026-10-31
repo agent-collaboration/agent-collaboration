@@ -89,12 +89,13 @@ test('real protocol subprocess feeds modes into existing driver and opt-in input
 		`
 const fs=require('node:fs'); const readline=require('node:readline');
 let bytes='\\x1b[>1u\\x1b[?1002h\\x1b[?1006h';
-process.stdout.write('TUI_GRID READY 120 36\\n');
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+const emitBytes=()=>process.stdout.write('TUI_GRID BYTES '+Buffer.from(bytes).toString('hex')+'\\n');emitBytes();
 const lines=readline.createInterface({input:process.stdin});
 lines.on('line',line=>{const [command,hex]=line.split(' ');
-if(command==='read'){process.stdout.write('TUI_GRID BYTES '+Buffer.from(bytes).toString('hex')+'\\n');bytes='';}
+if(command==='read'){process.stdout.write('TUI_GRID OK\\n');}
 else if(command==='write'){fs.appendFileSync(${JSON.stringify(writes)},hex+'\\n');process.stdout.write('TUI_GRID OK\\n');}
-else if(command==='resize'){bytes='\\x1b[>31u';process.stdout.write('TUI_GRID OK\\n');}
+else if(command==='resize'){bytes='\\x1b[>31u';process.stdout.write('TUI_GRID RESIZED '+line.slice(7)+'\\nTUI_GRID OK\\n');emitBytes();}
 else if(command==='reply'){process.stdout.write('TUI_GRID OK\\n');}
 else if(command==='stop'||command==='finish'){process.stdout.write('TUI_GRID FINISHED 0\\n');lines.close();process.stdin.destroy();}
 });`,

@@ -9,6 +9,8 @@ import type { GhosttyCore } from '@wterm/ghostty';
 import type { ArtifactBinding } from './evidence-schema.ts';
 import type { TerminalInputModes } from './ghostty-input-encoding.ts';
 import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
+import { DispatchFrameIndex, dispatchFrameGrid } from './input-dispatch-frames.ts';
+import type { DispatchFrameObservation } from './input-dispatch-frames.ts';
 import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
@@ -56,6 +58,13 @@ export class PtyGridDriver {
 	private ended = false;
 	private readonly completion: Promise<number | null>;
 	private released: Promise<number | null> | null = null;
+	private commandTail: Promise<void> = Promise.resolve();
+	private outputRevision = 0;
+	private receivedRevision = 0;
+	private eof = false;
+	private failure: Error | null = null;
+	private readonly outputWaiters = new Set<() => void>();
+	private readonly dispatchFrames = new DispatchFrameIndex();
 	private constructor(target: PtyGridTarget, core: GhosttyCore) {
 		this.target = target;
 		this.core = core;
@@ -120,6 +129,42 @@ export class PtyGridDriver {
 				const marker = line.indexOf('TUI_GRID ');
 				if (marker < 0) continue;
 				const response = line.slice(marker + 9);
+				if (response.startsWith('BYTES ')) {
+					try {
+						this.acceptBytes(response.slice(6));
+					} catch (error) {
+						this.failStream(error);
+					}
+					continue;
+				}
+				if (response === 'EOF') {
+					this.eof = true;
+					this.publishOutput();
+					continue;
+				}
+				if (response.startsWith('RESIZED ')) {
+					const [columns, rows] = response.slice(8).split(' ').map(Number);
+					if (
+						columns === undefined ||
+						rows === undefined ||
+						!Number.isSafeInteger(columns) ||
+						!Number.isSafeInteger(rows) ||
+						columns <= 0 ||
+						rows <= 0 ||
+						columns > 65535 ||
+						rows > 65535
+					)
+						this.failStream(new Error('invalid resize stream record'));
+					else {
+						this.core.resize(columns, rows);
+						this.resizes.push({ byteOffset: this.bytes().length, columns, rows });
+					}
+					continue;
+				}
+				if (response.startsWith('READ_ERROR ')) {
+					this.failStream(new Error(response));
+					continue;
+				}
 				if (this.waiter !== null) {
 					clearTimeout(this.waiter.timer);
 					this.waiter.resolve(response);
@@ -132,6 +177,7 @@ export class PtyGridDriver {
 		});
 		this.completion = new Promise((resolve) => {
 			this.child.once('error', (error) => {
+				this.failStream(error);
 				if (this.waiter !== null) {
 					clearTimeout(this.waiter.timer);
 					this.waiter.reject(error);
@@ -140,6 +186,7 @@ export class PtyGridDriver {
 			});
 			this.child.once('close', (code) => {
 				this.ended = true;
+				this.publishOutput();
 				writeFileSync(join(target.evidence, 'driver.stdout'), stdout);
 				writeFileSync(join(target.evidence, 'driver.stderr'), stderr);
 				if (this.waiter !== null) {
@@ -156,7 +203,8 @@ export class PtyGridDriver {
 		const driver = new PtyGridDriver(target, core);
 		try {
 			const ready = await driver.nextLine();
-			if (ready !== 'READY 120 36') throw new Error(`PTY readiness failed: ${ready}`);
+			if (ready !== 'READY 120 36 STREAM')
+				throw new Error(`streaming PTY driver required: ${ready}`);
 			return driver;
 		} catch (error) {
 			await driver.stop();
@@ -181,9 +229,18 @@ export class PtyGridDriver {
 		});
 	}
 	private async command(command: string): Promise<string> {
-		this.commands.push(command);
-		this.child.stdin.write(`${command}\n`);
-		return this.nextLine();
+		const result = this.commandTail.then(async () => {
+			if (this.failure !== null && command !== 'stop') throw this.failure;
+			this.commands.push(command);
+			const response = this.nextLine();
+			this.child.stdin.write(`${command}\n`);
+			return response;
+		});
+		this.commandTail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
 	}
 	async send(bytes: Uint8Array): Promise<void> {
 		if (bytes.length === 0) return;
@@ -193,15 +250,20 @@ export class PtyGridDriver {
 	async resize(columns: number, rows: number): Promise<void> {
 		const response = await this.command(`resize ${columns} ${rows}`);
 		if (response !== 'OK') throw new Error(response);
-		this.core.resize(columns, rows);
-		this.resizes.push({ byteOffset: this.bytes().length, columns, rows });
 	}
 	async receive(timeoutMillis = 8_000): Promise<'bytes' | 'eof'> {
-		const response = await this.command(`read ${timeoutMillis}`);
-		if (response === 'EOF') return 'eof';
-		if (!response.startsWith('BYTES ')) throw new Error(response);
-		const bytes = Buffer.from(response.slice(6), 'hex');
+		if (this.outputRevision === this.receivedRevision && !this.eof)
+			await this.waitForOutput(timeoutMillis);
+		if (this.failure !== null) throw this.failure;
+		this.receivedRevision = this.outputRevision;
+		return this.eof ? 'eof' : 'bytes';
+	}
+	private acceptBytes(hex: string): void {
+		if (!/^(?:[0-9a-f]{2})+$/iu.test(hex)) throw new Error('invalid PTY byte record');
+		if (this.eof) throw new Error('PTY bytes after EOF');
+		const bytes = Buffer.from(hex, 'hex');
 		this.raw.push(bytes);
+		this.dispatchFrames.append(bytes);
 		this.core.writeRaw(bytes);
 		const replies: string[] = [];
 		for (let reply = this.core.getResponse(); reply !== null; reply = this.core.getResponse()) {
@@ -209,10 +271,65 @@ export class PtyGridDriver {
 			if (this.target.keys !== 'legacy' || !isKitty) replies.push(reply);
 		}
 		if (replies.length > 0) {
-			const result = await this.command(`reply ${Buffer.from(replies.join('')).toString('hex')}`);
-			if (result !== 'OK') throw new Error(result);
+			void this.command(`reply ${Buffer.from(replies.join('')).toString('hex')}`).then(
+				(result) => {
+					if (result !== 'OK') this.failStream(new Error(result));
+				},
+				(error: unknown) => this.failStream(error),
+			);
 		}
-		return 'bytes';
+		this.publishOutput();
+	}
+	private failStream(error: unknown): void {
+		this.failure ??= error instanceof Error ? error : new Error(String(error));
+		this.publishOutput();
+	}
+	private publishOutput(): void {
+		this.outputRevision += 1;
+		for (const notify of this.outputWaiters) notify();
+	}
+	private waitForOutput(timeoutMillis: number): Promise<void> {
+		if (this.failure !== null) return Promise.reject(this.failure);
+		if (this.ended) return Promise.reject(new Error('PTY driver already ended'));
+		return new Promise((resolve, reject) => {
+			const notify = (): void => {
+				clearTimeout(timer);
+				this.outputWaiters.delete(notify);
+				resolve();
+			};
+			const timer = setTimeout(() => {
+				this.outputWaiters.delete(notify);
+				reject(new Error('PTY output deadline'));
+			}, timeoutMillis);
+			this.outputWaiters.add(notify);
+		});
+	}
+	async waitForDispatchFrame(sequence: number): Promise<DispatchFrameObservation> {
+		const deadline = Date.now() + 8_000;
+		const next = async (): Promise<DispatchFrameObservation> => {
+			if (this.failure !== null) throw this.failure;
+			const binding = this.dispatchFrames.get(sequence);
+			if (binding !== null) {
+				writeFileSync(
+					join(this.target.evidence, `dispatch-${sequence}-frame.json`),
+					JSON.stringify(binding, null, 2),
+				);
+				const bytes = this.bytes();
+				const resizes = this.resizeHistory();
+				return {
+					binding,
+					grid: await dispatchFrameGrid(bytes, resizes, binding),
+					bytes: bytes.subarray(0, binding.frameEndByteOffset),
+					resizes: resizes.filter((resize) => resize.byteOffset <= binding.frameEndByteOffset),
+				};
+			}
+			const remaining = deadline - Date.now();
+			if (remaining <= 0 || this.eof)
+				throw new Error(`dispatch frame marker absent for sequence ${sequence}`);
+			await this.waitForOutput(remaining);
+			return next();
+		};
+		return next();
 	}
 	grid(): TerminalGrid {
 		return snapshotGrid(this.core);
@@ -237,12 +354,15 @@ export class PtyGridDriver {
 	): Promise<TerminalGrid> {
 		const deadline = Date.now() + 8_000;
 		const nextFrame = async (): Promise<TerminalGrid> => {
-			if (!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid()))
-				return this.grid();
+			const matched = (): boolean =>
+				!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid());
+			if (matched()) return this.grid();
 			if (
 				Date.now() >= deadline ||
 				(await this.receive(Math.max(1, deadline - Date.now()))) === 'eof'
 			) {
+				// A final complete frame and EOF can share one stdout delivery.
+				if (matched()) return this.grid();
 				throw new Error(
 					`grid checkpoint unreachable: ${name}\n${gridLines(this.grid()).join('\n')}`,
 				);
@@ -270,6 +390,8 @@ export class PtyGridDriver {
 			try {
 				if ((await this.receive(remaining)) === 'eof') return this.finish();
 			} catch (error) {
+				if (error instanceof Error && error.message === 'PTY output deadline')
+					throw new Error('apparatus exit deadline: no child EOF', { cause: error });
 				throw new Error('apparatus exit drain failed before confirmed child exit', {
 					cause: error,
 				});

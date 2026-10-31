@@ -66,7 +66,7 @@ const frame = text => '\\x1b[?2026h\\x1b[2J\\x1b[H' + text + '\\x1b[?2026l';
 const main = 'Codex Alpha';const settled=main+' ❯';
 const help = '\\x1b[2;2H┌────────────────────┐\\x1b[3;2H│ Help               │\\x1b[4;2H│ Surface Sessions   │\\x1b[5;2H│ Close              │\\x1b[6;2H└────────────────────┘';
 let queue = ${coalesced}?[frame(main)+frame(settled)]:[frame(main),frame(settled)], overlay = false, escaped = false, quit = false;
-emit('READY 120 36');
+const flush=()=>{for(const bytes of queue)emit('BYTES '+Buffer.from(bytes).toString('hex'));queue=[];};emit('READY 120 36 STREAM');flush();
 createInterface({ input: process.stdin }).on('line', line => {
  if (line.startsWith('write ')) {
   const bytes = Buffer.from(line.slice(6), 'hex');
@@ -76,10 +76,8 @@ createInterface({ input: process.stdin }).on('line', line => {
   else if (text.includes('OP') || text.includes('[1;1P')) { overlay = true; ack({kind:'fixed',name:'F1'},[],{kind:'screen'},'help'); queue.push(frame(help)); }
   else if (overlay) { overlay = false; ack({kind:'fixed',name:'Esc'},[],{kind:'overlay',overlayId:'1'},null,${badTarget}?null:Buffer.byteLength('action:help')+':action:help:help-body'); queue.push(frame(settled + (${changed} && escaped ? ' changed query' : ''))); }
   else { escaped = true; ack({kind:'fixed',name:'Esc'},[],{kind:'screen'},'escape'); }
-  emit('OK');
- } else if (line.startsWith('read ')) {
-  const bytes = queue.shift();
-  emit(bytes === undefined ? (quit ? 'EOF' : 'UNEXPECTED_READ_WITHOUT_FRAME') : 'BYTES ' + Buffer.from(bytes).toString('hex'));
+  emit('OK');flush();if(quit)emit('EOF');
+ } else if (line.startsWith('read ')) {emit('OK');
  } else if (line === 'running') emit(quit ? 'EXITED' : 'RUNNING');
  else if (line === 'finish' || line === 'stop') { emit(line === 'finish' ? 'FINISHED 0' : 'STOPPED 0'); process.exit(0); }
  else emit('OK');

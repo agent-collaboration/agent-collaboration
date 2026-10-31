@@ -103,7 +103,7 @@ test('PtyGridDriver forwards only its explicitly nominated sessions receipt dire
 	const bridge = join(output, 'controlled-bridge.mjs');
 	writeFileSync(
 		bridge,
-		`#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(join(output, 'observed-directory'))}, process.env.TUI_SESSIONS_FIXTURE_RECEIPT_DIR ?? 'absent');\nprocess.stdout.write('TUI_GRID READY 120 36\\n');\nprocess.stdin.on('data', () => {process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});\n`,
+		`#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(join(output, 'observed-directory'))}, process.env.TUI_SESSIONS_FIXTURE_RECEIPT_DIR ?? 'absent');\nprocess.stdout.write('TUI_GRID READY 120 36 STREAM\\n');\nprocess.stdin.on('data', () => {process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});\n`,
 		{ mode: 0o700 },
 	);
 	await [undefined, directory].reduce<Promise<void>>(async (previous, nominated) => {
@@ -130,7 +130,7 @@ test.each(['wide-glyph-left-border', 'source-qualified-outcome', 'configured-sou
 		const bridge = join(output, 'variant-bridge.mjs');
 		writeFileSync(
 			bridge,
-			`#!${process.execPath}\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(output, 'variant'))}, process.env.TUI_GRID_STORYBOARD_VARIANT ?? 'absent');\nprocess.stdout.write('TUI_GRID READY 120 36\\n');\nprocess.stdin.on('data', () => { process.stdout.write('TUI_GRID STOPPED 0\\n'); process.exit(0); });\n`,
+			`#!${process.execPath}\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(output, 'variant'))}, process.env.TUI_GRID_STORYBOARD_VARIANT ?? 'absent');\nprocess.stdout.write('TUI_GRID READY 120 36 STREAM\\n');\nprocess.stdin.on('data', () => { process.stdout.write('TUI_GRID STOPPED 0\\n'); process.exit(0); });\n`,
 			{ mode: 0o700 },
 		);
 		const driver = await PtyGridDriver.start({

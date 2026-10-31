@@ -6,7 +6,6 @@ import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
-import { waitForMeasuredDialog } from './dialog-frame-readiness.ts';
 import type { ProcessIdentity } from './evidence-schema.ts';
 import type { GhosttyKey } from './ghostty-input-encoding.ts';
 import { GhosttyJourneyInput, requireDelivered } from './ghostty-journey-input.ts';
@@ -29,6 +28,7 @@ import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding, verifyArtifact } from './source-binding.ts';
+import { readSourceQualifiedOutcome } from './source-qualified-outcome.ts';
 import { gridLines } from './terminal-grid.ts';
 import { renderOriginal } from './terminal-original.ts';
 import { qualifyTerminal } from './terminal-qualification.ts';
@@ -193,18 +193,22 @@ async function observeCase(
 			actions.push(ack);
 			return ack;
 		};
+		let current = { grid: driver.grid(), bytes: driver.bytes(), resizes: driver.resizeHistory() };
+		const mark = async (ack: InputDispatchReceipt): Promise<void> => {
+			current = await driver.waitForDispatchFrame(ack.sequence);
+		};
 		const capture = async (name: string): Promise<void> => {
-			writeFileSync(join(directory, name + '.ansi'), driver.bytes());
-			writeFileSync(join(directory, name + '.grid.json'), JSON.stringify(driver.grid(), null, 2));
-			writeFileSync(join(directory, name + '.txt'), gridLines(driver.grid()).join('\n') + '\n');
+			writeFileSync(join(directory, name + '.ansi'), current.bytes);
+			writeFileSync(join(directory, name + '.grid.json'), JSON.stringify(current.grid, null, 2));
+			writeFileSync(join(directory, name + '.txt'), gridLines(current.grid).join('\n') + '\n');
 			await renderOriginal({
 				chrome: plan.chrome,
 				output: directory,
-				bytes: driver.bytes(),
-				grid: driver.grid(),
-				resizes: driver.resizeHistory(),
-				columns: driver.grid().columns,
-				rows: driver.grid().rows,
+				bytes: current.bytes,
+				grid: current.grid,
+				resizes: current.resizes,
+				columns: current.grid.columns,
+				rows: current.grid.rows,
 				checkpoint: name,
 				sourceHead: plan.source.head,
 				binarySha256: plan.product.sha256,
@@ -213,8 +217,7 @@ async function observeCase(
 		const [columns, rows] = dimensions.split('x').map(Number);
 		if (columns === undefined || rows === undefined) throw new Error('dimensions invalid');
 		if (columns !== 120 || rows !== 36) {
-			const before = driver.frameGeneration();
-			await observeInput(
+			const resized = await observeInput(
 				{
 					event: { kind: 'resize', columns, rows },
 					surface: { kind: 'screen' },
@@ -223,17 +226,9 @@ async function observeCase(
 				},
 				() => driver.resize(columns, rows),
 			);
-			await driver.waitForGrid(
-				'same-child resized picker',
-				(grid) => {
-					try {
-						return selectedFixtureRow(grid, plan.rows) === 0;
-					} catch {
-						return false;
-					}
-				},
-				before,
-			);
+			await mark(resized);
+			if (current.grid.columns !== columns || current.grid.rows !== rows)
+				throw new Error('marked resize frame dimensions differ');
 		}
 		const resizedIdentity = lookupProcessIdentity(pid);
 		if (
@@ -246,64 +241,43 @@ async function observeCase(
 			if ((await input.key(key)).delivery.kind !== 'consumed')
 				throw new Error('original key not consumed by nominated model');
 		await capture('entry');
-		const page = pickerPageRows(driver.grid());
+		const page = pickerPageRows(current.grid);
 		const last = plan.rows.length - 1;
 		const listStep = async (key: GhosttyKey, index: number, name: string): Promise<void> => {
-			const before = driver.frameGeneration();
-			const previous = selectedFixtureRow(driver.grid(), plan.rows);
-			await observeInput(expectedKey(key, false), async () => {
+			const ack = await observeInput(expectedKey(key, false), async () => {
 				requireDelivered(await input.key(key));
 			});
-			if (previous !== index)
-				await driver.waitForGrid(
-					name,
-					(grid) => {
-						try {
-							selectedFixtureRow(grid, plan.rows);
-							return true;
-						} catch {
-							return false;
-						}
-					},
-					before,
-				);
-			const actual = selectedFixtureRow(driver.grid(), plan.rows);
+			await mark(ack);
+			const actual = selectedFixtureRow(current.grid, plan.rows);
 			if (actual !== index)
 				throw new NavigationMismatch(`${name}: expected fixture row ${index}, observed ${actual}`);
 			actions.push({ name, page, expectedIndex: index, observedIndex: actual });
 			await capture(name);
 		};
+		await listStep('Alt+Shift+Up', 0, 'list-first-noop');
 		await listStep('Alt+Shift+Down', last, 'list-last');
+		await listStep('Alt+Down', last, 'list-end-page-noop');
 		await listStep('Alt+Up', Math.max(0, last - page), 'list-page-up');
 		await listStep('Alt+Shift+Up', 0, 'list-first');
 		await listStep('Alt+Down', Math.min(last, page), 'list-page-down');
-		const selectedBeforeHelp = selectedFixtureRow(driver.grid(), plan.rows);
-		const beforeHelp = driver.frameGeneration();
+		const selectedBeforeHelp = selectedFixtureRow(current.grid, plan.rows);
 		const openAck = await observeInput(expectedKey('F1', false), async () => {
 			requireDelivered(await input.key('F1'));
 		});
-		await waitForMeasuredDialog({
-			driver,
-			directory,
-			title: 'Help',
-			checkpoint: 'help',
-			before: beforeHelp,
-			acknowledgement: openAck,
-		});
-		const initial = helpViewport(driver.grid());
+		await mark(openAck);
+		const initial = helpViewport(current.grid);
 		if (!initial.rows.join(' ').includes('Context'))
 			throw new Error('Help did not start at its first content');
 		const full = [...initial.rows];
 		const collectRows = async (remaining: number): Promise<void> => {
-			const before = helpViewport(driver.grid());
+			const before = helpViewport(current.grid);
 			if (before.atEnd) return;
 			if (remaining === 0) throw new Error('bounded Help row qualification exhausted');
-			const frame = driver.frameGeneration();
-			await observeInput(expectedKey('Down', true), async () => {
+			const ack = await observeInput(expectedKey('Down', true), async () => {
 				requireDelivered(await input.key('Down'));
 			});
-			await driver.waitForGrid('one actual Help row', () => true, frame);
-			full.push(appendOneHelpRow(before.rows, helpViewport(driver.grid()).rows));
+			await mark(ack);
+			full.push(appendOneHelpRow(before.rows, helpViewport(current.grid).rows));
 			await collectRows(remaining - 1);
 		};
 		await collectRows(2048);
@@ -326,15 +300,12 @@ async function observeCase(
 		if (maximum <= 0) throw new Error('Help fixture cannot demonstrate paging');
 		const helpStep = async (key: GhosttyKey, offset: number, name: string): Promise<void> => {
 			const expected = full.slice(offset, offset + initial.rows.length);
-			const previous = helpViewport(driver.grid()).rows;
-			const frame = driver.frameGeneration();
-			await observeInput(expectedKey(key, true), async () => {
+			const ack = await observeInput(expectedKey(key, true), async () => {
 				requireDelivered(await input.key(key));
 			});
-			if (JSON.stringify(previous) !== JSON.stringify(expected))
-				await driver.waitForGrid(name, () => true, frame);
+			await mark(ack);
 			try {
-				requireHelpRows(helpViewport(driver.grid()).rows, expected);
+				requireHelpRows(helpViewport(current.grid).rows, expected);
 			} catch (error) {
 				throw new NavigationMismatch(`${name}: ${String(error)}`);
 			}
@@ -342,25 +313,32 @@ async function observeCase(
 			await capture(name);
 		};
 		await helpStep('Alt+Shift+Up', 0, 'help-first');
+		await helpStep('Alt+Shift+Up', 0, 'help-first-noop');
 		await helpStep('Alt+Down', Math.min(maximum, initial.rows.length), 'help-page-down');
 		await helpStep('Alt+Shift+Down', maximum, 'help-last');
+		await helpStep('Alt+Down', maximum, 'help-end-page-noop');
 		await helpStep('Alt+Up', Math.max(0, maximum - initial.rows.length), 'help-page-up');
-		const closeFrame = driver.frameGeneration();
-		await observeInput(expectedKey('Escape', true), async () => {
+		const closeAck = await observeInput(expectedKey('Escape', true), async () => {
 			requireDelivered(await input.key('Escape'));
 		});
-		await driver.waitForGrid(
-			'return from Help',
-			(grid) => findDialog(grid, 'Help') === null,
-			closeFrame,
-		);
-		if (selectedFixtureRow(driver.grid(), plan.rows) !== selectedBeforeHelp)
+		await mark(closeAck);
+		if (findDialog(current.grid, 'Help') !== null)
+			throw new NavigationMismatch('Help remained open after Escape');
+		if (selectedFixtureRow(current.grid, plan.rows) !== selectedBeforeHelp)
 			throw new NavigationMismatch('Help changed the covered picker selection');
 		await capture('help-return');
 		await observeInput(expectedKey('Ctrl+C', false), async () => {
 			requireDelivered(await input.key('Ctrl+C'));
 		});
+		// Loop-ending inputs may omit the frame marker. Settle on actual exit
+		// and the fixture's returned outcome, never on a rendering guess.
 		if ((await driver.drainUntilExit()) !== 0) throw new Error('picker did not exit cleanly');
+		actions.push({
+			name: 'quit-outcome',
+			outcome: readSourceQualifiedOutcome(join(receiptsDirectory, 'picker-outcome.json'), {
+				kind: 'cancelled',
+			}),
+		});
 		reader.assertComplete();
 	} catch (error) {
 		failure = { kind: 'failed', error };

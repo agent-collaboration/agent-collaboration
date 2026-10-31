@@ -50,6 +50,43 @@ pub(super) enum KeyboardProtocol {
 }
 
 impl TerminalDriver {
+    /// Forward each received chunk immediately while retaining the original
+    /// event stream for this owner's transcript, EOF and child cleanup methods.
+    pub(super) fn forward_output(
+        &mut self,
+        mut publish: impl FnMut(Option<&[u8]>) -> std::io::Result<()> + Send + 'static,
+    ) -> mpsc::Receiver<std::io::Result<()>> {
+        let (retained_sender, retained_receiver) = mpsc::channel();
+        let incoming = std::mem::replace(&mut self.output_receiver, retained_receiver);
+        let reader = self.reader_thread.take();
+        let (completion, completed) = mpsc::channel();
+        self.reader_thread = Some(thread::spawn(move || {
+            let result = (|| {
+                while let Ok(event) = incoming.recv() {
+                    let eof = matches!(event, ReaderEvent::Eof);
+                    publish(match &event {
+                        ReaderEvent::Bytes(bytes) => Some(bytes),
+                        ReaderEvent::Eof => None,
+                    })?;
+                    if retained_sender.send(event).is_err() || eof {
+                        return Ok(());
+                    }
+                }
+                Err(std::io::Error::other("PTY output disconnected before EOF"))
+            })();
+            // Existing cleanup joins this handle before draining its retained
+            // transcript. Chaining the original reader prevents an orphan and
+            // ensures every final chunk is forwarded before that drain.
+            let reader_result = reader.map_or(Ok(()), |reader| {
+                reader
+                    .join()
+                    .map_err(|_| std::io::Error::other("PTY reader thread panicked"))
+            });
+            let _ = completion.send(result.and(reader_result));
+        }));
+        completed
+    }
+
     /// Receive actual PTY bytes before the observer chooses its next input.
     /// None is EOF; a deadline remains an error, never a synthetic empty frame.
     pub(super) fn receive_bytes(&mut self, timeout: Duration) -> TestResult<Option<Vec<u8>>> {
@@ -634,6 +671,66 @@ impl Drop for TerminalDriver {
 mod tests {
     use super::super::isolated_fixture_test::ensure;
     use super::*;
+
+    #[test]
+    fn output_forwarding_drains_without_a_read_command_and_preserves_transcript() -> TestResult<()>
+    {
+        let (incoming, output_receiver) = mpsc::channel();
+        let (published, publication) = mpsc::channel();
+        let mut terminal = TerminalDriver {
+            master: None,
+            writer: Some(Box::new(Vec::<u8>::new())),
+            child: None,
+            output_receiver,
+            reader_thread: None,
+            transcript: Vec::new(),
+            reached_eof: false,
+            public_wrapper: None,
+            failure_capture: None,
+        };
+        let completed = terminal.forward_output(move |bytes| {
+            published
+                .send(bytes.map(<[u8]>::to_vec))
+                .map_err(|error| std::io::Error::other(error.to_string()))
+        });
+        let first = b"stale frame".to_vec();
+        incoming.send(ReaderEvent::Bytes(first.clone()))?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))? == Some(first.clone()),
+            "stream did not publish before any receive_bytes call",
+        )?;
+        // The command-side writer remains available while the output worker
+        // is blocked causally on the next actual event, without timing polls.
+        terminal.send(b"command during burst")?;
+        let second = b"post-input frame and marker".to_vec();
+        incoming.send(ReaderEvent::Bytes(second.clone()))?;
+        incoming.send(ReaderEvent::Eof)?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))? == Some(second.clone()),
+            "stream changed burst order",
+        )?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))?.is_none(),
+            "stream did not publish EOF",
+        )?;
+        completed.recv_timeout(Duration::from_secs(8))??;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)? == Some(first.clone()),
+            "first transcript chunk lost",
+        )?;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)? == Some(second.clone()),
+            "second transcript chunk lost",
+        )?;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)?.is_none(),
+            "retained EOF lost",
+        )?;
+        ensure(
+            terminal.transcript == [first, second].concat(),
+            "forwarding changed retained transcript",
+        )
+    }
 
     #[test]
     fn incremental_reads_preserve_actual_bytes_and_only_legacy_skips_kitty_reply() -> TestResult<()>

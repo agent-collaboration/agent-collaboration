@@ -25,7 +25,7 @@ const main='\\x1b[38;2;255;255;255mCodex Alpha';
 const covered='\\x1b[38;2;100;100;100mCodex Alpha';
 const help=legend=>covered+'\\x1b[2;2H┌────────────────────────────────────────────────────────────────────────────┐\\x1b[3;2H│ Help                                                                       │\\x1b[4;2H│ Screen  Sessions                                                           │\\x1b[5;2H│ '+(legend?'Esc clear filter, reset filters, never quit':'Generated actions fill the first Help viewport')+'\\x1b[6;2H└────────────────────────────────────────────────────────────────────────────┘';
 let queue=[frame(main),frame(main)],overlay=false;
-emit('READY 120 36');
+const flush=()=>{for(const bytes of queue)emit('BYTES '+Buffer.from(bytes).toString('hex'));queue=[];};emit('READY 120 36 STREAM');flush();
 createInterface({input:process.stdin}).on('line',line=>{
  if(line.startsWith('write ')){
   const text=Buffer.from(line.slice(6),'hex').toString();
@@ -33,8 +33,8 @@ createInterface({input:process.stdin}).on('line',line=>{
   else if(overlay&&(text.includes('[F')||text.includes('[1;1F')))queue.push(frame(help(!${missing})));
   else if(overlay&&text.includes('[B'))queue.push(frame(help(false)));
   else if(overlay){overlay=false;queue.push(frame(main));}
-  emit('OK');
- }else if(line.startsWith('read ')) {const next=queue.shift();emit(next===undefined?'UNEXPECTED_READ_WITHOUT_FRAME':'BYTES '+Buffer.from(next).toString('hex'));}
+  emit('OK');flush();
+ }else if(line.startsWith('read ')) {emit('OK');}
  else if(line==='stop'){emit('STOPPED 0');process.exit(0);}
  else emit('OK');
 });
