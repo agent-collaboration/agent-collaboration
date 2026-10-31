@@ -12,6 +12,10 @@ import {
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
+import {
+  managedInventoryObservationSchema,
+  readManagedInventory,
+} from "./claude-route-isolation.ts";
 
 /**
  * The bounded Claude route window over the normal debug Host's existing Router audit file,
@@ -37,11 +41,17 @@ const READ_CHUNK_BYTES = 65_536;
 export const MAX_ROUTE_PREFIX_BYTES = 67_108_864;
 export const MAX_ROUTE_SEGMENT_BYTES = 1_048_576;
 
-/** The declared normal Host whose Router writes the audit file, and the window's byte bounds. */
+/**
+ * The declared normal Host whose Router writes the audit file, the window's byte bounds, and the
+ * bound normal-build collaboration CLI and declared service instance its isolation reads use.
+ */
 export interface ClaudeRouteBinding {
   readonly hostRunDirectory: string;
   readonly hostPid: number;
   readonly serviceDirectory: string;
+  readonly serviceId: string;
+  readonly serviceEpoch: string;
+  readonly collaborationCli: { readonly path: string; readonly sha256: string };
   readonly maxPrefixBytes: number;
   readonly maxSegmentBytes: number;
 }
@@ -60,31 +70,47 @@ const hostMarkerSchema = z.looseObject({
 const serviceListenerSchema = z.looseObject({ routerProxyEndpoint: z.string() });
 
 /** What the runner recorded right before the submission Enter. */
-export const claudeRouteBaselineSchema = z.strictObject({
-  kind: z.literal("claude-route-baseline"),
-  // The composed-input checkpoint whose original capture preceded this record.
-  after_scene: z.enum(["prompt-composed", "skill-input-composed"]),
-  host_run_directory: z.string().refine(isAbsolute, "absolute path required"),
-  audit_file: z.string().refine(isAbsolute, "absolute path required"),
-  host_pid: z.number().int().positive(),
-  service_directory: z.string().refine(isAbsolute, "absolute path required"),
-  router_port: z.number().int().positive(),
-  provider_session_id: z.string().min(1),
-  native_thread_id: z.uuid(),
-  max_prefix_bytes: z.number().int().positive().max(MAX_ROUTE_PREFIX_BYTES),
-  max_segment_bytes: z.number().int().positive().max(MAX_ROUTE_SEGMENT_BYTES),
-  // The Router creates the file on its first decision (audit.rs:184-198), so it may not exist yet.
-  file: z.discriminatedUnion("state", [
-    z.strictObject({ state: z.literal("absent") }),
-    z.strictObject({
-      state: z.literal("present"),
-      device: z.string().regex(/^\d+$/u),
-      inode: z.string().regex(/^\d+$/u),
-      byte_length: z.number().int().nonnegative(),
-      prefix_sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+export const claudeRouteBaselineSchema = z
+  .strictObject({
+    kind: z.literal("claude-route-baseline"),
+    // The composed-input checkpoint whose original capture preceded this record.
+    after_scene: z.enum(["prompt-composed", "skill-input-composed"]),
+    host_run_directory: z.string().refine(isAbsolute, "absolute path required"),
+    audit_file: z.string().refine(isAbsolute, "absolute path required"),
+    host_pid: z.number().int().positive(),
+    service_directory: z.string().refine(isAbsolute, "absolute path required"),
+    // The runner target's declared service instance; every isolation read re-checks its manifest.
+    service_id: z.string().min(1),
+    service_epoch: z.string().min(1),
+    collaboration_cli: z.strictObject({
+      path: z.string().refine(isAbsolute, "absolute path required"),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/u),
     }),
-  ]),
-});
+    router_port: z.number().int().positive(),
+    provider_session_id: z.string().min(1),
+    native_thread_id: z.uuid(),
+    max_prefix_bytes: z.number().int().positive().max(MAX_ROUTE_PREFIX_BYTES),
+    max_segment_bytes: z.number().int().positive().max(MAX_ROUTE_SEGMENT_BYTES),
+    // The pre-Enter managed-Session inventory read, taken before this audit baseline.
+    inventory_before: managedInventoryObservationSchema,
+    // The Router creates the file on its first decision (audit.rs:184-198), so it may not exist yet.
+    file: z.discriminatedUnion("state", [
+      z.strictObject({ state: z.literal("absent") }),
+      z.strictObject({
+        state: z.literal("present"),
+        device: z.string().regex(/^\d+$/u),
+        inode: z.string().regex(/^\d+$/u),
+        byte_length: z.number().int().nonnegative(),
+        prefix_sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+    ]),
+  })
+  .refine(
+    (baseline) =>
+      baseline.inventory_before.service_id === baseline.service_id &&
+      baseline.inventory_before.session_id === baseline.provider_session_id,
+    "the pre-Enter inventory names another service or Session than its baseline",
+  );
 export type ClaudeRouteBaseline = z.infer<typeof claudeRouteBaselineSchema>;
 
 // One serialized AuditEvent (audit.rs:15-98, serde snake_case; RequestId is its bare string).
@@ -216,7 +242,10 @@ function isMissing(error: unknown): boolean {
 
 const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
-/** The runner's record right before the submission Enter: identity, length and prefix digest. */
+/**
+ * The runner's record right before the submission Enter: first the managed-Session inventory read
+ * at this hook, then the audit file's identity, length and prefix digest.
+ */
 export function captureClaudeRouteBaseline(
   binding: ClaudeRouteBinding,
   target: {
@@ -226,6 +255,13 @@ export function captureClaudeRouteBaseline(
   },
 ): ClaudeRouteBaseline {
   const { auditFile, routerPort } = requireClaudeRouteBinding(binding);
+  const inventoryBefore = readManagedInventory({
+    collaborationCli: binding.collaborationCli,
+    serviceDirectory: binding.serviceDirectory,
+    serviceId: binding.serviceId,
+    serviceEpoch: binding.serviceEpoch,
+    sessionId: target.providerSessionId,
+  });
   const record = {
     kind: "claude-route-baseline" as const,
     after_scene: target.afterScene,
@@ -233,11 +269,15 @@ export function captureClaudeRouteBaseline(
     audit_file: auditFile,
     host_pid: binding.hostPid,
     service_directory: binding.serviceDirectory,
+    service_id: binding.serviceId,
+    service_epoch: binding.serviceEpoch,
+    collaboration_cli: binding.collaborationCli,
     router_port: routerPort,
     provider_session_id: target.providerSessionId,
     native_thread_id: target.nativeThreadId,
     max_prefix_bytes: binding.maxPrefixBytes,
     max_segment_bytes: binding.maxSegmentBytes,
+    inventory_before: inventoryBefore,
   };
   let opened;
   try {
@@ -314,7 +354,11 @@ export function readClaudeRouteWindow(
     auditFile !== baseline.audit_file ||
     routerPort !== baseline.router_port ||
     binding.maxPrefixBytes !== baseline.max_prefix_bytes ||
-    binding.maxSegmentBytes !== baseline.max_segment_bytes
+    binding.maxSegmentBytes !== baseline.max_segment_bytes ||
+    binding.serviceId !== baseline.service_id ||
+    binding.serviceEpoch !== baseline.service_epoch ||
+    binding.collaborationCli.path !== baseline.collaboration_cli.path ||
+    binding.collaborationCli.sha256 !== baseline.collaboration_cli.sha256
   )
     throw new Error("Claude route binding differs from the recorded baseline");
   let opened;

@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
@@ -8,7 +8,15 @@ import {
 	captureClaudeRouteBaseline,
 	readClaudeRouteWindow,
 } from '../../../verification/observations/claude-route-window.ts';
-import type { ClaudeRouteBaseline } from '../../../verification/observations/claude-route-window.ts';
+import type {
+	ClaudeRouteBaseline,
+	ClaudeRouteBinding,
+} from '../../../verification/observations/claude-route-window.ts';
+import {
+	hostedRow,
+	inventoryPage,
+	inventoryStandIn,
+} from '../../../verification/observations/tests/claude-route-fixture.ts';
 import { informationJourney } from './codex-acp-information-scenes.ts';
 import { promptJourney } from './codex-acp-prompt-scenes.ts';
 import {
@@ -25,7 +33,9 @@ import type { CodexAcpRunPlan } from './codex-acp-run.ts';
 import { renameJourney } from './codex-acp-scenes.ts';
 import {
 	ALIAS,
+	EPOCH,
 	RAW_SESSION,
+	SERVICE,
 	claudeRouteHostFixture,
 	targetFixture,
 } from './codex-acp-test-fixtures.ts';
@@ -435,6 +445,7 @@ const CLAUDE_ROUTE = {
 	host_pid: 5446,
 	max_prefix_bytes: 65_536,
 	max_segment_bytes: 4096,
+	collaboration_cli: { path: '/tmp/cxr-agent-collaboration', sha256: 'a'.repeat(64) },
 };
 const CLAUDE_PROMPT = { ...PROMPT, provider: 'claude' };
 
@@ -459,6 +470,8 @@ test('a Claude route proof is admitted only for a bounded Claude prompt or selec
 		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, host_run_directory: 'run' }],
 		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, audit_file: '/tmp/other.jsonl' }],
 		[CLAUDE_PROMPT, { host_run_directory: '/tmp/cxr-run' }],
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, collaboration_cli: { path: 'agent-collaboration' } }],
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, collaboration_cli: undefined }],
 	] as const)
 		expect(() => claudePlan(journey, route), JSON.stringify(journey)).toThrow();
 	// The Cursor target never takes a Claude route proof.
@@ -475,13 +488,30 @@ const REJECTED_CLAUDE_ROW = `{"event_type":"proxy_decision","request_id":"local_
 const FORWARDED_CLAUDE_ROW = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"claude_messages","transport_kind":"http","local_auth_result":"valid","outcome":"allowed","decision_reason":"forwarded","response_commit_state":"committed","account_hash":"acct_5f3a9c0d"}\n`;
 const EMPTY_COMPOSER = `› Ask Codex to do anything${' '.repeat(94)}`;
 
+// The shared controlled collaboration CLI answering the one idle managed Session on this
+// fixture's service, beside the Host run directory; never the real CLI or Router.
+function withInventoryStandIn(host: ReturnType<typeof claudeRouteHostFixture>): {
+	readonly binding: ClaudeRouteBinding;
+	readonly reads: () => number;
+} {
+	const cli = inventoryStandIn(dirname(host.runDirectory));
+	cli.reply(inventoryPage([hostedRow(RAW_SESSION, 'idle', SERVICE)], SERVICE));
+	const binding = { ...host.binding, serviceId: SERVICE, serviceEpoch: EPOCH };
+	return {
+		binding: { ...binding, collaborationCli: cli.binding },
+		reads: () => cli.calls().length,
+	};
+}
+
 async function promptWithRouteEffects(afterScene: string): Promise<{
 	readonly observed: Promise<string[]>;
 	readonly baseline: () => ClaudeRouteBaseline | null;
-	readonly host: ReturnType<typeof claudeRouteHostFixture>;
+	readonly binding: ClaudeRouteBinding;
+	readonly inventoryReads: () => number;
 	readonly stop: () => Promise<void>;
 }> {
 	const host = claudeRouteHostFixture(MODELS_ROW);
+	const { binding, reads } = withInventoryStandIn(host);
 	const journey = promptJourney({
 		provider: 'claude',
 		prompt: PROMPT.prompt,
@@ -498,7 +528,7 @@ async function promptWithRouteEffects(afterScene: string): Promise<{
 	const observed = driveCodexJourney(driver, journey, 'legacy', async () => undefined, {
 		afterScene,
 		capture: () => {
-			baseline = captureClaudeRouteBaseline(host.binding, {
+			baseline = captureClaudeRouteBaseline(binding, {
 				afterScene: 'prompt-composed',
 				providerSessionId: RAW_SESSION,
 				nativeThreadId: ALIAS,
@@ -508,7 +538,8 @@ async function promptWithRouteEffects(afterScene: string): Promise<{
 	return {
 		observed,
 		baseline: () => baseline,
-		host,
+		binding,
+		inventoryReads: reads,
 		stop: async (): Promise<void> => {
 			await driver.stop();
 		},
@@ -531,7 +562,10 @@ test('the route baseline lands after the composed prompt is drawn and before its
 		state: 'present',
 		byte_length: Buffer.byteLength(MODELS_ROW + REJECTED_CLAUDE_ROW),
 	});
-	const window = readClaudeRouteWindow(baseline, run.host.binding);
+	// The pre-Enter inventory read ran once at this hook, before the audit baseline.
+	expect(run.inventoryReads()).toBe(1);
+	expect(baseline.inventory_before).toMatchObject({ session_id: RAW_SESSION, state: 'idle' });
+	const window = readClaudeRouteWindow(baseline, run.binding);
 	expect({ rows: window.rows, bytes: window.segment_bytes }).toEqual({
 		rows: 1,
 		bytes: Buffer.byteLength(FORWARDED_CLAUDE_ROW),
@@ -559,4 +593,5 @@ test('the route hook refuses a scene that the submission Enter does not directly
 		await run.stop();
 	}
 	expect(run.baseline()).toBeNull();
+	expect(run.inventoryReads()).toBe(0);
 });

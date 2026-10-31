@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { metadataObservationPlanSchema } from "./acp-metadata-models.ts";
+import type { ManagedInventoryObservation } from "./claude-route-isolation.ts";
 import type { ClaudeRouteWindow } from "./claude-route-window.ts";
 
 /** Native Codex 0.165 `SkillScope` wire values (app-server-protocol v2/plugin.rs, snake_case). */
@@ -112,8 +113,13 @@ export const journeyCheckSchema = z.discriminatedUnion("kind", [
   // connection, refused with this endpoint's declared code and message, then a supported read.
   z.strictObject({ kind: z.literal("information-refused"), command: informationCommandSchema }),
   // The Claude route window: the runner's baseline record from right before the submission Enter
-  // (claude-route-window.ts), read once after this plan's own reply readback.
-  z.strictObject({ kind: z.literal("claude-route"), baseline: absolutePathSchema }),
+  // (claude-route-window.ts), read once after this plan's own reply readback, and the thread/read
+  // response an earlier same-Session observer retained as this Session's pre-input history.
+  z.strictObject({
+    kind: z.literal("claude-route"),
+    baseline: absolutePathSchema,
+    before_thread_read: absolutePathSchema,
+  }),
   // J2 model: the bound native catalogue and the selected model's controls against the provider
   // Session's own settings catalogue from public session inspect, never the native list itself.
   z.strictObject({
@@ -295,9 +301,19 @@ export interface JourneyReadback {
   // Present only when a plan checks an information refusal.
   readonly information: InformationReadback | null;
   // Present only when a plan checks the Claude route window.
-  readonly claudeRoute: ClaudeRouteWindow | null;
+  readonly claudeRoute: ClaudeRouteReadback | null;
   readonly providerAgentTexts: readonly string[];
   readonly providerToolItems: readonly ProviderToolItem[];
+}
+
+/** The Claude route window with its two managed-Session reads and the pre-input history. */
+export interface ClaudeRouteReadback {
+  // The declared service the runner target carried through the baseline.
+  readonly serviceId: string;
+  readonly window: ClaudeRouteWindow;
+  readonly inventoryBefore: ManagedInventoryObservation;
+  readonly inventoryAfter: ManagedInventoryObservation;
+  readonly historyBefore: NativeThread;
 }
 
 /** A JSON-RPC error envelope: the request's ID, an integer code and a message, never a result. */

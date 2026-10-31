@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { INFORMATION_REFUSALS } from "./acp-journey-models.ts";
+import { historyDigest, requireOneNewReplyTurn } from "./claude-route-isolation.ts";
 import type {
   ActiveJourneyReadback,
   ExpectedSkill,
@@ -275,10 +276,25 @@ export function checkInformationRefused(
  * HTTP success or stream completion; the genuine reply check in the same plan decides that.
  */
 export function checkClaudeRoute(
-  readback: Pick<JourneyReadback, "claudeRoute">,
+  readback: Pick<JourneyReadback, "claudeRoute" | "threadRead" | "threadResume">,
+  target: { readonly sessionId: string },
+  replyTurnId: string,
 ): JourneyCheckResult {
-  const window = readback.claudeRoute;
-  if (window === null) throw new Error("claude-route needs the observer's audit window read");
+  const route = readback.claudeRoute;
+  if (route === null) throw new Error("claude-route needs the observer's audit window read");
+  // Isolation: the Host held exactly the declared hosted Session, idle, at both reads.
+  for (const inventory of [route.inventoryBefore, route.inventoryAfter])
+    if (
+      inventory.service_id !== route.serviceId ||
+      inventory.session_id !== target.sessionId ||
+      inventory.count !== 1 ||
+      inventory.state !== "idle"
+    )
+      throw new Error("the route window was not isolated to the declared idle Session");
+  // No other turn in this Session: both final views add exactly the reply turn to the before-state.
+  for (const view of [readback.threadRead, readback.threadResume])
+    requireOneNewReplyTurn(route.historyBefore, view, replyTurnId);
+  const window = route.window;
   const claude = window.categories.filter((category) => category.route_kind === "claude_messages");
   const count = (rows: typeof claude): number => rows.reduce((sum, row) => sum + row.count, 0);
   const forwarded = count(
@@ -307,8 +323,25 @@ export function checkClaudeRoute(
       other_claude: count(claude) - forwarded,
       other_route_rows: window.rows - count(claude),
       categories: window.categories,
+      inventory_before: route.inventoryBefore,
+      inventory_after: route.inventoryAfter,
+      prior_turns: route.historyBefore.turns.length,
+      history_before_sha256: historyDigest(route.historyBefore),
+      reply_turn_id: replyTurnId,
     },
   };
+}
+
+/** The reply turn the plan's own genuine reply check establishes; a route window needs one. */
+function routeReplyTurnId(readback: JourneyReadback, checks: readonly JourneyCheck[]): string {
+  const reply = checks.find(
+    (check) => check.kind === "ordinary-reply" || check.kind === "skill-effect",
+  );
+  if (reply?.kind === "ordinary-reply")
+    return String(checkOrdinaryReply(readback, reply).observed["turn_id"]);
+  if (reply?.kind === "skill-effect")
+    return String(checkSkillEffect(readback, reply.submission).observed["turn_id"]);
+  throw new Error("claude-route needs its plan's own genuine reply check");
 }
 
 function checkCompactedView(view: NativeThread): string {
@@ -496,7 +529,7 @@ export function checkIdleJourney(
       case "information-refused":
         return checkInformationRefused(readback, check);
       case "claude-route":
-        return checkClaudeRoute(readback);
+        return checkClaudeRoute(readback, target, routeReplyTurnId(readback, checks));
     }
   });
 }

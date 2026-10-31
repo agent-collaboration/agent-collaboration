@@ -13,6 +13,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import { normalBuildManifestSchema } from '../../../verification/observations/acp-metadata-models.ts';
 import {
 	MAX_ROUTE_PREFIX_BYTES,
 	MAX_ROUTE_SEGMENT_BYTES,
@@ -69,14 +70,16 @@ export const codexAcpRunPlanSchema = z
 		output: absolutePathSchema,
 		target: codexAcpTargetSchema,
 		// A Claude prompt or selected-skill route proof only: the declared normal debug Host's run
-		// directory (its router-audit.jsonl and debug-host-context.json), the same Host process, and
-		// the byte bounds of the audit prefix hashed before Enter and of the segment read after it.
+		// directory (its router-audit.jsonl and debug-host-context.json), the same Host process, the
+		// byte bounds of the audit prefix hashed before Enter and of the segment read after it, and
+		// the normal-build collaboration CLI whose managed-Session inventory reads isolate the window.
 		claude_route: z
 			.strictObject({
 				host_run_directory: absolutePathSchema,
 				host_pid: z.number().int().positive(),
 				max_prefix_bytes: z.number().int().positive().max(MAX_ROUTE_PREFIX_BYTES),
 				max_segment_bytes: z.number().int().positive().max(MAX_ROUTE_SEGMENT_BYTES),
+				collaboration_cli: artifactBindingSchema,
 			})
 			.optional(),
 		journey: z.discriminatedUnion('kind', [
@@ -197,6 +200,9 @@ function claudeRouteBinding(plan: CodexAcpRunPlan): ClaudeRouteBinding | null {
 		hostRunDirectory: route.host_run_directory,
 		hostPid: route.host_pid,
 		serviceDirectory: plan.target.service_directory,
+		serviceId: plan.target.expected_service_id,
+		serviceEpoch: plan.target.expected_service_epoch,
+		collaborationCli: route.collaboration_cli,
 		maxPrefixBytes: route.max_prefix_bytes,
 		maxSegmentBytes: route.max_segment_bytes,
 	};
@@ -284,11 +290,26 @@ export async function checkCodexAcp(plan: CodexAcpRunPlan): Promise<CodexJourney
 	const binding = claudeRouteBinding(plan);
 	if (binding !== null) {
 		requireClaudeRouteBinding(binding);
+		verifyArtifact(binding.collaborationCli);
 		const observer = z
-			.looseObject({ host_pid: z.number().int() })
+			.looseObject({
+				host_pid: z.number().int(),
+				build_manifest: absolutePathSchema,
+				collaboration_cli: z.string(),
+			})
 			.parse(JSON.parse(readFileSync(plan.target.observer_plan, 'utf8')));
 		if (observer.host_pid !== binding.hostPid)
 			throw new Error('the route proof names another Host than its observer plan');
+		// The inventory reads use the normal build's own collaboration CLI, the one its observer runs.
+		const built = normalBuildManifestSchema.parse(
+			JSON.parse(readFileSync(observer.build_manifest, 'utf8')),
+		).binaries['agent-collaboration'];
+		if (
+			observer.collaboration_cli !== binding.collaborationCli.path ||
+			built?.path !== binding.collaborationCli.path ||
+			built.sha256 !== binding.collaborationCli.sha256
+		)
+			throw new Error('the route proof binds another collaboration CLI than the normal build');
 	}
 	return codexJourneyFor(plan);
 }

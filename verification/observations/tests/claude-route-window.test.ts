@@ -1,21 +1,17 @@
-import { createFixtureDirectory } from "../../test-support/fixture-directory.ts";
 import assert from "node:assert/strict";
 import {
   appendFileSync,
   chmodSync,
-  mkdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
-  rmSync,
   symlinkSync,
   truncateSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
-import { journeyObservationPlanSchema, type JourneyCheckResult } from "../acp-journey-models.ts";
+import { test } from "node:test";
+import type { JourneyCheckResult } from "../acp-journey-models.ts";
 import { readPlanClaudeRoute } from "../acp-journey-observation.ts";
 import { checkClaudeRoute } from "../acp-journey-oracle.ts";
 import {
@@ -24,91 +20,45 @@ import {
   type ClaudeRouteBinding,
   type ClaudeRouteWindow,
 } from "../claude-route-window.ts";
+import {
+  ACCOUNT_HASH,
+  FORWARDED_CLAUDE,
+  INVENTORY,
+  MODELS_FORWARDED,
+  OTHER_SESSION,
+  PORT,
+  PRIOR_TURN,
+  REJECTED_CLAUDE,
+  REPLY_TURN,
+  RESTARTED_EPOCH,
+  SERVICE_ID,
+  SESSION,
+  TARGET,
+  observerPlan,
+  routeFixture,
+  sessionThread,
+  type RouteFixture,
+} from "./claude-route-fixture.ts";
 
-// Literal rows as the Router serializes AuditEvent (codex-router-core/src/audit.rs:83-98): a
-// forwarded Claude response (http_affinity.rs:128-143), a rejected Claude local token
-// (http_affinity.rs:110-125 via protocol_handler.rs:127-191) and Codex's own models traffic.
-const ACCOUNT_HASH = "acct_5f3a9c0d";
-const FORWARDED_CLAUDE = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"claude_messages","transport_kind":"http","local_auth_result":"valid","outcome":"allowed","decision_reason":"forwarded","response_commit_state":"committed","account_hash":"${ACCOUNT_HASH}"}\n`;
-const REJECTED_CLAUDE = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"claude_messages","transport_kind":"http","local_auth_result":"wrong","outcome":"rejected","decision_reason":"local_auth_wrong","response_commit_state":"not_committed","error_class":"local_auth"}\n`;
-const MODELS_FORWARDED = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"models","transport_kind":"http","local_auth_result":"valid","outcome":"allowed","decision_reason":"forwarded","response_commit_state":"committed","account_hash":"acct_openai_77"}\n`;
-
-const SESSION = "e4aa7dc9-8c96-4a78-8bcc-c87356410348";
-const PORT = 61613;
-const TARGET = {
-  afterScene: "prompt-composed",
-  providerSessionId: SESSION,
-  nativeThreadId: SESSION,
-} as const;
-
-interface RouteFixture {
-  readonly root: string;
-  readonly runDirectory: string;
-  readonly serviceDirectory: string;
-  readonly auditFile: string;
-  readonly binding: ClaudeRouteBinding;
-  readonly marker: (overrides: Record<string, unknown>) => void;
-}
-
-/** A real owner-private Host run directory with the Host's own marker and the service listener. */
-function routeFixture(context: TestContext, auditPrefix: string | null): RouteFixture {
-  const root = realpathSync(createFixtureDirectory("claude-route"));
-  context.after(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-  const runDirectory = join(root, "run");
-  const serviceDirectory = join(root, "router", "agent-communication");
-  mkdirSync(runDirectory, { mode: 0o700 });
-  mkdirSync(serviceDirectory, { recursive: true, mode: 0o700 });
-  writeFileSync(
-    join(serviceDirectory, "service.json"),
-    JSON.stringify({
-      serviceId: "c4007a11-4c33-43a9-b44d-2a5ff96dd211",
-      routerProxyEndpoint: `127.0.0.1:${PORT}`,
-    }),
-  );
-  const marker = (overrides: Record<string, unknown>): void => {
-    writeFileSync(
-      join(runDirectory, "debug-host-context.json"),
-      JSON.stringify({
-        kind: "debugHostPrepared",
-        runDirectory,
-        serviceDirectory,
-        workspace: join(runDirectory, "agent-workspace"),
-        profile: "codex-router-debug",
-        model: "gpt-5.6-luna",
-        port: PORT,
-        hostPid: 5446,
-        routerRoot: join(root, "router"),
-        claudeProvider: { executable: "/bin/claude-agent-acp", arguments: [] },
-        cursorProvider: null,
-        peerRegistryDirectory: null,
-        ...overrides,
-      }),
-      { mode: 0o600 },
-    );
-  };
-  marker({});
-  const auditFile = join(runDirectory, "router-audit.jsonl");
-  if (auditPrefix !== null) writeFileSync(auditFile, auditPrefix, { mode: 0o600 });
-  return {
-    root,
-    runDirectory,
-    serviceDirectory,
-    auditFile,
-    marker,
-    binding: {
-      hostRunDirectory: runDirectory,
-      hostPid: 5446,
-      serviceDirectory,
-      maxPrefixBytes: 65_536,
-      maxSegmentBytes: 4096,
-    },
-  };
-}
-
+/** The window inside an otherwise valid isolated route: both reads idle, one new reply turn. */
 function routeResult(window: ClaudeRouteWindow): JourneyCheckResult {
-  return checkClaudeRoute({ claudeRoute: window });
+  const before = sessionThread([PRIOR_TURN]);
+  const after = sessionThread([PRIOR_TURN, REPLY_TURN]);
+  return checkClaudeRoute(
+    {
+      claudeRoute: {
+        serviceId: SERVICE_ID,
+        window,
+        inventoryBefore: INVENTORY,
+        inventoryAfter: INVENTORY,
+        historyBefore: before,
+      },
+      threadRead: after,
+      threadResume: after,
+    },
+    { sessionId: SESSION },
+    "turn-2",
+  );
 }
 
 test("a forwarded Claude row appended after the baseline passes and keeps only categories", (context): void => {
@@ -331,76 +281,24 @@ test("the read must use the binding the baseline recorded", (context): void => {
   const fixture = routeFixture(context, MODELS_FORWARDED);
   const baseline = captureClaudeRouteBaseline(fixture.binding, TARGET);
   appendFileSync(fixture.auditFile, FORWARDED_CLAUDE);
-  assert.throws(
-    () => readClaudeRouteWindow(baseline, { ...fixture.binding, maxSegmentBytes: 8192 }),
-    /differs from the recorded baseline/,
-  );
+  const { path, sha256 } = fixture.binding.collaborationCli;
+  for (const rebound of [
+    { maxSegmentBytes: 8192 },
+    { serviceId: OTHER_SESSION },
+    { serviceEpoch: RESTARTED_EPOCH },
+    { collaborationCli: { path: "/bin/agent-collaboration", sha256 } },
+    { collaborationCli: { path, sha256: "f".repeat(64) } },
+  ])
+    assert.throws(
+      () => readClaudeRouteWindow(baseline, { ...fixture.binding, ...rebound }),
+      /differs from the recorded baseline/,
+      JSON.stringify(rebound),
+    );
   fixture.marker({ hostPid: 9999 });
   assert.throws(
     () => readClaudeRouteWindow(baseline, fixture.binding),
     /does not name the declared/,
   );
-});
-
-function observerPlan(
-  fixture: RouteFixture,
-  baselinePath: string,
-  overrides: Record<string, unknown> = {},
-) {
-  const evidence = join(fixture.root, `evidence-${Math.random().toString(16).slice(2)}`);
-  mkdirSync(evidence, { mode: 0o700 });
-  return journeyObservationPlanSchema.parse({
-    repository: "/repo",
-    source_head: "head",
-    build_manifest: "/repo/manifest.json",
-    host_pid: 5446,
-    host_binary: "/bin/host",
-    host_sha256: "h",
-    router_binary: "/bin/router",
-    router_sha256: "r",
-    codex_cli: "/bin/codex",
-    codex_sha256: "c",
-    collaboration_cli: "/bin/agent-collaboration",
-    service_directory: fixture.serviceDirectory,
-    endpoint_id: "claude-local",
-    session_id: SESSION,
-    native_thread_id: SESSION,
-    evidence,
-    cwd: "/work/provider",
-    mode: "idle-bind",
-    checks: [
-      {
-        kind: "ordinary-reply",
-        prompt: "Compute 1 + 2345678. Reply with only the integer.",
-        completion: "12345679",
-      },
-      { kind: "claude-route", baseline: baselinePath },
-    ],
-    ...overrides,
-  });
-}
-
-test("the observer reads the window only for its own Host and Session, retaining no raw rows", (context): void => {
-  const fixture = routeFixture(context, MODELS_FORWARDED);
-  const baselinePath = join(fixture.root, "claude-route-baseline.json");
-  writeFileSync(baselinePath, JSON.stringify(captureClaudeRouteBaseline(fixture.binding, TARGET)));
-  appendFileSync(fixture.auditFile, FORWARDED_CLAUDE);
-  const plan = observerPlan(fixture, baselinePath);
-  const window = readPlanClaudeRoute(plan);
-  assert.equal(window?.rows, 1);
-  const retained = readFileSync(join(plan.evidence, "claude-route-window.json"), "utf8");
-  assert.equal(retained.includes(ACCOUNT_HASH), false);
-  assert.equal(retained.includes("local_proxy_request"), false);
-  for (const overrides of [
-    { host_pid: 5447 },
-    { session_id: "other-session" },
-    { native_thread_id: "019a0000-0000-7000-8000-000000000001" },
-  ])
-    assert.throws(
-      () => readPlanClaudeRoute(observerPlan(fixture, baselinePath, overrides)),
-      /another Host or Session/,
-      JSON.stringify(overrides),
-    );
 });
 
 test("a baseline file over either declared cap is refused before any read", (context): void => {
@@ -420,7 +318,7 @@ test("a baseline file over either declared cap is refused before any read", (con
 test("a route window belongs to one idle-bind Claude plan with its own genuine reply check", (context): void => {
   const fixture = routeFixture(context, MODELS_FORWARDED);
   const baselinePath = join(fixture.root, "claude-route-baseline.json");
-  const route = { kind: "claude-route", baseline: baselinePath };
+  const route = { kind: "claude-route", baseline: baselinePath, before_thread_read: baselinePath };
   const reply = { kind: "ordinary-reply", prompt: "Compute 1 + 2345678.", completion: "12345679" };
   assert.doesNotThrow(() => observerPlan(fixture, baselinePath));
   for (const [overrides, expected] of [
@@ -428,10 +326,8 @@ test("a route window belongs to one idle-bind Claude plan with its own genuine r
     [{ checks: [reply, route, route] }, /its own genuine reply check/],
     [{ endpoint_id: "cursor-local" }, /its own genuine reply check/],
     [{ mode: "active-read-only" }, /active-read-only allows only turn-in-progress/],
-    [
-      { checks: [reply, { kind: "claude-route", baseline: "relative.json" }] },
-      /absolute path required/,
-    ],
+    [{ checks: [reply, { ...route, baseline: "relative.json" }] }, /absolute path required/],
+    [{ checks: [reply, { kind: "claude-route", baseline: baselinePath }] }, /before_thread_read/],
   ] as const)
     assert.throws(
       () => observerPlan(fixture, baselinePath, overrides),

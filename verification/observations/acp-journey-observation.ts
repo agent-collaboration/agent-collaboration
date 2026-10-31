@@ -9,7 +9,13 @@ import {
   readObservedJson,
   type JsonObject,
 } from "./evidence-models.ts";
+import { normalBuildManifestSchema } from "./acp-metadata-models.ts";
 import { qualifyMetadataSource, saveRaw } from "./acp-metadata-observation.ts";
+import {
+  historyDigest,
+  readManagedInventory,
+  requireHistoryBefore,
+} from "./claude-route-isolation.ts";
 import { UnixWebSocketObserver } from "./unix-websocket-observer.ts";
 import {
   INFORMATION_REFUSALS,
@@ -24,6 +30,7 @@ import {
   type ActiveJourneyReadback,
   type InformationReadback,
   type InformationRefusal,
+  type ClaudeRouteReadback,
   type JourneyCheckResult,
   type JourneyObservationPlan,
   type ModelReadback,
@@ -35,11 +42,7 @@ import {
   type ProviderToolItem,
 } from "./acp-journey-models.ts";
 import { checkActiveJourney, checkIdleJourney, nativeThreadAlias } from "./acp-journey-oracle.ts";
-import {
-  claudeRouteBaselineSchema,
-  readClaudeRouteWindow,
-  type ClaudeRouteWindow,
-} from "./claude-route-window.ts";
+import { claudeRouteBaselineSchema, readClaudeRouteWindow } from "./claude-route-window.ts";
 
 interface NativeReadback {
   readonly unboundSkills: NativeSkillsList;
@@ -378,7 +381,7 @@ function modelReadback(
  * runner's baseline must name this plan's Host, service, raw Session and native alias. Only the
  * categorical summary and the baseline record are retained, never raw audit rows.
  */
-export function readPlanClaudeRoute(plan: JourneyObservationPlan): ClaudeRouteWindow | null {
+export function readPlanClaudeRoute(plan: JourneyObservationPlan): ClaudeRouteReadback | null {
   const check = plan.checks.find((candidate) => candidate.kind === "claude-route");
   if (check === undefined) return null;
   const baseline = claudeRouteBaselineSchema.parse(
@@ -391,22 +394,62 @@ export function readPlanClaudeRoute(plan: JourneyObservationPlan): ClaudeRouteWi
     baseline.native_thread_id !== plan.native_thread_id
   )
     throw new Error("the route baseline was recorded for another Host or Session");
+  // The same normal-build collaboration CLI the runner bound, and this plan's own CLI.
+  const built = normalBuildManifestSchema.parse(decode(readFileSync(plan.build_manifest, "utf8")))
+    .binaries["agent-collaboration"];
+  if (
+    plan.collaboration_cli !== baseline.collaboration_cli.path ||
+    built?.path !== baseline.collaboration_cli.path ||
+    built.sha256 !== baseline.collaboration_cli.sha256
+  )
+    throw new Error("the route reads use another collaboration CLI than the normal build");
   saveRaw(
     join(plan.evidence, "claude-route-baseline.json"),
     prettyEvidenceJson(baseline, false, false),
   );
+  const historyBefore = retainedThreadRead(check.before_thread_read);
+  requireHistoryBefore(historyBefore, plan.native_thread_id, plan.cwd);
   const window = readClaudeRouteWindow(baseline, {
     hostRunDirectory: baseline.host_run_directory,
     hostPid: plan.host_pid,
     serviceDirectory: plan.service_directory,
+    serviceId: baseline.service_id,
+    serviceEpoch: baseline.service_epoch,
+    collaborationCli: baseline.collaboration_cli,
     maxPrefixBytes: baseline.max_prefix_bytes,
     maxSegmentBytes: baseline.max_segment_bytes,
   });
+  // Close the inventory after fixing the audit segment's end, so another managed Session
+  // cannot add a row between the last inventory observation and that segment's open-time size.
+  const inventoryAfter = readManagedInventory({
+    collaborationCli: baseline.collaboration_cli,
+    serviceDirectory: plan.service_directory,
+    serviceId: baseline.service_id,
+    serviceEpoch: baseline.service_epoch,
+    sessionId: plan.session_id,
+  });
+  const route = {
+    serviceId: baseline.service_id,
+    window,
+    inventoryBefore: baseline.inventory_before,
+    inventoryAfter,
+    historyBefore,
+  };
   saveRaw(
     join(plan.evidence, "claude-route-window.json"),
-    prettyEvidenceJson(window, false, false),
+    prettyEvidenceJson(
+      {
+        window,
+        inventory_before: route.inventoryBefore,
+        inventory_after: inventoryAfter,
+        prior_turns: historyBefore.turns.length,
+        history_before_sha256: historyDigest(historyBefore),
+      },
+      false,
+      false,
+    ),
   );
-  return window;
+  return route;
 }
 
 /** A thread/read response an earlier run retained, as the before-state of a refused command. */
