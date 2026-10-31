@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fixing the published design · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-fixing-the-published-design">Fixing the published design</h1>
+
+<p><strong>The board design on <code>main</code> is the version from before your 19 Oct decisions.</strong> The current version sits on a local branch that was never pushed: its history contains a Cloudflare CLI cache file with account metadata and an email. We publish the right documents <em>without</em> that history, as a hand-picked docs change in this stack.</p>
+
+<h2 id="why-not-copy">Why not copy the branch</h2>
+<ul>
+  <li>Its history carries the cache file, so pushing it would publish that file.</li>
+  <li>Copying its whole <code>docs/</code> would delete newer docs that are only on <code>main</code>: the TUI, quota-dialog and crate DAG sets.</li>
+  <li>The branch itself still has two stale spots: PD2's "activity gate", and an explainer page showing the old U38.</li>
+</ul>
+
+<h2 id="steps">Steps</h2>
+<ex-trace title="Publication" data-width="reading">
+  <details tone="planned" tag="1" icon="book-open">
+    <summary>Inventory every decision</summary>
+    <p>Each statement on the branch is labelled: owner-settled, Lead realization, superseded, open, or planned-but-unbuilt. This includes U38/U80, the removed lost-write family, central-first project creation, interaction ownership and remote wakes.</p>
+  </details>
+  <details tone="planned" tag="2" icon="file">
+    <summary>Apply only the approved files onto this stack</summary>
+    <p>A docs-only commit with no branch history. The two stale spots get fixed. Newer <code>main</code> docs stay byte-identical, checked against a file manifest.</p>
+  </details>
+  <details tone="planned" tag="3" icon="lock">
+    <summary>Public-safety scan</summary>
+    <p>On the exact staged files and the outgoing commits: cache folders, secrets, account IDs and emails, real staging hosts, Access identifiers, live service, session or machine IDs, and local paths. It also checks that no commit has the old branch as an ancestor.</p>
+  </details>
+  <details tone="planned" tag="4" icon="users">
+    <summary>Independent review, then it ships with the stack</summary>
+    <p>Checked against your decisions and today's code. The docs claim nothing as built that isn't.</p>
+  </details>
+</ex-trace>
+
+<ex-callout title="Code mostly already matches you" tone="done" icon="code">
+  <p>The Advisor read the code paths: central-first project creation, no offline writes, and the removed lost-write family are already as you decided. This fix is mainly the documents.</p>
+</ex-callout>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

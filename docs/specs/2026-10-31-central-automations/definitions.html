@@ -1,0 +1,107 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The central list · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-the-central-list">The central list</h1>
+
+<p><strong>Every schedule and wake lives once, on central, in the Fleet face.</strong> The Fleet face already owns central's own state, runs the same on Cloudflare and on self-hosted Tokio, and wakes itself on alarms. Any machine's Router reads and changes the list through calls on the machine session it already holds. No machine keeps its own copy.</p>
+
+<ex-callout title="What changes for you" tone="tldr" icon="users">
+  <p>The same <code>wake …</code> and <code>schedule …</code> commands, with the same output. The target can now be a session on <strong>any</strong> machine, and the list is the same wherever you ask.</p>
+</ex-callout>
+
+<h2 id="where">Where it lives</h2>
+<ex-mermaid id="def-map" label="Who owns what"><script type="text/plain">
+flowchart LR
+  a["Router on A<br/>CLI / MCP"] -->|"calls on the machine session"| cat["Fleet face<br/>automation catalog"]
+  b["Router on B<br/>CLI / MCP"] -->|"calls on the machine session"| cat
+  cat --> store[("central store<br/>automations · timing · firings")]
+  clock["Fleet alarm<br/>automation clock"] --> store
+</script></ex-mermaid>
+
+<h2 id="records">What central stores</h2>
+<ex-mermaid id="def-er" label="Central records"><script type="text/plain">
+erDiagram
+  AUTOMATION ||--|| TIMING : "has"
+  AUTOMATION ||--o{ FIRING : "fires"
+  AUTOMATION ||--o| IMPORT : "moved by"
+  AUTOMATION {
+    uuid automation_id PK
+    text kind
+    int revision
+    json definition
+    text state
+    json creator
+  }
+  TIMING {
+    uuid automation_id PK
+    int next_due_ms
+    int watermark_ms
+    uuid occupying_firing_id
+    uuid waiting_firing_id
+  }
+  FIRING {
+    uuid firing_id PK
+    uuid automation_id FK
+    int due_ms
+    text state
+    uuid mail_item_id
+    json outcome
+  }
+  IMPORT {
+    uuid import_id PK
+    text installation_id
+    uuid automation_id
+    text definition_digest
+  }
+</script></ex-mermaid>
+
+<ul>
+  <li><strong>The definition is kept whole:</strong> a schedule keeps its instruction, timing, destination (an existing session, or a fresh session in a folder), model, effort and timeout; a wake keeps its target, due time, repeat and creator.</li>
+  <li><strong>Every ID is UUIDv7,</strong> and kinds and states are checked by Rust types, not by database CHECK rules.</li>
+  <li><strong>Finished firings are removed after 2 months,</strong> the same retention as PR 1.</li>
+</ul>
+
+<h2 id="rules">Rules, checked once against the whole list</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Rule</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>No project</td><td>An automation has no project, so a lease never pauses or delays it.</td></tr>
+<tr><td>Wake limits</td><td>One-shot wakes at most 24 h ahead; repeating wakes end within 7 days, at most every 5 min. A violation is refused with its limit named.</td></tr>
+<tr><td>One active wake per session</td><td>Checked across <em>all</em> machines now. A second one is refused as <code>wakeExists</code>, naming who set the first.</td></tr>
+<tr><td>Changes carry a revision</td><td>Change, pause, resume and cancel send the revision they saw. A stale one is refused as <code>revisionMismatch</code>, so two people editing can't overwrite each other silently.</td></tr>
+<tr><td>Writes need central</td><td>If central can't be reached, a write is refused as <code>centralUnreachable</code>. Nothing is queued to apply later. A read shows the last list with its "as of" time, or fails visibly.</td></tr>
+</tbody>
+</table>
+</div>
+
+<details>
+<summary>Calls the Routers make</summary>
+<ul>
+  <li><code>AutomationCreate</code>, <code>Change</code>, <code>Pause</code>, <code>Resume</code>, <code>Cancel</code>, <code>List</code>, <code>Show</code></li>
+  <li><code>AutomationImport</code>: the one-time move from a machine (see Moving to central)</li>
+  <li><code>FiringReport</code>: the receiving machine reporting what happened (see On the receiving machine)</li>
+</ul>
+<p>Today's refusal "endpoint belongs to another service" (<code>schedule_activation.rs:80</code>), which blocks schedules for other machines, goes away. The old remote-wake request path is retired at cutover.</p>
+</details>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

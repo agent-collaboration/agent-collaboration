@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How it's proven · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-how-it-s-proven">How it's proven</h1>
+
+<p><strong>Two real debug Routers, machine A and machine B, enrolled with a local central, on Sunclaw.</strong> Real agent sessions run on Haiku. The same central behaviour also runs through the conformance suite on both Cloudflare and Tokio. Nothing below has run yet; this is the plan.</p>
+
+<ex-mermaid id="rig" label="Test rig"><script type="text/plain">
+flowchart LR
+  A["debug Router A<br/>+ Haiku sessions"] <-->|"machine session"| C["local Tokio central<br/>Fleet face"]
+  B["debug Router B<br/>+ Haiku sessions"] <-->|"machine session"| C
+  CF["Cloudflare runtime"] -.->|"same core, conformance suite"| C
+</script></ex-mermaid>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Promise</th><th>How we'll show it</th><th>Not covered</th></tr></thead>
+<tbody>
+<tr><td>One list everywhere</td><td>Create on A, see it on B; pause on B, see it on A</td><td>More than two machines</td></tr>
+<tr><td>Not tied to a project</td><td>Expire every lease; it still fires on time</td><td>—</td></tr>
+<tr><td>Wake limits</td><td>A second wake for one session from B is refused, naming A's creator; each limit refuses</td><td>—</td></tr>
+<tr><td>Central fires</td><td>Stop A; A's schedule still runs on B on time</td><td>Long clock drift</td></tr>
+<tr><td>Offline target</td><td>Stop B; the firing is held; start B; it's delivered once; an expired one shows as expired</td><td>—</td></tr>
+<tr><td>Never twice</td><td>Force redelivery; one message or run</td><td>—</td></tr>
+<tr><td>Runs as today</td><td>The wake push and the run match today's header, kind and session</td><td>—</td></tr>
+<tr><td>Outcome everywhere</td><td>Show from A lists B's run states in order</td><td>—</td></tr>
+<tr><td>Migration</td><td>A copy of your data's shape (9 schedules, live wakes); upgrade; same IDs and due times; kill mid-move, no duplicate</td><td>Your real data. You check it after upgrading.</td></tr>
+<tr><td>Old machines</td><td>B on the old release keeps firing its own; central doesn't</td><td>—</td></tr>
+<tr><td>Published design</td><td>A file manifest shows newer docs untouched; no stale rule left; the public-safety scan is clean</td><td>Meaning, which is checked by review, not grep</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="each-test">Each test has a broken build that fails it</h2>
+<p>For example: a per-machine list fails "one list everywhere"; a lease gate fails "not tied to a project"; two waiting runs fail the overlap rule; a migration that leaves both sides firing fails the move test. The full rows are in <a href="verification-design.md">verification-design.md</a>.</p>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

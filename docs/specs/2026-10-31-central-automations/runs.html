@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On the receiving machine · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-on-the-receiving-machine">On the receiving machine</h1>
+
+<p><strong>The machine that gets a firing does exactly what it does today.</strong> A wake becomes the same <code>⏰ Router wake</code> push in its session. A schedule run starts in its bound session, or in a fresh session in its folder, with the same instruction, model, effort and timeout, and a summary afterwards. What's new is that it reads these from its inbox instead of its own timer, refuses duplicates, and reports back.</p>
+
+<h2 id="path">From inbox to session</h2>
+<ex-mermaid id="runs-flow" label="Receiving path"><script type="text/plain">
+flowchart TD
+  inbox["inbox<br/>interaction.sqlite (local)"] --> inj["firing injection<br/>new"]
+  inj --> rec{"firing_id seen?"}
+  rec -->|yes| stop["do nothing<br/>(redelivery)"]
+  rec -->|no| kind{"wake or schedule?"}
+  kind -->|wake| push["today's wake push<br/>into its session"]
+  kind -->|schedule| run["workflow_runs row<br/>today's run route + summary"]
+  push --> rep["FiringReport<br/>durable, retried until accepted"]
+  run --> rep
+</script></ex-mermaid>
+
+<h2 id="local">What stays local</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Local file</th><th>Keeps</th><th>Loses</th></tr></thead>
+<tbody>
+<tr><td><code>interaction.sqlite</code></td><td>the inbox and the delivered pushes (your rule: stays local)</td><td>nothing</td></tr>
+<tr><td><code>automation.sqlite</code></td><td>runs it executed; <code>firing_receipts</code> (one row per firing, the duplicate guard); old history until the 2-month retention</td><td>definitions and timers, which move to central</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="report">Reporting back</h2>
+<p>Each state change (<code>delivered</code>, <code>runStarted</code>, <code>runFinished</code> with its summary, or <code>failed</code> with its reason) goes to central as a <code>FiringReport</code> through the machine's durable outbox. If the network drops, it's retried; central accepts repeats once. Central only accepts a report from the machine the firing was sent to. That makes <code>schedule show</code> from <em>any</em> machine say what happened.</p>
+
+<ex-callout title="Why nothing runs twice" tone="note" icon="shield-check">
+  <p>The <code>firing_receipts</code> row is written before anything is delivered or started, keyed by the firing ID. The same mail arriving again finds the row and stops. A run row carries the same firing ID, unique, as a second guard.</p>
+</ex-callout>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

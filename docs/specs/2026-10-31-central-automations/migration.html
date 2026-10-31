@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moving to central · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-moving-to-central">Moving to central</h1>
+
+<p><strong>The first time a machine runs the new release, it hands each of its schedules and live wakes to central, once.</strong> Each keeps its ID, timing, next due time, target, instruction and creator. During the move, exactly one side owns each automation's clock, so nothing fires twice and nothing is skipped.</p>
+
+<h2 id="handover">The handover, per automation</h2>
+<ex-mermaid id="mig-seq" label="Handover"><script type="text/plain">
+sequenceDiagram
+  participant L as Machine (local automation.sqlite)
+  participant C as Central (Fleet face)
+  L->>L: mark "pending": local timer stops firing it (one local transaction)
+  L->>C: AutomationImport (definition, watermark, next due, run state)
+  alt new
+    C->>C: insert, keyed by automation_id
+    C-->>L: imported
+  else same thing again (a retry after a crash)
+    C-->>L: alreadyImported
+  else a different definition with that ID
+    C-->>L: importConflict
+    L->>L: stays "pending"; reported to you; fires nowhere
+  end
+  L->>L: mark "moved"
+  C->>C: clock admits from the imported watermark
+</script></ex-mermaid>
+
+<ul>
+  <li><strong>A due time that falls during the move</strong> fires once: the local side stopped at "pending", and central catches up from the watermark under the fold rules.</li>
+  <li><strong>A crash mid-move</strong> resumes at the same step. Central answers a repeat with <code>alreadyImported</code>, so no duplicate appears.</li>
+  <li><strong>Ended wakes</strong> aren't moved; they stay as history.</li>
+  <li><strong>A machine still on the old release</strong> never imports, so central holds nothing of its schedules and never fires them. It keeps working locally until it upgrades.</li>
+</ul>
+
+<h2 id="states">Local states</h2>
+<ex-mermaid id="mig-state" label="Handover states"><script type="text/plain">
+stateDiagram-v2
+  [*] --> local: before the new release
+  local --> pending: handover starts
+  pending --> moved: central accepted
+  pending --> pending: retry, or conflict reported
+  moved --> [*]
+</script></ex-mermaid>
+
+<h2 id="schema">Storage changes</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Where</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>central (both runtimes)</td><td>new tables: automations, timing, firings, imports</td></tr>
+<tr><td>each machine's <code>automation.sqlite</code></td><td>new <code>automation_handover</code> and <code>firing_receipts</code>; <code>workflow_runs</code> gains a unique <code>firing_id</code>; old tables kept read-only under PR 1's retention, WAL and vacuum</td></tr>
+</tbody>
+</table>
+</div>
+
+<ex-callout title="Your data" tone="question" icon="database">
+  <p>On this Mac today: 9 schedules, 2,049 wake rows (most expired), and 3,910 past runs. Only the live schedules and wakes move. The past runs stay on this Mac until they age out at 2 months.</p>
+</ex-callout>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

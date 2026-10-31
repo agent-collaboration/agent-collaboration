@@ -1,6 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Central automations</title>
@@ -8,10 +6,20 @@
 <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
 </head>
 <body>
-<ex-nav for="content"></ex-nav>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
 <ex-document id="content">
 
-<h1>Central automations</h1>
+<h1 id="heading-central-automations">Central automations</h1>
 
 <p><strong>What broke:</strong> you meant automations to be definitions of scheduled messages, kept in one central place for every machine. That was never built. Each machine keeps its own schedules and wakes in its own <code>automation.sqlite</code>, fires them itself, and nothing about them is on central.</p>
 
@@ -29,11 +37,21 @@
   <p>If you meant central to hold only the definitions while a machine keeps the timer, say so and this changes.</p>
 </ex-callout>
 
+<h2 id="pages">The design, page by page</h2>
+<ul>
+  <li><a href="definitions.html">The central list</a>: where schedules and wakes live, what central stores, the rules.</li>
+  <li><a href="firing.html">Firing and mail</a>: how a due automation becomes one message, plus repeats, cancels and failures.</li>
+  <li><a href="runs.html">On the receiving machine</a>: what the machine does, what stays local, reporting back.</li>
+  <li><a href="migration.html">Moving to central</a>: the one-time handover and why nothing fires twice.</li>
+  <li><a href="published-design.html">Fixing the published design</a>: republishing your decisions safely.</li>
+  <li><a href="proof.html">How it's proven</a>: the two-machine test rig and what each test shows.</li>
+</ul>
+
 <h2 id="today-vs-design">Today versus the design</h2>
 
 <ex-grid data-width="canvas">
 <div>
-<h3>Today (main)</h3>
+<h3 id="heading-today-main">Today (main)</h3>
 <ex-mermaid id="today" label="Today"><script type="text/plain">
 flowchart TD
   def["automation.sqlite on machine A<br/>schedules + wakes + timer"] -->|fires| push["A's interaction.sqlite<br/>local push"]
@@ -44,7 +62,7 @@ flowchart TD
 <p>The list exists only on the machine that made it. If A is off, nothing fires.</p>
 </div>
 <div>
-<h3>The design</h3>
+<h3 id="heading-the-design">The design</h3>
 <ex-mermaid id="design" label="Design"><script type="text/plain">
 flowchart TD
   cli["any machine<br/>CLI / MCP"] -->|create, change, pause, cancel| fleet["central: one list<br/>definitions + clock"]
@@ -119,8 +137,8 @@ flowchart TD
 <tr><td>PR 1: 30-day affinity pruning, read-cache leak fix</td><td>Built and accepted at code level; pushed</td></tr>
 <tr><td>PR 1: vacuum, WAL for every database, retention table, Turso vacuum research</td><td>In progress (implementer on Sunclaw)</td></tr>
 <tr><td>PR 2: Requirements and Specification</td><td>Written (<code>requirements.md</code>, <code>specification.md</code>)</td></tr>
-<tr><td>PR 2: Program Design and Verification Design</td><td>Next</td></tr>
-<tr><td>Advisor validation of the four documents</td><td>After those</td></tr>
+<tr><td>PR 2: Program Design and Verification Design</td><td>Written</td></tr>
+<tr><td>Advisor review of all four</td><td>In progress</td></tr>
 <tr><td>Sunclaw transcript search</td><td>Waiting on the Station Chief to create the helpers</td></tr>
 </tbody>
 </table>
@@ -128,9 +146,10 @@ flowchart TD
 
 <details>
 <summary>Sources for agents</summary>
-<p><a href="requirements.md">requirements.md</a> (U1–U11) and <a href="specification.md">specification.md</a> (E1–E10, R1–R15, V1–V14) are the governing documents. Program and verification design follow in the same folder.</p>
+<p><a href="requirements.md">requirements.md</a> (U1–U11) and <a href="specification.md">specification.md</a> (E1–E10, R1–R15, V1–V14) are the governing documents. Also <a href="program-design.md">program-design.md</a> and <a href="verification-design.md">verification-design.md</a>.</p>
 </details>
 
 </ex-document>
-</body>
-</html>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>

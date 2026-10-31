@@ -1,0 +1,98 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Firing and mail · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-firing-and-mail">Firing and mail</h1>
+
+<p><strong>Central keeps the clock.</strong> When an automation is due, central records one firing and sends it as an ordinary message. It uses the same outbox → central ledger → inbox path as every other message, with central itself as the sender. The machine that created the automation doesn't need to be on.</p>
+
+<h2 id="sequence">One firing, end to end</h2>
+<ex-mermaid id="fire-seq" label="One firing"><script type="text/plain">
+sequenceDiagram
+  participant Clock as Central clock (Fleet alarm)
+  participant Store as Central store
+  participant Ledger as Central ledger (mail custody)
+  participant B as Router on target machine B
+  participant S as Session on B
+  Clock->>Store: due? record ONE firing, advance next due (one transaction)
+  Clock->>Ledger: after commit, place mail item (sender Automation, body Firing)
+  Ledger-->>B: delivered over B's machine session (held while B is offline)
+  B->>B: firing receipt by firing_id (a duplicate does nothing)
+  B->>S: wake push, or start the scheduled run
+  B-->>Store: FiringReport (delivered / runStarted / runFinished / failed)
+  Ledger-->>Store: mail status (held / delivered / expired / cancelled)
+</script></ex-mermaid>
+
+<h2 id="mail">The message</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Sender</td><td><code>Automation { automation_id }</code>. A new sender kind beside session, human user and project.</td></tr>
+<tr><td>Body</td><td><code>Firing { firing_id, automation_id, revision, due_at, valid_until, payload }</code>. The payload is either a wake (its message and creator) or a schedule run (instruction, destination, model, effort, timeout).</td></tr>
+<tr><td>Recipient</td><td>The target session, or, for a fresh-each-run schedule, the machine endpoint. That's a new recipient kind, because no session exists yet.</td></tr>
+<tr><td>Valid until</td><td>A wake's end, or a schedule's next due time, because the next firing replaces it.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="repeats">Repeats and overlaps, kept as today</h2>
+<ul>
+  <li>While a wake's firing is still undelivered, new due times <strong>fold into it</strong> instead of piling up.</li>
+  <li>A schedule has at most <strong>one running and one waiting</strong> run; extra due times fold into the waiting one.</li>
+  <li>The next due time is computed from now, so a long outage doesn't produce a burst.</li>
+</ul>
+
+<h2 id="races">Edits, cancels and unknowns</h2>
+<ex-mermaid id="fire-state" label="Firing states"><script type="text/plain">
+stateDiagram-v2
+  [*] --> due
+  due --> held: target offline
+  due --> delivered
+  held --> delivered: target back
+  held --> expired: valid-until passed
+  due --> cancelled: pause or cancel before delivery
+  held --> cancelled: pause or cancel before delivery
+  delivered --> runStarted: schedule
+  runStarted --> runFinished
+  runStarted --> failed
+  delivered --> [*]: wake done
+  runFinished --> [*]
+  failed --> [*]
+  expired --> [*]
+  cancelled --> [*]
+</script></ex-mermaid>
+<ul>
+  <li>A change acknowledged <strong>before</strong> a due time decides that firing. A firing already admitted keeps the revision it was admitted with.</li>
+  <li>A pause or cancel reaching a firing that hasn't been delivered stops it with the existing mail cancel, and it ends as <strong>cancelled</strong>.</li>
+  <li>If central doesn't know whether a send landed, it reconciles through the mail status. It never sends again under a new identity.</li>
+  <li>States only move forward, so a late report from the machine is answered as stale and ignored.</li>
+</ul>
+
+<ex-callout title="Failure cases" tone="risk" icon="shield-check">
+  <ul>
+    <li><strong>Central restarts mid-alarm:</strong> the durable step resumes; the firing and its send obligation were one transaction, so nothing is admitted twice.</li>
+    <li><strong>Target machine off for days:</strong> the item is held, then delivered, or expired by its valid-until.</li>
+    <li><strong>Central unreachable:</strong> nothing fires until it's back. Under U80 a machine only works online, so this matches.</li>
+  </ul>
+</ex-callout>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>
