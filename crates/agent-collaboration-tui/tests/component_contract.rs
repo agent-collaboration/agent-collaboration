@@ -87,6 +87,9 @@ mod menu_layout;
 #[path = "suites/popup_anchor.rs"]
 mod popup_anchor;
 #[cfg(test)]
+#[path = "suites/popup_pending_reveal.rs"]
+mod popup_pending_reveal;
+#[cfg(test)]
 #[path = "suites/popup_text_fit.rs"]
 mod popup_text_fit;
 #[cfg(test)]
