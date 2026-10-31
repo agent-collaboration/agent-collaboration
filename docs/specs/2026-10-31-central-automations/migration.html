@@ -14,6 +14,7 @@
     <a href="firing.html">Firing and mail</a>
     <a href="firing-options.html">Firing options and cost</a>
     <a href="runs.html">On the receiving machine</a>
+    <a href="notifications.html">Notifications</a>
     <a href="migration.html">Moving to central</a>
     <a href="published-design.html">Fixing the published design</a>
     <a href="proof.html">How it's proven</a>
@@ -22,60 +23,62 @@
 <ex-document id="content">
 <h1 id="heading-moving-to-central">Moving to central</h1>
 
-<p><strong>The first time a machine runs the new release, it hands each of its schedules and live wakes to central, once.</strong> Each keeps its ID, timing, next due time, target, instruction and creator. During the move, exactly one side owns each automation's clock, so nothing fires twice and nothing is skipped.</p>
+<p><strong>The first time a machine runs the new release, it hands its schedules, live wakes and their instructions to central, once.</strong> IDs, targets, creators and settings are kept, and timing is fitted to your new rules. At every moment exactly one side owns each automation's clock, so nothing fires twice and nothing is skipped.</p>
 
 <h2 id="handover">The handover, per automation</h2>
 <ex-mermaid id="mig-seq" label="Handover"><script type="text/plain">
 sequenceDiagram
-  participant L as Machine (local automation.sqlite)
-  participant C as Central (Fleet face)
-  L->>L: mark "pending": local timer stops firing it (one local transaction)
-  L->>C: AutomationImport (definition, watermark, next due, run state)
+  participant L as Machine (local)
+  participant C as Central (Fleet)
+  L->>L: ONE local transaction: stop admitting new due times, remember the last one admitted, fit timing to the grid, FREEZE the payload
+  Note over L: work already admitted keeps running locally under today's drivers
+  L->>C: AutomationImport (the frozen bytes, the same on every retry)
   alt new
-    C->>C: insert, keyed by automation_id
     C-->>L: imported
-  else same thing again (a retry after a crash)
+  else retry after a crash
     C-->>L: alreadyImported
-  else a different definition with that ID
-    C-->>L: importConflict
-    L->>L: stays "pending"; reported to you; fires nowhere
+  else different bytes for that ID
+    C-->>L: importConflict (stays pending, reported, fires nowhere)
   end
-  L->>L: mark "moved"
-  C->>C: clock admits from the imported watermark
+  L->>L: mark moved
+  C->>C: fires only due times AFTER the last one the machine admitted
 </script></ex-mermaid>
 
+<h2 id="fit">Fitting timing to the new rules</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Found on the machine</th><th>Becomes</th></tr></thead>
+<tbody>
+<tr><td>any due time</td><td>rounded up to the next 5-minute mark</td></tr>
+<tr><td>a wake repeating faster than every 10 minutes</td><td>every 10 minutes</td></tr>
+<tr><td>a wake whose next fitted time would fall after its end</td><td><strong>ended as expired</strong>, with an event; an end is never extended</td></tr>
+<tr><td>an ended wake</td><td>not moved; stays as history</td></tr>
+<tr><td>an interval schedule under 5 minutes</td><td>5 minutes</td></tr>
+</tbody>
+</table>
+</div>
+<p>The handover reports how many were adjusted or ended, so you can see it.</p>
+
+<h2 id="why-safe">Why it's safe</h2>
 <ul>
-  <li><strong>A due time that falls during the move</strong> fires once: the local side stopped at "pending", and central catches up from the watermark under the fold rules.</li>
-  <li><strong>A crash mid-move</strong> resumes at the same step. Central answers a repeat with <code>alreadyImported</code>, so no duplicate appears.</li>
-  <li><strong>Ended wakes</strong> aren't moved; they stay as history.</li>
-  <li><strong>A machine still on the old release</strong> never imports, so central holds nothing of its schedules and never fires them. It keeps working locally until it upgrades.</li>
+  <li><strong>One owner:</strong> the machine stops admitting <em>before</em> anything is sent, and central starts strictly <em>after</em> the machine's last admitted time.</li>
+  <li><strong>In-flight work finishes where it started:</strong> runs or wake deliveries the machine had already admitted complete locally, and stay in local history.</li>
+  <li><strong>Crash at any step:</strong> it resumes with the same frozen bytes, and central answers a repeat with <code>alreadyImported</code>.</li>
+  <li><strong>Old releases:</strong> a machine still on the old release never imports. It keeps firing its own schedules until it upgrades, and central never fires them.</li>
 </ul>
-
-<h2 id="states">Local states</h2>
-<ex-mermaid id="mig-state" label="Handover states"><script type="text/plain">
-stateDiagram-v2
-  [*] --> local: before the new release
-  local --> pending: handover starts
-  pending --> moved: central accepted
-  pending --> pending: retry, or conflict reported
-  moved --> [*]
-</script></ex-mermaid>
 
 <h2 id="schema">Storage changes</h2>
 <div class="ex-table-scroll">
 <table>
 <thead><tr><th>Where</th><th>Change</th></tr></thead>
 <tbody>
-<tr><td>central (both runtimes)</td><td>new tables: automations, timing, firings, imports</td></tr>
-<tr><td>each machine's <code>automation.sqlite</code></td><td>new <code>automation_handover</code> and <code>firing_receipts</code>; <code>workflow_runs</code> gains a unique <code>firing_id</code>; old tables kept read-only under PR 1's retention, WAL and vacuum</td></tr>
+<tr><td>central</td><td>new tables: automations, instructions and revisions, timing, firings, batches, operation receipts, imports</td></tr>
+<tr><td>each machine's <code>automation.sqlite</code></td><td>new <code>automation_handover</code> and <code>firing_receipts</code>. Old tables stay under PR 1's retention, WAL and vacuum.</td></tr>
+<tr><td>each machine's <code>interaction.sqlite</code></td><td>new <code>notification_windows</code> (see <a href="notifications.html">Notifications</a>)</td></tr>
 </tbody>
 </table>
 </div>
-
-<ex-callout title="Your data" tone="question" icon="database">
-  <p>On this Mac today: 9 schedules, 2,049 wake rows (most expired), and 3,910 past runs. Only the live schedules and wakes move. The past runs stay on this Mac until they age out at 2 months.</p>
-</ex-callout>
 </ex-document>
 
 
-<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (estimate)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per organization per month (A as designed / A + batching)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"How to measure instead of estimate","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (estimate)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per organization per month (A as designed / A + batching)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"How to measure instead of estimate","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>
