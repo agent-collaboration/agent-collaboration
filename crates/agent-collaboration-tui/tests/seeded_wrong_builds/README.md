@@ -108,7 +108,7 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `pinned-context-measures-allocation.patch` | A short identity is measured as an allocated 60-cell child and moves to a second row despite fitting inline. |
 | `pinned-context-splits-tag.patch` | Name and tag truncate together, clipping a tag that fits the row. |
 | `pinned-context-omits-header-rows.patch` | Content sizing omits the second pinned header row and squeezes a fitting body. |
-| `content-dialog-ignores-measured-extent.patch` | Native auto-height alone squeezes wrapped body or footer rows while the bound has room. |
+| `content-dialog-ignores-measured-extent.patch` | A content-sized frame uses intrinsic auto-height instead of its measured current body and chrome. |
 | `content-dialog-retains-header-width.patch` | Content-sized chrome retains a narrow draw width and never restores fitting Help after resize. |
 
 | `combo-secondary-omitted.patch` | The dropdown omits a choice's secondary text. |
@@ -118,6 +118,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `right-edge-focus-marker.patch` | Fitting lists, menus, and dropdowns add a duplicate focus glyph in the right scrollbar column. |
 
 | `menu-keeps-requested-height.patch` | Menus keep a tall requested height after their final item instead of fitting their content. |
+
+| `content-height-undercount-one.patch` | A content-sized frame subtracts one measured body row and scrolls despite spare room. |
 
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
@@ -133,12 +135,14 @@ identify the named defect. Compile errors, application errors, color setup
 failures, and entry/redraw timeouts do not establish sensitivity.
 
 The earlier `content-dialog-forced-percent.patch` and
-`content-dialog-no-measurement.patch` seeds were retired with the compact-header
-correction. Once the header occupies one row, both intrinsic percentage height
-and native Auto sizing preserve the existing form outcomes; those mutations no
-longer represent wrong behavior. Their replacements above exercise observable
-failures: forced maximum height and retaining a different body's measured height.
-The original form, section, overflow, action, and spacing assertions remain.
+`content-dialog-no-measurement.patch` seeds were retired during the initial
+compact-header correction, when native Auto matched those declared fixtures.
+The later continuing Checking-to-Result scenario exposed a different intrinsic
+height after a body swap. Native Auto now bootstraps an unmeasured body; current
+body and chrome measurements supply its bounded target height. The existing
+ignore-measured-extent seed challenges that case; undercount-by-one challenges
+the final wrapped line. Forced maximum and cross-body height controls remain,
+with every original form, section, overflow, action, and spacing assertion.
 
 Pinned context now hard-cuts over to typed text and an optional tag. The shared
 crate owns natural measurement and rendering; caller elements and allocated

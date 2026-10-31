@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -118,3 +118,3 @@ pub fn DialogFrame<'a>(
+@@ -113,3 +113,3 @@ pub fn DialogFrame<'a>(
      let border_rows = u16::from(border_style != BorderStyle::None) * 2;
 -    let header_chrome = header_height.get().saturating_add(border_rows);
 +    let header_chrome = 1 + border_rows;

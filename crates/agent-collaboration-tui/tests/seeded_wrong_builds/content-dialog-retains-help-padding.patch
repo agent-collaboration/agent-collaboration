@@ -1,7 +1,7 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 --- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
 +++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -128,7 +128,3 @@ pub fn DialogFrame<'a>(
+@@ -123,7 +123,3 @@ pub fn DialogFrame<'a>(
          .min(sizing.map_or(u16::MAX, |sizing| sizing.max_height));
 -    let padding_height = if content_height {
 -        content_extent

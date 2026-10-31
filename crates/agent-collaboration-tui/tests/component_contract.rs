@@ -95,3 +95,7 @@ mod wheel_isolation;
 #[cfg(test)]
 #[path = "suites/dialog_context_content.rs"]
 mod dialog_context_content;
+
+#[cfg(test)]
+#[path = "suites/dialog_result_extent.rs"]
+mod dialog_result_extent;
