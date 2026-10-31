@@ -191,6 +191,28 @@ On either screen, Tab from the list reaches the toolbar, and the menu button is 
 
 ### Carried forward from the 2026-10-17 design
 
+**R19 — grouping a list by a facet** (U18). The session picker's list and the quota screen's account list each have a **Group by** setting. It is None the first time a screen opens.
+
+- **Facets.**
+  - The picker offers Started by, Day, Folder, Provider and Machine.
+  - The quota screen offers Provider and Status.
+- **Started by** comes from the Router's own push-line kind of the session's first message, never from matching words in a title. The groups are: You (no Router push), Messages, Board, Schedules and wakes, Questions and approvals, and Thread activity.
+- **Day** uses the session's last update: Today, Yesterday, This week, Older.
+- **Choosing.**
+  - The picker's ≡ menu shows Group by as checked items, like sort (R8), with Ctrl+G cycling None → each facet → None.
+  - The quota screen offers Group by in its Filters dialog and as checked items in its ≡ menu. Its Filters button summary names the grouping when it isn't None.
+- **Headings.** Each non-empty group has a heading row with the group's name and its row count; the quota screen also shows the group's active clients. A heading is drawn, never focused or selected. ↑/↓, page, first/last, the Option aliases, typing to jump and the mouse wheel all move between rows as if headings weren't there, and a click on a heading selects nothing.
+- **Order.**
+  - Day runs newest first.
+  - Every other facet uses its fixed order as listed in R19's groups or the domain's own order (providers as the screen lists them today, statuses from best to worst).
+  - Rows within a group keep the screen's current sort.
+  - Filtering happens first, and a group left empty disappears.
+- **Selection.** Changing the grouping keeps the selected row selected (R16's key-following rule) and scrolls it into view.
+- **None** draws the list exactly as it is without grouping.
+- **Remembering.** Each screen remembers its own last grouping on that computer and opens with it next time. A remembered value the screen doesn't know (a removed facet, a damaged file) opens as None with no error shown, and the next change replaces it. Remembering never blocks the screen: if the choice can't be saved, the screen keeps working and keeps the choice for this run.
+
+*Entities: E1, E4, E5, E8.*
+
 **R16 — nothing from the accepted Sessions and Quota design is lost** (10-17/U1, U2, U4, U6–U9, U11–U16, carried forward in the Requirements). After the move onto the crate, every capability that design guarantees stays reachable by keyboard and by mouse, with the same identity and effect behaviour.
 
 Sessions keeps:
@@ -291,6 +313,7 @@ Each states what decides pass or fail and what it is judged against. How each is
 | V16 | R16 | Every capability in R16's list is reachable on the rebuilt screens by keyboard and by mouse, and behaves as the 10-17 design and its verification design specify. | Any listed capability missing, unreachable by one input method, or behaving differently. | 2026-10-17 Requirements, Specification and Verification Design; 2026-10-23 quota dialog visuals |
 | V17 | R17 | Activating "Log in again" in a given account's Details runs exactly `codex-router account login --provider <its provider> --label <its label>` once, after the quota screen has restored the terminal, then returns to quota with the same account selected; it is primary exactly when re-login is required; a failed or cancelled login returns with a plain message and no retry. The Actions ▾ menu lists exactly R17's items with their keys; each acts on the dialog's own account; Remove appears only for a disabled account and runs only after confirmation. | Another account's label, a guessed provider, the command running while the quota screen still owns the terminal, a duplicate run, or no return to quota. | U16; R17; `account_login_identity.rs` |
 | V18 | R18 | R and the menu item both start one refresh that uses the existing refresh rules; the screen stays up with the selection kept; "Refreshing…" shows and Refresh is unavailable until it ends; new values replace old ones; a failure shows a plain sentence and no retry. | A second refresh while one runs, the old values still shown after success, the app leaving the screen to refresh, or a silent failure. | U17; R18 |
+| V19 | R19 | Each facet produces the stated groups in the stated order, with correct counts; headings are never focused or selected by any key, alias, typing, wheel or click; selection survives a grouping change; None matches the ungrouped list exactly; Started by follows the push kind of the first message; a screen reopened after a change opens with the same grouping, and an unknown or unreadable remembered value opens as None. | A heading taking focus or selection; a session placed in a group from its title words; a lost selection on regrouping; a grouping forgotten on reopen; a crash or error dialog over a bad remembered value. | U18; R19; `collaboration_protocol::parse_push_line_header` |
 
 ## Coverage
 
@@ -312,5 +335,6 @@ Each states what decides pass or fail and what it is judged against. How each is
 | U14 | E4 | P5 / O5 | R15 | V15 | |
 | U16 | E2, E5 | P5 / O5 | R17 | V17 | Real OAuth login is interactive; automated proof uses a recording stand-in for the command, and the real login is the owner's check |
 | U17 | E5 | P5 / O5 | R18 | V18 | |
+| U18 | E1, E4, E5, E8 | P5 / O5 | R19 | V19 | |
 | U15 | E1, E4, E5 | P3 / O3 | R5 | V5 | |
 | 10-17 baseline | E1, E4, E5 | P5 / O5 | R16 | V16 | Three 10-17 rules superseded pending owner confirmation |

@@ -100,6 +100,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
 | 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. The real `agent-sessions` entry is driven through to Claude and Cursor actions on local and remote machines, and they still work. | Any case those routes haven't observed yet stays open, named, not waived. |
 | U16 Log in again from Details | From an account's Details, "Log in again" runs exactly that account's `account login` command after the quota screen has handed back the terminal, then quota returns on the same account. | The real OAuth login (browser or device code) is checked by you once. |
+| U18 Group lists by a facet | Both screens are driven through every grouping: headings never take the selection, a Router message session lands in Messages, and quitting and reopening keeps your choice. | Where the choice is stored waits on your A/B/C answer. |
 
 ## Coverage rows
 
@@ -352,6 +353,23 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - The in-flight check holds the first call open with a causal control (the stand-in waits for a release signal), observes the duplicate press and the "Refreshing…" grid, then releases. There are no sleeps.
 - *Reuses:* the existing quota refresh command tests (including `quota_refresh_continues_after_one_account_provider_failure`, `quota_auth_tests.rs:684-777`) for the fetch rules themselves.
 - *Unverified:* real provider latency and real provider errors.
+
+**U18 · R19** (controls)
+- *Seam:* `ListSelectionControl` groups; each consumer's facet computation; the `UiPreferenceStore` port.
+- *Observation:*
+  - A: crate scenarios over grouped and ungrouped lists, plus consumer facet tests over fixture rows. The picker's fixtures include real push-line headers for every kind.
+  - B: both binaries with their fixtures at 120x36 and 48x24, in legacy and kitty modes.
+- *Target and journey:* B, `needed:` "Group by" for the picker and the quota screen. Lasting.
+- *Reference:* R19; U18; `parse_push_line_header`.
+- *Passes when:*
+  - Each facet shows its groups in R19's order with correct counts, and None's grid is byte-identical to the ungrouped grid.
+  - ↓, ↑, page, Home/End, the Option aliases, typeahead and the wheel never select a heading, and a click on one changes nothing.
+  - Changing the facet keeps the selected session or account selected and visible.
+  - A ✉️ message session lands in Messages, and a session typed by the owner lands in You.
+  - Quit and reopen opens with the last facet. A stored unknown value opens as None, with no error.
+- *Wrong build that fails:* a heading taking the selection; Started by derived from title words (a plain session titled "✉️ notes" lands in You); a lost selection on regroup; a grouping forgotten after reopen; a crash on a bad stored value; an ungrouped grid that changed.
+- *Reuses:* `collaboration_protocol` push-line parser tests for the kinds themselves.
+- *Unverified:* where the preference is stored, until the owner decides (A/B/C).
 
 ## Journeys still needed
 
