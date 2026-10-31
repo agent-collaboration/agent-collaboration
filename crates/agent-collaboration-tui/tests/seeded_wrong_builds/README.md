@@ -111,6 +111,10 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `content-dialog-ignores-measured-extent.patch` | Native auto-height alone squeezes wrapped body or footer rows while the bound has room. |
 | `content-dialog-retains-header-width.patch` | Content-sized chrome retains a narrow draw width and never restores fitting Help after resize. |
 
+| `combo-secondary-omitted.patch` | The dropdown omits a choice's secondary text. |
+| `combo-secondary-not-truncated.patch` | A long secondary loses its ellipsis at constrained width. |
+| `combo-secondary-wrong-colour.patch` | Secondary text loses the shipped muted foreground role. |
+
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
 the independent screen-effect count after an outside menu press. The three
