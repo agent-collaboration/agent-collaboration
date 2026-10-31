@@ -125,7 +125,13 @@ impl ComboBoxControl {
     fn targets(&self, options: &[SelectOption]) -> Vec<TargetSpec> {
         let binding = self.binding.clone();
         let input_binding = binding.clone();
+        let keyboard_scroll = self.scroll.clone();
         let input = TargetInputHandler::new(move |event| {
+            if matches!(&event,TerminalEvent::Key(key) if matches!(super::scroll_model::navigation_code(key),Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)))
+            {
+                return keyboard_scroll.handle_event(&event);
+            }
+
             let mut value = input_binding.value;
             let mut next = value.read().clone();
             let transition = next.handle_event(&event);

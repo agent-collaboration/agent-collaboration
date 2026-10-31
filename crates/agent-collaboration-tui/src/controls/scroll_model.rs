@@ -87,19 +87,10 @@ impl ScrollHandle {
     }
     pub fn handle_event(&self, event: &TerminalEvent) -> InputUse {
         let code = match event {
-            TerminalEvent::Key(key)
-                if key.kind != KeyEventKind::Release && key.modifiers.is_empty() =>
-            {
-                match key.code {
-                    KeyCode::Up
-                    | KeyCode::Down
-                    | KeyCode::PageUp
-                    | KeyCode::PageDown
-                    | KeyCode::Home
-                    | KeyCode::End => key.code,
-                    _ => return InputUse::Unused,
-                }
-            }
+            TerminalEvent::Key(key) => match navigation_code(key) {
+                Some(code) => code,
+                None => return InputUse::Unused,
+            },
             TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
                 MouseEventKind::ScrollDown => KeyCode::Down,
                 MouseEventKind::ScrollUp => KeyCode::Up,
@@ -138,8 +129,8 @@ impl ScrollHandle {
         TargetInputHandler::new(move |event| {
             let accepts = match &event {
                 TerminalEvent::Key(key) => matches!(
-                    key.code,
-                    KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End
+                    navigation_code(key),
+                    Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)
                 ),
                 TerminalEvent::FullscreenMouse(_) => true,
                 _ => false,
@@ -150,5 +141,32 @@ impl ScrollHandle {
                 InputUse::Unused
             }
         })
+    }
+}
+
+/// One translation owns the terminal's paging aliases for all scroll consumers.
+pub(super) fn navigation_code(key: &KeyEvent) -> Option<KeyCode> {
+    if key.kind == KeyEventKind::Release {
+        return None;
+    }
+    match (key.code, key.modifiers) {
+        (KeyCode::Up, KeyModifiers::ALT) => Some(KeyCode::PageUp),
+        (KeyCode::Down, KeyModifiers::ALT) => Some(KeyCode::PageDown),
+        (KeyCode::Up, modifiers) if modifiers == KeyModifiers::ALT | KeyModifiers::SHIFT => {
+            Some(KeyCode::Home)
+        }
+        (KeyCode::Down, modifiers) if modifiers == KeyModifiers::ALT | KeyModifiers::SHIFT => {
+            Some(KeyCode::End)
+        }
+        (
+            code @ (KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Home
+            | KeyCode::End),
+            KeyModifiers::NONE,
+        ) => Some(code),
+        _ => None,
     }
 }

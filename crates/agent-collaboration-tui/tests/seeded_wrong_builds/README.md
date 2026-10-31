@@ -217,3 +217,13 @@ The `focus-no-automatic-fallback` control now concerns dropped/hidden targets.
 
 Resize scenarios also make an explicit Tab or pointer choice while the old
 button is hidden, so returning width cannot override that newer choice.
+
+| Patch | Intended failure |
+| --- | --- |
+| `option-page-up-alias-missing.patch` | Option+Up is inert instead of paging in the shared list/body handler. |
+| `option-page-down-moves-one-row.patch` | Option+Down selects or scrolls one row instead of a whole viewport. |
+| `dropdown-ignores-page-input.patch` | The dropdown filter consumes neither original page keys nor Option aliases through its scroll handle. |
+| `dropdown-unbound-control-arrows-select.patch` | Unbound Ctrl+Up/Down changes the dropdown highlight. |
+
+The pages-only arrow control follows the shared navigation translation and still
+requires plain form arrows to move focus rather than scroll the body.

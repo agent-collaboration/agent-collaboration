@@ -123,6 +123,24 @@ mod tests {
     }
 
     #[test]
+    fn default_help_names_original_page_and_bounds_keys_with_the_option_aliases() {
+        use agent_collaboration_tui::controls::{HelpContent, HelpInputConvention};
+        assert_eq!(
+            HelpContent::default().conventions,
+            vec![
+                HelpInputConvention {
+                    key: "PgUp/PgDn · Option+↑/↓".into(),
+                    description: "Page".into()
+                },
+                HelpInputConvention {
+                    key: "Home/End · Option+Shift+↑/↓".into(),
+                    description: "First/last".into()
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn identities_reject_absence_without_collapsing_distinct_domains() {
         assert!(TargetId::new(" ").is_err());
         assert!(ActionId::new("").is_err());
