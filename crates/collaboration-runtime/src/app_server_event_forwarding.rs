@@ -238,10 +238,30 @@ impl AppServerEventForwarding {
                     };
                 }
                 let mut frames = if matches!(event.event, SessionEvent::ItemStarted { .. }) {
-                    vec![json!({"method":"item/started","params":{
+                    let mut started = vec![json!({"method":"item/started","params":{
                         "threadId":thread_id,"turnId":turn_id,"item":translated.thread_item,
                         "startedAtMs":chrono::Utc::now().timestamp_millis()
-                    }})]
+                    }})];
+                    if let Some(delta) = item.text.as_deref().filter(|text| !text.is_empty()) {
+                        match item.kind {
+                            session_event_model::SessionItemKind::AgentMessage => {
+                                started.push(json!({"method":"item/agentMessage/delta","params":{
+                                    "threadId":thread_id,"turnId":turn_id,"itemId":item.item_id,
+                                    "delta":delta
+                                }}));
+                            }
+                            session_event_model::SessionItemKind::AgentThought => {
+                                started.push(
+                                    json!({"method":"item/reasoning/summaryTextDelta","params":{
+                                        "threadId":thread_id,"turnId":turn_id,"itemId":item.item_id,
+                                        "delta":delta,"summaryIndex":0
+                                    }}),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                    started
                 } else {
                     match &item.kind {
                         session_event_model::SessionItemKind::AgentMessage => {

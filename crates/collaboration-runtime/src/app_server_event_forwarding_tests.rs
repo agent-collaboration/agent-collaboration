@@ -1,6 +1,128 @@
 use super::*;
 use session_event_model::SessionItemKind;
 
+// Pinned Codex 360319d8 chatwidget/protocol.rs:122-147, 569-592:
+// item starts establish identity; only deltas feed live message/reasoning text.
+fn assert_live_delta_text(kind: SessionItemKind, initial: &str, updates: &[&str], expected: &str) {
+    let session: SessionRef = serde_json::from_value(json!({
+        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001",
+        "endpointId":"claude-local"},"sessionId":"stream-delta-session"
+    }))
+    .expect("session");
+    let actor: Identity =
+        serde_json::from_value(json!({"kind":"human","humanId":"owner"})).expect("actor");
+    let mut projector = AppServerEventForwarding::new(actor, None);
+    projector.project(
+        &session,
+        &HubEvent {
+            sequence: 1,
+            event: SessionEvent::TurnStarted {
+                turn_id: "stream-turn".into(),
+                input_id: session_event_model::InputId::generate(),
+            },
+        },
+    );
+    let item = |text: &str| SessionItem {
+        item_id: "stream-item".into(),
+        kind: kind.clone(),
+        text: Some(text.into()),
+    };
+    let mut frames = projector.project(
+        &session,
+        &HubEvent {
+            sequence: 2,
+            event: SessionEvent::ItemStarted {
+                item: item(initial),
+            },
+        },
+    );
+    assert_eq!(frames[0]["method"], "item/started");
+    for (index, text) in updates.iter().enumerate() {
+        frames.extend(projector.project(
+            &session,
+            &HubEvent {
+                sequence: 3 + index as u64,
+                event: SessionEvent::ItemUpdated { item: item(text) },
+            },
+        ));
+    }
+    let method = match kind {
+        SessionItemKind::AgentMessage => "item/agentMessage/delta",
+        SessionItemKind::AgentThought => "item/reasoning/summaryTextDelta",
+        _ => panic!("fixture must use a live text kind"),
+    };
+    let mut rendered = String::new();
+    for frame in frames.iter().filter(|frame| frame["method"] == method) {
+        assert_eq!(frame["params"]["threadId"], thread_alias(&session));
+        assert_eq!(frame["params"]["turnId"], "stream-turn");
+        assert_eq!(frame["params"]["itemId"], "stream-item");
+        if kind == SessionItemKind::AgentThought {
+            assert_eq!(frame["params"]["summaryIndex"], 0);
+        }
+        let delta = frame["params"]["delta"].as_str().expect("text delta");
+        assert!(!delta.is_empty(), "empty live delta");
+        rendered.push_str(delta);
+    }
+    assert_eq!(rendered, expected, "delta consumer lost or duplicated text");
+    let completed = projector.project(
+        &session,
+        &HubEvent {
+            sequence: 100,
+            event: SessionEvent::ItemCompleted {
+                item_id: "stream-item".into(),
+            },
+        },
+    );
+    assert_eq!(completed.len(), 1);
+    assert_eq!(completed[0]["method"], "item/completed");
+    let expected_item = match kind {
+        SessionItemKind::AgentMessage => {
+            json!({"type":"agentMessage","id":"stream-item","text":expected})
+        }
+        SessionItemKind::AgentThought => {
+            json!({"type":"reasoning","id":"stream-item",
+                "summary":if expected.is_empty() {vec![]} else {vec![expected]},"content":[]})
+        }
+        _ => panic!("fixture must use a live text kind"),
+    };
+    assert_eq!(completed[0]["params"]["item"], expected_item);
+}
+
+#[test]
+fn initial_message_delta_reaches_the_live_consumer() {
+    assert_live_delta_text(
+        SessionItemKind::AgentMessage,
+        "100",
+        &["100000000 + 23456789 = 123456789"],
+        "100000000 + 23456789 = 123456789",
+    );
+}
+
+#[test]
+fn initial_thought_delta_reaches_the_live_consumer() {
+    assert_live_delta_text(
+        SessionItemKind::AgentThought,
+        "First",
+        &["First more"],
+        "First more",
+    );
+}
+
+#[test]
+fn initial_text_delta_handles_empty_single_and_unchanged_chunks() {
+    for kind in [SessionItemKind::AgentMessage, SessionItemKind::AgentThought] {
+        assert_live_delta_text(kind.clone(), "", &[], "");
+        assert_live_delta_text(kind.clone(), "", &["Hello", "Hello"], "Hello");
+        assert_live_delta_text(kind.clone(), "Hello", &[], "Hello");
+        assert_live_delta_text(
+            kind,
+            "Hello",
+            &["Hello", "Hello world", "Hello world"],
+            "Hello world",
+        );
+    }
+}
+
 #[test]
 #[expect(
     clippy::panic_in_result_fn,
