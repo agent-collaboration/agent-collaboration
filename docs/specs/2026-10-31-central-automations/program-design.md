@@ -12,8 +12,9 @@ Router (any) ──Session→Fleet: AutomationCall──► Fleet: catalog + con
                                                  ▼ durable step
                               Fleet→Delivery: DeliverMachineNotice(BoardNotice::AutomationBatchReady{batch_id})
                                                  ▼ (journaled per machine, position, live hint, catch-up)
-target Router ──Session→Fleet: FetchBatch / FetchContent──► frozen bytes, content by revision
-             ──local admission (one txn per entry)──► today's wake delivery sender / run driver
+target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, hint, CursorExpired)──► unacked batch IDs
+             ──Session→Fleet: FetchAutomationBatch / FetchContent──► frozen bytes, content by revision
+             ──local admission (one txn)──► AckAutomationBatch(batch_id, digest) ──► today's wake delivery sender / run driver
              ──Session→Fleet: FiringReport{firing_id, seq, state}──► outcome
 ```
 
@@ -27,12 +28,13 @@ target Router ──Session→Fleet: FetchBatch / FetchContent──► frozen b
 | E11 Instruction, and wake messages | Fleet store | `content_revisions` (`content_id` UUIDv7 primary key, `owner_id`, `revision`, `digest`, `text`). These are immutable, and a Firing references `content_id` plus `digest` |
 | timing | Fleet store | `automation_timing` (`automation_id` primary key, `next_nominal_due_ms`, `next_effective_due_ms`, `admitted_through_nominal_ms`, `occupying_firing_id`, `waiting_firing_id`) |
 | E4, E7 Firing and outcome | Fleet store | `automation_firings` (`firing_id` primary key, `automation_id`, `nominal_due_ms` unique per automation, `effective_due_ms`, `revision`, `content_id`, `state`, `batch_id`, `report_seq`, `outcome_json`) |
-| E5 Batch | Fleet store | `automation_batches` (`batch_id` primary key, `service_id`, `frozen_bytes`, `digest`, `notice_state`, `fetched_at_ms`) |
-| clock operation | the Fleet's durable-steps journal | one perpetual operation, request key `automation-clock`, task `AutomationClockTask` |
+| E5 Batch | Fleet store (**the custody record**) | `automation_batches` (`batch_id` primary key, `service_id`, `frozen_bytes`, `digest`, `notice_state`, `acked_at_ms` NULL until acknowledged). Unacknowledged Batches never expire; acknowledged ones are pruned after 2 months. Content revisions stay while any unacknowledged Batch or live definition references them |
+| clock operations | the Fleet's durable-steps journal | one operation per grid instant that has work, request key `automation-clock:<effective_due_ms>`, task `AutomationClockTask` with `KEEP_RESULT = false` |
 | operation receipts, imports | Fleet store | `automation_operations` (`operation_id` primary key, digest, answer), `automation_imports` (`import_id` primary key, unique (`service_id`, `automation_id`), digest) |
 | local projections | the target Router's `automation.sqlite` | today's `schedule_definitions` and `wakeup_definitions` rows, with a new `authority` column (`local` or `central`; a Rust enum, no CHECK). A `central` row is a read-only projection that keeps today's foreign keys (`automation_v1.sql:51,88`) valid, and the local timing workers never time it |
 | local receipts | `automation.sqlite` | `firing_receipts` (`firing_id` primary key, `batch_id`, `local_work_ref`, `state`, `report_seq`) |
-| handover | `automation.sqlite` | `automation_handover` (`automation_id` primary key, `state`, `watermark_nominal_ms`, `frozen_payload`, `digest`) |
+| handover | `automation.sqlite` | `automation_handover` (`automation_id` primary key, `state`, `watermark_nominal_ms`, `frozen_payload`, `digest`); the payload includes `external_occupant` (the local run ID still occupying) and `carried_waiting_due_ms` |
+| external occupancy | Fleet store | `automation_timing.occupying_external_run` (the local run ID) is cleared by `LocalRunSettled` |
 | E12 window | `interaction.sqlite` | `notification_windows` (`recipient_key` primary key, `last_delivered_at_ms`, `flush_due_at_ms`) |
 | E13 Limit | `collaboration-protocol/src/limits.rs` | the values in Spec R5 |
 
@@ -42,32 +44,39 @@ target Router ──Session→Fleet: FetchBatch / FetchContent──► frozen b
 | --- | --- | --- |
 | **Limits** | `collaboration-protocol::limits` | The Spec R5 values as constants. The schemars schemas read them, and the validated constructors refuse a violation as `LimitExceeded`. The existing 1 MiB values point at today's constants instead of copying them |
 | **Automation catalog** | the Fleet face (`collaboration-central-core`) | Definitions, content revisions, the slot and atomic replacement, and operation-ID replay. Reached by `AutomationCall` CallTargets on the existing Session→Fleet edge: `CoreHost::classify` gains these kinds for a Session caller, which binds the caller's installation |
-| **Automation clock operation** | the Fleet journal plus the shared `AlarmOwner` | One perpetual durable operation (request key `automation-clock`). Create, change and import, **in the same transaction** as their catalog write, call `start` or `admit` for that request key, which is idempotent. They also set its next run to the earliest due time, using today's durable-steps reschedule, and call `wake_at`. On each run, the operation: admits every nominal due time ≤ now that's after `admitted_through_nominal_ms` (unique per automation and nominal due); applies the fold rules, including central's waiting slot (it sends a Schedule entry only when that Schedule has no occupying Firing); groups entries per machine into ≤ `BATCH_MAX_ENTRIES` Batches; freezes them; records the notice steps; advances timing; then **reschedules itself** at the next earliest effective due time. With no automations left it finishes, and the next create admits it again. Alarms are at least once and shared with `FleetNoticeTask`; admission is idempotent, and the shared `AlarmOwner` keeps the earliest deadline |
+| **Automation clock operations** | the Fleet journal plus the shared `AlarmOwner` | **One durable operation per grid instant**, request key `automation-clock:<effective_due_ms>`, `KEEP_RESULT = false`. It uses only the existing `JournalScope::admit` and `ensure_wake` (`operation_contract.rs:92–105`); no new reschedule API is needed.<br>• **Create, change and import**, in the same transaction as their catalog write, `admit` the key for the Automation's next effective due instant, which is idempotent per key, and `ensure_wake`. An earlier edit admits an earlier key; the later one runs and finds nothing.<br>• **Each run** admits Firings whose **effective** due time is ≤ now (the nominal frontier is used only for identity and migration). It applies the fold and slot rules, including external occupancy; batches and freezes; records the notice steps; advances timing; and admits the next instant's key for every Automation it advanced.<br>• **Edge cases:** an empty Fleet has no clock operations; a duplicate callback is harmless, because Firings are unique on (automation, nominal due); unrelated Fleet notice work shares the alarm through `AlarmOwner` |
 | **Batch notifier** | a durable step in the Fleet | Calls `DeliverMachineNotice` (Fleet→Delivery, which exists) with `BoardNotice::AutomationBatchReady { batch_id }`. Its answer means "appended to that machine's journal", which moves the Firings to held. A lost answer is retried, and reconciled against the machine's notice position |
-| **Batch fetch** | `FetchAutomationBatch { batch_id }` and `FetchContent { content_id, digest }` on Session→Fleet | Central checks that the caller's installation matches the Batch's `service_id`, returns the frozen bytes, and moves the Firings to received |
+| **Batch custody calls** | Session→Fleet: `ListPendingBatches { after? }` (paged, unacknowledged only), `FetchAutomationBatch { batch_id }`, `FetchContent { content_id, digest }`, `AckAutomationBatch { batch_id, digest }` | Central checks the caller's installation against `service_id`. The machine calls List on connect, on reconnect, on any `AutomationBatchReady` hint, and on `CursorExpired`. Ack is sent only after local admission commits, and moves the Firings to received and sets `acked_at_ms`. Every call is idempotent, so a lost reply is simply repeated |
 | **Notice contract** | `board-sync-protocol` `BoardNotice` | A new variant, `AutomationBatchReady { batch_id }`. An old Router can't decode it, so the catalog refuses a target without `automationBatchV1` (`targetNeedsUpgrade`), and no shim is added |
 | **Local admission** | `automation-storage` run and wake admission (`run_admission.rs`, `wakeup_evaluation.rs` shapes) | Per entry, in **one** `automation.sqlite` transaction:<br>• upsert the `central` projection row for the Automation (for the foreign keys);<br>• insert `firing_receipts(admitted)`;<br>• for a Wake: insert today's `mailbox_deliveries` row and wake draft (the message from `FetchContent`);<br>• for a Schedule: insert the run **directly as Preparing**, with captured inputs from the batch (the instruction text from `FetchContent` at the frozen `content_id`, model, effort, timeout, destination) and continuity from the previous completed run of that schedule on this machine. A new `admit_central_run` sits beside `admit_waiting_run` and produces the same row shape, so the central revision is never re-read from local tables. A Wake entry past its `expires_at` is recorded as expired instead |
 | **Execution drivers** | today's `wakeup_delivery_sender`, `scheduled_run_worker` and the run-step part of `schedule_timing_worker` | Unchanged: Preparing, executing, stop and summary, with today's uncertain and reconcile handling. **Only local due-time admission is switched off** for `central` rows |
 | **Firing reporter** | `collaboration-runtime` | On each state change of a receipt's owed work, in the **same local transaction**, it increments `firing_receipts.report_seq` and queues `FiringReport { firing_id, seq, state, summary? }` in the durable outbox, then sends it on Session→Fleet. A restart continues from the stored sequence |
 | **Automation operations** | `collaboration-service` | CLI and MCP shapes are kept, plus operation ID, `outcomeUnknown`, `alreadySent` and `targetNeedsUpgrade`. They call the catalog. The remote-wake request path and the "another service" refusal are retired |
 | **Handover** | `collaboration-runtime`, a startup step | See flow 5 |
+| **Local run settlement report** | `collaboration-runtime` | When a carried external occupant reaches a terminal state through today's reconciliation, it sends `LocalRunSettled { automation_id, run_id, outcome }` (durable, idempotent), which frees central's slot |
 | **Notification limiter** | the Router's reader delivery owner | Rolling per-recipient rate (Spec R6n): it delivers at once if now ≥ `last_delivered_at + 10 min` and nothing is held; otherwise it holds the item as a reference and sets `flush_due_at = last_delivered_at + 10 min`. On flush it sends one listing, ≤ 50 entries plus a pointer to the rest, and sets `last_delivered_at`. The state survives restarts. Off, Poll, the per-root windows and the replication gate stay upstream, as today |
 
 ## Flows
 
 1. **Create or change.** Over Session→Fleet: operation-ID replay or conflict; validate the Limits and the slot; write the definition, content, timing and the clock operation's admit and reschedule; call `wake_at`; write the operation receipt. All in one Fleet transaction.
 2. **Due.**
-   1. The alarm drives the clock operation, which admits, folds, batches, freezes and records notice steps in one transaction. That commit is **the cutoff** (U17).
+   1. The alarm drives the instant's clock operation. It admits Firings whose effective due time is ≤ now, folds, batches, freezes, records the notice steps and admits the next instants, all in one transaction. That commit is **the cutoff** (U17).
    2. The notifier appends `AutomationBatchReady` to each machine's journal, and the Firings become held.
-   3. The machine fetches the Batch, and they become received.
+   3. The machine lists and fetches the Batch, admits it locally, and acknowledges it; the Firings become received.
 3. **Pause, cancel or change.** Applied in the catalog. A Firing still pending is cancelled; one past the cutoff gets the answer `alreadySent`, and nothing is sent to the machine.
 4. **Receive.** Fetch, then content fetch (cached by digest), then local admission per entry, then today's drivers, then reports (delivered, run started, run finished or failed, uncertain, then the reconciled state).
 5. **Handover.**
-   1. **Freeze locally.** In one local transaction per Automation: stop local admission, record `watermark_nominal_ms` (the timer's evaluated-through value, `schedule_evaluation.rs:45–64`), normalize the timing (R11), and freeze and store the payload (definition, content revisions, watermark).
-   2. **Wait for local work to finish.** Wait until the Automation has no occupying or waiting Run and no unsettled wake delivery. Uncertain work counts as finished.
-   3. **Import.** Send `AutomationImport` with the frozen bytes; repeats are idempotent, and a conflict stays `pending` and is reported.
-   4. **Central starts after the watermark.** The Fleet sets `admitted_through_nominal_ms = watermark` and admits only nominal due times after it, so the locally admitted 10:02 occurrence can never be re-admitted at 10:05. A one-shot already evaluated locally arrives as finished, not active.
-   5. **Switch the local row.** Mark the Automation `moved`, and switch its local row to the `central` projection.
+   1. **Freeze locally.** In one local transaction per Automation:
+      - stop local admission;
+      - record `watermark_nominal_ms`;
+      - cancel any not-yet-started waiting Run, and carry its due time;
+      - name any Run still preparing, executing or uncertain as `external_occupant`, and any pending wake delivery as a carried pending Firing;
+      - normalize the timing;
+      - freeze and store the payload.
+   2. **Import.** Send `AutomationImport`, which is idempotent; a conflict stays `pending` and is reported.
+   3. **Central takes over admission.** The Fleet sets the watermark, the carried waiting slot, and the external occupancy, and admits the clock key.
+   4. **The local occupant keeps running locally.** It runs under today's drivers on its local row, now a `central` projection. At its terminal state it reports `LocalRunSettled`, which frees the slot. Uncertain is never treated as terminal.
+   5. **Mark `moved`.** There's no waiting step, and admission has exactly one owner throughout.
 6. **Notifications.** As described under the limiter.
 
 ## State
@@ -89,7 +98,9 @@ target Router ──Session→Fleet: FetchBatch / FetchContent──► frozen b
 | --- | --- |
 | A duplicate or retried alarm | the clock operation's admission is unique on (automation, nominal due); the same Batch bytes |
 | A lost notice answer | retried; reconciled against the machine's notice position; unknown until then |
-| The machine is offline | the notice waits in its journal; on reconnect it catches up, fetches, and expires each Wake entry past its end |
+| The machine is offline beyond the notice window | the notice is gone, but the Batch stays in central's custody. On reconnect, or on `CursorExpired`, the machine lists its unacknowledged Batches, fetches, admits, acknowledges, and expires each Wake entry past its end |
+| A lost fetch or acknowledgement reply | repeated; idempotent |
+| An uncertain local run at handover | stays occupying; no successor until `LocalRunSettled` |
 | A crash during local admission | it's one transaction, so the entry is either fully admitted or not at all; a re-fetch re-admits idempotently by receipt |
 | A crash after native acceptance | today's uncertain handling, reported as uncertain, then the reconciled state |
 | An instruction edited after admission | the Firing keeps its `content_id`; the new revision applies only to later Firings |
