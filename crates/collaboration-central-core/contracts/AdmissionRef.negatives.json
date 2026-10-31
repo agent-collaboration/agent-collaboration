@@ -1,0 +1,11 @@
+[
+null,
+{"admissionId":"019a3dce-2000-7000-8000-000000000001","kind":"admission","unexpectedField":true},
+{"admissionId":"019a3dce-2000-7000-8000-000000000001","kind":"unrecognizedVariant"},
+{"admission_id":"019a3dce-2000-7000-8000-000000000001","kind":"admission"},
+{"installation":"019A3DCE-2000-7000-8000-000000000001","kind":"machine"},
+{"installation":"019a3dce-2000-7000-8000-000000000001","kind":"machine","unexpectedField":true},
+{"installation":"019a3dce-2000-7000-8000-000000000001","kind":"unrecognizedVariant"},
+{"installation":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF","kind":"machine"},
+{"installation":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","kind":"machine"}
+]

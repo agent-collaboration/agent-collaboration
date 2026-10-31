@@ -1,0 +1,7 @@
+[
+null,
+{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","model":"configured-model","repository":"https://example.invalid/repository.git","unexpectedField":true,"workingDirectory":"/work/item-two"},
+{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","model":"configured-model","repository":"https://example.invalid/repository.git","working_directory":"/work/item-two"},
+{"unexpectedField":true,"workingDirectory":"/work/item-two"},
+{"working_directory":"/work/item-two"}
+]

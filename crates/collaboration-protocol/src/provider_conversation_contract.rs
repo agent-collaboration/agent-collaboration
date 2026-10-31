@@ -4,6 +4,7 @@ use crate::{
     PositiveSeconds, ProviderIdentity, RouterAccess, SessionRef,
 };
 use agent_automation::OperationId;
+use fleet_identity_protocol::{RemoteLaunchAccess, RemoteLaunchPolicy};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::BTreeSet};
@@ -243,6 +244,28 @@ impl JsonSchema for ProviderWorkingDirectory {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderRequestedPolicy {
     pub access: RouterAccess,
+}
+
+impl From<ProviderRequestedPolicy> for RemoteLaunchPolicy {
+    fn from(policy: ProviderRequestedPolicy) -> Self {
+        Self {
+            access: match policy.access {
+                RouterAccess::WriteRestricted => RemoteLaunchAccess::WriteRestricted,
+                RouterAccess::WorkspaceWrite => RemoteLaunchAccess::WorkspaceWrite,
+            },
+        }
+    }
+}
+
+impl From<RemoteLaunchPolicy> for ProviderRequestedPolicy {
+    fn from(policy: RemoteLaunchPolicy) -> Self {
+        Self {
+            access: match policy.access {
+                RemoteLaunchAccess::WriteRestricted => RouterAccess::WriteRestricted,
+                RemoteLaunchAccess::WorkspaceWrite => RouterAccess::WorkspaceWrite,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
