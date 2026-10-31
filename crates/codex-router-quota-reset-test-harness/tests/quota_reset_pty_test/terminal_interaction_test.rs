@@ -16,6 +16,9 @@ use portable_pty::native_pty_system;
 use super::isolated_fixture_test::FORBIDDEN_TERMINAL_CANARIES;
 use super::isolated_fixture_test::TestResult;
 
+#[path = "terminal_failure_capture.rs"]
+mod failure_capture;
+
 const INITIAL_SIZE: PtySize = PtySize {
     rows: 36,
     cols: 120,
@@ -32,6 +35,7 @@ pub(super) struct TerminalDriver {
     transcript: Vec<u8>,
     reached_eof: bool,
     public_wrapper: Option<PathBuf>,
+    failure_capture: Option<failure_capture::FailureCapture>,
 }
 
 enum ReaderEvent {
@@ -52,7 +56,7 @@ impl TerminalDriver {
         if self.reached_eof {
             return Ok(None);
         }
-        match self.output_receiver.recv_timeout(timeout)? {
+        match self.receive_event(timeout)? {
             ReaderEvent::Bytes(bytes) => {
                 self.transcript.extend_from_slice(&bytes);
                 Ok(Some(bytes))
@@ -173,6 +177,7 @@ impl TerminalDriver {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper,
+            failure_capture: failure_capture::FailureCapture::from_environment(),
         })
     }
 
@@ -255,13 +260,19 @@ impl TerminalDriver {
         })
     }
 
-    pub(super) fn resize(&self, rows: u16, cols: u16) -> TestResult<()> {
+    pub(super) fn resize(&mut self, rows: u16, cols: u16) -> TestResult<()> {
+        if self.failure_capture.is_some() {
+            self.drain_pending_output();
+        }
         self.master_ref()?.resize(PtySize {
             rows,
             cols,
             pixel_width: 0,
             pixel_height: 0,
         })?;
+        if let Some(capture) = self.failure_capture.as_mut() {
+            capture.record_resize(self.transcript.len(), cols, rows);
+        }
         Ok(())
     }
 
@@ -337,6 +348,7 @@ impl TerminalDriver {
                 break;
             }
             if Instant::now() >= deadline {
+                self.capture_wait_failure();
                 return Err(std::io::Error::other("PTY child termination exceeded timeout").into());
             }
             thread::sleep(Duration::from_millis(10));
@@ -407,6 +419,7 @@ impl TerminalDriver {
         let deadline = Instant::now() + timeout;
         while child.try_wait()?.is_none() {
             if Instant::now() >= deadline {
+                self.capture_wait_failure();
                 return Err("public wrapper cleanup unsettled".into());
             }
             thread::sleep(Duration::from_millis(10));
@@ -443,11 +456,12 @@ impl TerminalDriver {
         let deadline = Instant::now() + timeout;
         while !condition(&self.transcript) {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            match self.output_receiver.recv_timeout(remaining)? {
+            match self.receive_event(remaining)? {
                 ReaderEvent::Bytes(bytes) => self.transcript.extend(bytes),
                 ReaderEvent::Eof => self.reached_eof = true,
             }
             if self.reached_eof && !condition(&self.transcript) {
+                self.capture_wait_failure();
                 return Err(std::io::Error::other(
                     "PTY child exited before expected semantic output",
                 )
@@ -637,6 +651,7 @@ mod tests {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper: None,
+            failure_capture: None,
         };
         ensure(
             terminal.receive_bytes(Duration::ZERO)? == Some(bytes.clone()),
@@ -680,6 +695,7 @@ mod tests {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper: None,
+            failure_capture: None,
         };
 
         if terminal.transcript_len() != queued_frame.len() {
@@ -708,6 +724,7 @@ mod tests {
                 transcript: b"\x1b[?2026hSave\x1b[?2026l".to_vec(),
                 reached_eof: false,
                 public_wrapper: None,
+                failure_capture: None,
             };
             let action_start = terminal.transcript_len();
             output_sender.send(ReaderEvent::Bytes(current_output.to_vec()))?;
