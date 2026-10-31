@@ -111,3 +111,7 @@ mod field_reason_layout;
 #[cfg(test)]
 #[path = "suites/button_key_hint.rs"]
 mod button_key_hint;
+
+#[cfg(test)]
+#[path = "suites/filter_switch_layout.rs"]
+mod filter_switch_layout;

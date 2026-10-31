@@ -171,3 +171,11 @@ T4 replaces the old same-row secondary clipping rule with a full secondary line 
 | `dialog-body-bottom-aligned.patch` | A fixed-height dialog puts spare blank rows above its body instead of below it. |
 
 T9 changes the disabled editor fixture from one row to two so its reason can occupy the approved next row; the value style and ignored-input assertions remain. T7 replaces the former fixed-dialog body/footer adjacency assertion with a pinned-footer and empty-space-below-body assertion. Content-sized forms retain their exact one-row footer gap, and fixed frame sizes remain asserted.
+
+| Patch | Intended failure |
+| --- | --- |
+| `switch-paints-partial-group.patch` | Paint full switch labels and keys despite the shared remaining budget. |
+| `switch-hidden-target-remains-focusable.patch` | The group is hidden but its targets remain eligible for Tab. |
+| `filter-minimum-on-inner-child.patch` | The consumer reserves its minimum only inside the child and budgets the full peer row for the switch. |
+
+The inner-child minimum control mutates the sample consumer allocation, including its shared remaining-width budget; all expected assertions stay unchanged. The toolbar full-title budget control follows its existing calculation into the shared Button width owner.

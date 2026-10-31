@@ -7,6 +7,32 @@ use crate::{
     theme::{SurfaceRole, TextRole, UiGlyph},
 };
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
+/// Width of a registry-driven button, including its native padding and gaps.
+pub(crate) fn action_button_width(action: &ActionPresentation, show_key: bool) -> usize {
+    let label = action
+        .toolbar_label
+        .as_deref()
+        .unwrap_or(&action.title)
+        .width();
+    let key = if show_key {
+        action
+            .keys
+            .first()
+            .map_or(0, |key| key.to_string().width() + 1)
+    } else {
+        0
+    };
+    let reason = match &action.availability {
+        Availability::Available => 0,
+        Availability::Unavailable { reason } => reason.width() + 1,
+    };
+    label
+        .saturating_add(key)
+        .saturating_add(reason)
+        .saturating_add(usize::from(action.checked == Some(true)) * 2)
+        .saturating_add(2)
+}
 pub fn button_target(id: TargetId, action: &ActionDef) -> TargetSpec {
     TargetSpec::new(id)
         .with_activation(action.id.clone())

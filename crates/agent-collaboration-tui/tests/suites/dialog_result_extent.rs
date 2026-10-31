@@ -69,7 +69,7 @@ mod tests {
         // title and a margin-top section of typed unlabelled FormFields rows.
         element!(DialogFrame(title:if props.ready.get(){"Reset result".to_owned()}else{"Checking reset".to_owned()},scroll:props.scroll.clone(),scroll_target:body(),context:Some(PinnedContext::new("東京 OpenAI Research Account Alpha Long Name").with_tag("alpha-tag")),help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any())) {
             View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:if height<16{0}else{1}) {
-                SegmentedSwitch(actions:vec![action("resets"),action("credits")])
+                SegmentedSwitch(actions:vec![action("resets"),action("credits")],available_width:content_width)
                 View(width:100pct,max_width:content_width,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                     Text(content:if props.ready.get(){"Success — reset completed"}else{"Checking provider…"},wrap:TextWrap::Wrap)
                     View(width:100pct,flex_direction:FlexDirection::Column,margin_top:1) {
