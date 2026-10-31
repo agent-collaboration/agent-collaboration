@@ -143,12 +143,7 @@ pub fn LiveActionScene(
                         menu_overlay(
                             stack,
                             &stack.snapshot().top().actions,
-                            OverlayLayout::AtCells {
-                                left: 3,
-                                top: 3,
-                                width: 68,
-                                height: 12,
-                            },
+                            TargetId::for_action(&action("filters")),
                         )
                         .unwrap(),
                     )
@@ -204,6 +199,10 @@ pub fn LiveActionScene(
     let journal = props.journal.clone();
     let projection = match props.projection {
         ProjectionKind::Button => {
+            element!(Button(id:TargetId::for_action(&action("filters")),action:action("filters")))
+                .into_any()
+        }
+        ProjectionKind::Menu => {
             element!(Button(id:TargetId::for_action(&action("filters")),action:action("filters")))
                 .into_any()
         }

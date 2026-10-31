@@ -70,6 +70,19 @@ impl HitRegions {
     pub fn published(self) -> Option<HitMapSnapshot> {
         self.0.read().published.clone()
     }
+    pub(crate) fn published_anchor_cells(
+        self,
+        surface: SurfaceId,
+        target: &TargetId,
+    ) -> Option<Vec<(u16, u16)>> {
+        self.0.read().published.as_ref().map(|frame| {
+            frame
+                .targets
+                .iter()
+                .find(|region| region.surface == surface && region.target == *target)
+                .map_or_else(Vec::new, |region| region.cells.clone())
+        })
+    }
     pub fn invalidate(mut self) {
         let mut cache = self.0.write();
         cache.invalidation = cache.invalidation.wrapping_add(1);

@@ -15,7 +15,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::{SurfaceContext, SurfaceStackHandle, use_surface_stack},
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::{
@@ -86,14 +86,7 @@ mod tests {
                 choice: None,
                 placement: Placement::Hidden,
                 run: Handler::from(move |()| {
-                    control
-                        .open(OverlayLayout::AtCells {
-                            left: 2,
-                            top: 3,
-                            width: 36,
-                            height: 10,
-                        })
-                        .unwrap();
+                    control.open().unwrap();
                 }),
             };
             let help = HelpControl::new(stack, ActionId::new("help").unwrap());

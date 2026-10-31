@@ -1,0 +1,13 @@
+diff --git a/crates/agent-collaboration-tui/src/overlay_host.rs b/crates/agent-collaboration-tui/src/overlay_host.rs
+index 32d8d7b3..ebb5ea9d 100644
+--- a/crates/agent-collaboration-tui/src/overlay_host.rs
++++ b/crates/agent-collaboration-tui/src/overlay_host.rs
+@@ -159,7 +159,7 @@ impl Hook for AnchorPublication {
+             .published_anchor_cells(self.parent.surface, &self.target)
+         {
+             let measured = AnchorBounds::from_cells(&cells);
+-            if self.bounds.get() != measured {
++            if self.bounds.get().is_none() && self.bounds.get() != measured {
+                 self.bounds.set(measured);
+                 return std::task::Poll::Ready(());
+             }

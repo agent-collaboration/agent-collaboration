@@ -17,7 +17,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::{SurfaceStackHandle, use_surface_stack},
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -318,12 +318,7 @@ mod tests {
                     menu_overlay(
                         fixture.stack,
                         &fixture.stack.snapshot().top().actions,
-                        OverlayLayout::AtCells {
-                            left: 3,
-                            top: 3,
-                            width: 68,
-                            height: 20,
-                        },
+                        TargetId::for_action(&action("help")),
                     )
                     .unwrap(),
                 )
