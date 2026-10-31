@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+--- a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
++++ b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+@@ -77,3 +77,3 @@
+         if self.0.as_ref().is_some_and(DispatchFrameState::has_pending) {
+-            Poll::Ready(())
++            Poll::Pending
+         } else {

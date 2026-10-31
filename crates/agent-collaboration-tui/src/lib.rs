@@ -4,6 +4,8 @@ pub mod controls;
 mod dialog_sizing;
 #[cfg(test)]
 mod dialog_test_frame;
+#[cfg(all(feature = "test-support", debug_assertions))]
+mod dispatch_frame_marker;
 pub mod focus_model;
 pub mod hit_regions;
 mod hit_regions_model;
