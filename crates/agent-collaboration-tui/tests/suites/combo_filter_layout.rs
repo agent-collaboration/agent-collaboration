@@ -21,6 +21,7 @@ mod tests {
         collections::HashSet,
         sync::{Arc, Mutex},
     };
+    use unicode_width::UnicodeWidthStr;
     fn field() -> TargetId {
         TargetId::new("filter-choice").unwrap()
     }
@@ -39,17 +40,21 @@ mod tests {
         width: u16,
         height: u16,
         handle: Arc<Mutex<Option<FilterFixture>>>,
+        secondary: bool,
     }
     #[component]
     fn FilterScene(props: &FilterSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         record_draw(&mut hooks, &props.journal);
         let value = hooks.use_state(|| {
+            let mut alpha = SelectOption::available(OptionKey::new("alpha").unwrap(), "ab Alpha");
+            let mut beta = SelectOption::available(OptionKey::new("beta").unwrap(), "ab Beta");
+            if props.secondary {
+                alpha.secondary = Some("/remote/only/project".into());
+                beta.secondary = Some("/different/local/project".repeat(4));
+            }
             ComboBoxState::new(
-                vec![
-                    SelectOption::available(OptionKey::new("alpha").unwrap(), "ab Alpha"),
-                    SelectOption::available(OptionKey::new("beta").unwrap(), "ab Beta"),
-                ],
-                Some(OptionKey::new("alpha").unwrap()),
+                vec![alpha, beta],
+                Some(OptionKey::new(if props.secondary { "beta" } else { "alpha" }).unwrap()),
             )
             .unwrap()
         });
@@ -93,6 +98,110 @@ mod tests {
         element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(stack.snapshot().top_id(),value.read().query().text().as_bytes().to_vec())]))) {
             OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {Text(content:"Filter layout") ComboBox(id:field(),value)}}
         })
+    }
+    #[tokio::test]
+    async fn dropdown_secondary_is_muted_on_the_label_row_and_truncates_before_the_label() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            for (width, height) in [(120u16, 36u16), (48, 12), (32, 24)] {
+                let handle = Arc::new(Mutex::new(None));
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(FilterScene(journal,width,height,secondary:true,handle:handle.clone()));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                let scenario = async {
+                    driver.initial(&mut frames).await;
+                    let key = |code| TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code));
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Enter), true)], true)
+                        .await;
+                    let grid = driver.frames.last().unwrap();
+                    let (row, line) = (0..grid.height)
+                        .map(|row| (row, grid.row_text(row)))
+                        .find(|(_, line)| line.contains("ab Alpha"))
+                        .unwrap();
+                    let secondary = if width == 32 {
+                        "/remote/only/…"
+                    } else {
+                        "/remote/only/project"
+                    };
+                    assert!(
+                        line.contains(secondary),
+                        "secondary shares its label row at {width}x{height}\n{line}"
+                    );
+                    assert!(
+                        line.find(secondary).unwrap() > line.find("ab Alpha").unwrap(),
+                        "secondary follows the full label"
+                    );
+                    assert!(
+                        grid.round_frame_text().contains("ab Beta"),
+                        "a long secondary cannot starve another label"
+                    );
+                    let filter_row = (0..grid.height)
+                        .find(|row| grid.row_text(*row).contains("Filter:"))
+                        .unwrap();
+                    let filter_line = grid.row_text(filter_row);
+                    let filter_column = filter_line
+                        .get(..filter_line.find("Filter:").unwrap())
+                        .unwrap()
+                        .width();
+                    let muted = grid
+                        .cell(filter_column, filter_row)
+                        .unwrap()
+                        .style
+                        .foreground;
+                    let column = line.get(..line.find(secondary).unwrap()).unwrap().width();
+                    for offset in 0..secondary.chars().count() {
+                        assert_eq!(
+                            grid.cell(column + offset, row).unwrap().style.foreground,
+                            muted,
+                            "secondary uses the shipped muted role"
+                        );
+                    }
+                    driver
+                        .drive(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::BracketedPaste("only/project".into()), true)],
+                            true,
+                        )
+                        .await;
+                    let filtered = driver.frames.last().unwrap().round_frame_text();
+                    assert!(
+                        !filtered.contains("ab Beta"),
+                        "the real query matches secondary text only\n{filtered}"
+                    );
+                    assert_eq!(
+                        handle
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .unwrap()
+                            .value
+                            .read()
+                            .matching()
+                            .iter()
+                            .map(|option| option.key.clone())
+                            .collect::<Vec<_>>(),
+                        vec![OptionKey::new("alpha").unwrap()]
+                    );
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Enter), true)], true)
+                        .await;
+                    let fixture = handle.lock().unwrap().clone().unwrap();
+                    assert_eq!(
+                        fixture.value.read().value(),
+                        Some(&OptionKey::new("alpha").unwrap())
+                    );
+                    assert_eq!(
+                        fixture.stack.snapshot().top_id(),
+                        SurfaceId::Screen,
+                        "the real dropdown pick closes its scope"
+                    );
+                };
+                tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+                    .await
+                    .unwrap();
+            }
+        }
     }
     #[tokio::test]
     async fn dropdown_filter_label_and_typed_query_share_one_row_at_every_declared_grid() {

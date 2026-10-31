@@ -4,10 +4,12 @@ use crate::{
     actions::Availability,
     focus_model::TargetId,
     hit_regions::{HitRegion, HitRegionKind, use_target_geometry},
+    overlay_host::SurfaceSizing,
     surface_handle::SurfaceContext,
     theme::{SurfaceRole, TextRole, UiGlyph},
 };
 use iocraft::prelude::*;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 #[derive(Props)]
 pub struct ComboBoxProps {
     #[iocraft(required)]
@@ -64,6 +66,8 @@ pub(crate) fn ComboDropdown(
 ) -> impl Into<AnyElement<'static>> {
     let context = *hooks.use_context::<SurfaceContext>();
     let theme = context.theme();
+    let sizing = *hooks.use_context::<SurfaceSizing>();
+    let row_width = usize::from(sizing.max_width.saturating_sub(3));
     let state = props.value.read().clone();
     let matching = state.matching();
     element!(View(width:100pct,height:100pct,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
@@ -73,11 +77,33 @@ pub(crate) fn ComboDropdown(
         }}
         ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
-        #(matching.into_iter().map(|option|{let highlighted=Some(&option.key)==state.highlight();let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
+        #(matching.into_iter().map(|option|{let highlighted=Some(&option.key)==state.highlight();let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};let primary_width=option.label.width()+3+reason.as_ref().map_or(0,|reason|reason.width()+1);let secondary=option.secondary.as_ref().map(|content|fit_secondary_text(content,row_width.saturating_sub(primary_width)));element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
             View(width:1) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
-            Text(content:option.label.clone(),color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))
+            View(flex_shrink:0.0_f32) {Text(content:option.label.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
+            #(secondary.map(|content|element!(View(min_width:0,flex_shrink:1.0_f32,flex_grow:1.0_f32,overflow:Overflow::Hidden) {Text(content,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))})))
             #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
         }}}).into_any()}))
         }
     })
+}
+
+fn fit_secondary_text(content: &str, width: usize) -> String {
+    if content.width() <= width {
+        return content.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut result = String::new();
+    let mut used = 0;
+    for character in content.chars() {
+        let cells = character.width().unwrap_or(0);
+        if used + cells >= width {
+            break;
+        }
+        result.push(character);
+        used += cells;
+    }
+    result.push_str(UiGlyph::Ellipsis.text());
+    result
 }
