@@ -117,6 +117,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 
 | `right-edge-focus-marker.patch` | Fitting lists, menus, and dropdowns add a duplicate focus glyph in the right scrollbar column. |
 
+| `menu-keeps-requested-height.patch` | Menus keep a tall requested height after their final item instead of fitting their content. |
+
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
 the independent screen-effect count after an outside menu press. The three

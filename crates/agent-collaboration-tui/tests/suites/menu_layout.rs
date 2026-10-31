@@ -35,6 +35,7 @@ mod tests {
     }
     #[derive(Props)]
     struct MenuSceneProps {
+        layout: Option<OverlayLayout>,
         #[iocraft(required)]
         journal: EventJournal,
         width: u16,
@@ -46,6 +47,12 @@ mod tests {
         let help = hooks.use_ref(|| None::<HelpControl>);
         let calls = hooks.use_state(|| 0usize);
         let menu_height = props.height.saturating_sub(2).min(14);
+        let menu_layout = props.layout.unwrap_or(OverlayLayout::AtCells {
+            left: 1,
+            top: 1,
+            width: 18,
+            height: menu_height,
+        });
         let stack = use_surface_stack(&mut hooks, |stack| {
             let help_control = HelpControl::new(stack, action("help"));
             let mut retained = help;
@@ -93,19 +100,7 @@ mod tests {
                         .actions
                         .clone();
                     stack
-                        .open_overlay(
-                            menu_overlay(
-                                stack,
-                                &registry,
-                                OverlayLayout::AtCells {
-                                    left: 1,
-                                    top: 1,
-                                    width: 18,
-                                    height: menu_height,
-                                },
-                            )
-                            .unwrap(),
-                        )
+                        .open_overlay(menu_overlay(stack, &registry, menu_layout).unwrap())
                         .unwrap();
                 }),
             );
@@ -235,6 +230,143 @@ mod tests {
                             .await;
                     }
                 }
+            })
+            .await
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn menu_sizes_its_frame_to_items_without_an_empty_tail_or_stacked_screen_border() {
+        use agent_collaboration_tui::{DialogMargins, DialogPresentation};
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            for layout in [
+                OverlayLayout::AtCells {
+                    left: 1,
+                    top: 2,
+                    width: 18,
+                    height: 20,
+                },
+                OverlayLayout::CenteredCells {
+                    width: 18,
+                    height: 20,
+                },
+                OverlayLayout::Dialog {
+                    presentation: DialogPresentation::FullScreen,
+                    margins: DialogMargins {
+                        left: 1,
+                        right: 1,
+                        top: 1,
+                        bottom: 1,
+                    },
+                },
+            ] {
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui =
+                    element!(MenuScene(journal,width:48u16,height:24u16,layout:Some(layout)));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    driver.initial(&mut frames).await;
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                        .await;
+                    let grid = driver.frames.last().unwrap();
+                    let panel = grid.round_frame_text();
+                    assert_eq!(
+                        panel.lines().count(),
+                        6,
+                        "four items plus border, no empty tail\n{panel}"
+                    );
+                    let bottom = grid
+                        .cells
+                        .iter()
+                        .rposition(|row| row.iter().any(|cell| cell.text == "╰"))
+                        .unwrap();
+                    assert!(
+                        bottom < grid.height - 1,
+                        "fitting menu leaves the screen bottom border clear"
+                    );
+                    for title in [
+                        "New background session…",
+                        "Refresh",
+                        "Help",
+                        "Unavailable action",
+                    ] {
+                        assert!(
+                            panel.contains(title),
+                            "every item is visible before scrolling\n{panel}"
+                        );
+                    }
+                    assert!(
+                        !panel.contains('█'),
+                        "fitting menu needs no overflow scrollbar\n{panel}"
+                    );
+                })
+                .await
+                .unwrap();
+            }
+        }
+    }
+    #[tokio::test]
+    async fn capped_menu_scrolls_to_the_final_item_with_a_real_wheel_event() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:76u16,height:6u16));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                let grid = driver.frames.last().unwrap();
+                let panel = grid.round_frame_text();
+                assert_eq!(
+                    panel.lines().count(),
+                    4,
+                    "menu respects its physical cap\n{panel}"
+                );
+                assert!(
+                    panel.contains('█'),
+                    "overflow retains its scrollbar\n{panel}"
+                );
+                assert!(
+                    !panel.contains("Unavailable action"),
+                    "the last item starts below the viewport"
+                );
+                let (top, left) = grid
+                    .cells
+                    .iter()
+                    .enumerate()
+                    .find_map(|(row, cells)| {
+                        cells
+                            .iter()
+                            .position(|cell| cell.text == "╭")
+                            .map(|column| (row, column))
+                    })
+                    .unwrap();
+                let point = (
+                    u16::try_from(left + 2).unwrap(),
+                    u16::try_from(top + 1).unwrap(),
+                );
+                let wheel = || {
+                    TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                        MouseEventKind::ScrollDown,
+                        point.0,
+                        point.1,
+                    ))
+                };
+                driver
+                    .drive(&mut frames, mode, vec![(wheel(), true)], true)
+                    .await;
+                // Scrolling invalidates pointer geometry until the changed frame.
+                driver
+                    .drive(&mut frames, mode, vec![(wheel(), true)], true)
+                    .await;
+                let panel = driver.frames.last().unwrap().round_frame_text();
+                assert!(
+                    panel.contains("Unavailable action"),
+                    "the final item remains reachable\n{panel}"
+                );
             })
             .await
             .unwrap();
