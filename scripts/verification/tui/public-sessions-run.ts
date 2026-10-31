@@ -1,14 +1,20 @@
 import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
-import { publicPlanSchema, runPublicCapture } from './public-sessions.ts';
+import { publicPlanSchema, runPublicCapture, checkPublicCapture } from './public-sessions.ts';
 import { readJson } from './source-binding.ts';
 export async function publicSessionsMain(args: readonly string[]): Promise<void> {
-	const { values, positionals } = strictArguments(args, { help: { type: 'boolean' } }, true);
+	const { values, positionals } = strictArguments(
+		args,
+		{ help: { type: 'boolean' }, check: { type: 'boolean' } },
+		true,
+	);
 	if (values.help) {
-		process.stdout.write('public-sessions-run.ts PLAN.json\n');
+		process.stdout.write('public-sessions-run.ts PLAN.json [--check]\n');
 		return;
 	}
 	const file = planArgument(positionals);
-	await runPublicCapture(publicPlanSchema.parse(readJson(file)));
+	const plan = publicPlanSchema.parse(readJson(file));
+	if (values.check) await checkPublicCapture(plan);
+	else await runPublicCapture(plan);
 }
 if (isMain(import.meta.url))
 	await publicSessionsMain(process.argv.slice(2)).catch(reportCliFailure);

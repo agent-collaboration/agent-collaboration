@@ -1,0 +1,9 @@
+diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
+--- a/crates/agent-collaboration-tui/src/input_owner.rs
++++ b/crates/agent-collaboration-tui/src/input_owner.rs
+@@ -44,4 +44,4 @@ pub fn InputOwner<'a>(
+     let on_routed = props.on_routed.clone();
++    let snapshot = stack.snapshot();
+     hooks.use_terminal_events(move |event| {
+-        let snapshot = stack.snapshot();
+         let routed = route_event(stack, &snapshot, &quit_action, event);

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
+@@ -181,3 +181,3 @@ impl HelpControl {
+                 if let Some(model) = stack.surface_mut(surface) {
+-                    *model = saved;
++                    let _=(model,saved);
+                     true

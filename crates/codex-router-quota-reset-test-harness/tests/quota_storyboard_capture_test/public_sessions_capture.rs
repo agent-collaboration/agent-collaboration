@@ -1,27 +1,29 @@
-//! Public launch/effect boundary over the existing ttyd and original-JPEG sink.
-use super::cua_artifact_sink::CuaArtifactSink;
-use super::*;
-
+//! Public entry retains its fixed child/Host/effect contract; only the sink changes.
+use super::capture_support::{
+    digest_file, encode_json_string, permanent_adapter_source, verified_node_executable,
+};
+use super::grid_terminal_capture::{drive_terminal, emit};
+use super::isolated_fixture_test::{TestResult, ensure};
+use super::terminal_interaction_test::{KeyboardProtocol, TerminalDriver};
+use portable_pty::CommandBuilder;
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::Path;
 fn required_public_value(name: &str) -> TestResult<String> {
     let value = std::env::var(name)?;
     ensure(!value.is_empty(), "missing public target value")?;
     Ok(value)
 }
-
-pub(super) async fn run_live_public_sessions() -> TestResult<()> {
-    let (_, node_sha256) = verified_node_executable()?;
+pub(super) fn run_live_public_sessions() -> TestResult<()> {
+    let (node, node_sha256) = verified_node_executable()?;
     ensure(
         std::env::var_os("QUOTA_STORYBOARD_COMPONENT_FIXTURE_BINARY").is_none(),
         "public and synthetic component variants cannot be mixed",
     )?;
-    let tools = CaptureTools::from_environment()?;
-    let root = fs::canonicalize(
-        std::env::var_os("QUOTA_STORYBOARD_OUTPUT").ok_or("fresh public output required")?,
-    )?;
-    let output = root.join("cua-sessions");
     let config = fs::canonicalize(required_public_value(
         "QUOTA_STORYBOARD_PUBLIC_SESSIONS_CONFIG",
     )?)?;
+    let root = fs::canonicalize(required_public_value("QUOTA_STORYBOARD_OUTPUT")?)?;
     ensure(
         config == root.join("public-target.json"),
         "public configuration must belong to this output",
@@ -42,80 +44,43 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
         effects.len() == 64 && effects.bytes().all(|byte| byte.is_ascii_hexdigit()),
         "public effect proof binding required",
     )?;
-    fs::create_dir(&output)?;
-    fs::set_permissions(&output, fs::Permissions::from_mode(0o700))?;
-    tools.write_child_adapter_files(&output)?;
-    fs::copy(&config, output.join("fixture-command.json"))?;
-    let scenes = required_public_value("QUOTA_STORYBOARD_CUA_ARTIFACT_SCENES")?
-        .split(',')
-        .map(str::to_owned)
-        .collect();
-    let sink = CuaArtifactSink::start(&output, scenes).await?;
-    let export = sink.readiness_json();
-    let result: TestResult<()> = async {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
-        let address = listener.local_addr()?;
-        drop(listener);
-        let browser_directory = create_browser_temporary_directory(&output)?;
-        // Preserve actual inherited environment, including HOME/CODEX_HOME absence.
-        // The fixed TypeScript adapter rechecks public argv/hash/cwd/Host before spawn.
-        let child = Command::new(&tools.ttyd)
-            .arg(format!("--port={}", address.port()))
-            .args(["--interface", "127.0.0.1", "--once", "--writable", "-t", "rendererType=canvas", "-t", "disableResizeOverlay=true", "-t", "fontFamily=Menlo", "-t", "fontSize=16"])
-            .arg(verified_node_executable()?.0).arg(permanent_adapter_source("fixture-child.ts")?).arg(output.join("fixture-command.json"))
-            .current_dir(&output)
-            .env("TMPDIR", &browser_directory).env("LANG", "C.UTF-8").env("TERM", "xterm-256color")
-            .env("DYLD_LIBRARY_PATH", &tools.dynamic_library_path)
-            .env("QUOTA_STORYBOARD_FIXTURE_COMMAND", output.join("fixture-command.json"))
-            .stdout(fs::File::create(output.join("cua-ttyd.stdout"))?)
-            .stderr(fs::File::create(output.join("cua-ttyd.stderr"))?)
-            .process_group(0).spawn();
-        let child = match child {
-            Ok(child) => child,
-            Err(error) => { fs::remove_dir_all(&browser_directory)?; return Err(error.into()); }
-        };
-        let mut capture = OwnedCapture { child, group_released: false, output: output.clone(),
-            child_ownership: CapturedChildOwnership::RetainedAdapterChild,
-            browser_temporary_directory: browser_directory, stop_file: None };
-        fs::write(output.join("ttyd.pid"), capture.child.id().to_string())?;
-        let ready_deadline = std::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            ensure(capture.child.try_wait()?.is_none(), "public ttyd exited before readiness")?;
-            if std::net::TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_ok() { break; }
-            ensure(std::time::Instant::now() < ready_deadline, "public ttyd listener unavailable")?;
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-        fs::write(output.join("cua-ready.json"), format!(
-            "{{\"kind\":\"listener-ready-not-ui\",\"surface\":\"sessions\",\"url\":{},\"ttyd_pid\":{},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"ttyd_sha256\":{},\"child_pid_file\":{},\"viewport_file\":{},\"stop_file\":{},\"lifetime_seconds\":600,\"quota_fixture_scenario\":null,\"artifact_export\":{export}}}\n",
-            encode_json_string(&format!("http://127.0.0.1:{}/", address.port())), capture.child.id(),
-            encode_json_string(&digest_file(&binary)?), encode_json_string(&digest_file(&tools.ttyd)?),
-            encode_json_string(&output.join("quota-child.pid").to_string_lossy()),
-            encode_json_string(&output.join("quota-child.viewport").to_string_lossy()),
-            encode_json_string(&output.join("cua-stop").to_string_lossy()),
-        ))?;
-        let deadline = std::time::Instant::now() + Duration::from_secs(600);
-        loop {
-            if let Some(status) = capture.child.try_wait()? {
-                ensure(status.success(), "public ttyd failed")?;
-                break;
-            }
-            if output.join("cua-stop").exists() {
-                capture.release_process_group()?;
-                return Err("public CUA stopped early; job state remains with runtime helper".into());
-            }
-            ensure(std::time::Instant::now() < deadline, "public CUA lifetime elapsed")?;
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        capture.release_process_group()?;
-        ensure_owned_child_stopped(&output)?;
-        ensure(fs::read_to_string(output.join("quota-child.exit"))?.trim() == "0", "public child failed")?;
-        Ok(())
-    }.await;
-    let stopped = sink.stop().await;
-    result?;
-    let count = stopped?;
+    let output = root.join("cua-sessions");
+    ensure(output.is_dir(), "fresh public output required")?;
+    let wrapper = permanent_adapter_source("fixture-child.ts")?;
+    let wrapper_config = output.join("fixture-command.json");
+    fs::copy(&config, &wrapper_config)?;
+    let protocol = match required_public_value("TUI_GRID_KEYS")?.as_str() {
+        "legacy" => KeyboardProtocol::Legacy,
+        "kitty" => KeyboardProtocol::Kitty,
+        _ => return Err("unknown public key mode".into()),
+    };
+    let terminal = TerminalDriver::spawn_public_wrapper(&node, &wrapper, &wrapper_config, &output)?;
+    let result = drive_terminal(terminal, protocol)?;
+    if !result.completed {
+        emit(&format!("STOPPED {}", result.bytes))?;
+        return Err("public CUA stopped early; job state remains with runtime helper".into());
+    }
+    ensure(
+        fs::read_to_string(output.join("quota-child.exit"))?.trim() == "0",
+        "public child failed",
+    )?;
+    ensure(
+        !output.join("cleanup-unsettled").exists(),
+        "public child cleanup unsettled",
+    )?;
+    for name in ["quota-child.pid", "quota-wrapper.pid"] {
+        let pid: u32 = fs::read_to_string(output.join(name))?.trim().parse()?;
+        ensure(
+            !std::process::Command::new("/bin/kill")
+                .args(["-0", &pid.to_string()])
+                .output()?
+                .status
+                .success(),
+            "owned public child survived cleanup",
+        )?;
+    }
     verified_node_executable()?;
-    permanent_adapter_source("ttyd-adapter.ts")?;
+    let count: usize = required_public_value("TUI_GRID_PUBLIC_ARTIFACT_COUNT")?.parse()?;
     fs::write(
         output.join("public-cua-receipt.json"),
         format!(
@@ -125,14 +90,32 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
                 "{:x}",
                 Sha256::digest(include_bytes!("public_sessions_capture.rs"))
             )),
-            encode_json_string(&digest_file(&permanent_adapter_source(
-                "fixture-child.ts"
-            )?)?),
+            encode_json_string(&digest_file(&wrapper)?),
             encode_json_string(&service),
             encode_json_string(&epoch),
             encode_json_string(fs::read_to_string(output.join("quota-child.viewport"))?.trim()),
-            encode_json_string(&effects),
+            encode_json_string(&effects)
         ),
     )?;
+    emit(&format!("FINISHED {}", result.bytes))?;
     Ok(())
+}
+
+impl TerminalDriver {
+    pub(super) fn spawn_public_wrapper(
+        node: &Path,
+        wrapper: &Path,
+        configuration: &Path,
+        output: &Path,
+    ) -> TestResult<TerminalDriver> {
+        let mut command = CommandBuilder::new(node);
+        command.arg(wrapper);
+        command.arg(configuration);
+        // Public entry keeps the real inherited environment, including absent CODEX_HOME.
+        command.env("QUOTA_STORYBOARD_FIXTURE_COMMAND", configuration);
+        command.env("TERM", "xterm-256color");
+        command.env("LANG", "C.UTF-8");
+        command.cwd(output);
+        Self::spawn_prepared_command(command, Some(output.to_path_buf()))
+    }
 }

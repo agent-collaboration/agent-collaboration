@@ -1,0 +1,390 @@
+use crate::controls::{FormField, FormFields, SelectableRow};
+use crate::dialog_test_frame::StaticDialogFrame as DialogFrame;
+use crate::*;
+use futures_util::StreamExt;
+use iocraft::prelude::*;
+
+#[test]
+fn framed_dialog_overlays_without_reducing_background_viewport() {
+    let frame = element! {
+        DialogHost(width: 40u16, height: 12u16,
+            background: vec![element! {
+                View(width: 40, height: 12, flex_direction: FlexDirection::Column) {
+                    Text(content: "BACKGROUND TOP")
+                    View(flex_grow: 1.0_f32) {}
+                    Text(content: "BACKGROUND BOTTOM")
+                }
+            }.into_any()],
+            dialog: Some(element! {
+                DialogFrame(width: 40u16, height: 12u16, title: "Filters".to_owned(),
+                    presentation: DialogPresentation::cells(26, 8),
+                    margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
+                    actions: vec![element!(Text(content: "Apply  Cancel")).into_any()]) {
+                    Text(content: "Claude")
+                }
+            }.into_any()))
+    }
+    .to_string();
+    assert_eq!(frame.lines().count(), 12, "{frame}");
+    assert!(
+        frame
+            .lines()
+            .next()
+            .is_some_and(|line| line.contains("BACKGROUND TOP")),
+        "{frame}"
+    );
+    assert!(
+        frame
+            .lines()
+            .last()
+            .is_some_and(|line| line.contains("BACKGROUND BOTTOM")),
+        "{frame}"
+    );
+    assert!(frame.contains("Filters"), "{frame}");
+    assert!(frame.contains("Apply  Cancel"), "{frame}");
+    assert!(frame.contains('╭') && frame.contains('╯'), "{frame}");
+}
+
+#[test]
+fn full_screen_dialog_respects_explicit_margins_and_border() {
+    let frame = element! {
+        View(width: 30, height: 10) {
+        DialogFrame(width: 30u16, height: 10u16, title: "Details".to_owned(),
+            presentation: DialogPresentation::FullScreen,
+            margins: DialogMargins { top: 1, right: 3, bottom: 2, left: 2 },
+            padding: 0u16, border_style: BorderStyle::Double,
+            actions: vec![element!(Text(content: "Esc Close")).into_any()]) {
+            Text(content: "Selected account")
+        }
+        }
+    }
+    .to_string();
+    assert_eq!(frame.lines().count(), 10, "{frame}");
+    let border_row = frame.lines().nth(1).unwrap_or_default();
+    assert!(border_row.starts_with("  ╔"), "{frame}");
+    assert_eq!(border_row.trim_start().chars().count(), 25, "{frame}");
+    assert!(frame.contains("Esc Close"), "{frame}");
+}
+
+#[test]
+fn excessive_margins_and_tiny_viewports_remain_bounded() {
+    for (width, height) in [(0u16, 0u16), (1, 1), (8, 3), (40, 10)] {
+        let frame = element! {
+            View(width: u32::from(width), height: u32::from(height), overflow: Overflow::Hidden) {
+            DialogFrame(width, height, title: "Details".to_owned(),
+                presentation: DialogPresentation::FullScreen,
+                margins: DialogMargins { top: 100, right: 100, bottom: 100, left: 100 }) {
+                Text(content: "long content")
+            }
+            }
+        }
+        .to_string();
+        assert!(frame.lines().count() <= usize::from(height), "{frame}");
+    }
+}
+
+#[component]
+fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    use crate::{
+        actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+        controls::ScrollHandle,
+        focus_model::{FocusModel, InputUse, TargetId, TargetInputHandler, TargetSpec},
+        hit_regions::{HitRegion, HitRegionKind},
+        input_owner::InputOwner,
+        overlay_host::OverlayHost,
+        surface_handle::use_surface_stack,
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    };
+    let count = hooks.use_state(|| 0u32);
+    let exit = hooks.use_state(|| false);
+    let mut system = hooks.use_context_mut::<SystemContext>();
+    let stack = use_surface_stack(&mut hooks, |_| SurfaceModel {
+        focus: FocusModel::new(vec![
+            TargetSpec::new(TargetId::new("background").unwrap()).with_input(
+                TargetInputHandler::new(move |event| {
+                    if matches!(
+                        event,
+                        TerminalEvent::Key(KeyEvent {
+                            code: KeyCode::Char('b'),
+                            kind: KeyEventKind::Press,
+                            ..
+                        }) | TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
+                            kind: MouseEventKind::Down(MouseButton::Left),
+                            ..
+                        })
+                    ) {
+                        let mut count = count;
+                        count.set(count.get() + 1);
+                        InputUse::Used
+                    } else {
+                        InputUse::Unused
+                    }
+                }),
+            ),
+        ])
+        .unwrap(),
+        actions: ActionRegistry::new(
+            ScopeId::new("background").unwrap(),
+            vec![ActionDef {
+                id: ActionId::new("quit").unwrap(),
+                title: "Quit",
+                keys: vec!["q".parse().unwrap()],
+                availability: AvailabilityFn::default(),
+                choice: None,
+                placement: Placement::Hidden,
+                run: Handler::from(move |()| {
+                    let mut exit = exit;
+                    exit.set(true);
+                }),
+            }],
+        )
+        .unwrap(),
+        primary_action: None,
+    });
+    let mut opened = hooks.use_ref(|| false);
+    if !opened.get() {
+        let scroll = ScrollHandle::new(stack);
+        stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(vec![TargetSpec::new(TargetId::new("body").unwrap()).with_input(scroll.input_handler())]).unwrap(),actions:ActionRegistry::new(ScopeId::new("dialog").unwrap(),Vec::new()).unwrap(),primary_action:None},view:OverlayView::new(move||element!(crate::controls::DialogFrame(title:"Dialog active".to_owned(),scroll:scroll.clone(),scroll_target:TargetId::new("body").unwrap(),context:vec![element!(Text(content:"Account: alpha")).into_any()],actions:vec![element!(Text(content:"Esc Close")).into_any()]) {#((1..=40).map(|index|element!(Text(content:format!("CONTENT {index}")))))}).into_any()),layout:OverlayLayout::CenteredCells {width:30,height:10}}).unwrap();
+        opened.set(true);
+    }
+    if exit.get() {
+        system.exit();
+    }
+    element!(InputOwner(stack,width:40u16,height:12u16,quit_action:ActionId::new("quit").unwrap()) {OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {HitRegion(target:TargetId::new("background").unwrap(),kind:HitRegionKind::Target) {Text(content:format!("background:{}",count.get()))}}}})
+}
+
+#[tokio::test]
+async fn dialog_blocks_background_keys_and_pointer_then_restores_them_after_cancel() {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut ui = element!(DialogJourney);
+    let frames = ui.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last_frame = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if phase == 0 && frame.contains("Dialog active") {
+                assert!(frame.contains("background:0"), "{frame}");
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Char('b'),
+                    )))
+                    .unwrap();
+                sender
+                    .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                        MouseEventKind::Down(MouseButton::Left),
+                        2,
+                        0,
+                    )))
+                    .unwrap();
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::End,
+                    )))
+                    .unwrap();
+                phase = 1;
+            } else if phase == 1 && frame.contains("CONTENT 40") {
+                assert!(
+                    frame.contains("background:0"),
+                    "background input leaked: {frame}"
+                );
+                assert!(frame.contains("Esc Close"), "scroll lost actions: {frame}");
+                assert!(
+                    frame.contains("Account: alpha"),
+                    "scroll lost attributable context: {frame}"
+                );
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Esc,
+                    )))
+                    .unwrap();
+                phase = 2;
+            } else if phase == 2 && !frame.contains("Dialog active") {
+                assert!(
+                    frame.contains("background:0"),
+                    "cancel leaked its event: {frame}"
+                );
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Char('b'),
+                    )))
+                    .unwrap();
+                phase = 3;
+            } else if phase == 3 && frame.contains("background:1") {
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Char('q'),
+                    )))
+                    .unwrap();
+                phase = 4;
+            }
+            last_frame = frame;
+        }
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(2), journey)
+        .await
+        .unwrap();
+    assert_eq!(phase, 4, "{last_frame}");
+}
+
+#[test]
+fn dialog_actions_share_a_wrapping_horizontal_row() {
+    // R4: roomy action groups share a row; a vertical action stack is wrong.
+    let frame = element! {
+        View(width: 80, height: 24) {
+            DialogFrame(width: 80u16, height: 24u16, title: "Form".to_owned(),
+                presentation: DialogPresentation::cells(60, 14),
+                actions: vec![element!(Text(content: "Cancel")).into_any(), element!(Text(content: "Start")).into_any()]) {
+                Text(content: "Machine: local")
+            }
+        }
+    }.to_string();
+    assert!(
+        frame
+            .lines()
+            .any(|line| line.contains("Cancel") && line.contains("Start")),
+        "{frame}"
+    );
+}
+
+#[test]
+fn content_dialog_fits_one_tree_and_preserves_wide_body() {
+    let frame = element! {
+        View(width: 100, height: 30) {
+            DialogFrame(width: 100u16, height: 30u16, title: "Short".to_owned(),
+                presentation: DialogPresentation::Sized {
+                    width: DialogAxisSize::Content { maximum: Some(88) },
+                    height: DialogAxisSize::Content { maximum: Some(24) },
+                },
+                actions: vec![element!(Text(content: "Cancel")).into_any(), element!(Text(content: "Start")).into_any()]) {
+                Text(content: "A substantially wider body line than header and actions")
+            }
+        }
+    }.to_string();
+    let top = frame.lines().position(|line| line.contains('╭')).unwrap();
+    let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+    assert!(
+        bottom - top < 10,
+        "content fit must not fill maximum: {frame}"
+    );
+    assert!(
+        frame.contains("A substantially wider body line than header and actions"),
+        "{frame}"
+    );
+}
+
+#[test]
+fn selectable_row_reserves_two_cells_for_every_content_line() {
+    for selected in [false, true] {
+        let frame = element! {
+            View(width: 40, height: 3) {
+                SelectableRow(selected) { Text(content: "東京 title") Text(content: "Provider") Text(content: "Metadata") }
+            }
+        }.to_string();
+        for (row, label) in [(0, "東京"), (1, "Provider"), (2, "Metadata")] {
+            let line = frame.lines().nth(row).unwrap();
+            let prefix = line
+                .get(..line.find(label).unwrap())
+                .expect("matched label starts at UTF-8 boundary");
+            assert_eq!(prefix.chars().count(), 2, "{frame}");
+        }
+    }
+}
+
+#[test]
+fn default_frames_keep_header_and_actions_usable_at_supported_and_constrained_sizes() {
+    for (width, height, expected_width, expected_height) in [
+        (120u16, 36u16, 88u16, 20u16),
+        (76, 30, 57, 16),
+        (48, 24, 42, 13),
+        (48, 12, 42, 8),
+    ] {
+        let frame=element! {
+            View(width:u32::from(width),height:u32::from(height)) {
+                DialogFrame(width,height,title:"Filters".to_owned(),margins:DialogMargins {top:1,right:2,bottom:1,left:2},
+                    actions:vec![element!(Text(content:"Cancel")).into_any(),element!(Text(content:"Apply")).into_any()]) {
+                    #((1..=40).map(|row|element!(Text(content:format!("Body {row}")))))
+                }
+            }
+        }.to_string();
+        assert!(
+            frame.contains("Filters") && frame.contains("Cancel") && frame.contains("Apply"),
+            "{width}x{height}: {frame}"
+        );
+        assert!(frame.lines().count() <= usize::from(height), "{frame}");
+        let top = frame.lines().position(|line| line.contains('╭')).unwrap();
+        let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+        assert_eq!(bottom - top + 1, usize::from(expected_height), "{frame}");
+        let border = frame.lines().nth(top).unwrap().trim();
+        assert_eq!(
+            border.chars().count(),
+            usize::from(expected_width),
+            "{frame}"
+        );
+    }
+}
+
+#[test]
+fn form_field_columns_use_terminal_layout_for_wide_labels() {
+    let frame = element! {
+        View(width:40,flex_direction:FlexDirection::Column) {
+          FormFields {
+            FormField(label:"機械".to_owned()) {Text(content:"Sunbook")}
+            FormField(label:"Folder".to_owned()) {Text(content:"/repo")}
+          }
+        }
+    }
+    .to_string();
+    for label in ["Sunbook", "/repo"] {
+        let line = frame.lines().find(|line| line.contains(label)).unwrap();
+        let prefix = line
+            .get(..line.find(label).unwrap())
+            .expect("matched label starts at UTF-8 boundary");
+        // Folder is the widest label (six cells), followed by the gap and value gutter.
+        let cells = prefix
+            .chars()
+            .map(|character| if "機械".contains(character) { 2 } else { 1 })
+            .sum::<usize>();
+        assert_eq!(cells, 10, "{frame}");
+    }
+}
+
+#[test]
+fn percentage_dialog_footer_is_pinned_below_flexible_empty_space() {
+    for (width, height) in [
+        (120u16, 36u16),
+        (76, 30),
+        (48, 24),
+        (48, 12),
+        (40, 24),
+        (32, 20),
+    ] {
+        let frame = element! {View(width:u32::from(width),height:u32::from(height)) {
+            DialogFrame(width,height,title:"Credit usage".to_owned(),
+                actions:vec![element!(Text(content:"Cancel")).into_any(),element!(Text(content:"Save")).into_any()]) {
+                Text(content:"Use credits: Allow")
+            }
+        }}.render(None).to_string();
+        let body = frame
+            .lines()
+            .position(|line| line.contains("Use credits: Allow"))
+            .expect("short task body is visible");
+        let action = frame
+            .lines()
+            .position(|line| line.contains("Cancel") && line.contains("Save"))
+            .expect("actions remain visible");
+        let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+        assert!(action > body, "{frame}");
+        assert!(bottom - action <= 2, "C9 footer remains at bottom: {frame}");
+        assert!(frame.lines().count() <= usize::from(height), "{frame}");
+    }
+}

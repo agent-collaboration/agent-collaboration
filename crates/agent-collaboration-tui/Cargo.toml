@@ -1,0 +1,18 @@
+[package]
+name = "agent-collaboration-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+iocraft.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+tokio.workspace = true
+unicode-width-legacy = { package = "unicode-width", version = "=0.1.14" }
