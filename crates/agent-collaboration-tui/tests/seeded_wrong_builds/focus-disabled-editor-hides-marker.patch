@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/text_field.rs b/crates/agent-collaboration-tui/src/controls/text_field.rs
+--- a/crates/agent-collaboration-tui/src/controls/text_field.rs
++++ b/crates/agent-collaboration-tui/src/controls/text_field.rs
+@@ -210,3 +210,3 @@
+     let disabled = !availability.is_available();
+-    let focused = context.is_focused(&props.id);
++    let focused = context.is_focused(&props.id) && !disabled;
+     let value = props.value.read().clone();

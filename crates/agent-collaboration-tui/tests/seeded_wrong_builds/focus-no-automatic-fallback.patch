@@ -1,12 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/focus_model.rs b/crates/agent-collaboration-tui/src/focus_model.rs
 --- a/crates/agent-collaboration-tui/src/focus_model.rs
 +++ b/crates/agent-collaboration-tui/src/focus_model.rs
-@@ -214,7 +214,3 @@ impl FocusModel {
+@@ -271,3 +271,3 @@
              }
--            self.current = self
--                .targets
--                .iter()
--                .find(|target| target.can_focus())
--                .map(|target| target.id.clone());
+-            self.current = self.automatic_fallback();
 +            self.current = self.current.clone();
          }

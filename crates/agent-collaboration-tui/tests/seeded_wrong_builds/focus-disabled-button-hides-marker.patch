@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/button.rs b/crates/agent-collaboration-tui/src/controls/button.rs
+--- a/crates/agent-collaboration-tui/src/controls/button.rs
++++ b/crates/agent-collaboration-tui/src/controls/button.rs
+@@ -69,3 +69,3 @@
+     let available = action.availability.is_available();
+-    let focused = context.is_focused(&props.id);
++    let focused = available && context.is_focused(&props.id);
+     let checked = action.checked == Some(true);

@@ -249,14 +249,13 @@ mod tests {
             Text(content:format!("Credits effects {}",credit_activations.get()))
         }}})
     }
-    fn assert_focus(driver: &EventDriver, fixture: &FocusFixture, name: &str) {
+    fn assert_painted_focus(driver: &EventDriver, fixture: &FocusFixture, name: &str) {
         assert_eq!(
             fixture.stack.snapshot().top().focus.current(),
             Some(&target(name)),
             "current target is eligible without a repairing Tab"
         );
         let snapshot = fixture.stack.snapshot();
-        assert!(snapshot.top().focus.focused().unwrap().can_focus());
         let map = fixture.stack.hit_regions().published().unwrap();
         let region = map
             .targets
@@ -271,66 +270,128 @@ mod tests {
             "eligible focus has a visible shipped underline"
         );
     }
+    fn assert_focus(driver: &EventDriver, fixture: &FocusFixture, name: &str) {
+        assert_painted_focus(driver, fixture, name);
+        assert!(
+            fixture
+                .stack
+                .snapshot()
+                .top()
+                .focus
+                .focused()
+                .unwrap()
+                .can_focus()
+        );
+    }
+    fn assert_disabled_focus(driver: &EventDriver, fixture: &FocusFixture) {
+        assert_painted_focus(driver, fixture, "credits");
+        assert!(
+            !fixture
+                .stack
+                .snapshot()
+                .top()
+                .focus
+                .focused()
+                .unwrap()
+                .is_enabled()
+        );
+        let grid = driver.frames.last().unwrap();
+        assert!(
+            grid.row_text(0).contains("Operation pending"),
+            "disabled focus retains its reason"
+        );
+    }
     #[tokio::test]
     async fn toolbar_resize_repairs_focus_before_tab_and_returns_it_when_the_button_fits_again() {
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
-            let handle = Arc::new(Mutex::new(None));
-            let operation = Arc::new(HeldOperation::new());
-            let (mut driver, config, journal) = EventDriver::new();
-            let mut ui = element!(FocusReturnScene(journal,operation,handle:handle.clone()));
-            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
-            tokio::time::timeout(std::time::Duration::from_secs(5), async {
-                driver.initial(&mut frames).await;
-                let fixture = handle.lock().unwrap().clone().unwrap();
-                assert_focus(&driver, &fixture, "body");
-                driver
-                    .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
-                    .await;
-                assert_focus(&driver, &fixture, "credits");
-                driver
-                    .drive(
-                        &mut frames,
-                        mode,
-                        vec![(TerminalEvent::Resize(32, 24), true)],
-                        true,
-                    )
-                    .await;
-                assert_focus(&driver, &fixture, "body");
-                assert!(
-                    !driver
-                        .frames
-                        .last()
-                        .unwrap()
-                        .row_text(0)
-                        .contains("Credits quota control")
-                );
-                driver
-                    .drive(
-                        &mut frames,
-                        mode,
-                        vec![(TerminalEvent::Resize(120, 30), true)],
-                        true,
-                    )
-                    .await;
-                assert_focus(&driver, &fixture, "credits");
-                driver
+            for movement in [
+                ExplicitFocusMove::None,
+                ExplicitFocusMove::Tab,
+                ExplicitFocusMove::Pointer,
+            ] {
+                let moved = !matches!(movement, ExplicitFocusMove::None);
+                let handle = Arc::new(Mutex::new(None));
+                let operation = Arc::new(HeldOperation::new());
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(FocusReturnScene(journal,operation,handle:handle.clone()));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    driver.initial(&mut frames).await;
+                    let fixture = handle.lock().unwrap().clone().unwrap();
+                    assert_focus(&driver, &fixture, "body");
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
+                        .await;
+                    assert_focus(&driver, &fixture, "credits");
+                    driver
+                        .drive(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::Resize(32, 24), true)],
+                            true,
+                        )
+                        .await;
+                    assert_focus(&driver, &fixture, "body");
+                    assert!(
+                        !driver
+                            .frames
+                            .last()
+                            .unwrap()
+                            .row_text(0)
+                            .contains("Credits quota control")
+                    );
+                    if moved {
+                        let event = if matches!(movement, ExplicitFocusMove::Pointer) {
+                            let map = fixture.stack.hit_regions().published().unwrap();
+                            let region = map
+                                .targets
+                                .iter()
+                                .find(|region| {
+                                    region.surface == SurfaceId::Screen
+                                        && region.target == target("body")
+                                })
+                                .unwrap();
+                            let (column, row) = region.cells[0];
+                            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                                MouseEventKind::Down(MouseButton::Left),
+                                column,
+                                row,
+                            ))
+                        } else {
+                            key(KeyCode::Tab)
+                        };
+                        driver
+                            .drive(&mut frames, mode, vec![(event, false)], false)
+                            .await;
+                    }
+                    driver
+                        .drive(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::Resize(120, 30), true)],
+                            true,
+                        )
+                        .await;
+                    assert_focus(&driver, &fixture, if moved { "body" } else { "credits" });
+                    driver
                     .drive_checked(
                         &mut frames,
                         mode,
-                        vec![(key(KeyCode::Enter), true)],
-                        true,
+                        vec![(key(KeyCode::Enter), !moved)],
+                        !moved,
                         |_| {
                             assert_eq!(
                                 fixture.credit_activations.get(),
-                                1,
-                                "Enter reaches the restored Credits action"
+                                usize::from(!moved),
+                                "Enter respects explicit movement or the restored Credits action"
                             )
                         },
                     )
                     .await;
-            })
-            .await
-            .unwrap();
+                })
+                .await
+                .unwrap();
+            }
         }
     }
     #[tokio::test]
@@ -358,7 +419,30 @@ mod tests {
                         .drive(&mut frames, mode, vec![(key(KeyCode::F(9)), true)], true)
                         .await;
                     operation.wait_started().await;
-                    assert_focus(&driver, &fixture, "body");
+                    assert_disabled_focus(&driver, &fixture);
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::Enter), false)],
+                            false,
+                            |_| {
+                                assert_eq!(
+                                    fixture.credit_activations.get(),
+                                    0,
+                                    "Enter is inert while the operation remains held"
+                                );
+                                assert!(
+                                    operation.release.lock().unwrap().is_some(),
+                                    "the read is still held"
+                                );
+                                assert_eq!(
+                                    fixture.stack.snapshot().top().focus.current(),
+                                    Some(&target("credits"))
+                                );
+                            },
+                        )
+                        .await;
                     assert!(
                         driver
                             .frames
@@ -447,7 +531,30 @@ mod tests {
                         .drive(&mut frames, mode, vec![(key(KeyCode::F(9)), true)], true)
                         .await;
                     operation.wait_started().await;
-                    assert_focus(&driver, &fixture, "body");
+                    assert_disabled_focus(&driver, &fixture);
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::Enter), false)],
+                            false,
+                            |_| {
+                                assert_eq!(
+                                    fixture.credit_activations.get(),
+                                    0,
+                                    "Enter is inert while the operation remains held"
+                                );
+                                assert!(
+                                    operation.release.lock().unwrap().is_some(),
+                                    "the read is still held"
+                                );
+                                assert_eq!(
+                                    fixture.stack.snapshot().top().focus.current(),
+                                    Some(&target("credits"))
+                                );
+                            },
+                        )
+                        .await;
                     driver
                         .drive(
                             &mut frames,
@@ -474,8 +581,8 @@ mod tests {
                             .unwrap()
                             .focus
                             .current(),
-                        Some(&target("body")),
-                        "covered focus intent is suspended"
+                        Some(&target("credits")),
+                        "covered disabled focus stays with its painted target"
                     );
                     driver
                         .drive(&mut frames, mode, vec![(key(KeyCode::Esc), true)], true)

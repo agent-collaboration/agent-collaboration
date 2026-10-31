@@ -1,0 +1,17 @@
+diff --git a/crates/agent-collaboration-tui/src/focus_model.rs b/crates/agent-collaboration-tui/src/focus_model.rs
+--- a/crates/agent-collaboration-tui/src/focus_model.rs
++++ b/crates/agent-collaboration-tui/src/focus_model.rs
+@@ -238,12 +238,3 @@
+     fn automatic_fallback(&self) -> Option<TargetId> {
+-        self.initial
+-            .as_ref()
+-            .filter(|id| self.is_painted_focus(id))
+-            .cloned()
+-            .or_else(|| {
+-                self.targets
+-                    .iter()
+-                    .find(|target| target.can_focus() && target.activation.is_none())
+-                    .map(|target| target.id.clone())
+-            })
++        self.targets.iter().find(|target|target.can_focus()).map(|target|target.id.clone())
+     }

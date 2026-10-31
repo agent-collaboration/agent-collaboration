@@ -2,8 +2,8 @@
 use super::button::action_button_width;
 use super::{Button, button_target};
 use crate::{
-    actions::{ActionDef, ActionId, ActionPresentation, Availability, AvailabilityFn},
-    focus_model::{GroupId, TargetId, TargetSpec},
+    actions::{ActionDef, ActionId, ActionPresentation},
+    focus_model::{GroupId, TargetId, TargetSpec, TargetVisibility},
     surface_handle::SurfaceContext,
     theme::TextRole,
 };
@@ -47,25 +47,17 @@ pub fn segmented_targets(
     actions
         .iter()
         .map(|action| {
-            let availability = action.availability.clone();
             let definitions = definitions.clone();
             let available_width = available_width.clone();
             button_target(TargetId::for_action(&action.id), action)
                 .in_group(group.clone())
-                .with_availability(AvailabilityFn::new(move || {
+                .with_visibility(TargetVisibility::new(move || {
                     let actions = definitions
                         .iter()
                         .map(ActionDef::presentation)
                         .collect::<Vec<_>>();
-                    if segmented_presentation(&actions, available_width())
-                        == SegmentedPresentation::Hidden
-                    {
-                        Availability::Unavailable {
-                            reason: "Available in Menu".to_owned(),
-                        }
-                    } else {
-                        availability.get()
-                    }
+                    segmented_presentation(&actions, available_width())
+                        != SegmentedPresentation::Hidden
                 }))
         })
         .collect()

@@ -131,3 +131,7 @@ mod focus_return;
 #[cfg(test)]
 #[path = "suites/focus_replacement.rs"]
 mod focus_replacement;
+
+#[cfg(test)]
+#[path = "suites/disabled_control_focus.rs"]
+mod disabled_control_focus;

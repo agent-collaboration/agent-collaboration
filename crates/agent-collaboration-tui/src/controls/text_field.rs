@@ -173,7 +173,7 @@ pub(crate) fn EditorLine(
     element!(View(width:100pct,min_width:0,height:1,flex_grow:1.0_f32,flex_shrink:1.0_f32,overflow:Overflow::Hidden) {
         View(position:Position::Relative,left:-i32::try_from(offset).unwrap_or(i32::MAX),flex_shrink:0.0_f32) {
             Text(content:before,color:theme.foreground(role),wrap:TextWrap::NoWrap)
-            Text(content:cursor,color:theme.foreground(if props.focused {TextRole::Focused}else{role}),decoration:if props.focused {TextDecoration::Underline}else{TextDecoration::None},wrap:TextWrap::NoWrap)
+            Text(content:cursor,color:theme.foreground(if props.focused&&!props.disabled {TextRole::Focused}else{role}),decoration:if props.focused {TextDecoration::Underline}else{TextDecoration::None},wrap:TextWrap::NoWrap)
             Text(content:after,color:theme.foreground(role),wrap:TextWrap::NoWrap)
             #((props.value.text.is_empty()&&!props.focused).then(||element!(Text(content:props.placeholder.clone(),color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap))))
         }
@@ -208,7 +208,7 @@ pub fn TextField(props: &TextFieldProps, mut hooks: Hooks) -> impl Into<AnyEleme
             reason: "Unavailable".into(),
         });
     let disabled = !availability.is_available();
-    let focused = context.is_focused(&props.id) && !disabled;
+    let focused = context.is_focused(&props.id);
     let value = props.value.read().clone();
     element!(View(width:100pct,min_height:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
         EditorLine(value,focused,disabled,placeholder:props.placeholder.clone())
