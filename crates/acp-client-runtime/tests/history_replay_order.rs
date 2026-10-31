@@ -239,7 +239,6 @@ async fn history_replay_reset_precedes_session_load() {
         .settings_catalog("fixture-session")
         .await
         .expect("loaded session catalog");
-    let last_catalog = client.last_settings_catalog().await.expect("last catalog");
     client.shutdown().await;
 
     assert!(result.is_ok(), "load result: {result:?}");
@@ -248,7 +247,6 @@ async fn history_replay_reset_precedes_session_load() {
         catalog.effective_settings().model.as_deref(),
         Some("model-a")
     );
-    assert_eq!(last_catalog, catalog);
     let published = events.lock().expect("events");
     assert!(published.iter().any(|event| matches!(event,
         SessionEvent::SettingsChanged { settings }

@@ -127,7 +127,7 @@ pub(super) async fn handle_app_server_thread_request(
     events: Arc<dyn SessionEventHub>,
     endpoint: SessionEndpointRef,
     actor: Identity,
-    catalog: &[ProviderModelEntry],
+    _catalog: &[ProviderModelEntry],
 ) -> Result<Value, ThreadMethodError> {
     match method {
         "thread/start" => {
@@ -153,8 +153,14 @@ pub(super) async fn handle_app_server_thread_request(
             if !metadata.is_dir() {
                 return Err(ThreadMethodError::InvalidParams);
             }
-            let model_override =
-                provider_model_override(params.get("model").and_then(Value::as_str), catalog)?;
+            let model_override = match params.get("model") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(value)) if value == "provider-default" => None,
+                Some(Value::String(value)) if !value.is_empty() && !value.contains('\0') => {
+                    Some(value.clone())
+                }
+                Some(_) => return Err(ThreadMethodError::InvalidParams),
+            };
             let session = commands
                 .create(CreateSessionCommand {
                     endpoint: endpoint.clone(),
@@ -166,7 +172,7 @@ pub(super) async fn handle_app_server_thread_request(
                     actor,
                 })
                 .await
-                .map_err(|_| ThreadMethodError::Unavailable)?;
+                .map_err(command_error)?;
             let summary = events
                 .sessions(endpoint)
                 .await
@@ -524,6 +530,20 @@ pub(super) async fn handle_app_server_turn_request(
 fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethodError {
     use collaboration_contracts::CommandFailure;
     match error {
+        CommandFailure::InvalidCreateSetting { target, detail } => {
+            ThreadMethodError::InvalidCreateSetting { target, detail }
+        }
+        CommandFailure::CreatedWithoutSettings {
+            target,
+            applied,
+            failed,
+            not_applied,
+        } => ThreadMethodError::CreatedWithoutSettings {
+            target,
+            applied,
+            failed,
+            not_applied,
+        },
         CommandFailure::InvalidSelection => ThreadMethodError::InvalidSelection,
         CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => {
             ThreadMethodError::Unsupported
@@ -533,9 +553,11 @@ fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethod
         CommandFailure::InvalidSetting { .. } | CommandFailure::UnsupportedContent(_) => {
             ThreadMethodError::InvalidParams
         }
-        CommandFailure::SettingsUnresolved
-        | CommandFailure::UnauthorizedActor
-        | CommandFailure::ProviderFailure => ThreadMethodError::Unavailable,
+        CommandFailure::SettingsContextChanged => ThreadMethodError::SettingsContextChanged,
+        CommandFailure::SettingsUnresolved => ThreadMethodError::SettingsUnresolved,
+        CommandFailure::UnauthorizedActor | CommandFailure::ProviderFailure => {
+            ThreadMethodError::Unavailable
+        }
     }
 }
 
@@ -545,6 +567,15 @@ use input::parse_turn_input;
 
 #[path = "native_provider_settings.rs"]
 mod settings;
-use settings::{
-    NativeSettingsSource, apply_native_settings, parse_native_settings, provider_model_override,
-};
+use settings::{NativeSettingsSource, apply_native_settings, parse_native_settings};
+
+pub(super) async fn apply_resumed_native_settings(
+    params: &Value,
+    catalog: &[ProviderModelEntry],
+    commands: &dyn SessionCommandPort,
+    target: &message_board::SessionRef,
+    actor: &Identity,
+) -> Result<(), ThreadMethodError> {
+    let settings = parse_native_settings(params, catalog, NativeSettingsSource::Resume)?;
+    apply_native_settings(settings, commands, target, actor).await
+}

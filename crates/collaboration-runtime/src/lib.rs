@@ -68,7 +68,8 @@ pub mod schedule_preparation_evidence_sink;
 mod scheduled_run_evidence_sink;
 mod scheduled_run_router;
 pub use app_server_model_catalog::{
-    InvalidProviderModelEntry, ProviderModelEntry, render_model_list,
+    InvalidProviderModelEntry, ProviderModelEntry, ProviderModelReasoning, ProviderReasoningChoice,
+    SessionModelCatalog, SessionModelCatalogError, render_model_list,
 };
 pub use router_session_app_server::{
     AppServerConnectionError, RouterSessionAppServerContext, RouterSessionAppServerListener,

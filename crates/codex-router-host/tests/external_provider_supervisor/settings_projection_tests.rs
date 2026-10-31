@@ -23,18 +23,6 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
             vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],
         )
         .await?;
-        let mut models = backend
-            .provider_model_catalog(&provider_endpoint)
-            .ok_or("provider model watch missing")?;
-        let default_models = models.borrow().clone();
-        ensure_eq!(
-            default_models.as_slice(),
-            &[collaboration_runtime::ProviderModelEntry::try_new(
-                "provider-default".into(),
-                "provider default".into(),
-                "The provider selects its default model".into(),
-            )?]
-        );
         let operation_id = OperationId::generate();
         operation(
             backend
@@ -77,9 +65,8 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
                 };
                 ensure_eq!(effective_settings.mode.as_deref(), Some("ask"));
                 ensure_eq!(effective_settings.model.as_deref(), Some("b"));
-                tokio::time::timeout(std::time::Duration::from_secs(2), models.changed()).await??;
-                ensure_eq!(models.borrow().len(), 2);
-                let advertised_models = models.borrow().clone();
+                let advertised_models = backend.session_model_catalog(&target).await?;
+                ensure_eq!(advertised_models.len(), 2);
                 ensure_eq!(
                     advertised_models.as_slice(),
                     &[

@@ -323,12 +323,9 @@ impl ExternalProviderRuntime {
     pub async fn set_setting(
         &self,
         provider_session_id: String,
-        kind: acp_client_runtime::ProviderSettingKind,
-        value: String,
+        request: acp_client_runtime::ProviderSettingRequest,
     ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        self.client
-            .set_setting(provider_session_id, kind, value)
-            .await
+        self.client.set_setting(provider_session_id, request).await
     }
 
     pub async fn accept_session_settings(

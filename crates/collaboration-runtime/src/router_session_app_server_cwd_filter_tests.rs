@@ -56,7 +56,7 @@ async fn connect_native(
         ScriptedSessionBackend::actor()?,
         Arc::clone(backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let (client, server) = UnixStream::pair()?;
     let task = tokio::spawn(serve_router_session_app_server_connection(server, context));

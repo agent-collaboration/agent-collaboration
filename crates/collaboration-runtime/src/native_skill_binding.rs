@@ -37,14 +37,29 @@ struct CompletedBinding {
 }
 
 #[derive(Default)]
+enum ModelBinding {
+    #[default]
+    Unbound,
+    Bound(SessionRef),
+    Ambiguous,
+}
+
+#[derive(Default)]
 pub(super) struct NativeSkillBindings {
     next_event: u64,
     pending: HashMap<u64, u64>,
     completed: Vec<CompletedBinding>,
     bindings: BTreeMap<PathBuf, CwdBinding>,
+    model_binding: ModelBinding,
 }
 
 impl NativeSkillBindings {
+    pub(super) fn model_session(&self) -> Option<&SessionRef> {
+        match &self.model_binding {
+            ModelBinding::Bound(session) => Some(session),
+            ModelBinding::Unbound | ModelBinding::Ambiguous => None,
+        }
+    }
     pub(super) fn begin(&mut self) -> u64 {
         self.next_event += 1;
         let token = self.next_event;
@@ -63,6 +78,15 @@ impl NativeSkillBindings {
         let end = self.next_event;
         let changed = bound.and_then(|bound| {
             let cwd = bound.cwd;
+            self.model_binding = if self
+                .completed
+                .iter()
+                .any(|completed| completed.end > start && completed.start < end)
+            {
+                ModelBinding::Ambiguous
+            } else {
+                ModelBinding::Bound(bound.session.clone())
+            };
             let overlapping = self.completed.iter().any(|completed| {
                 completed.cwd == cwd && completed.end > start && completed.start < end
             });

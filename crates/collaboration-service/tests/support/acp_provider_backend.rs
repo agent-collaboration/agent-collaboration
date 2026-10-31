@@ -25,6 +25,25 @@ use session_event_model::{
 use std::sync::Mutex;
 use tokio::sync::broadcast;
 
+impl collaboration_runtime::SessionModelCatalog for ScriptedProviderBackend {
+    fn read_models(
+        &self,
+        _: SessionRef,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<collaboration_runtime::ProviderModelEntry>,
+                        collaboration_runtime::SessionModelCatalogError,
+                    >,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
 pub(crate) struct ScriptedProviderBackend {
     pub(crate) endpoint: SessionEndpointRef,
     pub(crate) session: SessionRef,

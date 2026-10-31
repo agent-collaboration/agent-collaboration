@@ -143,14 +143,16 @@ pub(super) async fn create_provider_target(
     actor: SessionRef,
     working_directory: &Path,
 ) -> SessionRef {
-    let generation = client
+    let description = client
         .list_endpoints()
         .await
         .expect("catalog")
         .endpoints
         .into_iter()
         .find(|entry| entry.endpoint == endpoint)
-        .expect("provider endpoint")
+        .expect("provider endpoint");
+    let availability = description.availability;
+    let generation = description
         .channels
         .into_iter()
         .find_map(|channel| match channel {
@@ -160,7 +162,9 @@ pub(super) async fn create_provider_target(
             } => Some(binding_generation),
             _ => None,
         })
-        .expect("binding generation");
+        .unwrap_or_else(|| {
+            panic!("binding generation for {endpoint:?}; availability: {availability:?}")
+        });
     let operation_id = OperationId::generate();
     submit_provider_create(
         client,

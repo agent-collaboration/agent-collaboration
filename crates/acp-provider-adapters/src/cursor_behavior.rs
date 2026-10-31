@@ -14,6 +14,24 @@ use std::collections::{HashMap, HashSet};
 pub struct CursorAcpBehavior;
 
 impl ProviderBehavior for CursorAcpBehavior {
+    fn can_reuse_setting_confirmation(
+        &self,
+        kind: acp_client_runtime::ProviderSettingKind,
+    ) -> bool {
+        // Cursor's shared model manager lets another Session change model/effort.
+        kind == acp_client_runtime::ProviderSettingKind::Mode
+    }
+    fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
+        acp_client_runtime::ModelMetadataSource::ConnectionRequest {
+            method: "cursor/list_available_models",
+        }
+    }
+    fn decode_model_metadata(
+        &self,
+        value: &serde_json::Value,
+    ) -> acp_client_runtime::ModelReasoningMetadata {
+        crate::model_reasoning_metadata::decode_cursor_models(value)
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         Ok(ProviderFacts {
             skill_view: match update {

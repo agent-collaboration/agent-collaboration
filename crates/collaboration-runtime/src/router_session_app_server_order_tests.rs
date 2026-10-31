@@ -43,7 +43,7 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -178,17 +178,18 @@ async fn settings_update_settles_before_dependent_turn_on_the_same_socket()
     let socket_path = directory.path().join("settings.sock");
     let listener = UnixListener::bind(&socket_path)?;
     let backend = ScriptedSessionBackend::new()?;
-    let catalog = vec![ProviderModelEntry::try_new(
-        "new".into(),
-        "New".into(),
-        String::new(),
+    let catalog = vec![super::test_support::qualified_model(
+        "new",
+        "New",
+        &["low", "high"],
+        "low",
     )?];
     let context = Arc::new(RouterSessionAppServerContext::new(
         backend.endpoint.clone(),
         ScriptedSessionBackend::actor()?,
         backend.clone(),
         backend.clone(),
-        tokio::sync::watch::channel(catalog).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(catalog).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");

@@ -1,4 +1,5 @@
 //! Typed provider Session settings at the ACP client boundary.
+use crate::provider_setting_choice::ProviderSettingChoice;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RequestedProviderSettings {
@@ -52,6 +53,14 @@ pub struct AppliedProviderSetting {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderSettingRequest {
+    pub kind: ProviderSettingKind,
+    pub value: String,
+    pub intent: session_event_model::SettingApplicationIntent,
+    pub expected_model: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FailedProviderSetting {
     pub kind: ProviderSettingKind,
     pub value: String,
@@ -68,12 +77,6 @@ pub struct NotAppliedProviderSetting {
 pub enum InvalidSettingSessionDisposition {
     Closed,
     RemainsCreated,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderSettingChoice {
-    pub value: String,
-    pub label: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -98,6 +101,7 @@ pub struct ProviderSettingsCatalog {
     pub current_mode: Option<String>,
     pub modes: Vec<ProviderSettingChoice>,
     pub config_options: Vec<ProviderConfigOption>,
+    pub model_reasoning: crate::ModelReasoningMetadata,
 }
 
 impl ProviderSettingsCatalog {

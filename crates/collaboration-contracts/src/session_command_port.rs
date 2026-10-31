@@ -81,11 +81,25 @@ pub struct SetSessionSettingCommand {
     pub target: SessionRef,
     pub setting_id: String,
     pub value: String,
+    pub intent: session_event_model::SettingApplicationIntent,
+    pub expected_model: Option<String>,
     pub actor: Identity,
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum CommandFailure {
+    #[error("new session settings are invalid")]
+    InvalidCreateSetting {
+        target: Option<collaboration_protocol::SessionRef>,
+        detail: Box<collaboration_protocol::InvalidProviderSetting>,
+    },
+    #[error("session was created without all requested settings")]
+    CreatedWithoutSettings {
+        target: Box<collaboration_protocol::SessionRef>,
+        applied: Vec<collaboration_protocol::AppliedProviderSetting>,
+        failed: Vec<collaboration_protocol::FailedProviderSetting>,
+        not_applied: Vec<collaboration_protocol::NotAppliedProviderSetting>,
+    },
     #[error("skill selection is invalid or stale")]
     InvalidSelection,
     #[error("session not found")]
@@ -100,6 +114,8 @@ pub enum CommandFailure {
     NoActiveTurn,
     #[error("session settings are unresolved")]
     SettingsUnresolved,
+    #[error("setting context changed")]
+    SettingsContextChanged,
     #[error("content type is unsupported: {0}")]
     UnsupportedContent(&'static str),
     #[error("setting value is invalid")]
@@ -317,6 +333,8 @@ mod tests {
             target: session,
             setting_id: "model".into(),
             value: "default".into(),
+            intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+            expected_model: None,
             actor: actor.clone(),
         })
         .await

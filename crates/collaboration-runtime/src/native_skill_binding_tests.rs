@@ -79,12 +79,17 @@ async fn held_first_start_cannot_overwrite_overlapping_same_cwd_and_read_does_no
         (first.clone(), first_view.clone()),
         (second.clone(), second_view),
     ]);
+    let models = vec![ProviderModelEntry::try_new(
+        "owned".into(),
+        "Owned".into(),
+        String::new(),
+    )?];
     let context = Arc::new(RouterSessionAppServerContext::new(
         backend.endpoint.clone(),
         ScriptedSessionBackend::actor()?,
         backend.clone(),
         backend.clone(),
-        tokio::sync::watch::channel(vec![]).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(models).1),
     ));
     let path = root.path().join("native.sock");
     let listener = RouterSessionAppServerListener::bind(&path, context)?;
@@ -114,6 +119,11 @@ async fn held_first_start_cannot_overwrite_overlapping_same_cwd_and_read_does_no
             .len(),
         1
     );
+    request(&mut client, 40, "model/list", json!({})).await?;
+    assert_eq!(
+        response(&mut client, 40).await?["result"]["data"][0]["id"],
+        "provider-default"
+    );
     request(
         &mut client,
         5,
@@ -130,6 +140,11 @@ async fn held_first_start_cannot_overwrite_overlapping_same_cwd_and_read_does_no
     )
     .await?;
     response(&mut client, 6).await?;
+    request(&mut client, 41, "model/list", json!({})).await?;
+    assert_eq!(
+        response(&mut client, 41).await?["result"]["data"][0]["id"],
+        "owned"
+    );
     request(&mut client, 7, "skills/list", json!({"cwds":[root.path()]})).await?;
     assert_eq!(
         response(&mut client, 7).await?["result"]["data"][0]["skills"][0]["name"],

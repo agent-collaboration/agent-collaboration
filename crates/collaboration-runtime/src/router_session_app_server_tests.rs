@@ -52,7 +52,7 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         for _ in 0..9 {
@@ -115,10 +115,10 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
         json!({"data":[{
         "id":"provider-default","model":"provider-default",
         "upgrade":null,"upgradeInfo":null,"availabilityNux":null,
-        "displayName":"provider default",
-        "description":"The provider selects its default model",
-        "hidden":false,"supportedReasoningEfforts":[],
-        "defaultReasoningEffort":"medium","multiAgentVersion":null,
+        "displayName":"Use provider settings",
+        "description":"Use provider settings",
+        "hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"provider","description":"Use provider settings"}],
+        "defaultReasoningEffort":"provider","multiAgentVersion":null,
         "isDefault":true
     }],"nextCursor":null})
     );
@@ -503,7 +503,7 @@ async fn listener_serves_a_private_provider_socket() -> Result<(), Box<dyn std::
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let listener = RouterSessionAppServerListener::bind(&socket_path, context)?;
     let shutdown = CancellationToken::new();
@@ -535,7 +535,7 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let listener = RouterSessionAppServerListener::bind(&socket_path, context)?;
     let shutdown = CancellationToken::new();
@@ -691,8 +691,8 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn model_list_reads_the_current_supervisor_catalog() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn unbound_model_list_ignores_changes_to_another_catalog()
+-> Result<(), Box<dyn std::error::Error>> {
     use tokio::sync::watch;
 
     let directory = tempfile::tempdir()?;
@@ -705,7 +705,7 @@ async fn model_list_reads_the_current_supervisor_catalog() -> Result<(), Box<dyn
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        catalog_reader,
+        super::test_support::model_catalog(catalog_reader),
     ));
     let listener = RouterSessionAppServerListener::bind(&socket_path, context)?;
     let shutdown = CancellationToken::new();
@@ -719,10 +719,10 @@ async fn model_list_reads_the_current_supervisor_catalog() -> Result<(), Box<dyn
         "Model advertised by provider".into(),
     )?])?;
     let refreshed = request_model_list(&socket_path).await?;
-    assert_eq!(refreshed["result"]["data"][0]["id"], "claude-sonnet");
+    assert_eq!(refreshed["result"]["data"][0]["id"], "provider-default");
     assert_eq!(
         refreshed["result"]["data"][0]["displayName"],
-        "Claude Sonnet"
+        "Use provider settings"
     );
     shutdown.cancel();
     running.await??;

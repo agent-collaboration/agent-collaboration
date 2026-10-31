@@ -12,6 +12,196 @@ use acp_client_runtime::{
 use acp_wire_fixture::AcpWireFixture;
 use session_event_model::ConfigValueState;
 
+#[tokio::test]
+async fn repeated_turn_context_preserves_confirmed_effort_without_setting_wire() {
+    let fixture = AcpWireFixture::start("thinking-first", false).await;
+    let session = fixture
+        .client
+        .create_session(fixture.root.path().into())
+        .await
+        .expect("session");
+    let initial_events = fixture.sink.settings.lock().expect("settings").len();
+    let result = fixture
+        .client
+        .set_setting(
+            session.clone(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "medium".into(),
+                intent: session_event_model::SettingApplicationIntent::TurnContext,
+                expected_model: None,
+            },
+        )
+        .await;
+    let second = fixture
+        .client
+        .set_setting(
+            session.clone(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "medium".into(),
+                intent: session_event_model::SettingApplicationIntent::TurnContext,
+                expected_model: None,
+            },
+        )
+        .await;
+    fixture.client.shutdown().await;
+    let settings = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request["method"] == "session/set_config_option")
+        .collect::<Vec<_>>();
+    assert!(
+        settings.is_empty(),
+        "unchanged context must not re-pin settings: {settings:?}"
+    );
+    assert_eq!(
+        result.expect("confirmed context").effort.as_deref(),
+        Some("medium")
+    );
+    assert_eq!(
+        second.expect("second context").effort.as_deref(),
+        Some("medium")
+    );
+    assert_eq!(
+        fixture.sink.settings.lock().expect("settings").len(),
+        initial_events,
+        "no-op must publish no new SettingsChanged event"
+    );
+}
+
+#[tokio::test]
+async fn effort_context_guard_rejects_a_different_confirmed_model_before_any_write() {
+    let fixture = AcpWireFixture::start("thinking-first", false).await;
+    let session = fixture
+        .client
+        .create_session(fixture.root.path().into())
+        .await
+        .expect("session");
+    for intent in [
+        session_event_model::SettingApplicationIntent::TurnContext,
+        session_event_model::SettingApplicationIntent::ExplicitChange,
+    ] {
+        let result = fixture
+            .client
+            .set_setting(
+                session.clone(),
+                acp_client_runtime::ProviderSettingRequest {
+                    kind: ProviderSettingKind::Effort,
+                    value: "high".into(),
+                    intent,
+                    expected_model: Some("fixture-b".into()),
+                },
+            )
+            .await;
+        assert!(matches!(
+            result,
+            Err(ExternalProviderRuntimeError::SettingsContextChanged)
+        ));
+    }
+    fixture.client.shutdown().await;
+    assert!(
+        fixture
+            .requests()
+            .iter()
+            .all(|request| request["method"] != "session/set_config_option")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn overlapping_model_change_is_confirmed_before_dependent_effort_checks_expected_model() {
+    use acp_client_runtime::ProviderSettingRequest;
+    use session_event_model::SettingApplicationIntent;
+    let fixture = AcpWireFixture::start("dynamic", false).await;
+    let session = fixture
+        .client
+        .create_session(fixture.root.path().into())
+        .await
+        .expect("session");
+    fixture
+        .client
+        .set_setting(
+            session.clone(),
+            ProviderSettingRequest {
+                kind: ProviderSettingKind::Mode,
+                value: "ask".into(),
+                intent: SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
+        .await
+        .expect("fresh catalogue offers both models");
+    let change = fixture.client.set_setting(
+        session.clone(),
+        ProviderSettingRequest {
+            kind: ProviderSettingKind::Model,
+            value: "fixture-b".into(),
+            intent: SettingApplicationIntent::ExplicitChange,
+            expected_model: None,
+        },
+    );
+    let effort = fixture.client.set_setting(
+        session.clone(),
+        ProviderSettingRequest {
+            kind: ProviderSettingKind::Effort,
+            value: "high".into(),
+            intent: SettingApplicationIntent::TurnContext,
+            expected_model: Some("fixture-a".into()),
+        },
+    );
+    tokio::pin!(change, effort);
+    // On this single-thread executor both callers enter before the connection
+    // task can settle either. The actor must check after the queued model effect.
+    assert!(futures_util::poll!(change.as_mut()).is_pending());
+    assert!(futures_util::poll!(effort.as_mut()).is_pending());
+    let (changed, refused) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        tokio::join!(change, effort)
+    })
+    .await
+    .expect("actor settles both queued commands");
+    assert_eq!(
+        changed.expect("model confirmed").model.as_deref(),
+        Some("fixture-b")
+    );
+    assert!(matches!(
+        refused,
+        Err(ExternalProviderRuntimeError::SettingsContextChanged)
+    ));
+    assert_eq!(
+        fixture
+            .requests()
+            .iter()
+            .filter(|request| request["method"] == "session/set_config_option")
+            .count(),
+        2,
+        "guarded effort must have no wire request"
+    );
+    let current = fixture
+        .client
+        .set_setting(
+            session,
+            ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "high".into(),
+                intent: SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
+        .await
+        .expect("an intentional current-model setting remains supported");
+    assert_eq!(current.effort.as_deref(), Some("high"));
+    fixture.client.shutdown().await;
+    assert_eq!(
+        fixture
+            .requests()
+            .iter()
+            .filter(|request| request["method"] == "session/set_config_option")
+            .count(),
+        3,
+        "positive control reaches the same peer's effort setter"
+    );
+}
+
 #[cfg(feature = "test-observation")]
 #[tokio::test]
 async fn native_observation_entrypoint_uses_picker_wire_without_mcp_injection() {
@@ -64,7 +254,15 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
             .expect("session");
         let observed = fixture
             .client
-            .set_setting(session.clone(), ProviderSettingKind::Effort, "high".into())
+            .set_setting(
+                session.clone(),
+                acp_client_runtime::ProviderSettingRequest {
+                    kind: ProviderSettingKind::Effort,
+                    value: "high".into(),
+                    intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                    expected_model: None,
+                },
+            )
             .await;
         fixture.client.shutdown().await;
         let observed = observed.expect("independent advertised effort must apply");
@@ -131,7 +329,15 @@ async fn ambiguous_or_thinking_only_effort_rejects_before_rpc() {
             .expect("session");
         let result = fixture
             .client
-            .set_setting(session, ProviderSettingKind::Effort, "high".into())
+            .set_setting(
+                session,
+                acp_client_runtime::ProviderSettingRequest {
+                    kind: ProviderSettingKind::Effort,
+                    value: "high".into(),
+                    intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                    expected_model: None,
+                },
+            )
             .await;
         fixture.client.shutdown().await;
         assert!(
@@ -195,7 +401,15 @@ async fn provider_adjusted_companion_values_are_reported_in_full_settings_event(
         .expect("session");
     let result = fixture
         .client
-        .set_setting(session, ProviderSettingKind::Effort, "high".into())
+        .set_setting(
+            session,
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "high".into(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
         .await;
     fixture.client.shutdown().await;
     assert_eq!(
@@ -253,8 +467,12 @@ async fn load_and_live_update_refresh_effort_identity_and_invalid_values_do_not_
         .client
         .set_setting(
             "fixture-session".into(),
-            ProviderSettingKind::Effort,
-            "not-offered".into(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "not-offered".into(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
         )
         .await;
     assert!(matches!(
@@ -265,8 +483,12 @@ async fn load_and_live_update_refresh_effort_identity_and_invalid_values_do_not_
         .client
         .set_setting(
             "fixture-session".into(),
-            ProviderSettingKind::Effort,
-            "high".into(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Effort,
+                value: "high".into(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
         )
         .await;
     fixture.client.shutdown().await;

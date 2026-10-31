@@ -75,6 +75,23 @@ struct ScriptedBehavior {
     preparation: Preparation,
 }
 impl ProviderBehavior for ScriptedBehavior {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _kind: acp_client_runtime::ProviderSettingKind,
+    ) -> bool {
+        false
+    }
+    fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
+        acp_client_runtime::ModelMetadataSource::Unavailable
+    }
+    fn decode_model_metadata(
+        &self,
+        _value: &serde_json::Value,
+    ) -> acp_client_runtime::ModelReasoningMetadata {
+        acp_client_runtime::ModelReasoningMetadata::Unknown(
+            acp_client_runtime::ModelReasoningUnknown::UnsupportedSource,
+        )
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         let mut facts = ProviderFacts::default();
         match update {

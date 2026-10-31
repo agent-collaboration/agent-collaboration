@@ -199,8 +199,12 @@ async fn create_setting_change_and_idle_update_refresh_hub_model() {
     runtime
         .set_setting(
             "fixture-session".into(),
-            ProviderSettingKind::Model,
-            "b".into(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Model,
+                value: "b".into(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
         )
         .await
         .expect("set model");
@@ -221,8 +225,12 @@ async fn create_setting_change_and_idle_update_refresh_hub_model() {
     runtime
         .set_setting(
             "fixture-session".into(),
-            ProviderSettingKind::Mode,
-            "ask".into(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Mode,
+                value: "ask".into(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
         )
         .await
         .expect("set mode");

@@ -27,6 +27,46 @@ use std::{
 };
 use tokio::sync::{Notify, broadcast};
 
+struct WatchedModelCatalog(tokio::sync::watch::Receiver<Vec<ProviderModelEntry>>);
+impl crate::SessionModelCatalog for WatchedModelCatalog {
+    fn read_models(
+        &self,
+        _: SessionRef,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Vec<ProviderModelEntry>, crate::SessionModelCatalogError>,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(self.0.borrow().clone()) })
+    }
+}
+pub(super) fn model_catalog(
+    receiver: tokio::sync::watch::Receiver<Vec<ProviderModelEntry>>,
+) -> Arc<dyn crate::SessionModelCatalog> {
+    Arc::new(WatchedModelCatalog(receiver))
+}
+
+pub(super) fn qualified_model(
+    id: &str,
+    label: &str,
+    values: &[&str],
+    default: &str,
+) -> Result<ProviderModelEntry, crate::InvalidProviderModelEntry> {
+    ProviderModelEntry::try_new(id.into(), label.into(), String::new())?.with_reasoning(
+        values
+            .iter()
+            .map(|value| crate::ProviderReasoningChoice {
+                value: (*value).into(),
+                label: (*value).into(),
+            })
+            .collect(),
+        default.into(),
+    )
+}
+
 pub(super) struct ScriptedSessionBackend {
     pub(super) endpoint: SessionEndpointRef,
     pub(super) session: SessionRef,

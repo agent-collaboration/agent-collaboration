@@ -16,7 +16,28 @@ await agent.initialize("behavior-fixture", {
 let sequence = 0;
 let held: Record<string, unknown> | undefined;
 let currentModel = "old";
-let currentEffort = "low";
+let currentEffort = compactCase === "primary-enter" ? "high" : "low";
+const savedEfforts = new Map([
+  ["old", "high"],
+  ["new", "low"],
+]);
+function restoreSavedModelEffort(modelId: string): void {
+  if (compactCase !== "primary-enter") return;
+  const saved = savedEfforts.get(modelId);
+  if (saved === undefined) throw new Error("saved model effort missing");
+  currentEffort = saved;
+}
+function savePrimaryEnterState(): void {
+  if (compactCase === "primary-enter")
+    writeFileSync(
+      `${receipt}.state.json`,
+      JSON.stringify({
+        model: currentModel,
+        effort: currentEffort,
+        savedEfforts: Object.fromEntries(savedEfforts),
+      }),
+    );
+}
 function settingsOptions(): unknown[] {
   return [
     {
@@ -25,7 +46,9 @@ function settingsOptions(): unknown[] {
       category: "model",
       type: "select",
       currentValue: currentModel,
-      options: ["old", "new"].map((value) => ({ value, name: value })),
+      options: (compactCase === "model-catalog" ? ["old", "new", "rejected"] : ["old", "new"]).map(
+        (value) => ({ value, name: value }),
+      ),
     },
     {
       id: "effort",
@@ -33,7 +56,10 @@ function settingsOptions(): unknown[] {
       category: "thought_level",
       type: "select",
       currentValue: currentEffort,
-      options: (currentModel === "new" ? ["low", "high"] : ["low"]).map((value) => ({
+      options: (compactCase === "primary-enter" || currentModel === "new"
+        ? ["low", "high"]
+        : ["low"]
+      ).map((value) => ({
         value,
         name: value,
       })),
@@ -44,12 +70,74 @@ for (;;) {
   const request = await agent.readRequest();
   if (!request) break;
   const params = request.params;
-  if (request.method === "session/new") {
+  if (request.method === "cursor/list_available_models") {
+    if (compactCase === "settings") {
+      agent.respond(request, {
+        models: ["old", "new"].map((value) => ({
+          value,
+          name: value,
+          configOptions: [
+            {
+              id: "effort",
+              name: "Effort",
+              category: "thought_level",
+              type: "select",
+              currentValue: "low",
+              options: (value === "old" ? ["low"] : ["low", "high"]).map((level) => ({
+                value: level,
+                name: level,
+              })),
+            },
+          ],
+        })),
+      });
+      continue;
+    }
+    if (compactCase === "primary-enter") {
+      agent.respond(request, {
+        models: ["old", "new"].map((value) => ({ value, name: value, configOptions: [] })),
+      });
+      continue;
+    }
+    if (compactCase === "held-model-catalog") {
+      appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+      // Leave only this optional request unanswered; keep serving the same wire.
+      continue;
+    }
+    if (compactCase === "model-catalog") {
+      appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+      agent.respond(request, {
+        models: [
+          { value: "old", name: "Old", configOptions: [] },
+          {
+            value: "new",
+            name: "New",
+            configOptions: [
+              {
+                id: "effort",
+                name: "Effort",
+                category: "thought_level",
+                type: "select",
+                currentValue: "high",
+                options: [
+                  { value: "low", name: "Low" },
+                  { value: "high", name: "High" },
+                ],
+              },
+            ],
+          },
+          { value: "foreign", name: "Foreign", configOptions: [] },
+        ],
+      });
+    } else agent.respond(request, {});
+  } else if (request.method === "session/new") {
     sequence += 1;
     const sessionId = `session-${sequence}`;
     agent.respond(request, {
       sessionId,
-      ...(compactCase === "settings" ? { configOptions: settingsOptions() } : {}),
+      ...(["settings", "model-catalog", "held-model-catalog", "primary-enter"].includes(compactCase)
+        ? { configOptions: settingsOptions() }
+        : {}),
     });
     agent.update(
       {
@@ -58,19 +146,35 @@ for (;;) {
       },
       sessionId,
     );
-  } else if (request.method === "session/set_config_option" && compactCase === "settings") {
+  } else if (
+    request.method === "session/set_config_option" &&
+    ["settings", "model-catalog", "held-model-catalog", "primary-enter"].includes(compactCase)
+  ) {
     appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     const configId = field(params, "configId");
     const value = field(params, "value");
-    if (configId === "model" && (value === "old" || value === "new")) currentModel = value;
-    else if (
+    if (compactCase === "model-catalog" && configId === "model" && value === "rejected") {
+      agent.send({
+        jsonrpc: "2.0",
+        id: request.id,
+        error: { code: -32602, message: "scripted model rejection" },
+      });
+      continue;
+    }
+    if (configId === "model" && (value === "old" || value === "new")) {
+      currentModel = value;
+      restoreSavedModelEffort(value);
+    } else if (
       configId === "effort" &&
       (value === "low" || (value === "high" && currentModel === "new"))
-    )
+    ) {
       currentEffort = value;
-    else throw new Error("unexpected or stale setting write");
+      if (compactCase === "primary-enter") savedEfforts.set(currentModel, value);
+    } else throw new Error("unexpected or stale setting write");
+    savePrimaryEnterState();
     agent.respond(request, { configOptions: settingsOptions() });
   } else if (request.method === "session/prompt") {
+    savePrimaryEnterState();
     appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     const sessionId = field(params, "sessionId");
     if (typeof sessionId !== "string") throw new Error("sessionId required");

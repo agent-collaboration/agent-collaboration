@@ -8,11 +8,18 @@ use message_board::SessionRef;
 pub(super) enum NativeSettingsSource {
     TurnStart,
     SettingsUpdate,
+    Resume,
 }
 
 pub(super) struct NativeProviderSettings {
     model: Option<String>,
-    effort: Option<String>,
+    effort: Option<NativeEffortIntent>,
+    intent: session_event_model::SettingApplicationIntent,
+}
+
+enum NativeEffortIntent {
+    ProviderSettings,
+    ProviderValue(String),
 }
 
 pub(super) fn parse_native_settings(
@@ -63,19 +70,57 @@ pub(super) fn parse_native_settings(
                 .get("model")
                 .and_then(Value::as_str)
                 .ok_or(ThreadMethodError::InvalidParams)?;
-            // A complete native mask replaces effort, unlike a sparse top-level
-            // update. No provider-neutral model-default reset is qualified here.
-            let effort = optional_string(settings.get("reasoning_effort"))?
-                .ok_or(ThreadMethodError::Unsupported)?;
+            let effort = match optional_string(settings.get("reasoning_effort"))? {
+                Some(value) => value,
+                None => match catalog
+                    .iter()
+                    .find(|entry| entry.id() == model)
+                    .map(ProviderModelEntry::reasoning)
+                {
+                    Some(crate::ProviderModelReasoning::Select { default_value, .. }) => {
+                        default_value
+                    }
+                    Some(crate::ProviderModelReasoning::ProviderSettings) | None => "provider",
+                },
+            };
             (Some(model), Some(effort))
         }
     };
     if effort.is_some_and(str::is_empty) {
         return Err(ThreadMethodError::InvalidParams);
     }
+    if matches!(source, NativeSettingsSource::SettingsUpdate)
+        && effort.is_some_and(|value| value != "provider")
+        && model.is_some_and(|id| {
+            id == "provider-default"
+                || catalog.iter().any(|entry| {
+                    entry.id() == id
+                        && matches!(
+                            entry.reasoning(),
+                            crate::ProviderModelReasoning::ProviderSettings
+                        )
+                })
+        })
+    {
+        return Err(ThreadMethodError::Unsupported);
+    }
     Ok(NativeProviderSettings {
         model: provider_model_override(model, catalog)?,
-        effort: effort.map(str::to_owned),
+        effort: effort.map(|value| {
+            if value == "provider" {
+                NativeEffortIntent::ProviderSettings
+            } else {
+                NativeEffortIntent::ProviderValue(value.to_owned())
+            }
+        }),
+        intent: match source {
+            NativeSettingsSource::TurnStart => {
+                session_event_model::SettingApplicationIntent::TurnContext
+            }
+            NativeSettingsSource::SettingsUpdate | NativeSettingsSource::Resume => {
+                session_event_model::SettingApplicationIntent::ExplicitChange
+            }
+        },
     })
 }
 
@@ -95,13 +140,22 @@ pub(super) async fn apply_native_settings(
 ) -> Result<(), ThreadMethodError> {
     // Each existing setting command validates against the provider's fresh catalogue.
     // A later refusal retains earlier confirmed effects; this adapter never rolls back.
-    for (setting_id, value) in [("model", settings.model), ("effort", settings.effort)] {
+    let expected_model = settings.model.clone();
+    let effort = match settings.effort {
+        Some(NativeEffortIntent::ProviderValue(value)) => Some(value),
+        None | Some(NativeEffortIntent::ProviderSettings) => None,
+    };
+    for (setting_id, value) in [("model", settings.model), ("effort", effort)] {
         if let Some(value) = value {
             commands
                 .set_setting(SetSessionSettingCommand {
                     target: target.clone(),
                     setting_id: setting_id.into(),
                     value,
+                    intent: settings.intent,
+                    expected_model: (setting_id == "effort")
+                        .then(|| expected_model.clone())
+                        .flatten(),
                     actor: actor.clone(),
                 })
                 .await

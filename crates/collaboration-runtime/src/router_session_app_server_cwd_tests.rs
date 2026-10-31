@@ -402,7 +402,7 @@ async fn omitted_tui_cwd_gets_a_typed_launch_instruction() -> Result<(), Box<dyn
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept");

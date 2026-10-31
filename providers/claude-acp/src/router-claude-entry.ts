@@ -3,6 +3,8 @@ import { join } from "node:path";
 import * as z from "zod/mini";
 import { SkillMetadataDecorator, notificationSchema } from "./skill-metadata.ts";
 import type { MetadataQuery } from "./skill-metadata.ts";
+import { ModelMetadataDecorator, decorateSessionMethods } from "./model-metadata.ts";
+import type { ModelMetadataSession } from "./model-metadata.ts";
 
 function isPublicObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -62,6 +64,22 @@ const client = publicObject(agent.client);
 const originalUpdate = client.sessionUpdate;
 if (typeof originalUpdate !== "function")
   throw new Error("Qualified Claude client lacks sessionUpdate");
+function modelSession(sessionId: string): ModelMetadataSession | undefined {
+  const sessions = publicObject(agent.sessions);
+  const candidate = sessions[sessionId];
+  if (!isPublicObject(candidate) || candidate.queryClosed === true) return undefined;
+  const queryIdentity = candidate.query;
+  if (!isPublicObject(queryIdentity)) return undefined;
+  return {
+    sessionIdentity: candidate,
+    queryIdentity,
+    models: candidate.models,
+    modelInfos: candidate.modelInfos,
+    configOptions: candidate.configOptions,
+  };
+}
+const modelMetadata = new ModelMetadataDecorator({ currentSession: modelSession });
+decorateSessionMethods(agent, modelMetadata);
 function currentQuery(sessionId: string): MetadataQuery | undefined {
   const sessions = publicObject(agent.sessions);
   const candidate = sessions[sessionId];
@@ -94,9 +112,10 @@ const metadata = new SkillMetadataDecorator({
   },
 });
 client.sessionUpdate = async (notification: unknown): Promise<void> => {
-  const decoded = notificationSchema.safeParse(notification);
+  const decorated = modelMetadata.decorateNotification(notification);
+  const decoded = notificationSchema.safeParse(decorated);
   if (decoded.success) await metadata.sessionUpdate(decoded.data);
-  else await Reflect.apply(originalUpdate, client, [notification]);
+  else await Reflect.apply(originalUpdate, client, [decorated]);
 };
 let shutdownTask: Promise<void> | undefined;
 function shutdown(): Promise<void> {

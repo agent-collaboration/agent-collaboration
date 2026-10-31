@@ -3,6 +3,7 @@
 mod claude_behavior;
 mod claude_launch;
 mod cursor_behavior;
+mod model_reasoning_metadata;
 mod selected_skill_content;
 mod standard_behavior;
 

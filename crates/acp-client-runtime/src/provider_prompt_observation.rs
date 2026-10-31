@@ -184,7 +184,7 @@ async fn update_live_settings(
     let catalog = if capability_change.is_some() {
         let mut catalogs = handles.session_settings.write().await;
         let catalog = catalogs.entry(session_id.to_owned()).or_default();
-        apply_settings_update(catalog, update);
+        apply_settings_update(catalog, update, handles.behavior.as_ref());
         Some(catalog.clone())
     } else {
         None
@@ -196,7 +196,6 @@ async fn update_live_settings(
                 settings: catalog.to_session_settings(),
             },
         )?;
-        *handles.last_settings_catalog.write().await = Some(catalog);
     }
     if let Some(modes_update) = capability_change {
         let capabilities = {

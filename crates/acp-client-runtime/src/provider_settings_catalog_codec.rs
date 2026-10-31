@@ -12,6 +12,8 @@ use crate::{
 
 pub(crate) fn catalog_from_session_response(
     response: &NewSessionResponse,
+    behavior: &dyn crate::ProviderBehavior,
+    connection_models: &crate::ModelReasoningMetadata,
 ) -> ProviderSettingsCatalog {
     let (current_mode, modes) = response.modes.as_ref().map_or_else(
         || (None, Vec::new()),
@@ -29,7 +31,8 @@ pub(crate) fn catalog_from_session_response(
             )
         },
     );
-    ProviderSettingsCatalog {
+    let mut catalog = ProviderSettingsCatalog {
+        model_reasoning: connection_models.clone(),
         current_mode,
         modes,
         config_options: response
@@ -39,6 +42,23 @@ pub(crate) fn catalog_from_session_response(
             .iter()
             .filter_map(project_config_option)
             .collect(),
+    };
+    apply_model_metadata(&mut catalog, behavior, response.meta.as_ref());
+    catalog
+}
+
+pub(crate) fn apply_model_metadata(
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+) {
+    if behavior.model_metadata_source() == crate::ModelMetadataSource::SessionMetadata {
+        catalog.model_reasoning = metadata
+            .and_then(|meta| meta.get("codexRouter"))
+            .and_then(|meta| meta.get("modelReasoning"))
+            .map_or_else(crate::ModelReasoningMetadata::default, |value| {
+                behavior.decode_model_metadata(value)
+            });
     }
 }
 
@@ -54,6 +74,7 @@ pub(crate) fn replace_catalog_config_options(
 pub(crate) fn apply_settings_update(
     catalog: &mut ProviderSettingsCatalog,
     update: &SessionUpdate,
+    behavior: &dyn crate::ProviderBehavior,
 ) -> bool {
     match update {
         SessionUpdate::CurrentModeUpdate(mode) => {
@@ -69,6 +90,7 @@ pub(crate) fn apply_settings_update(
             true
         }
         SessionUpdate::ConfigOptionUpdate(config) => {
+            apply_model_metadata(catalog, behavior, config.meta.as_ref());
             replace_catalog_config_options(catalog, &config.config_options);
             if let Some(mode) = catalog.config_option(ProviderSettingKind::Mode)
                 && let ProviderConfigValue::Select(value) = &mode.current_value
@@ -193,7 +215,11 @@ mod tests {
                 )
                 .category(SessionConfigOptionCategory::ThoughtLevel),
             ]);
-        let catalog = catalog_from_session_response(&response);
+        let catalog = catalog_from_session_response(
+            &response,
+            &crate::test_behavior::TestProviderBehavior,
+            &crate::ModelReasoningMetadata::default(),
+        );
         assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
         assert_eq!(
             catalog.effective_settings().model.as_deref(),

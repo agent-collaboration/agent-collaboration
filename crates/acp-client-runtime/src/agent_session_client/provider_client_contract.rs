@@ -167,6 +167,8 @@ pub enum ExternalProviderRuntimeError {
     LocalBusy,
     #[error("provider session settings need resolution before work can start")]
     SettingsUnresolved,
+    #[error("confirmed model changed before applying the dependent setting")]
+    SettingsContextChanged,
     #[error(
         "settings-uncertain: run conversation settings set to resolve the unknown provider setting outcome"
     )]

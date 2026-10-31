@@ -52,7 +52,7 @@ async fn lag_replays_missed_item_and_turn_completion() -> Result<(), Box<dyn std
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -248,7 +248,7 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&observed) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -363,7 +363,7 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -499,7 +499,7 @@ async fn resync_reattaches_and_forwards_the_next_turn() -> Result<(), Box<dyn st
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -582,7 +582,7 @@ async fn turn_events_keep_flowing_while_prompt_submission_is_in_flight()
         ScriptedSessionBackend::actor()?,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
@@ -688,7 +688,7 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_interaction_broker(broker),
     );

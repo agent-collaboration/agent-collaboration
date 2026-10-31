@@ -27,6 +27,22 @@ impl ClaudeAcpBehavior {
 }
 
 impl ProviderBehavior for ClaudeAcpBehavior {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _kind: acp_client_runtime::ProviderSettingKind,
+    ) -> bool {
+        // Only the qualified stock integration establishes per-query settings scope.
+        matches!(self.source, ClaudeSkillSource::Annotated)
+    }
+    fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
+        acp_client_runtime::ModelMetadataSource::SessionMetadata
+    }
+    fn decode_model_metadata(
+        &self,
+        value: &serde_json::Value,
+    ) -> acp_client_runtime::ModelReasoningMetadata {
+        crate::model_reasoning_metadata::decode_claude_models(value)
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         if let ClaudeSkillSource::Unavailable(reason) = &self.source {
             return Ok(ProviderFacts {

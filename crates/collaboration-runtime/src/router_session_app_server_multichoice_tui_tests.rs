@@ -68,7 +68,7 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_interaction_broker(Arc::clone(&broker))
         .with_project_trust(Arc::new(

@@ -51,6 +51,7 @@ pub enum ProviderSessionActivity {
 
 #[derive(Clone)]
 pub(crate) struct ProviderSessionRuntimeHandles {
+    pub(crate) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(crate) behavior: Arc<dyn crate::ProviderBehavior>,
     pub(crate) event_sink: Arc<dyn SessionEventSink>,
     pub(crate) sink_closed: CancellationToken,
@@ -61,8 +62,6 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     pub(crate) session_capabilities: Arc<
         tokio::sync::RwLock<std::collections::HashMap<String, crate::ProviderCapabilityReport>>,
     >,
-    pub(crate) last_settings_catalog:
-        Arc<tokio::sync::RwLock<Option<crate::ProviderSettingsCatalog>>>,
     pub(crate) settings_unresolved: Arc<
         tokio::sync::RwLock<
             std::collections::HashMap<
@@ -108,8 +107,7 @@ pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
         reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },
     SetSetting {
-        kind: crate::ProviderSettingKind,
-        value: String,
+        request: crate::ProviderSettingRequest,
         reply: tokio::sync::oneshot::Sender<
             Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
         >,
@@ -481,11 +479,10 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                     ProviderSessionCommand::WaitIdle { reply } => {
                         let _result = reply.send(Ok(()));
                     }
-                    ProviderSessionCommand::SetSetting { kind, value, reply } => {
+                    ProviderSessionCommand::SetSetting { request, reply } => {
                         let result = crate::provider_session_setting_update::apply_loaded_setting(
                             &session,
-                            kind,
-                            value,
+                            request,
                             &runtime_handles,
                         ).await;
                         if matches!(result, Err(ExternalProviderRuntimeError::SinkClosed)) {

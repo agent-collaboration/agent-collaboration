@@ -52,7 +52,7 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            backend.clone(),
         )
         .with_interaction_broker(Arc::clone(&broker)),
     );
@@ -183,7 +183,7 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            backend.clone(),
         )
         .with_interaction_broker(Arc::clone(&broker)),
     );

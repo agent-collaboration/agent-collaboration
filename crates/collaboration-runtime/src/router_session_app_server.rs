@@ -30,7 +30,7 @@ use std::{
 };
 use tokio::{
     net::UnixStream,
-    sync::{Semaphore, mpsc, watch},
+    sync::{Semaphore, mpsc},
     task::{AbortHandle, JoinSet},
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -42,7 +42,7 @@ pub struct RouterSessionAppServerContext {
     actor: Identity,
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
-    model_catalog: watch::Receiver<Vec<ProviderModelEntry>>,
+    model_catalog: Arc<dyn crate::SessionModelCatalog>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     project_trust: Option<Arc<dyn codex_native_integration::CodexProjectTrustLookup>>,
 }
@@ -53,7 +53,7 @@ impl RouterSessionAppServerContext {
         actor: Identity,
         commands: Arc<dyn SessionCommandPort>,
         events: Arc<dyn SessionEventHub>,
-        model_catalog: watch::Receiver<Vec<ProviderModelEntry>>,
+        model_catalog: Arc<dyn crate::SessionModelCatalog>,
     ) -> Self {
         Self {
             endpoint,
@@ -142,6 +142,22 @@ enum ThreadMethodError {
     Busy,
     #[error("invalid thread parameters")]
     InvalidParams,
+    #[error("setting context changed")]
+    SettingsContextChanged,
+    #[error("provider settings need resolution")]
+    SettingsUnresolved,
+    #[error("new session settings are invalid")]
+    InvalidCreateSetting {
+        target: Option<collaboration_protocol::SessionRef>,
+        detail: Box<collaboration_protocol::InvalidProviderSetting>,
+    },
+    #[error("session was created without all requested settings")]
+    CreatedWithoutSettings {
+        target: Box<collaboration_protocol::SessionRef>,
+        applied: Vec<collaboration_protocol::AppliedProviderSetting>,
+        failed: Vec<collaboration_protocol::FailedProviderSetting>,
+        not_applied: Vec<collaboration_protocol::NotAppliedProviderSetting>,
+    },
     #[error("launch the Codex TUI with --cd <project> to choose where this provider session works")]
     WorkingDirectoryRequired,
     #[error("image input could not be read")]
@@ -341,6 +357,35 @@ pub async fn serve_router_session_app_server_connection(
             continue;
         }
         if request.get("id").is_none() {
+            continue;
+        }
+        if request.get("method").and_then(Value::as_str) == Some("model/list") {
+            let id = request.get("id").cloned().unwrap_or(Value::Null);
+            let session = skill_bindings.model_session().cloned();
+            let catalog_reader = Arc::clone(&context.model_catalog);
+            let sender = response_sender.clone();
+            request_tasks.spawn(async move {
+                let catalog = match session {
+                    Some(session) => catalog_reader.read_models(session).await,
+                    None => Ok(Vec::new()),
+                };
+                let response = match catalog {
+                    Ok(catalog) => json!({"id":id,"result":render_model_list(&catalog)}),
+                    Err(error) => json!({"id":id,"error":{"code":match error {
+                        crate::SessionModelCatalogError::SessionNotFound => -32002,
+                        crate::SessionModelCatalogError::Unavailable => -32000,
+                    },"message":error.to_string()}}),
+                };
+                let _sent = sender
+                    .send(Ok(HandledAppServerRequest {
+                        binding_attempt: None,
+                        method: "model/list".into(),
+                        response,
+                        post_response_frames: Vec::new(),
+                        session_attachment: None,
+                    }))
+                    .await;
+            });
             continue;
         }
         if request.get("method").and_then(Value::as_str) == Some("skills/list") {

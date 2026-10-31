@@ -26,9 +26,8 @@ use collaboration_protocol::{
     ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationResumeRequest, EndpointId, EndpointRef,
     OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
-    ProviderRequestedSettings, ProviderSettingName, ProviderSettingsFailureKind,
-    ProviderSettingsSetRequest, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
-    UuidIdentity,
+    ProviderRequestedSettings, ProviderSettingName, ProviderSettingsSetRequest,
+    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -104,10 +103,18 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .map_err(map_operation_failure)?;
             let settlement = wait_for_settlement(self.supervisor.as_ref(), operation_id).await?;
             match settlement {
-                ConversationOperationSettlement::Created { target, .. }
-                | ConversationOperationSettlement::CreatedWithoutSettings { target, .. } => {
-                    board_session(target)
-                }
+                ConversationOperationSettlement::Created { target, .. } => board_session(target),
+                ConversationOperationSettlement::CreatedWithoutSettings {
+                    target,
+                    applied,
+                    failed,
+                    not_applied,
+                } => Err(CommandFailure::CreatedWithoutSettings {
+                    target: Box::new(target),
+                    applied,
+                    failed,
+                    not_applied,
+                }),
                 _ => Err(CommandFailure::ProviderFailure),
             }
         })
@@ -346,22 +353,17 @@ impl SessionCommandPort for HostSessionCommandPort {
                 }
             };
             self.supervisor
-                .settings_set(ProviderSettingsSetRequest {
-                    target: protocol_session(&command.target)?,
-                    actor: provider_actor(&command.actor)?,
-                    setting,
-                    value: command.value,
-                })
-                .await
-                .map_err(|error| match error.kind {
-                    ProviderSettingsFailureKind::WrongActor => CommandFailure::UnauthorizedActor,
-                    ProviderSettingsFailureKind::NotFound => CommandFailure::SessionNotFound,
-                    ProviderSettingsFailureKind::Busy => CommandFailure::Busy,
-                    ProviderSettingsFailureKind::InvalidSetting => CommandFailure::InvalidSetting {
-                        advertised: error.advertised,
+                .apply_setting_command(
+                    ProviderSettingsSetRequest {
+                        target: protocol_session(&command.target)?,
+                        actor: provider_actor(&command.actor)?,
+                        setting,
+                        value: command.value,
                     },
-                    _ => CommandFailure::ProviderFailure,
-                })?;
+                    command.intent,
+                    command.expected_model,
+                )
+                .await?;
             Ok(())
         })
     }
@@ -480,10 +482,14 @@ fn map_operation_failure(error: ConversationOperationFailure) -> CommandFailure 
         ConversationOperationFailureKind::Busy => CommandFailure::Busy,
         ConversationOperationFailureKind::UnsupportedCapability => CommandFailure::Unsupported,
         ConversationOperationFailureKind::SettingsUnresolved => CommandFailure::SettingsUnresolved,
-        ConversationOperationFailureKind::InvalidSetting => CommandFailure::InvalidSetting {
-            advertised: error
-                .invalid_setting
-                .map_or_else(Vec::new, |setting| setting.advertised),
+        ConversationOperationFailureKind::InvalidSetting => match error.invalid_setting {
+            Some(detail) => CommandFailure::InvalidCreateSetting {
+                target: error.target,
+                detail: Box::new(detail),
+            },
+            None => CommandFailure::InvalidSetting {
+                advertised: Vec::new(),
+            },
         },
         _ => CommandFailure::ProviderFailure,
     }

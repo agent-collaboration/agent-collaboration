@@ -417,14 +417,16 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
     {
         let id = 20 + u64::try_from(index)?;
         send(&mut client, id, "thread/settings/update", json!({"threadId":thread,"collaborationMode":{"mode":"default","settings":mode_settings}})).await?;
-        assert_eq!(
-            reply(&mut client, id, &mut notifications).await?["error"]["code"],
-            -32000
+        assert!(
+            reply(&mut client, id, &mut notifications)
+                .await?
+                .get("result")
+                .is_some()
         );
         assert_eq!(
             receipts(&receipt)?.len(),
-            4,
-            "unqualified effort reset must have zero provider effects"
+            6 + 2 * index,
+            "qualified complete masks apply the offered low default"
         );
     }
     // Switching back narrows the provider's advertised efforts. The next field
@@ -448,10 +450,10 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
     let writes = receipts(&receipt)?;
     assert_eq!(
         writes.len(),
-        5,
+        9,
         "invalid effort must never reach the provider"
     );
-    assert_eq!(writes[4]["params"]["value"], "old");
+    assert_eq!(writes[8]["params"]["value"], "old");
     send(
         &mut client,
         6,
@@ -468,7 +470,7 @@ async fn native_settings_reaches_provider_and_readback_retains_confirmed_partial
         &mut notifications,
     )
     .await?;
-    assert_eq!(receipts(&receipt)?.len(), 6);
+    assert_eq!(receipts(&receipt)?.len(), 10);
     client.close(None).await?;
     runtime.shutdown().await?;
     Ok(())

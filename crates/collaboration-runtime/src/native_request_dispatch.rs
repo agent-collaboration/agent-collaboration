@@ -14,7 +14,35 @@ pub(super) async fn handle_app_server_rpc(
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
-    let catalog = context.model_catalog.borrow().clone();
+    let catalog = if matches!(method.as_str(), "turn/start" | "thread/settings/update")
+        && let Some(thread_id) = request.pointer("/params/threadId").and_then(Value::as_str)
+    {
+        let session = context
+            .events
+            .sessions(context.endpoint.clone())
+            .await
+            .map_err(|_| AppServerConnectionError::HubUnavailable)?
+            .into_iter()
+            .find(|summary| thread_alias(&summary.session) == thread_id)
+            .map(|summary| summary.session);
+        match session {
+            Some(session) => match context.model_catalog.read_models(session).await {
+                Ok(catalog) => catalog,
+                Err(error) => {
+                    return Ok(HandledAppServerRequest {
+                        binding_attempt: None,
+                        method,
+                        response: json!({"id":id,"error":{"code":-32000,"message":error.to_string()}}),
+                        post_response_frames: Vec::new(),
+                        session_attachment: None,
+                    });
+                }
+            },
+            None => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
     let mut post_response_frames = Vec::new();
     let mut response = if matches!(
         method.as_str(),
@@ -74,25 +102,14 @@ pub(super) async fn handle_app_server_rpc(
                     post_response_frames.push(notification);
                     json!({"id":id,"result":{}})
                 } else {
-                    let code = match error {
-                        ThreadMethodError::InvalidParams
-                        | ThreadMethodError::InvalidSelection
-                        | ThreadMethodError::WorkingDirectoryRequired
-                        | ThreadMethodError::ImageUnreadable
-                        | ThreadMethodError::ImageTooLarge
-                        | ThreadMethodError::PromptTooLarge
-                        | ThreadMethodError::ImageUnsupportedType => -32602,
-                        ThreadMethodError::NotFound => -32002,
-                        ThreadMethodError::Unavailable | ThreadMethodError::Unsupported => -32000,
-                        ThreadMethodError::Busy => -32600,
-                    };
-                    json!({"id":id,"error":{"code":code,"message":error.to_string()}})
+                    native_error_response(id.clone(), &error)
                 }
             }
         }
     } else if method == "config/read" {
         let params = request.get("params").cloned().unwrap_or(Value::Null);
         let trust_lookup = context.project_trust.clone();
+        let id = id.clone();
         tokio::task::spawn_blocking(move || {
             handle_app_server_request(
                 id,
@@ -106,7 +123,7 @@ pub(super) async fn handle_app_server_rpc(
         .map_err(|_| AppServerConnectionError::RequestWorkerUnavailable)?
     } else {
         handle_app_server_request(
-            id,
+            id.clone(),
             &method,
             request.get("params").unwrap_or(&Value::Null),
             &catalog,
@@ -128,6 +145,33 @@ pub(super) async fn handle_app_server_rpc(
             .find(|summary| thread_alias(&summary.session) == thread_id)
             .map(|summary| summary.session)
     {
+        if method == "thread/resume" {
+            let result = async {
+                let catalog = context
+                    .model_catalog
+                    .read_models(session.clone())
+                    .await
+                    .map_err(|_| ThreadMethodError::Unavailable)?;
+                super::methods::apply_resumed_native_settings(
+                    request.get("params").unwrap_or(&Value::Null),
+                    &catalog,
+                    context.commands.as_ref(),
+                    &session,
+                    &context.actor,
+                )
+                .await
+            }
+            .await;
+            if let Err(error) = result {
+                return Ok(HandledAppServerRequest {
+                    binding_attempt: None,
+                    method,
+                    response: native_error_response(id, &error),
+                    post_response_frames,
+                    session_attachment: None,
+                });
+            }
+        }
         let attachment = context
             .events
             .attach(session.clone())
@@ -193,4 +237,50 @@ fn unsupported_compact_notification(request: &Value) -> Option<Value> {
         "threadId":thread_id,"turnId":submission_id,"willRetry":false,
         "error":{"message":"Compaction is unsupported for this provider session","codexErrorInfo":null}
     }}))
+}
+
+fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
+    let code = match error {
+        ThreadMethodError::InvalidParams
+        | ThreadMethodError::SettingsContextChanged
+        | ThreadMethodError::InvalidCreateSetting { .. }
+        | ThreadMethodError::InvalidSelection
+        | ThreadMethodError::WorkingDirectoryRequired
+        | ThreadMethodError::ImageUnreadable
+        | ThreadMethodError::ImageTooLarge
+        | ThreadMethodError::PromptTooLarge
+        | ThreadMethodError::ImageUnsupportedType => -32602,
+        ThreadMethodError::NotFound => -32002,
+        ThreadMethodError::Unavailable
+        | ThreadMethodError::Unsupported
+        | ThreadMethodError::SettingsUnresolved
+        | ThreadMethodError::CreatedWithoutSettings { .. } => -32000,
+        ThreadMethodError::Busy => -32600,
+    };
+    let data = match error {
+        ThreadMethodError::SettingsContextChanged => {
+            Some(json!({"kind":"settings_context_changed"}))
+        }
+        ThreadMethodError::SettingsUnresolved => Some(json!({"kind":"settings_unresolved"})),
+        ThreadMethodError::InvalidCreateSetting { target, detail } => {
+            Some(json!({"kind":"InvalidSetting","target":target,"detail":detail}))
+        }
+        ThreadMethodError::CreatedWithoutSettings {
+            target,
+            applied,
+            failed,
+            not_applied,
+        } => Some(
+            json!({"kind":"CreatedWithoutSettings","target":target,"sessionDisposition":"remainsCreated","applied":applied,"failed":failed,"notApplied":not_applied}),
+        ),
+        _ => None,
+    };
+    let mut fields = serde_json::Map::from_iter([
+        ("code".to_owned(), json!(code)),
+        ("message".to_owned(), json!(error.to_string())),
+    ]);
+    if let Some(data) = data {
+        fields.insert("data".into(), data);
+    }
+    json!({"id":id,"error":fields})
 }

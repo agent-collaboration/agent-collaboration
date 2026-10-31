@@ -71,7 +71,7 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_interaction_broker(broker)
         .with_project_trust(Arc::new(
@@ -286,7 +286,7 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
             ScriptedSessionBackend::actor()?,
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_project_trust(Arc::new(
             codex_native_integration::CodexHomeProjectTrust::new(codex_home.clone()),
@@ -437,7 +437,7 @@ async fn pinned_codex_tui_boots_and_starts_a_provider_thread()
             ScriptedSessionBackend::actor()?,
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_project_trust(Arc::new(
             codex_native_integration::CodexHomeProjectTrust::new(codex_home.clone()),
@@ -512,7 +512,7 @@ async fn pinned_codex_tui_shows_untrusted_project_and_refuses_persistence()
             ScriptedSessionBackend::actor()?,
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
         )
         .with_project_trust(Arc::new(
             codex_native_integration::CodexHomeProjectTrust::new(codex_home.clone()),

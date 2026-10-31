@@ -42,6 +42,7 @@ mod provider_capability_report;
 mod provider_connection_activity;
 mod provider_item_projection;
 mod provider_model_picker;
+mod provider_model_reasoning;
 mod provider_persistence_target;
 mod provider_prompt_content;
 mod provider_prompt_observation;
@@ -49,6 +50,7 @@ mod provider_prompt_result_codec;
 mod provider_session_actor;
 mod provider_session_setting_update;
 mod provider_session_settings;
+mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
@@ -71,6 +73,7 @@ pub use interaction_port::{
 pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
 pub use provider_model_picker::ProviderModelPicker;
+pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
 pub use provider_session_actor::{
@@ -79,9 +82,10 @@ pub use provider_session_actor::{
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting,
     InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderSettingChoice, ProviderSettingKind, ProviderSettingsCatalog,
+    ProviderConfigValue, ProviderSettingKind, ProviderSettingRequest, ProviderSettingsCatalog,
     RequestedProviderSettings,
 };
+pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_event_sink::{
     EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
 };

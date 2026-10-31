@@ -10,11 +10,17 @@ struct SettingsFixture {
 }
 
 async fn setup() -> Result<SettingsFixture, Box<dyn std::error::Error>> {
-    let backend = ScriptedSessionBackend::new()?;
     let catalog = vec![
-        ProviderModelEntry::try_new("old".into(), "Old".into(), String::new())?,
-        ProviderModelEntry::try_new("new".into(), "New".into(), String::new())?,
+        super::test_support::qualified_model("old", "Old", &["low", "high"], "low")?,
+        super::test_support::qualified_model("new", "New", &["low", "high"], "low")?,
     ];
+    setup_with_catalog(catalog).await
+}
+
+async fn setup_with_catalog(
+    catalog: Vec<ProviderModelEntry>,
+) -> Result<SettingsFixture, Box<dyn std::error::Error>> {
+    let backend = ScriptedSessionBackend::new()?;
     let actor = ScriptedSessionBackend::actor()?;
     let started = handle_app_server_thread_request(
         "thread/start",
@@ -31,7 +37,7 @@ async fn setup() -> Result<SettingsFixture, Box<dyn std::error::Error>> {
         actor,
         backend.clone(),
         backend.clone(),
-        tokio::sync::watch::channel(catalog).1,
+        super::test_support::model_catalog(tokio::sync::watch::channel(catalog).1),
     ));
     Ok(SettingsFixture {
         backend,
@@ -41,6 +47,99 @@ async fn setup() -> Result<SettingsFixture, Box<dyn std::error::Error>> {
             .ok_or("thread ID")?
             .to_owned(),
     })
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Refusal and supported sparse/context forms must retain their distinct effects."
+)]
+async fn unknown_model_numeric_action_refuses_whole_dedicated_request_without_changing_sparse_or_turn_context()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (method, mut params, refused, setting_count) in [
+        (
+            "thread/settings/update",
+            json!({"model":"new","effort":"high"}),
+            true,
+            0,
+        ),
+        (
+            "thread/settings/update",
+            json!({"collaborationMode":{"mode":"default","settings":{"model":"new","reasoning_effort":"high","developer_instructions":null}}}),
+            true,
+            0,
+        ),
+        ("thread/settings/update", json!({"effort":"high"}), false, 1),
+        (
+            "thread/settings/update",
+            json!({"model":"provider-default","effort":"high"}),
+            true,
+            0,
+        ),
+        (
+            "thread/settings/update",
+            json!({"collaborationMode":{"mode":"default","settings":{"model":"provider-default","reasoning_effort":"high","developer_instructions":null}}}),
+            true,
+            0,
+        ),
+        (
+            "thread/settings/update",
+            json!({"model":"provider-default","effort":"provider"}),
+            false,
+            0,
+        ),
+        (
+            "turn/start",
+            json!({"model":"provider-default","effort":"high","input":[{"type":"text","text":"delegated model context"}]}),
+            false,
+            1,
+        ),
+        (
+            "turn/start",
+            json!({"model":"new","effort":"high","input":[{"type":"text","text":"explicit turn context"}]}),
+            false,
+            2,
+        ),
+    ] {
+        let SettingsFixture {
+            backend,
+            context,
+            thread,
+        } = setup_with_catalog(vec![ProviderModelEntry::try_new(
+            "new".into(),
+            "New".into(),
+            String::new(),
+        )?])
+        .await?;
+        params
+            .as_object_mut()
+            .ok_or("params")?
+            .insert("threadId".into(), json!(thread));
+        let handled = handle_app_server_rpc(
+            context,
+            json!({"id":"scope-check","method":method,"params":params}),
+        )
+        .await?;
+        assert_eq!(handled.response["id"], "scope-check");
+        if refused {
+            assert_eq!(handled.response["error"]["code"], -32000);
+        } else {
+            assert!(
+                handled.response.get("result").is_some(),
+                "{}",
+                handled.response
+            );
+        }
+        assert_eq!(
+            backend.setting_commands.lock().expect("settings").len(),
+            setting_count
+        );
+        assert_eq!(
+            backend.prompt_commands.lock().expect("prompts").len(),
+            usize::from(method == "turn/start")
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -218,7 +317,7 @@ async fn turn_start_uses_mask_precedence_and_ordinary_absent_mask_keeps_input()
     clippy::panic_in_result_fn,
     reason = "Contract assertions reject a false reset success; setup errors propagate."
 )]
-async fn complete_default_mask_reset_is_unsupported_before_any_effect_but_sparse_null_preserves_effort()
+async fn unknown_complete_default_mask_delegates_effort_and_sparse_null_preserves_it()
 -> Result<(), Box<dyn std::error::Error>> {
     for method in ["thread/settings/update", "turn/start"] {
         for nested_effort in [None, Some(Value::Null)] {
@@ -226,8 +325,14 @@ async fn complete_default_mask_reset_is_unsupported_before_any_effect_but_sparse
                 backend,
                 context,
                 thread,
-            } = setup().await?;
-            let established = handle_app_server_rpc(context.clone(), json!({"id":1,"method":"thread/settings/update","params":{"threadId":thread,"model":"new","effort":"high"}})).await?;
+            } = setup_with_catalog(vec![
+                ProviderModelEntry::try_new("old".into(), "Old".into(), String::new())?,
+                ProviderModelEntry::try_new("new".into(), "New".into(), String::new())?,
+            ])
+            .await?;
+            let delegated = handle_app_server_rpc(context.clone(), json!({"id":0,"method":"thread/settings/update","params":{"threadId":thread,"model":"new","effort":"provider"}})).await?;
+            assert!(delegated.response.get("result").is_some());
+            let established = handle_app_server_rpc(context.clone(), json!({"id":1,"method":"thread/settings/update","params":{"threadId":thread,"effort":"high"}})).await?;
             assert!(established.response.get("result").is_some());
             backend.setting_commands.lock().expect("writes").clear();
             let mut mode_settings = json!({"model":"old","developer_instructions":null});
@@ -238,21 +343,25 @@ async fn complete_default_mask_reset_is_unsupported_before_any_effect_but_sparse
                     .insert("reasoning_effort".into(), effort);
             }
             let refused = handle_app_server_rpc(context.clone(), json!({"id":2,"method":method,"params":{"threadId":thread,"collaborationMode":{"mode":"default","settings":mode_settings},"input":[{"type":"text","text":"must not send"}]}})).await?;
-            assert_eq!(
-                refused.response["error"]["code"], -32000,
+            assert!(
+                refused.response.get("result").is_some(),
                 "{}",
                 refused.response
             );
-            assert!(backend.setting_commands.lock().expect("writes").is_empty());
-            assert!(backend.prompt_commands.lock().expect("prompts").is_empty());
+            assert_eq!(backend.setting_commands.lock().expect("writes").len(), 1);
+            assert_eq!(
+                backend.setting_commands.lock().expect("writes")[0].setting_id,
+                "model"
+            );
             assert_eq!(
                 backend.effective_model.lock().expect("model").as_deref(),
-                Some("new")
+                Some("old")
             );
             assert_eq!(
                 backend.effective_effort.lock().expect("effort").as_deref(),
                 Some("high")
             );
+            backend.setting_commands.lock().expect("writes").clear();
             let preserved = handle_app_server_rpc(context, json!({"id":3,"method":method,"params":{"threadId":thread,"collaborationMode":null,"effort":null,"input":[{"type":"text","text":"preserve sparse settings"}]}})).await?;
             assert!(
                 preserved.response.get("result").is_some(),
@@ -266,7 +375,7 @@ async fn complete_default_mask_reset_is_unsupported_before_any_effect_but_sparse
             );
             assert_eq!(
                 backend.prompt_commands.lock().expect("prompts").len(),
-                usize::from(method == "turn/start")
+                2 * usize::from(method == "turn/start")
             );
         }
     }
@@ -303,11 +412,23 @@ async fn start_and_resume_preserve_latest_exact_current_effort_in_their_atomic_a
             ScriptedSessionBackend::actor()?,
             backend.clone(),
             backend.clone(),
-            tokio::sync::watch::channel(vec![
-                ProviderModelEntry::try_new("old".into(), "Old".into(), String::new())?,
-                ProviderModelEntry::try_new("new".into(), "New".into(), String::new())?,
-            ])
-            .1,
+            super::test_support::model_catalog(
+                tokio::sync::watch::channel(vec![
+                    super::test_support::qualified_model(
+                        "old",
+                        "Old",
+                        &["default", "vendor:turbo", "high", "latest:exact"],
+                        "default",
+                    )?,
+                    super::test_support::qualified_model(
+                        "new",
+                        "New",
+                        &["default", "vendor:turbo", "high", "latest:exact"],
+                        "default",
+                    )?,
+                ])
+                .1,
+            ),
         ));
         let started = handle_app_server_rpc(
             context.clone(),
