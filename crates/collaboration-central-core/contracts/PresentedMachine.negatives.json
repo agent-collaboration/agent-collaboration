@@ -1,7 +1,9 @@
 [
 null,
+{"installation":"019A3DCE-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002"},
 {"installation":"019a3dce-2000-7000-8000-000000000001","peer":"00000000-0000-4000-8000-000000000001"},
 {"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019A3DCE-2000-7000-8000-000000000001"},
 {"installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","unexpectedField":true},
+{"installation":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF","peer":"019a3dce-2000-7000-8000-000000000002"},
 {"installation":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","peer":"019a3dce-2000-7000-8000-000000000002"}
 ]

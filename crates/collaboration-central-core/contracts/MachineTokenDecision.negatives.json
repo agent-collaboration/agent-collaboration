@@ -1,7 +1,9 @@
 [
 null,
+{"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"019A3DCE-2000-7000-8000-000000000001","result":"grant"},
 {"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"019a3dce-2000-7000-8000-000000000001","result":"grant","unexpectedField":true},
 {"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"019a3dce-2000-7000-8000-000000000001","result":"unrecognizedVariant"},
+{"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF","result":"grant"},
 {"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","result":"grant"},
 {"decidedAt":1793448000,"enrollmentId":"019a3dce-2000-7000-8000-000000000002","grant_expires_at":1793448600,"installation":"019a3dce-2000-7000-8000-000000000001","result":"grant"},
 {"decidedAt":1793448000,"enrollment_id":"019a3dce-2000-7000-8000-000000000002","grantExpiresAt":1793448600,"installation":"019a3dce-2000-7000-8000-000000000001","result":"grant"},

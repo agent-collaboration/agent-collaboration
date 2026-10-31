@@ -120,6 +120,13 @@ fn borrowed_machine_labels_and_session_ids_keep_their_byte_limits() {
 #[test]
 fn reviewed_scalar_installation_schema_rejects_non_uuid_text() {
     assert_rejected::<fleet_identity_protocol::InstallationId>(json!("x".repeat(36)));
+    for uppercase in [
+        "019A3DCE-2000-7000-8000-000000000001",
+        "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+    ] {
+        assert_rejected::<fleet_identity_protocol::InstallationId>(json!(uppercase));
+        assert_rejected::<message_board::ServiceId>(json!(uppercase));
+    }
     assert_rejected::<fleet_identity_protocol::InstallationId>(json!(
         "00000000-0000-4000-8000-000000000001\n"
     ));

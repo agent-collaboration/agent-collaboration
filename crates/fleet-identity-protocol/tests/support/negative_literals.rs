@@ -22,7 +22,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         "RepositoryLocator" => invalid.extend([json!(""), json!("r".repeat(2049)), json!(format!("{}a", "é".repeat(1024)))]),
         "ModelName" => invalid.extend([json!(""), json!("m".repeat(257)), json!(format!("{}a", "é".repeat(128))), json!("é".repeat(256))]),
         "MachineLabel" => invalid.extend([json!(format!("{}a", "é".repeat(128))), json!("a\0b"), json!("a\rb"), json!(" \t\n"), json!("\u{0085}"), json!("\u{0085}\u{2003}")]),
-        "InstallationId" => invalid.extend([json!("x".repeat(36)), json!("00000000-0000-4000-8000-000000000001\n")]),
+        "InstallationId" => invalid.extend([json!("x".repeat(36)), json!("019A3DCE-2000-7000-8000-000000000001"), json!("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"), json!("00000000-0000-4000-8000-000000000001\n")]),
         "SessionRef" => {
             if let Some(first) = literals.first() {
                 let mut value = first.clone(); value["sessionId"] = json!(format!("{}a", "é".repeat(2048))); invalid.push(value);
@@ -93,7 +93,11 @@ fn scalar_rule_negatives(literals: &[Value]) -> Vec<Value> {
                     let pointer = format!("{path}/{}", field.replace('~', "~0").replace('/', "~1"));
                     let invalid = match field.as_str() {
                         "installation" | "installationId" | "installation_id" | "serviceId" => {
-                            vec![json!("x".repeat(36))]
+                            vec![
+                                json!("x".repeat(36)),
+                                json!("019A3DCE-2000-7000-8000-000000000001"),
+                                json!("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"),
+                            ]
                         }
                         "endpointId" => vec![json!("Codex"), json!("9"), json!("codex-local\n")],
                         "sessionId" => vec![json!("a\0b")],
