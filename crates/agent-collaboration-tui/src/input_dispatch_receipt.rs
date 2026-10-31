@@ -1,4 +1,6 @@
 //! Verification-only, per-owner receipts. No environment lookup or global writer.
+use crate::dispatch_frame_marker::DispatchFrameState;
+pub use crate::dispatch_frame_marker::InputDispatchFrameWriter;
 use crate::{actions::ActionId, focus_model::TargetId, surface_stack::SurfaceId};
 use iocraft::prelude::*;
 use serde::Serialize;
@@ -15,6 +17,7 @@ struct ReceiptWriter {
     output: BufWriter<File>,
     sequence: u64,
     failure: Option<ReceiptFailure>,
+    frame_state: DispatchFrameState,
 }
 struct ReceiptFailure {
     kind: io::ErrorKind,
@@ -224,6 +227,29 @@ impl From<&TerminalEvent> for InputEventReadback {
 }
 
 impl InputDispatchReceiptSink {
+    /// Wrap the chosen render stream with this writer when a fixture receipt
+    /// directory is configured, and pass this same sink to InputOwner.
+    /// After each real frame flush it appends OSC 7770;dispatch=S ST for the
+    /// receipts included in that frame, including inputs with no visual change.
+    /// Markers are optional for loop-ending inputs and are never awaited:
+    /// terminal actions finish on process exit status plus their outcome file.
+    /// Without a configured directory, install neither the sink nor this writer.
+    pub fn frame_writer<W: Write>(&self, writer: W) -> io::Result<InputDispatchFrameWriter<W>> {
+        let state = self
+            .0
+            .lock()
+            .map_err(|_| io::Error::other("receipt writer poisoned"))?
+            .frame_state
+            .clone();
+        Ok(InputDispatchFrameWriter::new(writer, state))
+    }
+    pub(crate) fn frame_state(&self) -> DispatchFrameState {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .frame_state
+            .clone()
+    }
     /// The fixture supplies a new file in its explicitly owned directory.
     pub fn create(path: impl AsRef<Path>) -> io::Result<Self> {
         let path = path.as_ref();
@@ -238,6 +264,7 @@ impl InputDispatchReceiptSink {
             output: BufWriter::new(file),
             sequence: 0,
             failure: None,
+            frame_state: DispatchFrameState::default(),
         }))))
     }
     pub(crate) fn record(&self, event: InputEventReadback, facts: InputRouteFacts) {
@@ -261,6 +288,7 @@ impl InputDispatchReceiptSink {
         if let Some(failure) = &writer.failure {
             return Err(failure.to_error());
         }
+        writer.frame_state.check_failure()?;
         if let Err(error) = writer.output.flush() {
             let failure = ReceiptFailure::from_error(error);
             let error = failure.to_error();
@@ -288,6 +316,7 @@ impl ReceiptWriter {
         self.output.write_all(b"\n")?;
         self.output.flush()?;
         self.sequence = sequence;
+        self.frame_state.record(sequence);
         Ok(())
     }
 }
@@ -357,6 +386,7 @@ mod tests {
             output: BufWriter::new(File::open(&path).unwrap()),
             sequence: 0,
             failure: None,
+            frame_state: DispatchFrameState::default(),
         })));
         sink.record(event(), facts());
         let first = sink.flush_and_check().unwrap_err().to_string();

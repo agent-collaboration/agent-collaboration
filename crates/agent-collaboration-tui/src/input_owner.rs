@@ -62,6 +62,14 @@ pub fn InputOwner<'a>(
             sink.record(receipt_event, decision.facts);
         }
     });
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    crate::dispatch_frame_marker::use_dispatch_frames(
+        &mut hooks,
+        props
+            .dispatch_receipt
+            .as_ref()
+            .map(|sink| sink.frame_state()),
+    );
     let (width, height) = stack.viewport();
     let children = std::mem::take(&mut props.children);
     element! {

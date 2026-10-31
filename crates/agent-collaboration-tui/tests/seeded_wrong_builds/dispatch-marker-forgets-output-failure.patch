@@ -1,0 +1,16 @@
+diff --git a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+--- a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
++++ b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+@@ -52,11 +52,3 @@
+     }
+-    fn record_failure(&self, error: &io::Error) {
+-        let mut sequences = self
+-            .0
+-            .lock()
+-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+-        if sequences.failure.is_none() {
+-            sequences.failure = Some(io::Error::new(error.kind(), error.to_string()));
+-        }
+-    }
++    fn record_failure(&self,error:&std::io::Error) {let _=error;}
+     pub(crate) fn check_failure(&self) -> io::Result<()> {

@@ -239,3 +239,13 @@ requires plain form arrows to move focus rather than scroll the body.
 | `scroll-reveal-ignores-row-key.patch` | A replacement selected key at the same logical position stays offscreen. |
 
 Dropdown Help retains the original popup and its live keyed model while replacing the parent body. The original F1 action supplies every opening and closing alias. Scroll reveal remembers the target identity with geometry in the existing scroll handle, so a Help remount preserves manual scroll while a newly selected key is revealed.
+
+| Patch | Intended failure |
+| --- | --- |
+| `dispatch-marker-before-frame.patch` | A prepared receipt emits its marker before the frame bytes and underlying flush. |
+| `dispatch-marker-no-noop-frame.patch` | A real ignored Home produces its receipt but never requests its unchanged frame or marker. |
+| `dispatch-marker-in-production.patch` | An unconfigured normal or optimized build writes an OSC marker to stdout. |
+| `dispatch-marker-writes-grid-cell.patch` | Marker output overwrites the first grid cell with a printable character. |
+| `dispatch-marker-forgets-output-failure.patch` | The native loop discards its end-frame error and the fixture sink falsely reports success. |
+
+Frame controls run with test-support except the production leak, which also runs the entire package in a normal optimized build. The no-op scenario observes real input consumption before checking the native loop and does not wait for a missing redraw. Terminal-action drivers await process exit and the outcome file; a final marker is optional. The closed Canvas reader remains unchanged.
