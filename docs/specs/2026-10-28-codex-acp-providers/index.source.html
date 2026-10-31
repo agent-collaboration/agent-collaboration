@@ -17,7 +17,8 @@
 <ex-document id="content">
 <h1 id="documents">Codex CLI with Claude and Cursor ACP</h1>
 <p>Open the document that answers your question. The <a href="program-design.html#program--crates-and-injection">Program Design</a> contains the architecture and injected trait. The <a href="implementation-plan.html#plan--order-and-integration-gates">Implementation Plan</a> contains the slices and gates.</p>
-<p>The <a href="plans/2026-10-30-app-server-acp-model-metadata.source.md">plan source companion</a> travels with this collection. It preserves the model-data correction and all remaining delivery obligations; planning readiness is separate from implementation proof and PR readiness.</p>
+<p>The <a href="plans/2026-10-31-app-server-acp-claude-routing.source.md">plan source companion</a> travels with this collection. It preserves the route and model-data corrections and all remaining delivery obligations; planning readiness is separate from implementation proof and PR readiness.</p>
+<p>Reviewed correction: <a href="program-design.html#claude-route-binding">qualified Claude route binding</a>, with its <a href="verification-design.html#verification--qualified-claude-routing-through-the-existing-creation-boundary">constructor and real-reply proof</a>. It preserves the Host-selected route through the existing SDK creation boundary. The superseding plan carries the route correction and every remaining proof obligation; design readiness is not runtime qualification.</p>
 <div class="ex-table-scroll" data-width="reading"><table><thead><tr><th>Your question</th><th>Document</th></tr></thead><tbody>
 <tr><td>What are we building and why?</td><td><a href="requirements.html">Requirements</a></td></tr>
 <tr><td>What must skills and commands do?</td><td><a href="specification.html">Specification</a></td></tr>
@@ -40,6 +41,7 @@
 <ex-step to="specification.html#specification--r4-preserve-conversations-c4-v4">Read preservation obligations.</ex-step>
 <ex-step to="program-design.html#program--invocation-and-commands">Inspect command ownership.</ex-step>
 <ex-step to="program-design.html#model-metadata">Read per-model information, provider-controlled effort and setting intent.</ex-step>
+<ex-step to="program-design.html#claude-route-binding">Inspect the qualified Claude constructor correction.</ex-step>
 <ex-step to="program-design.html#program--state-failure-and-trust">Follow terminal and error behavior.</ex-step>
 <ex-step to="verification-design.html#verification--target-and-lasting-journeys">Read the planned TUI effect observations.</ex-step>
 </ex-presentation>
@@ -49,6 +51,7 @@
 <ex-step to="program-design.html#program--provider-routing-and-separate-sockets">See how the connection selects its provider.</ex-step>
 <ex-step to="program-design.html#program--crates-and-injection">Inspect the trait and crate boundaries.</ex-step>
 <ex-step to="program-design.html#program--where-the-dependency-is-constructed-and-passed">Follow constructor injection and lifetime.</ex-step>
+<ex-step to="program-design.html#claude-route-binding">Inspect Host-owned route input and Claude-specific parameter preparation.</ex-step>
 <ex-step to="program-design.html#program--why-this-much-and-no-more">Read the structure tradeoff.</ex-step>
 <ex-step to="verification-design.html#verification--u5-constructor-di-supplies-the-right-implementation">Inspect its planned proof.</ex-step>
 </ex-presentation>
