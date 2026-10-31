@@ -301,10 +301,9 @@ pub(crate) fn domain_dialog_controls(
         actions.push(inspect);
     }
     actions.push(close);
-    let mut targets = Vec::new();
     let switch_width = context.options_switch_available_width;
     let body_context = context;
-    targets.push(
+    let body_target =
         TargetSpec::new(domain_body_target()?).with_input(TargetInputHandler::new(move |event| {
             let TerminalEvent::Key(key) = event else {
                 return InputUse::Unused;
@@ -329,8 +328,7 @@ pub(crate) fn domain_dialog_controls(
             } else {
                 InputUse::Unused
             }
-        })),
-    );
+        }));
     let tab_group = GroupId::new("quota-options-tabs").map_err(|error| error.to_string())?;
     let tab_ids = [action_id("resets-tab")?, action_id("credits-tab")?];
     let tab_actions = actions
@@ -338,12 +336,13 @@ pub(crate) fn domain_dialog_controls(
         .filter(|action| tab_ids.contains(&action.id))
         .cloned()
         .collect::<Vec<_>>();
-    targets.extend(segmented_targets(&tab_actions, tab_group, move || {
-        switch_width.get()
-    }));
-    for action in &actions {
-        if !tab_ids.contains(&action.id) {
-            targets.push(button_target(TargetId::for_action(&action.id), action));
+    let mut targets = segmented_targets(&tab_actions, tab_group, move || switch_width.get());
+    targets.push(body_target);
+    for placement in [Placement::Hidden, Placement::Toolbar] {
+        for action in &actions {
+            if !tab_ids.contains(&action.id) && action.placement == placement {
+                targets.push(button_target(TargetId::for_action(&action.id), action));
+            }
         }
     }
     Ok((actions, targets, primary))

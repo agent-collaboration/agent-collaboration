@@ -167,10 +167,12 @@ pub(crate) fn quota_dialog_model(
             error_context.report(error.to_string())
         }),
     );
-    targets.push(button_target(
-        TargetId::for_action(&help_action.id),
-        &help_action,
-    ));
+    let help_target = button_target(TargetId::for_action(&help_action.id), &help_action);
+    if *kind == QuotaDialogKind::Options {
+        targets.insert(0, help_target);
+    } else {
+        targets.push(help_target);
+    }
     actions.push(help_action);
     actions.push(quota_quit_action(&context, false)?);
     let inventory_paging = if matches!(kind, QuotaDialogKind::Options)
@@ -235,7 +237,14 @@ pub(crate) fn quota_dialog_model(
             .find(|action| action.id == close.id)
             .map(|action| action.id.clone())
     });
-    control_model("quota-dialog", actions, targets, primary)
+    let mut model = control_model("quota-dialog", actions, targets, primary)?;
+    if *kind == QuotaDialogKind::Options {
+        // Keep the existing task's initial focus while declaring top-to-bottom traversal.
+        model
+            .focus
+            .focus(&super::quota_domain_controls::domain_body_target()?);
+    }
+    Ok(model)
 }
 
 pub(crate) fn dialog_scroll_target() -> QuotaControlResult<TargetId> {

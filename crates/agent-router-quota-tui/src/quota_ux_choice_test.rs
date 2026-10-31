@@ -60,15 +60,16 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
                         phase = 1;
                     }
                     1 if frame.contains("Options · Resets") => {
-                        for key in [KeyCode::Tab, KeyCode::Right, KeyCode::Enter] {
-                            sender.send(provider_filter_key(key)).unwrap();
-                        }
+                        sender
+                            .send(crate::quota_test_support::shift_tab_event())
+                            .unwrap();
+                        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
                     2 if frame.contains("Options · Credits")
                         && !frame.contains("Tab change pending") =>
                     {
-                        for key in [KeyCode::End, KeyCode::Tab, KeyCode::Enter] {
+                        for key in [KeyCode::End, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter] {
                             sender.send(provider_filter_key(key)).unwrap();
                         }
                         phase = 3;

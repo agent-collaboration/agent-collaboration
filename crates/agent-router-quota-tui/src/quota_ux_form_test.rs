@@ -62,12 +62,14 @@ async fn actual_credit_editor_frame() -> String {
                     phase = 1;
                 }
                 1 if frame.contains("Resets") => {
-                    sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-                    sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+                    sender
+                        .send(crate::quota_test_support::shift_tab_event())
+                        .unwrap();
                     sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                     phase = 2;
                 }
                 2 if frame.contains("Credit balance") => {
+                    sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
                     sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
                     sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                     phase = 3;
@@ -137,8 +139,9 @@ async fn actual_credit_refresh_notice_distinguishes_success_from_failure() {
                         phase = 1;
                     }
                     1 if frame.contains("Resets") => {
-                        sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-                        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+                        sender
+                            .send(crate::quota_test_support::shift_tab_event())
+                            .unwrap();
                         sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
@@ -372,16 +375,15 @@ async fn all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_la
                 id_pose.is_some() && title_pose.is_some(),
                 "both stable ID and unique last-voucher title stay reachable: {frame}"
             );
-            for key in [KeyCode::Tab, KeyCode::Right, KeyCode::Enter] {
-                sender.send(provider_filter_key(key)).unwrap();
-            }
+            sender
+                .send(crate::quota_test_support::shift_tab_event())
+                .unwrap();
+            sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
             frame = next_options_title_frame(frames.as_mut()).await;
             while !frame.contains("Options · Credits") || frame.contains("Tab change pending") {
                 frame = next_options_title_frame(frames.as_mut()).await;
             }
-            let mut body_focus = KeyEvent::new(KeyEventKind::Press, KeyCode::Tab);
-            body_focus.modifiers = KeyModifiers::SHIFT;
-            sender.send(TerminalEvent::Key(body_focus)).unwrap();
+            sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
             if !frame.contains("Credit balance") {
                 for _ in 0..256 {
                     sender.send(provider_filter_key(KeyCode::Up)).unwrap();

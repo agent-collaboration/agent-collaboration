@@ -168,8 +168,9 @@ async fn initial_options_pages_show_task_content_before_manual_scrolling_at_all_
                 "captured identity/title/actions cannot satisfy a completed task fact: {chrome_dialog}"
             );
         }
-        sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+        sender
+            .send(crate::quota_test_support::shift_tab_event())
+            .unwrap();
         sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
         let mut canvas = browse_canvas(frames.as_mut(), "Options Credits entry").await;
         while !canvas.to_string().contains("Options · Credits") {

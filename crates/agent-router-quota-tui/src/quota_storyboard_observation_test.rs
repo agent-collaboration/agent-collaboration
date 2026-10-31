@@ -167,9 +167,10 @@ async fn normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_a
                 canvas = observation_canvas(frames.as_mut()).await;
                 evidence.push(("after-reset-cancel", 0, canvas.to_string()));
             }
-            for key in [KeyCode::Tab, KeyCode::Right, KeyCode::Enter] {
-                sender.send(provider_filter_key(key)).unwrap();
-            }
+            sender
+                .send(crate::quota_test_support::shift_tab_event())
+                .unwrap();
+            sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
             canvas = observation_canvas(frames.as_mut()).await;
             evidence.push(("after-credit-tab", 0, canvas.to_string()));
             while !canvas.to_string().contains("Options · Credits")
@@ -178,9 +179,7 @@ async fn normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_a
                 canvas = observation_canvas(frames.as_mut()).await;
                 evidence.push(("after-credit-tab", 0, canvas.to_string()));
             }
-            let mut body_focus = KeyEvent::new(KeyEventKind::Press, KeyCode::Tab);
-            body_focus.modifiers = KeyModifiers::SHIFT;
-            sender.send(TerminalEvent::Key(body_focus)).unwrap();
+            sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
             if !dialog_words(&canvas.to_string(), "Options · Credits").contains("Status") {
                 for _ in 0..256 {
                     sender.send(provider_filter_key(KeyCode::Up)).unwrap();

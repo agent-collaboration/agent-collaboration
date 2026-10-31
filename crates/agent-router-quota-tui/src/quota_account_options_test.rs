@@ -348,14 +348,7 @@ async fn ctrl_r_opens_disabled_credentialless_account_and_switches_to_credits() 
             TerminalEvent::Key(control_key('r')),
             Some("Resets are unavailable"),
         ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-            None,
-        ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-            None,
-        ),
+        (crate::quota_test_support::shift_tab_event(), None),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
             Some("Credit usage"),
@@ -383,14 +376,7 @@ async fn ctrl_r_opens_disabled_credentialless_account_and_switches_to_credits() 
 async fn account_options_panel_keeps_spare_height_outside_its_border() {
     let events = vec![
         (TerminalEvent::Key(control_key('r')), Some("Inspect")),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-            None,
-        ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-            None,
-        ),
+        (crate::quota_test_support::shift_tab_event(), None),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
             Some("Credit usage"),

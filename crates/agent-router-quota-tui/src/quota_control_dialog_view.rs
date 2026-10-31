@@ -43,7 +43,7 @@ fn QuotaOptionsSwitch(
     hooks
         .use_hook(|| OptionsSwitchWidth(props.available_width))
         .0 = props.available_width;
-    // Measure this row after DialogFrame padding and ScrollList's gutter.
+    // Measure the pinned row after DialogFrame padding.
     // The same live value controls segmented_targets in the dialog model.
     element!(View(width:100pct,min_width:0,flex_shrink:0.0_f32) {
         SegmentedSwitch(actions:props.actions.clone(),available_width:props.available_width.get())
@@ -73,12 +73,25 @@ pub(crate) fn QuotaControlDialog(
     {
         return element!(DialogFrame(title:"Help".to_owned(),scroll,scroll_target:props.help.scroll_target(),scroll_focus:Some(props.help.body_target())) {HelpDialog(control:props.help.clone())}).into_any();
     }
-    let result = dialog_content(&props.context, &props.kind, surface);
-    let (title, content) = match result {
+    let result = dialog_content(&props.context, &props.kind, surface).and_then(|(title, content)| {
+        let (controls, status) = if props.kind == QuotaDialogKind::Options {
+            let actions = vec![action_id("resets-tab")?, action_id("credits-tab")?];
+            (
+                vec![element!(QuotaOptionsSwitch(actions,available_width:props.context.options_switch_available_width)).into_any()],
+                options_status(&props.context),
+            )
+        } else {
+            (Vec::new(), None)
+        };
+        Ok((title, content, controls, status))
+    });
+    let (title, content, pinned_controls, pinned_status) = match result {
         Ok(content) => content,
         Err(message) => (
             "Quota".to_owned(),
             element!(UiText(content:message,role:UiTextRole::Error,wrap:TextWrap::Wrap)).into_any(),
+            Vec::new(),
+            None,
         ),
     };
     let help = action_id("help")
@@ -91,7 +104,7 @@ pub(crate) fn QuotaControlDialog(
         .ok()
         .flatten();
     match super::quota_dialog_controls::dialog_scroll_target() {
-        Ok(scroll_target)=>element!(DialogFrame(title,scroll:props.scroll.clone(),scroll_target,scroll_focus,help_action:help,context:identity) {#(content)}).into_any(),
+        Ok(scroll_target)=>element!(DialogFrame(title,scroll:props.scroll.clone(),scroll_target,scroll_focus,help_action:help,context:identity,pinned_controls,pinned_status) {#(content)}).into_any(),
         Err(error)=>element!(UiText(content:error,role:UiTextRole::Error)).into_any(),
     }
 }
@@ -235,7 +248,6 @@ fn options_content(
     } else {
         "Options · Credits"
     };
-    let switches = vec![action_id("resets-tab")?, action_id("credits-tab")?];
     let body = if options.tab == super::quota_account_options::AccountOptionsTab::Credits {
         credit_content(context, options, surface)?
     } else if let (Some(snapshot), Some(target)) = (snapshot.as_ref(), target.as_ref())
@@ -271,7 +283,41 @@ fn options_content(
         };
         explanation.map_or_else(||element!(FormFields(stacked:context.width.get()<40) {#(vec![field("Eligibility","Not checked".into(),UiTextRole::Body)])}).into_any(),|content|element!(UiText(content,role:UiTextRole::Secondary,wrap:TextWrap::Wrap)).into_any())
     };
-    Ok((title.to_owned(),element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:if context.height.get()<16{0}else{1}) {QuotaOptionsSwitch(actions:switches,available_width:context.options_switch_available_width) #(options.pending_tab.is_some().then(||element!(UiText(content:"Tab change pending",role:UiTextRole::Secondary)))) #(body)}).into_any()))
+    Ok((title.to_owned(),element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:if context.height.get()<16{0}else{1}) {#(options.pending_tab.is_some().then(||element!(UiText(content:"Tab change pending",role:UiTextRole::Secondary)))) #(body)}).into_any()))
+}
+
+fn options_status(context: &QuotaControlContext) -> Option<AnyElement<'static>> {
+    use super::quota_account_options::{
+        CreditPolicyEditorPhase, account_options_message_role, account_options_message_text,
+    };
+    let options = context.account_options.read();
+    let options = options.as_ref()?;
+    if options.tab != super::quota_account_options::AccountOptionsTab::Credits {
+        return None;
+    }
+    let status = options
+        .editor
+        .as_ref()
+        .and_then(|editor| match editor.phase {
+            CreditPolicyEditorPhase::Editing => None,
+            CreditPolicyEditorPhase::Saving => {
+                Some((StatusKind::Available, "Saving preference…".to_owned()))
+            }
+            CreditPolicyEditorPhase::SaveFailed(error) => {
+                Some((StatusKind::Error, error.message().to_owned()))
+            }
+            CreditPolicyEditorPhase::SavedReloadFailed => Some((
+                StatusKind::Warning,
+                "Saved, but account data could not be reloaded.".to_owned(),
+            )),
+        });
+    if status.is_none() && options.message.is_none() {
+        return None;
+    }
+    Some(element!(View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+        #(status.map(|(status,detail)|element!(StatusValue(status,detail:Some(detail)))))
+        #(options.message.map(|message|element!(UiText(content:account_options_message_text(message),role:account_options_message_role(message),wrap:TextWrap::Wrap))))
+    }).into_any())
 }
 
 fn credit_content(
@@ -280,8 +326,7 @@ fn credit_content(
     surface: SurfaceContext,
 ) -> QuotaControlResult<AnyElement<'static>> {
     use super::quota_account_options::{
-        CreditPolicyEditorPhase, account_options_message_text, credit_entitlement_label,
-        credit_freshness_label, provider_control_note,
+        credit_entitlement_label, credit_freshness_label, provider_control_note,
     };
     let usage = &options.target.credit_usage;
     let editor = options.editor.as_ref();
@@ -296,19 +341,6 @@ fn credit_content(
     } else {
         element!(UiText(content:if policy==codex_router_core::credit_usage::CreditUsagePolicy::Allow {"Allow"}else{"Disallow"},role:UiTextRole::Body)).into_any()
     };
-    let status = editor.and_then(|editor| match editor.phase {
-        CreditPolicyEditorPhase::Editing => None,
-        CreditPolicyEditorPhase::Saving => {
-            Some((StatusKind::Available, "Saving preference…".to_owned()))
-        }
-        CreditPolicyEditorPhase::SaveFailed(error) => {
-            Some((StatusKind::Error, error.message().to_owned()))
-        }
-        CreditPolicyEditorPhase::SavedReloadFailed => Some((
-            StatusKind::Warning,
-            "Saved, but account data could not be reloaded.".to_owned(),
-        )),
-    });
     Ok(element!(DialogSections {DialogSection(heading:if editor.is_some(){String::new()}else{"Credit balance".to_owned()}) {FormFields(stacked:context.width.get()<40) {
         #(vec![field(if editor.is_some(){"Balance"}else{"Status"},credit_entitlement_label(usage),UiTextRole::Body)])
         #((editor.is_none()||usage.freshness!=codex_router_quota_service::quota::CreditUsageFreshness::Fresh).then(||field("Freshness",credit_freshness_label(usage.freshness).to_owned(),UiTextRole::Secondary)))
@@ -316,7 +348,5 @@ fn credit_content(
     }} DialogSection(heading:if editor.is_some(){String::new()}else{"Credit usage".to_owned()}) {FormFields(stacked:context.width.get()<40) {FormField(label:"Use credits".to_owned(),has_focus:surface.is_focused(&choice_target(QuotaChoiceField::Credit)?)) {#(policy_control)}}}
     #(provider_control_note(usage).map(|detail|element!(StatusValue(status:StatusKind::Warning,detail:Some(detail)))))
     #((options.target.weekly_quota_floor_percent>0).then(||element!(StatusValue(status:StatusKind::Warning,detail:Some(format!("Weekly floor {}% blocks credit routing.",options.target.weekly_quota_floor_percent))))))
-    #(status.map(|(status,detail)|element!(StatusValue(status,detail:Some(detail)))))
-    #(options.message.map(|message|element!(UiText(content:account_options_message_text(message),role:super::quota_account_options::account_options_message_role(message),wrap:TextWrap::Wrap))))
     }).into_any())
 }

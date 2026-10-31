@@ -43,12 +43,14 @@ async fn quota_credit_choice_cancel_is_owned_before_editor_and_never_saves() {
                     phase = 1;
                 }
                 1 if text.contains("Resets") => {
-                    sender.send(key(KeyCode::Tab)).unwrap();
-                    sender.send(key(KeyCode::Right)).unwrap();
+                    sender
+                        .send(crate::quota_test_support::shift_tab_event())
+                        .unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 2;
                 }
                 2 if text.contains("Credit balance") => {
+                    sender.send(key(KeyCode::Tab)).unwrap();
                     sender.send(key(KeyCode::Tab)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();

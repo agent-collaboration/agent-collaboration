@@ -209,17 +209,14 @@ async fn short_quota_options_keeps_credit_policy_and_footer_visible() {
     for width in [100usize, 48] {
         let events = vec![
             (TerminalEvent::Key(control_key('r')), Some("Inspect")),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                None,
-            ),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-                None,
-            ),
+            (crate::quota_test_support::shift_tab_event(), None),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
                 Some("Credit usage"),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+                None,
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
@@ -282,17 +279,14 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             });
         let events = vec![
             (TerminalEvent::Key(control_key('r')), Some("Inspect".into())),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                None,
-            ),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-                None,
-            ),
+            (crate::quota_test_support::shift_tab_event(), None),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
                 Some("Credit usage".into()),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+                None,
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
@@ -419,16 +413,7 @@ async fn composed_credit_sections_keep_a_rendered_blank_row_after_observation() 
                     }
                     1 if frame.contains("Inspect") => {
                         sender
-                            .send(TerminalEvent::Key(KeyEvent::new(
-                                KeyEventKind::Press,
-                                KeyCode::Tab,
-                            )))
-                            .unwrap();
-                        sender
-                            .send(TerminalEvent::Key(KeyEvent::new(
-                                KeyEventKind::Press,
-                                KeyCode::Right,
-                            )))
+                            .send(crate::quota_test_support::shift_tab_event())
                             .unwrap();
                         sender
                             .send(TerminalEvent::Key(KeyEvent::new(

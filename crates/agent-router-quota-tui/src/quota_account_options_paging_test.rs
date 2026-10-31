@@ -91,14 +91,7 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp)),
             Some("4-4 of 5"),
         ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-            None,
-        ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-            None,
-        ),
+        (crate::quota_test_support::shift_tab_event(), None),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
             Some("Options · Credits"),

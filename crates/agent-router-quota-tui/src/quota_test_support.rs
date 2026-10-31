@@ -8,6 +8,13 @@ pub mod frame_grid;
 #[path = "../../agent-collaboration-tui/tests/support/recording_backend.rs"]
 pub mod recording_backend;
 
+pub fn shift_tab_event() -> iocraft::TerminalEvent {
+    use iocraft::prelude::*;
+    let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Tab);
+    key.modifiers = KeyModifiers::SHIFT;
+    TerminalEvent::Key(key)
+}
+
 pub fn require_color_environment() {
     assert!(
         std::env::var_os("NO_COLOR").is_none(),

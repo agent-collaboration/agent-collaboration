@@ -67,9 +67,8 @@ async fn phone_options_titles_keep_the_active_tab_at_body_top_bottom_and_tab_ret
         sender.send(provider_filter_key(KeyCode::End)).unwrap();
         frame = next_options_title_frame(frames.as_mut()).await;
         observations.push(("Resets bottom", "Options · Resets", frame));
-        for key in [KeyCode::Tab, KeyCode::Right, KeyCode::Enter] {
-            sender.send(provider_filter_key(key)).unwrap();
-        }
+        sender.send(crate::quota_test_support::shift_tab_event()).unwrap();
+        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
         frame = next_options_title_frame(frames.as_mut()).await;
         // Both pre-fix clipped and corrected headers reach the assertion below;
         // this routing acknowledgement must not hide the known clipping defect.

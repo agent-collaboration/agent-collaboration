@@ -282,11 +282,7 @@ async fn assert_credit_control_c_exits_the_component(editing: bool) {
     let mut ordered_events = vec![
         (TerminalEvent::Key(control_key('r')), Some("Inspect")),
         (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-            None,
-        ),
-        (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+            crate::quota_test_support::shift_tab_event(),
             None,
         ),
         (
@@ -295,6 +291,10 @@ async fn assert_credit_control_c_exits_the_component(editing: bool) {
         ),
     ];
     if editing {
+        ordered_events.push((
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+            None,
+        ));
         ordered_events.push((
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
             None,
