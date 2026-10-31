@@ -56,16 +56,23 @@ pub struct ListSceneProps {
     pub marker_offset: u16,
     pub viewport_rows: Option<u16>,
     pub hover_selection: bool,
+    pub width: Option<u16>,
+    pub height: Option<u16>,
+    pub initial_rows: Option<Vec<ListRowKey>>,
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    pub sink: Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
 }
 #[component]
 pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     record_draw(&mut hooks, &props.journal);
     let value = hooks.use_state(|| {
         ListSelectionState::new(
-            ["alpha", "bravo", "charlie", "delta", "echo"]
-                .into_iter()
-                .map(|key| ListRowKey::new(key).unwrap())
-                .collect(),
+            props.initial_rows.clone().unwrap_or_else(|| {
+                ["alpha", "bravo", "charlie", "delta", "echo"]
+                    .into_iter()
+                    .map(|key| ListRowKey::new(key).unwrap())
+                    .collect()
+            }),
             None,
         )
         .unwrap()
@@ -193,7 +200,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let control = handle.get().control;
     let journal = props.journal.clone();
     let scroll = control.scroll();
-    element!(InputOwner(stack,width:76u16,height:24u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,format!("{}|{}",value.read().selected().map_or("-",ListRowKey::as_str),stack.snapshot().top().focus.current().map_or("-",TargetId::as_str)).into_bytes()), (SurfaceId::Screen,scroll.position().offset.to_string().into_bytes())]))) {
+    let root = element!(InputOwner(stack,width:props.width.unwrap_or(76),height:props.height.unwrap_or(24),quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,format!("{}|{}",value.read().selected().map_or("-",ListRowKey::as_str),stack.snapshot().top().focus.current().map_or("-",TargetId::as_str)).into_bytes()), (SurfaceId::Screen,scroll.position().offset.to_string().into_bytes())]))) {
         OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
             Text(content:format!("Details calls {}",calls.get()))
             View(height:props.viewport_rows.unwrap_or(2)) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("list")),scroll:control.scroll(),grow:true) {
@@ -201,5 +208,12 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             }}
             Button(id:target("toolbar"),action:action("toolbar"))
         }}
-    })
+    });
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    let root = {
+        let mut root = root;
+        root.props.dispatch_receipt = props.sink.clone();
+        root
+    };
+    root
 }
