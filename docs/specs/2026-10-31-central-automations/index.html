@@ -11,159 +11,114 @@
     <a href="index.html">Central automations</a>
     <a href="mental-model.html">How it all fits</a>
     <a href="definitions.html">The central list</a>
-    <a href="firing.html">Firing and mail</a>
-    <a href="firing-options.html">Firing options and cost</a>
-    <a href="runs.html">On the receiving machine</a>
+    <a href="firing.html">Clock, firing and delivery</a>
+    <a href="runs.html">The receiving machine</a>
+    <a href="remote-sessions.html">Sessions on other machines</a>
     <a href="notifications.html">Notifications</a>
     <a href="migration.html">Moving to central</a>
+    <a href="database.html">Database cleanup (PR 1)</a>
     <a href="published-design.html">Fixing the published design</a>
     <a href="proof.html">How it's proven</a>
+    <a href="firing-options.html">Firing options and cost</a>
+    <a href="history.html">How we got here</a>
     <a href="delivery-plan.html">Delivery plan</a>
   </nav>
 </ex-nav>
+<ex-presentation id="read-design" title="Read the design" description="The main islands in order, one stop each.">
+  <ex-step to="system-map">The whole system: central list and clock, delivery to machines, the receiving Router.</ex-step>
+  <ex-step to="definitions.html#rules">The central list and its rules.</ex-step>
+  <ex-step to="firing.html#sequence">One grid point, end to end.</ex-step>
+  <ex-step to="firing.html#cancel">Cancel happens in central only.</ex-step>
+  <ex-step to="runs.html#path">What the receiving machine does with a batch.</ex-step>
+  <ex-step to="remote-sessions.html#flow">Creating a session on another machine.</ex-step>
+  <ex-step to="notifications.html#window">Notifications at most once every 10 minutes.</ex-step>
+  <ex-step to="migration.html#handover">The one-time move to central.</ex-step>
+  <ex-step to="database.html#table">Database cleanup.</ex-step>
+  <ex-step to="delivery-plan.html#milestones">The delivery plan.</ex-step>
+</ex-presentation>
 <ex-document id="content">
-
 <h1 id="heading-central-automations">Central automations</h1>
 
-<p><strong>What broke:</strong> you meant automations to be definitions of scheduled messages, kept in one central place for every machine. That was never built. Each machine keeps its own schedules and wakes in its own <code>automation.sqlite</code>, fires them itself, and nothing about them is on central.</p>
+<p><strong>Schedules and wakes become one central list for all your machines.</strong> Central keeps the clock on a 5-minute grid and sends each machine its due work in one batch. Each machine runs that work exactly as today and reports back. The same path also lets you <strong>create a session on another machine</strong>. Notifications reach each agent at most once every 10 minutes, and the databases clean up after themselves.</p>
 
-<p><strong>Why nobody caught it:</strong> the board design that holds your later decisions sits on a local branch, <code>design/board-orchestration</code>, 667 commits ahead of <code>main</code> and never published. On 25 Oct, #160 copied an <em>older</em> version of the requirements onto <code>main</code>. Agents read <code>main</code>, so they read rules you had already removed.</p>
+<ex-callout title="Status" tone="decision" icon="users">
+  <p><strong>Design reviewed: ready</strong> (the Advisor's final verdict, with every finding closed). Remote sessions were added after that, and their review is under way. The <a href="delivery-plan.html">delivery plan</a> waits for your approval.</p>
+</ex-callout>
 
-<p><strong>What we're doing:</strong> one stack of two PRs that merge together.</p>
+<h2 id="map">The systems</h2>
+<ex-mermaid id="system-map" label="System map" data-width="canvas"><script type="text/plain">
+flowchart LR
+  subgraph you["Any machine (you or an agent)"]
+    cli["CLI / MCP<br/>wake · schedule · conversation create"]
+  end
+  subgraph central["Central (one per organization)"]
+    list["Central list<br/>definitions + limits"]
+    clock["Clock<br/>one alarm, 5-min grid"]
+    custody["Delivery to machines<br/>batches held until confirmed"]
+    list --> clock --> custody
+  end
+  subgraph machine["Target machine"]
+    router["Receiving Router<br/>store, run, report"]
+    notif["Notification limit<br/>once per 10 min"]
+    sess["Agent sessions"]
+    router --> sess
+    notif --> sess
+  end
+  cli --> list
+  cli -->|"session on another machine"| custody
+  custody -->|"hint, then pull"| router
+  router -->|"reports"| list
+  class cli slot5
+  class list,clock,custody slot1
+  class router,notif,sess slot2
+</script></ex-mermaid>
+
+<h2 id="islands">Read one island at a time</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Island</th><th>What it answers</th></tr></thead>
+<tbody>
+<tr><td><a href="mental-model.html">How it all fits</a></td><td>one worked example: 3 machines, 24 automations, one moment in time</td></tr>
+<tr><td><a href="definitions.html">The central list</a></td><td>where schedules and wakes live, the rules, and the limits agents see</td></tr>
+<tr><td><a href="firing.html">Clock, firing and delivery</a></td><td>the alarm as a scheduler, the grid, batches, cancel only in central, safe delivery</td></tr>
+<tr><td><a href="runs.html">The receiving machine</a></td><td>what a machine does with a batch, and why nothing is lost or run twice</td></tr>
+<tr><td><a href="remote-sessions.html">Sessions on other machines</a></td><td>creating a session on another computer, through central</td></tr>
+<tr><td><a href="notifications.html">Notifications</a></td><td>once every 10 minutes per agent; what stays immediate</td></tr>
+<tr><td><a href="migration.html">Moving to central</a></td><td>the one-time move of today's schedules and wakes</td></tr>
+<tr><td><a href="database.html">Database cleanup (PR 1)</a></td><td>retention, vacuum and WAL for every database</td></tr>
+<tr><td><a href="published-design.html">Fixing the published design</a></td><td>getting your board decisions onto <code>main</code> safely</td></tr>
+<tr><td><a href="proof.html">How it's proven</a></td><td>the two-machine test rig and each test</td></tr>
+<tr><td><a href="firing-options.html">Firing options and cost</a></td><td>why "A with batching", and what it costs</td></tr>
+<tr><td><a href="history.html">How we got here</a></td><td>the timeline of how the central design was missed</td></tr>
+<tr><td><a href="delivery-plan.html">Delivery plan</a></td><td>milestones, lanes and gates; waiting for your approval</td></tr>
+</tbody>
+</table>
+</div>
+<p>Press <strong>W</strong> for a guided walk through the main islands in order.</p>
+
+<h2 id="decisions">Your decisions so far</h2>
 <ul>
-  <li><strong>PR 1</strong> (<code>fix/router-db-retention</code>): retention, vacuum and WAL.</li>
-  <li><strong>PR 2</strong> (<code>design/automations-central</code>): this design, then its implementation and migrations, plus a safe republish of the board design.</li>
+  <li>Automations are central and never tied to a project.</li>
+  <li>Central fires at the due time, with send-time batching ("A"). Cancel happens in central only.</li>
+  <li>5-minute grid; wakes every 10 minutes at most; notifications at most once per 10 minutes per agent.</li>
+  <li>Machines send to central in batches: every 500 ms or 100 items.</li>
+  <li>The limits live in the schema and are validated everywhere.</li>
+  <li>You can create sessions on other machines.</li>
+  <li>There's one organization today. Both PRs merge together.</li>
 </ul>
-
-<ex-callout title="Your decisions so far (31 Oct)" tone="decision" icon="clock">
+<ex-callout title="Three calls I made, for you to correct" tone="question" icon="chat-circle">
   <ul>
-    <li><strong>Central keeps the clock and sends the mail:</strong> "A with send time batching". At each 5-minute mark, each machine gets one batch, right away.</li>
-    <li><strong>Cancel happens in central only:</strong> once something is sent, it's out.</li>
-    <li><strong>Cadence:</strong> everything on a 5-minute grid; wakes every 10 minutes at most; notifications at most once every 10 minutes per agent.</li>
-    <li><strong>The limits are written into the schema, checked everywhere, and visible to agents.</strong></li>
-    <li><strong>One organization today;</strong> multi-org is a separate project.</li>
+    <li>grid times round <strong>up</strong> (never early);</li>
+    <li>"notifications" means board, thread-activity and subscription-expiry notices, while approvals and questions stay immediate;</li>
+    <li>the 10-minute minimum applies to <strong>all</strong> wakes.</li>
   </ul>
 </ex-callout>
 
-<h2 id="pages">The design, page by page</h2>
-<ul>
-  <li><a href="delivery-plan.html">Delivery plan</a>: milestones, lanes, gates and risks. Approve it to start building.</li>
-  <li><a href="mental-model.html">How it all fits</a>: start here. Three machines, 24 automations and one moment in time, step by step; how a wake reaches a session; why it stays cheap.</li>
-  <li><a href="definitions.html">The central list</a>: where schedules and wakes live, what central stores, the rules.</li>
-  <li><a href="firing.html">Firing and mail</a>: how a due automation becomes one message, plus repeats, cancels and failures.</li>
-  <li><a href="firing-options.html">Firing options and cost</a>: your real volume, Cloudflare's billing, what one firing costs, and the A/B/C tradeoffs.</li>
-  <li><a href="notifications.html">Notifications</a>: once every 10 minutes per agent, what counts, and what stays immediate.</li>
-  <li><a href="runs.html">On the receiving machine</a>: what the machine does, what stays local, reporting back.</li>
-  <li><a href="migration.html">Moving to central</a>: the one-time handover and why nothing fires twice.</li>
-  <li><a href="published-design.html">Fixing the published design</a>: republishing your decisions safely.</li>
-  <li><a href="proof.html">How it's proven</a>: the two-machine test rig and what each test shows.</li>
-</ul>
-
-<ex-callout title="Design reviewed: ready. Plan waiting on you." tone="decision" icon="users">
-  <p>The Advisor's final verdict is ready, with every finding closed. The build plan is on the <a href="delivery-plan.html">Delivery plan</a> page and waits for your approval.</p>
-</ex-callout>
-
-<h2 id="today-vs-design">Today versus the design</h2>
-
-<ex-grid data-width="canvas">
-<div>
-<h3 id="heading-today-main">Today (main)</h3>
-<ex-mermaid id="today" label="Today"><script type="text/plain">
-flowchart TD
-  def["automation.sqlite on machine A<br/>schedules + wakes + timer"] -->|fires| push["A's interaction.sqlite<br/>local push"]
-  push --> sess["session on A"]
-  def -. "only a wake for another machine" .-> mail["mail via central"]
-  mail --> remote["machine B keeps that wake<br/>and its timer"]
-</script></ex-mermaid>
-<p>The list exists only on the machine that made it. If A is off, nothing fires.</p>
-</div>
-<div>
-<h3 id="heading-the-design">The design</h3>
-<ex-mermaid id="design" label="Design"><script type="text/plain">
-flowchart TD
-  cli["any machine<br/>CLI / MCP"] -->|create, change, pause, cancel| fleet["central: one list<br/>definitions + clock"]
-  fleet -->|due: one message| ledger["central ledger<br/>(the same path as all messages)"]
-  ledger --> inbox["target machine's inbox<br/>held while it's offline"]
-  inbox --> run["deliver the wake, or start the run<br/>in the bound or fresh session"]
-  run -. "outcome" .-> fleet
-</script></ex-mermaid>
-<p>One list, the same from every machine. Firing is a message on your outbox → central → inbox path.</p>
-</div>
-</ex-grid>
-
-<h2 id="rules">What the design promises</h2>
-
-<div class="ex-table-scroll">
-<table>
-<thead><tr><th>Part</th><th>Promise</th><th>Your words it rests on</th></tr></thead>
-<tbody>
-<tr><td><strong>Definitions</strong></td><td>One central list. Create, list, change, pause and cancel from any machine, and see the same state everywhere. Not tied to any project. The wake limits stay as they are (24 h, 7 days, 5 min, one active wake per session).</td><td>"cross system in a central location" (31 Oct); "should not be associated with anything, should always work" (19 Oct); wake limits (15 Oct)</td></tr>
-<tr><td><strong>Firing</strong></td><td>Central fires on time. Each firing is one message on the normal path, held while the target machine is offline. Edits and cancels that land before the due time take effect; a firing already in flight is cancelled cleanly, never sent twice.</td><td>"routing messages" (31 Oct); "schedules, wakes … same message path … must actually work" (27 Sep); "nothing is missed" (U63)</td></tr>
-<tr><td><strong>Runs</strong></td><td>The receiving machine does exactly what it does today: delivers the wake, or starts the run in the bound session or a fresh one in its folder, with the same model, effort and timeout. The outcome is visible from every machine.</td><td>"must actually work" (27 Sep)</td></tr>
-<tr><td><strong>Migration</strong></td><td>Each machine moves its schedules and live wakes to central once, keeping their IDs and next due times. No double firing and no loss during the move. Old history stays readable until the 2-month retention removes it. A machine on an old release keeps firing its own schedules until it upgrades.</td><td>"we need migrations" (31 Oct); "two months" retention (31 Oct)</td></tr>
-<tr><td><strong>Published design</strong></td><td><code>main</code>'s board design says what you decided, U80 and no project pause, published as a hand-picked docs change. Newer docs on main are kept; the Cloudflare-cache history is never pushed.</td><td>"we need to fix it" (31 Oct)</td></tr>
-</tbody>
-</table>
-</div>
-
-<h2 id="timeline">How it went wrong</h2>
-
-<p>From the Advisor's read of this Mac's transcripts, ledgers and git. Sunclaw's records are still being searched.</p>
-
-<ex-trace title="Timeline" data-width="reading">
-  <details tone="question" tag="4 Oct" icon="chat-circle">
-    <summary>You asked where automations live</summary>
-    <p>"what about automation? is that a global thing? is that a local thing? … where they live?" The Lead proposed definitions "global: on the fabric … one owner, one clock", but left the timer location open (D2). It was never closed, and the automation lane (P4) was never built.</p>
-  </details>
-  <details tone="risk" tag="9 Oct" icon="bug">
-    <summary>A Lead added "a project's wakes and schedules pause" to your lease rule</summary>
-    <p>Your words were about 4-hour leases. The pause clause was the Lead's own, marked as authorized. The same Lead admitted it on 18–19 Oct.</p>
-  </details>
-  <details tone="decision" tag="19 Oct" icon="chat-circle">
-    <summary>You asked "did we not put wakes and automations in central not in a project?" and removed the project link</summary>
-    <p>The Advisor answered yes, wrongly adding that a project controls firing. You said automation "should not be associated with anything, should always work". Commit <code>b8e63fedf</code> (U80) recorded it on the local design branch only.</p>
-  </details>
-  <details tone="risk" tag="22–25 Oct" icon="bug">
-    <summary>The published copy was the old one</summary>
-    <p>On 22 Oct a reviewer noticed the docs in the published tree were "an older copy", and it wasn't fixed. On 25 Oct, #160 put exactly the pre-U80 requirements onto <code>main</code>, where they still are.</p>
-  </details>
-  <details tone="note" tag="23 Oct" icon="code">
-    <summary>Only the cross-machine wake slice was built</summary>
-    <p>Remote wake creation and controls (the B3r slice) shipped. They give each target machine its own timer, not a central list.</p>
-  </details>
-</ex-trace>
-
-<ex-callout title="What was right" tone="done" icon="shield-check">
-  <p>Much of the code already follows your later decisions: central-first project creation, no offline writes, and the removed lost-write family. It's the published documents that contradict it. So the docs fix is mostly about the documents, not about code.</p>
-</ex-callout>
-
-<h2 id="fix-docs">Fixing the published design</h2>
-<ol>
-  <li>Inventory every decision on the design branch: settled, superseded, open, or planned but unbuilt. That includes fixing the two contradictions still on the branch: PD2's "activity gate" and an explainer showing the old U38.</li>
-  <li>Copy only the approved governing files onto this stack, without the branch's history. Newer docs on main stay as they are.</li>
-  <li>Public-safety scan of the exact files and commits: no cache, secrets, account IDs or emails, real hosts, or local paths.</li>
-  <li>An independent review checks it against your decisions, then it publishes with this stack.</li>
-</ol>
-
-<h2 id="status">Status</h2>
-<div class="ex-table-scroll">
-<table>
-<thead><tr><th>Piece</th><th>State</th></tr></thead>
-<tbody>
-<tr><td>PR 1: affinity pruning, read-cache leak, vacuum, WAL, proxy retention</td><td>Built and pushed; the rest of the retention table is in progress</td></tr>
-<tr><td>PR 2: the four design documents</td><td><strong>Reviewed: ready</strong> (Advisor final verdict; every finding closed)</td></tr>
-<tr><td>PR 2: build</td><td>Plan written; waiting for your approval</td></tr>
-<tr><td>Sunclaw transcript search</td><td>Waiting on the Station Chief</td></tr>
-</tbody>
-</table>
-</div>
-
 <details>
-<summary>Sources for agents</summary>
-<p><a href="requirements.md">requirements.md</a> (U1–U11) and <a href="specification.md">specification.md</a> (E1–E10, R1–R15, V1–V14) are the governing documents. Also <a href="program-design.md">program-design.md</a> and <a href="verification-design.md">verification-design.md</a>.</p>
+<summary>The documents behind this, for agents</summary>
+<p><a href="requirements.md">requirements.md</a>, <a href="specification.md">specification.md</a>, <a href="program-design.md">program-design.md</a>, <a href="verification-design.md">verification-design.md</a>, and the <a href="plans/2026-10-31-central-automations-delivery.md">plan</a>.</p>
 </details>
-
 </ex-document>
 
 
-<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"}]</script></body></html>
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The systems","pageTitle":"Central automations","ancestors":[],"href":"index.html#map"},{"kind":"heading","title":"Read one island at a time","pageTitle":"Central automations","ancestors":[],"href":"index.html#islands"},{"kind":"heading","title":"Your decisions so far","pageTitle":"Central automations","ancestors":[],"href":"index.html#decisions"},{"kind":"walkthrough","title":"Read the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#read-design","description":"The main islands in order, one stop each."},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Clock, firing and delivery","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#heading-clock-firing-and-delivery"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"The receiving machine","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#heading-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Sessions on other machines","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#heading-sessions-on-other-machines"},{"kind":"heading","title":"How it works","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#flow"},{"kind":"heading","title":"What you get back","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#answers"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Database cleanup (PR 1)","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#heading-database-cleanup-pr-1"},{"kind":"heading","title":"What's kept, and for how long","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#table"},{"kind":"heading","title":"Getting space back","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#space"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"How we got here","pageTitle":"How we got here","ancestors":[],"href":"history.html#heading-how-we-got-here"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"}]</script></body></html>
