@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_footer.rs b/crates/agent-collaboration-tui/src/controls/dialog_footer.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_footer.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_footer.rs
-@@ -10,3 +10,3 @@ pub fn DialogFooter<'a>(props: &mut DialogFooterProps<'a>) -> impl Into<AnyEleme
-     let hints = std::mem::take(&mut props.hints);
--    element!(View(width:100pct,padding_top:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-+    element!(View(width:100pct,padding_top:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-         View(column_gap:2,flex_shrink:0.0_f32,flex_wrap:FlexWrap::Wrap) {#(children)}

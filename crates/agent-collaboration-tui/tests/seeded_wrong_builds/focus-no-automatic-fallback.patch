@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/focus_model.rs b/crates/agent-collaboration-tui/src/focus_model.rs
---- a/crates/agent-collaboration-tui/src/focus_model.rs
-+++ b/crates/agent-collaboration-tui/src/focus_model.rs
-@@ -271,3 +271,3 @@
-             }
--            self.current = self.automatic_fallback();
-+            self.current = self.current.clone();
-         }

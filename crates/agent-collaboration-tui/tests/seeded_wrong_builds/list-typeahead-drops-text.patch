@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
---- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-@@ -234,3 +234,3 @@ impl ListSelectionControl {
-             {
--                return input.call(event);
-+                return InputUse::Used;
-             }

@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/theme.rs b/crates/agent-collaboration-tui/src/theme.rs
---- a/crates/agent-collaboration-tui/src/theme.rs
-+++ b/crates/agent-collaboration-tui/src/theme.rs
-@@ -125,3 +125,3 @@ impl Theme {
-     pub const fn covered() -> Self {
--        Self { covered: true }
-+        Self { covered: false }
-     }

@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/surface_stack.rs b/crates/agent-collaboration-tui/src/surface_stack.rs
---- a/crates/agent-collaboration-tui/src/surface_stack.rs
-+++ b/crates/agent-collaboration-tui/src/surface_stack.rs
-@@ -281,3 +281,3 @@ impl SurfaceStack {
-         };
--        overlay.model = model;
-+        let _=model;
-         true

@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/surface_stack.rs b/crates/agent-collaboration-tui/src/surface_stack.rs
---- a/crates/agent-collaboration-tui/src/surface_stack.rs
-+++ b/crates/agent-collaboration-tui/src/surface_stack.rs
-@@ -322,3 +322,3 @@
-         }
--        self.overlays.push(dropdown);
-+        let _=dropdown;
-         true

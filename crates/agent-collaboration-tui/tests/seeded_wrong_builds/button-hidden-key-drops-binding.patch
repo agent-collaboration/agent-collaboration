@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
---- a/crates/agent-collaboration-tui/src/actions.rs
-+++ b/crates/agent-collaboration-tui/src/actions.rs
-@@ -205,3 +205,3 @@ impl ActionRegistry {
-             .rev()
--            .find(|action| action.keys.iter().any(|key| key.matches(event)))
-+            .find(|action| event.code != iocraft::KeyCode::Left && action.keys.iter().any(|key| key.matches(event)))
-             .and_then(|action| {

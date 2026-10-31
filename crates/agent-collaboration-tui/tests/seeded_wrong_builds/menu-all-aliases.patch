@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
---- a/crates/agent-collaboration-tui/src/controls/menu.rs
-+++ b/crates/agent-collaboration-tui/src/controls/menu.rs
-@@ -170,3 +170,3 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
-             let reason=ellipsize(reason.as_deref().unwrap_or_default(),remaining.saturating_sub(key_width+usize::from(gap)));
--            let key=ellipsize(&key,key_width);
-+            let key=action.keys.iter().map(ToString::to_string).collect::<Vec<_>>().join(" / ");
-             element!(ScrollReveal(focused) {HitRegion(target:id.clone(),kind:HitRegionKind::Target) {View(width:100pct,min_height:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&id){SurfaceRole::Alternate}else{SurfaceRole::Raised})) {

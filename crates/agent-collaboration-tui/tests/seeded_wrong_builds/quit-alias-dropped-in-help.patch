@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
---- a/crates/agent-collaboration-tui/src/input_owner.rs
-+++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -164,2 +164,3 @@ fn declared_quit_alias(
- ) -> bool {
-+    if stack.top().actions.scope().as_str()=="help" {return false;}
-     aliases.iter().any(|alias| alias.matches(key))

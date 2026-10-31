@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/combo_box.rs b/crates/agent-collaboration-tui/src/controls/combo_box.rs
---- a/crates/agent-collaboration-tui/src/controls/combo_box.rs
-+++ b/crates/agent-collaboration-tui/src/controls/combo_box.rs
-@@ -39,3 +39,3 @@
-         });
--    let focused = context.is_focused(&props.id);
-+    let focused = context.is_focused(&props.id) && availability.is_available();
-     let state = props.value.read();
