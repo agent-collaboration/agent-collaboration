@@ -1,4 +1,7 @@
-use crate::maintenance_actor::previous_response_affinity_owner_retention_cutoff;
+use crate::maintenance_actor::{
+    active_session_rollup_retention_cutoff, previous_response_affinity_owner_retention_cutoff,
+    session_account_affinity_retention_cutoff,
+};
 
 #[cfg(debug_assertions)]
 use super::ClaudeUpstreamEndpoint;
@@ -709,17 +712,15 @@ impl LoopbackRouterRuntime {
     pub(super) fn enqueue_runtime_maintenance_hints(&self, now_unix_seconds: u64) {
         const ROLLUP_BUCKET_SECONDS: u64 = 300;
         const ACTIVE_CLIENT_STALE_AFTER_SECONDS: u64 = 600;
-        const ACTIVE_SESSION_RETENTION_SECONDS: u64 = 86_400;
-        const SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS: u64 = 7 * 86_400;
-
         if claim_maintenance_cleanup_utc_day(
             &self.last_session_affinity_cleanup_utc_day,
             now_unix_seconds,
         ) {
             let _cleanup_result = self.maintenance_actor.try_enqueue(
                 MaintenanceHint::CleanupStaleSessionAccountAffinities {
-                    stale_before_unix_seconds: now_unix_seconds
-                        .saturating_sub(SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS),
+                    stale_before_unix_seconds: session_account_affinity_retention_cutoff(
+                        now_unix_seconds,
+                    ),
                 },
             );
         }
@@ -765,8 +766,9 @@ impl LoopbackRouterRuntime {
                 self.maintenance_actor
                     .try_enqueue(MaintenanceHint::ApplyActiveSessionRetention {
                         route_band,
-                        retain_after_unix_seconds: now_unix_seconds
-                            .saturating_sub(ACTIVE_SESSION_RETENTION_SECONDS),
+                        retain_after_unix_seconds: active_session_rollup_retention_cutoff(
+                            now_unix_seconds,
+                        ),
                     });
             let _compaction_result =
                 self.maintenance_actor

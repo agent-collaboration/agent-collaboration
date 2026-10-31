@@ -113,6 +113,12 @@ const CURRENT_SCHEMA_VERSION: i64 = 13;
 /// Maximum previous-response affinity owner rows deleted by one retention batch.
 pub const PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE: i64 = 500;
 
+/// Retains quota history observations for one week.
+pub const QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS: u64 = 7 * 86_400;
+
+/// Maximum quota history observations deleted by one retention batch.
+pub const QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE: u32 = 500;
+
 /// SQLite state store failure.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum StateStoreError {

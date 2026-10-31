@@ -71,6 +71,31 @@ impl AsyncSqliteStateStore {
 
         Ok(())
     }
+
+    /// Deletes one bounded batch of quota history observations older than the cutoff.
+    pub async fn prune_quota_history_observations_before(
+        &self,
+        observed_before_unix_seconds: u64,
+        batch_size: u32,
+    ) -> Result<u64, StateStoreError> {
+        let result = sqlx::query(
+            "DELETE FROM quota_history_observations
+              WHERE rowid IN (
+                  SELECT rowid
+                    FROM quota_history_observations
+                   WHERE observed_unix_seconds < ?1
+                   ORDER BY observed_unix_seconds, id
+                   LIMIT ?2
+              )",
+        )
+        .bind(u64_to_i64(observed_before_unix_seconds)?)
+        .bind(i64::from(batch_size))
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 pub(crate) async fn insert_quota_history_observation_in_async_transaction(

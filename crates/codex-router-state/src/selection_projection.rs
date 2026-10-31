@@ -35,10 +35,9 @@ use crate::quota_snapshot::SelectorQuotaWindowStatus;
 use crate::sqlite::ActiveClientCount;
 use crate::sqlite::ActiveSessionRollup;
 use crate::sqlite::AsyncSqliteStateStore;
+use crate::sqlite::QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS;
 use crate::sqlite::StateStoreError;
 use crate::window_observation::LEGACY_QUOTA_EVIDENCE_FRESHNESS_SECONDS;
-
-const QUOTA_HISTORY_LOOKBACK_SECONDS: u64 = 14 * 24 * 60 * 60;
 
 /// Projected selector inputs for one route band.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -680,7 +679,7 @@ async fn estimate_window_burn_rate(
             account_id,
             route_band,
             window.limit_window_seconds(),
-            now_unix_seconds.saturating_sub(QUOTA_HISTORY_LOOKBACK_SECONDS),
+            now_unix_seconds.saturating_sub(QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS),
             now_unix_seconds,
         )
         .await?

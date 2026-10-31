@@ -155,6 +155,7 @@ use crate::websocket::router_websocket_config;
 
 #[cfg(test)]
 const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+/// Retains completed active-session events for one week.
 const ACTIVE_SESSION_EVENT_RETENTION_SECONDS: u64 = 7 * 86_400;
 
 #[path = "server/auth_reloader.rs"]
