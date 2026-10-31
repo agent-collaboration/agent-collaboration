@@ -1,5 +1,6 @@
 pub mod dispatch_frame_scene;
 pub mod event_driver;
+pub mod fixed_slots_scene;
 pub mod frame_grid;
 pub mod recording_backend;
 

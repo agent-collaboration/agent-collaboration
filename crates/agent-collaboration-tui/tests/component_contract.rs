@@ -26,6 +26,12 @@ mod dialog_context_spacing;
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]
+#[path = "suites/dialog_fixed_slots.rs"]
+mod dialog_fixed_slots;
+#[cfg(test)]
+#[path = "suites/dialog_fixed_slots_baseline.rs"]
+mod dialog_fixed_slots_baseline;
+#[cfg(test)]
 #[path = "suites/dialog_header_layout.rs"]
 mod dialog_header_layout;
 #[cfg(test)]

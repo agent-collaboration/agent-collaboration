@@ -1,0 +1,11 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+@@ -155,7 +155,6 @@ pub fn DialogFrame<'a>(
+         .saturating_add(header_chrome)
+         .saturating_add(u16::from(has_context))
+         .saturating_add(if has_actions { footer_height.get() } else { 0 })
+-        .saturating_add(fixed_slot_rows)
+         .min(sizing.map_or(u16::MAX, |sizing| sizing.max_height));
+     let padding_height = if content_height {
+         content_extent
