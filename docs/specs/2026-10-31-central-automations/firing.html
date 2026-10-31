@@ -39,13 +39,12 @@ sequenceDiagram
   Clock->>Fleet: 10:05: admit firings due by 10:05, freeze one batch per machine (THE CUTOFF), queue the next mark's job
   Fleet->>Conn: notice "batch ready" (a wake-up hint only)
   Conn-->>B: hint over B's socket
-  B->>Fleet: list my unconfirmed batches (also on every connect, and if notices were missed)
-  B->>Fleet: fetch batch, plus instruction or message by reference
+  B->>Fleet: pull ALL my unconfirmed batches in one call (also on every connect, and if notices were missed)
+  B->>Fleet: fetch every missing instruction or message in one call
   B->>B: store every entry locally: receipt + queued work, in one transaction
-  B->>Fleet: confirm batch (central keeps it until this)
-  B->>Fleet: FiringReport(seq) for each state change
+  B->>Fleet: confirm batches + reports, in one frame (flushed every 100 ms or 100 items)
 </script></ex-mermaid>
-<p>Every arrow is a call central already allows, in its one-way order. If B is off for a week or more and its notices have aged out, nothing is lost: on reconnect it asks for its unconfirmed batches, and central still has them.</p>
+<p><strong>Few, larger messages:</strong> following Cloudflare's WebSocket guidance, the machine packs many items into each frame, so pulls, confirms and reports cost one frame and one central call each instead of one per item. Every arrow is a call central already allows, in its one-way order. If B is off for a week or more and its notices have aged out, nothing is lost: on reconnect it asks for its unconfirmed batches, and central still has them.</p>
 <p>Every arrow is an object-to-object call central already allows, in its one-way order. Nothing new is added to the call graph.</p>
 
 <h2 id="grid">The grid</h2>
