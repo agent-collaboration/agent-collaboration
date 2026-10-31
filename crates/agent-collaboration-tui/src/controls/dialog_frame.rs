@@ -124,7 +124,12 @@ pub fn DialogFrame<'a>(
     let padding_height = if content_height {
         content_extent
     } else {
-        height.get()
+        // Fixed bounds are resolved before mount and resize; a previous draw
+        // must not move the content column or consume two body rows later.
+        match sizing.map(|sizing| sizing.height) {
+            Some(Size::Length(rows)) => u16::try_from(rows).unwrap_or(u16::MAX),
+            _ => height.get(),
+        }
     };
     let padding = props.padding.unwrap_or(u16::from(padding_height >= 16));
     // Size from the current body and measured chrome, never a previous body
