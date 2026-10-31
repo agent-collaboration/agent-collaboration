@@ -133,8 +133,8 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
     - the **creator**: the requesting person (the human user at machine A) or session on machine A;
     - the **approver** for the new session's permission prompts;
     - the endpoint, model, effort, access, folder, and an optional first input.
-  - **Identity is checked at the source.** Central checks that the creator and approver belong to the Machine that sent the request, and refuses a mismatch as `originMismatch`.
-  - **The approver.** The default is the owner (the human approver on the target Machine). Routing approvals to a session on another Machine waits for cross-machine approvals, which board design U63 deferred, so a session approver on another Machine is refused as `approverNotSupported`.
+  - **The creator is checked at the source.** Central checks that the creator belongs to the Machine that sent the request (the human user at that installation, or one of its sessions), and refuses a mismatch as `originMismatch`.
+  - **The approver is checked at the target.** The approver must be allowed by the target Machine's policy for that endpoint. Codex endpoints accept only a session approver, which must be a session on the target; provider endpoints also accept the owner. Approvers on another Machine are refused as `approverNotSupported`, because cross-machine approvals were deferred in board design U63. **The default approver is pending an owner decision**: (A) a session on the target that the owner names, (B) the owner, or (C) the requester, which needs cross-machine approvals.
   - **Delivery.** It's sent at once, not on the grid, as a Machine work item under the same custody as Firings: held until the target acknowledges, nothing missed, and repeats safe.
   - **The target decides before any effect.** Using its existing local checks (the endpoint and its advertised models, the access level, the folder), it refuses with a typed reason before creating anything. There's no new allowlist.
   - **What's created.** The session records its creator as that requester on the source Machine, and its approver as given.
