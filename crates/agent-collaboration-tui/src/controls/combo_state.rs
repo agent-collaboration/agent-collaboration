@@ -124,11 +124,11 @@ impl ComboBoxState {
     pub fn handle_event(&mut self, event: &TerminalEvent) -> ComboTransition {
         if let TerminalEvent::Key(key) = event {
             match key.code {
-                KeyCode::Down => {
+                KeyCode::Down if key.kind != KeyEventKind::Release && key.modifiers.is_empty() => {
                     self.navigate(true);
                     return ComboTransition::Changed;
                 }
-                KeyCode::Up => {
+                KeyCode::Up if key.kind != KeyEventKind::Release && key.modifiers.is_empty() => {
                     self.navigate(false);
                     return ComboTransition::Changed;
                 }

@@ -135,3 +135,7 @@ mod focus_replacement;
 #[cfg(test)]
 #[path = "suites/disabled_control_focus.rs"]
 mod disabled_control_focus;
+
+#[cfg(test)]
+#[path = "suites/dropdown_paging.rs"]
+mod dropdown_paging;
