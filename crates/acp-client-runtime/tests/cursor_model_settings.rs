@@ -12,6 +12,102 @@ use acp_client_runtime::{
 use acp_wire_fixture::AcpWireFixture;
 use session_event_model::ConfigValueState;
 
+async fn assert_shared_setting_is_reasserted(
+    kind: ProviderSettingKind,
+    initial: &str,
+    changed: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use acp_client_runtime::ProviderSettingRequest;
+    use session_event_model::SettingApplicationIntent;
+    let fixture = AcpWireFixture::start("shared-settings", false).await;
+    let first = fixture
+        .client
+        .create_session(fixture.root.path().into())
+        .await?;
+    let second = fixture
+        .client
+        .create_session(fixture.root.path().into())
+        .await?;
+    assert_ne!(first, second);
+    let request = |value: &str, intent| ProviderSettingRequest {
+        kind,
+        value: value.into(),
+        intent,
+        expected_model: None,
+    };
+    let confirmed = fixture
+        .client
+        .set_setting(
+            first.clone(),
+            request(initial, SettingApplicationIntent::ExplicitChange),
+        )
+        .await?;
+    let other = fixture
+        .client
+        .set_setting(
+            second.clone(),
+            request(changed, SettingApplicationIntent::ExplicitChange),
+        )
+        .await?;
+    let reasserted = fixture
+        .client
+        .set_setting(
+            first.clone(),
+            request(initial, SettingApplicationIntent::TurnContext),
+        )
+        .await?;
+    fixture.client.shutdown().await;
+    let value = |settings: acp_client_runtime::EffectiveProviderSettings| match kind {
+        ProviderSettingKind::Model => settings.model,
+        ProviderSettingKind::Effort => settings.effort,
+        ProviderSettingKind::Mode => settings.mode,
+    };
+    assert_eq!(value(confirmed).as_deref(), Some(initial));
+    assert_eq!(value(other).as_deref(), Some(changed));
+    assert_eq!(value(reasserted).as_deref(), Some(initial));
+    let config_id = match kind {
+        ProviderSettingKind::Model => "model",
+        ProviderSettingKind::Effort => "effort",
+        ProviderSettingKind::Mode => "mode",
+    };
+    let setters = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| {
+            request.get("method").and_then(serde_json::Value::as_str)
+                == Some("session/set_config_option")
+        })
+        .map(|request| {
+            request
+                .get("params")
+                .cloned()
+                .ok_or("setter parameters missing")
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        setters,
+        vec![
+            serde_json::json!({"sessionId":first,"configId":config_id,"value":initial}),
+            serde_json::json!({"sessionId":second,"configId":config_id,"value":changed}),
+            serde_json::json!({"sessionId":first,"configId":config_id,"value":initial}),
+        ],
+        "A's stale equality must not skip the actual shared-setting setter"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn nonreusable_model_confirmation_reasserts_after_another_session_changes_shared_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_shared_setting_is_reasserted(ProviderSettingKind::Model, "fixture-a", "fixture-b").await
+}
+
+#[tokio::test]
+async fn nonreusable_effort_confirmation_reasserts_after_another_session_changes_shared_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_shared_setting_is_reasserted(ProviderSettingKind::Effort, "medium", "high").await
+}
+
 #[tokio::test]
 async fn repeated_turn_context_preserves_confirmed_effort_without_setting_wire() {
     let fixture = AcpWireFixture::start("thinking-first", false).await;

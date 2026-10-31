@@ -2,13 +2,47 @@ use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderBehavior,
+    ProviderPersistenceTarget, RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent, SessionSettings};
 use tokio_util::sync::CancellationToken;
 
 pub struct NoopInteractionPort;
+
+struct SharedSettingsBehavior;
+
+impl ProviderBehavior for SharedSettingsBehavior {
+    fn can_reuse_setting_confirmation(&self, _: acp_client_runtime::ProviderSettingKind) -> bool {
+        false
+    }
+    fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
+        crate::test_behavior::TestProviderBehavior.model_metadata_source()
+    }
+    fn decode_model_metadata(
+        &self,
+        value: &serde_json::Value,
+    ) -> acp_client_runtime::ModelReasoningMetadata {
+        crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
+    }
+    fn observe(
+        &self,
+        update: acp_client_runtime::ProviderUpdate,
+    ) -> Result<acp_client_runtime::ProviderFacts, acp_client_runtime::ProviderError> {
+        crate::test_behavior::TestProviderBehavior.observe(update)
+    }
+    fn prepare(
+        &self,
+        submission: session_event_model::ProviderSubmission,
+    ) -> Result<Vec<session_event_model::PromptContent>, acp_client_runtime::ProviderError> {
+        crate::test_behavior::TestProviderBehavior.prepare(submission)
+    }
+    fn compact(
+        &self,
+    ) -> Result<acp_client_runtime::PreparedCompact, acp_client_runtime::ProviderError> {
+        crate::test_behavior::TestProviderBehavior.compact()
+    }
+}
 
 impl InteractionPort for NoopInteractionPort {
     type Context = ();
@@ -139,6 +173,11 @@ impl AcpWireFixture {
             persistence_target: ProviderPersistenceTarget::Unspecified,
         };
         let sink = Arc::new(SettingsSink::default());
+        let behavior: Arc<dyn ProviderBehavior> = if scenario == "shared-settings" {
+            Arc::new(SharedSettingsBehavior)
+        } else {
+            Arc::new(crate::test_behavior::TestProviderBehavior)
+        };
         let client = match initialization {
             ClientInitialization::CursorWithMcp => {
                 AgentSessionClient::initialize_with_mcp_http(
@@ -148,7 +187,7 @@ impl AcpWireFixture {
                     "http://127.0.0.1:1/mcp",
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
-                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+                    behavior,
                 )
                 .await
             }
@@ -157,7 +196,7 @@ impl AcpWireFixture {
                     launch,
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
-                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+                    behavior,
                 )
                 .await
             }
@@ -168,7 +207,7 @@ impl AcpWireFixture {
                     acp_client_runtime::ProviderModelPicker::CursorParameterized,
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
-                    std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+                    behavior,
                 )
                 .await
             }
