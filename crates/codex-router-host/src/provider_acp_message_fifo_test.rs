@@ -429,15 +429,27 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
 
 #[tokio::test]
 async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_prompt() {
+    use collaboration_contracts::SessionEventHub as _;
     use session_event_model::{
-        InputId, PromptContent, ProviderSubmission, SelectedSkill, SkillInvocationName,
+        InputId, PromptContent, ProviderSubmission, SelectedSkill, SkillInvocationName, SkillView,
     };
     let root = tempfile::tempdir().expect("root");
     let receipt = root.path().join("wire.jsonl");
     let mut target = target();
     target.session_id = SessionId::try_from("session-1".to_owned()).expect("session ID");
     let binding = binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("store"),
+    ));
+    let hub = Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
+        Arc::clone(&store),
+    ));
+    let hub_target: message_board::SessionRef =
+        serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
+            .expect("hub target");
+    let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
         ExternalProviderLaunch {
             executable: "node".into(),
             arguments: vec![
@@ -452,6 +464,11 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
             environment: vec![],
             persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         },
+        acp_client_runtime::ProviderModelPicker::Standard,
+        "fixture",
+        "http://127.0.0.1:1/mcp",
+        Arc::clone(&hub),
+        hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::CursorAcpBehavior),
     )
     .await
@@ -460,6 +477,42 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .create_session(root.path().into())
         .await
         .expect("session");
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: ProviderWorkingDirectory::try_from(
+                root.path().display().to_string(),
+            )
+            .expect("cwd"),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 1,
+        })
+        .await
+        .expect("record session");
+    let mut skills = hub
+        .skill_view(hub_target, root.path().to_path_buf())
+        .await
+        .expect("skill subscription");
+    // session/new completes before its subsequent command advertisement is observed.
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let view = skills.receiver.borrow_and_update().clone();
+            if matches!(view, SkillView::Available { skills, .. }
+                if skills.iter().any(|skill| skill.invocation_name.as_str() == "review"))
+            {
+                break;
+            }
+            skills.receiver.changed().await.expect("skill view changed");
+        }
+    })
+    .await
+    .expect("initial skill advertisement is observed before submission");
     let selected = || ProviderSubmission {
         content: vec![PromptContent::text("$review exact args".into()).expect("text")],
         selected: vec![SelectedSkill {
@@ -484,29 +537,6 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         )
         .await
         .expect("skill is initially current and invocable");
-    let store = Arc::new(Mutex::new(
-        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
-            .await
-            .expect("store"),
-    ));
-    store
-        .lock()
-        .await
-        .record_session(&ProviderSessionRecord {
-            target: target.clone(),
-            working_directory: ProviderWorkingDirectory::try_from(
-                root.path().display().to_string(),
-            )
-            .expect("cwd"),
-            requested_policy: ProviderRequestedPolicy {
-                access: RouterAccess::WriteRestricted,
-            },
-            created_by: target.clone().into(),
-            approver: target.clone().into(),
-            updated_at_ms: 1,
-        })
-        .await
-        .expect("record session");
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
             vec![ExternalProviderBinding {
