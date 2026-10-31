@@ -103,3 +103,7 @@ mod dialog_result_extent;
 #[cfg(test)]
 #[path = "suites/combo_option_layout.rs"]
 mod combo_option_layout;
+
+#[cfg(test)]
+#[path = "suites/field_reason_layout.rs"]
+mod field_reason_layout;

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/text_field.rs b/crates/agent-collaboration-tui/src/controls/text_field.rs
+--- a/crates/agent-collaboration-tui/src/controls/text_field.rs
++++ b/crates/agent-collaboration-tui/src/controls/text_field.rs
+@@ -214,3 +214,3 @@ pub fn TextField(props: &TextFieldProps, mut hooks: Hooks) -> impl Into<AnyEleme
+         EditorLine(value,focused,disabled,placeholder:props.placeholder.clone())
+-        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(View(width:100pct,flex_shrink:0.0_f32) {Text(content:reason,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))}))})
++        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(View(width:100pct,flex_shrink:0.0_f32) {Text(content:reason,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))}))})
+     })

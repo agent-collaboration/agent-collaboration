@@ -163,3 +163,8 @@ T4 replaces the old same-row secondary clipping rule with a full secondary line 
 | `menu-reason-not-right-aligned.patch` | The menu reason leaves space before its primary key instead of aligning to that column. |
 | `menu-reason-crowds-title.patch` | A natural-width menu leaves only one separating cell between title and reason. |
 | `menu-reason-wrong-colour.patch` | The menu reason loses the muted foreground role. |
+| `field-reason-inline.patch` | The disabled reason shares the editor row and steals its width. |
+| `field-reason-wrong-colour.patch` | The disabled reason loses its muted foreground. |
+| `field-reason-nowrap.patch` | A disabled reason clips instead of wrapping below the editor. |
+
+T9 changes the disabled editor fixture from one row to two so its reason can occupy the approved next row; the value style and ignored-input assertions remain.
