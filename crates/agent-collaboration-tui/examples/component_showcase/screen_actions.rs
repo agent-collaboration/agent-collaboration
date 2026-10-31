@@ -248,6 +248,7 @@ pub fn build_screen(
         },
     ));
     actions.extend(fixture_actions(stack, &data, list.clone(), help.clone()));
+    actions.extend(super::sample_intrinsic::intrinsic_actions(stack));
     actions.extend(super::sample_coverage::coverage_actions(
         stack,
         &data,

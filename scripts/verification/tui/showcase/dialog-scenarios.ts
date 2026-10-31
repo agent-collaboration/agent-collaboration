@@ -1,6 +1,7 @@
 import { cellText } from '../terminal-grid.ts';
 import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
 import { observeFormSections, observeTypography } from './form-observations.ts';
+import { observeCompleteHelp } from './help-projection.ts';
 import type { ShowcaseRig } from './rig.ts';
 import {
 	currentRegistry,
@@ -51,9 +52,22 @@ export async function livePrimary(rig: ShowcaseRig): Promise<void> {
 			return cell !== undefined && cellText(cell).includes('●');
 		});
 	requireObservation(markers.length === 1, 'exactly one visible primary marker', markers);
+	let fallbackCount = 0;
+	if (rig.keys === 'legacy') {
+		await rig.focus('action:alternate-start');
+		await rig.key('Enter', rig.route('alternate-start', 'action:alternate-start'));
+		fallbackCount = 1;
+		requireObservation(
+			effectCount(rig.state(), 'alternate-start') === 1 && effectCount(rig.state(), 'start') === 0,
+			'legacy Tab plus Enter invokes only the current primary once',
+			rig.state().effects,
+		);
+		await rig.capture('legacy-current-primary-fallback');
+	}
 	await rig.key('Ctrl+Enter', rig.route('alternate-start'));
 	requireObservation(
-		effectCount(rig.state(), 'alternate-start') === 1 && effectCount(rig.state(), 'start') === 0,
+		effectCount(rig.state(), 'alternate-start') === fallbackCount + 1 &&
+			effectCount(rig.state(), 'start') === 0,
 		'Ctrl+Enter invokes only the new primary once',
 		rig.state().effects,
 	);
@@ -61,6 +75,33 @@ export async function livePrimary(rig: ShowcaseRig): Promise<void> {
 	await escapeOverlay(rig);
 }
 export async function dialogSizing(rig: ShowcaseRig): Promise<void> {
+	// Independent arithmetic: explicit child rows + title row + two border rows.
+	// No production ScrollPosition or DialogFrame measurement supplies the expected height.
+	const intrinsicFixtures = [
+		['intrinsic-one', 1],
+		['intrinsic-four', 4],
+		['intrinsic-eight', 8],
+	] as const;
+	const observeIntrinsic = async (index: number): Promise<void> => {
+		const fixture = intrinsicFixtures[index];
+		if (fixture === undefined) return;
+		const [action, bodyRows] = fixture;
+		await rig.menuAction(action);
+		const measured = surfaceBounds(rig.drawState());
+		const actualHeight = measured.bottom - measured.top + 1;
+		const expectedHeight = Math.min(bodyRows + 3, 30, rig.grid().rows - 2);
+		requireObservation(
+			actualHeight === expectedHeight,
+			'arbitrary multiline, nested and gapped content has its independent intrinsic height',
+			{ action, bodyRows, expectedHeight, actualHeight, measured },
+		);
+		rig.requireText('First');
+		if (bodyRows + 3 <= rig.grid().rows - 2) rig.requireText('Last');
+		await rig.capture(action);
+		await escapeOverlay(rig);
+		await observeIntrinsic(index + 1);
+	};
+	await observeIntrinsic(0);
 	await openForm(rig);
 	const bounds = surfaceBounds(rig.drawState());
 	const height = bounds.bottom - bounds.top + 1;
@@ -127,6 +168,13 @@ export async function screenHelp(rig: ShowcaseRig): Promise<void> {
 	rig.requireText('Help');
 	rig.requireText('Main screen');
 	const body = childTarget('action:help', 'help-body');
+	const sourceRegistry = before.registries.screen;
+	requireObservation(
+		sourceRegistry !== null,
+		'screen source registry is available for full Help census',
+		before,
+	);
+	await observeCompleteHelp(rig, sourceRegistry);
 	await showHelpConvention(rig, body);
 	await rig.key('PageUp', rig.route(null, body));
 	await rig.wheel(childTarget('action:help', 'help-scroll'), 'up');

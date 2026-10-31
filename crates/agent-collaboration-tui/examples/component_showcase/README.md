@@ -97,3 +97,19 @@ pins it. Fixed dropdown placement is exposed by SC23, not repaired by the sample
 
 These are build-and-drive observations. The Advisor owns the independent verdict.
 Physical keyboard delivery is outside the PTY profile's claim.
+
+The lasting journeys also cover filter-focused Enter opening Details (SC06), an
+exact full Help action/key/reason census reconstructed from received scrolling
+rows (SC16), and independent 1/4/8-row arbitrary-content height fixtures (SC10).
+The height oracle adds one title row and two borders, then applies the declared
+maximum and margins; it never reads DialogFrame's natural-height calculation.
+SC19 establishes Record focus while visible, then narrows with Menu open before
+testing restoration after the origin becomes unavailable.
+
+Legacy SC08/SC09/SC15 retain a decoder/encoding prerequisite: the nominated encoder
+emits `ESC[27;5;13~` (modifyOtherKeys), which pinned crossterm 0.29 rejects. This is
+not labelled "not representable in legacy": explicit CSI-u is acknowledged even
+with legacy flags. Each journey proves and captures a Menu/Tab/Enter fallback
+before retaining the direct-chord missing-ACK result. A separate bounded real-PTY
+diagnosis confirmed that only this chord is dropped; separately written `a` and
+Down are acknowledged and Quit succeeds. No decoder repair is part of the sample.

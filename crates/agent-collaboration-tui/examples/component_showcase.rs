@@ -5,6 +5,8 @@ mod sample_clipping;
 mod sample_coverage;
 #[path = "component_showcase/sample_dialogs.rs"]
 mod sample_dialogs;
+#[path = "component_showcase/sample_intrinsic.rs"]
+mod sample_intrinsic;
 #[path = "component_showcase/sample_model.rs"]
 mod sample_model;
 #[cfg(all(feature = "test-support", debug_assertions))]

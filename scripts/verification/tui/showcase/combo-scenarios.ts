@@ -220,6 +220,27 @@ export async function comboUnavailable(rig: ShowcaseRig): Promise<void> {
 	await escapeOverlay(rig);
 }
 export async function compoundDropdown(rig: ShowcaseRig): Promise<void> {
+	let startsBeforeChord = 0;
+	if (rig.keys === 'legacy') {
+		await openForm(rig);
+		await openChoice(rig);
+		await rig.key('Down', rig.route(null, dropdownFilter()));
+		const unchangedChoice = rig.state().choice;
+		await escapeOverlay(rig);
+		await rig.focus('action:start');
+		await rig.key('Enter', rig.route('start', 'action:start'));
+		requireObservation(
+			rig.state().overlays.length === 1 &&
+				rig.state().choice === unchangedChoice &&
+				effectCount(rig.state(), 'start') === 1,
+			'legacy Esc then Tab plus Enter starts once without committing dropdown highlight',
+			rig.state(),
+		);
+		await rig.capture('legacy-compound-primary-fallback');
+		await escapeOverlay(rig);
+		await rig.key('Ctrl+G', rig.route('enable'));
+		startsBeforeChord = 1;
+	}
 	await openForm(rig);
 	await openChoice(rig);
 	await rig.key('Down', rig.route(null, dropdownFilter()));
@@ -233,7 +254,7 @@ export async function compoundDropdown(rig: ShowcaseRig): Promise<void> {
 	});
 	requireObservation(
 		rig.state().overlays.length === 1 &&
-			effectCount(rig.state(), 'start') === 1 &&
+			effectCount(rig.state(), 'start') === startsBeforeChord + 1 &&
 			rig.state().choice === before.choice,
 		'Ctrl+Enter closes only dropdown and starts once without picking highlight',
 		rig.state(),
@@ -247,7 +268,8 @@ export async function compoundDropdown(rig: ShowcaseRig): Promise<void> {
 	);
 	await escapeOverlay(rig);
 	requireObservation(
-		rig.state().overlays.length === 0 && effectCount(rig.state(), 'start') === 1,
+		rig.state().overlays.length === 0 &&
+			effectCount(rig.state(), 'start') === startsBeforeChord + 1,
 		'second Esc closes dialog without another Start',
 		rig.state(),
 	);

@@ -223,6 +223,23 @@ export async function fieldEditing(rig: ShowcaseRig): Promise<void> {
 	await rig.capture('disabled-field');
 }
 export async function mainActionMeanings(rig: ShowcaseRig): Promise<void> {
+	await rig.focus('filter');
+	const beforeFilterEnter = rig.state();
+	await rig.key('Enter', rig.route('details', 'filter'));
+	sameFields(
+		beforeFilterEnter,
+		rig.state(),
+		['filter', 'selection', 'effects'],
+		'plain Enter in the filter retains the keyed selection and records no Open effect',
+	);
+	requireObservation(
+		rig.state().overlays.length === 1 && effectCount(rig.state(), 'open') === 0,
+		'plain Enter in the filter opens the selected item Details',
+		rig.state(),
+	);
+	await escapeOverlay(rig);
+	requireObservation(rig.state().focus === 'filter', 'Details restores filter focus', rig.state());
+	await rig.focus('sample-list');
 	await rig.key('Down', rig.route(null, 'sample-list'));
 	const selected = rig.state().selection;
 	await rig.key('Enter', rig.route('details', 'sample-list'));
@@ -315,7 +332,7 @@ export async function liveActions(rig: ShowcaseRig): Promise<void> {
 		'first activation disables the second Press',
 		rig.state(),
 	);
-	await rig.key('Ctrl+Enter', rig.route(), false);
+	if (rig.keys !== 'legacy') await rig.key('Ctrl+Enter', rig.route(), false);
 	await rig.menu();
 	requireObservation(
 		actionPresentation(rig.state(), 'record').availability.kind === 'unavailable',
@@ -333,6 +350,17 @@ export async function liveActions(rig: ShowcaseRig): Promise<void> {
 	await rig.capture('live-title-help');
 	await escapeOverlay(rig);
 	await rig.key('Ctrl+G', rig.route('enable'));
+	if (rig.keys === 'legacy') {
+		await rig.menuAction('record');
+		requireObservation(
+			effectCount(rig.state(), 'open') === 2,
+			'legacy Menu plus Enter fallback reenables exactly one activation',
+			rig.state().effects,
+		);
+		await rig.capture('legacy-record-fallback');
+		await rig.key('Ctrl+Enter', rig.route(), false);
+		return;
+	}
 	await rig.key('Ctrl+Enter', rig.route('record'));
 	requireObservation(
 		effectCount(rig.state(), 'open') === 2,

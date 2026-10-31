@@ -51,8 +51,12 @@ export async function outsideClicks(rig: ShowcaseRig): Promise<void> {
 	);
 	await escapeOverlay(rig);
 	await rig.menuAction('stage-update');
+	const restoreViewport = rig.state().viewport;
+	// Establish the origin while painted, then drop it while Menu owns input.
+	await rig.resize(120, 36);
 	await rig.focus('action:record');
 	await rig.menu();
+	await rig.resize(...restoreViewport);
 	await rig.completeFixture();
 	await rig.clickOutside();
 	eligibleVisibleFocus(rig.drawState());
