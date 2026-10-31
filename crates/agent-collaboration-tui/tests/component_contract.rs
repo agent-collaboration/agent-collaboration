@@ -47,6 +47,9 @@ mod heading_style;
 #[path = "suites/help_controls.rs"]
 mod help_controls;
 #[cfg(test)]
+#[path = "suites/help_first_frame.rs"]
+mod help_first_frame;
+#[cfg(test)]
 #[path = "suites/hit_geometry.rs"]
 mod hit_geometry;
 #[cfg(test)]
@@ -58,6 +61,9 @@ mod input_receipts;
 #[cfg(test)]
 #[path = "suites/list_controls.rs"]
 mod list_controls;
+#[cfg(test)]
+#[path = "suites/list_first_frame.rs"]
+mod list_first_frame;
 #[path = "suites/list_hover.rs"]
 mod list_hover;
 #[cfg(test)]

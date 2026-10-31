@@ -4,7 +4,10 @@ use crate::{
     surface_handle::SurfaceStackHandle,
 };
 use iocraft::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ScrollPosition {
     pub offset: u16,
@@ -28,6 +31,7 @@ pub(super) struct ScrollRevealTarget {
 pub struct ScrollHandle {
     position: Arc<Mutex<ScrollPosition>>,
     last_reveal: Arc<Mutex<Option<ScrollRevealTarget>>>,
+    measured_targets: Arc<Mutex<HashMap<TargetId, ScrollRevealTarget>>>,
     stack: SurfaceStackHandle,
 }
 impl ScrollHandle {
@@ -35,6 +39,7 @@ impl ScrollHandle {
         Self {
             position: Arc::new(Mutex::new(ScrollPosition::default())),
             last_reveal: Arc::new(Mutex::new(None)),
+            measured_targets: Arc::new(Mutex::new(HashMap::new())),
             stack,
         }
     }
@@ -77,7 +82,32 @@ impl ScrollHandle {
         });
     }
     pub(crate) fn measure_content(&self, height: u16) {
+        // Each draw replaces the derived geometry, including offscreen rows.
+        self.measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
         self.update(|position| position.natural_height = height);
+    }
+    pub(super) fn measure_target(&self, target: ScrollRevealTarget) {
+        if let Some(target_id) = target.target_id.clone() {
+            self.measured_targets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(target_id, target);
+        }
+    }
+    /// Use the last drawn row geometry before selection starts the next layout.
+    pub(super) fn reveal_measured(&self, target_id: &TargetId) {
+        let target = self
+            .measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(target_id)
+            .cloned();
+        if let Some(target) = target {
+            self.reveal(target);
+        }
     }
     pub(super) fn forget_reveal(&self, target: ScrollRevealTarget) {
         let mut previous = self

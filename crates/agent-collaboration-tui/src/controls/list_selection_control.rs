@@ -270,6 +270,11 @@ impl ListSelectionControl {
     fn publish_selection(&self, next: ListSelectionState, reveal: SelectionReveal) {
         self.set_selection_reveal(reveal);
         let selected = next.selected().cloned();
+        if reveal == SelectionReveal::FollowSelection
+            && let Some(selected) = &selected
+        {
+            self.scroll.reveal_measured(&self.row_target(selected));
+        }
         let mut value = self.binding.value;
         value.set(next);
         (self.binding.on_select)(selected);
