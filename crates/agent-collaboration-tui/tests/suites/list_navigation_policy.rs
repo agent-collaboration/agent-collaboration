@@ -261,3 +261,43 @@ async fn option_page_and_bounds_aliases_obey_both_list_policies_without_changing
         }
     }
 }
+
+#[tokio::test]
+async fn replacing_an_offscreen_selected_row_reveals_its_new_key_even_at_the_same_logical_position()
+{
+    let handle = ListHandle::default();
+    let (mut driver, config, journal) = EventDriver::new();
+    let mut ui = element!(ListScene(journal,handle:handle.clone(),navigation_policy:ListNavigationPolicy::ContentScroll));
+    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        driver.initial(&mut frames).await;
+        let fixture = handle.get();
+        driver
+            .drive(
+                &mut frames,
+                InputMode::Burst,
+                vec![(key(KeyCode::End), true)],
+                true,
+            )
+            .await;
+        assert_eq!(fixture.control.selected().unwrap().as_str(), "alpha");
+        assert_eq!(fixture.control.scroll().position().offset, 3);
+        // A changed final row guarantees a changed canvas even on the wrong build.
+        fixture
+            .control
+            .replace_rows(crate::support::list_scene::rows(&[
+                "bravo", "charlie", "delta", "foxtrot",
+            ]))
+            .unwrap();
+        driver.initial(&mut frames).await;
+        assert_eq!(fixture.control.selected().unwrap().as_str(), "bravo");
+        assert_eq!(
+            fixture.control.scroll().position().offset,
+            0,
+            "the keyed replacement is revealed even though its geometry matches the removed row"
+        );
+        assert!(driver.frames.last().unwrap().row_text(1).contains("bravo"));
+    })
+    .await
+    .unwrap();
+}

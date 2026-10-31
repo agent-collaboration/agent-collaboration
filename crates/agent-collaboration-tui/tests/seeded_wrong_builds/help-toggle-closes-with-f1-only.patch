@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_control.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
+@@ -329,3 +329,3 @@
+             title: "Back".into(),
+-            keys: opening_keys,
++            keys: {let _=opening_keys;vec!["F1".parse().map_err(HelpError::Keys)?]},
+             availability: AvailabilityFn::default(),
