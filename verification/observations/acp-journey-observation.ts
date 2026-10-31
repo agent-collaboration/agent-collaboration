@@ -3,17 +3,27 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { decode, decodeAuthoredJson } from "../exact-json.ts";
 import { prettyEvidenceJson, evidenceJson } from "../evidence-json.ts";
-import { hostManifestSchema, observedObject, readObservedJson } from "./evidence-models.ts";
+import {
+  hostManifestSchema,
+  observedObject,
+  readObservedJson,
+  type JsonObject,
+} from "./evidence-models.ts";
 import { qualifyMetadataSource, saveRaw } from "./acp-metadata-observation.ts";
 import { UnixWebSocketObserver } from "./unix-websocket-observer.ts";
 import {
+  INFORMATION_REFUSALS,
+  informationRequestParams,
   journeyObservationPlanSchema,
+  nativeErrorEnvelopeSchema,
   nativeModelListSchema,
   nativeSkillsListSchema,
   nativeThreadSchema,
   providerJourneyEventsSchema,
   sessionInspectOutputSchema,
   type ActiveJourneyReadback,
+  type InformationReadback,
+  type InformationRefusal,
   type JourneyCheckResult,
   type JourneyObservationPlan,
   type ModelReadback,
@@ -38,6 +48,8 @@ interface NativeReadback {
     readonly bound: NativeModelList;
     readonly resumedEffort: string | null;
   } | null;
+  // Refused information requests, only when the plan checks one.
+  readonly information: InformationReadback | null;
 }
 
 /** One native request/response exchange on a fresh connection, with every raw response retained. */
@@ -57,7 +69,11 @@ class NativeExchange {
     await this.client.opened();
     await this.call("initialize", { clientInfo: { name: "journey-verifier", version: "1" } });
   }
-  async call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  /** Sends one request and returns the response correlated by its ID, retaining the raw frame. */
+  private async exchange(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<{ readonly id: bigint; readonly response: JsonObject }> {
     const id = this.nextId;
     this.nextId += 1n;
     await this.client.send(evidenceJson({ id, method, params }));
@@ -69,9 +85,26 @@ class NativeExchange {
       if (response.id === id) break;
     }
     saveRaw(join(this.plan.evidence, `app-server-${id}.json`), raw);
+    return { id, response };
+  }
+  async call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { response } = await this.exchange(method, params);
     if (Object.hasOwn(response, "error"))
       throw new Error(`${method} failed; raw response retained`);
     return observedObject(response.result);
+  }
+  /** One request the endpoint must refuse: its well-formed error, never a result. */
+  async refused(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<{ readonly id: bigint; readonly error: InformationRefusal["error"] }> {
+    const { id, response } = await this.exchange(method, params);
+    if (Object.hasOwn(response, "result") && !Object.hasOwn(response, "error"))
+      throw new Error(`${method} succeeded where a refusal was expected; raw response retained`);
+    const envelope = nativeErrorEnvelopeSchema.safeParse(response);
+    if (!envelope.success)
+      throw new Error(`${method} refusal envelope is malformed; raw response retained`);
+    return { id, error: envelope.data.error };
   }
   async readThread(): Promise<NativeThread> {
     return this.thread(
@@ -91,9 +124,35 @@ class NativeExchange {
 }
 
 /**
+ * Each declared information command's native request, once and in plan order, on this already
+ * bound connection, then one supported thread/read on the same connection. No request is retried.
+ */
+async function readInformationRefusals(
+  native: NativeExchange,
+  plan: JourneyObservationPlan,
+  threadId: string,
+): Promise<InformationReadback | null> {
+  const commands = plan.checks.flatMap((check) =>
+    check.kind === "information-refused" ? [check.command] : [],
+  );
+  if (commands.length === 0) return null;
+  const refusals = await commands.reduce<Promise<InformationRefusal[]>>(
+    async (previous, command) => {
+      const sent = await previous;
+      const { method } = INFORMATION_REFUSALS[command];
+      const params = informationRequestParams(command, { cwd: plan.cwd, threadId });
+      const { id, error } = await native.refused(method, params);
+      return [...sent, { command, requestId: id, method, params, error }];
+    },
+    Promise.resolve([]),
+  );
+  return { refusals, threadAfter: await native.readThread() };
+}
+
+/**
  * idle-bind: read the thread, refuse unless it is idle, then list skills before and after this
  * connection's own resume binds the cwd. The resume has lifecycle effects, so it never runs while
- * a turn is active.
+ * a turn is active. Declared information refusals follow on the same bound connection.
  */
 export async function readNativeJourney(
   plan: JourneyObservationPlan,
@@ -136,6 +195,7 @@ export async function readNativeJourney(
         resumedEffort: effort,
       };
     }
+    const information = await readInformationRefusals(native, plan, threadId);
     return {
       unboundSkills,
       threadRead,
@@ -143,6 +203,7 @@ export async function readNativeJourney(
       resumedModel: resumed.model,
       boundSkills,
       nativeModels,
+      information,
     };
   } finally {
     await native.close();
@@ -349,6 +410,7 @@ export async function runJourneyObservation(
         threadResume: native.threadResume,
         resumedModel: native.resumedModel,
         models: modelReadback(plan, serviceId, native),
+        information: native.information,
         providerAgentTexts: provider.agentTexts,
         providerToolItems: provider.toolItems,
       },

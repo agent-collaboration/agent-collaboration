@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { INFORMATION_REFUSALS } from "./acp-journey-models.ts";
 import type {
   ActiveJourneyReadback,
   ExpectedSkill,
@@ -178,6 +179,92 @@ export function checkSkillEffect(
 
 function compactionItems(items: readonly NativeThreadItem[]): NativeThreadItem[] {
   return items.filter((item) => item.type === "contextCompaction");
+}
+
+type OrdinaryReplyCheck = Extract<JourneyCheck, { kind: "ordinary-reply" }>;
+
+/** Whether one line of this text, apart from its surrounding whitespace, is exactly the completion. */
+function holdsCompletionLine(text: string, completion: string): boolean {
+  return text.split(/\r?\n/u).some((line) => line.trim() === completion);
+}
+
+/**
+ * The reply is the latest turn: completed, holding exactly one user item that is the original
+ * prompt as one Text input, and an assistant message with one line that is the whole completion,
+ * so the marker inside other prose, such as an error, never counts. No earlier turn holds the
+ * completion anywhere, so a prior reply cannot satisfy it, and a user item never stands in for the
+ * assistant's text.
+ */
+function checkReplyView(view: NativeThread, check: OrdinaryReplyCheck): string {
+  const turn = view.turns.at(-1);
+  if (turn === undefined) throw new Error("no reply turn in Codex history");
+  const agentTexts = (items: readonly NativeThreadItem[]): string[] =>
+    items.flatMap((item) => (item.type === "agentMessage" ? [item.text ?? ""] : []));
+  if (
+    view.turns
+      .slice(0, -1)
+      .some((earlier) => agentTexts(earlier.items).some((text) => text.includes(check.completion)))
+  )
+    throw new Error("an earlier turn already holds the completion");
+  if (!agentTexts(turn.items).some((text) => holdsCompletionLine(text, check.completion)))
+    throw new Error("latest turn lacks the assistant completion line");
+  if (turn.status !== "completed") throw new Error("reply turn did not complete");
+  const [user, ...extra] = userMessages(turn.items);
+  if (user === undefined || extra.length > 0 || !exactSingleText(user, check.prompt))
+    throw new Error("reply turn user item is not the exact original prompt");
+  return turn.id;
+}
+
+export function checkOrdinaryReply(
+  readback: JourneyReadback,
+  check: OrdinaryReplyCheck,
+): JourneyCheckResult {
+  const readTurn = checkReplyView(readback.threadRead, check);
+  if (readTurn !== checkReplyView(readback.threadResume, check))
+    throw new Error("read and resume disagree on the reply turn");
+  if (!readback.providerAgentTexts.some((text) => holdsCompletionLine(text, check.completion)))
+    throw new Error("provider events lack the completion line");
+  return { kind: "ordinary-reply", observed: { turn_id: readTurn } };
+}
+
+type InformationRefusedCheck = Extract<JourneyCheck, { kind: "information-refused" }>;
+
+/**
+ * The observer sent the command's native request exactly once on its own bound connection, the
+ * endpoint answered that request ID with its declared code and message, and a supported read on
+ * the same connection still returned this thread.
+ */
+export function checkInformationRefused(
+  readback: JourneyReadback,
+  check: InformationRefusedCheck,
+): JourneyCheckResult {
+  const information = readback.information;
+  if (information === null)
+    throw new Error("information-refused needs the observer's refused request");
+  const expected = INFORMATION_REFUSALS[check.command];
+  const sent = information.refusals.filter((refusal) => refusal.command === check.command);
+  const [refusal, ...repeated] = sent;
+  if (refusal === undefined || repeated.length > 0)
+    throw new Error(`expected exactly one ${expected.method} request`);
+  if (refusal.method !== expected.method)
+    throw new Error(`the ${check.command} request used ${refusal.method}`);
+  if (refusal.error.code !== expected.code)
+    throw new Error(
+      `${expected.method} refused with code ${refusal.error.code}, not ${expected.code}`,
+    );
+  if (refusal.error.message !== expected.message)
+    throw new Error(`${expected.method} refusal message differs from the endpoint's declared text`);
+  if (information.threadAfter.id !== readback.threadRead.id)
+    throw new Error("the supported read after the refusal returned another thread");
+  return {
+    kind: "information-refused",
+    observed: {
+      method: refusal.method,
+      request_id: String(refusal.requestId),
+      code: Number(refusal.error.code),
+      message: refusal.error.message,
+    },
+  };
 }
 
 function checkCompactedView(view: NativeThread): string {
@@ -360,6 +447,10 @@ export function checkIdleJourney(
         return checkEffectiveModel(readback, check.expected_model);
       case "model-catalogue":
         return checkModelCatalogue(readback, check);
+      case "ordinary-reply":
+        return checkOrdinaryReply(readback, check);
+      case "information-refused":
+        return checkInformationRefused(readback, check);
     }
   });
 }

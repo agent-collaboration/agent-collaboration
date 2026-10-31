@@ -39,6 +39,43 @@ export const skillSubmissionSchema = z
   );
 export type SkillSubmission = z.infer<typeof skillSubmissionSchema>;
 
+/** The read-only information commands whose native refusal the observer reads. */
+export const informationCommandSchema = z.enum(["hooks", "mcp"]);
+export type InformationCommand = z.infer<typeof informationCommandSchema>;
+
+/**
+ * Each information command's native request and this endpoint's refusal of it
+ * (router_session_app_server_methods.rs:100-108). The params are what Codex 0.165 sends:
+ * hooks/list with the one cwd (hooks_rpc.rs:24-35), and mcpServerStatus/list with no cursor, a
+ * 100 limit, tools-and-auth detail, the displayed thread and no server name, every None sent as
+ * null (app/background_requests.rs:780-803; app-server-protocol v2/mcp.rs:47-74).
+ */
+export const INFORMATION_REFUSALS = {
+  hooks: {
+    method: "hooks/list",
+    code: -32000n,
+    message: "Hook discovery is not supported on this ACP endpoint",
+  },
+  mcp: { method: "mcpServerStatus/list", code: -32601n, message: "Method not found" },
+} as const satisfies Record<
+  InformationCommand,
+  { readonly method: string; readonly code: bigint; readonly message: string }
+>;
+export function informationRequestParams(
+  command: InformationCommand,
+  target: { readonly cwd: string; readonly threadId: string },
+): Record<string, unknown> {
+  return command === "hooks"
+    ? { cwds: [target.cwd] }
+    : {
+        cursor: null,
+        limit: 100n,
+        detail: "toolsAndAuthOnly",
+        threadId: target.threadId,
+        serverName: null,
+      };
+}
+
 /** Supporting readbacks a TUI journey step needs, decided by Specification C1-C3 and U4. */
 export const journeyCheckSchema = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -57,6 +94,22 @@ export const journeyCheckSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("effective-model"), expected_model: z.string().min(1) }),
   // J3 active-turn preservation: read while the TUI's own turn is still running.
   z.strictObject({ kind: z.literal("turn-in-progress") }),
+  // An ordinary prompt the TUI submitted as plain text, and one line only that turn's own
+  // assistant reply produces (the J3 refresh turn, kept running through /skills).
+  z
+    .strictObject({
+      kind: z.literal("ordinary-reply"),
+      prompt: z.string().min(1),
+      completion: z.string().min(8),
+    })
+    .refine((check) => !/[\r\n]/u.test(check.completion), "the completion is one line")
+    .refine(
+      (check) => !check.prompt.includes(check.completion),
+      "completion appears in the prompt; an echo could satisfy it",
+    ),
+  // J2 information: the command's native request, sent once on the observer's own bound
+  // connection, refused with this endpoint's declared code and message, then a supported read.
+  z.strictObject({ kind: z.literal("information-refused"), command: informationCommandSchema }),
   // J2 model: the bound native catalogue and the selected model's controls against the provider
   // Session's own settings catalogue from public session inspect, never the native list itself.
   z.strictObject({
@@ -108,7 +161,13 @@ export const journeyObservationPlanSchema = metadataObservationPlanSchema
         (check) => (check.kind === "turn-in-progress") === (plan.mode === "active-read-only"),
       ),
     "active-read-only allows only turn-in-progress, which idle-bind cannot observe",
-  );
+  )
+  .refine((plan) => {
+    const commands = plan.checks.flatMap((check) =>
+      check.kind === "information-refused" ? [check.command] : [],
+    );
+    return new Set(commands).size === commands.length;
+  }, "each information command is requested once");
 export type JourneyObservationPlan = z.infer<typeof journeyObservationPlanSchema>;
 
 /** Used fields of native `skills/list` entries; the raw response stays authoritative. */
@@ -218,8 +277,33 @@ export interface JourneyReadback {
   readonly resumedModel: string;
   // Present only when a plan checks the model catalogue.
   readonly models: ModelReadback | null;
+  // Present only when a plan checks an information refusal.
+  readonly information: InformationReadback | null;
   readonly providerAgentTexts: readonly string[];
   readonly providerToolItems: readonly ProviderToolItem[];
+}
+
+/** A JSON-RPC error envelope: the request's ID, an integer code and a message, never a result. */
+export const nativeErrorEnvelopeSchema = z
+  .looseObject({
+    id: z.bigint(),
+    error: z.looseObject({ code: z.bigint(), message: z.string().min(1) }),
+  })
+  .refine((envelope) => !Object.hasOwn(envelope, "result"), "an error envelope holds no result");
+export type NativeError = z.infer<typeof nativeErrorEnvelopeSchema>["error"];
+
+/** One information request the observer sent and the error the endpoint returned for it. */
+export interface InformationRefusal {
+  readonly command: InformationCommand;
+  readonly requestId: bigint;
+  readonly method: string;
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly error: NativeError;
+}
+export interface InformationReadback {
+  readonly refusals: readonly InformationRefusal[];
+  // A supported thread/read on the same connection after the last refusal.
+  readonly threadAfter: NativeThread;
 }
 
 export interface ProviderToolItem {

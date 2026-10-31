@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
+import { informationJourney } from './codex-acp-information-scenes.ts';
 import {
 	checkCodexAcp,
 	codexAcpRunPlanSchema,
@@ -62,6 +63,14 @@ const RENAME = {
 	title: 'Fixture Title',
 	expected_refusal: ['Renaming this thread is not supported here'],
 };
+const INFORMATION = { kind: 'information', provider: 'cursor', command: 'mcp' };
+const REFRESH = {
+	kind: 'refresh',
+	provider: 'cursor',
+	prompt: 'count slowly from one to forty',
+	completion: 'REFRESH_DONE_4K7Q',
+	reply_deadline_ms: 120_000,
+};
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
@@ -112,6 +121,16 @@ test('each declared journey kind builds its scenes for the target provider only'
 	]);
 	expect(modelJourney.steps[2]?.actions).toEqual(MODEL.model_navigation);
 	expect(modelJourney.steps[3]?.actions).toEqual([{ kind: 'text', text: 's' }]);
+	const information = await runPlan(INFORMATION);
+	expect(codexJourneyFor(information.plan).steps.map((step) => step.checkpoint.scene)).toEqual([
+		'mcp-command-ready',
+		'mcp-refused',
+	]);
+	const refresh = await runPlan(REFRESH);
+	expect(codexJourneyFor(refresh.plan).name).toBe('codex-acp-j3-cursor-refresh');
+	// The plan shape admits a completion the prompt already holds; the journey refuses it.
+	const echoed = await runPlan({ ...REFRESH, completion: 'count slowly' });
+	expect(() => codexJourneyFor(echoed.plan)).toThrow('an echo could satisfy it');
 	// The fixture target is the Cursor endpoint; a Claude journey must not drive it.
 	const wrong = await runPlan({ ...CURSOR_SKILL, provider: 'claude' });
 	expect(() => codexJourneyFor(wrong.plan)).toThrow(
@@ -147,6 +166,17 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 		{ ...RENAME, title: 'Fixture\r/quit' },
 		{ ...RENAME, expected_refusal: [] },
 		{ ...RENAME, command: '/rename x' },
+		// Only /hooks and /mcp with no arguments; no login, option or free slash text.
+		{ ...INFORMATION, command: 'login' },
+		{ ...INFORMATION, command: '/mcp' },
+		{ ...INFORMATION, command: 'mcp verbose' },
+		{ ...INFORMATION, args: 'verbose' },
+		// An ordinary prompt only, a distinctive completion, a bounded reply and no extra keys.
+		{ ...REFRESH, prompt: '/skills' },
+		{ ...REFRESH, prompt: 'use $bridge_probe_claude_01a18013' },
+		{ ...REFRESH, completion: 'DONE' },
+		{ ...REFRESH, reply_deadline_ms: 3_600_000 },
+		{ ...REFRESH, toggle: { kind: 'key', key: 'Enter' } },
 	])
 		expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey })).toThrow();
 });
@@ -257,6 +287,26 @@ test('an Enter sent with the still-buffered /quit never ends the PTY', async () 
 		await driver.send(Buffer.from('/quit'));
 		await driver.send(Buffer.from('\r'));
 		await expect(driver.waitForEof('codex /quit')).rejects.toThrow('timed out waiting on channel');
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('a client that exits on a refused /hooks never reaches the refused scene', async () => {
+	const [ready, refused] = informationJourney('cursor', 'hooks').steps;
+	if (ready === undefined || refused === undefined) throw new Error('hooks scene missing');
+	const { driver } = await composerStandIn('/hooks', [
+		'› /hooks  view and manage lifecycle hooks',
+		'',
+		'› /hooks',
+	]);
+	try {
+		await driveCodexStep(driver, ready, 'legacy');
+		// Enter dispatches the drawn command and this client closes the PTY: an exit is never the
+		// usable-composer outcome.
+		await expect(driveCodexStep(driver, refused, 'legacy')).rejects.toThrow(
+			'grid checkpoint unreachable: hooks-refused',
+		);
 	} finally {
 		await driver.stop();
 	}

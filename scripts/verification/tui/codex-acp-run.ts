@@ -14,15 +14,19 @@ import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 import {
+	codexInformationCommandSchema,
+	informationJourney,
+} from './codex-acp-information-scenes.ts';
+import { codexMenuKeySchema, modelJourney } from './codex-acp-model-scenes.ts';
+import { codexOrdinaryPromptSchema, refreshJourney } from './codex-acp-refresh-scenes.ts';
+import {
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
 	codexFixtureTitleSchema,
-	codexMenuKeySchema,
 	compactJourney,
 	encodeCodexAction,
 	gridShowsCheckpoint,
 	interruptJourney,
-	modelJourney,
 	pickerOnlyJourney,
 	renameJourney,
 	reopenJourney,
@@ -123,6 +127,21 @@ export const codexAcpRunPlanSchema = z
 				title: codexFixtureTitleSchema,
 				expected_refusal: z.array(z.string().min(1)).min(1),
 			}),
+			// One built-in read-only inventory command with no arguments; its refusal text is Codex's own.
+			z.strictObject({
+				kind: z.literal('information'),
+				provider: providerSchema,
+				command: codexInformationCommandSchema,
+			}),
+			// One ordinary prompt kept running through /skills, the manage view and Esc, the completion
+			// line only its own reply produces, and the bound for that reply.
+			z.strictObject({
+				kind: z.literal('refresh'),
+				provider: providerSchema,
+				prompt: codexOrdinaryPromptSchema,
+				completion: z.string().min(8),
+				reply_deadline_ms: z.number().int().positive().max(600_000),
+			}),
 		]),
 	})
 	.readonly();
@@ -149,6 +168,14 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 	if (journey.kind === 'reopen') return reopenJourney(journey.provider, journey.prior_reply);
 	if (journey.kind === 'rename')
 		return renameJourney(journey.provider, journey.title, journey.expected_refusal);
+	if (journey.kind === 'information') return informationJourney(journey.provider, journey.command);
+	if (journey.kind === 'refresh')
+		return refreshJourney({
+			provider: journey.provider,
+			prompt: journey.prompt,
+			completion: journey.completion,
+			replyDeadlineMs: journey.reply_deadline_ms,
+		});
 	return modelJourney({
 		provider: journey.provider,
 		cataloguePage: journey.catalogue_page,

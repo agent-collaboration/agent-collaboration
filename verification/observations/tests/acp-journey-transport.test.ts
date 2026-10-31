@@ -11,7 +11,9 @@ import {
   journeyObservationPlanSchema,
   providerJourneyEventsSchema,
   type JourneyObservationPlan,
+  type JourneyReadback,
 } from "../acp-journey-models.ts";
+import { checkInformationRefused } from "../acp-journey-oracle.ts";
 import {
   observedThreadId,
   providerJourneyItems,
@@ -64,6 +66,30 @@ interface NativeFixture {
   readonly plan: JourneyObservationPlan;
   readonly evidence: string;
   readonly requests: Record<string, unknown>[];
+  readonly connections: () => number;
+}
+
+// This endpoint's refusals (router_session_app_server_methods.rs:100-108), as literal envelopes.
+const DECLARED_REFUSALS: Readonly<Record<string, { code: bigint; message: string }>> = {
+  "hooks/list": { code: -32000n, message: "Hook discovery is not supported on this ACP endpoint" },
+  "mcpServerStatus/list": { code: -32601n, message: "Method not found" },
+};
+function informationReply(failure: string, frame: Record<string, unknown>): unknown {
+  const id = frame["id"];
+  const declared = DECLARED_REFUSALS[String(frame["method"])];
+  if (declared === undefined) throw new Error("not an information request");
+  const replies: Readonly<Record<string, unknown>> = {
+    "refusal-success-empty": { id, result: { data: [], nextCursor: null } },
+    "refusal-wrong-code": { id, error: { ...declared, code: -32603n } },
+    "refusal-wrong-message": { id, error: { ...declared, message: "Internal error" } },
+    "refusal-wrong-id": { id: 999n, error: declared },
+    "refusal-error-string": { id, error: "refused" },
+    "refusal-code-missing": { id, error: { message: declared.message } },
+    "refusal-code-fraction": { id, error: { code: -32000.5, message: declared.message } },
+    "refusal-message-missing": { id, error: { code: declared.code } },
+    "refusal-result-and-error": { id, result: {}, error: declared },
+  };
+  return replies[failure] ?? { id, error: declared };
 }
 
 async function nativeFixture(
@@ -87,16 +113,27 @@ async function nativeFixture(
     rmSync(root, { recursive: true, force: true });
   });
   const requests: Record<string, unknown>[] = [];
+  let connections = 0;
   websocketServer.on("connection", (client): void => {
+    connections += 1;
     let bound = false;
+    let reads = 0;
     client.on("message", (raw): void => {
       const frame = readObservedJson(raw.toString());
       requests.push(frame);
       client.send(encode({ method: "skills/changed", params: {} }));
+      if (String(frame.method) in DECLARED_REFUSALS) {
+        client.send(encode(informationReply(failure, frame)));
+        // A reply to another ID is never this request's; the connection then ends.
+        if (failure === "refusal-wrong-id") client.close();
+        return;
+      }
+      if (frame.method === "thread/read") reads += 1;
+      const laterReadCwd = failure === "after-read-launch-cwd" && reads > 1;
       const thread = {
         id: failure === "wrong-thread" ? "other" : ALIAS,
         // A TUI launched in another trusted directory: the Session keeps its own cwd.
-        cwd: failure === "launch-cwd" ? LAUNCH_CWD : CWD,
+        cwd: failure === "launch-cwd" || laterReadCwd ? LAUNCH_CWD : CWD,
         status: { type: threadStatus },
         turns: [{ id: "t1", status: "completed", items: [] }],
       };
@@ -153,7 +190,7 @@ async function nativeFixture(
         ? [{ kind: "effective-model", expected_model: "claude-haiku-5-5" }]
         : [{ kind: "turn-in-progress" }]),
   });
-  return { plan, evidence, requests };
+  return { plan, evidence, requests, connections: () => connections };
 }
 
 const READ = { id: 2n, method: "thread/read", params: { threadId: ALIAS, includeTurns: true } };
@@ -425,6 +462,183 @@ test(
     await assert.rejects(
       readNativeJourney(plan, ALIAS),
       /reasoningEffort is neither a value nor null/,
+    );
+  },
+);
+
+const INFORMATION_CHECKS = [
+  { kind: "information-refused", command: "hooks" },
+  { kind: "information-refused", command: "mcp" },
+] as const;
+const HOOKS_REQUEST = { id: 6n, method: "hooks/list", params: { cwds: [CWD] } };
+// Codex 0.165's /mcp inventory request: every None sent as null (v2/mcp.rs:47-74).
+const MCP_REQUEST = {
+  id: 7n,
+  method: "mcpServerStatus/list",
+  params: {
+    cursor: null,
+    limit: 100n,
+    detail: "toolsAndAuthOnly",
+    threadId: ALIAS,
+    serverName: null,
+  },
+};
+function journeyReadback(native: Awaited<ReturnType<typeof readNativeJourney>>): JourneyReadback {
+  return {
+    unboundSkills: native.unboundSkills,
+    boundSkills: native.boundSkills,
+    threadRead: native.threadRead,
+    threadResume: native.threadResume,
+    resumedModel: native.resumedModel,
+    models: null,
+    information: native.information,
+    providerAgentTexts: [],
+    providerToolItems: [],
+  };
+}
+
+test(
+  "information requests are sent once on the bound connection, refused, then a supported read",
+  { timeout: 5000 },
+  async (context): Promise<void> => {
+    const { plan, evidence, requests, connections } = await nativeFixture(
+      context,
+      "none",
+      "idle",
+      "idle-bind",
+      INFORMATION_CHECKS,
+    );
+    const native = await readNativeJourney(plan, ALIAS);
+    // The exact native methods and params, in plan order, after the resume, then thread/read.
+    assert.deepEqual(requests.slice(5), [HOOKS_REQUEST, MCP_REQUEST, { ...READ, id: 8n }]);
+    assert.equal(connections(), 1);
+    for (const id of [6, 7, 8]) assert.ok(existsSync(join(evidence, `app-server-${id}.json`)));
+    const readback = journeyReadback(native);
+    assert.deepEqual(checkInformationRefused(readback, INFORMATION_CHECKS[0]), {
+      kind: "information-refused",
+      observed: {
+        method: "hooks/list",
+        request_id: "6",
+        code: -32000,
+        message: "Hook discovery is not supported on this ACP endpoint",
+      },
+    });
+    assert.deepEqual(checkInformationRefused(readback, INFORMATION_CHECKS[1]).observed, {
+      method: "mcpServerStatus/list",
+      request_id: "7",
+      code: -32601,
+      message: "Method not found",
+    });
+  },
+);
+
+for (const [failure, expected] of [
+  ["refusal-success-empty", /hooks\/list succeeded where a refusal was expected/],
+  ["refusal-error-string", /hooks\/list refusal envelope is malformed/],
+  ["refusal-code-missing", /hooks\/list refusal envelope is malformed/],
+  ["refusal-code-fraction", /hooks\/list refusal envelope is malformed/],
+  ["refusal-message-missing", /hooks\/list refusal envelope is malformed/],
+  ["refusal-result-and-error", /hooks\/list refusal envelope is malformed/],
+  ["refusal-wrong-id", /app-server WebSocket closed/],
+  // The supported read after the refusal keeps the Session and cwd boundary of every read.
+  ["after-read-launch-cwd", /thread cwd differs from the declared Session cwd/],
+] as const)
+  test(
+    `an information refusal is never accepted from a bad envelope or read: ${failure}`,
+    { timeout: 5000 },
+    async (context): Promise<void> => {
+      const { plan, evidence, requests } = await nativeFixture(
+        context,
+        failure,
+        "idle",
+        "idle-bind",
+        INFORMATION_CHECKS,
+      );
+      await assert.rejects(readNativeJourney(plan, ALIAS), expected);
+      // Sent once, never retried; a reply for another ID is never retained as this request's.
+      assert.equal(requests.filter((request) => request["method"] === "hooks/list").length, 1);
+      assert.equal(existsSync(join(evidence, "app-server-6.json")), failure !== "refusal-wrong-id");
+    },
+  );
+
+for (const [failure, expected] of [
+  ["refusal-wrong-code", /hooks\/list refused with code -32603, not -32000/],
+  [
+    "refusal-wrong-message",
+    /hooks\/list refusal message differs from the endpoint's declared text/,
+  ],
+] as const)
+  test(
+    `a well-formed refusal with another code or message fails the check: ${failure}`,
+    { timeout: 5000 },
+    async (context): Promise<void> => {
+      const { plan } = await nativeFixture(
+        context,
+        failure,
+        "idle",
+        "idle-bind",
+        INFORMATION_CHECKS,
+      );
+      const readback = journeyReadback(await readNativeJourney(plan, ALIAS));
+      assert.throws(() => checkInformationRefused(readback, INFORMATION_CHECKS[0]), expected);
+    },
+  );
+
+test(
+  "information-refused needs its own single request and an idle-bind plan",
+  { timeout: 5000 },
+  async (context): Promise<void> => {
+    const { plan } = await nativeFixture(context, "none", "idle", "idle-bind", INFORMATION_CHECKS);
+    const readback = journeyReadback(await readNativeJourney(plan, ALIAS));
+    const information = readback.information;
+    if (information === null) throw new Error("information readback missing");
+    const [hooks, mcp] = information.refusals;
+    if (hooks === undefined || mcp === undefined) throw new Error("refusals missing");
+    for (const [refusals, message] of [
+      [[mcp], /expected exactly one hooks\/list request/],
+      [[hooks, hooks], /expected exactly one hooks\/list request/],
+      [
+        [{ ...hooks, method: "mcpServerStatus/list" }],
+        /the hooks request used mcpServerStatus\/list/,
+      ],
+    ] as const)
+      assert.throws(
+        () =>
+          checkInformationRefused(
+            { ...readback, information: { ...information, refusals } },
+            INFORMATION_CHECKS[0],
+          ),
+        message,
+      );
+    assert.throws(
+      () =>
+        checkInformationRefused(
+          {
+            ...readback,
+            information: {
+              ...information,
+              threadAfter: { ...information.threadAfter, id: "other" },
+            },
+          },
+          INFORMATION_CHECKS[0],
+        ),
+      /supported read after the refusal returned another thread/,
+    );
+    assert.throws(
+      () => checkInformationRefused({ ...readback, information: null }, INFORMATION_CHECKS[0]),
+      /needs the observer's refused request/,
+    );
+    assert.throws(
+      () =>
+        journeyObservationPlanSchema.parse({
+          ...plan,
+          checks: [...INFORMATION_CHECKS, INFORMATION_CHECKS[0]],
+        }),
+      /each information command is requested once/,
+    );
+    assert.throws(
+      () => journeyObservationPlanSchema.parse({ ...plan, mode: "active-read-only" }),
+      /active-read-only allows only turn-in-progress/,
     );
   },
 );
