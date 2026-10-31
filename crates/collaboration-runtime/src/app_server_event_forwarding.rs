@@ -129,6 +129,11 @@ pub(crate) fn historical_turns(session: &SessionRef, snapshot: &[HubEvent]) -> V
     let mut turns = group_historical_turns(session, &items)
         .iter()
         .map(render_historical_turn)
+        .filter(|turn| {
+            turn.get("items")
+                .and_then(Value::as_array)
+                .is_some_and(|items| !items.is_empty())
+        })
         .collect::<Vec<_>>();
     if let (Some(turn_id), Some(active_items)) = (active_turn, active_items) {
         let translated_items = active_items

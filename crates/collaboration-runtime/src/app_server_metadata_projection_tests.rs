@@ -172,3 +172,103 @@ fn completed_and_active_history_exclude_metadata_and_preserve_transcript_content
         );
     }
 }
+
+#[test]
+fn metadata_only_history_has_no_turn_until_the_first_genuine_exchange() {
+    let session = target();
+    let mut snapshot = metadata_items()
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| HubEvent {
+            sequence: index as u64,
+            event: SessionEvent::ItemStarted { item },
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(historical_turns(&session, &snapshot), Vec::<Value>::new());
+
+    let prompt = SessionItem {
+        item_id: "first-user-message".into(),
+        kind: SessionItemKind::UserMessage,
+        text: Some("What is 2 + 2?".into()),
+    };
+    let reply = SessionItem {
+        item_id: "first-assistant-reply".into(),
+        kind: SessionItemKind::AgentMessage,
+        text: Some("4".into()),
+    };
+    snapshot.push(HubEvent {
+        sequence: 20,
+        event: SessionEvent::TurnStarted {
+            turn_id: "first-live-turn".into(),
+            input_id: InputId::generate(),
+        },
+    });
+    for (index, item) in [prompt, reply].into_iter().enumerate() {
+        snapshot.push(HubEvent {
+            sequence: 21 + index as u64,
+            event: SessionEvent::ItemStarted { item },
+        });
+    }
+    snapshot.push(HubEvent {
+        sequence: 23,
+        event: SessionEvent::TurnEnded {
+            turn_id: "first-live-turn".into(),
+            outcome: TurnOutcome::Ended {
+                stop_reason: StopReason::EndTurn,
+                local_cause: None,
+            },
+        },
+    });
+
+    let turns = historical_turns(&session, &snapshot);
+    assert_eq!(turns.len(), 1);
+    assert_eq!(turns[0]["status"], "completed");
+    assert_eq!(
+        turns[0]["items"],
+        json!([
+            {"type":"userMessage","id":"first-user-message",
+             "content":[{"type":"text","text":"What is 2 + 2?"}]},
+            {"type":"agentMessage","id":"first-assistant-reply","text":"4"}
+        ])
+    );
+    assert_eq!(historical_turns(&session, &snapshot), turns);
+
+    snapshot.push(HubEvent {
+        sequence: 24,
+        event: SessionEvent::ItemStarted {
+            item: SessionItem {
+                item_id: "second-user-message".into(),
+                kind: SessionItemKind::UserMessage,
+                text: Some("Thank you".into()),
+            },
+        },
+    });
+    let extended = historical_turns(&session, &snapshot);
+    assert_eq!(extended.len(), 2);
+    assert_eq!(extended[0], turns[0]);
+}
+
+#[test]
+fn empty_active_history_turn_remains_visible_before_and_after_metadata() {
+    let session = target();
+    let mut snapshot = vec![HubEvent {
+        sequence: 1,
+        event: SessionEvent::TurnStarted {
+            turn_id: "empty-active-turn".into(),
+            input_id: InputId::generate(),
+        },
+    }];
+    let expected = json!([{
+        "id":"empty-active-turn","items":[],"itemsView":"full",
+        "status":"inProgress","error":null,
+        "startedAt":null,"completedAt":null,"durationMs":null
+    }]);
+    assert_eq!(json!(historical_turns(&session, &snapshot)), expected);
+    for (index, item) in metadata_items().into_iter().enumerate() {
+        snapshot.push(HubEvent {
+            sequence: 2 + index as u64,
+            event: SessionEvent::ItemStarted { item },
+        });
+    }
+    assert_eq!(json!(historical_turns(&session, &snapshot)), expected);
+}
