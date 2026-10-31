@@ -112,7 +112,7 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `content-dialog-retains-header-width.patch` | Content-sized chrome retains a narrow draw width and never restores fitting Help after resize. |
 
 | `combo-secondary-omitted.patch` | The dropdown omits a choice's secondary text. |
-| `combo-secondary-not-truncated.patch` | A long secondary loses its ellipsis at constrained width. |
+| `combo-secondary-forced-inline.patch` | Overflow secondary text stays beside its label instead of using an indented muted line. |
 | `combo-secondary-wrong-colour.patch` | Secondary text loses the shipped muted foreground role. |
 
 | `right-edge-focus-marker.patch` | Fitting lists, menus, and dropdowns add a duplicate focus glyph in the right scrollbar column. |
@@ -152,3 +152,14 @@ whole-tag, measured-header and resize controls above. Narrow titles yield to a
 whole tag; long names use one ellipsized pinned row. The approved Options wide
 golden now uses its natural width with Help fitting, retaining its 24-row height,
 body capacity and actions. Existing wide and tiny Details goldens remain exact.
+
+T4 replaces the old same-row secondary clipping rule with a full secondary line when it does not fit. The Lead approved retiring `combo-secondary-not-truncated.patch` in favor of `combo-secondary-forced-inline.patch`; omission, muted style, secondary-only filtering, real pick/close and full-label checks remain.
+
+| Patch | Intended failure |
+| --- | --- |
+| `combo-option-label-wraps.patch` | An overlong dropdown label wraps instead of remaining one ellipsized row. |
+| `combo-option-reason-same-row.patch` | An unavailable reason crowds its label instead of occupying a muted indented line. |
+| `combo-option-reveal-composite.patch` | Focus reveal omits the expanded option block extent and clips the reason. |
+| `menu-reason-not-right-aligned.patch` | The menu reason leaves space before its primary key instead of aligning to that column. |
+| `menu-reason-crowds-title.patch` | A natural-width menu leaves only one separating cell between title and reason. |
+| `menu-reason-wrong-colour.patch` | The menu reason loses the muted foreground role. |

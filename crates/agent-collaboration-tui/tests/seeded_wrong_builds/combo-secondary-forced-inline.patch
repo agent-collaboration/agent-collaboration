@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_box.rs b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_box.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+@@ -83,3 +83,3 @@ pub(crate) fn ComboDropdown(
+             let label=fit_label_text(&option.label,row_width.saturating_sub(2));
+-            let inline_secondary=option.secondary.as_ref().filter(|secondary|option.label.width()+secondary.width()+3<=row_width);
++            let inline_secondary=option.secondary.as_ref();
+             let overflow_secondary=option.secondary.as_ref().filter(|_|inline_secondary.is_none());

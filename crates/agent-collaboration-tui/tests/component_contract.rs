@@ -99,3 +99,7 @@ mod dialog_context_content;
 #[cfg(test)]
 #[path = "suites/dialog_result_extent.rs"]
 mod dialog_result_extent;
+
+#[cfg(test)]
+#[path = "suites/combo_option_layout.rs"]
+mod combo_option_layout;

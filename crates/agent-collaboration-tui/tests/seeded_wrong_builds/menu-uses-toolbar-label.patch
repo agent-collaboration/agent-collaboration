@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
 --- a/crates/agent-collaboration-tui/src/controls/menu.rs
 +++ b/crates/agent-collaboration-tui/src/controls/menu.rs
-@@ -173,3 +173,3 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
+@@ -202,3 +202,3 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
                  View(width:1,flex_shrink:0.0_f32) {Text(content:if action.checked==Some(true){UiGlyph::Checked.text()}else if focused {UiGlyph::Focus.text()}else{""},color:theme.foreground(TextRole::Focused))}
 -                View(flex_shrink:0.0_f32) {Text(content:action.title,wrap:TextWrap::NoWrap,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))}
 +                View(flex_shrink:0.0_f32) {Text(content:action.toolbar_label.unwrap_or(action.title),wrap:TextWrap::NoWrap,color:theme.foreground(if !available {TextRole::Disabled}else if focused {TextRole::Focused}else{TextRole::Text}))}
-                 View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0,column_gap:gap) {
+                 View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0,column_gap:gap,padding_left:reason_gap) {

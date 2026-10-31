@@ -1,0 +1,13 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/combo_box.rs b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+--- a/crates/agent-collaboration-tui/src/controls/combo_box.rs
++++ b/crates/agent-collaboration-tui/src/controls/combo_box.rs
+@@ -85,3 +85,3 @@ pub(crate) fn ComboDropdown(
+             let overflow_secondary=option.secondary.as_ref().filter(|_|inline_secondary.is_none());
+-            element!(ScrollReveal(focused:highlighted) {View(width:100pct,flex_shrink:0.0_f32) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
++            element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
+                 View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
+@@ -93,3 +93,3 @@ pub(crate) fn ComboDropdown(
+                 #(reason.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
+-            }}}}).into_any()
++            }}}).into_any()
+         }))

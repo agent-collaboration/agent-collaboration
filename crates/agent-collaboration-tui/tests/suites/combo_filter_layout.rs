@@ -100,7 +100,7 @@ mod tests {
         })
     }
     #[tokio::test]
-    async fn dropdown_secondary_is_muted_on_the_label_row_and_truncates_before_the_label() {
+    async fn dropdown_secondary_is_muted_and_moves_below_the_label_when_it_does_not_fit() {
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
             for (width, height) in [(120u16, 36u16), (48, 12), (32, 24)] {
                 let handle = Arc::new(Mutex::new(None));
@@ -113,24 +113,51 @@ mod tests {
                     driver
                         .drive(&mut frames, mode, vec![(key(KeyCode::Enter), true)], true)
                         .await;
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Up), true)], true)
+                        .await;
                     let grid = driver.frames.last().unwrap();
-                    let (row, line) = (0..grid.height)
+                    let top = grid
+                        .cells
+                        .iter()
+                        .position(|row| row.iter().any(|cell| cell.text == "╭"))
+                        .unwrap();
+                    let bottom = grid
+                        .cells
+                        .iter()
+                        .rposition(|row| row.iter().any(|cell| cell.text == "╰"))
+                        .unwrap();
+                    let (label_row, label) = (top..=bottom)
                         .map(|row| (row, grid.row_text(row)))
                         .find(|(_, line)| line.contains("ab Alpha"))
                         .unwrap();
-                    let secondary = if width == 32 {
-                        "/remote/only/…"
+                    let secondary = "/remote/only/project";
+                    let (row, line) = (top..=bottom)
+                        .map(|row| (row, grid.row_text(row)))
+                        .find(|(_, line)| line.contains(secondary))
+                        .unwrap();
+                    assert_eq!(
+                        row,
+                        label_row + usize::from(width == 32),
+                        "overflow secondary gets its own row"
+                    );
+                    let label_column = label
+                        .get(..label.find("ab Alpha").unwrap())
+                        .unwrap()
+                        .width();
+                    let secondary_column =
+                        line.get(..line.find(secondary).unwrap()).unwrap().width();
+                    if width == 32 {
+                        assert_eq!(
+                            secondary_column, label_column,
+                            "overflow secondary is indented under its label"
+                        );
                     } else {
-                        "/remote/only/project"
-                    };
-                    assert!(
-                        line.contains(secondary),
-                        "secondary shares its label row at {width}x{height}\n{line}"
-                    );
-                    assert!(
-                        line.find(secondary).unwrap() > line.find("ab Alpha").unwrap(),
-                        "secondary follows the full label"
-                    );
+                        assert!(
+                            secondary_column > label_column,
+                            "inline secondary follows its full label"
+                        );
+                    }
                     assert!(
                         grid.round_frame_text().contains("ab Beta"),
                         "a long secondary cannot starve another label"

@@ -1,8 +1,11 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/combo_box.rs b/crates/agent-collaboration-tui/src/controls/combo_box.rs
 --- a/crates/agent-collaboration-tui/src/controls/combo_box.rs
 +++ b/crates/agent-collaboration-tui/src/controls/combo_box.rs
-@@ -82,3 +82,3 @@ pub(crate) fn ComboDropdown(
-             View(flex_shrink:0.0_f32) {Text(content:option.label.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
--            #(secondary.map(|content|element!(View(min_width:0,flex_shrink:1.0_f32,flex_grow:1.0_f32,overflow:Overflow::Hidden) {Text(content,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))})))
-+            #(secondary.map(|content|element!(View(min_width:0,flex_shrink:1.0_f32,flex_grow:1.0_f32,overflow:Overflow::Hidden) {Text(content,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Accent))})))
-             #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
+@@ -89,5 +89,5 @@ pub(crate) fn ComboDropdown(
+                     View(flex_shrink:0.0_f32) {Text(content:label,wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
+-                    #(inline_secondary.map(|content|element!(Text(content:content.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted)))))
++                    #(inline_secondary.map(|content|element!(Text(content:content.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Accent)))))
+                 }
+-                #(overflow_secondary.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content:content.clone(),wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
++                #(overflow_secondary.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content:content.clone(),wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Accent))})))
+                 #(reason.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
