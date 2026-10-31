@@ -1,0 +1,7 @@
+[
+{"kind":"unknownMachine"},
+{"kind":"enrollmentNotActive"},
+{"kind":"superseded"},
+{"kind":"machineInAnotherOrganization"},
+{"kind":"wrongClient"}
+]

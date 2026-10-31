@@ -1,0 +1,10 @@
+[
+null,
+{"deadline":1793448060,"requestId":"019a3dce-2000-7000-8000-000000000001","result":"forwarded","unexpectedField":true},
+{"deadline":1793448060,"requestId":"019a3dce-2000-7000-8000-000000000001","result":"unrecognizedVariant"},
+{"deadline":1793448060,"request_id":"019a3dce-2000-7000-8000-000000000001","result":"forwarded"},
+{"reason":{"kind":"machineNotConnected","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"machineNotConnected"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"machineNotConnected"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"unrecognizedVariant"},"result":"refused"}
+]

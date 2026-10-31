@@ -9,6 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }

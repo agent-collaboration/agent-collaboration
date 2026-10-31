@@ -7,6 +7,7 @@ members = [
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",
+    "crates/fleet-identity-protocol",
     "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
@@ -53,7 +54,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.118"
+version = "0.1.119"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
