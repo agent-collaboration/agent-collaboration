@@ -1,5 +1,5 @@
 /** Controlled protocol child checks command/stream ordering, never product behavior. */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
@@ -115,4 +115,76 @@ else if(line.startsWith('reply ')||line.startsWith('read '))emit('OK');
 	// microtask. Each answer must still reach the matching caller.
 	expect(running.burst).toBe(true);
 	expect(commands.some((command) => command.line.startsWith('read '))).toBe(false);
+});
+
+test('component dispatch receipt nomination reaches only its controlled component driver', async () => {
+	const directory = temporaryRoot();
+	const observedPath = join(directory, 'receipt-nomination.json');
+	const receiptPath = join(directory, 'component-input-dispatch.jsonl');
+	const executable = controlledExecutable(
+		directory,
+		'component-receipt-control',
+		`
+const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(observedPath)},JSON.stringify({path:process.env.TUI_GRID_COMPONENT_DISPATCH_RECEIPT,scenario:process.env.TUI_GRID_COMPONENT_SCENARIO}));
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});`,
+	);
+	const driver = await PtyGridDriver.start({
+		repository: directory,
+		driver: executable,
+		surface: 'normal',
+		keys: 'legacy',
+		evidence: directory,
+		componentBinary: '/declared/component-libtest',
+		componentDispatchReceipt: receiptPath,
+		componentScenario: 'save-failed',
+	});
+	try {
+		expect(JSON.parse(readFileSync(observedPath, 'utf8'))).toEqual({
+			path: receiptPath,
+			scenario: 'save-failed',
+		});
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('component receipt rejects occupied and foreign paths before any controlled child launch', async () => {
+	const directory = temporaryRoot(),
+		foreign = temporaryRoot();
+	const launched = join(directory, 'launched');
+	const executable = controlledExecutable(
+		directory,
+		'rejected-receipt-control',
+		`require('node:fs').writeFileSync(${JSON.stringify(launched)},'wrong launch');`,
+	);
+	const occupied = join(directory, 'occupied.jsonl');
+	writeFileSync(occupied, 'existing');
+	await Promise.all(
+		[occupied, join(foreign, 'foreign.jsonl'), 'relative.jsonl'].map((receipt) =>
+			expect(
+				PtyGridDriver.start({
+					repository: directory,
+					driver: executable,
+					surface: 'normal',
+					keys: 'legacy',
+					evidence: directory,
+					componentBinary: '/declared/component',
+					componentDispatchReceipt: receipt,
+				}),
+			).rejects.toThrow(/component receipt/u),
+		),
+	);
+	await expect(
+		PtyGridDriver.start({
+			repository: directory,
+			driver: executable,
+			surface: 'sessions-filters',
+			keys: 'legacy',
+			evidence: directory,
+			componentBinary: '/declared/component',
+			componentDispatchReceipt: join(directory, 'wrong-surface.jsonl'),
+		}),
+	).rejects.toThrow('requires a component fixture');
+	expect(existsSync(launched)).toBe(false);
 });

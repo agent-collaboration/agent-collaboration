@@ -57,6 +57,47 @@ fn nominated_product_binary(
         _ => Err("product binary path and SHA256 must be nominated together".into()),
     }
 }
+fn component_scenario(
+    surface: &str,
+    nomination: Option<&OsStr>,
+) -> TestResult<(&'static str, &'static str)> {
+    let name = nomination
+        .map(|value| value.to_str().ok_or("component scenario is not Unicode"))
+        .transpose()?;
+    match (surface, name) {
+        ("normal", None | Some("normal")) => Ok(("normal", "scenario=Normal")),
+        ("normal", Some("save-failed")) => Ok(("save-failed", "scenario=SaveFailed")),
+        ("hard", None | Some("visual-hard-cases")) => {
+            Ok(("visual-hard-cases", "scenario=VisualHardCases"))
+        }
+        _ => Err("component scenario does not match its surface".into()),
+    }
+}
+fn component_dispatch_receipt(
+    surface: &str,
+    nomination: Option<&OsStr>,
+) -> TestResult<Option<PathBuf>> {
+    let Some(nomination) = nomination else {
+        return Ok(None);
+    };
+    ensure(
+        matches!(surface, "normal" | "hard"),
+        "component receipt requires a component surface",
+    )?;
+    let path = PathBuf::from(nomination);
+    let parent = path.parent().ok_or("component receipt parent absent")?;
+    ensure(
+        path.is_absolute()
+            && path.file_name().is_some()
+            && std::fs::canonicalize(parent)? == parent,
+        "component receipt path must be canonical and absolute",
+    )?;
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Some(path)),
+        _ => Err("component receipt path already exists or is unavailable".into()),
+    }
+}
+
 pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let surface = std::env::var("TUI_GRID_SURFACE")?;
     let protocol = match std::env::var("TUI_GRID_KEYS")?.as_str() {
@@ -104,6 +145,16 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let receipt_path = std::env::var_os("TUI_GRID_COMPONENT_RECEIPT");
     let release_path = std::env::var_os("TUI_GRID_COMPONENT_RELEASE");
     let component = matches!(surface.as_str(), "normal" | "hard");
+    let scenario_nomination = std::env::var_os("TUI_GRID_COMPONENT_SCENARIO");
+    ensure(
+        component || scenario_nomination.is_none(),
+        "component scenario requires a component surface",
+    )?;
+    let scenario = component
+        .then(|| component_scenario(&surface, scenario_nomination.as_deref()))
+        .transpose()?;
+    let dispatch_nomination = std::env::var_os("TUI_GRID_COMPONENT_DISPATCH_RECEIPT");
+    let dispatch_receipt = component_dispatch_receipt(&surface, dispatch_nomination.as_deref())?;
     let product_path = std::env::var_os("TUI_GRID_PRODUCT_BINARY");
     let product_digest = match std::env::var("TUI_GRID_PRODUCT_SHA256") {
         Ok(digest) => Some(digest),
@@ -117,6 +168,12 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         "product and component binaries cannot be mixed",
     )?;
     let mut environment: Vec<(&str, &OsStr)> = Vec::new();
+    if let Some(path) = &dispatch_receipt {
+        environment.push((
+            "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+            path.as_os_str(),
+        ));
+    }
     let sessions_receipt_directory = std::env::var_os("TUI_SESSIONS_FIXTURE_RECEIPT_DIR");
     if let Some(directory) = sessions_receipt_directory.as_deref() {
         ensure(
@@ -145,11 +202,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     if component {
         environment.push((
             "QUOTA_COMPONENT_FIXTURE",
-            OsStr::new(if surface == "normal" {
-                "normal"
-            } else {
-                "visual-hard-cases"
-            }),
+            OsStr::new(scenario.ok_or("component scenario absent")?.0),
         ));
         environment.push((
             "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE",
@@ -189,11 +242,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
                 .as_deref()
                 .ok_or("component receipt required")?,
         )?;
-        let expected = if surface == "normal" {
-            "scenario=Normal"
-        } else {
-            "scenario=VisualHardCases"
-        };
+        let expected = scenario.ok_or("component scenario absent")?.1;
         ensure(
             receipt.contains(expected)
                 && receipt.contains("external_requests=0 persisted_writes=0"),
@@ -440,4 +489,73 @@ fn sessions_wrapper_receipt_input_reaches_its_child_on_the_existing_pty_owner() 
         fixture.cleanup()?;
     }
     Ok(())
+}
+
+#[test]
+fn component_receipt_and_scenario_nomination_are_confined_and_reach_the_real_pty() -> TestResult<()>
+{
+    let directory = std::fs::canonicalize(std::env::temp_dir())?
+        .join(format!("grid-component-receipt-{}", std::process::id()));
+    std::fs::create_dir(&directory)?;
+    let path = directory.join("dispatch.jsonl");
+    let result = (|| {
+        ensure(
+            component_dispatch_receipt("normal", Some(path.as_os_str()))? == Some(path.clone()),
+            "valid receipt nomination lost",
+        )?;
+        ensure(
+            component_dispatch_receipt("sessions", Some(path.as_os_str())).is_err(),
+            "sessions accepted a component receipt",
+        )?;
+        ensure(
+            component_dispatch_receipt("normal", Some(OsStr::new("relative.jsonl"))).is_err(),
+            "relative receipt accepted",
+        )?;
+        ensure(
+            component_scenario("normal", Some(OsStr::new("save-failed")))?
+                == ("save-failed", "scenario=SaveFailed"),
+            "save failure scenario/receipt changed",
+        )?;
+        ensure(
+            component_scenario("hard", None)? == ("visual-hard-cases", "scenario=VisualHardCases"),
+            "hard default changed",
+        )?;
+        for surface in ["normal", "hard", "sessions"] {
+            ensure(
+                component_scenario(surface, Some(OsStr::new("unknown"))).is_err(),
+                "unknown scenario accepted",
+            )?;
+        }
+        ensure(
+            component_scenario("hard", Some(OsStr::new("save-failed"))).is_err(),
+            "hard accepted normal scenario",
+        )?;
+        let terminal = TerminalDriver::spawn_with_environment(
+            Path::new("/usr/bin/env"),
+            std::iter::empty::<&OsStr>(),
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[(
+                "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+                path.as_os_str(),
+            )],
+        )?;
+        let bytes = terminal.finish(Duration::from_secs(8))?;
+        ensure(
+            String::from_utf8(bytes)?.contains(&format!(
+                "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE={}",
+                path.display()
+            )),
+            "real PTY dropped receipt key",
+        )?;
+        std::fs::write(&path, b"occupied")?;
+        ensure(
+            component_dispatch_receipt("normal", Some(path.as_os_str())).is_err(),
+            "occupied receipt accepted",
+        )
+    })();
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    std::fs::remove_dir(directory)?;
+    result
 }

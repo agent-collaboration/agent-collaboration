@@ -1,8 +1,8 @@
 /** Grid observer over the existing Rust TerminalDriver. One owner of each PTY. */
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { lstatSync, realpathSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import type { GhosttyCore } from '@wterm/ghostty';
 
@@ -40,6 +40,8 @@ export interface PtyGridTarget {
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
+	readonly componentDispatchReceipt?: string;
+	readonly componentScenario?: 'normal' | 'save-failed' | 'visual-hard-cases';
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly storyboardVariant?:
@@ -47,6 +49,45 @@ export interface PtyGridTarget {
 		| 'source-qualified-outcome'
 		| 'configured-source-new';
 }
+function componentEnvironment(target: PtyGridTarget): Readonly<Record<string, string>> {
+	if (target.componentDispatchReceipt === undefined && target.componentScenario === undefined)
+		return {};
+	if (target.componentBinary === undefined || !['normal', 'hard'].includes(target.surface))
+		throw new Error('component receipt/scenario requires a component fixture');
+	const scenario = target.componentScenario;
+	if (
+		scenario !== undefined &&
+		!(target.surface === 'normal' ? ['normal', 'save-failed'] : ['visual-hard-cases']).includes(
+			scenario,
+		)
+	)
+		throw new Error('component scenario does not match its surface');
+	const receipt = target.componentDispatchReceipt;
+	if (receipt !== undefined) {
+		const metadata = lstatSync(target.evidence);
+		if (
+			!metadata.isDirectory() ||
+			metadata.isSymbolicLink() ||
+			metadata.uid !== process.getuid?.() ||
+			!isAbsolute(receipt) ||
+			realpathSync(dirname(receipt)) !== realpathSync(target.evidence) ||
+			receipt !== join(realpathSync(target.evidence), basename(receipt))
+		)
+			throw new Error('component receipt requires a fresh path directly inside owned output');
+		try {
+			lstatSync(receipt);
+		} catch (error) {
+			if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+			return {
+				TUI_GRID_COMPONENT_DISPATCH_RECEIPT: receipt,
+				...(scenario === undefined ? {} : { TUI_GRID_COMPONENT_SCENARIO: scenario }),
+			};
+		}
+		throw new Error('component receipt path already exists');
+	}
+	return scenario === undefined ? {} : { TUI_GRID_COMPONENT_SCENARIO: scenario };
+}
+
 export class PtyGridDriver {
 	private readonly child: ChildProcessWithoutNullStreams;
 	private readonly core: GhosttyCore;
@@ -75,6 +116,7 @@ export class PtyGridDriver {
 		) {
 			throw new Error('sessions receipt directory requires a sessions fixture surface');
 		}
+		const componentOverrides = componentEnvironment(target);
 		const receiptEnvironment = sessionsReceiptEnvironment(
 			target.sessionsReceiptDirectory,
 			target.evidence,
@@ -94,6 +136,10 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
+					TUI_GRID_COMPONENT_DISPATCH_RECEIPT: undefined,
+					TUI_GRID_COMPONENT_SCENARIO: undefined,
+					QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE: undefined,
+					...componentOverrides,
 					TUI_GRID_PRODUCT_BINARY: target.product?.path,
 					TUI_GRID_PRODUCT_SHA256: target.product?.sha256,
 					...(target.node === undefined

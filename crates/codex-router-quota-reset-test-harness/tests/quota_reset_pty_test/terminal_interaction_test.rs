@@ -163,6 +163,7 @@ impl TerminalDriver {
                     | "CODEX_ROUTER_TUI_STORYBOARD_VARIANT"
                     | "QUOTA_COMPONENT_FIXTURE"
                     | "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"
+                    | "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE"
                     | "QUOTA_COMPONENT_FIXTURE_RELEASE_FILE"
             ) {
                 return Err(std::io::Error::other("unapproved PTY fixture environment key").into());
