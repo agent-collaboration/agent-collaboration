@@ -8,7 +8,7 @@ Human entry: [Design documents](index.html).
 | What must happen? | [Specification](specification.md) | [Specification](specification.html) |
 | How do components and provider traits fit? | [Complete Program Design source](program-design.source.html), including its Markdown dependency and inline corrections | [Program Design](program-design.html) |
 | How will each outcome be proved? | [Verification Design](verification-design.md) | [Verification Design](verification-design.html) |
-| What changes, in what order, with which proof gates? | [Published plan source companion](plans/2026-10-31-app-server-acp-claude-routing.source.md) | [Implementation Plan](implementation-plan.html) |
+| What changes, in what order, with which proof gates? | [Published plan source companion](plans/2026-10-31-app-server-acp-debug-route-control.source.md) | [Implementation Plan](implementation-plan.html) |
 
 The plan source companion is generated from the authoring artifact named in its canonical record. Keep it byte-identical when refreshing the reader. It preserves the planning-time record; planning readiness is separate from implementation proof and PR readiness.
 
@@ -36,9 +36,9 @@ The plan source companion is generated from the authoring artifact named in its 
 ## Reading path: implement the design
 
 1. [Crates and injection](program-design.md#crates-and-injection)
-2. [Canonical planning record](plans/2026-10-31-app-server-acp-claude-routing.source.md#canonical-planning-result)
-3. [Slices and gates](plans/2026-10-31-app-server-acp-claude-routing.source.md#order-and-integration-gates)
-4. [Obligation-to-proof map](plans/2026-10-31-app-server-acp-claude-routing.source.md#obligation-to-proof-map)
+2. [Canonical planning record](plans/2026-10-31-app-server-acp-debug-route-control.source.md#canonical-planning-result)
+3. [Slices and gates](plans/2026-10-31-app-server-acp-debug-route-control.source.md#order-and-integration-gates)
+4. [Obligation-to-proof map](plans/2026-10-31-app-server-acp-debug-route-control.source.md#obligation-to-proof-map)
 
 ## Reading path: qualified Claude routing correction
 
