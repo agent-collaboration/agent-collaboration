@@ -64,7 +64,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 
 ### firing
 
-- **R7f, central fires at the due time, batched per machine** (U5, U18). At each effective due time, central admits every due Firing once. The Firings for the same Machine go to it as one Batch, sent right away. Nothing is held on the Machine for later release. A second alarm for the same due time admits nothing new and resends the same Batch bytes. **Central's clock never stays stopped:** an error in one Automation never stops the others or the re-arming, and if the platform alarm is lost after its retries run out, the next central request re-arms it for the earliest pending due time, with no due Firing lost.
+- **R7f, central fires at the due time, batched per machine** (U5, U18). At each effective due time, central admits every due Firing once. The Firings for the same Machine go to it as one Batch, sent right away. Nothing is held on the Machine for later release. A second alarm for the same due time admits nothing new and resends the same Batch bytes. **Central's clock never stays stopped:** a permanent error in one Automation (an invalid definition) is reported on it and never stops the others; a temporary failure leaves every owed Firing owed; and if the platform alarm is lost after its retries run out, the next central request re-arms it for the earliest pending due time, with no due Firing lost.
 - **R6, firing is a message** (U6).
   - **Custody, the U63 contract applied to automations.**
     - **Central keeps the Batch.** A frozen Batch stays in central's custody until its Machine **acknowledges** it, after the Machine has durably admitted every entry locally. A Schedule entry never expires there.
@@ -167,7 +167,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | V10 | R6a | Pause before the cutoff: the Firing isn't sent. Pause after: the answer says `alreadySent` and the same Batch is delivered. A lost send answer reconciles to sent, or shows unknown, with no second identity | a false prevention, a chase message, or a duplicate |
 | V11 | R7 | Crash after receiving a Batch, before any entry's work; after two of three entries; after native acceptance, before the outcome is stored. Each restart gives exactly one effect per entry | an entry lost or repeated |
 | V12 | R8, R9 | The wake push header, kind and mode behaviour are today's. On a B that never held A's definitions: a Run starts, uses the frozen Instruction revision even after a later edit, keeps continuity across two fresh runs, and finishes its summary after a restart of B mid-run | a wrong revision, missing continuity, or a stuck summary |
-| V13 | R10 | B offline shows held; a cancel before the cutoff shows cancelled; native acceptance with its answer lost shows uncertain, then reconciles; reports reordered and duplicated, and the reporter restarted, keep the sequence | a regression; a reset sequence; a missing held or uncertain state |
+| V13 | R10, R6 (U19) | B offline shows held; a cancel before the cutoff shows cancelled; native acceptance with its answer lost shows uncertain, then reconciles; reports reordered and duplicated, and the reporter restarted, keep the sequence | a regression; a reset sequence; a missing held or uncertain state |
 | V14 | R11, R12 | The owner-shaped fixture (9 Schedules including a 60-second interval, Wakes with 5-minute repeats and near-end expiries) moves with IDs kept; timing is normalized per R11; adjustments are reported. A one-shot due at 10:02, admitted locally before an upgrade at 10:03, runs once and never again at 10:05. A fresh-each-run R0 accepted natively with its answer lost (uncertain) at handover: no successor run starts until R0 is reconciled and reported settled. A not-yet-started waiting run becomes central's waiting slot and runs once. Kill the move before and after the local cutoff, the central commit, and the local acknowledgement, with admitted, unsubmitted and uncertain local work outstanding: each due time ends with one effect | an ID changed, an end extended, two owners, or a double or missing effect |
 | V15 | R13 | An old-release Machine fires locally; the Fleet has none of its rows | a double Firing |
 | V16 | R14 | Pre-move history reads are identical | missing before retention |
@@ -194,3 +194,4 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | U16 | R5 | V5 |
 | U17 | R6a | V10 |
 | U18 | R7f, R6 | V8, V9 |
+| U19 | R6, R5 | V13, V5 |
