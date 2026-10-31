@@ -168,7 +168,7 @@ pub fn DialogFrame<'a>(
         border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
         View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
-            ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
+            ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:false,children)
         }
         #(has_actions.then(||element!(MeasuredFooter(height:footer_height,children:actions,hints:action_hints))))
     })
