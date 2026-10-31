@@ -1,10 +1,12 @@
-use agent_collaboration_tui::UseDialogInteraction;
+use super::quota_fact_presentation::{
+    reset_pace_color, reset_pace_role, reset_pace_summary, sample_metadata_summary,
+};
+use agent_collaboration_tui::{UiText, UiTextRole};
 use iocraft::prelude::*;
 
 use super::responsive_quota_layout::visible_account_window_start;
 use codex_router_quota_service::quota_display_model::{
     QuotaSelectedAccountViewModel, QuotaStatusAccountViewModel, ResetPaceState, ResetPaceViewModel,
-    SampleConfidence, SampleMetadata,
 };
 
 const DETAIL_LABEL_WIDTH: usize = 10;
@@ -12,33 +14,24 @@ const DETAIL_LABEL_WIDTH: usize = 10;
 #[derive(Clone, Copy)]
 pub(crate) struct QuotaAccountListProps<'a> {
     pub(crate) rows: &'a [QuotaStatusAccountViewModel],
-    pub(crate) interactive: bool,
     pub(crate) compact_phone: bool,
     pub(crate) width: usize,
     pub(crate) height: usize,
     pub(crate) focused_row_index: Option<usize>,
     pub(crate) visible_rows: usize,
-    pub(crate) focused_account_id: State<Option<codex_router_core::ids::AccountId>>,
-    pub(crate) interaction_enabled: bool,
     pub(crate) empty_notice: Option<&'a str>,
 }
 
 pub(crate) fn render_account_list(props: QuotaAccountListProps<'_>) -> AnyElement<'static> {
     let QuotaAccountListProps {
         rows,
-        interactive,
         compact_phone,
         width,
         height,
         focused_row_index,
         visible_rows,
-        mut focused_account_id,
-        interaction_enabled,
         empty_notice,
     } = props;
-    if interactive {
-        return element!(QuotaAccountViewport(rows:rows.to_vec(),width,height,compact_phone,focused_row_index,focused_account_id,interaction_enabled,empty_notice:empty_notice.map(str::to_owned))).into_any();
-    }
     let row_width = width.saturating_sub(4).max(32);
     let mut children = Vec::new();
     if rows.is_empty()
@@ -64,24 +57,13 @@ pub(crate) fn render_account_list(props: QuotaAccountListProps<'_>) -> AnyElemen
             children.push(quota_gap());
         }
         if let Some(row) = rows.get(index) {
-            let account_id = row.account_id.clone();
-            children.push(
-                element! {
-                    InteractiveQuotaAccountRow(
-                        row: Some(row.clone()),
-                        mode:super::quota_provider_filters::QuotaInteractionMode::Static,
-                        width: row_width,
-                        focused: focused_row_index == Some(index),
-                        interaction_enabled,
-                        click_handler: move |_| {
-                            if focused_account_id.read().as_ref() != Some(&account_id) {
-                                focused_account_id.set(Some(account_id.clone()));
-                            }
-                        },
-                    )
-                }
-                .into_any(),
-            );
+            children.push(render_account_row(
+                row,
+                row_width,
+                focused_row_index == Some(index),
+                super::quota_view_configuration::QuotaInteractionMode::Static,
+                compact_phone,
+            ));
         }
     }
     let remaining = rows.len().saturating_sub(window_start + visible_rows);
@@ -110,96 +92,6 @@ pub(crate) fn render_account_list(props: QuotaAccountListProps<'_>) -> AnyElemen
     .into_any()
 }
 
-#[derive(Props)]
-struct QuotaAccountViewportProps {
-    compact_phone: bool,
-    rows: Vec<QuotaStatusAccountViewModel>,
-    width: usize,
-    height: usize,
-    focused_row_index: Option<usize>,
-    focused_account_id: Option<State<Option<codex_router_core::ids::AccountId>>>,
-    interaction_enabled: bool,
-    empty_notice: Option<String>,
-}
-
-#[component]
-fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyElement<'static>> {
-    let row_width = props
-        .width
-        .saturating_sub(if props.compact_phone { 1 } else { 5 });
-    let rows=props.rows.iter().enumerate().map(|(index,row)| {
-        let account_id=row.account_id.clone();let state=props.focused_account_id;
-        element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else {2}) {
-            InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,compact_phone:props.compact_phone,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
-                click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})
-        }}.into_any()
-    });
-    element! {
-        View(width:u32::try_from(props.width).unwrap_or(u32::MAX),max_height:u32::try_from(props.height).unwrap_or(u32::MAX),min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,border_style:if props.compact_phone {BorderStyle::None}else {BorderStyle::Single},border_color:Color::DarkGrey,padding_left:if props.compact_phone {0}else {1},padding_right:if props.compact_phone {0}else {1}) {
-            #(super::quota_account_groups::render_group_headers(row_width.saturating_sub(2)).map(|headers|element! {View(padding_left:2,flex_shrink:0.0_f32) {#(headers)}}))
-            agent_collaboration_tui::DialogBodyViewport(scroll_keys:agent_collaboration_tui::DialogScrollKeys::Pages) {
-                #(props.rows.is_empty().then(||element!(Text(content:props.empty_notice.clone().unwrap_or_else(||"No selectable account".to_owned()),color:Color::Grey))))
-                #(rows)
-            }
-        }
-    }
-}
-
-#[derive(Default, Props)]
-struct InteractiveQuotaAccountRowProps {
-    compact_phone: bool,
-    row: Option<QuotaStatusAccountViewModel>,
-    mode: super::quota_provider_filters::QuotaInteractionMode,
-    width: usize,
-    focused: bool,
-    interaction_enabled: bool,
-    click_handler: HandlerMut<'static, ()>,
-}
-
-#[component]
-fn InteractiveQuotaAccountRow(
-    props: &mut InteractiveQuotaAccountRowProps,
-    mut hooks: Hooks,
-) -> impl Into<AnyElement<'static>> {
-    hooks.use_dialog_local_events({
-        let interaction_enabled = props.interaction_enabled;
-        let mut click_handler = props.click_handler.take();
-        move |event| {
-            if !interaction_enabled {
-                return;
-            }
-            if let TerminalEvent::FullscreenMouse(FullscreenMouseEvent {
-                kind: MouseEventKind::Down(MouseButton::Left),
-                ..
-            }) = event
-            {
-                click_handler(());
-            }
-        }
-    });
-
-    props.row.as_ref().map_or_else(
-        || element!(View).into_any(),
-        |row| {
-            if props.mode == super::quota_provider_filters::QuotaInteractionMode::Interactive {
-                super::quota_account_groups::render_interactive_account(
-                    row,
-                    props.width,
-                    props.focused,
-                )
-            } else {
-                render_account_row(
-                    row,
-                    props.width,
-                    props.focused,
-                    props.mode,
-                    props.compact_phone,
-                )
-            }
-        },
-    )
-}
-
 pub(crate) fn quota_more_marker(content: String) -> AnyElement<'static> {
     element! {
         Text(content, color: Color::DarkGrey, weight: Weight::Light)
@@ -218,10 +110,10 @@ pub(crate) fn render_account_row(
     row: &QuotaStatusAccountViewModel,
     width: usize,
     focused: bool,
-    mode: super::quota_provider_filters::QuotaInteractionMode,
+    mode: super::quota_view_configuration::QuotaInteractionMode,
     compact_phone: bool,
 ) -> AnyElement<'static> {
-    if mode == super::quota_provider_filters::QuotaInteractionMode::Interactive {
+    if mode == super::quota_view_configuration::QuotaInteractionMode::Interactive {
         return super::quota_account_groups::render_interactive_account(row, width, focused);
     }
     let row_padding = usize::from(!compact_phone);
@@ -249,7 +141,7 @@ pub(crate) fn render_account_row(
                         Text(content:provider,color:Color::Grey)
                     }
                     View(width:u32::try_from(status_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-                        Text(content:if mode==super::quota_provider_filters::QuotaInteractionMode::Static {row.status.label().to_owned()}else {row.status.compact(status_width)},color:Color::White)
+                        Text(content:if mode==super::quota_view_configuration::QuotaInteractionMode::Static {row.status.label().to_owned()}else {row.status.compact(status_width)},color:Color::White)
                         Text(content:row.active_clients.clone(),color:Color::Grey)
                         Text(content:row.reset_credits.clone(),color:Color::Grey)
                         Text(content:format!("Credits {}",row.credit_usage_summary),color:Color::Grey)
@@ -299,7 +191,7 @@ pub(crate) fn render_selected_panel(
             #((interactive).then(||selected.map(|selected|element! {
                 View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
                     agent_collaboration_tui::UiHeading(content:"Selected account".to_owned(),level:agent_collaboration_tui::UiHeadingLevel::Section)
-                    Text(content:selected.account.clone(),color:Color::White,wrap:TextWrap::Wrap)
+                    UiText(content:selected.account.clone(),role:UiTextRole::Body,wrap:TextWrap::Wrap)
                 }
             }.into_any())).flatten())
             #(details)
@@ -313,12 +205,19 @@ pub(crate) fn render_selected_details(
     detail_width: usize,
     interactive: bool,
 ) -> AnyElement<'static> {
+    if interactive {
+        return super::quota_account_details_view::render_account_details(
+            selected,
+            detail_width,
+            None,
+        );
+    }
     let line =
-        |label: &str, value: &str, color: Color| -> agent_collaboration_tui::FormFieldsChild {
+        |label: &str, value: &str, role: UiTextRole| -> agent_collaboration_tui::FormFieldsChild {
             if interactive {
                 element! {
                     agent_collaboration_tui::FormField(label:label.to_owned()) {
-                        Text(content:value.to_owned(),color,wrap:TextWrap::Wrap)
+                        UiText(content:value.to_owned(),role,wrap:TextWrap::Wrap)
                     }
                 }
                 .into()
@@ -327,7 +226,7 @@ pub(crate) fn render_selected_details(
                     label,
                     value,
                     detail_width,
-                    color,
+                    role.color(),
                 ))
             }
         };
@@ -336,7 +235,7 @@ pub(crate) fn render_selected_details(
             line(
                 label,
                 &reset_pace_summary(pace),
-                reset_pace_color(pace.state),
+                reset_pace_role(pace.state),
             )
         } else {
             reset_pace_detail_line(label, pace, detail_width).into()
@@ -353,26 +252,26 @@ pub(crate) fn render_selected_details(
             agent_collaboration_tui::FormFields(stacked:detail_width<32) {
             #((!interactive).then(||element!(Text(content:"Selected account",color:Color::Cyan,weight:Weight::Bold)).into_any()))
             #(if interactive {
-                vec![line("Status",&selected.status,Color::White),line("Reason",&selected.reason,Color::White)]
+                vec![line("Status",&selected.status,UiTextRole::Body),line("Reason",&selected.reason,UiTextRole::Body)]
             }else {
                 vec![element!(Text(content:fit_line(&format!("{}    {}    {}",selected.account,selected.status,selected.reason),detail_width),color:Color::White,weight:Weight::Bold,wrap:TextWrap::NoWrap)).into_any().into()]
             })
             #([if interactive { element!(agent_collaboration_tui::UiHeading(content: "Quota windows".to_owned(), level: agent_collaboration_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Quota windows", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
-            #([line("weekly", &selected.weekly_window, Color::White)])
-            #([line("5h", &selected.short_window, Color::White)])
+            #([line("weekly", &selected.weekly_window, UiTextRole::Body)])
+            #([line("5h", &selected.short_window, UiTextRole::Body)])
             #([quota_gap()])
             #([if interactive { element!(agent_collaboration_tui::UiHeading(content: "Reset pace".to_owned(), level: agent_collaboration_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Reset pace", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
             #([pace_line("weekly", &selected.reset_pace)])
-            #([line("sample", &sample_metadata_summary(&selected.sample_metadata), Color::White)])
-            #([line("rate", &selected.total_rate, Color::White)])
-            #([line("conn", &selected.connection_rate, Color::White)])
+            #([line("sample", &sample_metadata_summary(&selected.sample_metadata), UiTextRole::Body)])
+            #([line("rate", &selected.total_rate, UiTextRole::Body)])
+            #([line("conn", &selected.connection_rate, UiTextRole::Body)])
             #([pace_line("5h", &selected.short_reset_pace)])
             #([quota_gap()])
             #([if interactive { element!(agent_collaboration_tui::UiHeading(content: "Activity".to_owned(), level: agent_collaboration_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Activity", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
-            #([line("clients", &selected.active_clients, Color::White)])
-            #([line("guards", &selected.guards, Color::White)])
-            #([line("reset", &selected.reset, Color::White)])
-            #([line("note", &selected.note, Color::Grey)])
+            #([line("clients", &selected.active_clients, UiTextRole::Body)])
+            #([line("guards", &selected.guards, UiTextRole::Body)])
+            #([line("reset", &selected.reset, UiTextRole::Body)])
+            #([line("note", &selected.note, UiTextRole::Secondary)])
             }
         }
     }
@@ -414,172 +313,6 @@ pub(crate) fn detail_line(
         }
     }
     .into_any()
-}
-
-pub(crate) const fn reset_pace_color(state: ResetPaceState) -> Color {
-    match state {
-        ResetPaceState::UnderBurning => agent_collaboration_tui::UiTextRole::Warning.color(),
-        ResetPaceState::Healthy => Color::Green,
-        ResetPaceState::OverBurning => Color::Red,
-        ResetPaceState::Unavailable => Color::Grey,
-    }
-}
-
-pub(crate) fn colorize_reset_pace_ansi(text: &str) -> String {
-    text.lines()
-        .map(colorize_reset_pace_line_ansi)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-pub(crate) fn colorize_reset_pace_line_ansi(line: &str) -> String {
-    let mut ranges = reset_pace_ansi_ranges(line);
-    if ranges.is_empty() {
-        return line.to_owned();
-    }
-    ranges.sort_by_key(|(start, _, _)| *start);
-    let mut output = String::new();
-    let mut cursor = 0;
-    for (start, end, color) in ranges {
-        if start < cursor {
-            continue;
-        }
-        output.push_str(line.get(cursor..start).unwrap_or_default());
-        output.push_str(color);
-        output.push_str(line.get(start..end).unwrap_or_default());
-        output.push_str("\u{1b}[0m");
-        cursor = end;
-    }
-    output.push_str(line.get(cursor..).unwrap_or_default());
-    output
-}
-
-pub(crate) fn reset_pace_ansi_ranges(line: &str) -> Vec<(usize, usize, &'static str)> {
-    let mut ranges = Vec::new();
-    for (needle, color) in [
-        (" reset pace healthy", "\u{1b}[38;5;10m"),
-        (" reset pace under", "\u{1b}[38;5;11m"),
-        (" reset pace over", "\u{1b}[38;5;9m"),
-        (" pace healthy", "\u{1b}[38;5;10m"),
-        (" pace under", "\u{1b}[38;5;11m"),
-        (" pace over", "\u{1b}[38;5;9m"),
-        (" weekly runs out", "\u{1b}[38;5;9m"),
-        ("Exhausted", "\u{1b}[38;5;9m"),
-    ] {
-        let mut cursor = 0;
-        while let Some(relative_index) = line.get(cursor..).and_then(|suffix| suffix.find(needle)) {
-            let phrase_start = cursor + relative_index;
-            let end = phrase_start + needle.len();
-            let start = if needle == "Exhausted" {
-                phrase_start
-            } else {
-                reset_pace_segment_start(line, phrase_start)
-            };
-            ranges.push((start, end, color));
-            cursor = end;
-        }
-    }
-    ranges
-}
-
-pub(crate) fn reset_pace_segment_start(line: &str, phrase_start: usize) -> usize {
-    let mut cursor = phrase_start;
-    cursor = scan_back_while(line, cursor, |character| {
-        character.is_ascii_digit() || character == '.' || character == 'x'
-    });
-    cursor = scan_back_while(line, cursor, char::is_whitespace);
-    scan_back_while(line, cursor, |character| {
-        matches!(character, '□' | '■' | '│')
-    })
-}
-
-pub(crate) fn scan_back_while(
-    line: &str,
-    cursor: usize,
-    mut predicate: impl FnMut(char) -> bool,
-) -> usize {
-    let mut start = cursor;
-    let Some(prefix) = line.get(..cursor) else {
-        return start;
-    };
-    for (index, character) in prefix.char_indices().rev() {
-        if !predicate(character) {
-            break;
-        }
-        start = index;
-    }
-    start
-}
-
-pub(crate) fn reset_pace_summary(reset_pace: &ResetPaceViewModel) -> String {
-    if reset_pace.state == ResetPaceState::Unavailable {
-        return reset_pace.semantic_label.to_owned();
-    }
-    if let Some(impact_label) = &reset_pace.impact_label {
-        if is_depleted_quota_label(impact_label) {
-            return impact_label.clone();
-        }
-        return format!("{}  {}", reset_pace_meter(reset_pace), impact_label);
-    }
-    format!(
-        "{}  {} {}",
-        reset_pace_meter(reset_pace),
-        reset_pace.multiple_label,
-        reset_pace.semantic_label
-    )
-}
-
-pub(crate) fn is_depleted_quota_label(value: &str) -> bool {
-    value == "Exhausted"
-}
-
-pub(crate) fn reset_pace_meter(reset_pace: &ResetPaceViewModel) -> String {
-    reset_pace_meter_slots(
-        reset_pace.meter_left_segments.filled,
-        reset_pace.center_marker,
-        reset_pace.meter_right_segments.filled,
-    )
-}
-
-pub(crate) fn reset_pace_meter_slots(
-    left_filled: usize,
-    center_marker: char,
-    right_filled: usize,
-) -> String {
-    const RESET_PACE_METER_SIDE_WIDTH: usize = 7;
-    const RESET_PACE_METER_EMPTY: char = '□';
-    const RESET_PACE_METER_FILLED: char = '■';
-    let mut left_slots = [RESET_PACE_METER_EMPTY; RESET_PACE_METER_SIDE_WIDTH];
-    let mut right_slots = [RESET_PACE_METER_EMPTY; RESET_PACE_METER_SIDE_WIDTH];
-    for slot in left_slots
-        .iter_mut()
-        .rev()
-        .take(left_filled.min(RESET_PACE_METER_SIDE_WIDTH))
-    {
-        *slot = RESET_PACE_METER_FILLED;
-    }
-    for slot in right_slots
-        .iter_mut()
-        .take(right_filled.min(RESET_PACE_METER_SIDE_WIDTH))
-    {
-        *slot = RESET_PACE_METER_FILLED;
-    }
-
-    left_slots
-        .into_iter()
-        .chain(std::iter::once(center_marker))
-        .chain(right_slots)
-        .collect()
-}
-
-pub(crate) fn sample_metadata_summary(sample_metadata: &SampleMetadata) -> String {
-    if sample_metadata.confidence == SampleConfidence::Unknown {
-        return sample_metadata.semantic_label.to_owned();
-    }
-    format!(
-        "{} {}",
-        sample_metadata.semantic_label, sample_metadata.age_label
-    )
 }
 
 pub(crate) fn quota_gap() -> AnyElement<'static> {

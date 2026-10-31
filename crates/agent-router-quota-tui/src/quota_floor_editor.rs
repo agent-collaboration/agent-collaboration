@@ -1,4 +1,4 @@
-use agent_collaboration_tui::{DialogAction, UiHeading, UiHeadingLevel};
+use agent_collaboration_tui::{UiHeading, UiHeadingLevel};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -11,7 +11,6 @@ use crate::quota_status_view_model::QuotaStatusViewModelLoader;
 use codex_router_quota_service::quota_display_model::QuotaStatusViewModel;
 
 pub(crate) const MAX_WEEKLY_FLOOR_PERCENT: u16 = 15;
-const WEEKLY_FLOOR_EDITOR_HEIGHT: usize = 10;
 
 pub type WeeklyQuotaFloorSaver =
     Arc<dyn Fn(AccountId, u16) -> WeeklyQuotaFloorSaveFuture + Send + Sync>;
@@ -245,10 +244,6 @@ pub(crate) async fn run_weekly_floor_editor_commands(
     }
 }
 
-pub(crate) const fn weekly_floor_editor_content_height() -> usize {
-    WEEKLY_FLOOR_EDITOR_HEIGHT
-}
-
 pub(crate) fn weekly_floor_editor_footer(editor: &WeeklyFloorEditorState) -> &'static str {
     match editor.phase {
         WeeklyFloorEditorPhase::Editing | WeeklyFloorEditorPhase::SaveFailed(_) => {
@@ -272,19 +267,10 @@ pub(crate) fn render_weekly_floor_editor(
     }}.into_any()
 }
 
-pub(crate) fn render_weekly_floor_editor_content(
-    editor: &WeeklyFloorEditorState,
-    width: usize,
-    state: State<Option<WeeklyFloorEditorState>>,
-    section_gap: u16,
-) -> AnyElement<'static> {
-    render_floor_fields(editor, width, state, section_gap, false)
-}
-
 fn render_floor_fields(
     editor: &WeeklyFloorEditorState,
     width: usize,
-    mut state: State<Option<WeeklyFloorEditorState>>,
+    _state: State<Option<WeeklyFloorEditorState>>,
     section_gap: u16,
     include_account: bool,
 ) -> AnyElement<'static> {
@@ -302,8 +288,6 @@ fn render_floor_fields(
     } else {
         format!("{}%", editor.current_percent)
     };
-    let decrease_target = editor.account_id.clone();
-    let increase_target = editor.account_id.clone();
     let context_margin = if status.is_some() { 0 } else { section_gap };
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:section_gap,margin_top:context_margin) {
@@ -313,15 +297,9 @@ fn render_floor_fields(
             agent_collaboration_tui::FormField(label:"Current".to_owned()) {Text(content:current,color:Color::White)}
             agent_collaboration_tui::FormField(label:"Floor".to_owned(),has_focus:true) {
                 View(column_gap:2,align_items:AlignItems::Center) {
-                    DialogAction(label:"◀",handler:move |_| {
-                        let mut next=state.read().clone();
-                        if next.as_ref().is_some_and(|editor|editor.account_id==decrease_target) {step_weekly_floor_editor(&mut next,WeeklyFloorStep::Decrease);state.set(next);}
-                    })
+                    Text(content:"◀")
                     Text(content:format!("{}%",editor.draft_percent),color:Color::Yellow,weight:Weight::Bold)
-                    DialogAction(label:"▶",handler:move |_| {
-                        let mut next=state.read().clone();
-                        if next.as_ref().is_some_and(|editor|editor.account_id==increase_target) {step_weekly_floor_editor(&mut next,WeeklyFloorStep::Increase);state.set(next);}
-                    })
+                    Text(content:"▶")
                 }
             }
             }

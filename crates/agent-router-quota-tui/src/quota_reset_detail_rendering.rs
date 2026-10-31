@@ -11,8 +11,9 @@ use codex_router_quota_service::quota_reset::reset_session_supervisor::WorkflowR
 
 use super::quota_browse_rendering::fit_line;
 use super::quota_reset_detail_content::{
-    activity_field, credit_status_label, disabled_reason, format_credit_expiry,
-    format_credit_expiry_value, heading, muted_text, normal, saved_credit_count, warning_text,
+    ResetDetailRow, StyledText, activity_field, credit_status_label, disabled_reason,
+    format_credit_expiry, format_credit_expiry_value, heading, muted_text, normal,
+    saved_credit_count, warning_text,
 };
 use super::quota_reset_presentation_model::ResetPaneTarget;
 use super::responsive_quota_layout::quota_spinner_tick;
@@ -41,33 +42,8 @@ pub(crate) struct ResetDetailSection {
     pub(crate) rows: Vec<ResetDetailRow>,
 }
 
-pub(crate) enum ResetDetailRow {
-    Text(StyledText),
-    Field {
-        label: String,
-        value: String,
-        value_color: Color,
-    },
-    Credit {
-        marker: String,
-        id_hint: String,
-        description: String,
-        marker_color: Color,
-    },
-    Choices {
-        no_label: StyledText,
-        yes_label: StyledText,
-    },
-    Spacer,
-}
-
-pub(crate) struct StyledText {
-    pub(crate) content: String,
-    pub(crate) color: Color,
-    pub(crate) weight: Weight,
-}
-
 impl ResetDetailDocument {
+    #[cfg(test)]
     fn content_height(&self) -> usize {
         let title_rows = 1 + usize::from(self.account.is_some());
         let section_rows = self
@@ -79,6 +55,7 @@ impl ResetDetailDocument {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn reset_panel_content_height(
     snapshot: &ResetWorkflowSnapshot,
     target: &ResetPaneTarget,
@@ -187,7 +164,7 @@ pub(crate) fn render_reset_panel_content(
         })
         .collect::<Vec<_>>();
     element! {
-        View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
+        View(width:100pct,max_width:u32::try_from(width).unwrap_or(u32::MAX),flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(title)
             #(sections)
         }
@@ -222,7 +199,7 @@ fn render_section(
             flex_direction: FlexDirection::Column,
             margin_top: if decision {0}else {1},
         ) {
-            agent_collaboration_tui::FocusReveal(has_focus:reveal) {#(title) agent_collaboration_tui::FormFields(stacked:width<52) {#(rows)}}
+            agent_collaboration_tui::controls::ScrollReveal(focused:reveal) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {#(title) agent_collaboration_tui::FormFields(stacked:width<52) {#(rows)}}}
         }
     }
     .into_any()
@@ -289,7 +266,7 @@ fn render_detail_row(
             no_label,
             yes_label,
         } => {
-            if let Some(controls)=choices.take() {return controls.into();}
+            if let Some(controls)=choices.take() {return element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {agent_collaboration_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:agent_collaboration_tui::UiTextRole::Warning,wrap:TextWrap::Wrap) #(controls)}).into_any().into();}
             element! {
             View(width:100pct,flex_direction:FlexDirection::Column) {
             agent_collaboration_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:agent_collaboration_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)
@@ -676,12 +653,6 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
                 muted_text("Return to quota status."),
             ],
         }],
-    }
-}
-
-impl From<StyledText> for ResetDetailRow {
-    fn from(value: StyledText) -> Self {
-        Self::Text(value)
     }
 }
 

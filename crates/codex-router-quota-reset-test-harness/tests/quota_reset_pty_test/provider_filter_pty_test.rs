@@ -22,7 +22,7 @@ async fn compiled_quota_legacy_control_slash_drives_help_and_restores_terminal()
         Path::new(env!("CARGO_MANIFEST_DIR")),
     )?;
     terminal
-        .wait_for_text("Quota status", SEMANTIC_WAIT)
+        .wait_for_text("Quota ·", SEMANTIC_WAIT)
         .map_err(|error| {
             std::io::Error::other(format!(
                 "quota Browse was not reached before legacy input: {error}; {}",
@@ -32,18 +32,19 @@ async fn compiled_quota_legacy_control_slash_drives_help_and_restores_terminal()
     let help_start = terminal.transcript_len();
     terminal.send(&[0x1f])?;
     terminal
-        .wait_for_text_after("Quota Help", help_start, SEMANTIC_WAIT)
+        .wait_for_text_after("Help", help_start, SEMANTIC_WAIT)
         .map_err(|error| {
             std::io::Error::other(format!(
                 "legacy 0x1f did not open Help after Browse was observed and the byte was sent: {error}; {}",
                 terminal.safe_semantic_diagnostics(help_start),
             ))
         })?;
+    terminal.wait_for_text_after("Actions", help_start, SEMANTIC_WAIT)?;
     // Background filter and activation input must remain owned by Help.
     terminal.send(b"\x06\x1b[B\r")?;
     let close_start = terminal.transcript_len();
     terminal.send(&[0x1f])?;
-    terminal.wait_for_text_after("Quota status", close_start, SEMANTIC_WAIT)?;
+    terminal.wait_for_text_after("Quota ·", close_start, SEMANTIC_WAIT)?;
     terminal.send(b"q")?;
     let transcript = terminal.finish(SEMANTIC_WAIT)?;
     ensure(
@@ -69,18 +70,21 @@ async fn compiled_quota_legacy_control_slash_drives_help_and_restores_terminal()
 #[tokio::test(flavor = "current_thread")]
 async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections() -> TestResult<()>
 {
-    for (scenario, count, result) in [
+    for (scenario_index, (scenario, count, result)) in [
         (
             ProviderFilterFixtureScenario::MixedAccounts,
-            "1/4 accounts",
+            "Quota · 1/4",
             "Claude Gamma",
         ),
         (
             ProviderFilterFixtureScenario::ClaudeAccountsDisabled,
-            "0/4 accounts",
+            "Quota · 0/4",
             "No accounts match these filters",
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let fixture = QuotaResetFixture::create_provider_filters(scenario).await?;
         let provider = HeldLoopbackProvider::bind()?;
         let arguments = [
@@ -97,24 +101,51 @@ async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections
             Path::new(env!("CARGO_MANIFEST_DIR")),
         )?;
         terminal.resize(36, 120)?;
-        terminal.wait_for_text("4/4 accounts", SEMANTIC_WAIT)?;
+        terminal.wait_for_text("Quota · 4/4", SEMANTIC_WAIT)?;
         let chooser_start = terminal.transcript_len();
         terminal.send(&[0x06])?;
         terminal.wait_for_text_after("Account provider", chooser_start, SEMANTIC_WAIT)?;
         terminal.send(b"\r\x1b[B\x1b[B\r\t\t")?;
         let apply_start = terminal.transcript_len();
         terminal.send(b"\r")?;
-        terminal.wait_for_text_after("Provider: Claude", apply_start, SEMANTIC_WAIT)?;
-        terminal.wait_for_text_after("2/4 accounts", apply_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_text_after("Filters: Claude ▾", apply_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_text_after("Quota · 2/4", apply_start, SEMANTIC_WAIT)?;
         let toggle_start = terminal.transcript_len();
         terminal.send(&[0x06])?;
         terminal.wait_for_text_after("Account provider", toggle_start, SEMANTIC_WAIT)?;
-        terminal.send(b"\t \t")?;
+        let disabled_popup_start = terminal.transcript_len();
+        terminal.send(b"\t\r")?;
+        terminal.wait_for_text_after("Filter:", disabled_popup_start, SEMANTIC_WAIT)?;
+        let disabled_pick_start = terminal.transcript_len();
+        terminal.send(b"\x1b[B\r")?;
+        terminal.wait_for_styled_text_after("Hidden ▾", disabled_pick_start, SEMANTIC_WAIT)?;
+        terminal.send(b"\t")?;
         let intersection_start = terminal.transcript_len();
         terminal.send(b"\r")?;
-        terminal.wait_for_text_after("Disabled: Hidden", intersection_start, SEMANTIC_WAIT)?;
-        terminal.wait_for_text_after(count, intersection_start, SEMANTIC_WAIT)?;
+        if let Err(error) = terminal.wait_for_text_after(count, intersection_start, SEMANTIC_WAIT) {
+            if let Some(directory) = std::env::var_os("CODEX_ROUTER_PTY_CAPTURE_DIR") {
+                let directory = PathBuf::from(directory);
+                fs::create_dir_all(&directory)?;
+                fs::write(
+                    directory.join(format!(
+                        "provider-filter-intersection-{scenario_index}.ansi"
+                    )),
+                    terminal.transcript_snapshot(),
+                )?;
+            }
+            return Err(error);
+        }
         terminal.wait_for_text_after(result, intersection_start, SEMANTIC_WAIT)?;
+        // In the empty state the unavailable Details reason can displace the
+        // long filter caption. Read the committed values in their real form.
+        let committed_filter_start = terminal.transcript_len();
+        terminal.send(&[0x06])?;
+        terminal.wait_for_text_after("Account provider", committed_filter_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_styled_text_after("Claude ▾", committed_filter_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_styled_text_after("Hidden ▾", committed_filter_start, SEMANTIC_WAIT)?;
+        let committed_filter_close_start = terminal.transcript_len();
+        terminal.send(b"\x1b")?;
+        terminal.wait_for_text_after("Quota ·", committed_filter_close_start, SEMANTIC_WAIT)?;
         terminal.send(b"q")?;
         let transcript = terminal.finish(SEMANTIC_WAIT)?;
         ensure(

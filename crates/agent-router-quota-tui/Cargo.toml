@@ -10,6 +10,7 @@ workspace = true
 
 [features]
 default = []
+test-support = []
 quota-reset-test-harness = ["codex-router-quota-service/quota-reset-test-harness"]
 
 [dependencies]

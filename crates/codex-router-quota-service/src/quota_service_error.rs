@@ -5,6 +5,12 @@ use thiserror::Error;
 /// Quota command failure.
 #[derive(Debug, Error)]
 pub enum QuotaServiceError {
+    #[error(
+        "quota refresh provider response was unusable: quota refresh failed for all eligible route bands"
+    )]
+    AllAccountsFailed {
+        account_outcomes: Vec<crate::quota_refresh_outcome::AccountRefreshOutcome>,
+    },
     /// Quota refresh base URL is not one of the allowlisted provider URLs.
     #[error("quota refresh base URL is not allowed: {base_url}")]
     DisallowedBaseUrl {

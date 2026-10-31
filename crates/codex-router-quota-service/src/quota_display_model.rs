@@ -18,6 +18,7 @@ pub struct QuotaStatusViewModel {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuotaStatusAccountViewModel {
     pub provider: Provider,
+    pub login_state: QuotaLoginState,
     pub account_id: AccountId,
     pub account_tag: String,
     pub active_credential_generation: Option<u64>,
@@ -40,6 +41,13 @@ pub struct QuotaStatusAccountViewModel {
     pub weekly_pace: String,
     pub weekly_quota_floor_percent: u16,
     pub details: QuotaSelectedAccountViewModel,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum QuotaLoginState {
+    #[default]
+    NotRequired,
+    Required,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

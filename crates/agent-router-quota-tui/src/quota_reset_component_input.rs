@@ -4,14 +4,14 @@ use super::quota_account_options::{
 };
 use super::quota_floor_editor::WeeklyFloorEditorState;
 use super::quota_provider_filter_rendering::quota_filter_controls_height;
-use super::quota_provider_filters::{
-    QuotaFilterState, QuotaInteractionMode, quota_filter_modal_owns_input,
-};
+use super::quota_provider_filters::{QuotaFilterState, quota_filter_modal_owns_input};
 use super::quota_reset_keyboard_interaction::{ResetKeyAction, reset_key_action};
 use super::quota_reset_presentation_model::{
     ResetPaneTarget, credit_page_start, reset_inventory_page_size,
 };
-use super::quota_status_component::{NARROW_QUOTA_WIDTH, SIDECAR_QUOTA_WIDTH};
+use super::quota_view_configuration::{
+    NARROW_QUOTA_WIDTH, QuotaInteractionMode, SIDECAR_QUOTA_WIDTH,
+};
 use super::responsive_quota_layout::{
     QuotaBodyLayoutMode, focused_row_index_for_account, quota_body_budget, quota_body_layout,
     selected_detail_height,

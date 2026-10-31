@@ -1,7 +1,8 @@
 //! Interactive account composition; the static renderer keeps its own format.
-use super::quota_browse_rendering::{reset_pace_color, reset_pace_meter};
+use super::quota_fact_presentation::reset_pace_meter;
 use super::quota_typography::{QuotaText, QuotaTextRole};
-use agent_collaboration_tui::{SelectableRow, UiColumnHeading, UiText, UiTextRole};
+use agent_collaboration_tui::controls::SelectableRow;
+use agent_collaboration_tui::{UiColumnHeading, UiText, UiTextRole};
 use codex_router_quota_service::quota_display_model::{
     QuotaDisplayWindow, QuotaStatusAccountViewModel,
 };
@@ -87,7 +88,7 @@ fn account_group(row: &QuotaStatusAccountViewModel, focused: bool) -> AnyElement
     };
     element! {
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            Text(content:row.account.clone(),color:if focused {UiTextRole::Selected.color()}else {QuotaTextRole::WeeklyWindow.color()},weight:Weight::Bold,wrap:TextWrap::Wrap)
+            QuotaText(content:row.account.clone(),role:QuotaTextRole::AccountName {focused},weight:Weight::Bold,wrap:TextWrap::Wrap)
             UiText(content:format!("{provider} · {}",row.active_clients),role:UiTextRole::Secondary,wrap:TextWrap::Wrap)
             UiText(content:row.status.compact(usize::MAX),role:UiTextRole::Body,wrap:TextWrap::Wrap)
         }
@@ -122,7 +123,20 @@ pub(crate) fn render_interactive_account(
     width: usize,
     focused: bool,
 ) -> AnyElement<'static> {
-    let widths = group_widths(width.saturating_sub(2));
+    element!(View(width:u32::try_from(width).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
+        SelectableRow(selected:focused,marker_offset:if group_widths(width.saturating_sub(2)).is_some(){0u16}else{2u16}) {
+            #(render_account_groups(row,width.saturating_sub(2),focused))
+        }
+    }).into_any()
+}
+
+pub(crate) fn render_account_groups(
+    row: &QuotaStatusAccountViewModel,
+    width: usize,
+    focused: bool,
+) -> AnyElement<'static> {
+    let widths = group_widths(width);
+
     let pace = &row.reset_pace;
     let pace_label = pace.impact_label.clone().unwrap_or_else(|| {
         if pace.semantic_label == "burn unavailable" {
@@ -156,26 +170,22 @@ pub(crate) fn render_interactive_account(
             #(render_window(&row.display_short,"5h",QuotaTextRole::ShortWindow))
         }).into_any()),
         ("Weekly pace",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            Text(content:pace_label,color:reset_pace_color(pace.state),wrap:TextWrap::Wrap)
-            #(pace_detail.map(|detail|element!(Text(content:detail,color:Color::Grey,wrap:TextWrap::Wrap))))
+            QuotaText(content:pace_label,role:QuotaTextRole::WeeklyPace(pace.state),wrap:TextWrap::Wrap)
+            #(pace_detail.map(|detail|element!(QuotaText(content:detail,role:QuotaTextRole::Secondary,wrap:TextWrap::Wrap))))
             #((pace.state != codex_router_quota_service::quota_display_model::ResetPaceState::Unavailable).then(||element! {
-                View(flex_shrink:0.0_f32) {Text(content:reset_pace_meter(pace),color:reset_pace_color(pace.state),wrap:TextWrap::NoWrap)}
+                View(flex_shrink:0.0_f32) {QuotaText(content:reset_pace_meter(pace),role:QuotaTextRole::WeeklyPace(pace.state),wrap:TextWrap::NoWrap)}
             }))
         }).into_any()),
         ("Extra",extra_group(row)),
     ];
     element! {
-        View(width:u32::try_from(width).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
-            SelectableRow(selected:focused,marker_offset:if widths.is_some() {0u16}else {2u16}) {
-                View(flex_direction:if widths.is_some() {FlexDirection::Row}else {FlexDirection::Column},column_gap:1,flex_shrink:0.0_f32) {
-                    #(groups.into_iter().enumerate().map(|(index,(label,group))|element! {
-                        View(width:u32::try_from(widths.and_then(|widths|widths.get(index).copied()).unwrap_or(width.saturating_sub(2))).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-                            #(widths.is_none().then(||element!(UiColumnHeading(content:label))))
-                            #(group)
-                        }
-                    }))
+        View(flex_direction:if widths.is_some() {FlexDirection::Row}else {FlexDirection::Column},column_gap:1,flex_shrink:0.0_f32) {
+            #(groups.into_iter().enumerate().map(|(index,(label,group))|element! {
+                View(width:u32::try_from(widths.and_then(|widths|widths.get(index).copied()).unwrap_or(width)).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                    #(widths.is_none().then(||element!(UiColumnHeading(content:label))))
+                    #(group)
                 }
-            }
+            }))
         }
     }.into_any()
 }

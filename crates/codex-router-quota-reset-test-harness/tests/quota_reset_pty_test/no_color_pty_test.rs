@@ -58,7 +58,7 @@ async fn fresh_compiled_quota_no_color_child_keeps_windows_modals_and_read_only_
             no_color,
         )?;
         terminal.resize(36, 120)?;
-        terminal.wait_for_text("Quota status", SEMANTIC_WAIT)?;
+        terminal.wait_for_text("Quota ·", SEMANTIC_WAIT)?;
         terminal.wait_for_styled_text_after("92% · week", 0, SEMANTIC_WAIT)?;
         terminal.wait_for_styled_text_after("83% · 5h", 0, SEMANTIC_WAIT)?;
 
@@ -68,14 +68,14 @@ async fn fresh_compiled_quota_no_color_child_keeps_windows_modals_and_read_only_
         terminal.wait_for_text_after("Pool details", pool_start, SEMANTIC_WAIT)?;
         let browse_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
-        terminal.wait_for_text_after("Quota status", browse_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_text_after("Quota ·", browse_start, SEMANTIC_WAIT)?;
         let details_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Account details", details_start, SEMANTIC_WAIT)?;
         terminal.wait_for_styled_text_after("OpenAI Alpha", details_start, SEMANTIC_WAIT)?;
         let close_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
-        terminal.wait_for_text_after("Quota status", close_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_text_after("Quota ·", close_start, SEMANTIC_WAIT)?;
         terminal.send(b"q")?;
         let transcript = terminal.finish(SEMANTIC_WAIT)?;
 

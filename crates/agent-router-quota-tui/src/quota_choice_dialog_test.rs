@@ -44,32 +44,36 @@ async fn quota_credit_choice_cancel_is_owned_before_editor_and_never_saves() {
                 }
                 1 if text.contains("Resets") => {
                     sender.send(key(KeyCode::Tab)).unwrap();
+                    sender.send(key(KeyCode::Right)).unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 2;
                 }
                 2 if text.contains("Credit balance") => {
+                    sender.send(key(KeyCode::Tab)).unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 3;
                 }
-                3 if text.contains("Search:") => {
+                3 if text.contains("Filter:") => {
                     sender
                         .send(TerminalEvent::BracketedPaste("no-match-policy".to_owned()))
                         .unwrap();
                     phase = 4;
                 }
-                4 if text.contains("No matching choices") => {
+                4 if text.contains("No match") => {
                     sender.send(key(KeyCode::Esc)).unwrap();
                     phase = 5;
                 }
                 5 if text.contains("Credit usage")
                     && text.contains("Save")
-                    && !text.contains("Search:") =>
+                    && !text.contains("Filter:") =>
                 {
                     assert_eq!(saves.load(Ordering::SeqCst), 0);
                     sender.send(key(KeyCode::Esc)).unwrap();
                     phase = 6;
                 }
                 6 if text.contains("Credit balance") && text.contains("Edit") => {
-                    sender.send(control('d')).unwrap();
+                    sender.send(control('c')).unwrap();
                     phase = 7;
                 }
                 _ => {}
@@ -172,11 +176,9 @@ async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
                             .unwrap();
                         phase = 2;
                     }
-                    2 if visible_words.contains("No matching choices") => {
+                    2 if visible_words.contains("No match") => {
                         assert!(
-                            text.contains("Account filters")
-                                && text.contains("Cancel")
-                                && text.contains("Select"),
+                            text.contains("Filter:") && !text.contains("Select"),
                             "{text}"
                         );
                         // An empty Enter is deliberately a no-op and need not repaint.
@@ -186,17 +188,29 @@ async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
                         sender.send(key(KeyCode::Esc)).unwrap();
                         phase = 4;
                     }
-                    4 if text.contains("Account filters") && !text.contains("No matching") => {
+                    4 if text.contains("Account filters") && !text.contains("No match") => {
                         sender.send(key(KeyCode::Esc)).unwrap();
                         phase = 5;
                     }
                     5 if !text.contains("Account filters") => {
                         assert!(
-                            text.contains("All") && text.contains("2/2"),
+                            text.contains("2/2"),
                             "draft cancellation preserves the committed filter: {text}"
                         );
-                        sender.send(control('d')).unwrap();
+                        sender.send(control('f')).unwrap();
                         phase = 6;
+                    }
+                    6 if text.contains("Account filters") && text.contains("All ▾") => {
+                        assert!(
+                            text.contains("Shown ▾"),
+                            "committed values survive cancellation: {text}"
+                        );
+                        sender.send(key(KeyCode::Esc)).unwrap();
+                        phase = 7;
+                    }
+                    7 if !text.contains("Account filters") => {
+                        sender.send(key(KeyCode::Char('q'))).unwrap();
+                        phase = 8;
                     }
                     _ => {}
                 }
@@ -205,7 +219,7 @@ async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
         };
         let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
         assert!(result.is_ok(), "{width}x{height} phase={phase}: {last}");
-        assert_eq!(phase, 6, "{width}x{height}: {last}");
+        assert_eq!(phase, 8, "{width}x{height}: {last}");
     }
 }
 
@@ -235,7 +249,7 @@ async fn quota_disabled_choices_remain_keyboard_reachable_in_a_two_row_body() {
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 2;
                 }
-                2 if text.contains("OpenAI ▾") && !text.contains("Search:") => {
+                2 if text.contains("OpenAI ▾") && !text.contains("Filter:") => {
                     eprintln!("PROVIDER_DRAFT_48x12_OPENAI\n{text}");
                     assert!(text.contains("Cancel") && text.contains("Apply"), "{text}");
                     sender.send(key(KeyCode::Down)).unwrap();
@@ -251,32 +265,62 @@ async fn quota_disabled_choices_remain_keyboard_reachable_in_a_two_row_body() {
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 4;
                 }
-                4 if text.contains("❯ Shown") => {
+                4 if text.contains("Filter:") && text.contains("● Shown") => {
                     eprintln!("DISABLED_CHOICE_48x12_SHOWN\n{text}");
-                    assert!(text.contains("Cancel") && text.contains("Select"), "{text}");
+                    assert!(
+                        !text.contains("Select"),
+                        "the shared dropdown commits its highlighted choice directly: {text}"
+                    );
                     sender.send(key(KeyCode::Down)).unwrap();
                     phase = 5;
                 }
-                5 if text.contains("❯ Hidden") => {
+                5 if text.contains("Filter:")
+                    && text.lines().enumerate().any(|(row, line)| {
+                        line.find("Hidden").is_some_and(|byte| {
+                            canvas
+                                .cell(
+                                    unicode_width::UnicodeWidthStr::width(
+                                        line.get(..byte)
+                                            .expect("matched choice begins at a UTF-8 boundary"),
+                                    ),
+                                    row,
+                                )
+                                .and_then(|cell| cell.text_style())
+                                .is_some_and(|style| style.color == Some(Color::Yellow))
+                        })
+                    }) =>
+                {
                     eprintln!("DISABLED_CHOICE_48x12_HIDDEN\n{text}");
-                    assert!(text.contains("Cancel") && text.contains("Select"), "{text}");
+                    assert!(!text.contains("Select"), "{text}");
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 6;
                 }
                 6 if text.contains("Account filters")
                     && text.contains("Hidden")
-                    && !text.contains("Search:") =>
+                    && !text.contains("Filter:") =>
                 {
                     sender.send(key(KeyCode::Esc)).unwrap();
                     phase = 7;
                 }
                 7 if !text.contains("Account filters") => {
                     assert!(
-                        text.contains("All") && text.contains("2/2"),
+                        text.contains("2/2"),
                         "discard must preserve the committed disabled filter: {text}"
                     );
-                    sender.send(control('d')).unwrap();
+                    sender.send(control('f')).unwrap();
                     phase = 8;
+                }
+                8 if text.contains("Account filters") && text.contains("All ▾") => {
+                    assert!(
+                        text.contains("Shown ▾"),
+                        "the discarded OpenAI/Hidden draft must not commit: {text}"
+                    );
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 9;
+                }
+                9 if !text.contains("Account filters") => {
+                    sender.send(key(KeyCode::Char('q'))).unwrap();
+                    phase = 10;
                 }
                 _ => {}
             }
@@ -285,5 +329,5 @@ async fn quota_disabled_choices_remain_keyboard_reachable_in_a_two_row_body() {
     };
     let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
     assert!(result.is_ok(), "phase={phase}: {last}");
-    assert_eq!(phase, 8, "{last}");
+    assert_eq!(phase, 10, "{last}");
 }

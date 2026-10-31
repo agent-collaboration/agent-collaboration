@@ -64,20 +64,22 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
         }
         sender.send(provider_filter_key(KeyCode::Right)).unwrap();
         canvas = current_identity_canvas(frames.as_mut()).await;
-        while yes_choice_color(&canvas) != Some(Color::Yellow) {
+        while yes_choice_color(&canvas) != Some(Color::Yellow)
+            || !canvas.to_string().contains("● Yes")
+        {
             canvas = current_identity_canvas(frames.as_mut()).await;
         }
         evidence.push(("Yes before Help", canvas.to_string()));
         assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 3);
         sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
         canvas = current_identity_canvas(frames.as_mut()).await;
-        while !canvas.to_string().contains("Quota Help") {
+        while !crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string()) {
             canvas = current_identity_canvas(frames.as_mut()).await;
         }
         let mut full_name_visible = false;
         for _ in 0..24 {
             let frame = canvas.to_string();
-            let body = actual_dialog_text(&frame, "Quota Help")
+            let body = actual_dialog_text(&frame, "Help")
                 .replace(['│', '┃'], " ")
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -92,7 +94,7 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
         }
         assert!(
             full_name_visible,
-            "full captured label must be in actual scrollable Help body"
+            "full captured label must be in actual scrollable Help body: {evidence:?}"
         );
         sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
         canvas = current_identity_canvas(frames.as_mut()).await;
@@ -100,6 +102,10 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
             yes_choice_color(&canvas),
             Some(Color::Yellow),
             "Yes preserved after Help"
+        );
+        assert!(
+            canvas.to_string().contains("● Yes"),
+            "the selected choice itself survives Help, beyond its focus colour"
         );
         evidence.push(("Yes after Help", canvas.to_string()));
         assert_eq!(
@@ -151,7 +157,7 @@ fn yes_choice_color(canvas: &Canvas) -> Option<Color> {
     let (row, line) = frame
         .lines()
         .enumerate()
-        .find(|(_, line)| line.contains("Reset quota?") && line.contains("Yes"))?;
+        .find(|(_, line)| line.contains("No") && line.contains("Yes"))?;
     let column = unicode_width::UnicodeWidthStr::width(line.get(..line.find("Yes")?)?);
     canvas.cell(column, row)?.text_style()?.color
 }

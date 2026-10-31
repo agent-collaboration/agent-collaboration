@@ -169,6 +169,8 @@ async fn initial_options_pages_show_task_content_before_manual_scrolling_at_all_
             );
         }
         sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
         let mut canvas = browse_canvas(frames.as_mut(), "Options Credits entry").await;
         while !canvas.to_string().contains("Options · Credits") {
             canvas = browse_canvas(frames.as_mut(), "Credits title").await;

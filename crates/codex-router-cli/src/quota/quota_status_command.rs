@@ -48,6 +48,61 @@ pub(super) async fn render_interactive_quota_status(
     reset_session_factory: &dyn codex_router_quota_service::quota_reset::InteractiveResetSessionFactory,
     credit_usage_base_url: &str,
 ) -> Result<(), QuotaCommandError> {
+    let mut focused_account_id = None;
+    let mut notice = None;
+    loop {
+        let outcome = render_interactive_quota_once(InteractiveQuotaIteration {
+            router_root: router_root.clone(),
+            stdout_terminal_width,
+            all_limits,
+            now_unix_seconds: if focused_account_id.is_none() {
+                now_unix_seconds
+            } else {
+                current_unix_seconds()
+            },
+            reset_session_factory,
+            credit_usage_base_url,
+            focused_account_id: focused_account_id.take(),
+            notice: notice.take(),
+        })
+        .await?;
+        match outcome {
+            agent_router_quota_tui::QuotaOutcome::Quit => return Ok(()),
+            agent_router_quota_tui::QuotaOutcome::LogInAgain { target } => {
+                let result =
+                    super::quota_login_child::run_quota_login_child(&router_root, &target).await;
+                notice = Some(result.notice(target.label.as_str()));
+                focused_account_id = Some(target.account_id);
+            }
+        }
+    }
+}
+
+struct InteractiveQuotaIteration<'a> {
+    router_root: PathBuf,
+    stdout_terminal_width: Option<usize>,
+    all_limits: bool,
+    now_unix_seconds: u64,
+    reset_session_factory:
+        &'a dyn codex_router_quota_service::quota_reset::InteractiveResetSessionFactory,
+    credit_usage_base_url: &'a str,
+    focused_account_id: Option<AccountId>,
+    notice: Option<String>,
+}
+
+async fn render_interactive_quota_once(
+    inputs: InteractiveQuotaIteration<'_>,
+) -> Result<agent_router_quota_tui::QuotaOutcome, QuotaCommandError> {
+    let InteractiveQuotaIteration {
+        router_root,
+        stdout_terminal_width,
+        all_limits,
+        now_unix_seconds,
+        reset_session_factory,
+        credit_usage_base_url,
+        focused_account_id,
+        notice,
+    } = inputs;
     let width = stdout_terminal_width.unwrap_or(100).max(40);
     let credential_resources = QuotaCredentialResources::open(&router_root).await;
     let report = load_quota_status_report_with_availability_async(
@@ -86,28 +141,50 @@ pub(super) async fn render_interactive_quota_status(
         }
         None => (None, None, None),
     };
-    let render_result = run_quota_status_view(
-        view_model,
-        Some(reload_view_model),
-        reset_session_ports,
-        Some(weekly_floor_saver),
-        Some(credit_policy_saver),
-        Some(credit_usage_refresher),
-    )
-    .await;
+    let commands =
+        super::quota_account_adapter::interactive_quota_account_commands(router_root.clone());
+    let quota_refresher = super::quota_refresh_adapter::interactive_quota_refresher(
+        router_root,
+        credit_usage_base_url.to_owned(),
+    );
+    let session_result =
+        super::quota_account_run_session::run_quota_account_session(commands, move |queue| {
+            run_quota_status_view(
+                view_model,
+                agent_router_quota_tui::QuotaStatusViewOptions {
+                    reload_view_model: Some(reload_view_model),
+                    reset_session_ports,
+                    weekly_floor_saver: Some(weekly_floor_saver),
+                    credit_policy_saver: Some(credit_policy_saver),
+                    credit_usage_refresher: Some(credit_usage_refresher),
+                    quota_refresher: Some(quota_refresher),
+                    account_commands: Some(queue),
+                    focused_account_id,
+                    notice,
+                },
+            )
+        })
+        .await;
+    // Teardown has completed and every accepted mutation has settled. The reset
+    // supervisor is settled below even if rendering or the account runner failed.
+
     if let Some(shutdown_sender) = shutdown_sender {
         let _ = shutdown_sender
             .send(codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionIntent::Shutdown)
             .await;
         drop(shutdown_sender);
     }
-    if let Some(session_task) = session_task {
-        match await_reset_session_task(session_task).await? {
-            codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome::Cancelled
-            | codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome::Finished(_) => {}
-        }
+    let reset_result = match session_task {
+        Some(task) => await_reset_session_task(task).await.map(|_| ()),
+        None => Ok(()),
+    };
+    let session = session_result.map_err(QuotaCommandError::Stdout)?;
+    for completion in session.completions {
+        writeln!(std::io::stdout(), "{}", completion.message())
+            .map_err(QuotaCommandError::Stdout)?;
     }
-    render_result.map_err(QuotaCommandError::Stdout)
+    reset_result?;
+    session.outcome.map_err(QuotaCommandError::Stdout)
 }
 
 fn credit_usage_policy_saver(database_path: PathBuf) -> CreditUsagePolicySaver {

@@ -187,6 +187,12 @@ impl TerminalDriver {
         })
     }
 
+    /// Read back received PTY bytes for the existing qualified grid observer.
+    pub(super) fn transcript_snapshot(&mut self) -> Vec<u8> {
+        self.drain_pending_output();
+        self.transcript.clone()
+    }
+
     pub(super) fn transcript_len(&mut self) -> usize {
         self.drain_pending_output();
         self.transcript.len()

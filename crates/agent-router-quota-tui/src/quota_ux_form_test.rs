@@ -47,40 +47,53 @@ async fn actual_credit_editor_frame() -> String {
     });
     let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:120usize,height:36usize,credit_policy_saver:Some(saver)));
     let mut phase = 0;
+    let last = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let observed = last.clone();
     let frames = component
         .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
         .map(|canvas| canvas.to_string())
-        .inspect(move |frame| match phase {
-            0 => {
-                sender
-                    .send(TerminalEvent::Key(clarity_control_key('r')))
-                    .unwrap();
-                phase = 1;
+        .inspect(move |frame| {
+            *observed.lock().unwrap() = format!("phase{phase}: {frame}");
+            match phase {
+                0 => {
+                    sender
+                        .send(TerminalEvent::Key(clarity_control_key('r')))
+                        .unwrap();
+                    phase = 1;
+                }
+                1 if frame.contains("Resets") => {
+                    sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+                    sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+                    sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
+                    phase = 2;
+                }
+                2 if frame.contains("Credit balance") => {
+                    sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+                    sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
+                    phase = 3;
+                }
+                3 if frame.contains("Credit usage") && frame.contains("Save") => {
+                    sender
+                        .send(TerminalEvent::Key(clarity_control_key('d')))
+                        .unwrap();
+                    phase = 4;
+                }
+                _ => {}
             }
-            1 if frame.contains("Resets") => {
-                sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-                phase = 2;
-            }
-            2 if frame.contains("Credit balance") => {
-                sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
-                phase = 3;
-            }
-            3 if frame.contains("Credit usage") && frame.contains("Search:") => {
-                sender
-                    .send(TerminalEvent::Key(clarity_control_key('d')))
-                    .unwrap();
-                phase = 4;
-            }
-            _ => {}
         })
         .collect::<Vec<_>>();
     let frames = tokio::time::timeout(std::time::Duration::from_secs(3), frames)
         .await
-        .expect("actual credit editing opens and exits");
+        .unwrap_or_else(|error| {
+            panic!(
+                "actual credit editing opens and exits: {error}; {}",
+                last.lock().unwrap()
+            )
+        });
     frames
         .into_iter()
         .rev()
-        .find(|frame| frame.contains("Search:"))
+        .find(|frame| frame.contains("Credit usage") && frame.contains("Save"))
         .expect("actual edit task rendered")
 }
 
@@ -125,6 +138,8 @@ async fn actual_credit_refresh_notice_distinguishes_success_from_failure() {
                     }
                     1 if frame.contains("Resets") => {
                         sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+                        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+                        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
                     2 if frame.contains("Credit balance") => {
@@ -164,116 +179,7 @@ async fn actual_credit_refresh_notice_distinguishes_success_from_failure() {
     }
 }
 
-#[tokio::test]
-async fn phone_options_titles_keep_the_active_tab_at_body_top_bottom_and_tab_return() {
-    let (ports, driver) = options_preflight_ports();
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
-        receiver.recv().await.map(|event| (event, receiver))
-    });
-    let model = super::super::quota_storyboard_fixture_test::fixture_model();
-    let mut component = element!(QuotaStatusComponent(view_model:model,width:32usize,height:24usize,
-        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
-    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-    tokio::pin!(frames);
-    let mut observations = Vec::new();
-    let journey = async {
-        next_options_title_frame(frames.as_mut()).await;
-        sender
-            .send(TerminalEvent::Key(clarity_control_key('r')))
-            .unwrap();
-        let mut frame = next_options_title_frame(frames.as_mut()).await;
-        while !frame.contains("voucher-1") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        if !frame.contains("Live eligibility") {
-            for _ in 0..256 {
-                sender.send(provider_filter_key(KeyCode::Up)).unwrap();
-            }
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        observations.push(("Resets top", "Options · Resets", frame));
-        for _ in 0..256 {
-            sender.send(provider_filter_key(KeyCode::Down)).unwrap();
-        }
-        frame = next_options_title_frame(frames.as_mut()).await;
-        observations.push(("Resets bottom", "Options · Resets", frame));
-        sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        // Both pre-fix clipped and corrected headers reach the assertion below;
-        // this routing acknowledgement must not hide the known clipping defect.
-        while frame.contains("Tab change pending")
-            || !(frame.contains("options · Cr") || frame.contains("Options · Credits"))
-        {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        for _ in 0..256 {
-            sender.send(provider_filter_key(KeyCode::Up)).unwrap();
-        }
-        frame = next_options_title_frame(frames.as_mut()).await;
-        observations.push(("Credits top", "Options · Credits", frame));
-        for _ in 0..256 {
-            sender.send(provider_filter_key(KeyCode::Down)).unwrap();
-        }
-        frame = next_options_title_frame(frames.as_mut()).await;
-        observations.push(("Credits bottom", "Options · Credits", frame));
-        sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while !frame.contains("voucher-1") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        observations.push(("Resets return", "Options · Resets", frame));
-    };
-    let result = tokio::time::timeout(std::time::Duration::from_secs(3), journey).await;
-    driver.abort();
-    if let Err(error) = driver.await {
-        assert!(error.is_cancelled(), "title driver failed: {error}");
-    }
-    assert!(
-        result.is_ok(),
-        "bounded32-column title journey: {observations:?}"
-    );
-    for (phase, _, frame) in &observations {
-        println!("PHONE OPTIONS {phase}:\n{frame}");
-    }
-    for (phase, expected, frame) in &observations {
-        let header = frame
-            .lines()
-            .find(|line| line.contains('·') && line.contains("Help"))
-            .expect("actual fixed dialog header");
-        assert!(
-            header.contains(expected),
-            "active page must remain whole in fixed header at {phase}: {frame}"
-        );
-        if phase.ends_with("top") {
-            let first_fact = if phase.starts_with("Resets") {
-                "Live eligibility"
-            } else {
-                "Credit balance"
-            };
-            assert!(
-                frame.contains(first_fact),
-                "the actual task content top must be visible at {phase}: {frame}"
-            );
-        }
-        assert!(
-            frame.contains("alpha-tag"),
-            "captured account remains pinned at {phase}: {frame}"
-        );
-        assert_eq!(
-            frame.lines().count(),
-            24,
-            "physical32x24 at {phase}: {frame}"
-        );
-        assert!(
-            frame
-                .lines()
-                .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 32),
-            "{frame}"
-        );
-    }
-    assert_eq!(observations.len(), 5);
-}
+include!("quota_phone_options_title_test.rs");
 
 async fn next_options_title_frame<TFrames>(frames: std::pin::Pin<&mut TFrames>) -> String
 where
@@ -466,11 +372,16 @@ async fn all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_la
                 id_pose.is_some() && title_pose.is_some(),
                 "both stable ID and unique last-voucher title stay reachable: {frame}"
             );
-            sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+            for key in [KeyCode::Tab, KeyCode::Right, KeyCode::Enter] {
+                sender.send(provider_filter_key(key)).unwrap();
+            }
             frame = next_options_title_frame(frames.as_mut()).await;
             while !frame.contains("Options · Credits") || frame.contains("Tab change pending") {
                 frame = next_options_title_frame(frames.as_mut()).await;
             }
+            let mut body_focus = KeyEvent::new(KeyEventKind::Press, KeyCode::Tab);
+            body_focus.modifiers = KeyModifiers::SHIFT;
+            sender.send(TerminalEvent::Key(body_focus)).unwrap();
             if !frame.contains("Credit balance") {
                 for _ in 0..256 {
                     sender.send(provider_filter_key(KeyCode::Up)).unwrap();

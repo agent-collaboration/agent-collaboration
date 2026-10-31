@@ -43,6 +43,11 @@ pub fn quota_status_view_model(
         rows: rows
             .iter()
             .map(|row| QuotaStatusAccountViewModel {
+                login_state: match row.oauth_maintenance.as_ref().map(|record| record.state) {
+                    Some(codex_router_state::credential_maintenance::CredentialMaintenanceState::ReauthRequired
+                        | codex_router_state::credential_maintenance::CredentialMaintenanceState::Unrefreshable) => crate::quota_display_model::QuotaLoginState::Required,
+                    _ => crate::quota_display_model::QuotaLoginState::NotRequired,
+                },
                 account_id: row.account_id.clone(),
                 provider: row.provider,
                 account_tag: account_display_tag(&row.account_id),
@@ -309,6 +314,58 @@ fn quota_header_facts(report: &QuotaStatusReport) -> QuotaHeaderFacts {
 mod presentation_projection_tests {
     use super::*;
     use crate::quota_display_facts::QuotaAccountStatus;
+
+    #[test]
+    fn login_primary_fact_comes_from_typed_credential_maintenance() {
+        use crate::quota_display_model::QuotaLoginState;
+        use codex_router_state::credential_maintenance::{
+            CredentialMaintenanceRecord, CredentialMaintenanceState,
+        };
+        for (state, expected) in [
+            (
+                CredentialMaintenanceState::Healthy,
+                QuotaLoginState::NotRequired,
+            ),
+            (
+                CredentialMaintenanceState::Retrying,
+                QuotaLoginState::NotRequired,
+            ),
+            (
+                CredentialMaintenanceState::InProgress,
+                QuotaLoginState::NotRequired,
+            ),
+            (
+                CredentialMaintenanceState::ReauthRequired,
+                QuotaLoginState::Required,
+            ),
+            (
+                CredentialMaintenanceState::Unrefreshable,
+                QuotaLoginState::Required,
+            ),
+        ] {
+            let mut row = observed_row();
+            row.oauth_maintenance = Some(CredentialMaintenanceRecord {
+                credential_generation: 1,
+                state,
+                failure_class: None,
+                last_success_unix_seconds: None,
+                next_attempt_unix_seconds: None,
+                claimed_successor_generation: None,
+                claim_purpose: None,
+                claim_started_unix_seconds: None,
+                claim_prior_state: None,
+                consecutive_failures: 0,
+            });
+            let report = report(vec![row]);
+            let view = quota_status_view_model(&report, report.rows(), 120);
+            assert_eq!(view.rows[0].login_state, expected, "{state:?}");
+        }
+        let report = report(vec![observed_row()]);
+        assert_eq!(
+            quota_status_view_model(&report, report.rows(), 120).rows[0].login_state,
+            QuotaLoginState::NotRequired
+        );
+    }
 
     fn observed_row() -> QuotaStatusRow {
         QuotaStatusRow {

@@ -205,7 +205,7 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
         println!("BROWSE PAGE down{page}:\n{text}");
         assert_eq!((canvas.width(), canvas.height()), (48, 12));
         assert!(
-            text.contains("Quota status") && text.contains("Pool details"),
+            text.contains("Quota ·") && text.contains("Menu F10"),
             "C5 surface controls stay fixed while group headings scroll: {text}"
         );
         observed.observe(&canvas);
@@ -316,7 +316,7 @@ async fn help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_gri
         let mut witnessed = false;
         for reverse_rows in 0..=5 {
             let frame = canvas.to_string();
-            let dialog = actual_dialog_text(&frame, "Quota Help");
+            let dialog = actual_dialog_text(&frame, "Help");
             let words = dialog
                 .replace(['│', '┃'], " ")
                 .split_whitespace()

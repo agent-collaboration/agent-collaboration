@@ -32,8 +32,12 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
         let events = futures_util::stream::unfold(receiver, |mut receiver| async move {
             receiver.recv().await.map(|event| (event, receiver))
         });
-        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver)));
-        let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        let outcome = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver),outcome_sink:Some(outcome.clone())));
+        let frames = crate::quota_test_support::recording_backend::recording_terminal_render_loop(
+            &mut component,
+            MockTerminalConfig::with_events(events),
+        );
         tokio::pin!(frames);
         let mut phase = 0;
         let mut counts_seen = [false; COUNTS.len()];
@@ -44,6 +48,7 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
         let mut reading_selected_name = false;
         let mut captured_before = String::new();
         let mut captured_after = String::new();
+        let mut dropdown_before = String::new();
         let guidance = [
             "Included quota on eligible accounts always comes first.",
             "Allow is limited to eligible OpenAI Responses requests.",
@@ -54,7 +59,11 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
         let mut identity_evidence = Vec::new();
         let mut last = String::new();
         let journey = async {
-            while let Some(canvas) = frames.next().await {
+            while let Some(canvas) =
+                crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                    .await
+                    .unwrap()
+            {
                 let frame = canvas.to_string();
                 match phase {
                     0 => {
@@ -65,31 +74,45 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                     }
                     1 if frame.contains("Options · Resets") && frame.contains("Inspect") => {
                         sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+                        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
+                        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
-                    2 if frame.contains("Edit") => {
+                    2 if frame.contains("Options · Credits")
+                        && !frame.contains("Tab change pending") =>
+                    {
+                        sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
                         sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 3;
                     }
-                    3 if frame.contains("Credit usage") && frame.contains("Select") => {
-                        // start_editing opens the policy choices. At the tiny height,
-                        // the selected row can occupy the body before a query is typed.
-                        sender
-                            .send(TerminalEvent::BracketedPaste("zzhelp".to_owned()))
-                            .unwrap();
-                        phase = 4;
-                    }
-                    4 if frame.contains("zzhelp") && frame.contains("No matching choices") => {
+                    3 if frame.contains("Credit usage")
+                        && frame.contains("Save")
+                        && !frame.contains("Filter:") =>
+                    {
                         captured_before = actual_dialog_text(&frame, "Credit usage")
                             .lines()
                             .find(|line| line.contains("[alpha-tag]"))
-                            .unwrap()
+                            .expect("captured parent identity before the dropdown covers it")
                             .to_owned();
-                        sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
+                        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
+                        phase = 4;
+                    }
+                    4 if frame.contains("Filter:") => {
+                        sender
+                            .send(TerminalEvent::BracketedPaste("zzhelp".to_owned()))
+                            .unwrap();
                         phase = 5;
                     }
-                    5 if frame.contains("Quota Help") => {
-                        let dialog = actual_dialog_text(&frame, "Quota Help");
+                    5 if frame.contains("Filter:")
+                        && frame.contains("zzhelp")
+                        && frame.contains("No match") =>
+                    {
+                        dropdown_before = actual_dialog_text(&frame, "Filter:");
+                        sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
+                        phase = 6;
+                    }
+                    6 if crate::quota_browse_presentation_test::quota_help_visible(&frame) => {
+                        let dialog = actual_dialog_text(&frame, "Help");
                         let words = dialog
                             .replace(['│', '┃'], " ")
                             .split_whitespace()
@@ -135,7 +158,7 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                             && (width < 120 || guidance_seen.iter().all(|seen| *seen))
                         {
                             sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-                            phase = 6;
+                            phase = 7;
                         } else {
                             assert!(
                                 scroll_steps < 128,
@@ -145,9 +168,21 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                             scroll_steps += 1;
                         }
                     }
-                    6 if frame.contains("Credit usage")
+                    7 if frame.contains("Filter:")
                         && frame.contains("zzhelp")
-                        && frame.contains("No matching choices") =>
+                        && frame.contains("No match") =>
+                    {
+                        assert_eq!(
+                            actual_dialog_text(&frame, "Filter:"),
+                            dropdown_before,
+                            "Help preserves the exact dropdown query/results"
+                        );
+                        sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
+                        phase = 8;
+                    }
+                    8 if frame.contains("Credit usage")
+                        && frame.contains("Save")
+                        && !frame.contains("Filter:") =>
                     {
                         captured_after = actual_dialog_text(&frame, "Credit usage")
                             .lines()
@@ -155,9 +190,9 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                             .unwrap()
                             .to_owned();
                         sender
-                            .send(TerminalEvent::Key(clarity_control_key('d')))
+                            .send(TerminalEvent::Key(clarity_control_key('c')))
                             .unwrap();
-                        phase = 7;
+                        phase = 9;
                     }
                     _ => {}
                 }
@@ -166,7 +201,7 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
         };
         let result = tokio::time::timeout(std::time::Duration::from_secs(3), journey).await;
         assert!(
-            result.is_ok() && phase == 7,
+            result.is_ok() && phase == 9,
             "{width}x{height} phase{phase} scroll={scroll_steps} counts={counts_seen:?} name={name_seen:?} identity_evidence={identity_evidence:?}: {last}"
         );
         assert!(
@@ -183,6 +218,11 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                 "actual truncated draft identity needs a continuation cue: {captured_before}"
             );
         }
+        assert_eq!(
+            *outcome.lock().unwrap(),
+            Some(crate::QuotaOutcome::Quit),
+            "typed Ctrl+C must reach quota itself"
+        );
         assert_eq!(
             save_calls.load(std::sync::atomic::Ordering::SeqCst),
             0,
@@ -211,7 +251,7 @@ async fn phone_header_preserves_named_nonzero_pool_and_data_problems() {
             .collect::<Vec<_>>()
             .join(" ");
         for fact in [
-            "Pool details",
+            "Menu F10",
             "Credentials locked",
             "Selection projection degraded",
         ] {
@@ -250,11 +290,11 @@ async fn actual_help_body_explains_the_reset_apply_exception_to_exit() {
             width,
             height,
             vec![
-                ("Quota status", vec![provider_filter_key(KeyCode::F(1))]),
-                ("Quota Help", vec![provider_filter_key(KeyCode::End)]),
+                ("Quota ·", vec![provider_filter_key(KeyCode::F(1))]),
+                ("Help", vec![provider_filter_key(KeyCode::End)]),
                 ("Ctrl+C", vec![provider_filter_key(KeyCode::Esc)]),
                 (
-                    "Quota status",
+                    "Quota ·",
                     vec![TerminalEvent::Key(clarity_control_key('d'))],
                 ),
             ],
@@ -263,9 +303,9 @@ async fn actual_help_body_explains_the_reset_apply_exception_to_exit() {
         .await;
         let help_bodies = frames
             .iter()
-            .filter(|frame| frame.contains("Quota Help"))
+            .filter(|frame| crate::quota_browse_presentation_test::quota_help_visible(frame))
             .map(|frame| {
-                actual_dialog_text(frame, "Quota Help")
+                actual_dialog_text(frame, "Help")
                     .replace(['│', '┃'], " ")
                     .split_whitespace()
                     .collect::<Vec<_>>()
@@ -298,7 +338,7 @@ pub(crate) fn record_selected_account_words(
     let lines = frame.lines().collect::<Vec<_>>();
     let title = lines
         .iter()
-        .position(|line| line.contains("Quota Help"))
+        .position(|line| crate::quota_browse_presentation_test::quota_help_visible(line))
         .unwrap();
     let top = (0..title)
         .rev()
@@ -336,11 +376,14 @@ pub(crate) fn record_selected_account_words(
                 });
             selected_row.push(if value_cell { character } else { ' ' });
         }
-        if row_text.contains("Selected account") {
-            *reading = true;
-            continue;
+        if row_text.trim_start().starts_with("Account ID") {
+            *reading = false;
+            break;
         }
-        if row_text.contains("Current quota") {
+        if row_text.trim_start().starts_with("Account ") {
+            *reading = true;
+        }
+        if row_text.contains("Screen") || row_text.contains("Input conventions") {
             *reading = false;
             break;
         }

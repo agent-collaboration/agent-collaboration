@@ -104,6 +104,9 @@ mod floor_schema_tests;
 #[path = "state_tests/floor_mutation_tests.rs"]
 mod floor_mutation_tests;
 
+#[path = "state_tests/account_status_identity_tests.rs"]
+mod account_status_identity_tests;
+
 #[path = "state_tests/storage_boundary_tests.rs"]
 mod storage_boundary_tests;
 

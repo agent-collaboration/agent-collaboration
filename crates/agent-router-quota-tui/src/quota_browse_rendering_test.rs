@@ -22,7 +22,7 @@ fn review_qstatic_preserves_responsive_group_column_alignment() {
         row,
         46,
         false,
-        super::quota_provider_filters::QuotaInteractionMode::Static,
+        super::quota_view_configuration::QuotaInteractionMode::Static,
         false,
     )
     .render(None)
@@ -214,9 +214,10 @@ async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
         for frame in &frames {
             let title_line = frame
                 .lines()
-                .find(|line| line.contains("Quota status"))
+                .find(|line| line.contains("Quota ·"))
                 .unwrap_or_else(|| panic!("quota title should render:\n{frame}"));
-            assert!(title_line.contains("Clients 12"), "{frame}");
+            let counts_line = frame.lines().find(|line| line.contains("10/10 accounts")).expect("visible and loaded counts remain in the toolbar");
+            assert!(counts_line.contains("12 clients"), "{frame}");
             assert!(
                 !title_line.contains(freshness_summary),
                 "C6 routine census disclosed: {frame}"
@@ -226,7 +227,7 @@ async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
                 .find(|line| line.contains("Selection projection degraded"))
                 .unwrap();
             assert!(!frame.contains("Pool-wide:"), "C6 quiet header: {frame}");
-            observed_headers.push((route_line.trim().to_owned(), title_line.trim().to_owned()));
+            observed_headers.push((route_line.trim().to_owned(), title_line.trim().to_owned(), counts_line.trim().to_owned()));
         }
 
         let expected_detail = if preferred_index == 0 {
@@ -275,7 +276,7 @@ async fn quota_status_down_arrow_focuses_next_account_details() {
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
         vec![
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
         ],
     )))
     .map(|canvas| canvas.to_string())
@@ -342,7 +343,7 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
                         !text.contains("Account details"),
                         "pointer focuses passive details without opening an action: {text}"
                     );
-                    sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
+                    sender.send(provider_filter_key(KeyCode::Char('q'))).unwrap();
                     phase = 2;
                 }
                 _ => {}
@@ -375,7 +376,7 @@ async fn quota_status_non_left_row_events_do_not_change_account_focus() {
                 10,
                 9,
             )),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
         ],
     )))
     .map(|canvas| canvas.to_string())
@@ -427,7 +428,7 @@ async fn quota_status_reloads_view_model_on_timer() {
         }
         tokio::time::sleep(Duration::from_millis(35)).await;
         Some((
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
             true,
         ))
     });
@@ -474,7 +475,7 @@ async fn quota_status_up_arrow_focuses_previous_account_details() {
         vec![
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Up)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
         ],
     )))
     .map(|canvas| canvas.to_string())
@@ -546,6 +547,7 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
         selection_projection_degraded: false,
         serving_clients: None,
         rows: vec![QuotaStatusAccountViewModel {
+            login_state: Default::default(),
             provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id("ssdev"),
             account_tag: "test-tag".to_owned(),
@@ -589,7 +591,7 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
         vec![TerminalEvent::Key(KeyEvent::new(
             KeyEventKind::Press,
-            KeyCode::Esc,
+            KeyCode::Char('q'),
         ))],
     )))
     .map(|canvas| canvas.to_string())

@@ -14,7 +14,7 @@ const WEEKLY_FLOOR_RETRY_DELAYS: [Duration; 3] = [
 const WEEKLY_FLOOR_MUTATION_DEADLINE: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
-enum WeeklyQuotaFloorMutationAttemptError {
+enum AccountMutationAttemptError {
     AccountNotFound,
     AccountLabelAmbiguous,
     InvalidAccountMetadata,
@@ -22,12 +22,12 @@ enum WeeklyQuotaFloorMutationAttemptError {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum WeeklyQuotaFloorAccountSelector<'a> {
+enum AccountMutationSelector<'a> {
     AccountId(&'a AccountId),
     AccountLabel(&'a str),
 }
 
-impl From<sqlx::Error> for WeeklyQuotaFloorMutationAttemptError {
+impl From<sqlx::Error> for AccountMutationAttemptError {
     fn from(error: sqlx::Error) -> Self {
         Self::Sqlite(error)
     }
@@ -119,11 +119,8 @@ impl AsyncWeeklyQuotaFloorMutationStore {
         account_label: &str,
         floor: Option<WeeklyQuotaFloorBasisPoints>,
     ) -> Result<WeeklyQuotaFloorMutationResult, StateStoreError> {
-        self.set_weekly_quota_floor(
-            WeeklyQuotaFloorAccountSelector::AccountLabel(account_label),
-            floor,
-        )
-        .await
+        self.set_weekly_quota_floor(AccountMutationSelector::AccountLabel(account_label), floor)
+            .await
     }
 
     /// Atomically enables or disables one account's weekly quota floor by stable account ID.
@@ -132,11 +129,18 @@ impl AsyncWeeklyQuotaFloorMutationStore {
         account_id: &AccountId,
         floor: Option<WeeklyQuotaFloorBasisPoints>,
     ) -> Result<WeeklyQuotaFloorMutationResult, StateStoreError> {
-        self.set_weekly_quota_floor(
-            WeeklyQuotaFloorAccountSelector::AccountId(account_id),
-            floor,
-        )
-        .await
+        self.set_weekly_quota_floor(AccountMutationSelector::AccountId(account_id), floor)
+            .await
+    }
+
+    /// Sets one account's lifecycle status by stable account identity.
+    pub async fn set_account_status_by_account_id(
+        &self,
+        account_id: &AccountId,
+        status: AccountStatus,
+    ) -> Result<(), StateStoreError> {
+        self.set_account_status(AccountMutationSelector::AccountId(account_id), status)
+            .await
     }
 
     /// Sets one account's lifecycle status by its exact display label.
@@ -145,18 +149,24 @@ impl AsyncWeeklyQuotaFloorMutationStore {
         account_label: &str,
         status: AccountStatus,
     ) -> Result<(), StateStoreError> {
+        self.set_account_status(AccountMutationSelector::AccountLabel(account_label), status)
+            .await
+    }
+
+    async fn set_account_status(
+        &self,
+        account_selector: AccountMutationSelector<'_>,
+        status: AccountStatus,
+    ) -> Result<(), StateStoreError> {
         let deadline = Instant::now() + WEEKLY_FLOOR_MUTATION_DEADLINE;
         let mut next_delay_index = 0;
         loop {
             if deadline.checked_duration_since(Instant::now()).is_none() {
                 return Err(StateStoreError::AccountStatusDatabaseBusy);
             }
-            match self
-                .try_set_account_status_by_label(account_label, status)
-                .await
-            {
+            match self.try_set_account_status(account_selector, status).await {
                 Ok(()) => return Ok(()),
-                Err(WeeklyQuotaFloorMutationAttemptError::Sqlite(error))
+                Err(AccountMutationAttemptError::Sqlite(error))
                     if is_busy_or_locked_sqlx_error(&error) =>
                 {
                     let Some(delay) = WEEKLY_FLOOR_RETRY_DELAYS.get(next_delay_index).copied()
@@ -175,14 +185,14 @@ impl AsyncWeeklyQuotaFloorMutationStore {
                     ))
                     .await;
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound) => {
+                Err(AccountMutationAttemptError::AccountNotFound) => {
                     return Err(StateStoreError::AccountStatusAccountNotFound);
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::AccountLabelAmbiguous) => {
+                Err(AccountMutationAttemptError::AccountLabelAmbiguous) => {
                     return Err(StateStoreError::AccountStatusAccountLabelAmbiguous);
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::InvalidAccountMetadata)
-                | Err(WeeklyQuotaFloorMutationAttemptError::Sqlite(_)) => {
+                Err(AccountMutationAttemptError::InvalidAccountMetadata)
+                | Err(AccountMutationAttemptError::Sqlite(_)) => {
                     return Err(StateStoreError::AccountStatusSchemaUpgradeRequired);
                 }
             }
@@ -191,7 +201,7 @@ impl AsyncWeeklyQuotaFloorMutationStore {
 
     async fn set_weekly_quota_floor(
         &self,
-        account_selector: WeeklyQuotaFloorAccountSelector<'_>,
+        account_selector: AccountMutationSelector<'_>,
         floor: Option<WeeklyQuotaFloorBasisPoints>,
     ) -> Result<WeeklyQuotaFloorMutationResult, StateStoreError> {
         let deadline = Instant::now() + WEEKLY_FLOOR_MUTATION_DEADLINE;
@@ -205,7 +215,7 @@ impl AsyncWeeklyQuotaFloorMutationStore {
                 .await;
             match attempt {
                 Ok(result) => return Ok(result),
-                Err(WeeklyQuotaFloorMutationAttemptError::Sqlite(error))
+                Err(AccountMutationAttemptError::Sqlite(error))
                     if is_busy_or_locked_sqlx_error(&error) =>
                 {
                     let Some(delay) = WEEKLY_FLOOR_RETRY_DELAYS.get(next_delay_index).copied()
@@ -224,18 +234,18 @@ impl AsyncWeeklyQuotaFloorMutationStore {
                     ))
                     .await;
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound) => {
+                Err(AccountMutationAttemptError::AccountNotFound) => {
                     return Err(StateStoreError::WeeklyQuotaFloorAccountNotFound);
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::AccountLabelAmbiguous) => {
+                Err(AccountMutationAttemptError::AccountLabelAmbiguous) => {
                     return Err(StateStoreError::WeeklyQuotaFloorAccountLabelAmbiguous);
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::InvalidAccountMetadata) => {
+                Err(AccountMutationAttemptError::InvalidAccountMetadata) => {
                     return Err(redacted_weekly_floor_sqlite_error(
                         "invalid account metadata",
                     ));
                 }
-                Err(WeeklyQuotaFloorMutationAttemptError::Sqlite(_)) => {
+                Err(AccountMutationAttemptError::Sqlite(_)) => {
                     return Err(redacted_weekly_floor_sqlite_error("mutation failed"));
                 }
             }
@@ -244,51 +254,11 @@ impl AsyncWeeklyQuotaFloorMutationStore {
 
     async fn try_set_weekly_quota_floor(
         &self,
-        account_selector: WeeklyQuotaFloorAccountSelector<'_>,
+        account_selector: AccountMutationSelector<'_>,
         floor: Option<WeeklyQuotaFloorBasisPoints>,
-    ) -> Result<WeeklyQuotaFloorMutationResult, WeeklyQuotaFloorMutationAttemptError> {
+    ) -> Result<WeeklyQuotaFloorMutationResult, AccountMutationAttemptError> {
         let mut transaction = self.pool.begin().await?;
-        let account_id = match account_selector {
-            WeeklyQuotaFloorAccountSelector::AccountId(account_id) => {
-                let account_exists = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = ?1)",
-                )
-                .bind(account_id.as_str())
-                .fetch_one(&mut *transaction)
-                .await?;
-                if !account_exists {
-                    transaction.rollback().await?;
-                    return Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound);
-                }
-                account_id.clone()
-            }
-            WeeklyQuotaFloorAccountSelector::AccountLabel(account_label) => {
-                let matching_account_ids = sqlx::query_scalar::<_, String>(
-                    "SELECT account_id FROM accounts WHERE label = ?1 ORDER BY account_id LIMIT 2",
-                )
-                .bind(account_label)
-                .fetch_all(&mut *transaction)
-                .await?;
-                let account_id_value = match matching_account_ids.as_slice() {
-                    [] => {
-                        transaction.rollback().await?;
-                        return Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound);
-                    }
-                    [account_id] => account_id,
-                    [_, _, ..] => {
-                        transaction.rollback().await?;
-                        return Err(WeeklyQuotaFloorMutationAttemptError::AccountLabelAmbiguous);
-                    }
-                };
-                match AccountId::new(account_id_value.clone()) {
-                    Ok(account_id) => account_id,
-                    Err(_) => {
-                        transaction.rollback().await?;
-                        return Err(WeeklyQuotaFloorMutationAttemptError::InvalidAccountMetadata);
-                    }
-                }
-            }
-        };
+        let account_id = resolve_mutation_account_id(&mut transaction, account_selector).await?;
         let result = if let Some(floor) = floor {
             sqlx::query(
                 "INSERT INTO account_routing_policies (
@@ -313,31 +283,15 @@ impl AsyncWeeklyQuotaFloorMutationStore {
         Ok(result)
     }
 
-    async fn try_set_account_status_by_label(
+    async fn try_set_account_status(
         &self,
-        account_label: &str,
+        account_selector: AccountMutationSelector<'_>,
         status: AccountStatus,
-    ) -> Result<(), WeeklyQuotaFloorMutationAttemptError> {
+    ) -> Result<(), AccountMutationAttemptError> {
         let mut transaction = self.pool.begin().await?;
-        let matching_account_ids = sqlx::query_scalar::<_, String>(
-            "SELECT account_id FROM accounts WHERE label = ?1 ORDER BY account_id LIMIT 2",
-        )
-        .bind(account_label)
-        .fetch_all(&mut *transaction)
-        .await?;
-        let account_id = match matching_account_ids.as_slice() {
-            [] => {
-                transaction.rollback().await?;
-                return Err(WeeklyQuotaFloorMutationAttemptError::AccountNotFound);
-            }
-            [account_id] => account_id,
-            [_, _, ..] => {
-                transaction.rollback().await?;
-                return Err(WeeklyQuotaFloorMutationAttemptError::AccountLabelAmbiguous);
-            }
-        };
+        let account_id = resolve_mutation_account_id(&mut transaction, account_selector).await?;
         sqlx::query("UPDATE accounts SET status = ?2 WHERE account_id = ?1")
-            .bind(account_id)
+            .bind(account_id.as_str())
             .bind(status.as_str())
             .execute(&mut *transaction)
             .await?;
@@ -350,6 +304,49 @@ impl AsyncWeeklyQuotaFloorMutationStore {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+}
+
+async fn resolve_mutation_account_id(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    account_selector: AccountMutationSelector<'_>,
+) -> Result<AccountId, AccountMutationAttemptError> {
+    Ok(match account_selector {
+        AccountMutationSelector::AccountId(account_id) => {
+            let account_exists = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = ?1)",
+            )
+            .bind(account_id.as_str())
+            .fetch_one(&mut **transaction)
+            .await?;
+            if !account_exists {
+                return Err(AccountMutationAttemptError::AccountNotFound);
+            }
+            account_id.clone()
+        }
+        AccountMutationSelector::AccountLabel(account_label) => {
+            let matching_account_ids = sqlx::query_scalar::<_, String>(
+                "SELECT account_id FROM accounts WHERE label = ?1 ORDER BY account_id LIMIT 2",
+            )
+            .bind(account_label)
+            .fetch_all(&mut **transaction)
+            .await?;
+            let account_id_value = match matching_account_ids.as_slice() {
+                [] => {
+                    return Err(AccountMutationAttemptError::AccountNotFound);
+                }
+                [account_id] => account_id,
+                [_, _, ..] => {
+                    return Err(AccountMutationAttemptError::AccountLabelAmbiguous);
+                }
+            };
+            match AccountId::new(account_id_value.clone()) {
+                Ok(account_id) => account_id,
+                Err(_) => {
+                    return Err(AccountMutationAttemptError::InvalidAccountMetadata);
+                }
+            }
+        }
+    })
 }
 
 pub(super) fn redacted_weekly_floor_sqlite_error(message: &'static str) -> StateStoreError {

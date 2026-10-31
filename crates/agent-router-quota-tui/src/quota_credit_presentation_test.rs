@@ -1,8 +1,8 @@
 //! Credit policy fields, wrapped notices and real short-editor interaction.
 use super::*;
 
-#[test]
-fn credit_policy_options_render_in_keyboard_selection_order() {
+#[tokio::test]
+async fn credit_policy_options_render_in_keyboard_selection_order() {
     let model = quota_two_account_view_model();
     let mut options = AccountOptionsState::new(&model.rows[0], 1);
     options.tab = AccountOptionsTab::Credits;
@@ -22,17 +22,28 @@ fn credit_policy_options_render_in_keyboard_selection_order() {
         update_credit_policy_editor(&mut options, action, None);
         let editor = options.editor.as_mut().unwrap();
         assert_eq!(editor.draft_policy, policy);
-        editor.choice.open(policy);
-        let frame = render_account_options_panel(AccountOptionsPanelProps {
-            options: &options,
-            reset_snapshot: None,
-            reset_target: None,
-            width: 100,
-            height: 30,
-            inventory_page_start: 0,
-            spinner_tick: 0,
-        })
-        .render(None)
+        let mut fixture_model = model.clone();
+        fixture_model.rows[0].credit_usage.policy = policy;
+        let mut fixture =
+            crate::test_support::quota_control_fixture(crate::test_support::QuotaFixtureOptions {
+                view_model: fixture_model,
+                ports: Default::default(),
+                width: 100,
+                height: 30,
+                control: crate::test_support::QuotaFixtureControl::CreditChoices,
+            })
+            .element;
+        let frames = fixture.mock_terminal_render_loop(MockTerminalConfig::with_events(
+            futures_util::stream::pending(),
+        ));
+        tokio::pin!(frames);
+        let frame = super::super::super::quota_frame_observation::next_matching_frame(
+            frames.as_mut(),
+            Duration::from_secs(2),
+            |canvas| canvas.to_string().contains("Allow"),
+        )
+        .await
+        .unwrap()
         .to_string();
         let disallow = frame
             .lines()
@@ -47,9 +58,9 @@ fn credit_policy_options_render_in_keyboard_selection_order() {
             "choices follow the shared keyboard order: {frame}"
         );
         assert!(
-            frame
-                .lines()
-                .any(|line| line.contains('❯') && line.contains(label)),
+            frame.lines().any(|line| line
+                .contains(agent_collaboration_tui::theme::UiGlyph::Current.text())
+                && line.contains(label)),
             "captured typed policy remains selected: {frame}"
         );
     }
@@ -151,7 +162,6 @@ fn credit_options_wrap_dynamic_status_and_help_inside_narrow_pane() {
             CreditUsagePolicySaveError::StateOperationFailed,
         ),
         operation_generation: 2,
-        choice: agent_collaboration_tui::SearchSelectState::Closed,
     });
     options.message = Some(AccountOptionsMessage::RefreshFailed);
 
@@ -201,11 +211,27 @@ async fn short_quota_options_keeps_credit_policy_and_footer_visible() {
             (TerminalEvent::Key(control_key('r')), Some("Inspect")),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                Some("Credit usage"),
+                None,
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+                None,
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Search:"),
+                Some("Credit usage"),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+                None,
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                Some("Save"),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                Some("Filter:"),
             ),
             (TerminalEvent::Key(control_key('c')), None),
         ];
@@ -223,8 +249,8 @@ async fn short_quota_options_keeps_credit_policy_and_footer_visible() {
             frames.iter().any(|frame| {
                 frame.contains("Credit usage")
                     && frame.contains("Disallow")
-                    && frame.contains("Select")
-                    && frame.contains("Cancel")
+                    && frame.contains("Filter:")
+                    && !frame.contains("Select")
             }),
             "a {width}x24 credits pane must keep the active setting and editor footer visible:\n{}",
             frames.join("\n--- frame ---\n")
@@ -258,15 +284,19 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             (TerminalEvent::Key(control_key('r')), Some("Inspect")),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                Some("Credit usage"),
+                None,
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
+                None,
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("❯ Disallow"),
+                Some("Credit usage"),
             ),
             (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-                Some("❯ Allow"),
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+                None,
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
@@ -274,6 +304,22 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                Some("Filter:"),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
+                Some("Allow"),
+            ),
+            (
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                Some("Save"),
+            ),
+            (
+                TerminalEvent::Key({
+                    let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
+                    key.modifiers = KeyModifiers::CONTROL;
+                    key
+                }),
                 Some("credit preference"),
             ),
             // The narrow body cannot show all three wrapped notices together.
@@ -378,6 +424,18 @@ async fn composed_credit_sections_keep_a_rendered_blank_row_after_observation() 
                                 KeyCode::Tab,
                             )))
                             .unwrap();
+                        sender
+                            .send(TerminalEvent::Key(KeyEvent::new(
+                                KeyEventKind::Press,
+                                KeyCode::Right,
+                            )))
+                            .unwrap();
+                        sender
+                            .send(TerminalEvent::Key(KeyEvent::new(
+                                KeyEventKind::Press,
+                                KeyCode::Enter,
+                            )))
+                            .unwrap();
                         phase = 2;
                     }
                     2 if frame.contains("Observation") && frame.contains("Credit usage") => {
@@ -395,12 +453,13 @@ async fn composed_credit_sections_keep_a_rendered_blank_row_after_observation() 
                             usage >= observation + 2,
                             "{width}x{height} requires an actual empty row between observation and usage: {frame}"
                         );
+                        let blank = rows[usage - 1].trim_end();
+                        let blank = blank
+                            .strip_suffix('█')
+                            .or_else(|| blank.strip_suffix('│'))
+                            .unwrap_or(blank);
                         assert!(
-                            rows[usage - 1]
-                                .trim_end()
-                                .trim_end_matches('│')
-                                .trim()
-                                .is_empty(),
+                            blank.trim().is_empty(),
                             "the final balance fact must be followed by an empty inner row: {dialog}"
                         );
                         assert!(
