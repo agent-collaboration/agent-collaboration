@@ -235,19 +235,10 @@ impl ListSelectionControl {
                 return input.call(event);
             }
             let (code, wheel) = match &event {
-                TerminalEvent::Key(key)
-                    if key.kind != KeyEventKind::Release && key.modifiers.is_empty() =>
-                {
-                    match key.code {
-                        KeyCode::Up
-                        | KeyCode::Down
-                        | KeyCode::PageUp
-                        | KeyCode::PageDown
-                        | KeyCode::Home
-                        | KeyCode::End => (key.code, false),
-                        _ => return InputUse::Unused,
-                    }
-                }
+                TerminalEvent::Key(key) => match super::scroll_model::navigation_code(key) {
+                    Some(code) => (code, false),
+                    None => return InputUse::Unused,
+                },
                 TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
                     MouseEventKind::ScrollUp => (KeyCode::Up, true),
                     MouseEventKind::ScrollDown => (KeyCode::Down, true),

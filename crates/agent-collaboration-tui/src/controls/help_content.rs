@@ -9,8 +9,26 @@ pub struct HelpInputConvention {
     pub key: String,
     pub description: String,
 }
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HelpContent {
     pub context: Vec<HelpContextLine>,
     pub conventions: Vec<HelpInputConvention>,
+}
+
+impl Default for HelpContent {
+    fn default() -> Self {
+        Self {
+            context: Vec::new(),
+            conventions: vec![
+                HelpInputConvention {
+                    key: "PgUp/PgDn · Option+↑/↓".into(),
+                    description: "Page".into(),
+                },
+                HelpInputConvention {
+                    key: "Home/End · Option+Shift+↑/↓".into(),
+                    description: "First/last".into(),
+                },
+            ],
+        }
+    }
 }

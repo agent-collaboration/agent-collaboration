@@ -196,4 +196,86 @@ mod tests {
                 .unwrap();
         }
     }
+    #[tokio::test]
+    async fn option_pages_and_bounds_scroll_form_bodies_without_editing_or_moving_field_focus() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let handle = Arc::new(Mutex::new(None));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(PageScene(journal,handle:handle.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.lock().unwrap().clone().unwrap();
+                let initial = fixture.scroll.position();
+                for (code, modifiers, expected) in [
+                    (KeyCode::Down, KeyModifiers::ALT, initial.viewport_height),
+                    (
+                        KeyCode::Down,
+                        KeyModifiers::ALT | KeyModifiers::SHIFT,
+                        initial.maximum(),
+                    ),
+                    (
+                        KeyCode::Up,
+                        KeyModifiers::ALT,
+                        initial.maximum().saturating_sub(initial.viewport_height),
+                    ),
+                    (KeyCode::Up, KeyModifiers::ALT | KeyModifiers::SHIFT, 0),
+                ] {
+                    let mut event = KeyEvent::new(KeyEventKind::Press, code);
+                    event.modifiers = modifiers;
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::Key(event), true)],
+                            true,
+                            |ack| {
+                                assert_eq!(
+                                    ack.snapshot.0[0].1, b"source",
+                                    "paging aliases keep focused field"
+                                );
+                                assert_eq!(
+                                    fixture.scroll.position().offset,
+                                    expected,
+                                    "Option page and bound aliases reach the shared scroll model"
+                                );
+                            },
+                        )
+                        .await;
+                }
+                for code in [KeyCode::Up, KeyCode::Down] {
+                    let mut event = KeyEvent::new(KeyEventKind::Press, code);
+                    event.modifiers = KeyModifiers::CONTROL;
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(TerminalEvent::Key(event), false)],
+                            false,
+                            |ack| {
+                                assert_eq!(ack.snapshot.0[0].1, b"source");
+                                assert_eq!(fixture.scroll.position().offset, 0);
+                            },
+                        )
+                        .await;
+                }
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::Down), true)],
+                        true,
+                        |ack| {
+                            assert_eq!(
+                                ack.snapshot.0[0].1, b"destination",
+                                "plain Down still leaves the field"
+                            )
+                        },
+                    )
+                    .await;
+            })
+            .await
+            .unwrap();
+        }
+    }
 }

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/scroll_model.rs b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
+--- a/crates/agent-collaboration-tui/src/controls/scroll_model.rs
++++ b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
+@@ -152,3 +152,3 @@
+     match (key.code, key.modifiers) {
+-        (KeyCode::Up, KeyModifiers::ALT) => Some(KeyCode::PageUp),
++        (KeyCode::Up, KeyModifiers::ALT) => None,
+         (KeyCode::Down, KeyModifiers::ALT) => Some(KeyCode::PageDown),
