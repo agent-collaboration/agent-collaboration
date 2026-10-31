@@ -115,8 +115,12 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
  const core=await GhosttyCore.load({wasmPath:'/ghostty/wasm/ghostty-vt.wasm',imageStorageLimit:0});
  const terminal=new WTerm(document.getElementById('terminal'),{core,cols:${initialColumns},rows:${initialRows},autoResize:false,cursorBlink:false});
  await terminal.init(); terminal.setThemeColors(${JSON.stringify(terminalTheme)}); const bytes=Uint8Array.from(atob(${JSON.stringify(payload)}),c=>c.charCodeAt(0));let offset=0;for(const resize of ${JSON.stringify(resizes)}){terminal.write(bytes.subarray(offset,resize.byteOffset));terminal.resize(resize.columns,resize.rows);offset=resize.byteOffset;}terminal.write(bytes.subarray(offset));
+ const rowHeight=Number.parseFloat(getComputedStyle(terminal.element).getPropertyValue('--term-row-height'));
+ if(!Number.isFinite(rowHeight)||rowHeight<=0)throw new Error('renderer row height is invalid');
+ terminal.element.style.height=(core.getRows()*rowHeight)+'px';terminal.element.scrollTop=0;
  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const rect=terminal.element.getBoundingClientRect();
+ if(Math.abs(rect.height-core.getRows()*rowHeight)>0.01)throw new Error('renderer height differs from its terminal rows');
  const lines=Array.from({length:core.getRows()},(_,row)=>Array.from({length:core.getCols()},(_,col)=>{const cell=core.getCell(row,col);return cell.width===0||cell.spacerHead?'':cell.chars??String.fromCodePoint(cell.char)}).join(''));
  return {lines,columns:core.getCols(),rows:core.getRows(),width:rect.width,height:rect.height};
 })()`;
