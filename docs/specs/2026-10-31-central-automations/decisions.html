@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Decisions waiting on you · Central automations</title>
+<title>Your decisions · Central automations</title>
 <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
 <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
 </head>
@@ -22,173 +22,42 @@
     <a href="firing-options.html">Firing options and cost</a>
     <a href="history.html">How we got here</a>
     <a href="delivery-plan.html">Delivery plan</a>
-    <a href="decisions.html">Decisions waiting on you</a>
+    <a href="decisions.html">Your decisions</a>
   </nav>
 </ex-nav>
 <ex-document id="content">
-<h1 id="heading-decisions-waiting-on-you">Decisions waiting on you</h1>
+<h1 id="heading-your-decisions">Your decisions</h1>
 
-<p><strong>I need five answers from you.</strong> Two block building: who approves sessions created on another machine, and whether the delivery plan goes ahead. The other three are calls I made from your words and want you to confirm or correct. Each one below shows what it decides, the options, what each gains and costs, and my recommendation.</p>
+<p><strong>You answered every open question on 31 October, and building has started.</strong> This page records each answer and what it changed in the design.</p>
 
-<ex-callout title="How to answer" tone="note" icon="chat-circle">
-  <p>Pick an option in each question. Use Comments (press C) to qualify an answer, then <strong>Copy</strong> in the Comments panel and paste it to me, or just tell me in chat. Nothing is sent automatically. None of these are decided yet; a recommendation is only mine.</p>
-</ex-callout>
-
+<h2 id="answers">What you decided</h2>
 <div class="ex-table-scroll">
 <table>
-<thead><tr><th>Decision</th><th>Blocks</th><th>If you defer it</th></tr></thead>
+<thead><tr><th>Question</th><th>Your answer</th><th>What changed</th></tr></thead>
 <tbody>
-<tr><td><a href="#approver">1. Who approves a session created on another machine</a></td><td>M3b (sessions on other machines)</td><td>everything else proceeds; M3b is the last Router step, so there's time</td></tr>
-<tr><td><a href="#plan">2. The delivery plan</a></td><td>all building after the database PR</td><td>nothing starts but M0</td></tr>
-<tr><td><a href="#rounding">3. Rounding direction</a></td><td>M1 limits, M2 clock</td><td>I build "round up"</td></tr>
-<tr><td><a href="#kinds">4. Which kinds count as notifications</a></td><td>M6</td><td>I build approvals and questions as immediate</td></tr>
-<tr><td><a href="#wakes">5. Where the 10-minute wake minimum applies</a></td><td>M1 limits</td><td>I build "every wake"</td></tr>
+<tr><td>The delivery plan</td><td>Approved as written, and "milestones means it should be verified"</td><td>Every milestone has a verification gate that the Verifier observes before the milestone counts; M8 is the final pass, not the first check (<a href="delivery-plan.html#milestone-gates">gates</a>)</td></tr>
+<tr><td>Time precision</td><td>"app only allows 5 min precision … not fake precision"</td><td>Nothing is rounded. Only times on 5-minute marks are accepted; anything else is refused with the two nearest marks. Relative times aren't accepted. Only the one-time move fits existing times, because that data already exists (<a href="firing.html#grid">the grid</a>)</td></tr>
+<tr><td>Approvals and questions</td><td>Stay immediate</td><td>No change (<a href="notifications.html">notifications</a>)</td></tr>
+<tr><td>The 10-minute wake minimum</td><td>Every repeating wake</td><td>No change</td></tr>
+<tr><td>Who approves a session created on another machine</td><td>The requester, later; for now the target machine's Chief of Staff</td><td>See below</td></tr>
 </tbody>
 </table>
 </div>
 
-<h2 id="approver">1. Who approves a session created on another machine</h2>
-
-<p>An agent on machine A asks central to create a session on machine B. The new session runs on B, and when it hits a permission prompt (run this command, write that file) someone has to answer. That someone is the session's <strong>approver</strong>. The question is who it is when the request doesn't name one.</p>
-
-<ex-mermaid id="approver-picture" label="Where the prompt appears"><script type="text/plain">
-sequenceDiagram
-  participant A as Machine A (requester)
-  participant C as Central
-  participant B as Machine B
-  participant S as New session on B
-  A->>C: create a session on B, first input
-  C->>B: work item (held until B confirms)
-  B->>S: create locally, send the first input
-  S->>B: permission prompt
-  Note over B: who answers? A, B or C below
-</script></ex-mermaid>
-
-<h3 id="approver-facts">What the code does today</h3>
-<ul>
-  <li><strong>Codex wants sessions, not people.</strong> A Codex create refuses a human creator or approver: "Human creators and Approvers are supported for provider endpoints only" (<code>crates/collaboration-client/src/conversation_create_actor.rs:54–70</code>).</li>
-  <li><strong>The local default is the creator.</strong> When no approver is named, Codex uses the creating session (<code>crates/collaboration-client/src/conversation_client.rs:501</code>). Claude and Cursor endpoints also accept you as approver.</li>
-  <li><strong>Prompts don't cross machines.</strong> Cross-machine approvals were deferred in board design U63, so a prompt on B can't be answered from A today.</li>
-</ul>
-
+<h2 id="approvals">Approvals, in three steps</h2>
+<p>Approval state lives only in <code>interaction.sqlite</code>; the JSON files go. Routes, meaning who created a session and who answers its prompts, eventually move to central so prompts can reach an approver on any machine.</p>
 <div class="ex-table-scroll">
 <table>
-<thead><tr><th></th><th>A. A session you name on B</th><th>B. You</th><th>C. The requester on A</th></tr></thead>
+<thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
 <tbody>
-<tr><td>Codex on B</td><td>works</td><td><strong>refused</strong>: Codex takes only session approvers</td><td>needs cross-machine approvals</td></tr>
-<tr><td>Claude, Cursor on B</td><td>works</td><td>works</td><td>needs cross-machine approvals</td></tr>
-<tr><td>Who answers prompts</td><td>an agent on B, such as that machine's Lead or Station Chief</td><td>you, for every remote session</td><td>the agent that asked</td></tr>
-<tr><td>New work</td><td>one setting per machine: its default approver session</td><td>none</td><td>a new milestone: route B's prompts through central to A and answers back</td></tr>
-<tr><td>Who pays</td><td>you, once per machine, to name it</td><td>you, on every prompt</td><td>the schedule: M3b grows and waits on that milestone</td></tr>
+<tr><td>1</td><td>Database PR</td><td><code>approval-routes.json</code> is imported once into a table in <code>interaction.sqlite</code>, then deleted. The old <code>approval-history.json</code> code and file are removed.</td></tr>
+<tr><td>2</td><td>Automations PR</td><td><strong>Named interim step:</strong> a remote create with no approver gets the target machine's Chief of Staff session, which you name once per machine. A machine with none named refuses before creating anything.</td></tr>
+<tr><td>3</td><td>Follow-up PR, its own design</td><td>Central owns the routes, prompts are sent through central to the approver's machine, and the requester becomes the default approver. Step 2's interim ends here. The Lead working on quota may take this design once quota is done.</td></tr>
 </tbody>
 </table>
 </div>
 
-<ex-choice id="approver-default" title="When a remote create names no approver, who approves the new session?">
-  <ex-option id="target-session" title="**A. A session you name on the target machine** (recommended)">
-    <template slot="summary">
-Each machine has one default approver session that you set once, such as its Station Chief. A request can still name a different session on that machine.
-
-- Works on Codex, Claude and Cursor with today's code.
-- Prompts are answered on the machine where they happen.
-- A machine with no default set refuses the create before anything is made, with a clear reason.
-    </template>
-  </ex-option>
-  <ex-option id="owner" title="**B. You**">
-    <template slot="summary">
-Every remote session's prompts come to you.
-
-- Nothing new to configure.
-- **Codex sessions can't be created this way**: Codex refuses a human approver, so a remote Codex create would have to name a session or be refused.
-    </template>
-  </ex-option>
-  <ex-option id="requester" title="**C. The agent that asked, on the other machine**">
-    <template slot="summary">
-The same rule as a local create today: whoever creates the session approves it.
-
-- Needs cross-machine approvals first, which board design U63 deferred: a new milestone before M3b can finish.
-- Each prompt waits on a round trip through central.
-    </template>
-  </ex-option>
-</ex-choice>
-
-<p><strong>Why I recommend A:</strong> it's the only option that works on every endpoint without new approval plumbing, and it keeps the answer next to the work. Choose C if you want agents to own their remote helpers end to end, and accept the extra milestone. The proof row for this (V18) currently says "the approver is the owner"; I'll rewrite it to match your answer.</p>
-
-<h2 id="plan">2. The delivery plan</h2>
-
-<p><strong>Ten milestones in six parallel lanes, all in PR 2, merged together with PR 1.</strong> The full plan, with its order, lanes and gates, is on <a href="delivery-plan.html">Delivery plan</a>. In short:</p>
-<ul>
-  <li><strong>M0</strong> database retention, vacuum and WAL: running now, PR 1.</li>
-  <li><strong>M1 → M2</strong> contracts and limits, then central's list, clock and custody: one Sol helper.</li>
-  <li><strong>M3 → M4 → M3b → M5</strong> the receiving Router, the command cutover, sessions on other machines, the move to central: one Sol helper, starting after M1 against a stand-in for central.</li>
-  <li><strong>M6</strong> notifications once per 10 minutes: one Sol helper.</li>
-  <li><strong>M7</strong> republish the board design: one Luna helper plus a separate public-safety reviewer.</li>
-  <li><strong>M8</strong> end-to-end proof on two debug Routers and a local central on Sunclaw, with Haiku sessions: a Verifier from day one.</li>
-</ul>
-<p>Every helper runs on Sunclaw, created through the Station Chief, each in its own Agent Studio worktree. The biggest risk is losing or doubling work at the migration, receive and confirm steps, so those tests run on the real paths before anything is called working.</p>
-
-<ex-choice id="plan-approval" title="Can building start on this plan?">
-  <ex-option id="approve" title="**Approve as written**">
-    <template slot="summary">I commission the lanes through the Station Chief and start M1 now. M3b follows your answer to question 1.</template>
-  </ex-option>
-  <ex-option id="approve-with-changes" title="**Approve with changes**">
-    <template slot="summary">Say what to change in a comment on this option (lanes, models, order, scope). I update the plan, then start.</template>
-  </ex-option>
-  <ex-option id="hold" title="**Don't start yet**">
-    <template slot="summary">Only the database PR (M0) continues. Say in a comment what has to be settled first.</template>
-  </ex-option>
-</ex-choice>
-
-<h2 id="calls">3–5. Three calls I made from your words</h2>
-<p>You gave the direction; these are the details I filled in. Each has a default I build if you don't answer.</p>
-
-<h3 id="rounding">3. Which way times round to the 5-minute grid</h3>
-<p>You said "all schedules can be rounded to 5". A due time of 10:02 has to land on 10:00 or 10:05.</p>
-<ex-choice id="rounding-direction" title="Which way should due times round?">
-  <ex-option id="round-up" title="**Up, to the next mark** (my call)">
-    <template slot="summary">
-10:02 fires at 10:05. Nothing ever fires early, so "at 10:02" never runs before 10:02. The cost is up to 5 minutes late.
-    </template>
-  </ex-option>
-  <ex-option id="round-nearest" title="**To the nearest mark**">
-    <template slot="summary">
-10:02 fires at 10:00 and 10:03 fires at 10:05. On average it's closer to the asked time, but a run can start up to 2.5 minutes before it was asked for.
-    </template>
-  </ex-option>
-</ex-choice>
-
-<h3 id="kinds">4. Which kinds count as notifications</h3>
-<p>You said "all notifications every 10min minimum". The 10-minute window applies to the kinds below; direct messages, wakes and schedule runs stay immediate either way. The open part is approvals and questions. See <a href="notifications.html">Notifications</a>.</p>
-<ex-choice id="notification-kinds" title="Do approvals and questions wait for the 10-minute window too?">
-  <ex-option id="prompts-immediate" title="**No, they stay immediate** (my call)">
-    <template slot="summary">
-Board notifications, thread activity and subscription expiry notices wait for the window. Approvals and questions arrive at once, because an agent waiting on one is stuck until it's answered: up to 10 minutes per prompt otherwise.
-    </template>
-  </ex-option>
-  <ex-option id="prompts-windowed" title="**Yes, window them too**">
-    <template slot="summary">
-Everything except direct messages, wakes and schedule runs waits for the window. Fewer interruptions, but an agent blocked on an approval can sit idle for up to 10 minutes.
-    </template>
-  </ex-option>
-</ex-choice>
-
-<h3 id="wakes">5. Where the 10-minute wake minimum applies</h3>
-<p>You said "wakes should be 10min min on boards". I read that as every repeating wake, because a wake goes to a session, not to a board.</p>
-<ex-choice id="wake-minimum" title="Which wakes must repeat no faster than every 10 minutes?">
-  <ex-option id="all-wakes" title="**Every repeating wake** (my call)">
-    <template slot="summary">
-One rule for all wakes: repeat every 10 minutes or slower. Schedules keep their 5-minute minimum. Existing faster wakes move to 10 minutes during the move to central.
-    </template>
-  </ex-option>
-  <ex-option id="board-wakes-only" title="**Only wakes tied to board work**">
-    <template slot="summary">
-Board-related wakes repeat every 10 minutes or slower; other wakes can repeat every 5. This needs a way to mark a wake as board-related, which wakes don't carry today. Say in a comment how you'd tell them apart.
-    </template>
-  </ex-option>
-</ex-choice>
-
-<h2 id="settled">Already decided</h2>
-<p>These came from you and won't be asked again:</p>
+<h2 id="settled">Decided earlier</h2>
 <ul>
   <li>Automations are central definitions of message schedules, one list per organization; one organization for now.</li>
   <li>Central fires on its own clock and batches per machine at send time (<a href="firing-options.html">option A</a>).</li>
@@ -201,4 +70,4 @@ Board-related wakes repeat every 10 minutes or slower; other wakes can repeat ev
 </ul>
 </ex-document>
 
-<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The systems","pageTitle":"Central automations","ancestors":[],"href":"index.html#map"},{"kind":"heading","title":"Read one island at a time","pageTitle":"Central automations","ancestors":[],"href":"index.html#islands"},{"kind":"heading","title":"Your decisions so far","pageTitle":"Central automations","ancestors":[],"href":"index.html#decisions"},{"kind":"walkthrough","title":"Read the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#read-design","description":"The main islands in order, one stop each."},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Clock, firing and delivery","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#heading-clock-firing-and-delivery"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"The receiving machine","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#heading-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Sessions on other machines","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#heading-sessions-on-other-machines"},{"kind":"heading","title":"How it works","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#flow"},{"kind":"heading","title":"Who creates, who approves","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#who"},{"kind":"heading","title":"What you get back: two parts","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#answers"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Database cleanup (PR 1)","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#heading-database-cleanup-pr-1"},{"kind":"heading","title":"What's kept, and for how long","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#table"},{"kind":"heading","title":"Getting space back","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#space"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"How we got here","pageTitle":"How we got here","ancestors":[],"href":"history.html#heading-how-we-got-here"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"},{"kind":"page","title":"Decisions waiting on you","pageTitle":"Decisions waiting on you","ancestors":[],"href":"decisions.html#heading-decisions-waiting-on-you"},{"kind":"heading","title":"1. Who approves a session created on another machine","pageTitle":"Decisions waiting on you","ancestors":[],"href":"decisions.html#approver"},{"kind":"heading","title":"What the code does today","pageTitle":"Decisions waiting on you","ancestors":["1. Who approves a session created on another machine"],"href":"decisions.html#approver-facts"},{"kind":"heading","title":"2. The delivery plan","pageTitle":"Decisions waiting on you","ancestors":[],"href":"decisions.html#plan"},{"kind":"heading","title":"3–5. Three calls I made from your words","pageTitle":"Decisions waiting on you","ancestors":[],"href":"decisions.html#calls"},{"kind":"heading","title":"3. Which way times round to the 5-minute grid","pageTitle":"Decisions waiting on you","ancestors":["3–5. Three calls I made from your words"],"href":"decisions.html#rounding"},{"kind":"heading","title":"4. Which kinds count as notifications","pageTitle":"Decisions waiting on you","ancestors":["3–5. Three calls I made from your words"],"href":"decisions.html#kinds"},{"kind":"heading","title":"5. Where the 10-minute wake minimum applies","pageTitle":"Decisions waiting on you","ancestors":["3–5. Three calls I made from your words"],"href":"decisions.html#wakes"},{"kind":"heading","title":"Already decided","pageTitle":"Decisions waiting on you","ancestors":[],"href":"decisions.html#settled"}]</script></body></html>
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The systems","pageTitle":"Central automations","ancestors":[],"href":"index.html#map"},{"kind":"heading","title":"Read one island at a time","pageTitle":"Central automations","ancestors":[],"href":"index.html#islands"},{"kind":"heading","title":"Your decisions so far","pageTitle":"Central automations","ancestors":[],"href":"index.html#decisions"},{"kind":"walkthrough","title":"Read the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#read-design","description":"The main islands in order, one stop each."},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Clock, firing and delivery","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#heading-clock-firing-and-delivery"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"The receiving machine","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#heading-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Sessions on other machines","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#heading-sessions-on-other-machines"},{"kind":"heading","title":"How it works","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#flow"},{"kind":"heading","title":"Who creates, who approves","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#who"},{"kind":"heading","title":"What you get back: two parts","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#answers"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Database cleanup (PR 1)","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#heading-database-cleanup-pr-1"},{"kind":"heading","title":"What's kept, and for how long","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#table"},{"kind":"heading","title":"Getting space back","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#space"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"How we got here","pageTitle":"How we got here","ancestors":[],"href":"history.html#heading-how-we-got-here"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"How each milestone is verified","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestone-gates"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"},{"kind":"page","title":"Your decisions","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#heading-your-decisions"},{"kind":"heading","title":"What you decided","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#answers"},{"kind":"heading","title":"Approvals, in three steps","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#approvals"},{"kind":"heading","title":"Decided earlier","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#settled"}]</script></body></html>

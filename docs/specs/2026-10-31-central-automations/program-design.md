@@ -8,7 +8,7 @@ Realizes [specification.md](specification.md). Revised twice on 2026-10-31: firs
 
 ```text
 Router (any) ──Session→Fleet: AutomationCall──► Fleet: catalog + content + automation_timing
-                                                 │ on_alarm → AutomationClock::evaluate(now): admit effective-due → freeze Batch(es)
+                                                 │ on_alarm → AutomationClock::evaluate(now): admit due → freeze Batch(es)
                                                  │           + admit due-now notice operations + wake_at(next) via shared AlarmOwner
                                                  ▼ durable notice step (journal, due now)
                               Fleet→Delivery: DeliverMachineNotice(BoardNotice::AutomationBatchReady{batch_id})
@@ -27,14 +27,14 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 | E9 Machine | `ServiceId`, the Delivery face of `ObjectAddress::Connection(ServiceId)`; installation bound by the machine session; capability `machineWorkV1` from its enrollment (covering both entry kinds) | — |
 | E1–E3 Automation | Fleet store | `automations` (`automation_id` UUIDv7 primary key, `kind`, `revision`, `definition_json`, `state`, `creator_json`, `slot_session_key` unique across active and paused Wakes) |
 | E11 Instruction, and wake messages | Fleet store | `content_revisions` (`content_id` UUIDv7 primary key, `owner_id`, `revision`, `digest`, `text`). These are immutable, and a Firing references `content_id` plus `digest` |
-| timing | Fleet store | `automation_timing` (`automation_id` primary key, `next_nominal_due_ms`, `next_effective_due_ms`, `admitted_through_nominal_ms`, `occupying_firing_id`, `waiting_firing_id`) |
-| E4, E7 Firing and outcome | Fleet store | `automation_firings` (`firing_id` primary key, `automation_id`, `nominal_due_ms` unique per automation, `effective_due_ms`, `revision`, `content_id`, `state`, `batch_id`, `report_seq`, `outcome_json`) |
+| timing | Fleet store | `automation_timing` (`automation_id` primary key, `next_due_ms`, `admitted_through_ms`, `imported_watermark_local_ms` (set only for moved definitions), `occupying_firing_id`, `waiting_firing_id`) |
+| E4, E7 Firing and outcome | Fleet store | `automation_firings` (`firing_id` primary key, `automation_id`, `due_ms` unique per automation, `revision`, `content_id`, `state`, `batch_id`, `report_seq`, `outcome_json`) |
 | E5 Batch | Fleet store (**the custody record**) | `automation_batches` (`batch_id` primary key, `service_id`, `frozen_bytes`, `digest`, `notice_state`, `acked_at_ms` NULL until acknowledged). Unacknowledged Batches never expire; acknowledged ones are pruned after 2 months. Content revisions stay while any unacknowledged Batch or live definition references them |
-| clock | the Fleet face's alarm handler plus `automation_timing` | **no journal operation for time**: the deadline lives in `automation_timing.next_effective_due_ms` and the shared `AlarmOwner` |
+| clock | the Fleet face's alarm handler plus `automation_timing` | **no journal operation for time**: the deadline lives in `automation_timing.next_due_ms` and the shared `AlarmOwner` |
 | operation receipts, imports | Fleet store | `automation_operations` (`operation_id` primary key, digest, answer), `automation_imports` (`import_id` primary key, unique (`service_id`, `automation_id`), digest) |
 | local projections | the target Router's `automation.sqlite` | today's `schedule_definitions` and `wakeup_definitions` rows, with a new `authority` column (`local` or `central`; a Rust enum, no CHECK). A `central` row is a read-only projection that keeps today's foreign keys (`automation_v1.sql:51,88`) valid, and the local timing workers never time it |
 | local receipts | `automation.sqlite` | `firing_receipts` (`firing_id` primary key, `batch_id`, `local_work_ref`, `state`, `report_seq`) |
-| handover | `automation.sqlite` | `automation_handover` (`automation_id` primary key, `state`, `watermark_nominal_ms`, `frozen_payload`, `digest`); the payload includes `external_occupant` (the local run ID still occupying) and `carried_waiting_due_ms` |
+| handover | `automation.sqlite` | `automation_handover` (`automation_id` primary key, `state`, `watermark_local_ms`, `frozen_payload`, `digest`); the payload includes `external_occupant` (the local run ID still occupying) and `carried_waiting_due_ms` |
 | external occupancy | Fleet store | `automation_timing.occupying_external_run` (the local run ID) is cleared by `LocalRunSettled` |
 | E12 window | `interaction.sqlite` | `notification_windows` (`recipient_key` primary key, `last_delivered_at_ms`, `flush_due_at_ms`) |
 | E14 Machine work item | Fleet store, plus the target's `automation.sqlite` | Central: `machine_work_items` (`work_item_id` UUIDv7 primary key, `operation_id` unique, `service_id`, `kind`, `request_json`, `request_digest`, `state`, `result_json`). Batch entries are a tagged enum `WorkEntry::{Firing(FiringEntry), SessionCreate(SessionCreateEntry{work_item_id, operation_id, request})}`. Target: `work_item_receipts` (`work_item_id` primary key, `kind`, `request_bytes`, `local_operation_id`, `target_session_ref`, `create_state`, `input_state`, `report_seq`). Firing entries keep `firing_receipts` |
@@ -46,7 +46,7 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 | --- | --- | --- |
 | **Limits** | `collaboration-protocol::limits` | The Spec R5 values as constants. The schemars schemas read them, and the validated constructors refuse a violation as `LimitExceeded`. The existing 1 MiB values point at today's constants instead of copying them |
 | **Automation catalog** | the Fleet face (`collaboration-central-core`) | Definitions, content revisions, the slot and atomic replacement, and operation-ID replay. Reached by `AutomationCall` CallTargets on the existing Session→Fleet edge: `CoreHost::classify` gains these kinds for a Session caller, which binds the caller's installation |
-| **Automation clock** | the Fleet face's `on_alarm` (`fleet_runtime.rs:54`) plus the shared `AlarmOwner` | **An explicit due-evaluation step, not a journal job.** The pinned journal can't defer a job: `admit` makes it due now (`sql_journal.rs:100–118`), and `Retry{after_ms}` is clamped to 60 seconds (`operation_engine.rs:132–140,294–303`), which would poll.<br>• **When the alarm fires,** `on_alarm` runs `drive_due` as today and also `AutomationClock::evaluate(now)` in **one Fleet transaction**. It admits every Firing whose **effective** due time is ≤ now, after the nominal frontier and unique on (automation, nominal due). It applies the fold and slot rules, including external occupancy; batches and freezes; admits the notice operations, which are due now and correctly immediate; advances `automation_timing`; and calls `wake_at(min next_effective_due)`.<br>• **Create, change and import** call `wake_at(their next effective due)` in their own transaction. `AlarmOwner` keeps only the earliest deadline across all owners, and every owner re-requests its next wake after an alarm fires, which is its documented contract.<br>• **Edge cases:** an empty Fleet requests nothing; alarms arrive at least once, so evaluation is idempotent; notice retries keep their own policy, unchanged |
+| **Automation clock** | the Fleet face's `on_alarm` (`fleet_runtime.rs:54`) plus the shared `AlarmOwner` | **An explicit due-evaluation step, not a journal job.** The pinned journal can't defer a job: `admit` makes it due now (`sql_journal.rs:100–118`), and `Retry{after_ms}` is clamped to 60 seconds (`operation_engine.rs:132–140,294–303`), which would poll.<br>• **When the alarm fires,** `on_alarm` runs `drive_due` as today and also `AutomationClock::evaluate(now)` in **one Fleet transaction**. It admits every Firing whose **effective** due time is ≤ now, after the nominal frontier and unique on (automation, due time). It applies the fold and slot rules, including external occupancy; batches and freezes; admits the notice operations, which are due now and correctly immediate; advances `automation_timing`; and calls `wake_at(min next_effective_due)`.<br>• **Create, change and import** call `wake_at(their next effective due)` in their own transaction. `AlarmOwner` keeps only the earliest deadline across all owners, and every owner re-requests its next wake after an alarm fires, which is its documented contract.<br>• **Edge cases:** an empty Fleet requests nothing; alarms arrive at least once, so evaluation is idempotent; notice retries keep their own policy, unchanged |
 | **Batch notifier** | a durable step in the Fleet | Calls `DeliverMachineNotice` (Fleet→Delivery, which exists) with `BoardNotice::AutomationBatchReady { batch_id }`. Its answer means "appended to that machine's journal", which moves the Firings to held. A lost answer is retried, and reconciled against the machine's notice position |
 | **Batch custody calls (batched envelopes)** | Session→Fleet: `PullAutomationBatches { after?, max_bytes }`, which returns the IDs **and frozen bytes** of every unacknowledged Batch, up to the frame budget, with a continuation token; `FetchContents { [content_id, digest] }`; `AckAutomationBatches { [batch_id, digest] }`; `ReportWorkItems { [WorkItemReport] }`, where `WorkItemReport` is the enum `Firing(FiringReport) | SessionCreate { work_item_id, seq, create: Created{session_ref, settings} | Refused{reason} | Unknown, input: None | Accepted | Failed{reason} | Unknown }` | Central checks the caller's installation against each `service_id`. The machine pulls on connect, on reconnect, on any `AutomationBatchReady` hint, and on `CursorExpired`. Acknowledgement only after local admission commits. **Batched per Cloudflare's WebSocket guidance:** each call carries many logical items, so one frame and one Connection→Fleet request replace many. The reporter flushes queued reports at `REPORT_FLUSH_WINDOW` (500 ms after the first queued report) or `REPORT_FLUSH_MAX` (100), whichever comes first. Acknowledgements and reports are separate calls, each carrying many entries; nothing packs two calls into one frame. Every item is idempotent, so a lost reply is simply repeated |
 | **Notice contract** | `board-sync-protocol` `BoardNotice` | A new variant, `AutomationBatchReady { batch_id }`. An old Router can't decode it, so the catalog refuses a target without `machineWorkV1` (`targetNeedsUpgrade`), and no shim is added |
@@ -61,9 +61,9 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 
 ## Flows
 
-1. **Create or change.** Over Session→Fleet: operation-ID replay or conflict; validate the Limits and the slot; write the definition, content and `automation_timing`; call `wake_at(next effective due)` through the shared `AlarmOwner`; write the operation receipt. All in one Fleet transaction. No journal operation is admitted for time.
+1. **Create or change.** Over Session→Fleet: operation-ID replay or conflict; validate the Limits and the slot; write the definition, content and `automation_timing`; call `wake_at(next due)` through the shared `AlarmOwner`; write the operation receipt. All in one Fleet transaction. No journal operation is admitted for time.
 2. **Due.**
-   1. The alarm runs `on_alarm`, which drives the journal and runs `AutomationClock::evaluate(now)`. In one transaction, evaluate admits Firings whose effective due time is ≤ now, folds, batches, freezes, admits the notice operations, advances timing and re-arms. That commit is **the cutoff** (U17).
+   1. The alarm runs `on_alarm`, which drives the journal and runs `AutomationClock::evaluate(now)`. In one transaction, evaluate admits Firings whose due time is ≤ now, folds, batches, freezes, admits the notice operations, advances timing and re-arms. That commit is **the cutoff** (U17).
    2. The notifier appends `AutomationBatchReady` to each machine's journal, and the Firings become held.
    3. The machine pulls its unacknowledged Batches, fetches missing content, admits them locally, and acknowledges them (batched with reports); the Firings become received.
 3. **Pause, cancel or change.** Applied in the catalog. A Firing still pending is cancelled; one past the cutoff gets the answer `alreadySent`, and nothing is sent to the machine.
@@ -71,13 +71,13 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 5. **Handover.**
    1. **Freeze locally.** In one local transaction per Automation:
       - stop local admission;
-      - record `watermark_nominal_ms`;
+      - record `watermark_local_ms`;
       - cancel any not-yet-started waiting Run, and carry its due time;
       - name any Run still preparing, executing or uncertain as `external_occupant`, and any pending wake delivery as a carried pending Firing;
       - normalize the timing;
       - freeze and store the payload.
    2. **Import.** Send `AutomationImport`, which is idempotent; a conflict stays `pending` and is reported.
-   3. **Central takes over admission.** The Fleet sets the watermark, the carried waiting slot and the external occupancy, and calls `wake_at` for the next effective due time.
+   3. **Central takes over admission.** The Fleet sets the watermark, the carried waiting slot and the external occupancy, and calls `wake_at` for the next due time.
    4. **The local occupant keeps running locally.** It runs under today's drivers on its local row, now a `central` projection. At its terminal state the settlement is queued durably, and `LocalRunSettled` is **sent only after the import is acknowledged** (state `moved`), so central always knows the Automation first. If the occupant settled before the import was frozen, it isn't carried at all. Uncertain is never treated as terminal.
    5. **Mark `moved`.** There's no waiting step, and admission has exactly one owner throughout.
 6. **Notifications.** As described under the limiter.
@@ -100,7 +100,7 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 | Case | Behaviour |
 | --- | --- |
 | The alarm handler fails, or the alarm is lost after exhausted retries | a permanent per-Automation error is recorded and the others continue; a transient error commits nothing and is retried by the platform; any later central request re-arms for the earliest pending due time; no Firing is lost or doubled |
-| A duplicate or retried alarm | `evaluate`'s admission is unique on (automation, nominal due); the same Batch bytes |
+| A duplicate or retried alarm | `evaluate`'s admission is unique on (automation, due time); the same Batch bytes |
 | A lost notice answer | retried; reconciled against the machine's notice position; unknown until then |
 | The machine is offline beyond the notice window | the notice is gone, but the Batch stays in central's custody. On reconnect, or on `CursorExpired`, the machine lists its unacknowledged Batches, fetches, admits, acknowledges, and expires each Wake entry past its end |
 | A lost fetch or acknowledgement reply | repeated; idempotent |
@@ -114,13 +114,13 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 
 ## Runtime behaviour and cost
 
-- **The scheduler model** (Cloudflare's "multiple events with a single alarm" pattern). The stored schedule is `automation_timing` (next effective due time and repeat rule per Automation). Scheduling an event means writing its row, then `wake_at`, which sets the alarm only if none is set or the new time is earlier: `AlarmOwner`, constructor-safe because it checks before it sets. `alarm()` processes everything due, then sets the alarm for the next. On Tokio, the same interface is a timer.
+- **The scheduler model** (Cloudflare's "multiple events with a single alarm" pattern). The stored schedule is `automation_timing` (next due time and repeat rule per Automation). Scheduling an event means writing its row, then `wake_at`, which sets the alarm only if none is set or the new time is earlier: `AlarmOwner`, constructor-safe because it checks before it sets. `alarm()` processes everything due, then sets the alarm for the next. On Tokio, the same interface is a timer.
 - **Retries and self-healing.** The platform retries a failed `alarm()` with backoff (2 s, up to 6 times), only for the latest `setAlarm`, and then gives up.
   - **Permanent and transient errors are treated differently.**
     - A **permanent** error in one Automation (an invalid stored definition, an unrepresentable time) is recorded in the same transaction: that Firing becomes `failed` with its reason, or the Automation is marked invalid. The other Automations continue, and the commit re-arms.
     - A **transient** error (a store, transaction or platform failure, or a failed notice admission) **aborts the whole pass without committing**. Nothing advances: no timing, no Firing, no Batch. The handler returns the error, so the platform retries the alarm, and self-healing covers exhausted retries. The owed Firings are then admitted exactly once on the next successful pass.
     - Re-arming happens only on a successful commit. Notice retry policy is unchanged.
-  - **Self-healing:** every catalog call and every machine pull ends with `AlarmOwner::wake_at(min pending due)`, a `getAlarm` read and at most one set. If the alarm was lost after exhausted retries, the next request restores it, and the overdue Firings are sent once (admission is unique on automation and nominal due).
+  - **Self-healing:** every catalog call and every machine pull ends with `AlarmOwner::wake_at(min pending due)`, a `getAlarm` read and at most one set. If the alarm was lost after exhausted retries, the next request restores it, and the overdue Firings are sent once (admission is unique on automation and due time).
 - **The clock is a callback.** `alarm()` calls `on_alarm`, which runs `drive_due` and `AutomationClock::evaluate`, and each re-arms through the shared `AlarmOwner`. Alarms are at least once, and nothing polls.
 - **Batched machine-to-central traffic:** pulls, content fetches, acknowledgements and reports are envelopes of many items, following Cloudflare's WebSocket best practice (fewer, larger frames; flushing every 50–100 ms or 50–100 messages). That cuts incoming frames and Connection→Fleet requests in proportion to the batch size.
 - **Hops per Batch (planning model):**
@@ -137,7 +137,7 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 | --- | --- | --- | --- |
 | definitions | R1–R4 | catalog + operations | List/Show from a second Router; replay answers |
 | definitions | R5 | limits | schema against acceptance; decode refusal |
-| cadence | R6g | clock (nominal → effective) | `automation_firings` rows |
+| cadence | R6g | entry validation (`offGrid`) and the clock (grid due times) | `automation_firings` rows |
 | cadence | R6n | notification limiter | push count per recipient; listing |
 | firing | R7f | `AutomationClock::evaluate` + notifier | Batch rows; `automation_timing`; alarm callbacks |
 | firing | R6 | notice contract + batched custody calls + local admission | per-entry outcomes; capability refusal |

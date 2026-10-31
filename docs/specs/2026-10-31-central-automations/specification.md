@@ -17,15 +17,15 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | ID | Term | Identity rule | Relationships | Invariants | Observable states | Basis |
 | --- | --- | --- | --- | --- | --- | --- |
 | E1 | **Automation** | its automation ID, minted once at creation and kept through every change and through migration | one Fleet; exactly one kind (Schedule or Wake); 0..n Firings | no project (U3); one definition, one place (U2) | per kind | U1–U3 |
-| E2 | **Schedule** | an Automation of kind schedule | has one timing (at, after, interval or cron with its time zone) and one instruction (E11). It also has today's execution settings: model, effort, timeout, and a destination, either an existing session or a machine endpoint plus folder (fresh each run). Its continuity comes from its previous completed Run on its destination machine | at most one occupying and one waiting Run; later due times fold into the waiting Run, which never expires (today's rule) | enabled, disabled, deleted | U1, U7 |
+| E2 | **Schedule** | an Automation of kind schedule | has one timing (at, interval or cron with its time zone; R6g) and one instruction (E11). It also has today's execution settings: model, effort, timeout, and a destination, either an existing session or a machine endpoint plus folder (fresh each run). Its continuity comes from its previous completed Run on its destination machine | at most one occupying and one waiting Run; later due times fold into the waiting Run, which never expires (today's rule) | enabled, disabled, deleted | U1, U7 |
 | E3 | **Wake** | an Automation of kind wake | has one target session, one due time, an optional repeat, one end (expiry) and one creator | the wake limits (R3); the target session's wake slot is held by an active **or paused** Wake | active, paused, ended (expired, cancelled or completed) | U1, U4, U13 |
-| E4 | **Firing** | one Automation plus one **nominal due time** (the occurrence); its effective due time (E10) decides when it's sent | belongs to one Automation; is an entry in exactly one Batch (E5) once sent; yields at most one wake delivery or one Run | carried out at most once (R7); cancelable only before the send cutoff (R6a) | the R10 states | U5–U8, U17 |
+| E4 | **Firing** | one Automation plus one **due time**, always a grid time (E10) | belongs to one Automation; is an entry in exactly one Batch (E5) once sent; yields at most one wake delivery or one Run | carried out at most once (R7); cancelable only before the send cutoff (R6a) | the R10 states | U5–U8, U17 |
 | E5 | **Batch** | its own batch ID, minted when central freezes it; each chunk of a split due set is its own Batch with its own ID | addressed to exactly one Machine; carries 1..n Machine work item entries (E14) of two kinds: a **Firing** entry (target, revision, expiry, **content references**, i.e. the revision ID plus digest, never the text), or a **SessionCreate** entry (the frozen full request) | bounded entries (R5); the same bytes on every resend | frozen, notified, fetched | U6, U18 |
 | E6 | **Run** | one Schedule Firing carried out on its destination machine | belongs to one Firing; runs in exactly one session | one per Firing | today's run states | U7 |
 | E7 | **Firing outcome** | the latest observable state of one Firing | readable from any Machine | never moves back to an earlier state (R10) | as E4 | U8 |
 | E8 | **Fleet** | the organization's central (one organization today) | holds the one list | — | — | U2, Boundary |
 | E9 | **Machine** | an enrolled Router installation | receives Batches; hosts sessions | carries out what it receives | online or offline | U6, U7 |
-| E10 | **Effective due time** | a nominal due time (from the Automation's timing) rounded **up** to the next 5-minute boundary of UTC time, or kept as-is if it's already on a boundary | nominal 1..n → effective 1 | never earlier than the nominal time | — | U12 |
+| E10 | **Grid time** | an instant on a 5-minute boundary of UTC time | every due time an Automation can produce is one | an off-grid time is refused at entry, never rounded | — | U12 |
 | E11 | **Instruction** | its instruction ID, with numbered revisions (today's meaning) | used by 0..n Schedules | a Firing freezes the revision in force at admission | — | U1, U9 |
 | E12 | **Notification** | one board notification, thread-activity notice, or subscription-expiry notice item. **Not** a direct message, wake, schedule run, approval or question | addressed to one recipient session | — | today's item states | U14 |
 | E14 | **Machine work item** | its work item ID, minted once by central when it admits the request (a Firing's entry, or a remote session creation) | addressed to exactly one Machine; carried in a Batch (E5) | the same custody, acknowledgement and report rules as Firing entries (R6, R7, R10) | pending, held, received, then the kind's own outcome | U6, U20 |
@@ -49,10 +49,14 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 
 ### cadence
 
-- **R6g, the 5-minute grid** (U12). Each Firing's due time is its effective due time (E10).
-  - Several nominal times that round to the same effective time make **one** Firing.
-  - An interval Schedule's interval is at least 5 minutes. A cron Schedule may name sub-grid minutes, but they collapse to their grid point.
-  - Time zones and DST apply when computing the nominal time; the rounding applies to the resulting instant.
+- **R6g, the 5-minute grid, with 5-minute precision** (U12). Every due time an Automation can produce is a grid time (E10). Entry refuses anything else as `offGrid`, naming the nearest earlier and later grid times; nothing is rounded.
+  - **at:** the time must be a grid time.
+  - **interval and repeating Wakes:** the period is a multiple of 5 minutes (at least 5 for a Schedule, 10 for a Wake), and the first due time is a grid time, given by the caller or, when omitted, the next grid time, which the answer states.
+  - **cron:** every minute the expression can produce is a multiple of 5, checked over its whole expansion in its time zone.
+  - **after:** relative timing is not accepted for Automations; the refusal names the grid times it would fall between.
+  - Time zones and DST apply when computing a due time; a zone whose offset isn't a multiple of 5 minutes is refused.
+  - The end of a repeating Wake is not a firing time and need not be on the grid.
+  - The one place times are fitted is the move of existing definitions (R11), because that data already exists.
 - **R6n, notifications at most once every 10 minutes per recipient** (U14).
   - **Rate:** a recipient session receives at most one Notification delivery in any 10 minutes.
     - A Notification arriving 10 minutes or more after that recipient's last Notification delivery is delivered at once.
@@ -65,7 +69,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 
 ### firing
 
-- **R7f, central fires at the due time, batched per machine** (U5, U18). At each effective due time, central admits every due Firing once. The Firings for the same Machine go to it as one Batch, sent right away. Nothing is held on the Machine for later release. A second alarm for the same due time admits nothing new and resends the same Batch bytes. **Central's clock never stays stopped:** a permanent error in one Automation (an invalid definition) is reported on it and never stops the others; a temporary failure leaves every owed Firing owed; and if the platform alarm is lost after its retries run out, the next central request re-arms it for the earliest pending due time, with no due Firing lost.
+- **R7f, central fires at the due time, batched per machine** (U5, U18). At each due time, central admits every due Firing once. The Firings for the same Machine go to it as one Batch, sent right away. Nothing is held on the Machine for later release. A second alarm for the same due time admits nothing new and resends the same Batch bytes. **Central's clock never stays stopped:** a permanent error in one Automation (an invalid definition) is reported on it and never stops the others; a temporary failure leaves every owed Firing owed; and if the platform alarm is lost after its retries run out, the next central request re-arms it for the earliest pending due time, with no due Firing lost.
 - **R6, firing is a message** (U6).
   - **Custody, the U63 contract applied to automations.**
     - **Central keeps the Batch.** A frozen Batch stays in central's custody until its Machine **acknowledges** it, after the Machine has durably admitted every entry locally. A Schedule entry never expires there.
@@ -106,22 +110,22 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 - **R11, one move per machine** (U9).
   - On first start of the new release, the Machine moves each local Schedule, each active or paused Wake, and the Instructions they use to the Fleet, exactly once. IDs, targets, creators and execution settings are kept.
   - **Timing is normalized under U12 and U13** (the owner's later decisions qualify U9's "keeps timing"):
-    - due times round up to the grid;
+    - existing due times move up to the next grid time (the only fitting anywhere);
     - Wake repeats under 10 minutes become 10 minutes;
     - interval Schedules under 5 minutes become 5 minutes;
-    - an end time is never extended, and a Wake whose next effective due time would pass its end ends as **expired**, recorded with an event.
+    - an end time is never extended, and a Wake whose next fitted due time would pass its end ends as **expired**, recorded with an event.
   - The handover reports how many definitions were adjusted or ended.
 - **R12, one owner at every moment** (U9).
   - In one local transaction, the Machine:
     - stops admitting new local due times for the Automation;
-    - records its timer watermark: the last **nominal** due time evaluated, including times folded into a waiting Run;
+    - records its timer watermark: the last **original local** due time evaluated (before fitting), including times folded into a waiting Run;
     - cancels a not-yet-started waiting Run, carrying that Run's due time into the payload as central's waiting slot;
     - freezes and stores the payload.
   - **A local Run that may still be executing stays occupying the schedule.** That covers preparing, executing or uncertain. The payload names it as an external occupant.
     - Central sends no Run for that Schedule until the Machine reports the external Run settled.
     - The report comes through the existing reconciliation; uncertain is never treated as finished.
     - A pending local wake delivery is carried the same way, as a pending Firing that later due times fold into.
-  - The Fleet admits only nominal due times **after** the watermark, and sends them only when their effective time has arrived.
+  - The Fleet admits only occurrences whose original local due time is **after** the watermark, and sends each at its fitted grid time.
   - Every retry sends the same frozen bytes. An interrupted move resumes, and never makes a duplicate or leaves two owners of admission.
 - **R13, old machines keep working until they upgrade** (U9). A Machine on an earlier release keeps firing its own definitions; the Fleet never fires an Automation it hasn't received.
 - **R14, local history stays** (U10). Pre-move runs and deliveries stay readable on their Machine until the 2-month retention removes them.
@@ -134,7 +138,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
     - the **approver** for the new session's permission prompts;
     - the endpoint, model, effort, access, folder, and an optional first input.
   - **The creator is checked at the source.** Central checks that the creator belongs to the Machine that sent the request (the human user at that installation, or one of its sessions), and refuses a mismatch as `originMismatch`.
-  - **The approver is checked at the target.** The approver must be allowed by the target Machine's policy for that endpoint. Codex endpoints accept only a session approver, which must be a session on the target; provider endpoints also accept the owner. Approvers on another Machine are refused as `approverNotSupported`, because cross-machine approvals were deferred in board design U63. **The default approver is pending an owner decision**: (A) a session on the target that the owner names, (B) the owner, or (C) the requester, which needs cross-machine approvals.
+  - **The approver is checked at the target.** The approver must be allowed by the target Machine's policy for that endpoint. Codex endpoints accept only a session approver, which must be a session on the target; provider endpoints also accept the owner. Approvers on another Machine are refused as `approverNotSupported`, because cross-machine approvals were deferred in board design U63. **Default approver (interim, owner 2026-10-31):** when the request names none, the target Machine's named Chief of Staff session approves. A Machine with none named refuses the create as `approverRequired` before any effect. The interim ends when routed approvals land (a separate later design, where the default becomes the requester).
   - **Delivery.** It's sent at once, not on the grid, as a Machine work item under the same custody as Firings: held until the target acknowledges, nothing missed, and repeats safe.
   - **The target decides before any effect.** Using its existing local checks (the endpoint and its advertised models, the access level, the folder), it refuses with a typed reason before creating anything. There's no new allowlist.
   - **What's created.** The session records its creator as that requester on the source Machine, and its approver as given.
@@ -175,11 +179,11 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | ID | Obligation | Passes when | Fails when |
 | --- | --- | --- | --- |
 | V1 | R1 | A write on A is read identically on B; a pause on B shows on A | a per-machine list, or a stale read after an acknowledged write |
-| V2 | R2 | A Firing happens at its effective due time with every lease expired | any lease gate |
+| V2 | R2 | A Firing happens at its due time with every lease expired | any lease gate |
 | V3 | R3 | A paused W1 blocks W2; an authorized replacement ends W1 and starts W2 once; a foreign replacement is refused naming the creator; each timing limit refuses; a replay returns the same result | two Wakes in one slot; a limit accepted |
 | V4 | R4 | Drop the reply after commit: a retry with the same operation ID returns the original; changed content conflicts; pre-send unreachable is definite and nothing is created | a second definition; `centralUnreachable` after an applied write |
 | V5 | R5 | For each Limit, the schema's bound equals what's accepted at the CLI, MCP and central, and a corrupted stored row is refused on decode with `limitExceeded` | a mismatch, or silent coercion |
-| V6 | R6g | Fixtures for at, after, interval, cron (with time zone and DST) and an already-aligned time: the effective time is the ceiling; sub-grid cron collapses to one Firing; an interval under 5 minutes is refused | an early Firing, two Firings for one grid point, or a sub-5 interval accepted |
+| V6 | R6g | Fixtures for at, interval, cron (with time zone and DST), repeating Wakes and after: grid times are accepted and fire at exactly that time; every off-grid input (at 10:02, a 7-minute period, cron minute 3, any after) is refused `offGrid` naming the two nearest grid times; an omitted first due time is the next grid time and is stated | an off-grid time accepted, rounded or fired at another time; a sub-5 interval accepted |
 | V7 | R6n | 30 Notifications across 3 projects and 3 kinds to one recipient within 10 minutes give one immediate delivery, then one listing; a Notification arriving just after that listing is held until 10 minutes after it, including across a restart; a direct message, wake, approval or question in the same window arrives immediately; an overflowing listing points to the rest with no item lost; Off and Poll are respected; a remote notification still waits for replication | more than one delivery per window, a delayed direct message, or a lost item |
 | V8 | R7f | The alarm handler fails on one Automation: the others still fire and the alarm re-arms. The alarm is lost after exhausted retries: the next create, list or machine pull re-arms it, and every overdue Firing is sent once. From an empty Fleet journal, creating one Automation and restarting central fires it at its time with no further call. Five Firings due at one grid point for two machines give two Batches. A duplicate alarm resends the same bytes and admits nothing new. 250 due entries split into three Batches with distinct IDs. Unrelated Fleet notice work isn't delayed | a Firing admitted twice, or different bytes on a resend |
 | V9 | R6 | A mixed Batch (a Wake with an end plus a Schedule) for a Machine offline for 8 days, past the notice window: on reconnect (notice position expired) it lists, fetches, admits and acknowledges. The Schedule runs once, the Wake is expired. A lost fetch reply, a lost acknowledgement, and a crash before and after local admission each recover exactly once. A target on an old release is refused | the Schedule dropped, the Wake delivered after its end, or an old target accepted |
@@ -190,7 +194,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | V14 | R11, R12 | The owner-shaped fixture (9 Schedules including a 60-second interval, Wakes with 5-minute repeats and near-end expiries) moves with IDs kept; timing is normalized per R11; adjustments are reported. A one-shot due at 10:02, admitted locally before an upgrade at 10:03, runs once and never again at 10:05. A fresh-each-run R0 accepted natively with its answer lost (uncertain) at handover: no successor run starts until R0 is reconciled and reported settled. A not-yet-started waiting run becomes central's waiting slot and runs once. Kill the move before and after the local cutoff, the central commit, and the local acknowledgement, with admitted, unsubmitted and uncertain local work outstanding: each due time ends with one effect | an ID changed, an end extended, two owners, or a double or missing effect |
 | V15 | R13 | An old-release Machine fires locally; the Fleet has none of its rows | a double Firing |
 | V16 | R14 | Pre-move history reads are identical | missing before retention |
-| V18 | R16 | From A, create a session on B with a first input. A gets B's address, the creator shows A's requester, and the approver is the one R16's default names (this row is finalized with the owner's approver decision). A spoofed creator from another Machine is refused (`originMismatch`); unless that decision is (C), a session approver on A is refused (`approverNotSupported`), and a human approver on a Codex endpoint is refused; B's own access, folder and model refusals come before any effect. With B offline the result is pending, and B creates it exactly once on return. Kills before and after local admission and acknowledgement, after native creation before its report, and after first-input acceptance before its result: the same operation returns the same session, with no second create and no second input. Settings applied only partly are shown. A first input that fails after creation shows the session as created and the input as failed. A caller timeout returns pending, and the work continues | a second session or input; a hidden created session; a lost request; a misattributed creator; the old 'belongs to another service' refusal |
+| V18 | R16 | From A, create a session on B with a first input. A gets B's address, the creator shows A's requester, and with no approver named the approver is B's named Chief of Staff; with none named on B the create is refused `approverRequired` before any effect. A spoofed creator from another Machine is refused (`originMismatch`); a session approver on A is refused (`approverNotSupported`), and a human approver on a Codex endpoint is refused; B's own access, folder and model refusals come before any effect. With B offline the result is pending, and B creates it exactly once on return. Kills before and after local admission and acknowledgement, after native creation before its report, and after first-input acceptance before its result: the same operation returns the same session, with no second create and no second input. Settings applied only partly are shown. A first input that fails after creation shows the session as created and the input as failed. A caller timeout returns pending, and the work continues | a second session or input; a hidden created session; a lost request; a misattributed creator; the old 'belongs to another service' refusal |
 | V17 | R15 | The manifest leaves newer docs untouched; no contradiction remains; the scan of the tree and the outgoing ancestry is clean | any hit |
 
 ## Coverage

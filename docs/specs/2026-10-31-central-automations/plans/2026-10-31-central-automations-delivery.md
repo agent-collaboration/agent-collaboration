@@ -11,7 +11,8 @@ governing planning basis:
   Specification: docs/specs/2026-10-31-central-automations/specification.md
   Program Design: docs/specs/2026-10-31-central-automations/program-design.md
   Verification Design: docs/specs/2026-10-31-central-automations/verification-design.md
-  review: Advisor four-document-design review + four correction checks, final READY at bfa5020f6 (2026-10-31); the U20 remote-sessions addition is under review
+  review: Advisor four-document-design review + four correction checks, final READY at bfa5020f6 (2026-10-31); U20 F16/F17 closed; owner-answer correction (5-minute precision, interim approver, milestone verification) under Advisor anchor check
+  owner approval: plan approved as written on the decisions page, 2026-10-31, with "milestones means it should be verified" and "make sure each milestone is verifiable"; revised in place before any implementation started
   applicability anchors: origin/main 072f4d6c1; fix/router-db-retention d3a831a84+ (PR 1); pinned agent-fleet-sync v0.4.0 b9da4b5; worker 0.8.7
 delivery context:
   requested terminal: pr-ready-unmerged
@@ -55,15 +56,15 @@ Each slice gets a red build first, then green, with its named seeded wrong build
 
 | Slice | Milestone | Writes | Depends on | Earns |
 | --- | --- | --- | --- | --- |
-| **S0** | M0, PR 1: database retention, vacuum, WAL (in progress) | the storage crates, `sqlite-storage-maintenance`, `docs/architecture/data-retention.md` | — | PR 1 gates (below) |
-| **S1** | M1: contracts and limits | `collaboration-protocol/src/limits.rs`; the call-kind enums for `AutomationCall`, the custody envelopes, `FiringReport` and `LocalRunSettled`; `BoardNotice::AutomationBatchReady`; the batch body; schemars annotations; the CLI and MCP schema exposure | — | V5 (the schema-versus-acceptance test over the Limits inventory) |
+| **S0** | M0, PR 1: database retention, vacuum, WAL (in progress), and approval state only in `interaction.sqlite` | the storage crates, `sqlite-storage-maintenance`, `docs/architecture/data-retention.md`; `approval_routes` table with a one-time import of `approval-routes.json`, then the file deleted; the `approval-history.json` code and file removed | — | PR 1 gates (below) and the M0 gate |
+| **S1** | M1: contracts and limits | `collaboration-protocol/src/limits.rs`; the call-kind enums for `AutomationCall`, the custody envelopes, `FiringReport` and `LocalRunSettled`; `BoardNotice::AutomationBatchReady`; the batch body; schemars annotations; the CLI and MCP schema exposure; the grid-precision validation (`offGrid` with the two nearest grid times; `after` refused for Automations) | — | V5, and V6's entry half |
 | **S2** | M2: central catalog | the Fleet face in `collaboration-central-core` (catalog, content revisions, slot and replacement, operation receipts) and the Fleet store migrations on both runtimes; `CoreHost::classify` for the Session caller | S1 | V1 (catalog part), V3, V4 in conformance |
 | **S3** | M2: central clock and batches | `AutomationClock::evaluate` in `on_alarm`; `automation_timing`, `automation_firings` and `automation_batches`; the grid and fold rules; freeze; notice operations; self-healing `wake_at`; the permanent/transient error split | S2 | V2, V6, V8, V10 (central side) in conformance |
 | **S4** | M2: central custody | `PullAutomationBatches`, `FetchContents`, `AckAutomationBatches`, `ReportFirings`, `LocalRunSettled` intake; outcome states and `seq` | S3 | V13 (central side) in conformance |
 | **S5** | M3: the receiving Router | `collaboration-runtime`: the pull client (connect, hint, `CursorExpired`); local admission (projections with `authority`, receipts, `admit_central_run`, wake rows); the reporter flusher (500 ms or 100); `automation-storage` migrations | S1, S4 | V7 (reporter part), V9, V11, V12, V13 on the rig |
 | **S6** | M4: command cutover | `collaboration-service` wake, schedule and instruction operations to the catalog; the new answers; the remote-wake path and the "another service" refusal retired | S2, S5 | V1, V4 on the rig |
 | **S7** | M5: the move to central | `collaboration-runtime` handover (freeze, watermark, external occupant, carried waiting, normalization, import, `LocalRunSettled` after acknowledgement); timing workers stop admitting for `central` rows | S5, S6 | V14, V15, V16 |
-| **S11** | M3b: sessions on other machines | central `RemoteSessionCreate` and status, plus `machine_work_items`; the target's work-item injection (today's local create and first input); the `collaboration-client` refusal removed; `operation show` and `wait` | S4, S5 | V18 on the rig |
+| **S11** | M3b: sessions on other machines | central `RemoteSessionCreate` and status, plus `machine_work_items`; the target's work-item injection (today's local create and first input); the `collaboration-client` refusal removed; `operation show` and `wait`; the **interim** default approver: each machine's named Chief of Staff session (a per-machine setting), `approverRequired` when none is named, labeled interim with routed approvals as its removal condition | S4, S5 | V18 on the rig |
 | **S8** | M6: notification cadence | the reader delivery owner's limiter and `notification_windows` in `interaction.sqlite` | S1 | V7 |
 | **S9** | M7: republish the board design | the decision inventory; the hand-picked docs change on this branch; fixing the two branch contradictions; the public-safety scan of the staged tree and the outgoing ancestry | — | V17 |
 | **S10** | M8: end-to-end proof | the `verify-codex-router` journey "central automations across two machines", and the conformance cases | built from day one against stand-ins; run at each gate | runs every V row on the rig; the final full pass |
@@ -71,6 +72,23 @@ Each slice gets a red build first, then green, with its named seeded wrong build
 **Necessary edges:** S1 before S2, S5 and S8; S2 → S3 → S4; S4 and S1 before S5; S2 and S5 before S6; S5 and S6 before S7; S4 and S5 before S11. S9 and S10's building have no dependencies.
 
 **Stand-ins:** S5 may start against a conformance stand-in of the S4 custody calls. Its integration proof needs the real S4. A stand-in proves nothing about the real interaction.
+
+## Milestone verification gates
+
+A milestone counts as done only when its gate below has been observed by the 🛠️ Verifier on the named target and recorded with its evidence. A dependent milestone doesn't start its integration until then. Every gate also needs a seeded wrong build (kept in the working tree, never committed) that fails the same observation. M8 is the final full pass, not the first time anything is checked.
+
+| Milestone | Target | Observed | The wrong build that must fail |
+| --- | --- | --- | --- |
+| M0 | an isolated signed debug Router on Sunclaw, started over a seeded copy of each store with old rows and an `approval-routes.json` | every store opens in WAL; rows past each window are gone and newer ones remain; free pages are reclaimed; routes are in `approval_routes` and survive a restart; both JSON files are gone; a corrupt routes file is refused and kept | retention off for one store; a route lost in the import; a JSON file left behind |
+| M1 | the debug Router's real CLI and MCP | each Limit's schema bound equals what's accepted (V5); 10:05 accepted, 10:02, a 7-minute period, cron minute 3 and `after` refused `offGrid` with the two nearest grid times (V6 entry) | a limit that differs between schema and acceptance; an off-grid time accepted or rounded |
+| M2 | conformance on Tokio **and** Cloudflare `workerd`; plus a local Tokio central on Sunclaw driven by the CLI | V1 catalog, V2, V3, V4, V6 clock half, V8, V10 and V13 central side; one alarm per due time, one Batch per machine, held until acknowledged | a Firing at another time; two Batches for one machine and grid point; a Batch dropped before acknowledgement |
+| M3 | the rig: two signed debug Routers (A, B) and the local Tokio central, with Haiku sessions | V7 reporter, V9, V11, V12, V13: wakes and schedule runs arrive on B from the central list; kills at each admission point lose and double nothing; reports reach central in order | a duplicate run after a kill; a lost Firing while B is offline |
+| M4 | the rig | V1, V4 on A and B: `wake` and `schedule` go to central; the old cross-machine path is refused | a local definition still created; the old remote-wake path still accepted |
+| M3b | the rig | V18: from A, a session created on B with a first input; B's Chief of Staff approves when none is named; `approverRequired` when B has none; offline, retry and refusal behave | a second session or input; a missing default accepted |
+| M5 | the rig, with A on the old release first and an owner-shaped fixture | V14, V15, V16: the move with kills at every step; no loss, no double fire; old-release B keeps its own; history stays readable | a doubled fire at the handover; a definition lost |
+| M6 | the rig | V7: a burst of notifications to one session gives one now and one listing 10 minutes later, across a restart; approvals, questions and direct messages stay immediate | a second notification delivery inside the window; a delayed approval |
+| M7 | the docs manifest and the public-safety scan | V17 | any scan hit or contradiction |
+| M8 | the rig, every V row in one pass at the stack's head | all of the above together | any row |
 
 ## Workstreams
 
@@ -107,6 +125,7 @@ These run on Sunclaw, never on Sunbook.
   - the module-cycle ratchet: `cargo nextest run -p workspace-architecture-check --run-ignored only`;
   - the verification tooling: `pnpm --dir verification install --frozen-lockfile`, then `check`, `lint`, `format:check` and `test`;
   - file size limits.
+- **Milestone gates:** the table above; the Verifier records each observation with the build, target and evidence path before the milestone counts.
 - **Rig:**
   - two signed debug Routers plus a local Tokio central on Sunclaw, driven by the `verify-codex-router` journey;
   - Haiku sessions with a small budget;
