@@ -51,9 +51,12 @@ fn existing_uuid_versions_variants_and_utf8_boundaries_survive_both_conversions(
 #[derive(serde::Deserialize)]
 #[serde(tag = "field", content = "input", rename_all = "camelCase")]
 enum IdentityBoundaryNegative {
-    SessionId(String),
-    EndpointId(String),
-    ServiceId(String),
+    #[serde(rename = "sessionId")]
+    Session(String),
+    #[serde(rename = "endpointId")]
+    Endpoint(String),
+    #[serde(rename = "serviceId")]
+    Service(String),
 }
 
 #[test]
@@ -62,15 +65,15 @@ fn both_domains_reject_invalid_identity_boundaries_without_normalizing() {
         serde_json::from_str(include_str!("fixtures/fleet_identity_negatives.json")).unwrap();
     for case in cases {
         match case {
-            IdentityBoundaryNegative::SessionId(input) => {
+            IdentityBoundaryNegative::Session(input) => {
                 assert!(SessionId::try_from(input.clone()).is_err());
                 assert!(message_board::SessionId::try_from(input).is_err());
             }
-            IdentityBoundaryNegative::EndpointId(input) => {
+            IdentityBoundaryNegative::Endpoint(input) => {
                 assert!(EndpointId::try_from(input.clone()).is_err());
                 assert!(message_board::EndpointId::try_from(input).is_err());
             }
-            IdentityBoundaryNegative::ServiceId(input) => {
+            IdentityBoundaryNegative::Service(input) => {
                 assert!(UuidIdentity::try_from(input.clone()).is_err());
                 assert!(message_board::ServiceId::try_from(input).is_err());
             }
