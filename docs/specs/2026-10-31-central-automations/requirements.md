@@ -72,6 +72,7 @@ Authority:
 - **Changes to the wake limits** (U4).
 - **Database retention, vacuum and WAL.** These are the stacked PR below this one. This set relies on them and doesn't change them.
 - **A terminal UI for automations.** Nobody asked for it.
+- **Multiple organizations.** There is one organization and one central today; a multi-organization service is a separate project (owner, 2026-10-31: "its a separate project rn, we just have one org"). This set targets the one central. The service-scale cost model on `firing-options.html` is context, not scope.
 
 ## Unresolved hypotheses
 
