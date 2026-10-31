@@ -1,136 +1,171 @@
 # Specification: central automations
 
-Traces to [requirements.md](requirements.md) (U1–U11). The capability keys are those defined there.
+Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was removed. The capability keys are those defined there. Revised 2026-10-31 after the Advisor's review (F1–F11) and the owner's decisions U12–U18.
 
 ## Problem and current reality (main, 2026-10-31)
 
-- **Definitions are per machine.** Each Router keeps its schedules and wakes in its own `automation.sqlite`. There's no project column and no central copy.
-- **Firing is local.** The machine that holds the definition keeps its timer (`schedule_timing_worker`, `wakeup_timing_worker`).
-- **Delivery is a local push.** A fired wake or schedule run is delivered as a Router push through that machine's `interaction.sqlite` (`wakeup_delivery_sender`, `scheduled_run_worker`).
-- **Only one path crosses machines.** A wake aimed at another machine's session is sent as fleet mail to the machine that owns the target. That machine then holds the definition and the timer (`wake_operations/remote.rs`).
-- **The consequence:** an automation is visible only on its own machine, stops when that machine is off, and can't be managed from elsewhere.
-- **The published spec is stale.** It still says a project's wakes and schedules pause when its lease expires. The owner removed that rule (U3), but the removal wasn't published (U11).
+- **Definitions are per machine.** Each Router keeps its schedules and wakes in its own `automation.sqlite`, with no project and no central copy.
+- **Firing is local.** That machine fires them.
+- **Delivery is a local push.** A fired wake or run arrives as a Router push through that machine's `interaction.sqlite`.
+- **Cross-machine wakes move the timer.** A wake for another machine is mailed to it, and that machine owns the timer (`wake_operations/remote.rs`).
+- **Schedules can't cross machines.** A schedule for another machine is refused ("endpoint belongs to another service", `schedule_activation.rs:80–84`).
+- **Board notifications aren't rate-limited per recipient.** Each one is its own item, and same-machine ones are immediate.
+- **The published spec is stale.** It still pauses wakes and schedules on lease expiry (U3, U11).
 
 ## Entities
 
-| ID | Term | Identity rule | Relationships | Invariants | Observable states | Canonicalizes | Basis |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| E1 | **Automation** | its automation ID, minted once when it's created and kept through every change and through migration (R11) | belongs to exactly one Fleet (E8); is exactly one kind, Schedule (E2) or Wake (E3); has 0..n Firings (E4) | not tied to any project (U3); one definition, one place (U2) | per kind (E2, E3) | "automation", "schedule", "wake", "timer"; excludes the delivered message (E5) | U1, U2, U3 |
-| E2 | **Schedule** | an Automation of kind schedule | has one timing and one instruction, plus everything today's schedule definition carries: model, effort, execution timeout, and one destination, either an existing session (reuse) or a machine endpoint plus folder (fresh each run). The move keeps all of it (`collaboration-protocol/src/schedule_contract.rs:11–34`) | at most one occupying Run (E6) and one waiting Run; further due times fold into the waiting Run (today's rule, carried forward) | enabled, disabled, deleted | "scheduled workflow", "schedule run definition" | U1, U4, U7 |
-| E3 | **Wake** | an Automation of kind wake | has one target session, one due time, an optional repeat with an end, and a creator | the U66 limits; at most one active Wake per target session; while a Firing of it is pending, new due times fold into that Firing (today's rule, carried forward) | active, paused, ended (expired, cancelled or completed) | "wake-up", "reminder", "wakeup definition" | U1, U4 |
-| E4 | **Firing** | one Automation plus one due time; a due time that folds into a pending Firing joins that Firing and makes no new one | belongs to one Automation; is carried by at most one Delivery item (E5); yields at most one Run (E6) for a Schedule | decided by the Fleet's clock (U5); carried out at most once (U7) | due, held, delivered, run started, run finished, failed, expired, cancelled | "occurrence", "fire", "attempt"; excludes retries of the same Firing's delivery, which stay the same Firing | U5, U6, U7, U8 |
-| E5 | **Delivery item** | the message item that carries one Firing; the same identity rules as any message item (U63) | carries exactly one Firing to exactly one target machine | travels outbox-free from the central ledger to the target machine's inbox, then into local delivery; held while undelivered; "valid until" honoured | the U63 states (queued, sent, at machine, held, delivered, uncertain, expired, cancelled, refused) | "mail item", "push" | U6 |
-| E6 | **Run** | one Schedule Firing carried out on its target machine | belongs to one Firing; runs in exactly one session (the bound one, or one it started fresh) | one per Firing, never two | started, finished (with summary), failed, cancelled | "workflow run", "scheduled run" | U7, U8 |
-| E7 | **Firing outcome** | the latest observable state of one Firing | belongs to one Firing; readable from any Machine (E9) in the Fleet | after a state is acknowledged, a later read from any machine never shows an earlier one | as E4 | "result", "status" | U8 |
-| E8 | **Fleet** | the set of machines enrolled with one central deployment (the existing enrollment meaning) | has 0..n Automations and 1..n Machines | holds the one list of Automations (U2) | (unchanged) | "central", "fabric" | U2, U5 |
-| E9 | **Machine** | an enrolled Router installation (the existing meaning) | belongs to one Fleet; hosts sessions; receives Delivery items | carries out the Firings delivered to it | online or offline (from central's view) | "installation", "host" | U6, U7 |
-| E10 | **Local automation history** | the run and delivery records a Machine kept before migration | belongs to one Machine | read-only after migration; removed by the 2-month retention | readable, then removed | "automation.sqlite history" | U10 |
+| ID | Term | Identity rule | Relationships | Invariants | Observable states | Basis |
+| --- | --- | --- | --- | --- | --- | --- |
+| E1 | **Automation** | its automation ID, minted once at creation and kept through every change and through migration | one Fleet; exactly one kind (Schedule or Wake); 0..n Firings | no project (U3); one definition, one place (U2) | per kind | U1–U3 |
+| E2 | **Schedule** | an Automation of kind schedule | has one timing (at, after, interval or cron with its time zone) and one instruction (E11). It also has today's execution settings: model, effort, timeout, and a destination, either an existing session or a machine endpoint plus folder (fresh each run). Its continuity comes from its previous completed Run on its destination machine | at most one occupying and one waiting Run; later due times fold into the waiting Run, which never expires (today's rule) | enabled, disabled, deleted | U1, U7 |
+| E3 | **Wake** | an Automation of kind wake | has one target session, one due time, an optional repeat, one end (expiry) and one creator | the wake limits (R3); the target session's wake slot is held by an active **or paused** Wake | active, paused, ended (expired, cancelled or completed) | U1, U4, U13 |
+| E4 | **Firing** | one Automation plus one **effective due time** (E10) | belongs to one Automation; is an entry in exactly one Batch (E5) once sent; yields at most one wake delivery or one Run | carried out at most once (R7); cancelable only before the send cutoff (R6a) | pending, sent, delivered, run started, run finished, failed, expired, unknown (each defined in R10) | U5–U8, U17 |
+| E5 | **Batch** | one machine plus one admission (a grid point, or the call that created it); its membership is frozen at the send cutoff | addressed to exactly one Machine; carries 1..n Firing entries, each with its own target, revision and expiry | bounded size (R6); the same bytes on every resend | admitted, sent, received | U6, U18 |
+| E6 | **Run** | one Schedule Firing carried out on its destination machine | belongs to one Firing; runs in exactly one session | one per Firing | today's run states | U7 |
+| E7 | **Firing outcome** | the latest observable state of one Firing | readable from any Machine | never moves back to an earlier state (R10) | as E4 | U8 |
+| E8 | **Fleet** | the organization's central (one organization today) | holds the one list | — | — | U2, Boundary |
+| E9 | **Machine** | an enrolled Router installation | receives Batches; hosts sessions | carries out what it receives | online or offline | U6, U7 |
+| E10 | **Effective due time** | a nominal due time (from the Automation's timing) rounded **up** to the next 5-minute boundary of UTC time, or kept as-is if it's already on a boundary | nominal 1..n → effective 1 | never earlier than the nominal time | — | U12 |
+| E11 | **Instruction** | its instruction ID, with numbered revisions (today's meaning) | used by 0..n Schedules | a Firing freezes the revision in force at admission | — | U1, U9 |
+| E12 | **Notification** | one board notification, thread-activity notice, or subscription-expiry notice item. **Not** a direct message, wake, schedule run, approval or question | addressed to one recipient session | — | today's item states | U14 |
+| E13 | **Limit** | one named product limit, with its value and step | lives in the published contract | the same value in the schema, the validators, and the CLI and MCP descriptions | — | U16 |
 
 ## Obligations
 
 ### definitions
 
-- **R1, one list everywhere** (U2). From any Machine in the Fleet, the Router CLI and MCP create, list, show, change, pause, resume and cancel Automations.
-  - Once a write is acknowledged, any later read from any Machine shows it.
-  - Two Machines listing at the same moment, with no write in between, show the same Automations and states.
-  - There's no per-machine list.
-- **R2, no project** (U3). An Automation carries no project. A project's lease state, including expiry, never stops, delays or pauses a Firing. The board-orchestration obligations that pause wakes and schedules on lease expiry are void, and are removed by R15.
-- **R3, the wake rules hold at the single place** (U4). Creating or changing a Wake enforces the U66 limits and the one-active-Wake-per-session rule against the Fleet-wide list. A violation is refused with the existing typed refusals (`wakeExists` naming the creator, and the limit refusals). The creator is recorded and shown.
-- **R4, writes need central** (U2, with board design U80: "a machine works only while it's online").
-  - A create, change, pause, resume or cancel issued while central is unreachable is **refused visibly**, naming central as unreachable. It's never queued as an offline draft.
-  - A read while central is unreachable either fails visibly or returns the last list with an explicit "as of" time. It never presents a stale list as current.
+- **R1, one list everywhere** (U2). From any Machine, the CLI and MCP create, list, show, change, pause, resume and cancel Automations. Once a write is acknowledged, any later read from any Machine shows it, and there's no per-machine list.
+- **R2, no project** (U3). An Automation carries no project. A lease state never stops, delays or pauses a Firing.
+- **R3, the wake rules hold everywhere** (U4, U13).
+  - **Timing:** a one-shot Wake is due at most 24 h ahead; a repeating Wake ends within 7 days; a repeat is at least **10 minutes**.
+  - **The slot:** a session's wake slot is held by an active or paused Wake. Setting another needs `replace: true`, and only the existing Wake's creator, the target session or the owner may replace it; anyone else is refused as `wakeExists`, naming the creator. A Wake with no recorded creator can be replaced only by its target session or the owner.
+  - **Replacement is atomic:** the old Wake ends as cancelled and the new one becomes active in one step. A replayed replacement returns the same result.
+- **R4, writes need central, and retries are safe** (U2, U16).
+  - Every create, change, pause, resume or cancel carries the caller's **operation ID**. Repeating the same operation with the same content returns the original result; the same ID with different content is refused as `operationConflict`.
+  - Central unreachable **before sending** gives a definite `centralUnreachable`, and nothing is queued.
+  - A request sent but **unanswered** gives `outcomeUnknown` with its operation ID. Retrying it with that ID returns the real result. It's never reported as not applied.
+- **R5, the limits are the contract** (U16). Every limit (the grid step, wake period and lifetime, the notification interval, the slot rules, schedule interval minimum, field sizes, batch size) has one definition. That definition appears in the published schema (minimum, maximum, step, description). Every entry (CLI, MCP, central calls) and every decode of a stored row checks it. A violation is refused as `limitExceeded` with the limit's name, the value and the allowed range. The CLI help and MCP tool schemas show the same values.
+
+### cadence
+
+- **R6g, the 5-minute grid** (U12). Each Firing's due time is its effective due time (E10).
+  - Several nominal times that round to the same effective time make **one** Firing.
+  - An interval Schedule's interval is at least 5 minutes. A cron Schedule may name sub-grid minutes, but they collapse to their grid point.
+  - Time zones and DST apply when computing the nominal time; the rounding applies to the resulting instant.
+- **R6n, notifications at most once every 10 minutes per recipient** (U14).
+  - **Window:** for each recipient session, the first Notification after a quiet 10 minutes is delivered at once. Any further Notifications within the next 10 minutes are delivered **together** at the window's end, as one delivery listing each item.
+  - **Listing size:** a listing holds at most a fixed number of entries (a Limit). Beyond that, it shows the count and a pointer to read the rest. No accepted item is lost; each stays in the recipient's inbox and feed.
+  - **What stays immediate:** direct messages, wakes, schedule runs, approvals and questions.
+  - **What's unchanged:** the replication gate for remote notifications (U63), and the recipient's Off and Poll policies.
+  - **What's superseded:** U63's "same-machine delivery stays immediate" for notifications only.
 
 ### firing
 
-- **R5, central keeps time** (U5).
-  - The Fleet decides each due time. A Firing happens at its due time whether or not the Machine that created the Automation is online.
-  - A due time that falls while an earlier Firing of the same Wake is pending folds into it. A Schedule never has more than one occupying and one waiting Run (today's rules, carried forward).
-  - An Automation that's paused, disabled or ended never fires.
+- **R7f, central fires at the due time, batched per machine** (U5, U18). At each effective due time, central admits every due Firing once. The Firings for the same Machine go to it as one Batch, sent right away. Nothing is held on the Machine for later release. A second alarm for the same due time admits nothing new and resends the same Batch bytes.
 - **R6, firing is a message** (U6).
-  - Each Firing is carried by one Delivery item, addressed to the target session's Machine, on the U63 path: central ledger, the Machine's inbox, then local delivery.
-  - While that Machine is offline, the item is held and delivered when the Machine comes back, unless its "valid until" has passed. A Wake's valid-until is its end. A Schedule's is its next due time, because the next Firing supersedes it.
-  - An expired item ends as **expired**, which is visible per R10.
-- **R6a, edits and cancels race cleanly** (U2, U7).
-  - A change, pause or cancel acknowledged before a due time decides that Firing.
-  - A Firing already admitted before the change keeps the definition it was admitted with.
-  - A cancel or pause reaching an admitted Firing that hasn't been delivered yet stops it through the existing message cancel. It ends as **cancelled** and is never carried out.
-  - A Firing whose delivery outcome is unknown is reconciled, never fired again.
-- **R7, carried out once** (U7). However many times a Delivery item is retried or redelivered, the target Machine delivers a Wake's message into its session at most once per Firing, and starts at most one Run per Schedule Firing.
+  - Each Batch travels on the U63 path, from central's ledger to the Machine's inbox.
+  - **Expiry is per entry:** a Wake entry carries its Wake's end, a Schedule entry carries none. While the Machine is offline the Batch is held. When it returns, each Wake entry past its end ends as **expired**, and every other entry is carried out.
+  - **Size:** a Batch never exceeds the batch-size Limit. Larger due sets are split into several Batches at admission.
+  - **Old releases:** a Machine whose Router can't receive Batches can't be a target, and creating an Automation for it is refused as `targetNeedsUpgrade`.
+- **R6a, the send cutoff** (U17).
+  - A Firing is **pending** until the central commit that freezes it into a Batch; that commit is the cutoff.
+  - A pause, cancel or change acknowledged before the cutoff removes or updates the Firing.
+  - After the cutoff, the Firing is out. The command's answer says `alreadySent` for it, and nothing is sent to the Machine to chase it.
+  - If central can't tell whether the Batch reached the ledger, the Firing shows **unknown** until central reconciles it against the ledger. It's never sent a second time under a new identity.
+- **R7, carried out once** (U7). However many times a Batch is delivered, each entry results in at most one wake delivery or one Run. A crash at any point resumes the entry's unfinished work; it never drops it or repeats completed work.
 
 ### runs
 
-- **R8, wake delivery as today** (U7). A delivered Wake Firing reaches its session as today's wake push, with the same kind and header (`PushKind::Wake`, `⏰ Router wake …`), through the same local delivery routes.
-- **R9, a scheduled run as today** (U7). A delivered Schedule Firing starts one Run in the Schedule's bound session, or in a fresh session started in its folder (fresh each run). Its instruction, summary and stop rules are as today.
-- **R10, outcomes are visible everywhere** (U8).
-  - Each Firing's outcome is readable from every Machine: held, delivered, run started, run finished (with its summary), failed (with its reason), expired or cancelled.
-  - The target Machine reports each state change back to the Fleet.
-  - A later read never shows an earlier state than one already acknowledged.
+- **R8, wake delivery as today** (U7). A Wake entry reaches its session as today's wake push (`PushKind::Wake`, `⏰ Router wake …`), through today's routes and modes.
+- **R9, a scheduled run as today** (U7). A Schedule entry starts one Run in the bound session, or in a fresh session in its folder. It runs with the Instruction revision frozen at admission and the Schedule's model, effort and timeout. Its continuity comes from the previous completed Run on that Machine. The run is driven through preparation, execution, stop and summary as today.
+- **R10, outcomes are visible everywhere** (U8). Each Firing's outcome is readable from every Machine.
+  - **States:** pending, sent, delivered (Wake), run started, run finished (with summary) or failed (with reason) for a Schedule, expired, and unknown.
+  - **Ordering:** each report carries a sequence number from the executing Machine. Central applies reports in that order and ignores duplicates and older ones.
+  - **Terminal states are final:** run finished, failed, expired, and delivered (for a Wake).
 
 ### migration
 
 - **R11, one move per machine** (U9).
-  - When a Machine first runs the release that contains this design, it moves each local Schedule and each active or paused Wake to the Fleet exactly once. Each keeps its automation ID, kind, timing, next due time, target, instruction and creator.
-  - An interrupted move resumes, and never makes a duplicate.
-  - After the move, the Machine's local timers stop, and its local definitions are no longer used.
-  - Ended Wakes aren't moved.
-- **R12, no loss and no double fire across the move** (U9). Each due time that falls during the move results in exactly one Firing: either the Machine carries it out locally before handing the Automation over, or the Fleet fires it afterwards, never both and never neither.
-- **R13, old machines keep working until they upgrade** (U9). A Machine still on an earlier release keeps firing its own local definitions until it upgrades and moves them. The Fleet never fires an Automation that a Machine hasn't moved yet.
-- **R14, local history stays** (U10). Runs and deliveries a Machine recorded before the move stay readable on that Machine, unchanged, until the 2-month retention removes them.
+  - On first start of the new release, the Machine moves each local Schedule, each active or paused Wake, and the Instructions they use to the Fleet, exactly once. IDs, targets, creators and execution settings are kept.
+  - **Timing is normalized under U12 and U13** (the owner's later decisions qualify U9's "keeps timing"):
+    - due times round up to the grid;
+    - Wake repeats under 10 minutes become 10 minutes;
+    - an end time is never extended, and a Wake whose next effective due time would pass its end ends as **expired**, recorded with an event.
+  - The handover reports how many definitions were adjusted or ended.
+- **R12, one owner at every moment** (U9).
+  - In one local transaction, the Machine stops admitting new local due times for an Automation and records the last due time it admitted.
+  - Work it had already admitted finishes locally, under today's drivers, and its outcome stays in local history.
+  - The Fleet admits only due times after that recorded point. The move's payload is frozen and stored before it's sent, so every retry sends identical bytes.
+  - An interrupted move resumes, and never makes a duplicate or leaves two owners.
+- **R13, old machines keep working until they upgrade** (U9). A Machine on an earlier release keeps firing its own definitions; the Fleet never fires an Automation it hasn't received.
+- **R14, local history stays** (U10). Pre-move runs and deliveries stay readable on their Machine until the 2-month retention removes them.
 
 ### design-truth
 
 - **R15, `main` carries the owner-decided design** (U11).
-  - **What `main` must say.** After this change, `main`'s governing board-orchestration documents say what the owner decided: U38 without the wake and schedule pause, U80 and its removals throughout (requirements, specs 1–3, program designs, verification design), and no remaining contradictions.
-    - The known contradictions are: PD2 "the activity gate", and `central-one-core/explainer/requirements-full.html`, which still shows the old U38.
-    - Each published statement is labelled owner-settled, Lead realization, superseded, open, or planned-but-unbuilt. A docs change claims no product "done".
-  - **What it must not touch.** Newer documents on `main` that the design branch lacks (the TUI, quota-dialog and Rust crate-DAG sets) stay as they are.
-  - **How it's published.** Publication adds no commit that has the design branch as an ancestor. Nothing from `.cloudflare/`, `.wrangler/` or other cache directories enters the published tree or history. The same holds for secrets, account IDs or emails, real staging hosts, Access identifiers, live service, session or machine IDs, and local user paths.
+  - `main`'s governing board-orchestration documents say what the owner decided: U38 without the pause, U80 throughout, U14's notification cadence noted against U63, and no remaining contradictions (PD2's "activity gate", and the `requirements-full.html` explainer).
+  - Each statement is labelled owner-settled, Lead realization, superseded, open or planned-but-unbuilt.
+  - Newer `main` documents stay unchanged.
+  - There's no commit with the design branch as an ancestor, and no cache, secret, account, email, host, live ID or local-path material.
 
 ## Constraints
 
-- **C1:** the repository is public. Anything published passes the public-safety scan in R15.
-- **C2:** central behaviour runs on both central runtimes, Cloudflare and self-hosted Tokio, through the one core (owner decision, 2026-10-16).
-- **C3:** `interaction.sqlite` stays local on each Machine (owner, 2026-10-31).
-- **C4:** every Router-owned database runs in WAL mode, with the retention and vacuum of the stacked PR below this one (owner, 2026-10-31).
-- **C5:** primary keys are UUIDv7. No SQL CHECK constraints except on booleans (AGENTS.md).
+- **C1:** the repository is public.
+- **C2:** the one core runs on both central runtimes.
+- **C3:** `interaction.sqlite` stays local.
+- **C4:** every Router database runs in WAL mode under PR 1's retention and vacuum.
+- **C5:** primary keys are UUIDv7; there are no SQL CHECK constraints except on booleans.
+- **C6:** there is one organization today.
 
 ## What this deliberately does not promise
 
-- Role targets ("whoever is reviewer now"; the October design note's D5). Targets stay exact sessions or machine endpoints, as today.
-- A changed rule for a fixed-target Automation whose session is recovered as a new conversation (the October note's D3). Today's behaviour stays.
-- Offline creation or editing of Automations (R4).
+- role targets (the October D5);
+- a new rule for sessions recovered as new conversations (D3);
+- offline creation;
+- chasing a sent Firing (U17);
+- holding Firings on a Machine for later release (B, closed);
+- organization offsets (U15, removed).
 
 ## Proof obligations
 
-| ID | Obligation | Passes when | Fails when | Reference |
-| --- | --- | --- | --- | --- |
-| V1 | R1 | An Automation created from Machine A is shown, with the same state, by `list` and `show` on Machine B; a pause on B is shown on A at the next read | B doesn't show it, or shows an older state after the write was acknowledged | R1 |
-| V2 | R2 | A Firing happens at its due time while every project's lease is expired | it's delayed or paused by any lease state | U3, R2 |
-| V3 | R3 | A second active Wake for one session, created from a different Machine than the first, is refused as `wakeExists`, naming the creator; each U66 limit refuses | the Fleet holds two active Wakes for one session, or a limit is accepted | U66, R3 |
-| V4 | R4 | With central unreachable, `create` returns a visible "central unreachable" refusal and nothing is created later | it's accepted, queued or created afterwards | R4 |
-| V5 | R5 | With the creating Machine offline, its Wake fires on time to a session on another online Machine; due times during a pending Firing fold; a Schedule never shows two waiting Runs | no Firing happens, a fold makes two, or a third Run appears | R5 |
-| V6 | R6 | With the target Machine offline, a Firing is held; it's delivered once when the Machine returns; a Wake whose end passes while it's held ends as expired | it's dropped, delivered twice, or delivered after valid-until | U63, R6 |
-| V7 | R7 | Forced redelivery of one Firing's item yields one session message or one Run | there are two | R7 |
-| V8 | R8, R9 | The delivered Wake's push matches today's header and kind; the Schedule Run starts in the bound or fresh session with its instruction, and its summary is recorded | the header or kind differs, or the session is wrong | today's behaviour |
-| V9 | R10 | Each outcome state is shown from a Machine other than the target, in order, with no regression | it's missing, out of order, or an older state is shown | R10 |
-| V10 | R11, R12 | A Machine holding the owner-shaped fixture (9 Schedules, active and paused Wakes) migrates: identities equal, next due times equal; a due time inside the move fires exactly once; a killed and restarted migration makes no duplicate | an ID changes, a definition is lost or duplicated, or a due time fires twice or never | R11, R12 |
-| V11 | R13 | An old-release Machine keeps firing its own definitions; the Fleet doesn't fire them until that Machine moves them | there's a double Firing, or a missed one | R13 |
-| V12 | R14 | Pre-move runs and deliveries read the same after the move | they're changed or missing before retention | R14 |
-| V13 | R15 | On the published branch: no governing document carries the pause clause, a lost-write obligation or an offline-created project; every statement in the decision inventory has its label; the newer `main` docs are unchanged (file manifest diff); a scan of the staged paths and the outgoing commit ancestry finds no cache, secret, account, host or live-ID material, and no design-branch ancestor | any contradiction remains, a newer doc is changed or deleted, or there's any scan hit or ancestor | U11, R15; the Advisor's 2026-10-31 inventory |
-| V14 | R6a | A cancel after admission but before delivery ends as cancelled with no session message; a change before a due time governs that Firing; an unknown-outcome Firing is reconciled and not refired | it's delivered after cancel, the old definition is used, or it's fired twice | R6a |
+| ID | Obligation | Passes when | Fails when |
+| --- | --- | --- | --- |
+| V1 | R1 | A write on A is read identically on B; a pause on B shows on A | a per-machine list, or a stale read after an acknowledged write |
+| V2 | R2 | A Firing happens at its effective due time with every lease expired | any lease gate |
+| V3 | R3 | A paused W1 blocks W2; an authorized replacement ends W1 and starts W2 once; a foreign replacement is refused naming the creator; each timing limit refuses; a replay returns the same result | two Wakes in one slot; a limit accepted |
+| V4 | R4 | Drop the reply after commit: a retry with the same operation ID returns the original; changed content conflicts; pre-send unreachable is definite and nothing is created | a second definition; `centralUnreachable` after an applied write |
+| V5 | R5 | For each Limit, the schema's bound equals what's accepted at the CLI, MCP and central, and a corrupted stored row is refused on decode with `limitExceeded` | a mismatch, or silent coercion |
+| V6 | R6g | Fixtures for at, after, interval, cron (with time zone and DST) and an already-aligned time: the effective time is the ceiling; sub-grid cron collapses to one Firing; an interval under 5 minutes is refused | an early Firing, two Firings for one grid point, or a sub-5 interval accepted |
+| V7 | R6n | 30 Notifications across 3 projects and 3 kinds to one recipient within 10 minutes give one immediate delivery, then one listing; a direct message, wake, approval or question in the same window arrives immediately; an overflowing listing points to the rest with no item lost; Off and Poll are respected; a remote notification still waits for replication | more than one delivery per window, a delayed direct message, or a lost item |
+| V8 | R7f | Five Firings due at one grid point for two machines give two Batches; a duplicate alarm resends the same bytes and admits nothing new; an oversized due set splits into several Batches | a Firing admitted twice, or different bytes on a resend |
+| V9 | R6 | A mixed Batch (a Wake with an end plus a Schedule) held while the Machine is offline past the Wake's end: the Wake is expired and the Schedule runs; a target on an old release is refused | the Schedule dropped, the Wake delivered after its end, or an old target accepted |
+| V10 | R6a | Pause before the cutoff: the Firing isn't sent. Pause after: the answer says `alreadySent` and the same Batch is delivered. A lost send answer reconciles to sent, or shows unknown, with no second identity | a false prevention, a chase message, or a duplicate |
+| V11 | R7 | Crash after receiving a Batch, before any entry's work; after two of three entries; after native acceptance, before the outcome is stored. Each restart gives exactly one effect per entry | an entry lost or repeated |
+| V12 | R8, R9 | The wake push header, kind and mode behaviour are today's. A Run uses the frozen Instruction revision (with creator A offline), keeps continuity across two fresh runs on B, and finishes its summary after a restart of B mid-run | a wrong revision, missing continuity, or a stuck summary |
+| V13 | R10 | Reports reordered and duplicated: the shown states follow the sequence, with no regression and terminal states final | a regression |
+| V14 | R11, R12 | The owner-shaped fixture (9 Schedules, Wakes with 5-minute repeats and near-end expiries) moves with IDs kept; timing is normalized per R11; adjustments are reported. Kill the move before and after the local cutoff, the central commit, and the local acknowledgement, with admitted, unsubmitted and uncertain local work outstanding: each due time ends with one effect | an ID changed, an end extended, two owners, or a double or missing effect |
+| V15 | R13 | An old-release Machine fires locally; the Fleet has none of its rows | a double Firing |
+| V16 | R14 | Pre-move history reads are identical | missing before retention |
+| V17 | R15 | The manifest leaves newer docs untouched; no contradiction remains; the scan of the tree and the outgoing ancestry is clean | any hit |
 
 ## Coverage
 
-| U | E | R | V |
-| --- | --- | --- | --- |
-| U1 | E1, E2, E3 | R1, R8, R9 | V1, V8 |
-| U2 | E1, E8 | R1, R4 | V1, V4 |
-| U3 | E1 | R2 | V2 |
-| U4 | E3 | R3 | V3 |
-| U5 | E4, E8 | R5 | V5 |
-| U6 | E5 | R6 | V6 |
-| U7 | E6, E9 | R6a, R7, R8, R9 | V7, V8, V14 |
-| U8 | E7 | R10 | V9 |
-| U9 | E1, E10 | R11, R12, R13 | V10, V11 |
-| U10 | E10 | R14 | V12 |
-| U11 | — | R15 | V13 |
+| U | R | V |
+| --- | --- | --- |
+| U1 | R1, R8, R9 | V1, V12 |
+| U2 | R1, R4 | V1, V4 |
+| U3 | R2 | V2 |
+| U4 | R3 | V3 |
+| U5 | R7f | V8 |
+| U6 | R6 | V9 |
+| U7 | R7, R8, R9 | V11, V12 |
+| U8 | R10 | V13 |
+| U9 | R11, R12, R13 | V14, V15 |
+| U10 | R14 | V16 |
+| U11 | R15 | V17 |
+| U12 | R6g | V6 |
+| U13 | R3 | V3 |
+| U14 | R6n | V7 |
+| U16 | R5 | V5 |
+| U17 | R6a | V10 |
+| U18 | R7f, R6 | V8, V9 |

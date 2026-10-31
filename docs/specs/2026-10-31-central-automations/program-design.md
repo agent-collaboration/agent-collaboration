@@ -1,148 +1,135 @@
 # Program Design: central automations
 
-Realizes [specification.md](specification.md) (R1–R15). The entities come from the Specification and keep their meaning here.
+Realizes [specification.md](specification.md). The entities come from there unchanged. Revised 2026-10-31 for the Advisor's review (F1–F4, F7–F11) and U12–U18.
 
 ## Structure decision
 
-**Central's Fleet face owns automations.** It already "owns central's nonreplicated application state" (`collaboration-central-core/src/fleet_runtime.rs:1`), and it runs on alarms through durable steps. It runs on both central runtimes through the one core (C2). Firing reuses the mail path, with central as the sender. Each Router keeps execution (the wake push and the run) and its local history, and gives up definitions and timers.
+**The Fleet face owns definitions and the clock** (`fleet_runtime.rs:1`, one per organization). **The Registry stays the only mail admitter:** central-produced mail enters custody through a new Fleet→Registry call, so no second admission path exists. **The target Router owns execution,** reusing today's owed-work stores and drivers. Only due-time admission moves to central.
 
 ```text
-any Router (CLI/MCP) ──calls──► Fleet face: automation catalog + clock
-                                   │ alarm: admit due Firing (one txn)
-                                   ▼
-                          recipient custody (central ledger, U63)
-                                   │ machine session
-                                   ▼
-target Router: inbox (interaction.sqlite) ─► firing injection ─► wake push | scheduled run
-                                   │ FiringReport (durable)
-                                   └──────────────► Fleet face (outcome)
+Router (any) ──AutomationCall (Connection→Fleet)──► Fleet: catalog + clock task
+                                                     │ alarm (shared AlarmOwner) → admit due → freeze Batch
+                                                     ▼ durable step
+                                   Fleet→Registry: AdmitCentralBatch
+                                                     ▼ (Registry authority, as today)
+                                   Mailbox(ServiceId of target machine) ─► Connection ─► machine pulls
+target Router: inbox → batch injection (one local txn per entry: receipt + today's owed work)
+             → today's wake delivery sender / scheduled run driver
+             → FiringReport (seq) ──Connection→Fleet──► Firing outcome
+Mailbox status for central items ──Mailbox→Fleet: CentralBatchStatus──► Fleet
 ```
 
 ## Entity binding
 
-| E | Home | Shape |
+| E | Owner and home | Shape (validated by Rust types; no CHECK constraints) |
 | --- | --- | --- |
-| E1 Automation, E2 Schedule, E3 Wake | Fleet face store (central, both runtimes) | `automations`: `automation_id` (UUIDv7 primary key), `kind`, `revision`, `definition_json`, `state`, `creator_json`, `created_at_ms`, `updated_at_ms`. The kind, state and definition are validated by Rust enums, with no CHECK constraints (C5). `definition_json` carries today's `ScheduleDefinition` (instruction, timing, destination, model, effort, timeout) or today's wake record unchanged |
-| timing (part of E1) | Fleet face store | `automation_timing`: `automation_id` (primary key and foreign key), `next_due_ms`, `watermark_ms`, `occupying_firing_id`, `waiting_firing_id` |
-| E4 Firing, E7 Firing outcome | Fleet face store | `automation_firings`: `firing_id` (UUIDv7 primary key), `automation_id` (foreign key), `revision`, `due_ms`, `state`, `mail_item_id`, `outcome_json`, `updated_at_ms`. Finished Firings are removed after 2 months (the PR 1 retention rule) |
-| migration record | Fleet face store | `automation_imports`: `import_id` (UUIDv7 primary key), unique on (`installation_id`, `automation_id`), `definition_digest`, `imported_at_ms` |
-| E5 Delivery item | the existing mail custody (central ledger) and the recipient's `interaction.sqlite` | a mail item with `MailSender::Automation { automation_id }` and `MailBody::Firing(FiringBody)` |
-| E6 Run | the target Router's `automation.sqlite`, the existing `workflow_runs` | plus `firing_id`, unique |
-| E10 Local history, and execution receipts | the target Router's `automation.sqlite` | `firing_receipts`: `firing_id` (primary key), `received_at_ms`, `local_state`; the existing history tables are kept read-only and pruned at 2 months |
-| handover state | the Router's `automation.sqlite` | `automation_handover`: `automation_id` (primary key), `state` (`pending` or `moved`, validated in Rust), `updated_at_ms` |
+| E8 Fleet | the `ObjectAddress::Fleet` Durable Object (Cloudflare) or native object (Tokio), one per organization | Fleet store tables below |
+| E9 Machine | identified by `ServiceId` (`ObjectAddress::Connection(ServiceId)`, `Mailbox(ServiceId)`), resolved by the Registry to its installation peer | the Registry's peer directory (existing) plus a capability flag `automationBatchV1` |
+| E1 to E3 Automation, Schedule, Wake | Fleet store | `automations` (`automation_id` UUIDv7 primary key, `kind`, `revision`, `definition_json`, `state`, `creator_json`, `slot_session_key` with a unique index for active and paused Wakes, created and updated timestamps). `definition_json` is today's `ScheduleDefinition` or wake record, with its timing normalized |
+| E11 Instruction | Fleet store | `instructions` (`instruction_id` primary key, `current_revision`) and `instruction_revisions` (`revision_id` UUIDv7 primary key, `instruction_id`, `revision`, `text`), moved from the local `instruction_documents` and `instruction_revisions` |
+| timing | Fleet store | `automation_timing` (`automation_id` primary key, `next_effective_due_ms`, `admitted_through_ms`, `occupying_firing_id`, `waiting_firing_id`) |
+| E4 Firing, E7 outcome | Fleet store | `automation_firings` (`firing_id` UUIDv7 primary key, `automation_id`, `effective_due_ms`, unique (`automation_id`, `effective_due_ms`), `revision`, `instruction_revision_id`, `state`, `batch_id`, `report_seq`, `outcome_json`); finished rows are pruned after 2 months |
+| E5 Batch | Fleet store, then the existing mail custody | `automation_batches` (`batch_id` UUIDv7 primary key, `service_id`, `admitted_for_ms`, `frozen_bytes`, `digest`, `send_state`); the mail item ID is `batch_id` |
+| operation receipts | Fleet store | `automation_operations` (`operation_id` primary key, `request_digest`, `answer_json`) |
+| handover receipts | Fleet store | `automation_imports` (`import_id` primary key, unique (`service_id`, `automation_id`), `payload_digest`) |
+| E6 Run, local receipts | the target Router's `automation.sqlite` | today's `workflow_runs` and `mailbox_deliveries`, plus `firing_receipts` (`firing_id` primary key, `batch_id`, `entry_index`, `local_work_ref`, `state`: admitted or done) |
+| handover state | the local `automation.sqlite` | `automation_handover` (`automation_id` primary key, `state`, `admitted_through_ms`, `frozen_payload`, `digest`) |
+| E12 notification window | the target Router, in the reader delivery owner | `notification_windows` (`recipient_key` primary key, `window_opened_at_ms`, `flush_due_at_ms`) in `interaction.sqlite` |
+| E13 Limit | `collaboration-protocol::limits`, one module | constants plus JSON Schema annotations (`minimum`, `maximum`, `multipleOf`, description), used by every constructor |
 
 ## Components
 
-| Component | Crate | Owns | Change |
-| --- | --- | --- | --- |
-| **Automation catalog** | `collaboration-central-core` (new module under the Fleet face) | the definitions, revisions, the U66 limits and one-active-Wake checks, list and show | new |
-| **Automation clock** | `collaboration-central-core` (the Fleet face alarm, a durable step) | admitting due Firings, today's fold rules, advancing timing, the next alarm | new; reuses the `durable_steps` drive in `fleet_runtime.rs:54` |
-| **Firing sender** | `collaboration-central-core` | after commit, placing the mail item in recipient custody (the existing `effect_driver/mailbox_requests` path); a cancel for undelivered items; reading the sender status back into Firing state | new; reuses the mailbox request and sender settlement calls (`mail_sender_calls.rs`) |
-| **Mail contract** | `collaboration-mail-protocol` | `MailSender::Automation`, `MailBody::Firing`, `MailKind::Firing`; `MailRecipient::Endpoint` for fresh-each-run, where no session exists yet | additive protocol change |
-| **Automation calls** | `collaboration-central-core` call targets, plus `collaboration-runtime/src/fleet_client.rs` | `AutomationCreate`, `Change`, `Pause`, `Resume`, `Cancel` (each with `expected_revision`), `List`, `Show`, `Import`, and `FiringReport` | new; carried on the existing single machine session |
-| **Automation operations** | `collaboration-service` `wake_operations` and `schedule_operations` | CLI and MCP keep their commands and output shapes, but read and write through the Fleet calls | rewired; the `remote.rs` request path retires at cutover; the "endpoint belongs to another service" refusal (`schedule_activation.rs:80`) goes |
-| **Firing injection** | `collaboration-runtime` (new `firing_injection`), called by the mail runtime's injection owner | the `firing_id` receipt (dedupe, R7); a wake goes to today's `build_wake_push_draft` and delivery; a schedule goes to a `workflow_runs` row and today's scheduled-run execution route and summary worker | new |
-| **Firing reporter** | `collaboration-runtime` | a durable `FiringReport` for every run or delivery state change, retried until accepted | new; reuses the fleet-sync durable outbox |
-| **Handover** | `collaboration-runtime` (a Host startup step after enrollment) | the one-time move of local definitions | new |
-| **Local timers** | `schedule_timing_worker`, `wakeup_timing_worker` | skip `pending` and `moved` automations; removed once the machine has none left | retired |
+| Component | Where | Responsibility (and what it reuses) |
+| --- | --- | --- |
+| **Limits** | `collaboration-protocol/src/limits.rs` (new) | One inventory: `GRID_STEP = 5 min`, `WAKE_MIN_PERIOD = 10 min`, `WAKE_ONE_SHOT_MAX_AHEAD = 24 h`, `WAKE_REPEAT_MAX_LIFETIME = 7 d`, `SCHEDULE_MIN_INTERVAL = 5 min`, `NOTIFICATION_INTERVAL = 10 min`, `NOTIFICATION_LISTING_MAX_ENTRIES`, `BATCH_MAX_BYTES` (within the 1 MiB unit, `unit_budget.rs:7`), `BATCH_MAX_ENTRIES = 100` (`mail_delivery_session.rs:25–26`), and field sizes. The schemars schema reads the same constants, and validated constructors return `LimitExceeded { limit, value, allowed }` |
+| **Automation catalog** | `collaboration-central-core`, the Fleet face | Definitions, Instructions, revisions, the slot and atomic replacement (today's MS-10 rules), and operation-ID replay. Calls arrive Connection→Fleet: `CoreHost::classify` gains the `AutomationCall` kinds for a Session caller, and the installation is bound by the machine session |
+| **Automation clock task** | `collaboration-central-core`, registered in the Fleet shared task registry beside `FleetNoticeTask` (`shared_task_registry.rs:62–71`) | Create, change and import upsert `automation_timing` and call `wake_at(next_effective_due)` **in the same transaction** through the shared `AlarmOwner`, so there's never a second alarm owner. On alarm (`drive_due`, at least once), admit every due Firing keyed by (automation, effective due), so a repeat admits nothing. It applies today's fold rules, groups Firings by `ServiceId`, freezes Batches within the size limits, records the send obligation as a durable step, advances timing, and re-arms |
+| **Central batch sender** | a durable step in the Fleet; a new **Registry** call `AdmitCentralBatch` | The Fleet asks the Registry to admit the frozen Batch for the `ServiceId`. The Registry checks the peer and its capability and submits it into the Mailbox under Registry authority (`mailbox_submit_runtime.rs:43–70`, unchanged). A lost answer is retried with the same `batch_id` and bytes, and admission is idempotent per item ID |
+| **Central status route** | a new Mailbox→Fleet call `CentralBatchStatus`; `StatusRoute` gains a `Fleet` variant beside `ServiceId` | Carries custody status (`sent` at ledger custody, then `received`) to the Fleet for central-sender items. Machine sender checks are unchanged |
+| **Mail contract** | `board-sync-protocol` and `collaboration-mail-protocol` | `BoardDeliveryBody::AutomationBatch(AutomationBatchBody)`, addressed to a `ServiceId`. Each entry: `firing_id`, `automation_id`, `revision`, `target` (`SessionRef` or `EndpointRef`), `expires_at` (Wakes only), and the payload: a Wake message, or a ScheduleRun (instruction text and revision, model, effort, timeout, destination). An old receiver can't decode it, so the Registry refuses an incapable peer at admission (`targetNeedsUpgrade`) instead of adding a compatibility shim |
+| **Batch injection** | `collaboration-runtime` (new), called by the mail runtime's injection owner | For each entry, in **one `automation.sqlite` transaction**, insert `firing_receipts(admitted)` together with today's owed work: a `mailbox_deliveries` row and wake draft (the `wakeup_evaluation.rs:24–35` shape), or a waiting `workflow_runs` row with frozen inputs (the `run_admission.rs` shape). A repeat finds the receipt and lets the existing owed work continue, so it doesn't stall. An expired Wake entry is recorded as expired and never delivered |
+| **Execution drivers** | today's `wakeup_delivery_sender` and today's run-step driving in `schedule_timing_worker` and `scheduled_run_worker` | Unchanged. They drive owed work through delivery, preparation, execution, stop and summary, with today's recovery. **Only due-time admission is removed** from the local timing workers; run driving stays |
+| **Firing reporter** | `collaboration-runtime` | When owed work changes state, it sends `FiringReport { firing_id, seq, state, summary? }` Connection→Fleet through the durable outbox. The receipt moves to `done` at a terminal state |
+| **Automation operations** | `collaboration-service` `wake_operations` and `schedule_operations`, plus instruction operations | CLI and MCP shapes are kept, plus operation ID, `outcomeUnknown` and `alreadySent`. The calls go to the Fleet; the `remote.rs` request path and the "another service" refusal are retired |
+| **Handover** | `collaboration-runtime`, a startup step after enrollment | See the flows below |
+| **Notification limiter** | the Router's reader delivery owner (`reader_delivery_owner.rs`), the last stage before a push to a session | For E12 kinds only, it applies the per-recipient window: the first item goes immediately; later ones are held as references (custody unchanged) until `flush_due_at`, then delivered as one listing push up to the listing limit, with a pointer for the rest. Today's per-root quiet and cap windows (`subscription_facts.rs:11–45`) still run upstream, and the replication gate is unchanged |
 
 ## Flows
 
-**Create, from any machine (R1, R3, R4).** Router → `AutomationCreate` → the catalog validates (U66, one active Wake per session against the Fleet-wide list), inserts the definition and its timing in one transaction, and answers with the revision. If central is unreachable, the CLI and MCP return `centralUnreachable`, and nothing is queued.
-
-**Fire (R5, R6, R6a).**
-1. The alarm runs. In one Fleet transaction, for each enabled Automation with `next_due_ms <= now`:
-   - a pending undelivered Firing of a Wake absorbs the due time;
-   - a Schedule with a `waiting_firing_id` folds into it;
-   - otherwise a new `automation_firings` row is created, the occupying and waiting slots are set, `next_due_ms` is advanced from now (today's rule), and a mail-submit obligation is recorded.
-2. After commit, the Firing sender places the item in recipient custody.
-   - Its `valid_until` is the Wake's end, or the Schedule's next due time.
-   - Then the next alarm is set to the minimum `next_due_ms`.
-3. A pause or cancel arriving for a Firing that's admitted but not delivered sends a mail `Cancel`, and the Firing ends as `cancelled`.
-
-**Deliver and run (R7–R10).**
-1. The target Router receives the item in its inbox (existing).
-2. The injection owner calls `firing_injection`, which inserts the `firing_receipts` row. A duplicate is a no-op.
-3. For a Wake: the existing wake push is built and delivered, then `FiringReport(delivered)` is sent.
-4. For a Schedule: a `workflow_runs` row is inserted with the `firing_id`, and the run starts through the existing execution route, followed by `FiringReport(runStarted)`. The summary worker runs as today, followed by `FiringReport(runFinished, summary)`, or `failed` with its reason.
-5. The mail sender status (`held`, `delivered`, `expired`, `cancelled`) also updates the Firing.
-
-**Hand over (R11–R13).** At first startup on the new release, after enrollment, for each local Schedule and each active or paused Wake:
-1. In one local transaction, set `automation_handover = pending`. The local timers now skip it.
-2. Call `AutomationImport`. It carries the definition, its `watermark_ms` and `next_due_ms`, and its occupying and waiting run state.
-3. The Fleet inserts it, keyed by `automation_id`.
-   - A repeat with the same digest gets the same answer.
-   - A different digest is refused as `importConflict`, and the Router reports it and keeps the Automation `pending`.
-4. On acceptance, set `moved`.
-5. The Fleet admits from the imported watermark, so a due time that fell during the move fires once, under the fold rules.
-6. A crash between steps resumes at the same step.
-
-An old-release machine never calls Import, so the Fleet holds nothing of its definitions and never fires them.
-
-## Interfaces
-
-- **Calls** (typed request and answer enums, through `CallTarget` on the Fleet face):
-  - `AutomationCreate { definition }` → `{ automation_id, revision }`
-  - `AutomationChange | Pause | Resume | Cancel { automation_id, expected_revision }` → `{ revision }`, or the refusals `revisionMismatch`, `wakeExists { creator }`, `limitExceeded { limit }`
-  - `AutomationList { filter } | AutomationShow { automation_id }` → definitions, state and recent Firing outcomes
-  - `AutomationImport { automation_id, definition, timing, run_state }` → `imported | alreadyImported | importConflict`
-  - `FiringReport { firing_id, state, summary? }` → `recorded | stale`
-- **Mail:** `FiringBody { firing_id, automation_id, revision, due_at, valid_until, payload: Wake { message, creator } | ScheduleRun { instruction, destination, model, effort, timeout } }`.
-- **CLI and MCP:** the existing `wake …` and `schedule …` commands keep their flags and JSON shapes. The target may now be on any machine, and each command's answer comes from the Fleet. Offline writes fail with `centralUnreachable`.
+1. **Create or change.**
+   1. The Router sends an `AutomationCall` with its operation ID.
+   2. The catalog replays a known operation ID: the same digest gets the stored answer, and a different digest gets `operationConflict`.
+   3. Otherwise it validates the Limits and the slot, writes the definition, timing, `wake_at` and the operation receipt in one transaction, and answers.
+   4. On the Router side: an unreachable central before the send returns `centralUnreachable`, and a lost answer returns `outcomeUnknown` plus the operation ID.
+2. **Due (R7f, R6a).**
+   1. The alarm fires and `drive_due` runs the clock task.
+   2. In one transaction it admits the due Firings (unique on automation and effective due), folds as today, groups them by machine, freezes the Batches (bytes and digest), records the send step, advances timing, and re-arms. That commit is **the cutoff**.
+   3. The send step calls `AdmitCentralBatch`. Its answer or the Mailbox status marks the Firings `sent`. A lost answer leaves them `unknown` until a status read reconciles them.
+3. **Pause, cancel or change.** These take effect in the catalog. Firings not yet frozen into a Batch are dropped or updated. Firings already frozen are answered as `alreadySent`, and nothing is sent to the Machine.
+4. **Receive (R7–R9).** The Machine pulls (existing). Batch injection runs per entry. Today's drivers deliver the wake push or run the schedule; continuity comes from the previous completed run of that schedule on this machine (`run_admission.rs:105–143`). The reporter reports each state.
+5. **Handover (R11–R12).**
+   1. In one local transaction per Automation: set `pending`, record `admitted_through_ms` (the last locally admitted due time), normalize the timing under U12 and U13, and **freeze and store the payload** (definition, Instruction revisions, `admitted_through_ms`, adjustments).
+   2. Locally admitted work keeps running under today's drivers.
+   3. Send `AutomationImport` with the frozen bytes. The Fleet inserts it; a repeated digest gets `alreadyImported`, and a different digest gets `importConflict`, which stays `pending` and is reported.
+   4. The Fleet admits only due times after `admitted_through_ms`.
+   5. Mark `moved`.
+   6. A crash between steps resumes with the same bytes.
+6. **Notification window (R6n).** An E12 item reaches the reader delivery owner.
+   - If no window is open for that recipient, it's pushed now and a window opens until now + 10 min.
+   - If one is open, the item is held as a reference.
+   - At `flush_due_at`, one listing push goes out and the window closes.
+   - Off and Poll policies are applied first, as today.
 
 ## State
 
-- Firing (central): `due` → `held` → `delivered`, then `runStarted`, then `runFinished` or `failed`; and `due`/`held` → `expired` or `cancelled`. It's monotonic, so a stale `FiringReport` is answered `stale`.
-- Handover (local): `none` → `pending` → `moved`.
-
-## Runtime behaviour: clock, delivery, scale
-
-- **The clock.** The Fleet object holds one platform alarm, owned by `AlarmOwner` (`runtime-primitives/src/alarm_owner.rs:34-53`); a request only moves it earlier. On Cloudflare, `DurableObject::alarm()` (`object_shell.rs:448`) calls `on_alarm`, which calls `durable_steps::drive_due` (`operation_engine.rs:210`). That reads every due operation in one transaction, re-arms to the next earliest deadline, and runs them with bounded concurrency. There's no polling. On Tokio, `wake_at` is a Tokio timer (`native_objects.rs:65`).
-- **Batching.** One alarm admits every Automation due at or before now in one transaction, so N automations due together cost one wake.
-- **Delivery to machines.** Each machine holds one hibernatable WebSocket to its Connection object (`object_shell.rs:1`, `binding_attachment.rs:1`). A Firing in recipient custody becomes one journaled notice plus a live hint (`machine_notice_delivery.rs:1`). The machine pulls, and when it's offline it catches up from its position on reconnect.
-- **The wake push** is unchanged: `wakeup_delivery_sender` builds the `PushKind::Wake` push, and `session_delivery_router` picks one route (Codex app-server, Claude Code peer, ACP) per attempt. The modes are `auto` (idle starts a turn; busy queues, then one prompt), `queue` and `steer`.
-- **Bounds:** one alarm per object; one socket per machine; one active Wake per session; one occupying and one waiting Run per Schedule; an undelivered Wake Firing absorbs new due times.
-- **Hot spot:** a single Fleet object holds every Automation. That's adequate for tens to hundreds. If thousands with second-level timing ever appear, round due times to the minute (deferred; not needed now).
+- **Firing:**
+  - pending → sent → (Wake) delivered or expired;
+  - pending → sent → (Schedule) run started → run finished or failed;
+  - pending → unknown → sent;
+  - pending → dropped, by a pause or cancel before the cutoff.
+- **Reports:** applied by `seq`; anything at or below the current one is ignored.
+- **Local receipt:** admitted → done.
+- **Handover:** none → pending → moved.
 
 ## Failure and edge behaviour
 
 | Case | Behaviour |
 | --- | --- |
-| Central unreachable during a write | refused as `centralUnreachable`, never queued (R4) |
-| Central restarts during an alarm | the durable step resumes; the Firing row and its mail obligation are in one transaction, so there's no double admission |
-| Mail submit's outcome unknown | reconciled through sender status, never resubmitted with a new identity (R6a) |
-| Target machine offline | the item is held, then delivered or expired by `valid_until` (R6) |
-| The same item delivered twice | the `firing_receipts` primary key turns the second into a no-op (R7) |
-| A FiringReport is lost | the durable outbox retries it; the Fleet answers repeats idempotently |
-| Import conflict | stays `pending`, is reported to the operator, and never fires on both sides |
+| A duplicate alarm | admission is unique on (automation, effective due), so nothing new; the send step resends the same Batch bytes |
+| The send's answer is lost | retried with the same `batch_id` and bytes; reconciled through `CentralBatchStatus` |
+| A crash after the receipt, before the work | can't happen: the receipt and the owed work commit together. On restart, the existing driver resumes the owed work |
+| A crash after native acceptance, before the outcome is stored | today's uncertain and reconcile handling in the drivers; never a blind repeat |
+| The Machine is offline | the Batch is held in custody. On return, Wake entries past their end become expired and the rest run |
+| An oversized due set | split into several Batches at admission |
+| An incapable (old) target | refused at create (`targetNeedsUpgrade`), and the Registry refuses at admission |
+| An import conflict | stays `pending`, is reported to the operator, and nothing fires on either side |
+| A stored row that breaks a Limit | refused on decode with `limitExceeded`, never coerced |
 
-## Trust boundaries
+## Runtime behaviour: clock, delivery, cost
 
-Calls ride the authenticated machine session, so the installation is bound by central. The `creator` is recorded as declared, which is today's wake rule (spec 1 §6). A `FiringReport` is accepted only from the installation the Firing was addressed to.
-
-## Migration of storage
-
-- **Fleet face:** a new migration adds the four tables on both runtimes.
-- **Router `automation.sqlite`:** adds `firing_receipts`, `automation_handover`, and a unique `workflow_runs.firing_id`. Existing tables stay, under PR 1's retention, WAL and vacuum.
-- The `remote_wake_requests` rows stay as history and are pruned at 2 months.
+- **The clock is a callback, not a loop.** Each object has one platform alarm, held by `AlarmOwner`, which only moves earlier (`alarm_owner.rs:34–51`). Cloudflare invokes `DurableObject::alarm()` (`object_shell.rs:448`), which calls `drive_due` (`operation_engine.rs:210–238`, concurrency 8). Alarms are at least once, so every admission is idempotent. On Tokio, `wake_at` is a timer.
+- **The grid concentrates wake-ups:** under U12, a Fleet wakes at most once per 5-minute grid point that has work.
+- **Delivery to machines** uses the existing hibernatable socket. Outgoing messages aren't billed, and incoming ones are billed at 20:1. Mailbox and Connection steps run on their own alarms (`mailbox_step.rs:112–119`, `machine_notice_delivery.rs:146–190`), so the cost of one Batch is several object events, not one.
+- **Cost:** the planning model is on `firing-options.html`. The real per-batch event, row-write and duration counts are measured on the first A slice (VD).
 
 ## Trace table
 
-| Capability | R | Component | Seam (proof) |
+| Capability | R | Component | Seam |
 | --- | --- | --- | --- |
-| definitions | R1 | catalog + automation calls + operations | the List/Show answer from a second Router |
-| definitions | R2 | catalog (no project field), clock | Firing at its due time while all leases are expired |
-| definitions | R3 | catalog checks | the refusal answers |
-| definitions | R4 | operations | the `centralUnreachable` answer; no later insert |
-| firing | R5 | clock | `automation_firings` rows; the alarm drive report |
-| firing | R6 | firing sender + mail custody | mail status; the recipient's inbox |
-| firing | R6a | catalog revision + firing sender cancel | Firing state; no injection |
-| firing | R7 | firing injection | `firing_receipts`; the count of pushes and runs |
-| runs | R8 | firing injection → wake push | the session's received push |
-| runs | R9 | firing injection → scheduled-run route | the `workflow_runs` row; the session |
-| runs | R10 | reporter + sender status | Show from a non-target Router |
-| migration | R11 | handover | `automation_handover`; Fleet rows |
-| migration | R12 | handover + clock watermark | the count of Firings for the due time |
-| migration | R13 | handover (absent on old releases) | the Fleet holds no row for the machine |
-| migration | R14 | PR 1 retention | local history reads |
-| design-truth | R15 | the docs reconciliation process | the published tree, the manifest and the scan |
+| definitions | R1 | catalog + operations | List/Show from a second Router |
+| definitions | R2 | catalog, clock | a Firing with leases expired |
+| definitions | R3 | catalog slot and replacement | refusals and replacement answers |
+| definitions | R4 | operations + catalog operation receipts | replay and conflict answers; `outcomeUnknown` |
+| definitions | R5 | limits + constructors | schema against acceptance; decode refusal |
+| cadence | R6g | limits + clock rounding | `automation_firings.effective_due_ms` |
+| cadence | R6n | notification limiter | push count per recipient window; listing content |
+| firing | R7f | clock task + batch sender | Batch rows, digests, alarm drive report |
+| firing | R6 | mail contract + Registry admission + injection expiry | per-entry outcomes |
+| firing | R6a | clock commit (the cutoff) + catalog | the command's answer; Batch membership |
+| firing | R7 | batch injection + drivers | receipts; effect counts |
+| runs | R8, R9 | drivers | the session's input; run summary |
+| runs | R10 | reporter + catalog | Show from a non-target Router |
+| migration | R11, R12 | handover | frozen payloads; Fleet rows; effect counts |
+| migration | R13 | handover absent on old releases | no Fleet rows |
+| migration | R14 | PR 1 retention | local reads |
+| design-truth | R15 | the docs reconciliation | manifest, grep, scan |
