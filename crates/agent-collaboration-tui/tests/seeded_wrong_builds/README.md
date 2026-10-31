@@ -171,3 +171,20 @@ T4 replaces the old same-row secondary clipping rule with a full secondary line 
 | `dialog-body-bottom-aligned.patch` | A fixed-height dialog puts spare blank rows above its body instead of below it. |
 
 T9 changes the disabled editor fixture from one row to two so its reason can occupy the approved next row; the value style and ignored-input assertions remain. T7 replaces the former fixed-dialog body/footer adjacency assertion with a pinned-footer and empty-space-below-body assertion. Content-sized forms retain their exact one-row footer gap, and fixed frame sizes remain asserted.
+
+| Patch | Intended failure |
+| --- | --- |
+| `switch-paints-partial-group.patch` | Paint full switch labels and keys despite the shared remaining budget. |
+| `switch-hidden-target-remains-focusable.patch` | The group is hidden but its targets remain eligible for Tab. |
+| `filter-minimum-on-inner-child.patch` | The consumer reserves its minimum only inside the child and budgets the full peer row for the switch. |
+| `form-value-refuses-reflow.patch` | The shared label column squeezes a value instead of moving above it. |
+| `form-selector-gutter-one-too-wide.patch` | An extra selector cell breaks a 36-cell UUID that fits after the correct two-cell gutter. |
+| `status-detail-starves-word.patch` | The detail text squeezes the status word into fragments. |
+| `help-columns-refuse-reflow.patch` | Fixed Help columns fragment the captured account, action titles and conventions. |
+| `help-native-word-breaks-token.patch` | Native Unicode line-break opportunities split fitting paths and bracketed tags. |
+| `help-overlong-token-never-wraps.patch` | A token longer than the whole body clips instead of hard wrapping. |
+| `help-token-width-stale-on-resize.patch` | A continuing Help body uses its old token-width budget after resize. |
+| `help-collapses-original-spacing.patch` | Help token layout collapses original multiple spaces. |
+| `help-keyless-placeholder.patch` | A keyless Help action gains an invented dash key. |
+
+The inner-child minimum control mutates the sample consumer allocation, including its shared remaining-width budget; all expected assertions stay unchanged. The toolbar full-title budget control follows its existing calculation into the shared Button width owner. Header/field style controls are mechanically refreshed for the native reflow layout.

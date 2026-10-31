@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_dialog.rs b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_dialog.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+@@ -15,3 +15,3 @@ impl Hook for HelpTextMeasure {
+     fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+-        if self.0.get() != drawer.size().width {
++        if self.0.get() == 0 {
+             self.0.set(drawer.size().width);

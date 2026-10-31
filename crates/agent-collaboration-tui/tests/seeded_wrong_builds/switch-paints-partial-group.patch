@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/segmented_switch.rs b/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
+--- a/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
++++ b/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
+@@ -102,3 +102,3 @@ pub fn SegmentedSwitch(
+     };
+-    let presentation = segmented_presentation(&actions, props.available_width);
++    let presentation = SegmentedPresentation::Full;
+     if presentation == SegmentedPresentation::Hidden {

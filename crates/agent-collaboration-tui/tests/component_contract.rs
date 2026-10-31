@@ -111,3 +111,15 @@ mod field_reason_layout;
 #[cfg(test)]
 #[path = "suites/button_key_hint.rs"]
 mod button_key_hint;
+
+#[cfg(test)]
+#[path = "suites/filter_switch_layout.rs"]
+mod filter_switch_layout;
+
+#[cfg(test)]
+#[path = "suites/responsive_fields.rs"]
+mod responsive_fields;
+
+#[cfg(test)]
+#[path = "suites/help_narrow_layout.rs"]
+mod help_narrow_layout;

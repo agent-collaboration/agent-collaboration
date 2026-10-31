@@ -6,24 +6,11 @@ use crate::{
     surface_handle::SurfaceContext,
 };
 use iocraft::prelude::*;
-use unicode_width::UnicodeWidthStr;
 pub fn toolbar_actions(registry: &ActionRegistry, available: u16) -> Vec<ActionPresentation> {
     let mut remaining = usize::from(available);
     let mut actions = Vec::new();
     for action in ActionProjections::from_registry(registry).toolbar {
-        let key = action.keys.first().map_or(0, |key| {
-            UnicodeWidthStr::width(key.to_string().as_str()) + 1
-        });
-        let reason = match &action.availability {
-            Availability::Available => 0,
-            Availability::Unavailable { reason } => reason.width() + 1,
-        };
-        let checked = usize::from(action.checked == Some(true)) * 2;
-        let label = action
-            .toolbar_label
-            .as_deref()
-            .unwrap_or(action.title.as_str());
-        let width = UnicodeWidthStr::width(label) + key + reason + checked + 3;
+        let width = super::button::action_button_width(&action, true).saturating_add(1);
         if width > remaining {
             break;
         }

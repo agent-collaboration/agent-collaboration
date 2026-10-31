@@ -93,6 +93,7 @@ mod tests {
             targets.extend(segmented_targets(
                 &[folder.clone(), every.clone()],
                 GroupId::new("scope").unwrap(),
+                move || stack.viewport().0.saturating_sub(12),
             ));
             SurfaceModel {
                 focus: FocusModel::new(targets).unwrap(),
@@ -105,7 +106,7 @@ mod tests {
             }
         });
         let journal = props.journal.clone();
-        element!(InputOwner(stack,width:76u16,height:20u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,vec![u8::from(all.get())]),(SurfaceId::Screen,stack.snapshot().top().focus.current().unwrap().as_str().as_bytes().to_vec())]))) {OverlayHost {View {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu")) SegmentedSwitch(actions:vec![action("folder"),action("all")])}}})
+        element!(InputOwner(stack,width:76u16,height:20u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,vec![u8::from(all.get())]),(SurfaceId::Screen,stack.snapshot().top().focus.current().unwrap().as_str().as_bytes().to_vec())]))) {OverlayHost {View {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu")) SegmentedSwitch(actions:vec![action("folder"),action("all")],available_width:stack.viewport().0.saturating_sub(12))}}})
     }
     fn click_label(driver: &EventDriver, label: &str, menu: bool) -> TerminalEvent {
         let grid = driver.frames.last().unwrap();
