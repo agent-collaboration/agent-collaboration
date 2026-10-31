@@ -123,7 +123,8 @@ pub fn SelectableRow<'a>(
                 .snapshot()
                 .surface(context.surface)
                 .and_then(|surface| surface.focus.current().cloned())
-        });
+        })
+        .filter(|_| props.selected);
     super::scroll_list::use_scroll_reveal(&mut hooks, props.selected, target_id);
     let theme = hooks
         .try_use_context::<SurfaceContext>()
