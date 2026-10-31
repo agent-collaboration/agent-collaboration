@@ -1,11 +1,11 @@
 diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
 --- a/crates/agent-collaboration-tui/src/input_owner.rs
 +++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -51,2 +51,3 @@ pub fn InputOwner<'a>(
+@@ -52,2 +52,3 @@ pub fn InputOwner<'a>(
      let dispatch_receipt = props.dispatch_receipt.clone();
 +    let snapshot = stack.snapshot();
      hooks.use_terminal_events(move |event| {
-@@ -54,3 +55,2 @@ pub fn InputOwner<'a>(
-         let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
+@@ -56,3 +57,2 @@ pub fn InputOwner<'a>(
+         stack.reconcile_active_focus();
 -        let snapshot = stack.snapshot();
          let decision = route_event(stack, &snapshot, &quit_action, &global_quit_aliases, event);

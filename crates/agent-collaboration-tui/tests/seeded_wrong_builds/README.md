@@ -188,3 +188,15 @@ T9 changes the disabled editor fixture from one row to two so its reason can occ
 | `help-keyless-placeholder.patch` | A keyless Help action gains an invented dash key. |
 
 The inner-child minimum control mutates the sample consumer allocation, including its shared remaining-width budget; all expected assertions stay unchanged. The toolbar full-title budget control follows its existing calculation into the shared Button width owner. Header/field style controls are mechanically refreshed for the native reflow layout.
+
+| Patch | Intended failure |
+| --- | --- |
+| `focus-no-automatic-fallback.patch` | A disabled or dropped target stays current before any Tab. |
+| `focus-never-returns-displaced.patch` | An eligible displaced target never regains focus. |
+| `focus-returns-after-user-move.patch` | Automatic return overrides a newer explicit focus choice. |
+| `focus-pointer-keeps-old-return-intent.patch` | A pointer focus move leaves the displaced return intent active. |
+| `focus-model-refresh-drops-return-intent.patch` | Replacing the complete dialog model preserves only its current ID and loses displaced intent, including a Help-suspended model. |
+
+The switch resize fixture now asserts focus repair immediately before Tab. With automatic repair, a later Tab on the sole eligible filter makes no visual change; its focus assertion remains, and its incorrect redraw wait is removed. Existing render-time snapshot and availability-cache controls are mechanically refreshed around active-focus reconciliation.
+
+The existing complete-model focus-reset and discarded-primary controls are also mechanically refreshed around intent transfer; they retain the same faults and original assertions.

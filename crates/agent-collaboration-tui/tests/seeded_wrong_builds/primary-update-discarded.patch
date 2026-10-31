@@ -1,10 +1,10 @@
 diff --git a/crates/agent-collaboration-tui/src/surface_handle.rs b/crates/agent-collaboration-tui/src/surface_handle.rs
 --- a/crates/agent-collaboration-tui/src/surface_handle.rs
 +++ b/crates/agent-collaboration-tui/src/surface_handle.rs
-@@ -73,4 +73,6 @@ impl SurfaceStackHandle {
+@@ -74,4 +74,6 @@ impl SurfaceStackHandle {
          };
 +        let primary=model.primary_action.clone();
-         let focused = model.focus.current().cloned();
+         let previous_focus = model.focus.clone();
          update(model);
 +        model.primary_action=primary;
-         model.focus.restore(focused.as_ref());
+         model.focus.inherit_focus_intent(&previous_focus);

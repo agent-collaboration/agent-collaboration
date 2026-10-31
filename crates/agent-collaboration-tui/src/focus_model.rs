@@ -143,12 +143,14 @@ impl std::error::Error for FocusError {}
 pub struct FocusModel {
     targets: Vec<TargetSpec>,
     current: Option<TargetId>,
+    displaced: Option<TargetId>,
 }
 impl FocusModel {
     pub(crate) fn empty() -> Self {
         Self {
             targets: Vec::new(),
             current: None,
+            displaced: None,
         }
     }
     pub fn new(targets: Vec<TargetSpec>) -> Result<Self, FocusError> {
@@ -157,7 +159,11 @@ impl FocusModel {
             .iter()
             .find(|target| target.can_focus())
             .map(|target| target.id.clone());
-        Ok(Self { targets, current })
+        Ok(Self {
+            targets,
+            current,
+            displaced: None,
+        })
     }
     pub fn targets(&self) -> &[TargetSpec] {
         &self.targets
@@ -177,26 +183,56 @@ impl FocusModel {
             .any(|target| target.id == *id && target.can_focus())
         {
             self.current = Some(id.clone());
+            self.displaced = None;
             true
         } else {
             false
         }
     }
+    fn is_focus_eligible(&self, id: &TargetId) -> bool {
+        self.targets
+            .iter()
+            .any(|target| target.id == *id && target.can_focus())
+    }
+    /// Reconcile only the active surface. Covered and Help-suspended models keep
+    /// their displaced intent until the original surface becomes active again.
+    pub(crate) fn reconcile_eligibility(&mut self) -> bool {
+        let before = (self.current.clone(), self.displaced.clone());
+        if self
+            .displaced
+            .as_ref()
+            .is_some_and(|id| self.is_focus_eligible(id))
+        {
+            self.current = self.displaced.take();
+        } else if !self
+            .current
+            .as_ref()
+            .is_some_and(|id| self.is_focus_eligible(id))
+        {
+            if self.displaced.is_none() {
+                self.displaced = self.current.clone();
+            }
+            self.current = self
+                .targets
+                .iter()
+                .find(|target| target.can_focus())
+                .map(|target| target.id.clone());
+        }
+        (self.current.clone(), self.displaced.clone()) != before
+    }
+    /// Model replacement copies intent without reconciling a covered surface.
+    pub(crate) fn inherit_focus_intent(&mut self, previous: &Self) {
+        self.current = previous.current.clone();
+        self.displaced = previous.displaced.clone();
+    }
     pub fn restore(&mut self, id: Option<&TargetId>) {
-        self.current = id
-            .and_then(|id| {
-                self.targets
-                    .iter()
-                    .find(|target| target.id == *id && target.can_focus())
-            })
-            .or_else(|| self.targets.iter().find(|target| target.can_focus()))
-            .map(|target| target.id.clone());
+        self.current = id.cloned();
+        self.reconcile_eligibility();
     }
     pub fn replace_targets(&mut self, targets: Vec<TargetSpec>) -> Result<(), FocusError> {
         validate_targets(&targets)?;
-        let previous = self.current.clone();
         self.targets = targets;
-        self.restore(previous.as_ref());
+        self.reconcile_eligibility();
         Ok(())
     }
     pub fn traverse(&mut self, direction: FocusDirection) {
@@ -236,6 +272,7 @@ impl FocusModel {
             }
         };
         self.current = next.map(|id| (*id).clone());
+        self.displaced = None;
     }
 }
 
