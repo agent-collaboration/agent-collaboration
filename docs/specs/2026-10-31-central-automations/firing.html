@@ -106,16 +106,15 @@ stateDiagram-v2
 <p>Reports from the machine carry a sequence number, stored on the machine together with each state change, so a restart continues it. Central applies them in order, ignores repeats and older ones, and never moves a finished firing back.</p>
 
 <h2 id="clock">How the clock works (Cloudflare and Tokio)</h2>
-<p><strong>There's no polling loop.</strong> The clock is <strong>one journal job per 5-minute mark that has work</strong>, named for that mark. Creating, changing or moving an automation queues the job for its next mark, in the same transaction. Each job sends only what's due by its mark, never earlier, then queues the jobs for the next marks. An earlier edit just queues an earlier job, and a later job with nothing left to do finishes instantly. The Fleet object has one alarm, shared with its other work through <code>AlarmOwner</code>, which only ever moves it earlier. Cloudflare calls <code>alarm()</code> at that time. Cloudflare alarms can arrive <strong>more than once</strong>, so admission is keyed by automation and due time, and a repeat admits nothing new and resends the same bytes. On self-hosted Tokio, the same wake request is a timer.</p>
+<p><strong>There's no polling loop.</strong> Central's Fleet object holds <strong>one alarm</strong>, set to the next due time. When it fires, the alarm handler runs one step: send everything whose rounded time has arrived, then set the alarm for the next due time. Creating or changing an automation moves the alarm earlier if needed, in the same transaction. The alarm is shared with central's other Fleet work through <code>AlarmOwner</code>, which keeps only the earliest. Alarms can arrive more than once, so the step is safe to repeat. On self-hosted Tokio, the same thing is a timer.</p>
 <ex-mermaid id="clock-flow" label="Alarm path"><script type="text/plain">
 flowchart TD
-  cf["Cloudflare at the grid mark"] --> alarm["DurableObject alarm()"]
-  alarm --> drive["durable steps: drive_due()"]
-  drive --> admit["one transaction: admit due firings,<br/>freeze batches, record send step,<br/>set next wake"]
-  admit --> send["notice step: Fleet → Delivery, per batch<br/>+ queue next mark's job"]
-  send --> idle["object idles until the next mark with work"]
+  cf["Cloudflare at the next due time"] --> alarm["DurableObject alarm()"]
+  alarm --> drive["drive central's other jobs (as today)"]
+  alarm --> eval["one transaction: what's due by now?<br/>freeze batches, queue 'batch ready' notices,<br/>set the alarm for the next due time"]
+  eval --> idle["object sleeps until then"]
 </script></ex-mermaid>
-<p>The notice journal runs on its own alarm, so one batch is a few object events, not one. The <a href="firing-options.html">cost page</a> keeps that as a planning model until it's measured.</p>
+<p>Between due times nothing runs: there are no ticks and no retries standing in for a timer. The notice journal runs on its own alarm, so one batch is a few object events, not one. The <a href="firing-options.html">cost page</a> keeps that as a planning model until it's measured.</p>
 </ex-document>
 
 
