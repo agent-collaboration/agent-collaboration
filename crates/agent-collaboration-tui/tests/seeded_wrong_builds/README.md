@@ -256,3 +256,9 @@ Frame controls run with test-support except the production leak, which also runs
 | `scroll-deferred-first-track.patch` | A freshly mounted overflowing list or Help uses previous measurements and paints its first canvas without a scrollbar. |
 
 The first-frame scenarios retain every native synchronized frame before the settled driver drains them. They inspect the first marked canvas at the commissioned small grids; fresh-list checks also run without receipts in normal builds. Fitting content must remain trackless. Help keeps the declared paging conventions visible through real scrolling.
+
+| Patch | Intended failure |
+| --- | --- |
+| `fixed-dialog-padding-deferred.patch` | The first marked F1 frame uses zero padding; Down then consumes two body rows and shifts the content column by one. |
+
+The Help padding cases compare the painted scrollbar and content column in the first marked F1 and Down canvases at120x36 and76x30. They derive geometry from each retained canvas; reading shared measurement state after receiving queued frames could observe a later layout instead. The first frame also keeps the shipped one-cell padding for these fixed-height dialogs. The existing content-dialog padding mutation retains its previous-height defect for both sizing policies.
