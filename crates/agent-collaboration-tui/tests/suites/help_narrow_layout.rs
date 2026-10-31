@@ -282,6 +282,35 @@ mod tests {
         }
     }
     #[tokio::test]
+    async fn keyless_help_actions_have_an_empty_key_column_without_a_placeholder_glyph() {
+        let handle = Arc::new(Mutex::new(None));
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(NarrowHelpScene(journal,width:120u16,height:36u16,handle));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            driver.initial(&mut frames).await;
+            driver
+                .drive(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::F(1)), true)],
+                    true,
+                )
+                .await;
+            let panel = driver.frames.last().unwrap().round_frame_text();
+            let line = panel
+                .lines()
+                .find(|line| line.contains("Inspect metadata"))
+                .unwrap();
+            assert!(
+                !line.contains('—'),
+                "keyless action has no invented key\n{line}"
+            );
+        })
+        .await
+        .unwrap();
+    }
+    #[tokio::test]
     async fn help_token_layout_tracks_live_width_and_returns_to_its_exact_wide_grid() {
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
             let handle = Arc::new(Mutex::new(None));

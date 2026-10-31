@@ -112,7 +112,7 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
         Text(content:"Actions",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
         #(entries.into_iter().map(|(action,keys)| {let available=action.availability.is_available();let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};element!(View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
-            View(width:key_width,max_width:100pct,flex_shrink:0.0_f32) {Text(content:if keys.is_empty(){"—".to_owned()}else{keys},color:theme.foreground(TextRole::Muted))}
+            View(width:key_width,max_width:100pct,flex_shrink:0.0_f32) {Text(content:keys,color:theme.foreground(TextRole::Muted))}
             View(min_width:0,max_width:100pct,flex_grow:1.0_f32,flex_shrink:1.0_f32,flex_wrap:FlexWrap::Wrap,column_gap:2) {
                 Text(content:action.title,color:theme.foreground(if available {TextRole::Text}else{TextRole::Disabled}))
                 #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))

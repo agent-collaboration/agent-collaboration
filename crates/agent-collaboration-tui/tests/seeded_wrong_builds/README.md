@@ -185,5 +185,6 @@ T9 changes the disabled editor fixture from one row to two so its reason can occ
 | `help-overlong-token-never-wraps.patch` | A token longer than the whole body clips instead of hard wrapping. |
 | `help-token-width-stale-on-resize.patch` | A continuing Help body uses its old token-width budget after resize. |
 | `help-collapses-original-spacing.patch` | Help token layout collapses original multiple spaces. |
+| `help-keyless-placeholder.patch` | A keyless Help action gains an invented dash key. |
 
 The inner-child minimum control mutates the sample consumer allocation, including its shared remaining-width budget; all expected assertions stay unchanged. The toolbar full-title budget control follows its existing calculation into the shared Button width owner. Header/field style controls are mechanically refreshed for the native reflow layout.
