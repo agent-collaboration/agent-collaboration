@@ -102,6 +102,12 @@ pub(crate) fn open_choice(
         QuotaChoiceField::Disabled => context.disabled_choice,
         QuotaChoiceField::Credit => context.credit_choice,
     };
+    let parent_scroll = context
+        .dialog
+        .read()
+        .as_ref()
+        .map(|session| session.scroll.clone())
+        .ok_or_else(|| "Quota dialog is unavailable".to_owned())?;
     let selected_context = context;
     let control = ComboBoxControl::new(ComboBoxBinding {
         parent: SurfaceContext {
@@ -109,6 +115,7 @@ pub(crate) fn open_choice(
             surface: stack.snapshot().top_id(),
         },
         field: choice_target(field)?,
+        parent_scroll: Some(parent_scroll),
         value,
         on_pick: Handler::from(move |key: OptionKey| {
             let mut filters = selected_context.filters;
