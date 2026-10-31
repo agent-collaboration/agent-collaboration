@@ -16,8 +16,8 @@ import { z } from 'zod';
 import {
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
-	codexActionSchema,
 	codexFixtureTitleSchema,
+	codexMenuKeySchema,
 	compactJourney,
 	encodeCodexAction,
 	gridShowsCheckpoint,
@@ -89,17 +89,34 @@ export const codexAcpRunPlanSchema = z
 				provider: providerSchema,
 				prior_reply: z.array(z.string().min(1)).min(1),
 			}),
-			// Keys moving to one advertised model row, how it is applied, and the text Codex shows.
+			// The refreshed catalogue page and stale bootstrap rows from the actual bound and unbound
+			// model/list, the selected model row and optional effort row, the apply, and its text.
 			z.strictObject({
 				kind: z.literal('model'),
 				provider: providerSchema,
-				navigation: z.array(codexActionSchema),
+				catalogue_page: z.array(z.string().min(1)).min(1).max(8),
+				stale_rows: z.array(z.string().min(1)),
+				model_navigation: z.array(codexMenuKeySchema),
+				target: z.strictObject({
+					display_name: z.string().min(1),
+					number: z.number().int().positive(),
+					is_current: z.boolean(),
+				}),
+				effort: z
+					.strictObject({
+						navigation: z.array(codexMenuKeySchema),
+						value: z.string().min(1),
+						number: z.number().int().positive(),
+						is_default: z.boolean(),
+						is_current: z.boolean(),
+					})
+					.nullable(),
 				apply: z.enum(['session', 'default']),
 				expected_outcome: z.array(z.string().min(1)).min(1),
 				outcome_deadline_ms: z.number().int().positive().max(600_000),
 			}),
-			// A harmless fixture title for inline /rename and the endpoint's declared refusal text:
-			// the first entry is the error cell's leading text, each entry fits one grid row.
+			// Diagnostic rename probe, not a delivery gate: a harmless fixture title and the endpoint's
+			// declared refusal text (first entry is the error cell's leading text; each fits one row).
 			z.strictObject({
 				kind: z.literal('rename'),
 				provider: providerSchema,
@@ -132,13 +149,30 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 	if (journey.kind === 'reopen') return reopenJourney(journey.provider, journey.prior_reply);
 	if (journey.kind === 'rename')
 		return renameJourney(journey.provider, journey.title, journey.expected_refusal);
-	return modelJourney(
-		journey.provider,
-		journey.navigation,
-		journey.apply,
-		journey.expected_outcome,
-		journey.outcome_deadline_ms,
-	);
+	return modelJourney({
+		provider: journey.provider,
+		cataloguePage: journey.catalogue_page,
+		staleRows: journey.stale_rows,
+		modelNavigation: journey.model_navigation,
+		target: {
+			displayName: journey.target.display_name,
+			number: journey.target.number,
+			isCurrent: journey.target.is_current,
+		},
+		effort:
+			journey.effort === null
+				? null
+				: {
+						navigation: journey.effort.navigation,
+						value: journey.effort.value,
+						number: journey.effort.number,
+						isDefault: journey.effort.is_default,
+						isCurrent: journey.effort.is_current,
+					},
+		apply: journey.apply,
+		expectedOutcome: journey.expected_outcome,
+		outcomeDeadlineMs: journey.outcome_deadline_ms,
+	});
 }
 
 /** Everything a run needs, checked without launching Codex. */

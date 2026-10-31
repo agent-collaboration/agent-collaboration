@@ -57,6 +57,21 @@ export const journeyCheckSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("effective-model"), expected_model: z.string().min(1) }),
   // J3 active-turn preservation: read while the TUI's own turn is still running.
   z.strictObject({ kind: z.literal("turn-in-progress") }),
+  // J2 model: the bound native catalogue and the selected model's controls against the provider
+  // Session's own settings catalogue from public session inspect, never the native list itself.
+  z.strictObject({
+    kind: z.literal("model-catalogue"),
+    // Native rows the bridge may add beside the provider's models (the reserved delegation).
+    delegation_models: z.array(z.string().min(1)).min(1),
+    selected_model: z.string().min(1),
+    effort: z.discriminatedUnion("kind", [
+      // The selected model's actual provider effort options, and its current provider value.
+      z.strictObject({ kind: z.literal("qualified"), expected_current: z.string().min(1) }),
+      // The explicit bridge action for a model without qualified effort metadata; its token is
+      // product-defined and is never an effective value.
+      z.strictObject({ kind: z.literal("provider-settings"), action: z.string().min(1) }),
+    ]),
+  }),
 ]);
 export type JourneyCheck = z.infer<typeof journeyCheckSchema>;
 
@@ -141,6 +156,54 @@ export const nativeThreadSchema = z.looseObject({
 });
 export type NativeThread = z.infer<typeof nativeThreadSchema>;
 
+/** Used fields of native `model/list` rows (Codex v2/model.rs:116-172); the raw response is kept. */
+export const nativeModelListSchema = z.looseObject({
+  data: z.array(
+    z.looseObject({
+      model: z.string(),
+      displayName: z.string(),
+      supportedReasoningEfforts: z.array(
+        z.looseObject({ reasoningEffort: z.string(), description: z.string() }),
+      ),
+      defaultReasoningEffort: z.string(),
+    }),
+  ),
+});
+export type NativeModelList = z.infer<typeof nativeModelListSchema>;
+
+/**
+ * The provider Session's own settings catalogue as public `session inspect --json` prints it
+ * (collaboration-protocol ProviderSettingsCatalogView, provider_session_inspect.rs:33-64).
+ */
+export const providerSettingsCatalogSchema = z.looseObject({
+  configOptions: z.array(
+    z.looseObject({
+      id: z.string(),
+      category: z.enum(["mode", "model", "effort"]).optional(),
+      currentValue: z.discriminatedUnion("kind", [
+        z.looseObject({ kind: z.literal("select"), value: z.string() }),
+        z.looseObject({ kind: z.literal("boolean"), value: z.boolean() }),
+      ]),
+      choices: z.array(z.looseObject({ value: z.string(), label: z.string() })),
+    }),
+  ),
+});
+export type ProviderSettingsCatalog = z.infer<typeof providerSettingsCatalogSchema>;
+export const sessionInspectOutputSchema = z.looseObject({
+  kind: z.literal("result"),
+  result: z.looseObject({
+    record: z.looseObject({ settingsCatalog: providerSettingsCatalogSchema }),
+  }),
+});
+
+/** Model reads an idle-bind observation adds only when a plan checks the model catalogue. */
+export interface ModelReadback {
+  readonly unboundModels: NativeModelList;
+  readonly boundModels: NativeModelList;
+  readonly providerCatalog: ProviderSettingsCatalog;
+  readonly resumedEffort: string | null;
+}
+
 /** What an `active-read-only` observation may collect: history and public events, nothing more. */
 export interface ActiveJourneyReadback {
   readonly threadRead: NativeThread;
@@ -153,6 +216,8 @@ export interface JourneyReadback {
   readonly threadRead: NativeThread;
   readonly threadResume: NativeThread;
   readonly resumedModel: string;
+  // Present only when a plan checks the model catalogue.
+  readonly models: ModelReadback | null;
   readonly providerAgentTexts: readonly string[];
   readonly providerToolItems: readonly ProviderToolItem[];
 }

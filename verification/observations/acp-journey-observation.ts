@@ -8,13 +8,18 @@ import { qualifyMetadataSource, saveRaw } from "./acp-metadata-observation.ts";
 import { UnixWebSocketObserver } from "./unix-websocket-observer.ts";
 import {
   journeyObservationPlanSchema,
+  nativeModelListSchema,
   nativeSkillsListSchema,
   nativeThreadSchema,
   providerJourneyEventsSchema,
+  sessionInspectOutputSchema,
   type ActiveJourneyReadback,
   type JourneyCheckResult,
   type JourneyObservationPlan,
+  type ModelReadback,
+  type NativeModelList,
   type NativeSkillsList,
+  type ProviderSettingsCatalog,
   type NativeThread,
   type ProviderJourneyEvents,
   type ProviderToolItem,
@@ -27,6 +32,12 @@ interface NativeReadback {
   readonly threadRead: NativeThread;
   readonly threadResume: NativeThread;
   readonly resumedModel: string;
+  // Native model reads, only when the plan checks the model catalogue.
+  readonly nativeModels: {
+    readonly unbound: NativeModelList;
+    readonly bound: NativeModelList;
+    readonly resumedEffort: string | null;
+  } | null;
 }
 
 /** One native request/response exchange on a fresh connection, with every raw response retained. */
@@ -97,6 +108,11 @@ export async function readNativeJourney(
     const unboundSkills = nativeSkillsListSchema.parse(
       await native.call("skills/list", { cwds: [plan.cwd] }),
     );
+    // Codex sends model/list with includeHidden (app_server_session.rs:698-735).
+    const readsModels = plan.checks.some((check) => check.kind === "model-catalogue");
+    const unboundModels = readsModels
+      ? nativeModelListSchema.parse(await native.call("model/list", { includeHidden: true }))
+      : null;
     const resumed = await native.call("thread/resume", {
       threadId,
       cwd: plan.cwd,
@@ -107,12 +123,26 @@ export async function readNativeJourney(
     const boundSkills = nativeSkillsListSchema.parse(
       await native.call("skills/list", { cwds: [plan.cwd] }),
     );
+    let nativeModels: NativeReadback["nativeModels"] = null;
+    if (unboundModels !== null) {
+      const effort = resumed.reasoningEffort;
+      if (effort !== null && typeof effort !== "string")
+        throw new Error("thread/resume reasoningEffort is neither a value nor null");
+      nativeModels = {
+        unbound: unboundModels,
+        bound: nativeModelListSchema.parse(
+          await native.call("model/list", { includeHidden: true }),
+        ),
+        resumedEffort: effort,
+      };
+    }
     return {
       unboundSkills,
       threadRead,
       threadResume: native.thread(resumed),
       resumedModel: resumed.model,
       boundSkills,
+      nativeModels,
     };
   } finally {
     await native.close();
@@ -206,6 +236,77 @@ function observeProviderEvents(
   return observation;
 }
 
+/** The provider Session's own settings catalogue from the last JSON line of public session inspect. */
+export function parseSessionInspectOutput(
+  stdout: string,
+  target: { readonly serviceId: string; readonly endpointId: string; readonly sessionId: string },
+): ProviderSettingsCatalog {
+  const last = stdout
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .at(-1);
+  if (last === undefined) throw new Error("session inspect printed nothing");
+  const output = sessionInspectOutputSchema.parse(decode(last));
+  const record = observedObject(output.result.record);
+  const addressed = observedObject(record.target);
+  const endpoint = observedObject(addressed.endpoint);
+  if (
+    addressed.sessionId !== target.sessionId ||
+    endpoint.endpointId !== target.endpointId ||
+    endpoint.serviceId !== target.serviceId
+  )
+    throw new Error("session inspect returned a different Session");
+  return output.result.record.settingsCatalog;
+}
+
+function readProviderSettingsCatalog(
+  plan: JourneyObservationPlan,
+  serviceId: string,
+): ProviderSettingsCatalog {
+  const target = {
+    endpoint: { serviceId, endpointId: plan.endpoint_id },
+    sessionId: plan.session_id,
+  };
+  const completed = spawnSync(
+    plan.collaboration_cli,
+    [
+      "session",
+      "inspect",
+      "--to",
+      JSON.stringify(target),
+      "--service-directory",
+      plan.service_directory,
+      "--json",
+    ],
+    { encoding: "utf8", timeout: 20_000 },
+  );
+  if (completed.error !== undefined) throw completed.error;
+  saveRaw(join(plan.evidence, "session-inspect.json"), completed.stdout);
+  saveRaw(join(plan.evidence, "session-inspect.stderr"), completed.stderr);
+  if (completed.status !== 0)
+    throw new Error("public session inspect failed; raw response retained");
+  return parseSessionInspectOutput(completed.stdout, {
+    serviceId,
+    endpointId: plan.endpoint_id,
+    sessionId: plan.session_id,
+  });
+}
+
+/** Joins the native model reads with the provider's catalogue, or none when no check needs them. */
+function modelReadback(
+  plan: JourneyObservationPlan,
+  serviceId: string,
+  native: NativeReadback,
+): ModelReadback | null {
+  if (native.nativeModels === null) return null;
+  return {
+    unboundModels: native.nativeModels.unbound,
+    boundModels: native.nativeModels.bound,
+    providerCatalog: readProviderSettingsCatalog(plan, serviceId),
+    resumedEffort: native.nativeModels.resumedEffort,
+  };
+}
+
 /** A thread/read response an earlier run retained, as the before-state of a refused command. */
 export function retainedThreadRead(path: string): NativeThread {
   const response = readObservedJson(readFileSync(path));
@@ -235,19 +336,27 @@ export async function runJourneyObservation(
   );
   const threadId = observedThreadId(plan, serviceId);
   const provider = providerJourneyItems(observeProviderEvents(plan, serviceId));
-  const results =
-    plan.mode === "active-read-only"
-      ? checkActiveJourney(await readActiveJourney(plan, threadId), plan.checks)
-      : checkIdleJourney(
-          {
-            ...(await readNativeJourney(plan, threadId)),
-            providerAgentTexts: provider.agentTexts,
-            providerToolItems: provider.toolItems,
-          },
-          { endpointId: plan.endpoint_id, sessionId: plan.session_id, cwd: plan.cwd },
-          plan.checks,
-          retainedThreadRead,
-        );
+  let results: JourneyCheckResult[];
+  if (plan.mode === "active-read-only")
+    results = checkActiveJourney(await readActiveJourney(plan, threadId), plan.checks);
+  else {
+    const native = await readNativeJourney(plan, threadId);
+    results = checkIdleJourney(
+      {
+        unboundSkills: native.unboundSkills,
+        boundSkills: native.boundSkills,
+        threadRead: native.threadRead,
+        threadResume: native.threadResume,
+        resumedModel: native.resumedModel,
+        models: modelReadback(plan, serviceId, native),
+        providerAgentTexts: provider.agentTexts,
+        providerToolItems: provider.toolItems,
+      },
+      { endpointId: plan.endpoint_id, sessionId: plan.session_id, cwd: plan.cwd },
+      plan.checks,
+      retainedThreadRead,
+    );
+  }
   saveRaw(join(plan.evidence, "result.json"), prettyEvidenceJson(results, false, false));
   return results;
 }

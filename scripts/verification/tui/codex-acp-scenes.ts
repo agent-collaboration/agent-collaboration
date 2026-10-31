@@ -31,6 +31,15 @@ export const codexCheckpointSchema = z.strictObject({
 	selected_skill_row: z.string().min(1).optional(),
 	// A grid line that is the empty composer alone: its prompt and placeholder, nothing typed.
 	empty_composer: z.literal(true).optional(),
+	// A selected numbered menu row: `› <number>. <label>` with exactly the declared markers.
+	selected_menu_row: z
+		.strictObject({
+			number: z.number().int().positive(),
+			label: z.string().min(1),
+			default: z.boolean(),
+			current: z.boolean(),
+		})
+		.optional(),
 });
 export type CodexCheckpoint = z.infer<typeof codexCheckpointSchema>;
 
@@ -84,6 +93,9 @@ export const CODEX_0_165_TEXT = {
 	interrupted: '■ Conversation interrupted',
 	// chatwidget/model_popups.rs:637, the reasoning popup that may follow a model row.
 	effortPopupTitle: 'Select Reasoning Level',
+	// startup_draft.rs:486 and startup_draft_layout.rs:83: shown while the startup resume is pending;
+	// the composer already accepts typed text then.
+	resumingSession: 'Resuming session…',
 	// bottom_pane/mod.rs:1306, default status header while a turn runs.
 	working: 'Working',
 } as const;
@@ -323,50 +335,160 @@ const MODEL_APPLY_ACTION: Record<CodexModelApply, CodexAction> = {
 	default: { kind: 'key', key: 'Enter' },
 };
 
+/** Keys that only move a menu selection; the journey sends no other key while choosing. */
+export const codexMenuKeySchema = z.strictObject({
+	kind: z.literal('key'),
+	key: z.enum(['Up', 'Down']),
+});
+export type CodexMenuKey = z.infer<typeof codexMenuKeySchema>;
+
+const EFFORT_LABELS: Readonly<Record<string, string>> = {
+	none: 'None',
+	minimal: 'Minimal',
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High',
+	xhigh: 'Extra high',
+	max: 'Max',
+	ultra: 'Ultra',
+	persistent: 'Persistent',
+};
 /**
- * J2 `/model`: open the popup through its command row, move to the chosen row with the declared
- * navigation keys, then apply it. The declared outcome is the text Codex shows for that apply,
- * success or the endpoint's refusal, so errors are not forbidden; no popup may stay open. The
- * effective model itself is decided by the same-session observer.
+ * The label Codex 0.165 shows for a native effort value: known wire values map to fixed labels and
+ * any other model-defined value is shown raw (openai_models.rs:84-97,148-166;
+ * model_popups.rs reasoning_effort_label). A provider's own label is never the row label.
  */
-export function modelJourney(
-	provider: 'claude' | 'cursor',
-	navigation: readonly CodexAction[],
-	apply: CodexModelApply,
-	expectedOutcome: readonly string[],
-	outcomeDeadlineMs: number,
-): CodexJourney {
+export function codexEffortLabel(value: string): string {
+	return EFFORT_LABELS[value] ?? value;
+}
+
+/** A numbered menu row the journey must see selected, with exactly these markers. */
+export interface CodexMenuRow {
+	readonly number: number;
+	readonly label: string;
+	readonly isDefault: boolean;
+	readonly isCurrent: boolean;
+}
+/** The declared reasoning step: keys from the initial selection to the chosen effort row. */
+export interface CodexEffortStep {
+	readonly navigation: readonly CodexMenuKey[];
+	readonly value: string;
+	readonly number: number;
+	readonly isDefault: boolean;
+	readonly isCurrent: boolean;
+}
+export interface ModelJourneyInput {
+	readonly provider: 'claude' | 'cursor';
+	// Display names the refreshed catalogue shows on its visible page, from the bound model/list.
+	readonly cataloguePage: readonly string[];
+	// Rows only the cached bootstrap view shows; their presence means the refresh has not landed.
+	readonly staleRows: readonly string[];
+	readonly modelNavigation: readonly CodexMenuKey[];
+	readonly target: {
+		readonly displayName: string;
+		readonly number: number;
+		readonly isCurrent: boolean;
+	};
+	// Null when the model has one plain effort choice or none, which applies without a popup.
+	readonly effort: CodexEffortStep | null;
+	readonly apply: CodexModelApply;
+	readonly expectedOutcome: readonly string[];
+	readonly outcomeDeadlineMs: number;
+}
+
+function selectedRow(row: CodexMenuRow): NonNullable<CodexCheckpoint['selected_menu_row']> {
+	return { number: row.number, label: row.label, default: row.isDefault, current: row.isCurrent };
+}
+
+/**
+ * J2 `/model` through the actual catalogue. /model draws the cached bootstrap catalogue first and
+ * replaces it when FetchModels returns (chatwidget/model_popups.rs:16-40; app/event_dispatch.rs:
+ * 2272-2300), so no key is sent until a frame shows the declared catalogue page with no stale row.
+ * After each declared batch of menu keys, its final selection is proved by the selected numbered
+ * row (list_selection_view.rs:742-791) before the next step's key; rows passed on the way are not
+ * observed. A model with several plain efforts opens "Select Reasoning Level for <name>"; one
+ * plain effort or none applies directly (model_popups.rs open_reasoning_popup). The outcome is the
+ * declared text with no model or reasoning popup left open. The effective model and effort are
+ * decided by the same-session observer.
+ */
+export function modelJourney(input: ModelJourneyInput): CodexJourney {
+	if (input.cataloguePage.length === 0)
+		throw new Error('model journey needs the declared catalogue page');
+	if (input.effort !== null && ['max', 'ultra'].includes(input.effort.value))
+		throw new Error('advanced efforts sit behind "More reasoning…" and are outside this journey');
+	const header = CODEX_0_165_TEXT.modelPopupHeader;
+	const targetRow = selectedRow({
+		...input.target,
+		label: input.target.displayName,
+		isDefault: false,
+	});
+	const catalogueReady: CodexCheckpoint = {
+		scene: 'model-catalogue-ready',
+		require: [header, ...input.cataloguePage],
+		forbid: [...input.staleRows],
+		deadline_ms: UI_CHECKPOINT_MS,
+		...(input.modelNavigation.length === 0 ? { selected_menu_row: targetRow } : {}),
+	};
+	const steps: CodexJourney['steps'][number][] = [
+		{
+			actions: [{ kind: 'text', text: '/model' }],
+			checkpoint: {
+				scene: 'model-command-ready',
+				require: [CODEX_0_165_TEXT.modelCommandRow],
+				forbid: [],
+				deadline_ms: UI_CHECKPOINT_MS,
+			},
+		},
+		{ actions: [{ kind: 'key', key: 'Enter' }], checkpoint: catalogueReady },
+	];
+	if (input.modelNavigation.length > 0)
+		steps.push({
+			actions: [...input.modelNavigation],
+			checkpoint: {
+				scene: 'model-row-selected',
+				require: [header],
+				forbid: [...input.staleRows],
+				deadline_ms: UI_CHECKPOINT_MS,
+				selected_menu_row: targetRow,
+			},
+		});
+	if (input.effort !== null) {
+		const effortRow = selectedRow({ ...input.effort, label: codexEffortLabel(input.effort.value) });
+		const effortHeader = `${CODEX_0_165_TEXT.effortPopupTitle} for ${input.target.displayName}`;
+		steps.push({
+			actions: [{ kind: 'key', key: 'Enter' }],
+			checkpoint: {
+				scene: 'reasoning-popup-open',
+				require: [effortHeader],
+				forbid: [],
+				deadline_ms: UI_CHECKPOINT_MS,
+				...(input.effort.navigation.length === 0 ? { selected_menu_row: effortRow } : {}),
+			},
+		});
+		if (input.effort.navigation.length > 0)
+			steps.push({
+				actions: [...input.effort.navigation],
+				checkpoint: {
+					scene: 'effort-selected',
+					require: [effortHeader],
+					forbid: [],
+					deadline_ms: UI_CHECKPOINT_MS,
+					selected_menu_row: effortRow,
+				},
+			});
+	}
+	steps.push({
+		actions: [MODEL_APPLY_ACTION[input.apply]],
+		checkpoint: {
+			scene: 'model-applied',
+			require: [...input.expectedOutcome],
+			forbid: [CODEX_0_165_TEXT.modelPopupHeader, CODEX_0_165_TEXT.effortPopupTitle],
+			deadline_ms: input.outcomeDeadlineMs,
+		},
+	});
 	return codexJourneySchema.parse({
-		name: `codex-acp-j2-${provider}-model-${apply}`,
-		steps: [
-			{
-				actions: [{ kind: 'text', text: '/model' }],
-				checkpoint: {
-					scene: 'model-command-ready',
-					require: [CODEX_0_165_TEXT.modelCommandRow],
-					forbid: [],
-					deadline_ms: UI_CHECKPOINT_MS,
-				},
-			},
-			{
-				actions: [{ kind: 'key', key: 'Enter' }],
-				checkpoint: {
-					scene: 'model-popup-open',
-					require: [CODEX_0_165_TEXT.modelPopupHeader],
-					forbid: [],
-					deadline_ms: UI_CHECKPOINT_MS,
-				},
-			},
-			{
-				actions: [...navigation, MODEL_APPLY_ACTION[apply]],
-				checkpoint: {
-					scene: 'model-applied',
-					require: [...expectedOutcome],
-					forbid: [CODEX_0_165_TEXT.modelPopupHeader, CODEX_0_165_TEXT.effortPopupTitle],
-					deadline_ms: outcomeDeadlineMs,
-				},
-			},
-		],
+		name: `codex-acp-j2-${input.provider}-model-${input.apply}`,
+		steps,
 	});
 }
 
@@ -384,14 +506,17 @@ export const codexFixtureTitleSchema = z
 	);
 
 /**
- * J2 `/rename <title>` refused by the endpoint, with Codex still usable. Inline `/rename` with a
- * title calls set_thread_name, a native thread/name/set (chatwidget/slash_dispatch.rs:917-927;
- * app_event_sender.rs:80-82). Once the caret is past the command name the slash popup is closed
- * (chat_composer.rs:3983-4020; slash_input.rs:585-606), so the drawn composer line is the
- * ready proof before Enter. The deciding outcome is the endpoint's explicit refusal as an error
- * cell (`■ ` then the declared leading text), the empty composer and, through CODEX_QUIT_STEP, a
- * normal exit. A CLI that exits on the refusal never reaches that scene. TUI-local refusals such
- * as thread_rename_block_message (interaction.rs:533-541) don't carry the declared text.
+ * Diagnostic, not a delivery gate: J2 `/rename <title>` refused by the endpoint, with Codex still
+ * usable. The adopted outcomes require that usability only for Cursor `/compact`; the current
+ * client exits on a refused thread/name/set, which this probe reports as a client limitation.
+ * Inline `/rename` with a title calls set_thread_name, a native thread/name/set
+ * (chatwidget/slash_dispatch.rs:917-927; app_event_sender.rs:80-82). Once the caret is past the
+ * command name the slash popup is closed (chat_composer.rs:3983-4020; slash_input.rs:585-606),
+ * so the drawn composer line is the ready proof before Enter. The probe passes only on the
+ * endpoint's explicit refusal as an error cell (`■ ` then the declared leading text), the empty
+ * composer and, through CODEX_QUIT_STEP, a normal exit; a CLI exit never reaches that scene.
+ * TUI-local refusals such as thread_rename_block_message (interaction.rs:533-541) don't carry the
+ * declared text.
  */
 export function renameJourney(
 	provider: 'claude' | 'cursor',
@@ -411,7 +536,8 @@ export function renameJourney(
 				checkpoint: {
 					scene: 'rename-command-ready',
 					require: [CODEX_0_165_TEXT.composerPrompt + command],
-					forbid: [],
+					// The startup draft accepts typing before the resume lands; Enter waits for the resumed session.
+					forbid: [CODEX_0_165_TEXT.resumingSession],
 					deadline_ms: UI_CHECKPOINT_MS,
 				},
 			},
@@ -493,6 +619,25 @@ export function gridShowsEmptyComposer(lines: readonly string[]): boolean {
 	return lines.some((line) => row.test(line));
 }
 
+/**
+ * One grid line that is this selected numbered menu row, with exactly the declared markers. The
+ * name (with its " (default)"/" (current)" markers) is followed by end of line or by the padding
+ * before the description column, which starts two cells after the widest visible name
+ * (selection_popup_common.rs:137-186; list_selection_view.rs:765-766). A single space after the
+ * declared text means the name continues: a longer label or an undeclared marker.
+ */
+export function gridShowsSelectedMenuRow(
+	lines: readonly string[],
+	row: NonNullable<CodexCheckpoint['selected_menu_row']>,
+): boolean {
+	const markers = `${row.default ? ' (default)' : ''}${row.current ? ' (current)' : ''}`;
+	const pattern = new RegExp(
+		`^\\s*${escapeRegExp(`${CODEX_0_165_TEXT.selectedRowPrefix}${row.number}. ${row.label}${markers}`)}(?=\\s{2,}\\S|\\s*$)`,
+		'u',
+	);
+	return lines.some((line) => pattern.test(line));
+}
+
 /** Whether one grid frame shows a checkpoint: every required text and no forbidden text. */
 export function gridShowsCheckpoint(
 	lines: readonly string[],
@@ -504,7 +649,9 @@ export function gridShowsCheckpoint(
 		checkpoint.forbid.every((text) => !screen.includes(text)) &&
 		(checkpoint.selected_skill_row === undefined ||
 			gridShowsSelectedSkillRow(lines, checkpoint.selected_skill_row)) &&
-		(checkpoint.empty_composer !== true || gridShowsEmptyComposer(lines))
+		(checkpoint.empty_composer !== true || gridShowsEmptyComposer(lines)) &&
+		(checkpoint.selected_menu_row === undefined ||
+			gridShowsSelectedMenuRow(lines, checkpoint.selected_menu_row))
 	);
 }
 

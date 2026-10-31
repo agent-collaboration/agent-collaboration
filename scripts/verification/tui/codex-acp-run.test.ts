@@ -65,7 +65,11 @@ const RENAME = {
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
-	navigation: [{ kind: 'key', key: 'Down' }],
+	catalogue_page: ['Grok 4.6', 'Composer 2.5'],
+	stale_rows: ['Use provider settings'],
+	model_navigation: [{ kind: 'key', key: 'Down' }],
+	target: { display_name: 'Composer 2.5', number: 2, is_current: false },
+	effort: null,
 	apply: 'session',
 	expected_outcome: ['Model changed to fixture-model', 'for this session only'],
 	outcome_deadline_ms: 30_000,
@@ -99,10 +103,15 @@ test('each declared journey kind builds its scenes for the target provider only'
 		'rename-refused',
 	]);
 	const model = await runPlan(MODEL);
-	expect(codexJourneyFor(model.plan).steps[2]?.actions).toEqual([
-		...MODEL.navigation,
-		{ kind: 'text', text: 's' },
+	const modelJourney = codexJourneyFor(model.plan);
+	expect(modelJourney.steps.map((step) => step.checkpoint.scene)).toEqual([
+		'model-command-ready',
+		'model-catalogue-ready',
+		'model-row-selected',
+		'model-applied',
 	]);
+	expect(modelJourney.steps[2]?.actions).toEqual(MODEL.model_navigation);
+	expect(modelJourney.steps[3]?.actions).toEqual([{ kind: 'text', text: 's' }]);
 	// The fixture target is the Cursor endpoint; a Claude journey must not drive it.
 	const wrong = await runPlan({ ...CURSOR_SKILL, provider: 'claude' });
 	expect(() => codexJourneyFor(wrong.plan)).toThrow(
@@ -125,6 +134,13 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 	for (const journey of [
 		{ ...REOPEN, prior_reply: [] },
 		{ ...MODEL, apply: 'global' },
+		// Hard cutover: the old free navigation field and non-menu keys are refused.
+		{ ...MODEL, navigation: [{ kind: 'key', key: 'Down' }] },
+		{ ...MODEL, model_navigation: [{ kind: 'key', key: 'Enter' }] },
+		{ ...MODEL, model_navigation: [{ kind: 'text', text: 's' }] },
+		{ ...MODEL, catalogue_page: [] },
+		{ ...MODEL, catalogue_page: Array.from({ length: 9 }, (_, index) => `Model ${index}`) },
+		{ ...MODEL, target: { ...MODEL.target, number: 0 } },
 		{ ...MODEL, expected_outcome: [] },
 		{ ...MODEL, outcome_deadline_ms: 3_600_000 },
 		{ ...PICKER, skill: '' },

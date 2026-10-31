@@ -4,6 +4,7 @@ import {
   journeyObservationPlanSchema,
   skillSubmissionSchema,
   type JourneyReadback,
+  type ModelReadback,
   type NativeSkillsList,
   type NativeThread,
 } from "../acp-journey-models.ts";
@@ -16,6 +17,7 @@ import {
   checkCompactRefused,
   checkCompacted,
   checkEffectiveModel,
+  checkModelCatalogue,
   checkSkillEffect,
   checkSkillsListed,
   skillReferencePath,
@@ -76,6 +78,7 @@ function readback(overrides: Partial<JourneyReadback> = {}): JourneyReadback {
     threadRead: history,
     threadResume: history,
     resumedModel: "claude-haiku-5-5",
+    models: null,
     providerAgentTexts: ["HI", `${MARKER} alpha beta`],
     providerToolItems: [],
     ...overrides,
@@ -587,5 +590,249 @@ test("turn-in-progress reads only an active turn and the dispatchers keep the mo
   assert.throws(
     () => checkIdleJourney(readback(), TARGET, [{ kind: "turn-in-progress" }], () => thread([])),
     /turn-in-progress needs an active-read-only observation/,
+  );
+});
+
+// The provider Session's own catalogue (session inspect) and the bridge's native lists, as literals.
+const providerCatalog = (model: string, effort: { current: string; choices: string[] } | null) => ({
+  configOptions: [
+    {
+      id: "model",
+      category: "model" as const,
+      currentValue: { kind: "select" as const, value: model },
+      choices: ["sonnet", "haiku"].map((value) => ({ value, label: value })),
+    },
+    ...(effort === null
+      ? []
+      : [
+          {
+            id: "effort",
+            category: "effort" as const,
+            currentValue: { kind: "select" as const, value: effort.current },
+            choices: effort.choices.map((value) => ({ value, label: value })),
+          },
+        ]),
+  ],
+});
+const nativeRow = (model: string, efforts: string[], defaultEffort: string) => ({
+  model,
+  displayName: model,
+  supportedReasoningEfforts: efforts.map((reasoningEffort) => ({
+    reasoningEffort,
+    description: "",
+  })),
+  defaultReasoningEffort: defaultEffort,
+});
+const DELEGATION = nativeRow("provider-default", ["provider"], "provider");
+function modelReads(overrides: Partial<ModelReadback> = {}): ModelReadback {
+  return {
+    unboundModels: { data: [DELEGATION] },
+    boundModels: {
+      data: [
+        nativeRow("sonnet", ["default", "high"], "default"),
+        nativeRow("haiku", ["provider"], "provider"),
+      ],
+    },
+    providerCatalog: providerCatalog("sonnet", { current: "high", choices: ["default", "high"] }),
+    resumedEffort: "high",
+    ...overrides,
+  };
+}
+const QUALIFIED = {
+  kind: "model-catalogue" as const,
+  delegation_models: ["provider-default"],
+  selected_model: "sonnet",
+  effort: { kind: "qualified" as const, expected_current: "high" },
+};
+
+// Each case breaks one rule; the check must refuse it with that rule's reason.
+const MODEL_CATALOGUE_FAILURES: readonly [string, Partial<JourneyReadback>, RegExp][] = [
+  ["no model reads", { resumedModel: "sonnet", models: null }, /needs the observer's model reads/],
+  [
+    "a provider model hidden",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        boundModels: { data: [nativeRow("sonnet", ["default", "high"], "default")] },
+      }),
+    },
+    /hides provider models: haiku/,
+  ],
+  [
+    "an invented model",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        boundModels: {
+          data: [...modelReads().boundModels.data, nativeRow("opus", ["high"], "high")],
+        },
+      }),
+    },
+    /adds models: opus/,
+  ],
+  [
+    "bootstrap with a real model",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        unboundModels: { data: [DELEGATION, nativeRow("sonnet", ["high"], "high")] },
+      }),
+    },
+    /bootstrap catalogue is not the delegation alone/,
+  ],
+  [
+    "provider current model elsewhere",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        providerCatalog: providerCatalog("haiku", {
+          current: "high",
+          choices: ["default", "high"],
+        }),
+      }),
+    },
+    /provider current model differs/,
+  ],
+  [
+    "native current model stale",
+    { resumedModel: "haiku", models: modelReads() },
+    /native current model differs/,
+  ],
+  // A broken extension that leaves every model in the fallback cannot pass the qualified case.
+  [
+    "every model in fallback",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        boundModels: {
+          data: [
+            nativeRow("sonnet", ["provider"], "provider"),
+            nativeRow("haiku", ["provider"], "provider"),
+          ],
+        },
+      }),
+    },
+    /native effort choices differ from the provider's options/,
+  ],
+  [
+    "a guessed medium default",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        boundModels: {
+          data: [
+            nativeRow("sonnet", ["default", "high"], "medium"),
+            nativeRow("haiku", ["provider"], "provider"),
+          ],
+        },
+      }),
+    },
+    /native default effort is not an offered provider value/,
+  ],
+  [
+    "the wrong current effort",
+    {
+      resumedModel: "sonnet",
+      models: modelReads({
+        providerCatalog: providerCatalog("sonnet", {
+          current: "default",
+          choices: ["default", "high"],
+        }),
+      }),
+    },
+    /provider current effort differs/,
+  ],
+  [
+    "native effort not the provider's",
+    { resumedModel: "sonnet", models: modelReads({ resumedEffort: "default" }) },
+    /native current effort differs/,
+  ],
+];
+
+test("the model catalogue is judged against the provider Session, never the native list", (): void => {
+  assert.deepEqual(
+    checkModelCatalogue(readback({ resumedModel: "sonnet", models: modelReads() }), QUALIFIED)
+      .observed,
+    {
+      selected_model: "sonnet",
+      provider_models: 2,
+      native_models: 2,
+      bootstrap_models: ["provider-default"],
+      effort: "qualified",
+      native_efforts: ["default", "high"],
+      current_effort: "high",
+    },
+  );
+  for (const [name, overrides, failure] of MODEL_CATALOGUE_FAILURES)
+    assert.throws(() => checkModelCatalogue(readback(overrides), QUALIFIED), failure, name);
+});
+
+test("provider settings is an explicit action and never an effective effort", (): void => {
+  const fallback = {
+    ...QUALIFIED,
+    selected_model: "haiku",
+    effort: { kind: "provider-settings" as const, action: "provider" },
+  };
+  // The provider still reports its own current effort; the action changes nothing about it.
+  const current = modelReads({
+    providerCatalog: providerCatalog("haiku", { current: "default", choices: ["default"] }),
+    resumedEffort: "default",
+  });
+  assert.equal(
+    checkModelCatalogue(readback({ resumedModel: "haiku", models: current }), fallback).observed
+      .effort,
+    "provider-settings",
+  );
+  // No provider effort option at all: the effective effort is null, not the action.
+  const none = modelReads({ providerCatalog: providerCatalog("haiku", null), resumedEffort: null });
+  assert.equal(
+    checkModelCatalogue(readback({ resumedModel: "haiku", models: none }), fallback).observed
+      .current_effort,
+    null,
+  );
+  assert.throws(
+    () =>
+      checkModelCatalogue(
+        readback({ resumedModel: "haiku", models: { ...none, resumedEffort: "provider" } }),
+        fallback,
+      ),
+    /provider-settings action is reported as an effective effort/,
+  );
+  // Collision: the provider itself reports the action string as its current effort. Matching
+  // upstream data passes; the same native value against a different provider value does not.
+  const collision = modelReads({
+    providerCatalog: providerCatalog("haiku", {
+      current: "provider",
+      choices: ["provider", "high"],
+    }),
+    resumedEffort: "provider",
+  });
+  assert.equal(
+    checkModelCatalogue(readback({ resumedModel: "haiku", models: collision }), fallback).observed
+      .current_effort,
+    "provider",
+  );
+  assert.throws(
+    () =>
+      checkModelCatalogue(
+        readback({ resumedModel: "haiku", models: { ...current, resumedEffort: "provider" } }),
+        fallback,
+      ),
+    /provider-settings action is reported as an effective effort/,
+  );
+  // A fallback row must carry exactly the declared action.
+  const missingAction = modelReads({
+    boundModels: {
+      data: [
+        nativeRow("sonnet", ["default", "high"], "default"),
+        nativeRow("haiku", ["medium"], "medium"),
+      ],
+    },
+    providerCatalog: providerCatalog("haiku", null),
+    resumedEffort: null,
+  });
+  assert.throws(
+    () => checkModelCatalogue(readback({ resumedModel: "haiku", models: missingAction }), fallback),
+    /lacks the explicit provider-settings action/,
   );
 });

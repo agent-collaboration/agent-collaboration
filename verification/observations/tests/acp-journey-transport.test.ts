@@ -15,6 +15,7 @@ import {
 import {
   observedThreadId,
   providerJourneyItems,
+  parseSessionInspectOutput,
   readActiveJourney,
   readNativeJourney,
 } from "../acp-journey-observation.ts";
@@ -32,6 +33,33 @@ const BOUND_SKILL = {
   enabled: true,
 };
 
+const UNBOUND_MODELS = {
+  data: [
+    {
+      model: "provider-default",
+      displayName: "Use provider settings",
+      supportedReasoningEfforts: [
+        { reasoningEffort: "provider", description: "Use provider settings" },
+      ],
+      defaultReasoningEffort: "provider",
+    },
+  ],
+  nextCursor: null,
+};
+const BOUND_MODELS = {
+  data: [
+    {
+      model: "claude-haiku-5-5",
+      displayName: "Haiku",
+      supportedReasoningEfforts: [
+        { reasoningEffort: "provider", description: "Use provider settings" },
+      ],
+      defaultReasoningEffort: "provider",
+    },
+  ],
+  nextCursor: null,
+};
+
 interface NativeFixture {
   readonly plan: JourneyObservationPlan;
   readonly evidence: string;
@@ -43,6 +71,7 @@ async function nativeFixture(
   failure: string,
   threadStatus: string,
   mode: "idle-bind" | "active-read-only",
+  checks?: readonly Record<string, unknown>[],
 ): Promise<NativeFixture> {
   const root = createFixtureDirectory("journey-ws");
   const serviceDirectory = join(root, "service: with spaces");
@@ -76,14 +105,17 @@ async function nativeFixture(
       else if (frame.method === "skills/list")
         result = { data: [{ cwd: CWD, skills: bound ? [BOUND_SKILL] : [], errors: [] }] };
       else if (frame.method === "thread/read") result = { thread };
+      else if (frame.method === "model/list") result = bound ? BOUND_MODELS : UNBOUND_MODELS;
       else {
         bound = true;
         const resumedThread =
           failure === "resume-launch-cwd" ? { ...thread, cwd: LAUNCH_CWD } : thread;
+        // The bridge always sends reasoningEffort, a value or null (native_request_dispatch.rs:140-143).
+        const effort = failure === "no-effort-field" ? {} : { reasoningEffort: null };
         result =
           failure === "no-model"
-            ? { thread: resumedThread }
-            : { thread: resumedThread, model: "claude-haiku-5-5" };
+            ? { thread: resumedThread, ...effort }
+            : { thread: resumedThread, model: "claude-haiku-5-5", ...effort };
       }
       client.send(
         encode(
@@ -116,9 +148,10 @@ async function nativeFixture(
     cwd: CWD,
     mode,
     checks:
-      mode === "idle-bind"
+      checks ??
+      (mode === "idle-bind"
         ? [{ kind: "effective-model", expected_model: "claude-haiku-5-5" }]
-        : [{ kind: "turn-in-progress" }],
+        : [{ kind: "turn-in-progress" }]),
   });
   return { plan, evidence, requests };
 }
@@ -307,3 +340,91 @@ test("the declared native thread must be the Router alias of the raw provider Se
     /not the alias of this provider Session/,
   );
 });
+
+test(
+  "idle-bind reads model/list before and after its own resume only when the catalogue is checked",
+  { timeout: 5000 },
+  async (context): Promise<void> => {
+    const check = {
+      kind: "model-catalogue",
+      delegation_models: ["provider-default"],
+      selected_model: "claude-haiku-5-5",
+      effort: { kind: "provider-settings", action: "provider" },
+    };
+    const { plan, evidence, requests } = await nativeFixture(context, "none", "idle", "idle-bind", [
+      check,
+    ]);
+    const readback = await readNativeJourney(plan, ALIAS);
+    assert.deepEqual(
+      readback.nativeModels?.unbound.data.map((row) => row.model),
+      ["provider-default"],
+    );
+    assert.deepEqual(
+      readback.nativeModels?.bound.data.map((row) => row.model),
+      ["claude-haiku-5-5"],
+    );
+    assert.equal(readback.nativeModels?.resumedEffort, null);
+    assert.deepEqual(
+      requests.map((request) => request["method"]),
+      [
+        "initialize",
+        "thread/read",
+        "skills/list",
+        "model/list",
+        "thread/resume",
+        "skills/list",
+        "model/list",
+      ],
+    );
+    for (const id of [1, 2, 3, 4, 5, 6, 7])
+      assert.ok(existsSync(join(evidence, `app-server-${id}.json`)));
+  },
+);
+
+test("session inspect is read from its last JSON line and must address this Session", (): void => {
+  const target = { serviceId: "svc", endpointId: "cursor-local", sessionId: "raw" };
+  const record = (sessionId: string) =>
+    encode({
+      kind: "result",
+      result: {
+        record: {
+          target: { endpoint: { serviceId: "svc", endpointId: "cursor-local" }, sessionId },
+          settingsCatalog: {
+            currentMode: null,
+            modes: [],
+            configOptions: [
+              {
+                id: "model",
+                name: "Model",
+                category: "model",
+                currentValue: { kind: "select", value: "grok" },
+                choices: [{ value: "grok", label: "Grok" }],
+              },
+            ],
+          },
+        },
+      },
+    });
+  const catalog = parseSessionInspectOutput(`progress line\n${record("raw")}\n`, target);
+  assert.equal(catalog.configOptions[0]?.choices[0]?.value, "grok");
+  assert.throws(() => parseSessionInspectOutput(record("other"), target), /different Session/);
+  assert.throws(() => parseSessionInspectOutput("", target), /printed nothing/);
+});
+
+test(
+  "a resume without reasoningEffort is refused when the model catalogue is checked",
+  { timeout: 5000 },
+  async (context): Promise<void> => {
+    const check = {
+      kind: "model-catalogue",
+      delegation_models: ["provider-default"],
+      selected_model: "claude-haiku-5-5",
+      effort: { kind: "provider-settings", action: "provider" },
+    };
+    const { plan } = await nativeFixture(context, "no-effort-field", "idle", "idle-bind", [check]);
+    await assert.rejects(
+      readNativeJourney(plan, ALIAS),
+      /reasoningEffort is neither a value nor null/,
+    );
+  },
+);

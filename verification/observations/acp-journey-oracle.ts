@@ -5,6 +5,7 @@ import type {
   JourneyCheck,
   JourneyCheckResult,
   JourneyReadback,
+  ModelReadback,
   NativeSkillsList,
   NativeThread,
   NativeThreadItem,
@@ -225,6 +226,100 @@ export function checkEffectiveModel(
   return { kind: "effective-model", observed: { model: readback.resumedModel } };
 }
 
+type ModelCatalogueCheck = Extract<JourneyCheck, { kind: "model-catalogue" }>;
+
+function providerOption(readback: ModelReadback, category: "model" | "effort") {
+  return readback.providerCatalog.configOptions.find((option) => option.category === category);
+}
+
+function selectValue(option: {
+  currentValue: { kind: string; value: string | boolean };
+}): string | null {
+  return option.currentValue.kind === "select" && typeof option.currentValue.value === "string"
+    ? option.currentValue.value
+    : null;
+}
+
+const sameMembers = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length &&
+  [...left].sort().join("\u0000") === [...right].sort().join("\u0000");
+
+/**
+ * The bound native catalogue keeps every provider model and adds only the declared delegation; the
+ * bootstrap catalogue is the delegation alone; the selected model's controls and current values
+ * match the provider Session's own catalogue. The native list is never its own reference.
+ */
+export function checkModelCatalogue(
+  readback: JourneyReadback,
+  check: ModelCatalogueCheck,
+): JourneyCheckResult {
+  const models = readback.models;
+  if (models === null) throw new Error("model-catalogue needs the observer's model reads");
+  const providerModel = providerOption(models, "model");
+  if (providerModel === undefined) throw new Error("the provider Session exposes no model option");
+  const providerModels = providerModel.choices.map((choice) => choice.value);
+  const boundModels = models.boundModels.data.map((row) => row.model);
+  const hidden = providerModels.filter((model) => !boundModels.includes(model));
+  if (hidden.length > 0)
+    throw new Error(`native catalogue hides provider models: ${hidden.join(", ")}`);
+  const extra = boundModels.filter(
+    (model) => !providerModels.includes(model) && !check.delegation_models.includes(model),
+  );
+  if (extra.length > 0) throw new Error(`native catalogue adds models: ${extra.join(", ")}`);
+  const bootstrap = models.unboundModels.data.map((row) => row.model);
+  if (bootstrap.length === 0 || bootstrap.some((model) => !check.delegation_models.includes(model)))
+    throw new Error("bootstrap catalogue is not the delegation alone");
+  if (selectValue(providerModel) !== check.selected_model)
+    throw new Error("provider current model differs from the selection");
+  if (readback.resumedModel !== check.selected_model)
+    throw new Error("native current model differs from the provider's");
+  const row = models.boundModels.data.find((candidate) => candidate.model === check.selected_model);
+  if (row === undefined) throw new Error("selected model has no native row");
+  const nativeEfforts = row.supportedReasoningEfforts.map((option) => option.reasoningEffort);
+  const providerEffort = providerOption(models, "effort");
+  const providerCurrentEffort = providerEffort === undefined ? null : selectValue(providerEffort);
+  if (check.effort.kind === "qualified") {
+    if (providerEffort === undefined)
+      throw new Error("the provider Session exposes no effort option");
+    const providerEfforts = providerEffort.choices.map((choice) => choice.value);
+    if (!sameMembers(nativeEfforts, providerEfforts))
+      throw new Error("native effort choices differ from the provider's options");
+    if (!providerEfforts.includes(row.defaultReasoningEffort))
+      throw new Error("native default effort is not an offered provider value");
+    if (providerCurrentEffort !== check.effort.expected_current)
+      throw new Error("provider current effort differs from the selection");
+  } else {
+    if (
+      nativeEfforts.length !== 1 ||
+      nativeEfforts[0] !== check.effort.action ||
+      row.defaultReasoningEffort !== check.effort.action
+    )
+      throw new Error("selected model lacks the explicit provider-settings action");
+    // The action token is fabricated as an effective effort only when the provider's own current
+    // effort is something else; a provider that truly reports the same string (the reserved-value
+    // collision, Program Design model chapter) is matching upstream data, decided below.
+    if (
+      models.resumedEffort === check.effort.action &&
+      providerCurrentEffort !== check.effort.action
+    )
+      throw new Error("the provider-settings action is reported as an effective effort");
+  }
+  if (models.resumedEffort !== providerCurrentEffort)
+    throw new Error("native current effort differs from the provider's");
+  return {
+    kind: "model-catalogue",
+    observed: {
+      selected_model: check.selected_model,
+      provider_models: providerModels.length,
+      native_models: boundModels.length,
+      bootstrap_models: bootstrap,
+      effort: check.effort.kind,
+      native_efforts: nativeEfforts,
+      current_effort: providerCurrentEffort,
+    },
+  };
+}
+
 export function checkTurnInProgress(readback: ActiveJourneyReadback): JourneyCheckResult {
   const turn = readback.threadRead.turns.at(-1);
   if (turn === undefined || turn.status !== "inProgress")
@@ -263,6 +358,8 @@ export function checkIdleJourney(
         return checkCompactRefused(readback, before(check.before_thread_read));
       case "effective-model":
         return checkEffectiveModel(readback, check.expected_model);
+      case "model-catalogue":
+        return checkModelCatalogue(readback, check);
     }
   });
 }
