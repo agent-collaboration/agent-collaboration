@@ -168,7 +168,8 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
                     && (marker != "Quota ·"
                         || frame.chars().filter(|character| *character == '╮').count() == 1)
                 {
-                    let _ = acknowledgement_sender.send(marker);
+                    let _ = acknowledgement_sender
+                        .send(super::CreditFrameAcknowledgement::Text(marker));
                 }
             }
         })
@@ -224,7 +225,9 @@ async fn beginning_a_new_reset_inspection_resets_a_nonzero_inventory_page_start(
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
             if frame.contains("inventory page start: 0") {
-                let _ = acknowledgement_sender.send("inventory page start: 0");
+                let _ = acknowledgement_sender.send(super::CreditFrameAcknowledgement::Text(
+                    "inventory page start: 0",
+                ));
             }
         })
         .collect::<Vec<_>>();

@@ -374,6 +374,13 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     let release_path = fixture_release_path(scenario)?;
     let receipt_path =
         fixture_receipt_path(std::env::var_os("QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"))?;
+    let dispatch_receipt_path = fixture_receipt_path(std::env::var_os(
+        "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+    ))?;
+    let dispatch_sink = dispatch_receipt_path
+        .as_ref()
+        .map(agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink::create)
+        .transpose()?;
     let (release_sender, release_receiver) = tokio::sync::watch::channel(false);
     let (floor, policy, refresh) = fixture_ports(model.clone(), scenario, release_receiver);
     let loader: QuotaStatusViewModelLoader = {
@@ -507,8 +514,14 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     let viewport_trace = receipt_path
         .as_ref()
         .map(|_| super::super::quota_viewport_trace::QuotaViewportTrace::default());
-    let result=element!(QuotaStatusComponent(view_model,viewport_trace:viewport_trace.clone(),width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)))
-        .render_loop().fullscreen().ignore_ctrl_c().await;
+    let outcome = Arc::new(Mutex::new(None));
+    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
+    let render = component.render_loop().fullscreen().ignore_ctrl_c();
+    let render = match &dispatch_sink {
+        Some(sink) => render.stdout(sink.frame_writer(std::io::stdout())?),
+        None => render,
+    };
+    let result = render.await;
     driver.abort();
     if let Err(error) = driver.await
         && !error.is_cancelled()
@@ -536,6 +549,14 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
         ));
     }
     result?;
+    if let Some(sink) = dispatch_sink {
+        sink.flush_and_check()?;
+    }
+    if *outcome.lock().unwrap() != Some(crate::QuotaOutcome::Quit) {
+        return Err(std::io::Error::other(
+            "fixture exited without its Quit outcome",
+        ));
+    }
     let receipt = format!(
         "QUOTA_COMPONENT_FIXTURE_FINISHED scenario={scenario:?} released={released} external_requests=0 persisted_writes=0\n"
     );

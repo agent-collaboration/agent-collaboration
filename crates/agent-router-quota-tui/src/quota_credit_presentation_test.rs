@@ -281,7 +281,7 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
                 Box::pin(async { Err(CreditUsagePolicySaveError::StateOperationFailed) })
             });
         let events = vec![
-            (TerminalEvent::Key(control_key('r')), Some("Inspect")),
+            (TerminalEvent::Key(control_key('r')), Some("Inspect".into())),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
                 None,
@@ -292,7 +292,7 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Credit usage"),
+                Some("Credit usage".into()),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
@@ -300,19 +300,19 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Save"),
+                Some("Save".into()),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Filter:"),
+                Some("Filter:".into()),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-                Some("Allow"),
+                Some("Allow".into()),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Save"),
+                Some("Save".into()),
             ),
             (
                 TerminalEvent::Key({
@@ -320,7 +320,7 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
                     key.modifiers = KeyModifiers::CONTROL;
                     key
                 }),
-                Some("credit preference"),
+                Some("credit preference".into()),
             ),
             // The narrow body cannot show all three wrapped notices together.
             // Navigate the same failed editor; keep the error and both warnings reachable.
@@ -330,11 +330,11 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Up)),
-                Some("Weekly floor"),
+                Some("Weekly floor".into()),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::End)),
-                Some("credit preference"),
+                Some(ExpectedCreditFrame::DispatchFrame("credit preference")),
             ),
             (TerminalEvent::Key(control_key('c')), None),
         ];

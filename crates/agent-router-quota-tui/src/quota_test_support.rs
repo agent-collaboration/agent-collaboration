@@ -1,4 +1,6 @@
 //! Reuse S2's recording backend and causal driver; quota adds no second emulator.
+#[path = "../../agent-collaboration-tui/tests/support/dispatch_frame_scene.rs"]
+pub mod dispatch_frame_scene;
 #[path = "../../agent-collaboration-tui/tests/support/event_driver.rs"]
 pub mod event_driver;
 #[path = "../../agent-collaboration-tui/tests/support/frame_grid.rs"]

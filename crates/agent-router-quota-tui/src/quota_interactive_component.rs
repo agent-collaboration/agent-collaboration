@@ -235,13 +235,20 @@ pub(crate) fn render_interactive_quota_status(
     let routed_context = context.clone();
     #[cfg(test)]
     let routed_outcome_observer = props.routed_outcome_observer.clone();
-    element!(InputOwner(stack,width,height,quit_action:quit,on_routed:move |_| {
+    let root = element!(InputOwner(stack,width,height,quit_action:quit,on_routed:move |_| {
         let (width,height)=stack.viewport();let mut observed_width=routed_context.width;let mut observed_height=routed_context.height;
         if observed_width.get()!=usize::from(width) {observed_width.set(usize::from(width));}
         if observed_height.get()!=usize::from(height) {observed_height.set(usize::from(height));}
         if let Some(session)=routed_context.dialog.read().clone() && stack.snapshot().surface(SurfaceId::Overlay(session.id)).is_none() {let mut dialog=routed_context.dialog;dialog.set(None);}
         #[cfg(test)] if let Some(observer)=&routed_outcome_observer {observer(routed_context.outcome.read().clone());}
-    }) {OverlayHost {super::quota_control_browse_view::QuotaControlBrowse(context,list)}}).into_any()
+    }) {OverlayHost {super::quota_control_browse_view::QuotaControlBrowse(context,list)}});
+    #[cfg(test)]
+    let root = {
+        let mut root = root;
+        root.props.dispatch_receipt = props.dispatch_receipt.clone();
+        root
+    };
+    root.into_any()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

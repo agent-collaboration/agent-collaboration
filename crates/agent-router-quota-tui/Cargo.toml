@@ -25,6 +25,7 @@ unicode-width.workspace = true
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service" }
 
 [dev-dependencies]
+agent-collaboration-tui = { workspace = true, features = ["test-support"] }
 codex-router-selection = { path = "../codex-router-selection", version = "0.1.4" }
 serde.workspace = true
 serde_json.workspace = true

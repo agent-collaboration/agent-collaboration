@@ -15,6 +15,9 @@ use tokio::sync::watch;
 #[derive(Default, Props)]
 pub(crate) struct QuotaStatusComponentProps {
     #[cfg(test)]
+    pub(crate) dispatch_receipt:
+        Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
+    #[cfg(test)]
     pub(crate) quit_observer: Option<Handler<()>>,
     #[cfg(test)]
     pub(crate) routed_outcome_observer: Option<Handler<Option<crate::QuotaOutcome>>>,
