@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import type { GhosttyCore } from '@wterm/ghostty';
 
+import type { ArtifactBinding } from './evidence-schema.ts';
 import type { TerminalInputModes } from './ghostty-input-encoding.ts';
 import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
 import {
@@ -22,6 +23,7 @@ interface WaitingLine {
 	readonly timer: ReturnType<typeof setTimeout>;
 }
 export interface PtyGridTarget {
+	readonly node?: ArtifactBinding;
 	readonly repository: string;
 	readonly driver: string;
 	readonly surface:
@@ -82,6 +84,12 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
+					...(target.node === undefined
+						? {}
+						: {
+								QUOTA_STORYBOARD_NODE: target.node.path,
+								QUOTA_STORYBOARD_NODE_SHA256: target.node.sha256,
+							}),
 					[SESSIONS_RECEIPT_DIRECTORY]: undefined,
 					...receiptEnvironment,
 					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),

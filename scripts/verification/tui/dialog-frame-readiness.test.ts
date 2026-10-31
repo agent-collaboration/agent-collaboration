@@ -109,3 +109,60 @@ test('an indefinitely live child producing bytes cannot escape the apparatus exi
 		'finish',
 	);
 });
+
+import { waitForMeasuredDialog } from './dialog-frame-readiness.ts';
+import type { InputDispatchReceipt } from './input-consumption-schema.ts';
+import { temporaryRoot } from './receipt-fixtures.ts';
+import { createTerminalCore, snapshotGrid } from './terminal-grid.ts';
+const ack: InputDispatchReceipt = {
+	sequence: 1,
+	event: { kind: 'key', code: { kind: 'fixed', name: 'F1' }, modifiers: [], phase: 'press' },
+	surface: { kind: 'screen' },
+	target: null,
+	action: 'help',
+};
+const frame = (body: string): Buffer =>
+	Buffer.from('\x1b[?2026h\x1b[2J\x1b[H' + body + '\x1b[?2026l');
+const help =
+	'\x1b[2;2H╭──────────────────╮\x1b[3;2H│Help              │\x1b[4;2H│Context           │\x1b[5;2H╰──────────────────╯';
+test.each([false, true])(
+	'dialog readiness replays kernel resize and requires actual followup=%s',
+	async (followup) => {
+		const directory = temporaryRoot();
+		const first = frame('entry');
+		const second = frame(help);
+		const bytes = Buffer.concat(followup ? [first, second, frame(help)] : [first, second]);
+		const core = await createTerminalCore(32, 24);
+		core.writeRaw(Buffer.concat(followup ? [second, frame(help)] : [second]));
+		const driver = {
+			frameGeneration: () => (followup ? 3 : 2),
+			bytes: () => bytes,
+			resizeHistory: () => [{ byteOffset: first.length, columns: 32, rows: 24 }],
+			waitForGrid: async (_name, matches) => {
+				const grid = snapshotGrid(core);
+				if (!matches(grid)) throw new Error('no actual followup frame');
+				return grid;
+			},
+		} satisfies Pick<PtyGridDriver, 'frameGeneration' | 'bytes' | 'resizeHistory' | 'waitForGrid'>;
+		try {
+			const observed = waitForMeasuredDialog({
+				driver,
+				directory,
+				title: 'Help',
+				checkpoint: 'help',
+				before: 1,
+				acknowledgement: ack,
+			});
+			if (!followup) {
+				await expect(observed).rejects.toThrow('no actual followup');
+				return;
+			}
+			await observed;
+			expect(
+				JSON.parse(readFileSync(join(directory, 'help-frame-binding.json'), 'utf8')),
+			).toMatchObject({ measurementFrame: 2, minimumCompletedFrame: 3, receivedCompletedFrame: 3 });
+		} finally {
+			core.dispose();
+		}
+	},
+);

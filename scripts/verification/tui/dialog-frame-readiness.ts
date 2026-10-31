@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { findDialog } from './grid-scene-matcher.ts';
 import { InputConsumptionReadback } from './input-consumption-readback.ts';
+import type { InputDispatchReceipt } from './input-consumption-schema.ts';
 import { encodeJourneyKey } from './journey-key.ts';
 import type { KeyProtocol, PtyGridDriver } from './pty-grid-driver.ts';
 import { createTerminalCore, snapshotGrid } from './terminal-grid.ts';
@@ -34,13 +35,37 @@ export async function openMeasuredDetails(
 		inject: () => driver.send(encodeJourneyKey('Enter', keys)),
 		timeoutMs: 8_000,
 	});
+	if (acknowledgement === undefined) throw new Error('Details input acknowledgement absent');
+	await waitForMeasuredDialog({
+		driver,
+		directory,
+		title: 'Session details',
+		checkpoint: 'details',
+		before,
+		acknowledgement,
+	});
+}
+
+export async function waitForMeasuredDialog(options: {
+	readonly driver: Pick<
+		PtyGridDriver,
+		'frameGeneration' | 'bytes' | 'resizeHistory' | 'waitForGrid'
+	>;
+	readonly directory: string;
+	readonly title: string;
+	readonly checkpoint: string;
+	readonly before: number;
+	readonly acknowledgement: InputDispatchReceipt;
+}): Promise<void> {
+	const { driver, directory, title, checkpoint, before, acknowledgement } = options;
 	const replay = await createTerminalCore(120, 36);
 	let offset = 0;
+	let resizeIndex = 0;
 	let measurementFrame: number | null = null;
 	const endMarker = Buffer.from('\x1b[?2026l');
 	try {
 		await driver.waitForGrid(
-			'Details after its measurement redraw',
+			`${title} after its measurement redraw`,
 			(grid) => {
 				const bytes = driver.bytes();
 				for (
@@ -49,13 +74,24 @@ export async function openMeasuredDetails(
 					end = bytes.indexOf(endMarker, offset)
 				) {
 					const next = end + endMarker.length;
+					const resizes = driver.resizeHistory();
+					for (
+						let resize = resizes[resizeIndex];
+						resize !== undefined && resize.byteOffset <= next;
+						resize = resizes[resizeIndex]
+					) {
+						replay.writeRaw(bytes.subarray(offset, resize.byteOffset));
+						offset = resize.byteOffset;
+						replay.resize(resize.columns, resize.rows);
+						resizeIndex += 1;
+					}
 					replay.writeRaw(bytes.subarray(offset, next));
 					offset = next;
 					const ordinal = replay.synchronizedOutputGeneration();
 					if (
 						measurementFrame === null &&
 						ordinal > before &&
-						findDialog(snapshotGrid(replay), 'Session details') !== null
+						findDialog(snapshotGrid(replay), title) !== null
 					)
 						measurementFrame = ordinal;
 				}
@@ -64,13 +100,13 @@ export async function openMeasuredDetails(
 				return (
 					measurementFrame !== null &&
 					driver.frameGeneration() > measurementFrame &&
-					findDialog(grid, 'Session details') !== null
+					findDialog(grid, title) !== null
 				);
 			},
 			before,
 		);
 		writeFileSync(
-			join(directory, 'details-frame-binding.json'),
+			join(directory, `${checkpoint}-frame-binding.json`),
 			JSON.stringify(
 				{
 					kind: 'post-measurement-dialog',
