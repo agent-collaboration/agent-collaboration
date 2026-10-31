@@ -17,7 +17,6 @@ use agent_collaboration_tui::{
     surface_stack::{
         OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceId, SurfaceModel,
     },
-    theme::TextRole,
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -46,6 +45,8 @@ pub struct DialogSceneProps {
     pub height: u16,
     pub combo: Arc<Mutex<Option<ComboBoxControl>>>,
     pub data: Arc<Mutex<Option<DialogData>>>,
+    pub surface_stack: Arc<Mutex<Option<SurfaceStackHandle>>>,
+    pub help_control: Arc<Mutex<Option<HelpControl>>>,
 }
 #[component]
 pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -88,10 +89,12 @@ pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyE
         .unwrap(),
         primary_action: None,
     });
+    *props.surface_stack.lock().unwrap() = Some(stack);
     let help = hooks
         .use_ref(|| HelpControl::new(stack, action("help")))
         .read()
         .clone();
+    *props.help_control.lock().unwrap() = Some(help.clone());
     let mut opened = hooks.use_ref(|| false);
     if !opened.get() {
         stack
@@ -121,6 +124,7 @@ fn dialog_spec(
 ) -> OverlaySpec {
     let scroll = ScrollHandle::new(stack);
     let group = GroupId::new("dialog-fields").unwrap();
+    let parent_scroll = scroll.clone();
     let open = ActionDef {
         toolbar_label: None,
         id: action("client"),
@@ -135,18 +139,12 @@ fn dialog_spec(
                     stack,
                     surface: stack.snapshot().top_id(),
                 },
+                parent_scroll: Some(parent_scroll.clone()),
                 field: target("client"),
                 value: data.client,
                 on_pick: Handler::default(),
             });
-            control
-                .open(OverlayLayout::AtCells {
-                    left: 8,
-                    top: 7,
-                    width: 30,
-                    height: 7,
-                })
-                .unwrap();
+            control.open().unwrap();
             *combo.lock().unwrap() = Some(control);
         }),
     };
@@ -187,7 +185,7 @@ fn dialog_spec(
         toolbar_label: None,
         id: action("help"),
         title: "Help".into(),
-        keys: vec!["F1".parse().unwrap()],
+        keys: vec!["F1".parse().unwrap(), "Ctrl+7".parse().unwrap()],
         availability: AvailabilityFn::default(),
         choice: None,
         placement: Placement::Hidden,
@@ -274,7 +272,6 @@ struct DialogBodyProps {
 #[component]
 fn DialogBody(props: &DialogBodyProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let context = *hooks.use_context::<SurfaceContext>();
-    let theme = context.theme();
     let data = props.data;
     let snapshot = context.stack.snapshot();
     let focus = &snapshot.surface(context.surface).unwrap().focus;
@@ -282,9 +279,9 @@ fn DialogBody(props: &DialogBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
         element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any(),
     );
     if let Some(scroll) = props.help.scroll(context.surface) {
-        return element!(DialogFrame(title:"New session".to_owned(),scroll,scroll_target:props.help.scroll_target(),scroll_focus:Some(props.help.body_target()),help_action,context:vec![element!(Text(content:"fixture-42",color:theme.foreground(TextRole::Muted))).into_any()]) {HelpDialog(control:props.help.clone())}).into_any();
+        return element!(DialogFrame(title:"New session".to_owned(),scroll,scroll_target:props.help.scroll_target(),scroll_focus:Some(props.help.body_target()),help_action,context:Some(agent_collaboration_tui::controls::PinnedContext::new("fixture-42"))) {HelpDialog(control:props.help.clone())}).into_any();
     }
-    element!(DialogFrame(title:"New session".to_owned(),scroll:props.scroll.clone(),scroll_target:target("dialog-scroll"),help_action,context:vec![element!(Text(content:"fixture-42",color:theme.foreground(TextRole::Muted))).into_any()],action_hints:vec![element!(DialogKeyHints(actions:vec![action("start"),action("close")])).into_any()]) {
+    element!(DialogFrame(title:"New session".to_owned(),scroll:props.scroll.clone(),scroll_target:target("dialog-scroll"),help_action,context:Some(agent_collaboration_tui::controls::PinnedContext::new("fixture-42")),action_hints:vec![element!(DialogKeyHints(actions:vec![action("start"),action("close")])).into_any()]) {
         DialogSections {
             DialogSection(heading:"Connection".to_owned()) {FormFields {
                 FormField(label:"Client".to_owned(),has_focus:focus.current()==Some(&target("client"))) {ComboBox(id:target("client"),value:data.client)}

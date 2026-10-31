@@ -70,12 +70,35 @@ pub enum TargetRole {
     PointerOnly,
 }
 
+/// Live layout presence, independent of whether a painted control can activate.
+#[derive(Clone)]
+pub struct TargetVisibility(Arc<dyn Fn() -> bool + Send + Sync>);
+impl TargetVisibility {
+    pub fn new(is_painted: impl Fn() -> bool + Send + Sync + 'static) -> Self {
+        Self(Arc::new(is_painted))
+    }
+    pub fn is_painted(&self) -> bool {
+        (self.0)()
+    }
+}
+impl Default for TargetVisibility {
+    fn default() -> Self {
+        Self::new(|| true)
+    }
+}
+impl fmt::Debug for TargetVisibility {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TargetVisibility")
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TargetSpec {
     pub id: TargetId,
     pub role: TargetRole,
     pub group: Option<GroupId>,
     pub availability: AvailabilityFn,
+    pub visibility: TargetVisibility,
     pub input: TargetInputHandler,
     pub activation: Option<crate::actions::ActionId>,
 }
@@ -86,6 +109,7 @@ impl TargetSpec {
             role: TargetRole::Focusable,
             group: None,
             availability: AvailabilityFn::default(),
+            visibility: TargetVisibility::default(),
             input: TargetInputHandler::default(),
             activation: None,
         }
@@ -113,8 +137,15 @@ impl TargetSpec {
         self.availability = availability;
         self
     }
+    pub fn with_visibility(mut self, visibility: TargetVisibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
     pub fn is_enabled(&self) -> bool {
-        self.availability.get().is_available()
+        self.visibility.is_painted() && self.availability.get().is_available()
+    }
+    fn can_retain_focus(&self) -> bool {
+        self.role == TargetRole::Focusable && self.visibility.is_painted()
     }
 }
 
@@ -143,21 +174,32 @@ impl std::error::Error for FocusError {}
 pub struct FocusModel {
     targets: Vec<TargetSpec>,
     current: Option<TargetId>,
+    initial: Option<TargetId>,
+    displaced: Option<TargetId>,
 }
 impl FocusModel {
     pub(crate) fn empty() -> Self {
         Self {
             targets: Vec::new(),
             current: None,
+            initial: None,
+            displaced: None,
         }
     }
     pub fn new(targets: Vec<TargetSpec>) -> Result<Self, FocusError> {
         validate_targets(&targets)?;
         let current = targets
             .iter()
-            .find(|target| target.can_focus())
+            .find(|target| target.role == TargetRole::Focusable)
             .map(|target| target.id.clone());
-        Ok(Self { targets, current })
+        let mut model = Self {
+            targets,
+            initial: current.clone(),
+            current,
+            displaced: None,
+        };
+        model.reconcile_eligibility();
+        Ok(model)
     }
     pub fn targets(&self) -> &[TargetSpec] {
         &self.targets
@@ -177,26 +219,74 @@ impl FocusModel {
             .any(|target| target.id == *id && target.can_focus())
         {
             self.current = Some(id.clone());
+            self.displaced = None;
             true
         } else {
             false
         }
     }
-    pub fn restore(&mut self, id: Option<&TargetId>) {
-        self.current = id
-            .and_then(|id| {
+    fn is_focus_eligible(&self, id: &TargetId) -> bool {
+        self.targets
+            .iter()
+            .any(|target| target.id == *id && target.can_focus())
+    }
+    fn is_painted_focus(&self, id: &TargetId) -> bool {
+        self.targets
+            .iter()
+            .any(|target| target.id == *id && target.can_retain_focus())
+    }
+    fn automatic_fallback(&self) -> Option<TargetId> {
+        self.initial
+            .as_ref()
+            .filter(|id| self.is_painted_focus(id))
+            .cloned()
+            .or_else(|| {
                 self.targets
                     .iter()
-                    .find(|target| target.id == *id && target.can_focus())
+                    .find(|target| target.can_focus() && target.activation.is_none())
+                    .map(|target| target.id.clone())
             })
-            .or_else(|| self.targets.iter().find(|target| target.can_focus()))
-            .map(|target| target.id.clone());
+    }
+    pub(crate) fn mount_initial_focus(&mut self) {
+        self.initial = self.current.clone().or_else(|| self.initial.clone());
+        self.reconcile_eligibility();
+    }
+    /// Reconcile only the active surface. Covered and Help-suspended models keep
+    /// their displaced intent until the original surface becomes active again.
+    pub(crate) fn reconcile_eligibility(&mut self) -> bool {
+        let before = (self.current.clone(), self.displaced.clone());
+        if self
+            .displaced
+            .as_ref()
+            .is_some_and(|id| self.is_focus_eligible(id))
+        {
+            self.current = self.displaced.take();
+        } else if !self
+            .current
+            .as_ref()
+            .is_some_and(|id| self.is_painted_focus(id))
+        {
+            if self.displaced.is_none() {
+                self.displaced = self.current.clone();
+            }
+            self.current = self.automatic_fallback();
+        }
+        (self.current.clone(), self.displaced.clone()) != before
+    }
+    /// Model replacement copies intent without reconciling a covered surface.
+    pub(crate) fn inherit_focus_intent(&mut self, previous: &Self) {
+        self.current = previous.current.clone();
+        self.initial = previous.initial.clone();
+        self.displaced = previous.displaced.clone();
+    }
+    pub fn restore(&mut self, id: Option<&TargetId>) {
+        self.current = id.cloned();
+        self.reconcile_eligibility();
     }
     pub fn replace_targets(&mut self, targets: Vec<TargetSpec>) -> Result<(), FocusError> {
         validate_targets(&targets)?;
-        let previous = self.current.clone();
         self.targets = targets;
-        self.restore(previous.as_ref());
+        self.reconcile_eligibility();
         Ok(())
     }
     pub fn traverse(&mut self, direction: FocusDirection) {
@@ -210,32 +300,31 @@ impl FocusModel {
         if within_group && group.is_none() {
             return;
         }
+        let current_index = self
+            .targets
+            .iter()
+            .position(|target| Some(&target.id) == self.current.as_ref());
         let eligible = self
             .targets
             .iter()
-            .filter(|target| {
+            .enumerate()
+            .filter(|(_, target)| {
                 target.can_focus() && (!within_group || target.group.as_ref() == group)
             })
-            .map(|target| &target.id)
             .collect::<Vec<_>>();
-        let next = if let Some(index) = eligible
-            .iter()
-            .position(|id| Some(*id) == self.current.as_ref())
-        {
-            match direction {
-                FocusDirection::Next => eligible.get(index + 1).or_else(|| eligible.first()),
-                FocusDirection::Previous => index
-                    .checked_sub(1)
-                    .and_then(|index| eligible.get(index))
-                    .or_else(|| eligible.last()),
-            }
-        } else {
-            match direction {
-                FocusDirection::Next => eligible.first(),
-                FocusDirection::Previous => eligible.last(),
-            }
+        let next = match direction {
+            FocusDirection::Next => eligible
+                .iter()
+                .find(|(index, _)| current_index.is_some_and(|current| *index > current))
+                .or_else(|| eligible.first()),
+            FocusDirection::Previous => eligible
+                .iter()
+                .rev()
+                .find(|(index, _)| current_index.is_some_and(|current| *index < current))
+                .or_else(|| eligible.last()),
         };
-        self.current = next.map(|id| (*id).clone());
+        self.current = next.map(|(_, target)| target.id.clone());
+        self.displaced = None;
     }
 }
 

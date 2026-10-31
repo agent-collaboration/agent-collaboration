@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_row.rs b/crates/agent-collaboration-tui/src/controls/list_row.rs
---- a/crates/agent-collaboration-tui/src/controls/list_row.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_row.rs
-@@ -33,3 +33,3 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<
-     element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if selected {SurfaceRole::Selected}else{context.surface_role()})) {
--            View(width:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,padding_top:props.marker_offset) {
-+            View(width:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,padding_top:0) {
-                 Text(content:if focused {UiGlyph::Focus.text()}else if selected {UiGlyph::Current.text()}else{" "},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted}))

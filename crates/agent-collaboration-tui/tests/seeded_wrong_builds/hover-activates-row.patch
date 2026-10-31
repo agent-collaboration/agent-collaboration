@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
---- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-@@ -273,2 +273,3 @@ impl ListSelectionControl {
-                 }
-+                if reveal == SelectionReveal::PreserveViewport && let Some(run) = parent.stack.snapshot().top().actions.invocation(&control.binding.activation) { run(()); }
-                 InputUse::Used

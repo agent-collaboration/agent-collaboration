@@ -1,13 +1,15 @@
 //! ComboBox presentation uses the scoped control model and the shared input owner.
-use super::{ComboBoxState, ScrollHandle, ScrollList, ScrollReveal};
+use super::{ComboBoxState, ScrollHandle, ScrollList, scroll_list::TargetScrollReveal};
 use crate::{
     actions::Availability,
     focus_model::TargetId,
     hit_regions::{HitRegion, HitRegionKind, use_target_geometry},
+    overlay_host::SurfaceSizing,
     surface_handle::SurfaceContext,
     theme::{SurfaceRole, TextRole, UiGlyph},
 };
 use iocraft::prelude::*;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 #[derive(Props)]
 pub struct ComboBoxProps {
     #[iocraft(required)]
@@ -35,7 +37,8 @@ pub fn ComboBox(props: &ComboBoxProps, mut hooks: Hooks) -> impl Into<AnyElement
         .unwrap_or(Availability::Unavailable {
             reason: "Unavailable".into(),
         });
-    let focused = context.is_focused(&props.id) && availability.is_available();
+    let focused = context.is_focused(&props.id);
+    super::scroll_list::use_scroll_reveal(&mut hooks, focused, Some(props.id.clone()));
     let state = props.value.read();
     let label = state
         .options()
@@ -64,20 +67,55 @@ pub(crate) fn ComboDropdown(
 ) -> impl Into<AnyElement<'static>> {
     let context = *hooks.use_context::<SurfaceContext>();
     let theme = context.theme();
+    let sizing = *hooks.use_context::<SurfaceSizing>();
+    let row_width = usize::from(sizing.max_width.saturating_sub(3));
     let state = props.value.read().clone();
     let matching = state.matching();
     element!(View(width:100pct,height:100pct,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
         HitRegion(target:props.field.child("filter"),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
             View(flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap)}
-            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true)}
+            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true,available_width:Some(sizing.max_width.saturating_sub(10)))}
         }}
         ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
-        #(matching.into_iter().map(|option|{let highlighted=Some(&option.key)==state.highlight();let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
-            View(width:1) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
-            Text(content:option.label.clone(),color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))
-            #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
-        }}}).into_any()}))
+        #(matching.into_iter().map(|option| {
+            let highlighted=Some(&option.key)==state.highlight();
+            let target=props.field.child(&format!("option:{}",option.key.as_str()));
+            let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};
+            let label=fit_label_text(&option.label,row_width.saturating_sub(2));
+            let inline_secondary=option.secondary.as_ref().filter(|secondary|option.label.width()+secondary.width()+3<=row_width);
+            let overflow_secondary=option.secondary.as_ref().filter(|_|inline_secondary.is_none());
+            element!(TargetScrollReveal(target:target.clone(),focused:highlighted) {View(width:100pct,flex_shrink:0.0_f32) {HitRegion(target,kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
+                View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
+                    View(width:1,flex_shrink:0.0_f32) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
+                    View(flex_shrink:0.0_f32) {Text(content:label,wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
+                    #(inline_secondary.map(|content|element!(Text(content:content.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted)))))
+                }
+                #(overflow_secondary.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content:content.clone(),wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
+                #(reason.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
+            }}}}).into_any()
+        }))
         }
     })
+}
+
+fn fit_label_text(content: &str, width: usize) -> String {
+    if content.width() <= width {
+        return content.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let mut result = String::new();
+    let mut used = 0;
+    for character in content.chars() {
+        let cells = character.width().unwrap_or(0);
+        if used + cells >= width {
+            break;
+        }
+        result.push(character);
+        used += cells;
+    }
+    result.push_str(UiGlyph::Ellipsis.text());
+    result
 }

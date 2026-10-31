@@ -64,8 +64,14 @@ pub struct OverlaySpec {
     pub layout: OverlayLayout,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OverlayLayout {
+    Anchored {
+        target: TargetId,
+        preferred_width: u16,
+        maximum_width: u16,
+        maximum_height: u16,
+    },
     Dialog {
         presentation: crate::DialogPresentation,
         margins: crate::DialogMargins,
@@ -89,8 +95,14 @@ impl Default for OverlayLayout {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OverlayPlacement {
+    Anchored {
+        target: TargetId,
+        preferred_width: u16,
+        maximum_width: u16,
+        maximum_height: u16,
+    },
     Fixed {
         left: u16,
         top: u16,
@@ -108,6 +120,17 @@ pub enum OverlayPlacement {
 impl OverlayLayout {
     pub fn resolve(self, viewport: (u16, u16)) -> OverlayPlacement {
         match self {
+            Self::Anchored {
+                target,
+                preferred_width,
+                maximum_width,
+                maximum_height,
+            } => OverlayPlacement::Anchored {
+                target,
+                preferred_width,
+                maximum_width,
+                maximum_height,
+            },
             Self::Dialog {
                 presentation,
                 margins,
@@ -183,6 +206,7 @@ impl std::error::Error for OverlayIdentityExhausted {}
 pub struct SurfaceStack {
     screen: SurfaceModel,
     overlays: Vec<Overlay>,
+    suspended_dropdown: Option<Overlay>,
     next_identity: u64,
 }
 impl SurfaceStack {
@@ -193,10 +217,12 @@ impl SurfaceStack {
             primary_action: None,
         })
     }
-    pub fn new(screen: SurfaceModel) -> Self {
+    pub fn new(mut screen: SurfaceModel) -> Self {
+        screen.focus.mount_initial_focus();
         Self {
             screen,
             overlays: Vec::new(),
+            suspended_dropdown: None,
             next_identity: 1,
         }
     }
@@ -218,9 +244,13 @@ impl SurfaceStack {
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
     }
-    #[cfg(test)]
-    pub(crate) fn set_overlay_layout_for_test(&mut self, id: OverlayId, layout: OverlayLayout) {
-        if let Some(overlay) = self.overlays.iter_mut().find(|overlay| overlay.id == id) {
+    pub(crate) fn set_overlay_layout_if_open(&mut self, id: OverlayId, layout: OverlayLayout) {
+        if let Some(overlay) = self
+            .overlays
+            .iter_mut()
+            .chain(self.suspended_dropdown.iter_mut())
+            .find(|overlay| overlay.id == id)
+        {
             overlay.layout = layout;
         }
     }
@@ -230,6 +260,7 @@ impl SurfaceStack {
             SurfaceId::Overlay(id) => self
                 .overlays
                 .iter()
+                .chain(self.suspended_dropdown.iter())
                 .find(|overlay| overlay.id == id)
                 .map(|overlay| &overlay.model),
         }
@@ -240,6 +271,7 @@ impl SurfaceStack {
             SurfaceId::Overlay(id) => self
                 .overlays
                 .iter_mut()
+                .chain(self.suspended_dropdown.iter_mut())
                 .find(|overlay| overlay.id == id)
                 .map(|overlay| &mut overlay.model),
         }
@@ -247,12 +279,14 @@ impl SurfaceStack {
     pub(crate) fn overlay_base_model(&self, id: OverlayId) -> Option<&SurfaceModel> {
         self.overlays
             .iter()
+            .chain(self.suspended_dropdown.iter())
             .find(|overlay| overlay.id == id)
             .map(|overlay| overlay.suspended_model.as_ref().unwrap_or(&overlay.model))
     }
     pub(crate) fn overlay_base_model_mut(&mut self, id: OverlayId) -> Option<&mut SurfaceModel> {
         self.overlays
             .iter_mut()
+            .chain(self.suspended_dropdown.iter_mut())
             .find(|overlay| overlay.id == id)
             .map(|overlay| {
                 overlay
@@ -282,13 +316,48 @@ impl SurfaceStack {
         overlay.model = model;
         true
     }
+    pub(crate) fn dropdown_for(&self, parent: SurfaceId, field: &TargetId) -> Option<&Overlay> {
+        self.overlays
+            .iter()
+            .chain(self.suspended_dropdown.iter())
+            .find(|overlay| {
+                overlay.parent == parent
+                    && overlay.kind
+                        == OverlayKind::Dropdown {
+                            field: field.clone(),
+                        }
+            })
+    }
+    pub(crate) fn suspend_dropdown(&mut self, id: OverlayId) -> bool {
+        if self.suspended_dropdown.is_some()
+            || !self.overlays.last().is_some_and(|overlay| {
+                overlay.id == id && matches!(overlay.kind, OverlayKind::Dropdown { .. })
+            })
+        {
+            return false;
+        }
+        self.suspended_dropdown = self.overlays.pop();
+        true
+    }
+    pub(crate) fn restore_dropdown(&mut self) -> bool {
+        let Some(dropdown) = self.suspended_dropdown.take() else {
+            return false;
+        };
+        if self.top_id() != dropdown.parent {
+            self.suspended_dropdown = Some(dropdown);
+            return false;
+        }
+        self.overlays.push(dropdown);
+        true
+    }
     pub fn is_covered(&self, id: SurfaceId) -> bool {
         self.surface(id).is_some() && self.top_id() != id
     }
     pub fn open_overlay(
         &mut self,
-        spec: OverlaySpec,
+        mut spec: OverlaySpec,
     ) -> Result<OverlayId, OverlayIdentityExhausted> {
+        spec.model.focus.mount_initial_focus();
         let next = self
             .next_identity
             .checked_add(1)
@@ -310,6 +379,13 @@ impl SurfaceStack {
     }
     pub fn close_top(&mut self) -> Option<OverlayId> {
         let closed = self.overlays.pop()?;
+        if self
+            .suspended_dropdown
+            .as_ref()
+            .is_some_and(|dropdown| dropdown.parent == SurfaceId::Overlay(closed.id))
+        {
+            self.suspended_dropdown = None;
+        }
         self.top_mut().focus.restore(closed.restore_focus.as_ref());
         Some(closed.id)
     }

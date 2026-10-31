@@ -358,7 +358,7 @@ mod tests {
                             .drive(&mut frames, mode, vec![(close, true)], true)
                             .await;
                         let expected = match replacement {
-                            "reordered" => b"seed|0|0|other".as_slice(),
+                            "reordered" | "disabled" => b"seed|0|0|other".as_slice(),
                             "empty" => b"seed|0|0|-".as_slice(),
                             _ => b"seed|0|0|filter".as_slice(),
                         };

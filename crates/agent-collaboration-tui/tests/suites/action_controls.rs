@@ -17,7 +17,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::use_surface_stack,
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -113,17 +113,8 @@ mod tests {
                     let registry = &state.surface(SurfaceId::Screen).unwrap().actions;
                     stack
                         .open_overlay(
-                            menu_overlay(
-                                stack,
-                                registry,
-                                OverlayLayout::AtCells {
-                                    left: 15,
-                                    top: 3,
-                                    width: 32,
-                                    height: 8,
-                                },
-                            )
-                            .unwrap(),
+                            menu_overlay(stack, registry, TargetId::for_action(&id("menu")))
+                                .unwrap(),
                         )
                         .unwrap();
                 }),
@@ -167,16 +158,7 @@ mod tests {
             .join("\n")
     }
     fn menu_text(driver: &EventDriver) -> String {
-        let grid = driver.frames.last().unwrap();
-        (3..11)
-            .map(|row| {
-                grid.cells[row][15..47]
-                    .iter()
-                    .map(|cell| cell.text.as_str())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        driver.frames.last().unwrap().round_frame_text()
     }
     #[tokio::test]
     async fn effects_recheck_live_availability_inside_a_burst_and_every_projection_updates() {

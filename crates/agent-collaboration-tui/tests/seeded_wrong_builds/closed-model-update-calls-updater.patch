@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/surface_handle.rs b/crates/agent-collaboration-tui/src/surface_handle.rs
---- a/crates/agent-collaboration-tui/src/surface_handle.rs
-+++ b/crates/agent-collaboration-tui/src/surface_handle.rs
-@@ -71,2 +71,3 @@ impl SurfaceStackHandle {
-         let Some(model) = next.overlay_base_model_mut(overlay) else {
-+            if let Some(model)=next.surface_mut(SurfaceId::Screen) {update(model);}
-             return false;

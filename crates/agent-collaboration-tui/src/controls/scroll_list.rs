@@ -1,5 +1,5 @@
 //! In-flow measurement, actual clipped hits, focus reveal and a visible scrollbar.
-use super::ScrollHandle;
+use super::{ScrollHandle, scroll_model::ScrollRevealTarget};
 use crate::{
     actions::Availability,
     focus_model::TargetId,
@@ -85,67 +85,120 @@ pub fn ScrollList<'a>(
         .map_or(Availability::Available, |target| target.availability.get());
     let focused = availability.is_available() && context.is_focused(keyboard_target);
     let theme = context.theme();
-    let visible = position.viewport_height;
-    let thumb = if position.natural_height == 0 {
-        0
-    } else {
-        u16::try_from(
+    element!(View(width:100pct,min_height:0,flex_grow:if props.grow {1.0_f32}else{0.0_f32},flex_shrink:1.0_f32,padding_right:1,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
+        #(props.align_bottom.then(||element!(View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_height:0))))
+        ScrollContent(scroll:props.scroll.clone(),offset:position.offset,children)
+        ScrollBar(scroll:props.scroll.clone(),color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted}))
+        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(Text(content:reason,color:theme.foreground(TextRole::Disabled))))})
+    })
+}
+struct ScrollBarPaint {
+    scroll: ScrollHandle,
+    color: Option<Color>,
+}
+impl Hook for ScrollBarPaint {
+    fn post_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        // The preceding viewport/content hooks measured THIS layout, even on mount.
+        let position = self.scroll.position();
+        if position.maximum() == 0 {
+            return;
+        }
+        let visible = position.viewport_height.min(drawer.size().height);
+        let thumb = u16::try_from(
             (u32::from(visible) * u32::from(visible) / u32::from(position.natural_height))
                 .max(1)
                 .min(u32::from(visible)),
         )
-        .unwrap_or(visible)
-    };
-    let thumb_top = if position.maximum() == 0 {
-        0
-    } else {
-        u16::try_from(
+        .unwrap_or(visible);
+        let thumb_top = u16::try_from(
             u32::from(position.offset) * u32::from(visible.saturating_sub(thumb))
                 / u32::from(position.maximum()),
         )
-        .unwrap_or(0)
-    };
-    element!(View(width:100pct,min_height:0,flex_grow:if props.grow {1.0_f32}else{0.0_f32},flex_shrink:1.0_f32,padding_right:1,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
-        #(props.align_bottom.then(||element!(View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_height:0))))
-        ScrollContent(scroll:props.scroll.clone(),offset:position.offset,children)
-        #((position.maximum()>0||focused).then(||element! {View(position:Position::Absolute,right:0,top:0,width:1,height:visible,flex_direction:FlexDirection::Column) {
-            #((0..visible).map(|row|element!(Text(content:if position.maximum()==0 {if row==0 {UiGlyph::Focus.text()}else{" "}}else if row>=thumb_top&&row<thumb_top+thumb {UiGlyph::ScrollThumb.text()}else{UiGlyph::ScrollTrack.text()},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted})))))
-        }}))
-        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(Text(content:reason,color:theme.foreground(TextRole::Disabled))))})
-    })
+        .unwrap_or(0);
+        let mut style = CanvasTextStyle::default();
+        style.color = self.color;
+        let mut canvas = drawer.canvas();
+        for row in 0..visible {
+            let glyph = if row >= thumb_top && row < thumb_top + thumb {
+                UiGlyph::ScrollThumb
+            } else {
+                UiGlyph::ScrollTrack
+            };
+            canvas.set_text(
+                0,
+                isize::try_from(row).unwrap_or(isize::MAX),
+                glyph.text(),
+                style,
+            );
+        }
+    }
+}
+#[derive(Props)]
+struct ScrollBarProps {
+    #[iocraft(required)]
+    scroll: ScrollHandle,
+    color: Option<Color>,
+}
+#[component]
+fn ScrollBar(props: &ScrollBarProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let paint = hooks.use_hook(|| ScrollBarPaint {
+        scroll: props.scroll.clone(),
+        color: props.color,
+    });
+    paint.scroll = props.scroll.clone();
+    paint.color = props.color;
+    element!(View(position:Position::Absolute,right:0,top:0,width:1,height:100pct))
 }
 struct RevealHook {
     context: Option<ScrollContext>,
     focused: bool,
-    last_target: Option<(i32, u16, u16)>,
+    target_id: Option<TargetId>,
+    last_target: Option<ScrollRevealTarget>,
 }
 impl Hook for RevealHook {
     fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
-        let Some(context) = self.context.as_ref().filter(|_| self.focused) else {
-            self.last_target = None;
+        let Some(context) = self.context.as_ref() else {
             return;
         };
         let position = context.scroll.position();
         let logical_top = i32::from(drawer.canvas_position().y) - i32::from(position.viewport_top)
             + i32::from(context.layout_offset);
-        let target = (logical_top, drawer.size().height, position.viewport_height);
-        if self.last_target != Some(target) {
-            self.last_target = Some(target);
-            context.scroll.reveal(logical_top, target.1);
+        let target = ScrollRevealTarget {
+            target_id: self.target_id.clone(),
+            logical_top,
+            height: drawer.size().height,
+            viewport_height: position.viewport_height,
+        };
+        context.scroll.measure_target(target.clone());
+        if !self.focused {
+            if let Some(previous) = self.last_target.take()
+                && let Some(context) = self.context.as_ref()
+            {
+                context.scroll.forget_reveal(previous);
+            }
+            return;
         }
+        self.last_target = Some(target.clone());
+        context.scroll.reveal(target);
     }
 }
-pub(crate) fn use_scroll_reveal(hooks: &mut Hooks<'_, '_>, focused: bool) {
+pub(crate) fn use_scroll_reveal(
+    hooks: &mut Hooks<'_, '_>,
+    focused: bool,
+    target_id: Option<TargetId>,
+) {
     let context = hooks
         .try_use_context::<ScrollContext>()
         .map(|context| context.clone());
     let hook = hooks.use_hook(|| RevealHook {
         context: context.clone(),
         focused,
+        target_id: target_id.clone(),
         last_target: None,
     });
     hook.context = context;
     hook.focused = focused;
+    hook.target_id = target_id;
 }
 #[derive(Props)]
 pub struct ScrollRevealProps<'a> {
@@ -157,7 +210,40 @@ pub fn ScrollReveal<'a>(
     props: &mut ScrollRevealProps<'a>,
     mut hooks: Hooks,
 ) -> impl Into<AnyElement<'a>> {
-    use_scroll_reveal(&mut hooks, props.focused);
+    let target_id = props
+        .focused
+        .then(|| {
+            hooks
+                .try_use_context::<SurfaceContext>()
+                .and_then(|context| {
+                    context
+                        .stack
+                        .snapshot()
+                        .surface(context.surface)
+                        .and_then(|surface| surface.focus.current().cloned())
+                })
+        })
+        .flatten();
+    use_scroll_reveal(&mut hooks, props.focused, target_id);
+    match props.children.first_mut() {
+        Some(child) => child.into(),
+        None => element!(View).into_any(),
+    }
+}
+
+#[derive(Props)]
+pub(crate) struct TargetScrollRevealProps<'a> {
+    #[iocraft(required)]
+    pub(crate) target: TargetId,
+    pub(crate) focused: bool,
+    pub(crate) children: Vec<AnyElement<'a>>,
+}
+#[component]
+pub(crate) fn TargetScrollReveal<'a>(
+    props: &mut TargetScrollRevealProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    use_scroll_reveal(&mut hooks, props.focused, Some(props.target.clone()));
     match props.children.first_mut() {
         Some(child) => child.into(),
         None => element!(View).into_any(),

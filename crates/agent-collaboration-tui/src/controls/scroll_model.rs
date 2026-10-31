@@ -1,10 +1,13 @@
 //! A scroll model can be constructed with its overlay before any component mounts.
 use crate::{
-    focus_model::{InputUse, TargetInputHandler},
+    focus_model::{InputUse, TargetId, TargetInputHandler},
     surface_handle::SurfaceStackHandle,
 };
 use iocraft::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ScrollPosition {
     pub offset: u16,
@@ -17,15 +20,28 @@ impl ScrollPosition {
         self.natural_height.saturating_sub(self.viewport_height)
     }
 }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ScrollRevealTarget {
+    pub target_id: Option<TargetId>,
+    pub logical_top: i32,
+    pub height: u16,
+    pub viewport_height: u16,
+}
 #[derive(Clone)]
 pub struct ScrollHandle {
     position: Arc<Mutex<ScrollPosition>>,
+    last_reveal: Arc<Mutex<Option<ScrollRevealTarget>>>,
+    measured_targets: Arc<Mutex<HashMap<TargetId, ScrollRevealTarget>>>,
+    pending_reveal: Arc<Mutex<Option<TargetId>>>,
     stack: SurfaceStackHandle,
 }
 impl ScrollHandle {
     pub fn new(stack: SurfaceStackHandle) -> Self {
         Self {
             position: Arc::new(Mutex::new(ScrollPosition::default())),
+            last_reveal: Arc::new(Mutex::new(None)),
+            measured_targets: Arc::new(Mutex::new(HashMap::new())),
+            pending_reveal: Arc::new(Mutex::new(None)),
             stack,
         }
     }
@@ -36,6 +52,14 @@ impl ScrollHandle {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
     pub fn reset(&self) {
+        *self
+            .pending_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.update(|position| position.offset = 0);
     }
     fn update(&self, update: impl FnOnce(&mut ScrollPosition)) -> bool {
@@ -64,9 +88,78 @@ impl ScrollHandle {
         });
     }
     pub(crate) fn measure_content(&self, height: u16) {
+        // Each draw replaces the derived geometry, including offscreen rows.
+        self.measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
         self.update(|position| position.natural_height = height);
     }
-    pub(crate) fn reveal(&self, logical_top: i32, height: u16) {
+    pub(super) fn measure_target(&self, target: ScrollRevealTarget) {
+        if let Some(target_id) = target.target_id.clone() {
+            self.measured_targets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(target_id, target);
+        }
+        self.apply_pending_reveal();
+    }
+    /// Reveal with drawn geometry, retaining unmeasured intent until that target appears.
+    pub(super) fn reveal_measured(&self, target_id: &TargetId) {
+        *self
+            .pending_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(target_id.clone());
+        self.apply_pending_reveal();
+    }
+    fn apply_pending_reveal(&self) {
+        let position = self.position();
+        if position.viewport_height == 0 || position.natural_height == 0 {
+            return;
+        }
+        let mut pending = self
+            .pending_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let target = pending.as_ref().and_then(|target_id| {
+            self.measured_targets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(target_id)
+                .filter(|target| target.height > 0)
+                .cloned()
+        });
+        let Some(target) = target else {
+            return;
+        };
+        *pending = None;
+        drop(pending);
+        // New explicit input must reveal a target displaced by manual scrolling.
+        self.forget_reveal(target.clone());
+        self.reveal(target);
+    }
+    pub(super) fn forget_reveal(&self, target: ScrollRevealTarget) {
+        let mut previous = self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if previous.as_ref() == Some(&target) {
+            *previous = None;
+        }
+    }
+    pub(super) fn reveal(&self, target: ScrollRevealTarget) {
+        let logical_top = target.logical_top;
+        let height = target.height;
+        {
+            let mut previous = self
+                .last_reveal
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if previous.as_ref() == Some(&target) {
+                return;
+            }
+            *previous = Some(target);
+        }
         self.update(|position| {
             let top = i32::from(position.offset);
             let bottom = top + i32::from(position.viewport_height);
@@ -87,19 +180,10 @@ impl ScrollHandle {
     }
     pub fn handle_event(&self, event: &TerminalEvent) -> InputUse {
         let code = match event {
-            TerminalEvent::Key(key)
-                if key.kind != KeyEventKind::Release && key.modifiers.is_empty() =>
-            {
-                match key.code {
-                    KeyCode::Up
-                    | KeyCode::Down
-                    | KeyCode::PageUp
-                    | KeyCode::PageDown
-                    | KeyCode::Home
-                    | KeyCode::End => key.code,
-                    _ => return InputUse::Unused,
-                }
-            }
+            TerminalEvent::Key(key) => match navigation_code(key) {
+                Some(code) => code,
+                None => return InputUse::Unused,
+            },
             TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
                 MouseEventKind::ScrollDown => KeyCode::Down,
                 MouseEventKind::ScrollUp => KeyCode::Up,
@@ -138,8 +222,8 @@ impl ScrollHandle {
         TargetInputHandler::new(move |event| {
             let accepts = match &event {
                 TerminalEvent::Key(key) => matches!(
-                    key.code,
-                    KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End
+                    navigation_code(key),
+                    Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)
                 ),
                 TerminalEvent::FullscreenMouse(_) => true,
                 _ => false,
@@ -150,5 +234,32 @@ impl ScrollHandle {
                 InputUse::Unused
             }
         })
+    }
+}
+
+/// One translation owns the terminal's paging aliases for all scroll consumers.
+pub(super) fn navigation_code(key: &KeyEvent) -> Option<KeyCode> {
+    if key.kind == KeyEventKind::Release {
+        return None;
+    }
+    match (key.code, key.modifiers) {
+        (KeyCode::Up, KeyModifiers::ALT) => Some(KeyCode::PageUp),
+        (KeyCode::Down, KeyModifiers::ALT) => Some(KeyCode::PageDown),
+        (KeyCode::Up, modifiers) if modifiers == KeyModifiers::ALT | KeyModifiers::SHIFT => {
+            Some(KeyCode::Home)
+        }
+        (KeyCode::Down, modifiers) if modifiers == KeyModifiers::ALT | KeyModifiers::SHIFT => {
+            Some(KeyCode::End)
+        }
+        (
+            code @ (KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Home
+            | KeyCode::End),
+            KeyModifiers::NONE,
+        ) => Some(code),
+        _ => None,
     }
 }

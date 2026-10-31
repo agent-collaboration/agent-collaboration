@@ -40,6 +40,107 @@ mod tests {
     }
 
     #[test]
+    fn removed_focus_uses_the_scope_initial_target_before_cancel_in_declared_order() {
+        let cancel = target("cancel").with_activation(ActionId::new("close").unwrap());
+        let primary = target("primary").with_activation(ActionId::new("submit").unwrap());
+        let initial = target("initial-field");
+        let transient = target("transient");
+        let mut screen = surface(&[]);
+        screen.focus = FocusModel::new(vec![
+            cancel.clone(),
+            primary.clone(),
+            initial.clone(),
+            transient.clone(),
+        ])
+        .unwrap();
+        assert!(screen.focus.focus(&initial.id));
+        let mut stack = SurfaceStack::new(screen);
+        assert!(stack.top_mut().focus.focus(&transient.id));
+        stack
+            .top_mut()
+            .focus
+            .replace_targets(vec![cancel, primary, initial.clone()])
+            .unwrap();
+        assert_eq!(
+            stack.top().focus.current(),
+            Some(&initial.id),
+            "mount-time initial focus wins over Cancel and Submit"
+        );
+    }
+
+    #[test]
+    fn absent_initial_focus_never_automatically_selects_an_action() {
+        let initial = target("initial-field");
+        let cancel = target("cancel").with_activation(ActionId::new("close").unwrap());
+        let primary = target("primary").with_activation(ActionId::new("submit").unwrap());
+        let safe = target("body");
+        let mut focus =
+            FocusModel::new(vec![initial, cancel.clone(), primary.clone(), safe.clone()]).unwrap();
+        focus
+            .replace_targets(vec![cancel.clone(), primary.clone(), safe.clone()])
+            .unwrap();
+        assert_eq!(
+            focus.current(),
+            Some(&safe.id),
+            "secondary fallback uses a non-activating target"
+        );
+        focus.replace_targets(vec![cancel, primary]).unwrap();
+        assert_eq!(
+            focus.current(),
+            None,
+            "no safe target leaves focus empty rather than arming Cancel"
+        );
+    }
+
+    #[test]
+    fn initial_disabled_activation_remains_focused_on_mount_and_after_displacement() {
+        let disabled = target("initial-submit")
+            .with_activation(ActionId::new("submit").unwrap())
+            .with_availability(AvailabilityFn::new(|| Availability::Unavailable {
+                reason: "Waiting".into(),
+            }));
+        let transient = target("transient");
+        let mut screen = surface(&[]);
+        screen.focus = FocusModel::new(vec![disabled.clone(), transient.clone()]).unwrap();
+        let mut stack = SurfaceStack::new(screen);
+        assert_eq!(
+            stack.top().focus.current(),
+            Some(&disabled.id),
+            "painted disabled initial target is retained at mount"
+        );
+        assert!(stack.top_mut().focus.focus(&transient.id));
+        stack
+            .top_mut()
+            .focus
+            .replace_targets(vec![disabled.clone()])
+            .unwrap();
+        assert_eq!(
+            stack.top().focus.current(),
+            Some(&disabled.id),
+            "only the initial activation may receive automatic fallback"
+        );
+        assert!(!stack.top().focus.focused().unwrap().is_enabled());
+    }
+
+    #[test]
+    fn default_help_names_original_page_and_bounds_keys_with_the_option_aliases() {
+        use agent_collaboration_tui::controls::{HelpContent, HelpInputConvention};
+        assert_eq!(
+            HelpContent::default().conventions,
+            vec![
+                HelpInputConvention {
+                    key: "PgUp/PgDn · Option+↑/↓".into(),
+                    description: "Page".into()
+                },
+                HelpInputConvention {
+                    key: "Home/End · Option+Shift+↑/↓".into(),
+                    description: "First/last".into()
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn identities_reject_absence_without_collapsing_distinct_domains() {
         assert!(TargetId::new(" ").is_err());
         assert!(ActionId::new("").is_err());
@@ -196,12 +297,19 @@ mod tests {
                     .map(|target| target.id.clone())
                     .collect::<Vec<_>>();
                 let mut focus = FocusModel::new(targets).unwrap();
-                assert_eq!(focus.current(), enabled.first());
+                assert_eq!(
+                    focus.current(),
+                    (length > 0)
+                        .then(|| TargetId::new("row-0").unwrap())
+                        .as_ref(),
+                    "the painted initial target retains focus even when disabled"
+                );
                 if enabled.is_empty() {
                     focus.traverse(FocusDirection::Next);
                     assert!(focus.current().is_none());
                     continue;
                 }
+                assert!(focus.focus(&enabled[0]));
                 for expected in enabled.iter().cycle().skip(1).take(enabled.len() * 2) {
                     focus.traverse(FocusDirection::Next);
                     assert_eq!(focus.current(), Some(expected));
@@ -296,7 +404,11 @@ mod tests {
             .replace_targets(vec![disabled, target("beta")])
             .unwrap();
         stack.close_top();
-        assert_eq!(stack.top().focus.current().unwrap().as_str(), "beta");
+        assert_eq!(
+            stack.top().focus.current().unwrap().as_str(),
+            "alpha",
+            "painted disabled captured focus is retained on close"
+        );
     }
 
     #[test]

@@ -104,7 +104,7 @@ mod tests {
         });
         let journal = props.journal.clone();
         element!(InputOwner(stack,width:50u16,height:12u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,format!("{}|{}",value.read().text(),value.read().cursor()).into_bytes())]))) {
-            OverlayHost {View(width:if disabled {40}else{12},height:1) {#(if props.filter {element!(FilterField(id:target(),value)).into_any()}else{element!(TextField(id:target(),value)).into_any()})}}
+            OverlayHost {View(width:if disabled {40}else{12},height:if disabled {2}else{1}) {#(if props.filter {element!(FilterField(id:target(),value)).into_any()}else{element!(TextField(id:target(),value)).into_any()})}}
         })
     }
     fn key(code: KeyCode) -> TerminalEvent {
@@ -147,13 +147,18 @@ mod tests {
                 if disabled {
                     let grid = driver.frames.last().unwrap();
                     assert!(
-                        grid.row_text(0).contains("Read only"),
+                        grid.row_text(1).contains("Read only"),
                         "{}",
                         grid.row_text(0)
                     );
                     assert_eq!(
                         grid.cell(0, 0).unwrap().style.foreground,
                         Some(Theme::default().foreground(TextRole::Disabled))
+                    );
+                    assert_eq!(
+                        grid.cell(0, 1).unwrap().style.foreground,
+                        Some(Color::AnsiValue(7)),
+                        "disabled reason is on its own muted row"
                     );
                     driver
                         .drive_checked(

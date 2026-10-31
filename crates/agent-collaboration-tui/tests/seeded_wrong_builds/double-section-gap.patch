@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_section.rs b/crates/agent-collaboration-tui/src/controls/dialog_section.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_section.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_section.rs
-@@ -13,3 +13,3 @@ pub fn DialogSections<'a>(props: &mut DialogSectionsProps<'a>) -> impl Into<AnyE
-     let children = std::mem::take(&mut props.children);
--    element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:1) {#(children)})
-+    element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:2) {#(children)})
- }

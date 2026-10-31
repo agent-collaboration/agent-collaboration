@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/button.rs b/crates/agent-collaboration-tui/src/controls/button.rs
---- a/crates/agent-collaboration-tui/src/controls/button.rs
-+++ b/crates/agent-collaboration-tui/src/controls/button.rs
-@@ -66,3 +66,3 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
-         #(primary.then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Primary)))))
--        Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::Underline}else{TextDecoration::None})
-+        Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::None}else{TextDecoration::None})
-         #(action.keys.first().map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))

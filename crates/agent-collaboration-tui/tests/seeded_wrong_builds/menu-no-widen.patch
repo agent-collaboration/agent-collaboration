@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
---- a/crates/agent-collaboration-tui/src/controls/menu.rs
-+++ b/crates/agent-collaboration-tui/src/controls/menu.rs
-@@ -93,3 +93,3 @@ pub fn menu_overlay(
- ) -> Result<OverlaySpec, MenuModelError> {
--    let layout = menu_layout(registry, layout, stack.viewport());
-+    let _preferred = menu_layout(registry, layout, stack.viewport());
-     let actions = registry

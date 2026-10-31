@@ -13,7 +13,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::use_surface_stack,
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     fn action(name: &str) -> ActionId {
@@ -35,6 +35,7 @@ mod tests {
     }
     #[derive(Props)]
     struct MenuSceneProps {
+        anchor_top: Option<u16>,
         #[iocraft(required)]
         journal: EventJournal,
         width: u16,
@@ -45,7 +46,6 @@ mod tests {
         record_draw(&mut hooks, &props.journal);
         let help = hooks.use_ref(|| None::<HelpControl>);
         let calls = hooks.use_state(|| 0usize);
-        let menu_height = props.height.saturating_sub(2).min(14);
         let stack = use_surface_stack(&mut hooks, |stack| {
             let help_control = HelpControl::new(stack, action("help"));
             let mut retained = help;
@@ -94,17 +94,8 @@ mod tests {
                         .clone();
                     stack
                         .open_overlay(
-                            menu_overlay(
-                                stack,
-                                &registry,
-                                OverlayLayout::AtCells {
-                                    left: 1,
-                                    top: 1,
-                                    width: 18,
-                                    height: menu_height,
-                                },
-                            )
-                            .unwrap(),
+                            menu_overlay(stack, &registry, TargetId::for_action(&action("menu")))
+                                .unwrap(),
                         )
                         .unwrap();
                 }),
@@ -123,7 +114,7 @@ mod tests {
         });
         let journal = props.journal.clone();
         element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_| journal.processed(SurfaceSnapshot(vec![(stack.snapshot().top_id(),calls.get().to_le_bytes().to_vec())]))) {
-            OverlayHost {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu"))}
+            OverlayHost {View(width:100pct,height:100pct,position:Position::Relative) {View(position:Position::Absolute,left:1,top:props.anchor_top.unwrap_or(1)) {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu"))}}}
         })
     }
     fn key(code: KeyCode) -> TerminalEvent {
@@ -164,6 +155,20 @@ mod tests {
                         .find(|line| line.contains("Unavailable action"))
                         .unwrap();
                     if width == 120 {
+                        let title_end = unavailable.find("Unavailable action").unwrap()
+                            + "Unavailable action".len();
+                        let reason_start = unavailable
+                            .find("Waiting for selected machine capabilities")
+                            .unwrap();
+                        assert!(
+                            unavailable
+                                .get(title_end..reason_start)
+                                .unwrap()
+                                .chars()
+                                .count()
+                                >= 2,
+                            "reason stays clear of the complete title\n{menu}"
+                        );
                         assert!(
                             unavailable.contains("Waiting for selected machine capabilities")
                                 && unavailable.contains("Ctrl+Shift+F9"),
@@ -202,6 +207,216 @@ mod tests {
                     .await
                     .unwrap();
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn menu_reason_has_a_muted_right_aligned_column_clear_of_its_full_title() {
+        use unicode_width::UnicodeWidthStr;
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:120u16,height:36u16));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                let grid = driver.frames.last().unwrap();
+                let (row, line) = (0..grid.height)
+                    .map(|row| (row, grid.row_text(row)))
+                    .find(|(_, line)| line.contains("Unavailable action"))
+                    .unwrap();
+                let reason = "Waiting for selected machine capabilities";
+                let reason_start = line.find(reason).unwrap();
+                let title_end =
+                    line.find("Unavailable action").unwrap() + "Unavailable action".len();
+                assert!(
+                    line.get(title_end..reason_start).unwrap().width() >= 2,
+                    "reason has a distinct column
+{line}"
+                );
+                let key_start = line.find("Ctrl+Shift+F9").unwrap();
+                assert_eq!(
+                    line.get(reason_start + reason.len()..key_start).unwrap(),
+                    " ",
+                    "reason aligns right beside the primary key
+{line}"
+                );
+                let help_row = (0..grid.height)
+                    .find(|row| grid.row_text(*row).contains("Help"))
+                    .unwrap();
+                let help_line = grid.row_text(help_row);
+                let muted_column = help_line
+                    .get(..help_line.find("F1").unwrap())
+                    .unwrap()
+                    .width();
+                let muted = grid.cell(muted_column, help_row).unwrap().style.foreground;
+                let reason_column = line.get(..reason_start).unwrap().width();
+                for offset in 0..reason.len() {
+                    assert_eq!(
+                        grid.cell(reason_column + offset, row)
+                            .unwrap()
+                            .style
+                            .foreground,
+                        muted,
+                        "reason uses the muted role"
+                    );
+                }
+            })
+            .await
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn menu_focus_keeps_one_left_marker_and_no_right_edge_duplicate() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:76u16,height:30u16));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                for title in ["New background session…", "Refresh"] {
+                    let panel = driver.frames.last().unwrap().round_frame_text();
+                    assert_eq!(
+                        panel.matches('❯').count(),
+                        1,
+                        "only the left marker shows focus\n{panel}"
+                    );
+                    assert!(
+                        panel
+                            .lines()
+                            .any(|line| line.starts_with("│❯") && line.contains(title)),
+                        "{panel}"
+                    );
+                    if title != "Refresh" {
+                        driver
+                            .drive(&mut frames, mode, vec![(key(KeyCode::Down), true)], true)
+                            .await;
+                    }
+                }
+            })
+            .await
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn menu_sizes_its_frame_to_items_without_an_empty_tail_or_stacked_screen_border() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            for anchor_top in [1u16, 6, 20] {
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(MenuScene(journal,width:48u16,height:24u16,anchor_top:Some(anchor_top)));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    driver.initial(&mut frames).await;
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                        .await;
+                    let grid = driver.frames.last().unwrap();
+                    let panel = grid.round_frame_text();
+                    assert_eq!(
+                        panel.lines().count(),
+                        6,
+                        "four items plus border, no empty tail\n{panel}"
+                    );
+                    let bottom = grid
+                        .cells
+                        .iter()
+                        .rposition(|row| row.iter().any(|cell| cell.text == "╰"))
+                        .unwrap();
+                    assert!(
+                        bottom < grid.height - 1,
+                        "fitting menu leaves the screen bottom border clear"
+                    );
+                    for title in [
+                        "New background session…",
+                        "Refresh",
+                        "Help",
+                        "Unavailable action",
+                    ] {
+                        assert!(
+                            panel.contains(title),
+                            "every item is visible before scrolling\n{panel}"
+                        );
+                    }
+                    assert!(
+                        !panel.contains('█'),
+                        "fitting menu needs no overflow scrollbar\n{panel}"
+                    );
+                })
+                .await
+                .unwrap();
+            }
+        }
+    }
+    #[tokio::test]
+    async fn capped_menu_scrolls_to_the_final_item_with_a_real_wheel_event() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:76u16,height:6u16));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                let grid = driver.frames.last().unwrap();
+                let panel = grid.round_frame_text();
+                assert_eq!(
+                    panel.lines().count(),
+                    4,
+                    "menu respects its physical cap\n{panel}"
+                );
+                assert!(
+                    panel.contains('█'),
+                    "overflow retains its scrollbar\n{panel}"
+                );
+                assert!(
+                    !panel.contains("Unavailable action"),
+                    "the last item starts below the viewport"
+                );
+                let (top, left) = grid
+                    .cells
+                    .iter()
+                    .enumerate()
+                    .find_map(|(row, cells)| {
+                        cells
+                            .iter()
+                            .position(|cell| cell.text == "╭")
+                            .map(|column| (row, column))
+                    })
+                    .unwrap();
+                let point = (
+                    u16::try_from(left + 2).unwrap(),
+                    u16::try_from(top + 1).unwrap(),
+                );
+                let wheel = || {
+                    TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                        MouseEventKind::ScrollDown,
+                        point.0,
+                        point.1,
+                    ))
+                };
+                driver
+                    .drive(&mut frames, mode, vec![(wheel(), true)], true)
+                    .await;
+                // Scrolling invalidates pointer geometry until the changed frame.
+                driver
+                    .drive(&mut frames, mode, vec![(wheel(), true)], true)
+                    .await;
+                let panel = driver.frames.last().unwrap().round_frame_text();
+                assert!(
+                    panel.contains("Unavailable action"),
+                    "the final item remains reachable\n{panel}"
+                );
+            })
+            .await
+            .unwrap();
         }
     }
 }

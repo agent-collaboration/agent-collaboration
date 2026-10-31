@@ -27,7 +27,7 @@ pub struct StaticDialogFrameProps<'a> {
     pub border_style: Option<BorderStyle>,
     pub border_color: Option<Color>,
     pub help_action: Option<AnyElement<'a>>,
-    pub context: Vec<AnyElement<'a>>,
+    pub context: Option<crate::controls::PinnedContext>,
     pub children: Vec<AnyElement<'a>>,
     pub actions: Vec<AnyElement<'a>>,
     pub action_hints: Vec<AnyElement<'a>>,
@@ -56,7 +56,7 @@ pub fn StaticDialogFrame<'a>(
                     kind: OverlayKind::Dialog,
                     model: model(),
                     view: OverlayView::default(),
-                    layout,
+                    layout: layout.clone(),
                 })
                 .unwrap(),
         ));
@@ -82,7 +82,9 @@ pub fn StaticDialogFrame<'a>(
             View(width:100pct,height:100pct,padding_left:margins.left,padding_right:margins.right,padding_top:margins.top,padding_bottom:margins.bottom,align_items:AlignItems::Center,justify_content:JustifyContent::Center,overflow:Overflow::Hidden) {
                 View(width,height,max_width,max_height,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                     ContextProvider(value:Context::owned(SurfaceContext {stack,surface})) {
-                        crate::controls::DialogFrame(title:props.title.clone(),scroll,scroll_target:TargetId::new("body").unwrap(),padding:props.padding,border_style:props.border_style,border_color:props.border_color,children,actions,action_hints,help_action,context)
+                        ContextProvider(value:Context::owned(crate::overlay_host::SurfaceSizing {width,height,max_width,max_height})) {
+                            crate::controls::DialogFrame(title:props.title.clone(),scroll,scroll_target:TargetId::new("body").unwrap(),padding:props.padding,border_style:props.border_style,border_color:props.border_color,children,actions,action_hints,help_action,context)
+                        }
                     }
                 }
             }

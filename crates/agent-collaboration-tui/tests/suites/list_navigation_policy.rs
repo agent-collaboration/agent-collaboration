@@ -161,3 +161,143 @@ async fn list_row_marker_offset_places_the_focus_marker_below_the_group_heading(
         .await
         .unwrap();
 }
+
+fn modified_key(code: KeyCode, modifiers: KeyModifiers) -> TerminalEvent {
+    let mut event = KeyEvent::new(KeyEventKind::Press, code);
+    event.modifiers = modifiers;
+    TerminalEvent::Key(event)
+}
+
+#[tokio::test]
+async fn option_page_and_bounds_aliases_obey_both_list_policies_without_changing_plain_or_control_arrows()
+ {
+    for policy in [
+        ListNavigationPolicy::RowPaging,
+        ListNavigationPolicy::ContentScroll,
+    ] {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let handle = ListHandle::default();
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui =
+                element!(ListScene(journal,handle:handle.clone(),navigation_policy:policy));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.get();
+                for (code, modifiers, selected, offset) in [
+                    (KeyCode::Down, KeyModifiers::ALT, "charlie", 2),
+                    (
+                        KeyCode::Down,
+                        KeyModifiers::ALT | KeyModifiers::SHIFT,
+                        "echo",
+                        3,
+                    ),
+                    (KeyCode::Up, KeyModifiers::ALT, "charlie", 1),
+                    (
+                        KeyCode::Up,
+                        KeyModifiers::ALT | KeyModifiers::SHIFT,
+                        "alpha",
+                        0,
+                    ),
+                ] {
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(modified_key(code, modifiers), true)],
+                            true,
+                            |ack| match policy {
+                                ListNavigationPolicy::RowPaging => assert_eq!(
+                                    ack.snapshot.0[0].1,
+                                    format!("{selected}|list").as_bytes(),
+                                    "Option aliases page/select by row policy"
+                                ),
+                                ListNavigationPolicy::ContentScroll => {
+                                    assert_eq!(
+                                        ack.snapshot.0[0].1, b"alpha|list",
+                                        "content paging keeps selection"
+                                    );
+                                    assert_eq!(
+                                        fixture.control.scroll().position().offset,
+                                        offset,
+                                        "Option aliases move a full page or reach the bound"
+                                    );
+                                }
+                            },
+                        )
+                        .await;
+                }
+                for code in [KeyCode::Up, KeyCode::Down, KeyCode::Left, KeyCode::Right] {
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(modified_key(code, KeyModifiers::CONTROL), false)],
+                            false,
+                            |ack| {
+                                assert_eq!(
+                                    ack.snapshot.0[0].1, b"alpha|list",
+                                    "unbound Ctrl arrows stay inert"
+                                );
+                                assert_eq!(fixture.control.scroll().position().offset, 0);
+                            },
+                        )
+                        .await;
+                }
+                for (code, selected) in [(KeyCode::Down, "bravo"), (KeyCode::Up, "alpha")] {
+                    driver
+                        .drive_checked(&mut frames, mode, vec![(key(code), true)], true, |ack| {
+                            assert_eq!(
+                                ack.snapshot.0[0].1,
+                                format!("{selected}|list").as_bytes(),
+                                "plain arrows still select one row"
+                            )
+                        })
+                        .await;
+                }
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn replacing_an_offscreen_selected_row_reveals_its_new_key_even_at_the_same_logical_position()
+{
+    let handle = ListHandle::default();
+    let (mut driver, config, journal) = EventDriver::new();
+    let mut ui = element!(ListScene(journal,handle:handle.clone(),navigation_policy:ListNavigationPolicy::ContentScroll));
+    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        driver.initial(&mut frames).await;
+        let fixture = handle.get();
+        driver
+            .drive(
+                &mut frames,
+                InputMode::Burst,
+                vec![(key(KeyCode::End), true)],
+                true,
+            )
+            .await;
+        assert_eq!(fixture.control.selected().unwrap().as_str(), "alpha");
+        assert_eq!(fixture.control.scroll().position().offset, 3);
+        // A changed final row guarantees a changed canvas even on the wrong build.
+        fixture
+            .control
+            .replace_rows(crate::support::list_scene::rows(&[
+                "bravo", "charlie", "delta", "foxtrot",
+            ]))
+            .unwrap();
+        driver.initial(&mut frames).await;
+        assert_eq!(fixture.control.selected().unwrap().as_str(), "bravo");
+        assert_eq!(
+            fixture.control.scroll().position().offset,
+            0,
+            "the keyed replacement is revealed even though its geometry matches the removed row"
+        );
+        assert!(driver.frames.last().unwrap().row_text(1).contains("bravo"));
+    })
+    .await
+    .unwrap();
+}

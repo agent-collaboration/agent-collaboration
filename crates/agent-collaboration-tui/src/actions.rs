@@ -121,6 +121,19 @@ pub struct ActionDef {
     pub placement: Placement,
     pub run: Handler<()>,
 }
+impl ActionDef {
+    pub(crate) fn presentation(&self) -> ActionPresentation {
+        ActionPresentation {
+            id: self.id.clone(),
+            title: self.title.get(),
+            toolbar_label: self.toolbar_label.as_ref().map(ActionTitle::get),
+            keys: self.keys.clone(),
+            availability: self.availability.get(),
+            checked: self.choice.as_ref().map(Checked::get),
+            placement: self.placement.clone(),
+        }
+    }
+}
 impl fmt::Debug for ActionDef {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -210,17 +223,6 @@ impl ActionRegistry {
             })
     }
     pub fn presentations(&self) -> Vec<ActionPresentation> {
-        self.actions
-            .iter()
-            .map(|action| ActionPresentation {
-                id: action.id.clone(),
-                title: action.title.get(),
-                toolbar_label: action.toolbar_label.as_ref().map(ActionTitle::get),
-                keys: action.keys.clone(),
-                availability: action.availability.get(),
-                checked: action.choice.as_ref().map(Checked::get),
-                placement: action.placement.clone(),
-            })
-            .collect()
+        self.actions.iter().map(ActionDef::presentation).collect()
     }
 }

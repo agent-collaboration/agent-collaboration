@@ -21,13 +21,18 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<
     let context = *hooks.use_context::<SurfaceContext>();
     let selected = props.control.selected().as_ref() == Some(&props.row);
     let focused = selected && context.is_focused(props.control.id());
+    let row_target = props.control.row_target(&props.row);
     use_target_geometry(
         &mut hooks,
         context,
-        props.control.row_target(&props.row),
+        row_target.clone(),
         HitRegionKind::Target,
     );
-    use_scroll_reveal(&mut hooks, selected && props.control.reveals_selection());
+    use_scroll_reveal(
+        &mut hooks,
+        selected && props.control.reveals_selection(),
+        Some(row_target),
+    );
     let theme = context.theme();
     let children = std::mem::take(&mut props.children);
     element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if selected {SurfaceRole::Selected}else{context.surface_role()})) {

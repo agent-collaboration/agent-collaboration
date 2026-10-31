@@ -7,6 +7,32 @@ use crate::{
     theme::{SurfaceRole, TextRole, UiGlyph},
 };
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
+/// Width of a registry-driven button, including its native padding and gaps.
+pub(crate) fn action_button_width(action: &ActionPresentation, show_key: bool) -> usize {
+    let label = action
+        .toolbar_label
+        .as_deref()
+        .unwrap_or(&action.title)
+        .width();
+    let key = if show_key {
+        action
+            .keys
+            .first()
+            .map_or(0, |key| key.to_string().width() + 1)
+    } else {
+        0
+    };
+    let reason = match &action.availability {
+        Availability::Available => 0,
+        Availability::Unavailable { reason } => reason.width() + 1,
+    };
+    label
+        .saturating_add(key)
+        .saturating_add(reason)
+        .saturating_add(usize::from(action.checked == Some(true)) * 2)
+        .saturating_add(2)
+}
 pub fn button_target(id: TargetId, action: &ActionDef) -> TargetSpec {
     TargetSpec::new(id)
         .with_activation(action.id.clone())
@@ -29,6 +55,8 @@ pub struct ButtonProps {
     #[iocraft(required)]
     pub action: ActionId,
     pub glyph: Option<UiGlyph>,
+    /// Hides only this button's printed key hint; unset keeps the default hint.
+    pub show_key: Option<bool>,
 }
 #[component]
 pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -39,7 +67,7 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
     };
     let theme = context.theme();
     let available = action.availability.is_available();
-    let focused = available && context.is_focused(&props.id);
+    let focused = context.is_focused(&props.id);
     let checked = action.checked == Some(true);
     let label_emphasized = available && (focused || checked);
     let primary = context
@@ -65,11 +93,11 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         #(props.glyph.map(|glyph|element!(Text(content:glyph.text(),color:theme.foreground(role)))))
         #(primary.then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Primary)))))
         Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::Underline}else{TextDecoration::None})
-        #(action.keys.first().map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
+        #(action.keys.first().filter(|_|props.show_key.unwrap_or(true)).map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
         #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
     }}.into_any()
 }
 #[component]
 pub fn MenuButton(props: &ButtonProps) -> impl Into<AnyElement<'static>> {
-    element!(Button(id:props.id.clone(),action:props.action.clone(),glyph:Some(UiGlyph::Menu)))
+    element!(Button(id:props.id.clone(),action:props.action.clone(),glyph:Some(UiGlyph::Menu),show_key:props.show_key))
 }

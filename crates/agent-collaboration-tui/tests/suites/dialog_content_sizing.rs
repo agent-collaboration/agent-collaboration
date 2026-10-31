@@ -89,14 +89,13 @@ mod tests {
             };
             let view_scroll = scroll.clone();
             let overflow = props.overflow;
-            let identity_width = props.width.saturating_sub(18).min(60);
             stack.open_overlay(OverlaySpec {
                 kind:OverlayKind::Dialog,
                 model:SurfaceModel {
                     focus:FocusModel::new(vec![TargetSpec::new(target("body")).with_input(scroll.input_handler()),button_target(TargetId::for_action(&save.id),&save),button_target(TargetId::for_action(&cancel.id),&cancel)]).unwrap(),
                     actions:ActionRegistry::new(ScopeId::new("content-form").unwrap(),vec![save,cancel,help]).unwrap(),primary_action:Some(action("save")),
                 },
-                view:OverlayView::new(move ||element!(DialogFrame(title:"Content form".to_owned(),scroll:view_scroll.clone(),scroll_target:target("body"),help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any()),context:vec![element!(View(width:identity_width,max_width:100pct,column_gap:1,flex_shrink:0.0_f32) {View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32,overflow:Overflow::Hidden) {Text(content:"Account Alpha",wrap:TextWrap::NoWrap)}}).into_any()]) {
+                view:OverlayView::new(move ||element!(DialogFrame(title:"Content form".to_owned(),scroll:view_scroll.clone(),scroll_target:target("body"),help_action:Some(element!(Button(id:TargetId::for_action(&action("help")),action:action("help"))).into_any()),context:Some(agent_collaboration_tui::controls::PinnedContext::new("Account Alpha"))) {
                     DialogSections {
                         #((1..=4).map(|section|element!(DialogSection(heading:format!("Section {section}")) {
                             FormFields {FormField(label:"Value".to_owned()) {Text(content:format!("FIELD-{section}"))}}

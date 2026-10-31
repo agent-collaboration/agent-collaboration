@@ -43,6 +43,7 @@ pub fn InputOwner<'a>(
         stack.set_viewport(props.width, props.height);
         initialized.set(true);
     }
+    stack.reconcile_active_focus();
     use_frame_publication(&mut hooks, stack.hit_regions());
     let quit_action = props.quit_action.clone();
     let global_quit_aliases = props.global_quit_aliases.clone();
@@ -52,6 +53,7 @@ pub fn InputOwner<'a>(
     hooks.use_terminal_events(move |event| {
         #[cfg(all(feature = "test-support", debug_assertions))]
         let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
+        stack.reconcile_active_focus();
         let snapshot = stack.snapshot();
         let decision = route_event(stack, &snapshot, &quit_action, &global_quit_aliases, event);
         on_routed(decision.routed);
@@ -60,6 +62,14 @@ pub fn InputOwner<'a>(
             sink.record(receipt_event, decision.facts);
         }
     });
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    crate::dispatch_frame_marker::use_dispatch_frames(
+        &mut hooks,
+        props
+            .dispatch_receipt
+            .as_ref()
+            .map(|sink| sink.frame_state()),
+    );
     let (width, height) = stack.viewport();
     let children = std::mem::take(&mut props.children);
     element! {

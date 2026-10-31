@@ -12,6 +12,10 @@ use crate::{
     },
 };
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
+
+const MINIMUM_DROPDOWN_WIDTH: usize = 12;
+const MAXIMUM_DROPDOWN_HEIGHT: u16 = 9;
 
 #[derive(Debug)]
 pub enum ComboModelError {
@@ -33,6 +37,8 @@ impl std::error::Error for ComboModelError {}
 pub struct ComboBoxBinding {
     pub parent: SurfaceContext,
     pub field: TargetId,
+    /// The existing parent body scroll, when this field lives in a ScrollList.
+    pub parent_scroll: Option<ScrollHandle>,
     pub value: State<ComboBoxState>,
     pub on_pick: Handler<OptionKey>,
 }
@@ -50,13 +56,19 @@ impl ComboBoxControl {
         }
     }
 
-    pub fn open(&self, layout: OverlayLayout) -> Result<OverlayId, ComboModelError> {
+    /// Open against the bound field; the host owns fit, flipping and resize.
+    pub fn open(&self) -> Result<OverlayId, ComboModelError> {
         let binding = &self.binding;
         if binding.parent.stack.snapshot().top_id() != binding.parent.surface {
             return Err(ComboModelError::ParentUnavailable);
         }
+        self.assert_parent_scroll_binding();
+        if let Some(scroll) = &binding.parent_scroll {
+            scroll.reveal_measured(&binding.field);
+        }
         let mut next = binding.value.read().clone();
         next.begin();
+        let layout = self.dropdown_layout(&next);
         let model = self.build_model(next.options())?;
         let mut value = binding.value;
         value.set(next);
@@ -91,13 +103,7 @@ impl ComboBoxControl {
         next.replace_options(options)
             .map_err(ComboModelError::Options)?;
         let targets = self.targets(next.options());
-        if let Some(overlay) = snapshot.overlays().iter().find(|overlay| {
-            overlay.parent == binding.parent.surface
-                && overlay.kind
-                    == OverlayKind::Dropdown {
-                        field: binding.field.clone(),
-                    }
-        }) {
+        if let Some(overlay) = snapshot.dropdown_for(binding.parent.surface, &binding.field) {
             binding
                 .parent
                 .stack
@@ -105,9 +111,78 @@ impl ComboBoxControl {
                 .map_err(ComboModelError::Focus)?;
             binding.parent.stack.hit_regions().invalidate();
         }
+        self.refresh_layout(&next);
         let mut value = binding.value;
         value.set(next);
         Ok(true)
+    }
+
+    fn dropdown_layout(&self, state: &ComboBoxState) -> OverlayLayout {
+        let option_width = state
+            .matching()
+            .into_iter()
+            .map(|option| {
+                let label_width = option.label.width()
+                    + option
+                        .secondary
+                        .as_deref()
+                        .map_or(0, |text| text.width() + 1)
+                    + 5;
+                let reason_width = match &option.availability {
+                    crate::actions::Availability::Available => 0,
+                    crate::actions::Availability::Unavailable { reason } => reason.width() + 5,
+                };
+                label_width.max(reason_width)
+            })
+            .max()
+            .unwrap_or("No match".width() + 3);
+        // Filter prefix, gap, cursor and border are outside the option rows.
+        let preferred_width = option_width
+            .max(state.query().text().width() + 11)
+            .max(MINIMUM_DROPDOWN_WIDTH);
+        OverlayLayout::Anchored {
+            target: self.binding.field.clone(),
+            preferred_width: u16::try_from(preferred_width).unwrap_or(u16::MAX),
+            maximum_width: u16::MAX,
+            maximum_height: MAXIMUM_DROPDOWN_HEIGHT,
+        }
+    }
+
+    fn refresh_layout(&self, state: &ComboBoxState) {
+        let binding = &self.binding;
+        let snapshot = binding.parent.stack.snapshot();
+        let Some(overlay) = snapshot.dropdown_for(binding.parent.surface, &binding.field) else {
+            return;
+        };
+        let layout = self.dropdown_layout(state);
+        if overlay.layout != layout {
+            binding.parent.stack.hit_regions().invalidate();
+            binding
+                .parent
+                .stack
+                .update(|stack| stack.set_overlay_layout_if_open(overlay.id, layout));
+        }
+    }
+
+    fn assert_parent_scroll_binding(&self) {
+        #[cfg(any(debug_assertions, test))]
+        if self.binding.parent_scroll.is_none()
+            && let Some(map) = self.binding.parent.stack.hit_regions().published()
+            && map
+                .surfaces
+                .iter()
+                .any(|region| region.surface == self.binding.parent.surface)
+        {
+            assert!(
+                map.targets
+                    .iter()
+                    .any(|region| region.surface == self.binding.parent.surface
+                        && region.target == self.binding.field
+                        && !region.cells.is_empty()),
+                "{} requires parent_scroll to reveal its offscreen field before opening",
+                self.binding.field.as_str()
+            );
+        }
     }
 
     fn build_model(&self, options: &[SelectOption]) -> Result<SurfaceModel, ComboModelError> {
@@ -115,23 +190,47 @@ impl ComboBoxControl {
             focus: FocusModel::new(self.targets(options)).map_err(ComboModelError::Focus)?,
             actions: ActionRegistry::new(
                 ScopeId::new("dropdown").map_err(ComboModelError::Identity)?,
-                Vec::new(),
+                self.help_actions(),
             )
             .map_err(ComboModelError::Actions)?,
             primary_action: None,
         })
     }
 
+    fn help_actions(&self) -> Vec<crate::actions::ActionDef> {
+        let snapshot = self.binding.parent.stack.snapshot();
+        let event = KeyEvent::new(KeyEventKind::Press, KeyCode::F(1));
+        snapshot
+            .surface(self.binding.parent.surface)
+            .and_then(|surface| {
+                surface
+                    .actions
+                    .definitions()
+                    .iter()
+                    .find(|action| action.keys.iter().any(|key| key.matches(&event)))
+                    .cloned()
+            })
+            .into_iter()
+            .collect()
+    }
     fn targets(&self, options: &[SelectOption]) -> Vec<TargetSpec> {
         let binding = self.binding.clone();
         let input_binding = binding.clone();
+        let input_control = self.clone();
+        let keyboard_scroll = self.scroll.clone();
         let input = TargetInputHandler::new(move |event| {
+            if matches!(&event,TerminalEvent::Key(key) if matches!(super::scroll_model::navigation_code(key),Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)))
+            {
+                return keyboard_scroll.handle_event(&event);
+            }
+
             let mut value = input_binding.value;
             let mut next = value.read().clone();
             let transition = next.handle_event(&event);
             if transition == ComboTransition::Unused {
                 return InputUse::Unused;
             }
+            input_control.refresh_layout(&next);
             value.set(next);
             if let ComboTransition::Picked(key) = transition {
                 input_binding.parent.stack.close_top();

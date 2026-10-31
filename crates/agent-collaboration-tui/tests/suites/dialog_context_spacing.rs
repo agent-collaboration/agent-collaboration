@@ -46,7 +46,7 @@ mod tests {
                     actions:ActionRegistry::new(ScopeId::new("context-dialog").unwrap(),Vec::new()).unwrap(),primary_action:None,
                 },
                 view:OverlayView::new(move || {
-                    let context=if with_context {vec![element!(Text(content:"PINNED CONTEXT")).into_any()]}else{Vec::new()};
+                    let context=with_context.then(||agent_collaboration_tui::controls::PinnedContext::new("PINNED CONTEXT"));
                     element!(DialogFrame(title:"Spacing".to_owned(),padding:Some(0u16),scroll:scroll.clone(),scroll_target:body(),context) {
                         Text(content:"BODY FIRST")
                         Text(content:"BODY LAST")

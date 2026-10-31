@@ -42,7 +42,10 @@ pub use form_fields::{
     SelectableRowProps,
 };
 pub mod dialog_frame;
+mod dialog_header;
+mod pinned_context;
 pub use dialog_frame::{DialogFrame, DialogFrameProps};
+pub use pinned_context::PinnedContext;
 
 pub mod dialog_footer;
 pub mod help_content;

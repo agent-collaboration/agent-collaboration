@@ -14,6 +14,9 @@ mod combo_filter_layout;
 #[path = "suites/control_editor.rs"]
 mod control_editor;
 #[cfg(test)]
+#[path = "suites/dialog_body_restore.rs"]
+mod dialog_body_restore;
+#[cfg(test)]
 #[path = "suites/dialog_content_sizing.rs"]
 mod dialog_content_sizing;
 #[cfg(test)]
@@ -23,8 +26,20 @@ mod dialog_context_spacing;
 #[path = "suites/dialog_controls.rs"]
 mod dialog_controls;
 #[cfg(test)]
+#[path = "suites/dialog_fixed_slots.rs"]
+mod dialog_fixed_slots;
+#[cfg(test)]
+#[path = "suites/dialog_fixed_slots_baseline.rs"]
+mod dialog_fixed_slots_baseline;
+#[cfg(test)]
+#[path = "suites/dialog_header_layout.rs"]
+mod dialog_header_layout;
+#[cfg(test)]
 #[path = "suites/dialog_page_navigation.rs"]
 mod dialog_page_navigation;
+#[cfg(test)]
+#[path = "suites/dialog_pinned_context.rs"]
+mod dialog_pinned_context;
 #[cfg(test)]
 #[path = "suites/global_quit_aliases.rs"]
 mod global_quit_aliases;
@@ -38,6 +53,9 @@ mod heading_style;
 #[path = "suites/help_controls.rs"]
 mod help_controls;
 #[cfg(test)]
+#[path = "suites/help_first_frame.rs"]
+mod help_first_frame;
+#[cfg(test)]
 #[path = "suites/hit_geometry.rs"]
 mod hit_geometry;
 #[cfg(test)]
@@ -49,16 +67,31 @@ mod input_receipts;
 #[cfg(test)]
 #[path = "suites/list_controls.rs"]
 mod list_controls;
+#[cfg(test)]
+#[path = "suites/list_first_frame.rs"]
+mod list_first_frame;
 #[path = "suites/list_hover.rs"]
 mod list_hover;
 #[cfg(test)]
 #[path = "suites/list_navigation_policy.rs"]
 mod list_navigation_policy;
 #[cfg(test)]
+#[path = "suites/list_typeahead.rs"]
+mod list_typeahead;
+#[cfg(test)]
 #[path = "suites/live_actions.rs"]
 mod live_actions;
 #[path = "suites/menu_layout.rs"]
 mod menu_layout;
+#[cfg(test)]
+#[path = "suites/popup_anchor.rs"]
+mod popup_anchor;
+#[cfg(test)]
+#[path = "suites/popup_pending_reveal.rs"]
+mod popup_pending_reveal;
+#[cfg(test)]
+#[path = "suites/popup_text_fit.rs"]
+mod popup_text_fit;
 #[cfg(test)]
 #[path = "suites/scroll_geometry.rs"]
 mod scroll_geometry;
@@ -79,3 +112,58 @@ mod typography_coverage;
 #[cfg(test)]
 #[path = "suites/wheel_isolation.rs"]
 mod wheel_isolation;
+
+#[cfg(test)]
+#[path = "suites/dialog_context_content.rs"]
+mod dialog_context_content;
+
+#[cfg(test)]
+#[path = "suites/dialog_result_extent.rs"]
+mod dialog_result_extent;
+
+#[cfg(test)]
+#[path = "suites/combo_option_layout.rs"]
+mod combo_option_layout;
+
+#[cfg(test)]
+#[path = "suites/field_reason_layout.rs"]
+mod field_reason_layout;
+
+#[cfg(test)]
+#[path = "suites/button_key_hint.rs"]
+mod button_key_hint;
+
+#[cfg(test)]
+#[path = "suites/filter_switch_layout.rs"]
+mod filter_switch_layout;
+
+#[cfg(test)]
+#[path = "suites/responsive_fields.rs"]
+mod responsive_fields;
+
+#[cfg(test)]
+#[path = "suites/help_narrow_layout.rs"]
+mod help_narrow_layout;
+
+#[cfg(test)]
+#[path = "suites/focus_return.rs"]
+mod focus_return;
+
+#[cfg(test)]
+#[path = "suites/focus_replacement.rs"]
+mod focus_replacement;
+
+#[cfg(test)]
+#[path = "suites/disabled_control_focus.rs"]
+mod disabled_control_focus;
+
+#[cfg(test)]
+#[path = "suites/dropdown_paging.rs"]
+mod dropdown_paging;
+
+#[cfg(test)]
+#[path = "suites/dropdown_help.rs"]
+mod dropdown_help;
+
+#[path = "suites/dispatch_frames.rs"]
+mod dispatch_frames;
