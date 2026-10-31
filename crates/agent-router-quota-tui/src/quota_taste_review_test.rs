@@ -166,3 +166,73 @@ async fn taste_pool_labels_the_route_and_aligns_every_census_field() {
         "route fact remains visible: {frame}"
     );
 }
+
+#[tokio::test]
+async fn taste_options_close_hint_uses_escape_and_preserves_the_control_r_toggle() {
+    for control in [QuotaFixtureControl::Options, QuotaFixtureControl::Credits] {
+        let mut toggle = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('r'));
+        toggle.modifiers = KeyModifiers::CONTROL;
+        for close in [
+            provider_filter_key(KeyCode::Esc),
+            TerminalEvent::Key(toggle),
+        ] {
+            // Arrange: mount the real dialog with a saver that rejects any effect.
+            let mut fixture = quota_control_fixture(QuotaFixtureOptions {
+                view_model: quota_two_account_view_model(),
+                ports: crate::QuotaStatusViewOptions {
+                    credit_policy_saver: Some(Arc::new(|_, _, _| {
+                        panic!("closing Options must not save a credit preference")
+                    })),
+                    ..Default::default()
+                },
+                width: 120,
+                height: 36,
+                control,
+            });
+            let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+            let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+                receiver.recv().await.map(|event| (event, receiver))
+            });
+            let frames = fixture
+                .element
+                .mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+            tokio::pin!(frames);
+            let dialog = next_matching_frame(frames.as_mut(), Duration::from_secs(2), |canvas| {
+                let frame = canvas.to_string();
+                frame.contains("Options ·") && frame.contains("Close")
+            })
+            .await
+            .unwrap()
+            .to_string();
+            assert!(
+                dialog.contains("Close Esc") && !dialog.contains("Close Ctrl+R"),
+                "{control:?} exposes the universal close hint: {dialog}"
+            );
+
+            // Act: both the shown Esc and retained Ctrl+R close this dialog.
+            sender.send(close).unwrap();
+            let browse = next_matching_frame(frames.as_mut(), Duration::from_secs(2), |canvas| {
+                let frame = canvas.to_string();
+                frame.contains("Menu F10") && !frame.contains("Options ·")
+            })
+            .await
+            .unwrap()
+            .to_string();
+
+            // Assert: close returns to Browse without becoming Quit or saving.
+            assert!(
+                browse.contains("alpha") && browse.contains("beta"),
+                "{browse}"
+            );
+            assert_eq!(*fixture.outcome.lock().unwrap(), None);
+            sender
+                .send(provider_filter_key(KeyCode::Char('q')))
+                .unwrap();
+            frames.collect::<Vec<_>>().await;
+            assert_eq!(
+                *fixture.outcome.lock().unwrap(),
+                Some(crate::QuotaOutcome::Quit)
+            );
+        }
+    }
+}

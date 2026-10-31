@@ -98,7 +98,7 @@ pub(crate) fn domain_dialog_controls(
     let close = quota_action(
         "domain-close",
         close_title,
-        &["Ctrl+R"],
+        &["Esc", "Ctrl+R"],
         Placement::Toolbar,
         move |()| super::quota_dialog_controls::close_dialog(stack, &close_context),
     )?;
