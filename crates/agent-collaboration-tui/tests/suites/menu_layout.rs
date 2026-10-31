@@ -13,7 +13,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::use_surface_stack,
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     fn action(name: &str) -> ActionId {
@@ -35,7 +35,7 @@ mod tests {
     }
     #[derive(Props)]
     struct MenuSceneProps {
-        layout: Option<OverlayLayout>,
+        anchor_top: Option<u16>,
         #[iocraft(required)]
         journal: EventJournal,
         width: u16,
@@ -46,13 +46,6 @@ mod tests {
         record_draw(&mut hooks, &props.journal);
         let help = hooks.use_ref(|| None::<HelpControl>);
         let calls = hooks.use_state(|| 0usize);
-        let menu_height = props.height.saturating_sub(2).min(14);
-        let menu_layout = props.layout.unwrap_or(OverlayLayout::AtCells {
-            left: 1,
-            top: 1,
-            width: 18,
-            height: menu_height,
-        });
         let stack = use_surface_stack(&mut hooks, |stack| {
             let help_control = HelpControl::new(stack, action("help"));
             let mut retained = help;
@@ -100,7 +93,10 @@ mod tests {
                         .actions
                         .clone();
                     stack
-                        .open_overlay(menu_overlay(stack, &registry, menu_layout).unwrap())
+                        .open_overlay(
+                            menu_overlay(stack, &registry, TargetId::for_action(&action("menu")))
+                                .unwrap(),
+                        )
                         .unwrap();
                 }),
             );
@@ -118,7 +114,7 @@ mod tests {
         });
         let journal = props.journal.clone();
         element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_| journal.processed(SurfaceSnapshot(vec![(stack.snapshot().top_id(),calls.get().to_le_bytes().to_vec())]))) {
-            OverlayHost {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu"))}
+            OverlayHost {View(width:100pct,height:100pct,position:Position::Relative) {View(position:Position::Absolute,left:1,top:props.anchor_top.unwrap_or(1)) {MenuButton(id:TargetId::for_action(&action("menu")),action:action("menu"))}}}
         })
     }
     fn key(code: KeyCode) -> TerminalEvent {
@@ -219,7 +215,7 @@ mod tests {
         use unicode_width::UnicodeWidthStr;
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
             let (mut driver, config, journal) = EventDriver::new();
-            let mut ui = element!(MenuScene(journal,width:120u16,height:36u16,layout:Some(OverlayLayout::AtCells {left:1,top:1,width:110,height:14})));
+            let mut ui = element!(MenuScene(journal,width:120u16,height:36u16));
             let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
             tokio::time::timeout(std::time::Duration::from_secs(5), async {
                 driver.initial(&mut frames).await;
@@ -311,32 +307,10 @@ mod tests {
 
     #[tokio::test]
     async fn menu_sizes_its_frame_to_items_without_an_empty_tail_or_stacked_screen_border() {
-        use agent_collaboration_tui::{DialogMargins, DialogPresentation};
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
-            for layout in [
-                OverlayLayout::AtCells {
-                    left: 1,
-                    top: 2,
-                    width: 18,
-                    height: 20,
-                },
-                OverlayLayout::CenteredCells {
-                    width: 18,
-                    height: 20,
-                },
-                OverlayLayout::Dialog {
-                    presentation: DialogPresentation::FullScreen,
-                    margins: DialogMargins {
-                        left: 1,
-                        right: 1,
-                        top: 1,
-                        bottom: 1,
-                    },
-                },
-            ] {
+            for anchor_top in [1u16, 6, 20] {
                 let (mut driver, config, journal) = EventDriver::new();
-                let mut ui =
-                    element!(MenuScene(journal,width:48u16,height:24u16,layout:Some(layout)));
+                let mut ui = element!(MenuScene(journal,width:48u16,height:24u16,anchor_top:Some(anchor_top)));
                 let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
                 tokio::time::timeout(std::time::Duration::from_secs(5), async {
                     driver.initial(&mut frames).await;

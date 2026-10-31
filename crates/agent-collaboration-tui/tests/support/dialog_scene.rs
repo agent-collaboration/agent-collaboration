@@ -142,14 +142,7 @@ fn dialog_spec(
                 value: data.client,
                 on_pick: Handler::default(),
             });
-            control
-                .open(OverlayLayout::AtCells {
-                    left: 8,
-                    top: 7,
-                    width: 30,
-                    height: 7,
-                })
-                .unwrap();
+            control.open().unwrap();
             *combo.lock().unwrap() = Some(control);
         }),
     };

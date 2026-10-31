@@ -13,7 +13,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::{SurfaceStackHandle, use_surface_stack},
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -204,17 +204,8 @@ mod tests {
                     let registry = &snapshot.surface(SurfaceId::Screen).unwrap().actions;
                     stack
                         .open_overlay(
-                            menu_overlay(
-                                stack,
-                                registry,
-                                OverlayLayout::AtCells {
-                                    left: 10,
-                                    top: 5,
-                                    width: 40,
-                                    height: 8,
-                                },
-                            )
-                            .unwrap(),
+                            menu_overlay(stack, registry, TargetId::for_action(&action("credits")))
+                                .unwrap(),
                         )
                         .unwrap();
                 }),

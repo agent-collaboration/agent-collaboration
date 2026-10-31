@@ -74,7 +74,7 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `quit-alias-hardcodes-control-d.patch` | Ctrl+D globally quits an undeclared scope and steals its own domain binding. |
 | `raw-control-c-not-normalized.patch` | Raw U+0003 misses the shared Ctrl+C chord and cannot quit from a dialog. |
 | `combo-filter-editor-full-width.patch` | The filter editor measures the whole row rather than its remaining width and clips the query tail/cursor. |
-| `menu-no-widen.patch` | A requested narrow menu clips its title instead of expanding into available viewport space. |
+| `menu-no-widen.patch` | A menu stays at the former 18-cell narrow width instead of fitting action titles in available viewport space. |
 | `menu-auxiliary-starves-title.patch` | Unbounded key/reason columns force an action title to wrap at a narrow viewport. |
 | `menu-all-aliases.patch` | Menu paints the full alias list instead of the primary key; Help is the complete alias projection. |
 | `hover-reveals-partial-row.patch` | Hover selection scrolls to reveal a partially visible tall row. |
@@ -277,3 +277,11 @@ The Help padding cases compare the painted scrollbar and content column in the f
 | `pinned-slots-missing-content-extent.patch` | Content-sized forms omit the fixed slots from their height. |
 
 The fixed-slot cases use native layout, published pointer cells and the declared focus order. Both slots remain visible at32x24 and48x12, and paging reaches every body row. The existing three-row rule guards header context separation after subtracting fixed slots and gaps; at physically shorter heights the body scrolls with fewer rows. No gap compression or new fallback is added. An independent pre-change52944-byte ANSI baseline freezes12 existing no-slot dialogs across six grids and both sizing policies. Its explicit ignored exporter writes only a new absolute file selected by TUI_DIALOG_BASELINE_EXPORT; normal runs never regenerate the fixture.
+
+| Patch | Required failure |
+| --- | --- |
+| `popup-centered.patch` | The first native popup centers instead of opening directly beside its published field or button. |
+| `popup-overlaps-anchor.patch` | A popup covers its own field or button. |
+| `popup-no-horizontal-clamp.patch` | A right-edge popup loses its border outside the phone viewport. |
+| `popup-keeps-stale-anchor.patch` | An open menu or dropdown keeps its prior anchor after resize. |
+| `popup-ignores-available-height.patch` | A capped popup loses its border or scrolling body outside available vertical space. |

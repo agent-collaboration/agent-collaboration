@@ -12,6 +12,11 @@ use crate::{
     },
 };
 use iocraft::prelude::*;
+use unicode_width::UnicodeWidthStr;
+
+const MINIMUM_DROPDOWN_WIDTH: usize = 12;
+const MAXIMUM_DROPDOWN_WIDTH: u16 = 64;
+const MAXIMUM_DROPDOWN_HEIGHT: u16 = 9;
 
 #[derive(Debug)]
 pub enum ComboModelError {
@@ -50,11 +55,34 @@ impl ComboBoxControl {
         }
     }
 
-    pub fn open(&self, layout: OverlayLayout) -> Result<OverlayId, ComboModelError> {
+    /// Open against the bound field; the host owns fit, flipping and resize.
+    pub fn open(&self) -> Result<OverlayId, ComboModelError> {
         let binding = &self.binding;
         if binding.parent.stack.snapshot().top_id() != binding.parent.surface {
             return Err(ComboModelError::ParentUnavailable);
         }
+        let preferred_width = binding
+            .value
+            .read()
+            .options()
+            .iter()
+            .map(|option| {
+                option.label.width()
+                    + option
+                        .secondary
+                        .as_deref()
+                        .map_or(0, |text| text.width() + 1)
+                    + 5
+            })
+            .max()
+            .unwrap_or(MINIMUM_DROPDOWN_WIDTH)
+            .clamp(MINIMUM_DROPDOWN_WIDTH, usize::from(MAXIMUM_DROPDOWN_WIDTH));
+        let layout = OverlayLayout::Anchored {
+            target: binding.field.clone(),
+            preferred_width: u16::try_from(preferred_width).unwrap_or(MAXIMUM_DROPDOWN_WIDTH),
+            maximum_width: MAXIMUM_DROPDOWN_WIDTH,
+            maximum_height: MAXIMUM_DROPDOWN_HEIGHT,
+        };
         let mut next = binding.value.read().clone();
         next.begin();
         let model = self.build_model(next.options())?;
