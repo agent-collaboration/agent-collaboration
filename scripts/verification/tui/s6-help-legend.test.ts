@@ -23,7 +23,7 @@ const emit=text=>process.stdout.write('TUI_GRID '+text+'\\n');
 const frame=text=>'\\x1b[?2026h\\x1b[2J\\x1b[H'+text+'\\x1b[?2026l';
 const main='\\x1b[38;2;255;255;255mCodex Alpha';
 const covered='\\x1b[38;2;100;100;100mCodex Alpha';
-const help=legend=>covered+'\\x1b[2;2H┌────────────────────────────────────────────────────────────────────────────┐\\x1b[3;2H│ Help                                                                       │\\x1b[4;2H│ Surface Sessions                                                           │\\x1b[5;2H│ '+(legend?'Esc clear filter, reset filters, never quit':'Generated actions fill the first Help viewport')+'\\x1b[6;2H└────────────────────────────────────────────────────────────────────────────┘';
+const help=legend=>covered+'\\x1b[2;2H┌────────────────────────────────────────────────────────────────────────────┐\\x1b[3;2H│ Help                                                                       │\\x1b[4;2H│ Screen  Sessions                                                           │\\x1b[5;2H│ '+(legend?'Esc clear filter, reset filters, never quit':'Generated actions fill the first Help viewport')+'\\x1b[6;2H└────────────────────────────────────────────────────────────────────────────┘';
 let queue=[frame(main),frame(main)],overlay=false;
 emit('READY 120 36');
 createInterface({input:process.stdin}).on('line',line=>{
