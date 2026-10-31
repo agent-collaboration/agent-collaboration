@@ -1,0 +1,33 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/scroll_list.rs b/crates/agent-collaboration-tui/src/controls/scroll_list.rs
+--- a/crates/agent-collaboration-tui/src/controls/scroll_list.rs
++++ b/crates/agent-collaboration-tui/src/controls/scroll_list.rs
+@@ -93,13 +93,14 @@ pub fn ScrollList<'a>(
+     })
+ }
+ struct ScrollBarPaint {
++    sampled: super::scroll_model::ScrollPosition,
+     scroll: ScrollHandle,
+     color: Option<Color>,
+ }
+ impl Hook for ScrollBarPaint {
+     fn post_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+         // The preceding viewport/content hooks measured THIS layout, even on mount.
+-        let position = self.scroll.position();
++        let position = self.sampled;
+         if position.maximum() == 0 {
+             return;
+         }
+@@ -142,11 +143,13 @@ struct ScrollBarProps {
+ #[component]
+ fn ScrollBar(props: &ScrollBarProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+     let paint = hooks.use_hook(|| ScrollBarPaint {
++        sampled: props.scroll.position(),
+         scroll: props.scroll.clone(),
+         color: props.color,
+     });
+     paint.scroll = props.scroll.clone();
+     paint.color = props.color;
++    paint.sampled = props.scroll.position();
+     element!(View(position:Position::Absolute,right:0,top:0,width:1,height:100pct))
+ }
+ struct RevealHook {

@@ -249,3 +249,10 @@ Dropdown Help retains the original popup and its live keyed model while replacin
 | `dispatch-marker-forgets-output-failure.patch` | The native loop discards its end-frame error and the fixture sink falsely reports success. |
 
 Frame controls run with test-support except the production leak, which also runs the entire package in a normal optimized build. The no-op scenario observes real input consumption before checking the native loop and does not wait for a missing redraw. Terminal-action drivers await process exit and the outcome file; a final marker is optional. The closed Canvas reader remains unchanged.
+
+| Patch | Intended failure |
+| --- | --- |
+| `scroll-deferred-selection-reveal.patch` | Jumping to the last row changes selection but the first marked canvas still paints the initial window. |
+| `scroll-deferred-first-track.patch` | A freshly mounted overflowing list or Help uses previous measurements and paints its first canvas without a scrollbar. |
+
+The first-frame scenarios retain every native synchronized frame before the settled driver drains them. They inspect the first marked canvas at the commissioned small grids; fresh-list checks also run without receipts in normal builds. Fitting content must remain trackless. Help keeps the declared paging conventions visible through real scrolling.
