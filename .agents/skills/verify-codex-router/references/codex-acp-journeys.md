@@ -7,12 +7,13 @@
 - **J3 `reopen`:** Claude, with no new prompt. The existing reply is replayed and Codex exits normally.
 - **J2 `model` with `apply: default`:** the earlier Claude free-navigation journey changed the model against the hardcoded catalogue. On `6b9d2c20f`, the typed refreshed-catalogue journey and same-session `model-catalogue` readback separately passed for Sonnet/low and Haiku/low, preserving all five advertised model IDs and showing the honest default-save refusal. Each had six original terminal captures and normal quit. This qualifies selection/current-value readback only: both subsequent skill/image prompts failed to produce their required replies, later returning ACP `-32603/server_error`. The cause and the complete model-plus-prompt gate remain open.
 - **J2 `compact` on Cursor:** an explicit unsupported error, with no compaction effect, unchanged history, a usable empty composer and normal exit. This needs a Router build that reports unsupported compaction without closing Codex; on an older build the refusal ends the CLI.
+- **J2 `information` on Claude:** on `c00692d8e`, `/hooks` and `/mcp` each showed their command-specific refusal, returned to an empty usable composer and quit normally. Each paired same-session observer confirmed the exact native error and a subsequent supported read. This proves refusal recovery only, not hook discovery or provider MCP inventory. Cursor is unqualified.
 - **Readback route:** the Claude J1 and J2 `model` readbacks, both picker readbacks and the Cursor compact readbacks ran through the observer's CLI entry (`acp-journey-observation.ts PLAN.json`).
 
 Not yet qualified:
 
 - J2: Claude `compact` (`Context compacted`), `model` with `apply: session`, and `model` on Cursor.
-- J2 `information` (`/hooks`, `/mcp`) and `prompt`: scripted from Codex source and controlled tests only, never run on a real target. Basic inference after a model selection is still unobserved.
+- J2 `information` (`/hooks`, `/mcp`) on Cursor remains unobserved. On `c00692d8e`, the actual Haiku/low `prompt` control submitted one plain Text message with no skill or image, but no required reply appeared within 120 seconds; ACP returned `-32603/server_error` at about 186.6 seconds. Successful basic inference after model selection is unqualified; the cause and actual downstream route remain unknown. No Sonnet control was sent.
 - J3: `interrupt`, Cursor `reopen`, approval, `refresh` (scripted from source, with no real target or setup chosen yet), a Claude skill added mid-turn, and native and reverse control preservation.
 - `ordinary-reply` and `information-refused`: observer checks exercised only on literal history fixtures and the controlled transport.
 - A next valid prompt after a Cursor compact refusal; only a controlled Host test covers it.
