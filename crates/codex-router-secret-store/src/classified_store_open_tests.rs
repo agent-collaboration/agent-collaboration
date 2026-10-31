@@ -29,12 +29,18 @@ impl RecordedKeychain {
 
 impl KeychainAccess for RecordedKeychain {
     fn read_secret(&self, _: &str, _: &str) -> Result<Option<Vec<u8>>, KeychainAccessError> {
-        self.calls.lock().unwrap().push("read");
+        self.calls
+            .lock()
+            .map_err(|_| KeychainAccessError::TestKeychainAccessForbidden)?
+            .push("read");
         self.response.clone()
     }
 
     fn add_secret(&self, _: &str, _: &str, _: &[u8]) -> Result<(), KeychainAccessError> {
-        self.calls.lock().unwrap().push("add");
+        self.calls
+            .lock()
+            .map_err(|_| KeychainAccessError::TestKeychainAccessForbidden)?
+            .push("add");
         Err(KeychainAccessError::TestKeychainAccessForbidden)
     }
 }
