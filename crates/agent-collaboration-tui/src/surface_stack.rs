@@ -193,7 +193,8 @@ impl SurfaceStack {
             primary_action: None,
         })
     }
-    pub fn new(screen: SurfaceModel) -> Self {
+    pub fn new(mut screen: SurfaceModel) -> Self {
+        screen.focus.mount_initial_focus();
         Self {
             screen,
             overlays: Vec::new(),
@@ -287,8 +288,9 @@ impl SurfaceStack {
     }
     pub fn open_overlay(
         &mut self,
-        spec: OverlaySpec,
+        mut spec: OverlaySpec,
     ) -> Result<OverlayId, OverlayIdentityExhausted> {
+        spec.model.focus.mount_initial_focus();
         let next = self
             .next_identity
             .checked_add(1)

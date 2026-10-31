@@ -1,8 +1,8 @@
 //! The same width calculation drives drawing and keyboard reachability.
 use super::{ActionProjections, Button, button_target};
 use crate::{
-    actions::{ActionPresentation, ActionRegistry, Availability, AvailabilityFn},
-    focus_model::{TargetId, TargetSpec},
+    actions::{ActionPresentation, ActionRegistry},
+    focus_model::{TargetId, TargetSpec, TargetVisibility},
     surface_handle::SurfaceContext,
 };
 use iocraft::prelude::*;
@@ -25,19 +25,11 @@ pub fn toolbar_target(
     width: impl Fn() -> u16 + Send + Sync + 'static,
 ) -> TargetSpec {
     let id = action.id.clone();
-    let availability = action.availability.clone();
-    button_target(TargetId::for_action(&id), action).with_availability(AvailabilityFn::new(
+    button_target(TargetId::for_action(&id), action).with_visibility(TargetVisibility::new(
         move || {
-            if !toolbar_actions(&registry, width())
+            toolbar_actions(&registry, width())
                 .iter()
                 .any(|action| action.id == id)
-            {
-                Availability::Unavailable {
-                    reason: "Available in Menu".to_owned(),
-                }
-            } else {
-                availability.get()
-            }
         },
     ))
 }

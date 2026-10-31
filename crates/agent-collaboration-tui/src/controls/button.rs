@@ -67,7 +67,7 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
     };
     let theme = context.theme();
     let available = action.availability.is_available();
-    let focused = available && context.is_focused(&props.id);
+    let focused = context.is_focused(&props.id);
     let checked = action.checked == Some(true);
     let label_emphasized = available && (focused || checked);
     let primary = context

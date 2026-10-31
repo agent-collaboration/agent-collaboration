@@ -9,7 +9,7 @@ mod tests {
             ActionDef, ActionId, ActionRegistry, Availability, AvailabilityFn, Placement, ScopeId,
         },
         controls::{Button, DialogFrame, HelpControl, HelpDialog, ScrollHandle, button_target},
-        focus_model::{FocusModel, TargetId, TargetSpec},
+        focus_model::{FocusModel, TargetId, TargetSpec, TargetVisibility},
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::{SurfaceContext, SurfaceStackHandle, use_surface_stack},
@@ -36,10 +36,12 @@ mod tests {
     enum ReplacementPhase {
         Ready,
         Pending,
+        Hidden,
     }
     #[derive(Clone)]
     struct ReplacementBinding {
         help: HelpControl,
+        stack: SurfaceStackHandle,
         scroll: ScrollHandle,
         effects: State<usize>,
     }
@@ -74,11 +76,14 @@ mod tests {
             }),
         );
         credits.availability = AvailabilityFn::new(move || match phase {
-            ReplacementPhase::Ready => Availability::Available,
+            ReplacementPhase::Ready | ReplacementPhase::Hidden => Availability::Available,
             ReplacementPhase::Pending => Availability::Unavailable {
                 reason: "Operation pending".into(),
             },
         });
+        if matches!(phase, ReplacementPhase::Hidden) {
+            credits.placement = Placement::Hidden;
+        }
         let other = definition(
             "other",
             "Other",
@@ -95,9 +100,28 @@ mod tests {
                 .help
                 .open_handler(Default::default, Handler::from(|error| panic!("{error}"))),
         );
-        let mut targets = [&body, &credits, &other]
+        let stack = binding.stack;
+        let cancel = definition(
+            "cancel",
+            "Cancel",
+            &["Esc"],
+            Placement::Toolbar,
+            Handler::from(move |()| {
+                stack.close_top();
+            }),
+        );
+        let mut targets = [&body, &credits, &other, &cancel]
             .into_iter()
-            .map(|definition| button_target(TargetId::for_action(&definition.id), definition))
+            .map(|definition| {
+                let target = button_target(TargetId::for_action(&definition.id), definition);
+                if definition.id == action("credits") {
+                    target.with_visibility(TargetVisibility::new(move || {
+                        !matches!(phase, ReplacementPhase::Hidden)
+                    }))
+                } else {
+                    target
+                }
+            })
             .collect::<Vec<_>>();
         targets.push(
             TargetSpec::new(scroll_target())
@@ -108,7 +132,7 @@ mod tests {
             focus: FocusModel::new(targets).unwrap(),
             actions: ActionRegistry::new(
                 ScopeId::new("replacement-dialog").unwrap(),
-                vec![body, credits, other, help],
+                vec![body, credits, other, cancel, help],
             )
             .unwrap(),
             primary_action: None,
@@ -154,6 +178,7 @@ mod tests {
         });
         let binding = hooks
             .use_ref(|| ReplacementBinding {
+                stack,
                 help: HelpControl::new(stack, action("help")),
                 scroll: ScrollHandle::new(stack),
                 effects,
@@ -199,84 +224,183 @@ mod tests {
     #[tokio::test]
     async fn replacing_the_whole_dialog_model_preserves_displaced_intent_and_explicit_choices() {
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
-            for moved in [false, true] {
-                let handle = Arc::new(Mutex::new(None));
-                let (mut driver, config, journal) = EventDriver::new();
-                let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
-                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
-                tokio::time::timeout(std::time::Duration::from_secs(5),async {
+            for phase in [ReplacementPhase::Pending, ReplacementPhase::Hidden] {
+                for moved in [false, true] {
+                    let handle = Arc::new(Mutex::new(None));
+                    let (mut driver, config, journal) = EventDriver::new();
+                    let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
+                    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                    tokio::time::timeout(std::time::Duration::from_secs(5),async {
                     driver.initial(&mut frames).await;let fixture=handle.lock().unwrap().clone().unwrap();driver.drive(&mut frames,mode,vec![(key(KeyCode::Tab),true)],true).await;assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&target("credits")));
-                    replace_phase(&fixture,ReplacementPhase::Pending);driver.initial(&mut frames).await;assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&target("body")));
+                    replace_phase(&fixture,phase);driver.initial(&mut frames).await;assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&target(if matches!(phase,ReplacementPhase::Hidden){"body"}else{"credits"})));
+                    let map=fixture.stack.hit_regions().published().unwrap();assert_eq!(map.targets.iter().any(|region|region.surface==SurfaceId::Overlay(fixture.id)&&region.target==target("credits")),!matches!(phase,ReplacementPhase::Hidden),"layout presence agrees with the drawn control");
+                    driver.drive_checked(&mut frames,mode,vec![(key(KeyCode::Enter),false)],false,|_| {
+                        assert_eq!(fixture.stack.snapshot().top_id(),SurfaceId::Overlay(fixture.id),"Enter during pending keeps the dialog open");
+                        assert_eq!(fixture.binding.effects.get(),0,"Enter never activates pending Credits or Cancel");
+                    }).await;
                     if moved {driver.drive(&mut frames,mode,vec![(key(KeyCode::Tab),true)],true).await;assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&target("other")));}
                     replace_phase(&fixture,ReplacementPhase::Ready);driver.initial(&mut frames).await;assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&target(if moved {"other"}else{"credits"})),"complete model replacement retains the focus owner's intent");
                     driver.drive_checked(&mut frames,mode,vec![(key(KeyCode::Enter),!moved)],!moved,|_|assert_eq!(fixture.binding.effects.get(),usize::from(!moved),"Enter reaches the retained target after a complete model refresh")).await;
                 }).await.unwrap();
+                }
             }
         }
     }
     #[tokio::test]
     async fn replacing_a_help_suspended_dialog_model_preserves_return_intent() {
         for mode in [InputMode::Burst, InputMode::FrameSeparated] {
-            let handle = Arc::new(Mutex::new(None));
-            let (mut driver, config, journal) = EventDriver::new();
-            let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
-            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
-            tokio::time::timeout(std::time::Duration::from_secs(5), async {
-                driver.initial(&mut frames).await;
-                let fixture = handle.lock().unwrap().clone().unwrap();
-                driver
-                    .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
-                    .await;
-                replace_phase(&fixture, ReplacementPhase::Pending);
-                driver.initial(&mut frames).await;
-                assert_eq!(
-                    fixture.stack.snapshot().top().focus.current(),
-                    Some(&target("body"))
-                );
-                driver
-                    .drive(&mut frames, mode, vec![(key(KeyCode::F(1)), true)], true)
-                    .await;
-                assert!(
-                    fixture
-                        .binding
-                        .help
-                        .is_active(SurfaceId::Overlay(fixture.id))
-                );
-                replace_phase(&fixture, ReplacementPhase::Ready);
-                driver.initial(&mut frames).await;
-                assert!(
-                    fixture
-                        .binding
-                        .help
-                        .is_active(SurfaceId::Overlay(fixture.id)),
-                    "refresh keeps the active Help model"
-                );
-                driver
-                    .drive(&mut frames, mode, vec![(key(KeyCode::Esc), true)], true)
-                    .await;
-                assert!(
-                    !fixture
-                        .binding
-                        .help
-                        .is_active(SurfaceId::Overlay(fixture.id))
-                );
-                assert_eq!(
-                    fixture.stack.snapshot().top().focus.current(),
-                    Some(&target("credits")),
-                    "the saved base model retains displaced Credits intent"
-                );
-                driver
-                    .drive_checked(
-                        &mut frames,
-                        mode,
-                        vec![(key(KeyCode::Enter), true)],
-                        true,
-                        |_| assert_eq!(fixture.binding.effects.get(), 1),
-                    )
-                    .await;
-            })
-            .await
-            .unwrap();
+            for phase in [ReplacementPhase::Pending, ReplacementPhase::Hidden] {
+                let handle = Arc::new(Mutex::new(None));
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    driver.initial(&mut frames).await;
+                    let fixture = handle.lock().unwrap().clone().unwrap();
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
+                        .await;
+                    replace_phase(&fixture, phase);
+                    driver.initial(&mut frames).await;
+                    assert_eq!(
+                        fixture.stack.snapshot().top().focus.current(),
+                        Some(&target(if matches!(phase, ReplacementPhase::Hidden) {
+                            "body"
+                        } else {
+                            "credits"
+                        }))
+                    );
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::F(1)), true)], true)
+                        .await;
+                    assert!(
+                        fixture
+                            .binding
+                            .help
+                            .is_active(SurfaceId::Overlay(fixture.id))
+                    );
+                    replace_phase(&fixture, ReplacementPhase::Ready);
+                    if matches!(phase, ReplacementPhase::Pending) {
+                        driver.initial(&mut frames).await;
+                    }
+                    assert!(
+                        fixture
+                            .binding
+                            .help
+                            .is_active(SurfaceId::Overlay(fixture.id)),
+                        "refresh keeps the active Help model"
+                    );
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Esc), true)], true)
+                        .await;
+                    assert!(
+                        !fixture
+                            .binding
+                            .help
+                            .is_active(SurfaceId::Overlay(fixture.id))
+                    );
+                    assert_eq!(
+                        fixture.stack.snapshot().top().focus.current(),
+                        Some(&target("credits")),
+                        "the saved base model retains displaced Credits intent"
+                    );
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::Enter), true)],
+                            true,
+                            |_| assert_eq!(fixture.binding.effects.get(), 1),
+                        )
+                        .await;
+                })
+                .await
+                .unwrap();
+            }
         }
+    }
+    #[tokio::test]
+    async fn no_safe_focus_keeps_enter_inert_and_scope_help_and_escape_working() {
+        let handle = Arc::new(Mutex::new(None));
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            driver.initial(&mut frames).await;
+            let fixture = handle.lock().unwrap().clone().unwrap();
+            let snapshot = fixture.stack.snapshot();
+            let cancel = snapshot
+                .top()
+                .actions
+                .definitions()
+                .iter()
+                .find(|definition| definition.id == action("cancel"))
+                .unwrap();
+            let targets = vec![button_target(target("cancel"), cancel)];
+            fixture.stack.update_overlay_if_open(fixture.id, |model| {
+                model.focus.replace_targets(targets).unwrap()
+            });
+            // Removing all safe targets changes routing even if the footer's pixels are identical.
+            assert_eq!(fixture.stack.snapshot().top().focus.current(), None);
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::Enter), false)],
+                    false,
+                    |_| {
+                        assert_eq!(
+                            fixture.stack.snapshot().top_id(),
+                            SurfaceId::Overlay(fixture.id),
+                            "Enter cannot arm Cancel"
+                        );
+                        assert_eq!(fixture.binding.effects.get(), 0);
+                    },
+                )
+                .await;
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::F(1)), true)],
+                    true,
+                    |_| {
+                        assert!(
+                            fixture
+                                .binding
+                                .help
+                                .is_active(SurfaceId::Overlay(fixture.id)),
+                            "scope Help remains available without focus"
+                        )
+                    },
+                )
+                .await;
+            driver
+                .drive(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::Esc), true)],
+                    true,
+                )
+                .await;
+            assert_eq!(fixture.stack.snapshot().top().focus.current(), None);
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::Esc), true)],
+                    true,
+                    |_| {
+                        assert_eq!(
+                            fixture.stack.snapshot().top_id(),
+                            SurfaceId::Screen,
+                            "explicit Escape still closes the scope"
+                        )
+                    },
+                )
+                .await;
+        })
+        .await
+        .unwrap();
     }
 }

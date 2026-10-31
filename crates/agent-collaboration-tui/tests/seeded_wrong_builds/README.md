@@ -200,3 +200,20 @@ The inner-child minimum control mutates the sample consumer allocation, includin
 The switch resize fixture now asserts focus repair immediately before Tab. With automatic repair, a later Tab on the sole eligible filter makes no visual change; its focus assertion remains, and its incorrect redraw wait is removed. Existing render-time snapshot and availability-cache controls are mechanically refreshed around active-focus reconciliation.
 
 The existing complete-model focus-reset and discarded-primary controls are also mechanically refreshed around intent transfer; they retain the same faults and original assertions.
+
+A2 refinement keeps focus on a painted disabled target. Only a target removed
+from the model or hidden by its layout is displaced. Automatic fallback chooses
+the painted scope initial target, then an enabled non-activation target, or none.
+The `focus-no-automatic-fallback` control now concerns dropped/hidden targets.
+
+| Patch | Intended failure |
+| --- | --- |
+| `focus-fallback-to-cancel.patch` | Declared-order fallback selects Cancel ahead of the captured initial field or safe body. |
+| `focus-fallback-to-primary.patch` | Automatic fallback arms a non-initial primary activation. |
+| `focus-disabled-painted-loses-focus.patch` | Temporary unavailability moves focus off a still-painted control. |
+| `focus-disabled-button-hides-marker.patch` | A disabled focused button loses its visible underline. |
+| `focus-disabled-combo-hides-marker.patch` | A disabled focused combo loses its focus background. |
+| `focus-disabled-editor-hides-marker.patch` | A disabled focused editor loses its focus background/cursor. |
+
+Resize scenarios also make an explicit Tab or pointer choice while the old
+button is hidden, so returning width cannot override that newer choice.

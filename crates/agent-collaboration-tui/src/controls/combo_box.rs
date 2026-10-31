@@ -37,7 +37,7 @@ pub fn ComboBox(props: &ComboBoxProps, mut hooks: Hooks) -> impl Into<AnyElement
         .unwrap_or(Availability::Unavailable {
             reason: "Unavailable".into(),
         });
-    let focused = context.is_focused(&props.id) && availability.is_available();
+    let focused = context.is_focused(&props.id);
     let state = props.value.read();
     let label = state
         .options()

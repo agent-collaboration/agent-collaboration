@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/segmented_switch.rs b/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
 --- a/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
 +++ b/crates/agent-collaboration-tui/src/controls/segmented_switch.rs
-@@ -59,3 +59,3 @@ pub fn segmented_targets(
+@@ -58,3 +58,3 @@
                          .collect::<Vec<_>>();
--                    if segmented_presentation(&actions, available_width())
-+                    if false && segmented_presentation(&actions, available_width())
-                         == SegmentedPresentation::Hidden
+-                    segmented_presentation(&actions, available_width())
++                    true || segmented_presentation(&actions, available_width())
+                         != SegmentedPresentation::Hidden
