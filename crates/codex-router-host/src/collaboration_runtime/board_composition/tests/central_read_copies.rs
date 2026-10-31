@@ -225,8 +225,20 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
         read.close().await?;
     }
     assert!(
-        pinned_paths.iter().any(|path| after_refresh.contains(path)),
-        "refresh removed a pinned generation"
+        pinned_paths.intersection(&after_refresh).next().is_some(),
+        "refresh removed the pinned copy file"
+    );
+    let pinned_copy = pinned_paths
+        .intersection(&after_refresh)
+        .next()
+        .ok_or("pinned copy after refresh")?;
+    let pinned_generation = pinned_copy
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("pinned generation directory")?;
+    assert!(
+        pinned_generation.is_dir(),
+        "refresh removed a generation directory while its reader was open"
     );
     assert!(
         after_refresh.difference(&pinned_paths).next().is_some(),

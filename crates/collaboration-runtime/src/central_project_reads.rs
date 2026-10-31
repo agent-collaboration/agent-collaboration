@@ -1,9 +1,22 @@
 //! Coalesce central pulls and publish only completed immutable project generations.
 use fleet_admission::{DirectoryLease, DirectorySide, LeaseMetadata};
 use message_board::{CurrentWriter, ProjectId, WriterObservation};
-use message_board_storage::ProjectReadCopy;
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
+use message_board_storage::{ProjectReadCopy, ProjectReadStore};
+use std::{
+    collections::BTreeMap,
+    future::Future,
+    path::PathBuf,
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+use tokio::{
+    runtime::Handle,
+    sync::{Mutex, Notify, RwLock},
+};
+use tokio_util::task::TaskTracker;
 
 #[cfg(test)]
 #[path = "central_project_reads_tests.rs"]
@@ -12,6 +25,7 @@ mod tests;
 pub struct PulledProjectReadCopy {
     pub copy: ProjectReadCopy,
     pub lease: DirectorySide<LeaseMetadata>,
+    pub generation_root: PathBuf,
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -34,10 +48,17 @@ pub trait ProjectReadCopySource: Send + Sync {
 }
 
 pub(crate) struct CentralReadGeneration {
-    pub copy: Arc<ProjectReadCopy>,
+    copy: Option<ProjectReadCopy>,
     pub lease: DirectorySide<LeaseMetadata>,
+    generation_root: PathBuf,
+    cleanup: Arc<GenerationCleanup>,
+    runtime: Handle,
 }
 impl CentralReadGeneration {
+    pub(crate) fn reader(&self) -> Option<ProjectReadStore<'_>> {
+        self.copy.as_ref().map(ProjectReadCopy::reader)
+    }
+
     pub fn authority(
         &self,
     ) -> Result<(CurrentWriter, Option<WriterObservation>), CentralReadError> {
@@ -73,6 +94,81 @@ impl CentralReadGeneration {
     }
 }
 
+impl Drop for CentralReadGeneration {
+    fn drop(&mut self) {
+        let Some(copy) = self.copy.take() else {
+            return;
+        };
+        let generation_root = self.generation_root.clone();
+        let completion = GenerationCleanupCompletion(self.cleanup.clone());
+        let _task = self.cleanup.tasks.spawn_on(
+            async move {
+                let _completion = completion;
+                match copy.close().await {
+                    Ok(()) => match tokio::fs::remove_dir_all(&generation_root).await {
+                        Ok(()) => {}
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => tracing::warn!(
+                            path = %generation_root.display(),
+                            %error,
+                            "central read generation directory cleanup failed; directory retained"
+                        ),
+                    },
+                    Err(error) => tracing::warn!(
+                        path = %generation_root.display(),
+                        %error,
+                        "central read copy close failed; generation directory retained"
+                    ),
+                }
+            },
+            &self.runtime,
+        );
+    }
+}
+
+#[derive(Default)]
+struct GenerationCleanup {
+    tasks: TaskTracker,
+    live_generations: AtomicUsize,
+    released: Notify,
+}
+
+impl GenerationCleanup {
+    fn generation_created(&self) {
+        self.live_generations.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn generation_cleaned(&self) {
+        let previous = self.live_generations.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(previous > 0, "central read generation count underflowed");
+        if previous == 1 {
+            self.released.notify_waiters();
+        }
+    }
+
+    async fn close(&self) {
+        loop {
+            let released = self.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if self.live_generations.load(Ordering::Acquire) == 0 {
+                break;
+            }
+            released.await;
+        }
+        self.tasks.close();
+        self.tasks.wait().await;
+    }
+}
+
+struct GenerationCleanupCompletion(Arc<GenerationCleanup>);
+
+impl Drop for GenerationCleanupCompletion {
+    fn drop(&mut self) {
+        self.0.generation_cleaned();
+    }
+}
+
 #[derive(Default)]
 struct ProjectReadSlot {
     refresh: Mutex<()>,
@@ -87,13 +183,23 @@ struct ProjectReadState {
 pub(crate) struct CentralProjectReads {
     source: Arc<dyn ProjectReadCopySource>,
     projects: Mutex<BTreeMap<ProjectId, Arc<ProjectReadSlot>>>,
+    cleanup: Arc<GenerationCleanup>,
 }
 impl CentralProjectReads {
     pub fn new(source: Arc<dyn ProjectReadCopySource>) -> Self {
         Self {
             source,
             projects: Mutex::new(BTreeMap::new()),
+            cleanup: Arc::new(GenerationCleanup::default()),
         }
+    }
+
+    pub(crate) async fn close(self) {
+        let Self {
+            projects, cleanup, ..
+        } = self;
+        drop(projects.into_inner());
+        cleanup.close().await;
     }
     /// Inspect only a verified completed generation; never start or join a pull.
     pub(crate) async fn completed_authority(
@@ -139,9 +245,14 @@ impl CentralProjectReads {
             Ok(pulled) => (|| {
                 let lease =
                     select_lease(previous.as_deref().map(|read| &read.lease), pulled.lease)?;
+                let cleanup = self.cleanup.clone();
+                cleanup.generation_created();
                 let generation = Arc::new(CentralReadGeneration {
-                    copy: Arc::new(pulled.copy),
+                    copy: Some(pulled.copy),
                     lease,
+                    generation_root: pulled.generation_root,
+                    cleanup,
+                    runtime: Handle::current(),
                 });
                 generation.authority()?;
                 Ok(generation)
