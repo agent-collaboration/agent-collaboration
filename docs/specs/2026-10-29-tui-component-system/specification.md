@@ -159,7 +159,7 @@ A form, such as New session, is as tall as its content, capped by the space avai
 - ≡ Menu, with its key shown beside it in muted text (F10);
 - a [+ New] button;
 - a [/ Filter…] text field;
-- a This folder &#124; All switch;
+- a This folder &#124; Repo &#124; All switch (owner, 2026-10-31: "cwd repo all i thought?");
 - right-aligned, the session count and the machine.
 
 Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one cell wide both in the pinned renderer's width table and under current Unicode, so rows line up in the terminal exactly as the crate measured them. The menu icon is ≡, not ☰: U+2630 is wide under Unicode 16, while the pinned renderer counts it as one cell (probe worker, 2026-10-30).
