@@ -17,8 +17,11 @@ fn menu_layout(
     layout: OverlayLayout,
     viewport: (u16, u16),
 ) -> OverlayLayout {
-    let preferred = ActionProjections::from_registry(registry)
-        .menu
+    let entries = ActionProjections::from_registry(registry).menu;
+    let content_height = u16::try_from(entries.len())
+        .unwrap_or(u16::MAX)
+        .saturating_add(2);
+    let preferred = entries
         .iter()
         .map(|action| {
             let key = action.keys.first().map_or(0, |key| key.to_string().width());
@@ -43,14 +46,39 @@ fn menu_layout(
                 left: left.min(viewport.0.saturating_sub(width)),
                 top,
                 width,
-                height,
+                height: height.min(content_height),
             }
         }
         OverlayLayout::CenteredCells { width, height } => OverlayLayout::CenteredCells {
             width: width.max(preferred),
-            height,
+            height: height.min(content_height),
         },
-        layout @ OverlayLayout::Dialog { .. } => layout,
+        OverlayLayout::Dialog {
+            presentation,
+            margins,
+        } => {
+            let available_width = viewport
+                .0
+                .saturating_sub(margins.left.saturating_add(margins.right));
+            let available_height = viewport
+                .1
+                .saturating_sub(margins.top.saturating_add(margins.bottom));
+            let (width, height) = match presentation {
+                crate::DialogPresentation::FullScreen => (
+                    crate::DialogAxisSize::cells(available_width),
+                    crate::DialogAxisSize::cells(available_height),
+                ),
+                crate::DialogPresentation::Sized { width, height } => (width, height),
+            };
+            let (_, maximum) = height.resolve(available_height);
+            OverlayLayout::Dialog {
+                presentation: crate::DialogPresentation::Sized {
+                    width,
+                    height: crate::DialogAxisSize::cells(maximum.min(content_height)),
+                },
+                margins,
+            }
+        }
     }
 }
 
