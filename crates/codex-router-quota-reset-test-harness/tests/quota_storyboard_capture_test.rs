@@ -17,6 +17,9 @@ mod isolated_fixture_test;
 )]
 mod loopback_provider_test;
 
+#[path = "quota_storyboard_capture_test/component_first_frame_test.rs"]
+mod component_first_frame_test;
+
 #[path = "quota_storyboard_capture_test/grid_terminal_capture.rs"]
 mod grid_terminal_capture;
 #[path = "quota_reset_pty_test/terminal_interaction_test.rs"]

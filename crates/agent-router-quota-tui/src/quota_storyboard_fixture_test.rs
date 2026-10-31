@@ -370,6 +370,7 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return Err(std::io::Error::other("fixture requires its owned real PTY"));
     }
+    let (terminal_width, terminal_height) = crossterm::terminal::size()?;
     let model = Arc::new(Mutex::new(fixture_scenario_model(scenario)));
     let release_path = fixture_release_path(scenario)?;
     let receipt_path =
@@ -515,7 +516,7 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
         .as_ref()
         .map(|_| super::super::quota_viewport_trace::QuotaViewportTrace::default());
     let outcome = Arc::new(Mutex::new(None));
-    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
+    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:usize::from(terminal_width),height:usize::from(terminal_height),reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
     let render = component.render_loop().fullscreen().ignore_ctrl_c();
     let render = match &dispatch_sink {
         Some(sink) => render.stdout(sink.frame_writer(std::io::stdout())?),
