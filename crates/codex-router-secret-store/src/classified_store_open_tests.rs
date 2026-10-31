@@ -159,6 +159,69 @@ fn classified_open_test_guard_is_unusable() {
 }
 
 #[test]
+fn classified_open_absent_backend_stays_absent_without_writes() {
+    let root = initialized_root();
+    let keychain = RecordedKeychain {
+        response: Err(KeychainAccessError::BackendAbsent),
+        calls: Mutex::new(Vec::new()),
+    };
+    let before = snapshot(root.path());
+    for _ in 0..2 {
+        assert!(matches!(
+            ClassifiedCredentialStore::open_read_only_with_keychain(root.path(), &keychain),
+            ClassifiedCredentialStore::Absent
+        ));
+        assert_eq!(snapshot(root.path()), before);
+    }
+    assert!(!keychain.calls.lock().unwrap().contains(&"add"));
+}
+
+#[test]
+fn classified_open_unreadable_metadata_is_unusable() {
+    let root = initialized_root();
+    fs::write(root.path().join("store-id"), [0xff]).unwrap();
+    assert_unusable_untouched(
+        root.path(),
+        &RecordedKeychain::key(vec![0x42; 32]),
+        UnusableCause::MetadataUnavailable,
+    );
+}
+
+#[test]
+fn classified_open_debug_plaintext_declaration_is_not_an_encrypted_store() {
+    let root = initialized_root();
+    fs::write(
+        root.path().join("debug-plaintext.marker"),
+        b"debug-plaintext-v1\n",
+    )
+    .unwrap();
+    assert_unusable_untouched(
+        root.path(),
+        &RecordedKeychain::key(vec![0x42; 32]),
+        UnusableCause::DebugPlaintextConfigured,
+    );
+}
+
+#[test]
+fn classified_open_unsafe_root_is_never_absent() {
+    let parent = tempfile::tempdir().unwrap();
+    let unsafe_root = parent.path().join("not-a-directory");
+    fs::write(&unsafe_root, b"unchanged").unwrap();
+    let keychain = RecordedKeychain::key(vec![0x42; 32]);
+    let before = snapshot(parent.path());
+    for _ in 0..2 {
+        assert!(matches!(
+            ClassifiedCredentialStore::open_read_only_with_keychain(&unsafe_root, &keychain),
+            ClassifiedCredentialStore::Unusable {
+                cause: UnusableCause::UnsafeStoreRoot
+            }
+        ));
+        assert_eq!(snapshot(parent.path()), before);
+    }
+    assert!(keychain.calls.lock().unwrap().is_empty());
+}
+
+#[test]
 fn classified_open_invalid_marker_is_unusable() {
     let root = initialized_root();
     fs::write(root.path().join("format-v2.marker"), b"invalid").unwrap();

@@ -19,6 +19,43 @@ pub(crate) struct PooledCredentialTemporaryFile {
 }
 
 impl FileSecretStore {
+    /// Enumerates every existing encrypted credential for read-only integrity checking.
+    pub(crate) fn encrypted_keys_for_validation(&self) -> Result<Vec<SecretKey>, SecretStoreError> {
+        let mut keys = Vec::new();
+        for entry in self.read_directory(&self.root)? {
+            let entry = entry.map_err(|source| SecretStoreError::Filesystem {
+                path: self.root.clone(),
+                source,
+            })?;
+            let path = entry.path();
+            if path.extension().is_none_or(|extension| extension != "v2") {
+                continue;
+            }
+            reject_symlink_path(&path)?;
+            if !entry
+                .file_type()
+                .map_err(|source| SecretStoreError::Filesystem {
+                    path: path.clone(),
+                    source,
+                })?
+                .is_file()
+            {
+                return Err(SecretStoreError::UnexpectedCredentialEntry { path });
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .ok_or_else(|| SecretStoreError::UnexpectedCredentialEntry {
+                    path: path.clone(),
+                })?;
+            let key = SecretKey::new(stem)?;
+            crate::credential_key::require_encrypted_secret_key(&key)?;
+            keys.push(key);
+        }
+        keys.sort();
+        Ok(keys)
+    }
+
     fn encrypted_credential_path(&self, key: &SecretKey) -> PathBuf {
         self.root.join(format!("{}.v2", key.as_str()))
     }

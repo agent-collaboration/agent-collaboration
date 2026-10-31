@@ -68,6 +68,8 @@ pub trait KeychainAccess: Send + Sync {
 /// Keychain boundary failures, kept independent of platform error text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeychainAccessError {
+    /// This machine has no credential backend; distinct from a denied or damaged one.
+    BackendAbsent,
     /// The caller requested a Keychain service other than Router's own service.
     ServiceRejected,
     /// The Keychain is locked, denied, unavailable, or returned an unclassified error.
@@ -172,7 +174,7 @@ impl KeychainAccess for PlatformKeychainAccess {
         _account: &str,
     ) -> Result<Option<Vec<u8>>, KeychainAccessError> {
         ensure_router_keychain_service(service)?;
-        Err(KeychainAccessError::Unavailable)
+        Err(KeychainAccessError::BackendAbsent)
     }
 
     fn add_secret(
@@ -182,7 +184,7 @@ impl KeychainAccess for PlatformKeychainAccess {
         _secret: &[u8],
     ) -> Result<(), KeychainAccessError> {
         ensure_router_keychain_service(service)?;
-        Err(KeychainAccessError::Unavailable)
+        Err(KeychainAccessError::BackendAbsent)
     }
 }
 
@@ -239,6 +241,36 @@ pub(crate) fn load_or_create_pooled_credential_data_key(
     }
 }
 
+pub(crate) enum ExistingCredentialDataKey {
+    MissingStore,
+    BackendAbsent,
+    Ready(PooledCredentialDataKey),
+}
+
+/// Observes existing metadata and key material without invoking any create path.
+pub(crate) fn read_existing_pooled_credential_data_key(
+    file_store: &FileSecretStore,
+    keychain: &dyn KeychainAccess,
+) -> Result<ExistingCredentialDataKey, SecretStoreError> {
+    let Some(value) = file_store.read_store_id_file()? else {
+        return Ok(ExistingCredentialDataKey::MissingStore);
+    };
+    let store_id = PooledCredentialStoreId::parse(&value, file_store)?;
+    let account = format!("{POOLED_KEY_ACCOUNT_PREFIX}{store_id}");
+    match keychain.read_secret(ROUTER_KEYCHAIN_SERVICE, &account) {
+        Ok(Some(bytes)) => {
+            data_key_from_secret(Zeroizing::new(bytes)).map(ExistingCredentialDataKey::Ready)
+        }
+        Ok(None) => Err(SecretStoreError::KeyMissing),
+        Err(KeychainAccessError::BackendAbsent) => Ok(ExistingCredentialDataKey::BackendAbsent),
+        Err(KeychainAccessError::Unavailable) => Err(SecretStoreError::KeyUnavailable),
+        Err(KeychainAccessError::ServiceRejected) => Err(SecretStoreError::KeychainServiceRejected),
+        Err(KeychainAccessError::TestKeychainAccessForbidden) => {
+            Err(SecretStoreError::TestKeychainAccessForbidden)
+        }
+    }
+}
+
 fn read_keychain_secret(
     keychain: &dyn KeychainAccess,
     account: &str,
@@ -246,7 +278,9 @@ fn read_keychain_secret(
     match keychain.read_secret(ROUTER_KEYCHAIN_SERVICE, account) {
         Ok(secret) => Ok(secret.map(Zeroizing::new)),
         Err(KeychainAccessError::ServiceRejected) => Err(SecretStoreError::KeychainServiceRejected),
-        Err(KeychainAccessError::Unavailable) => Err(SecretStoreError::KeyUnavailable),
+        Err(KeychainAccessError::Unavailable | KeychainAccessError::BackendAbsent) => {
+            Err(SecretStoreError::KeyUnavailable)
+        }
         Err(KeychainAccessError::TestKeychainAccessForbidden) => {
             Err(SecretStoreError::TestKeychainAccessForbidden)
         }
@@ -261,7 +295,9 @@ fn add_keychain_secret(
     match keychain.add_secret(ROUTER_KEYCHAIN_SERVICE, account, secret) {
         Ok(()) => Ok(()),
         Err(KeychainAccessError::ServiceRejected) => Err(SecretStoreError::KeychainServiceRejected),
-        Err(KeychainAccessError::Unavailable) => Err(SecretStoreError::KeyUnavailable),
+        Err(KeychainAccessError::Unavailable | KeychainAccessError::BackendAbsent) => {
+            Err(SecretStoreError::KeyUnavailable)
+        }
         Err(KeychainAccessError::TestKeychainAccessForbidden) => {
             Err(SecretStoreError::TestKeychainAccessForbidden)
         }
