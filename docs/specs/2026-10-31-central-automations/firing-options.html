@@ -22,7 +22,7 @@
 <ex-document id="content">
 <h1 id="heading-firing-options-and-cost">Firing options and cost</h1>
 
-<p><strong>Short answer: at your real volume, all the options cost about nothing on Cloudflare.</strong> Your busiest day had about 1,250 firings. Option A, where central wakes at every due time, comes to roughly <strong>11,000 billed requests a day, about 0.34 million a month</strong>. That's inside the 1 million requests a month the paid plan already includes. Even at 10 times your peak it's about <strong>$0.36 a month</strong>. So the choice should rest on reliability and complexity, not on alarm cost.</p>
+<p><strong>Short answer: at your real volume, all the options cost about nothing on Cloudflare.</strong> Your busiest day had about 1,250 firings. Option A, where central wakes at every due time, comes to roughly <strong>11,000 billed requests a day, about 0.34 million a month</strong>. That's inside the 1 million requests a month the paid plan already includes. At 10 times your peak it's about <strong>$0.45 a month</strong>; Cloudflare rounds billable usage up to the next million. So the choice should rest on reliability and complexity, not on alarm cost.</p>
 
 <ex-callout title="What's measured and what's estimated" tone="risk" icon="chart-line">
   <ul>
@@ -68,7 +68,7 @@ flowchart LR
   conn2 --> status["status back to sender<br/>1"]
   mach -->|"FiringReport ×1–2:<br/>incoming WS 1/20 + 1 each"| fleet2["Fleet"]
 </script></ex-mermaid>
-<p><strong>About 9 billed requests and about 10 rows written per firing, all-in.</strong> The alarm is only one of those requests. Most of the cost is the mail hops, which every option pays unless firings are batched.</p>
+<p><strong>About 9 billed requests and about 10 rows written per firing, all-in: an estimate.</strong> A's central-sent mail route and its status route aren't designed yet, so there's no exact hop count until they are. Batched notices, journaled connection appends and status flows can each add calls. The alarm is only one of those requests. Most of the cost is the mail hops, which every option pays unless firings are batched.</p>
 
 <h2 id="totals">Totals</h2>
 <div class="ex-table-scroll">
@@ -76,8 +76,8 @@ flowchart LR
 <thead><tr><th>Volume</th><th>A: central wakes at every due time</th><th>B: hourly window, one batch per machine</th><th>Paid-plan cost difference</th></tr></thead>
 <tbody>
 <tr><td>Your busiest day (about 1,250 a day)</td><td>about 11,000 requests a day; 0.34 M a month</td><td>about 2,500 a day; 0.07 M a month</td><td>$0: both are inside the included 1 M</td></tr>
-<tr><td>10× (about 12,500 a day)</td><td>3.4 M a month, about $0.36</td><td>about 0.6 M a month, $0</td><td>about $0.36 a month</td></tr>
-<tr><td>100× (about 125,000 a day)</td><td>34 M a month, about $5</td><td>about 6 M a month, about $0.75</td><td>about $4 a month</td></tr>
+<tr><td>10× (about 12,500 a day)</td><td>3.4 M a month: 2.4 M billable, rounded up to 3 M, about $0.45</td><td>about 0.6 M a month, $0</td><td>about $0.45 a month</td></tr>
+<tr><td>100× (about 125,000 a day)</td><td>34 M a month: 33 M billable, about $4.95</td><td>about 6 M a month: 5 M billable, about $0.75</td><td>about $4.20 a month</td></tr>
 </tbody>
 </table>
 </div>
@@ -103,11 +103,15 @@ flowchart LR
 </div>
 
 <ex-callout title="Recommendation, revised after counting" tone="decision" icon="clock">
-  <p><strong>A: central fires at the due time.</strong> I recommended B earlier to save alarms, but the alarm is about one ninth of a firing's cost, and the total is inside the included monthly allowance even at 10 times your peak. B's real gain is staying on time through a central blip. It costs a local hold store and a cancel-versus-release race. Switch to B only if on-time delivery through outages matters more than that complexity. Your call; nothing is built yet.</p>
+  <p><strong>A: central fires at the due time.</strong> I recommended B earlier to save alarms, but the alarm is about one ninth of a firing's cost. At your peak the total is inside the included monthly allowance; at 10 times your peak it's about $0.45 a month. B's real gain is staying on time through a central blip. It costs a local hold store and a cancel-versus-release race. Switch to B only if on-time delivery through outages matters more than that complexity. Your call; nothing is built yet.</p>
 </ex-callout>
 
 <h2 id="measure">How to measure instead of estimate</h2>
-<p>Before building: on the staging central, fire 100 test wakes and 20 schedule runs to two debug machines. Then read the Durable Object analytics for requests, rows written and duration per object class, and divide by the firings. That turns the "about 9 requests per firing" estimate into a measured number, and settles whether batching (B) is worth it.</p>
+<p><strong>Two steps.</strong></p>
+<ol>
+  <li><strong>Baseline now:</strong> on the staging central, send 100 test wakes between two debug machines on <em>today's</em> code (cross-machine wakes as mail), then read the Durable Object analytics: requests, rows written and duration per object class. That measures today's mail hops, not A.</li>
+  <li><strong>A itself:</strong> build the first slice of A (central list, clock and central-sent mail for one wake to one machine), run the same 100 wakes, and measure again. Only that number is A's real cost, and it settles whether batching (B) is ever worth it.</li>
+</ol>
 </ex-document>
 
 
