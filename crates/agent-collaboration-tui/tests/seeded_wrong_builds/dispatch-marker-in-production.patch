@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
---- a/crates/agent-collaboration-tui/src/input_owner.rs
-+++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -39,2 +39,3 @@
- ) -> impl Into<AnyElement<'a>> {
-+    {use std::io::Write; let _=std::io::stdout().write_all(b"\x1b]7770;dispatch=0\x1b\\");}
-     let stack = props.stack;

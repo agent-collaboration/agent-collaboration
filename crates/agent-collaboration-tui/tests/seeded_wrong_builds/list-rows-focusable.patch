@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
---- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-@@ -213,3 +213,3 @@ impl ListSelectionControl {
-             });
--            targets.push(TargetSpec::new(target).pointer_only().with_input(input));
-+            targets.push(TargetSpec::new(target).with_input(input));
-         }

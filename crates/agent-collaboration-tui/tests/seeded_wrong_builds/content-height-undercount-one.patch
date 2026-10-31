@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -119,2 +119,3 @@ pub fn DialogFrame<'a>(
-         .natural_height
-+        .saturating_sub(1)
-         .saturating_add(header_chrome)

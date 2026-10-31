@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
-@@ -239,3 +239,3 @@
--        #(pinned_status.map(|status|element!(View(width:100pct,padding_top:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-+        #(pinned_status.map(|status|element!(View(width:100pct,padding_top:1,padding_bottom:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-             MeasuredFixedSlot(height:status_height,children:vec![status])
-         }).into_any()))

@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/pinned_context.rs b/crates/agent-collaboration-tui/src/controls/pinned_context.rs
---- a/crates/agent-collaboration-tui/src/controls/pinned_context.rs
-+++ b/crates/agent-collaboration-tui/src/controls/pinned_context.rs
-@@ -30,3 +30,3 @@ impl PinnedContext {
-         let gap = usize::from(tag_width > 0 && !self.text.is_empty() && tag_width < width);
--        let text = fit_pinned_text(&self.text, width.saturating_sub(tag_width + gap));
-+        let text = self.text.clone();
-         (text, tag.map(|tag| fit_pinned_text(&tag, width)))

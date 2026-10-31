@@ -1,9 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
---- a/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_selection_control.rs
-@@ -202,5 +202,2 @@ impl ListSelectionControl {
-             {
--                if key.code == KeyCode::Esc {
--                    return true;
--                }
-                 let editable = match key.code {

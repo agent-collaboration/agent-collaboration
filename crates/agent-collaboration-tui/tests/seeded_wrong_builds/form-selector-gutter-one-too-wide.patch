@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/form_fields.rs b/crates/agent-collaboration-tui/src/controls/form_fields.rs
---- a/crates/agent-collaboration-tui/src/controls/form_fields.rs
-+++ b/crates/agent-collaboration-tui/src/controls/form_fields.rs
-@@ -131,3 +131,3 @@ pub fn SelectableRow<'a>(
-         View(background_color:background.map(|role|theme.background(role)),flex_shrink: 0.0_f32) {
--            View(width: 2, flex_shrink: 0.0_f32,flex_direction:FlexDirection::Column,padding_top:props.marker_offset) {
-+            View(width: 3, flex_shrink: 0.0_f32,flex_direction:FlexDirection::Column,padding_top:props.marker_offset) {
-                 Text(content: if props.selected { UiGlyph::Focus.text() } else { "" }, color: theme.foreground(TextRole::Focused))
