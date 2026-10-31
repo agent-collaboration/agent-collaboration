@@ -23,7 +23,7 @@
 <ex-document id="content">
 <h1 id="heading-firing-and-mail">Firing and mail</h1>
 
-<p><strong>Central keeps the clock, on a 5-minute grid.</strong> When grid point 10:05 arrives, central records every firing due then, groups them by machine, freezes one <strong>batch</strong> per machine, and tells each machine it's ready, right away. It does that on central's durable per-machine notice channel, which already exists, is journaled, and catches up when an offline machine reconnects. The machine then fetches the batch. Agent-to-agent messages keep using the mailbox as today. The machine that created the automation doesn't need to be on.</p>
+<p><strong>Central keeps the clock, on a 5-minute grid.</strong> When grid point 10:05 arrives, central records every firing due then, groups them by machine, freezes one <strong>batch</strong> per machine, and tells each machine it's ready, right away. <strong>Central keeps the batch until the machine confirms it has it.</strong> The "ready" notice is only a wake-up on central's existing per-machine notice channel. Whenever the machine connects or gets a notice, it asks central for every batch it hasn't confirmed, fetches them, stores them locally, then confirms. Agent-to-agent messages keep using the mailbox as today. The machine that created the automation doesn't need to be on.</p>
 
 <ex-callout title="Decided" tone="decision" icon="clock">
   <p>"A with send time batching" (you, 31 Oct). Central fires at the due time, and firings for one machine travel together. Nothing waits on the machine for later, and cancels happen only in central.</p>
@@ -32,17 +32,20 @@
 <h2 id="sequence">One grid point, end to end</h2>
 <ex-mermaid id="fire-seq" label="One grid point"><script type="text/plain">
 sequenceDiagram
-  participant Clock as Central clock (Fleet journal op)
+  participant Clock as Central clock (journal job for 10:05)
   participant Fleet as Central list (Fleet)
   participant Conn as B's connection (notice journal)
   participant B as Router on machine B
-  Clock->>Fleet: 10:05: admit every due firing once, group by machine, freeze one batch each (THE CUTOFF)
-  Fleet->>Conn: notice "batch ready" (Fleet to Delivery, an edge that exists)
-  Conn-->>B: hint over B's socket (held in the journal while B is offline)
-  B->>Fleet: fetch batch, plus instruction or message content by reference (Session to Fleet)
-  B->>B: per entry: receipt + today's queued work, in one local transaction
+  Clock->>Fleet: 10:05: admit firings due by 10:05, freeze one batch per machine (THE CUTOFF), queue the next mark's job
+  Fleet->>Conn: notice "batch ready" (a wake-up hint only)
+  Conn-->>B: hint over B's socket
+  B->>Fleet: list my unconfirmed batches (also on every connect, and if notices were missed)
+  B->>Fleet: fetch batch, plus instruction or message by reference
+  B->>B: store every entry locally: receipt + queued work, in one transaction
+  B->>Fleet: confirm batch (central keeps it until this)
   B->>Fleet: FiringReport(seq) for each state change
 </script></ex-mermaid>
+<p>Every arrow is a call central already allows, in its one-way order. If B is off for a week or more and its notices have aged out, nothing is lost: on reconnect it asks for its unconfirmed batches, and central still has them.</p>
 <p>Every arrow is an object-to-object call central already allows, in its one-way order. Nothing new is added to the call graph.</p>
 
 <h2 id="grid">The grid</h2>
@@ -81,10 +84,10 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> pending
   pending --> cancelled: pause or cancel before the cutoff
-  pending --> held: frozen into a batch, notice appended
+  pending --> held: frozen into a batch, waiting for the machine
   pending --> unknown: notice answer lost
   unknown --> held: reconciled
-  held --> received: machine fetched the batch
+  held --> received: machine stored it and confirmed
   received --> delivered: wake reached its session
   received --> expired: wake's end passed while held
   received --> runStarted: schedule
@@ -103,13 +106,13 @@ stateDiagram-v2
 <p>Reports from the machine carry a sequence number, stored on the machine together with each state change, so a restart continues it. Central applies them in order, ignores repeats and older ones, and never moves a finished firing back.</p>
 
 <h2 id="clock">How the clock works (Cloudflare and Tokio)</h2>
-<p><strong>There's no polling loop.</strong> The clock is one standing job in central's durable journal. Creating, changing or moving an automation makes sure that job exists and moves its next run earlier if needed, in the same transaction. The job reschedules itself after each run and stops when there's nothing left. The Fleet object has one alarm, shared with its other work through <code>AlarmOwner</code>, which only ever moves it earlier. Cloudflare calls <code>alarm()</code> at that time. Cloudflare alarms can arrive <strong>more than once</strong>, so admission is keyed by automation and due time, and a repeat admits nothing new and resends the same bytes. On self-hosted Tokio, the same wake request is a timer.</p>
+<p><strong>There's no polling loop.</strong> The clock is <strong>one journal job per 5-minute mark that has work</strong>, named for that mark. Creating, changing or moving an automation queues the job for its next mark, in the same transaction. Each job sends only what's due by its mark, never earlier, then queues the jobs for the next marks. An earlier edit just queues an earlier job, and a later job with nothing left to do finishes instantly. The Fleet object has one alarm, shared with its other work through <code>AlarmOwner</code>, which only ever moves it earlier. Cloudflare calls <code>alarm()</code> at that time. Cloudflare alarms can arrive <strong>more than once</strong>, so admission is keyed by automation and due time, and a repeat admits nothing new and resends the same bytes. On self-hosted Tokio, the same wake request is a timer.</p>
 <ex-mermaid id="clock-flow" label="Alarm path"><script type="text/plain">
 flowchart TD
   cf["Cloudflare at the grid mark"] --> alarm["DurableObject alarm()"]
   alarm --> drive["durable steps: drive_due()"]
   drive --> admit["one transaction: admit due firings,<br/>freeze batches, record send step,<br/>set next wake"]
-  admit --> send["notice step: Fleet → Delivery, per batch"]
+  admit --> send["notice step: Fleet → Delivery, per batch<br/>+ queue next mark's job"]
   send --> idle["object idles until the next mark with work"]
 </script></ex-mermaid>
 <p>The notice journal runs on its own alarm, so one batch is a few object events, not one. The <a href="firing-options.html">cost page</a> keeps that as a planning model until it's measured.</p>

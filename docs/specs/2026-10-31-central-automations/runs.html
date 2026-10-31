@@ -28,13 +28,14 @@
 <h2 id="path">From inbox to session</h2>
 <ex-mermaid id="runs-flow" label="Receiving path"><script type="text/plain">
 flowchart TD
-  inbox["batch ready notice<br/>→ fetch batch + content from central"] --> entry["for each entry"]
+  inbox["on connect or notice: list unconfirmed batches<br/>→ fetch batch + content"] --> entry["for each entry"]
   entry --> seen{"receipt for this firing?"}
   seen -->|"yes"| cont["its owed work already exists:<br/>today's drivers keep going"]
   seen -->|"no"| exp{"wake past its end?"}
   exp -->|"yes"| expired["record expired"]
   exp -->|"no"| txn["ONE local transaction:<br/>local copy of the definition<br/>+ receipt + today's queued work<br/>(wake delivery row, or run ready to start)"]
   txn --> drivers["today's drivers:<br/>wake delivery sender / run driver"]
+  txn --> ack["confirm the batch to central"]
   drivers --> rep["FiringReport(seq)<br/>durable, retried until accepted"]
 </script></ex-mermaid>
 

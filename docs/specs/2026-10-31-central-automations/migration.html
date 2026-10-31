@@ -30,8 +30,8 @@
 sequenceDiagram
   participant L as Machine (local)
   participant C as Central (Fleet)
-  L->>L: ONE local transaction: stop admitting, record the timer mark (last ORIGINAL due time evaluated), fit timing to the grid, FREEZE the payload
-  Note over L: wait until this automation's local work is finished (running or waiting runs, wake deliveries)
+  L->>L: ONE local transaction: stop admitting, record the timer mark, hand a not-yet-started waiting run to central, name any run still running or uncertain as still occupying, fit timing, FREEZE the payload
+  Note over L: a run still running or uncertain keeps going locally
   L->>C: AutomationImport (the frozen bytes, the same on every retry)
   alt new
     C-->>L: imported
@@ -41,7 +41,8 @@ sequenceDiagram
     C-->>L: importConflict (stays pending, reported, fires nowhere)
   end
   L->>L: mark moved
-  C->>C: fires only ORIGINAL due times after the timer mark, then rounds them
+  C->>C: fires only ORIGINAL due times after the timer mark, at their rounded time
+  L-->>C: LocalRunSettled when the old run truly finishes, which frees the schedule
 </script></ex-mermaid>
 
 <h2 id="fit">Fitting timing to the new rules</h2>
@@ -61,7 +62,7 @@ sequenceDiagram
 
 <h2 id="why-safe">Why it's safe</h2>
 <ul>
-  <li><strong>One owner:</strong> the machine stops admitting <em>before</em> anything is sent, and each automation moves only once its local work is finished.</li>
+  <li><strong>One owner, no waiting:</strong> the machine stops admitting <em>before</em> anything is sent. A run that's still going, or whose outcome is uncertain, keeps holding its schedule. Central starts nothing for that schedule until the machine reports the run truly finished.</li>
   <li><strong>No double fire from rounding:</strong> central compares <em>original</em> due times with the machine's timer mark. A one-shot the machine fired at 10:02 can't fire again at 10:05.</li>
   <li><strong>Crash at any step:</strong> it resumes with the same frozen bytes, and central answers a repeat with <code>alreadyImported</code>.</li>
   <li><strong>Old releases:</strong> a machine still on the old release never imports. It keeps firing its own schedules until it upgrades, and central never fires them.</li>
