@@ -319,11 +319,11 @@ async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visi
             // The narrow body cannot show all three wrapped notices together.
             // Navigate the same failed editor; keep the error and both warnings reachable.
             (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Up)),
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
                 None,
             ),
             (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Up)),
+                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
                 Some("Weekly floor".into()),
             ),
             (
