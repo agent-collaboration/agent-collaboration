@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rmdir, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
 import * as z from "zod/mini";
 import { modelReasoningSchema } from "../src/model-metadata.ts";
 
 await test("embedded lifecycle decorators admit fresh replacements and reject retired results", async (): Promise<void> => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "model-entry-test-"));
   const source = await readFile(
     new URL("../../../crates/acp-provider-adapters/src/claude_metadata.mjs", import.meta.url),
     "utf8",
@@ -25,6 +28,7 @@ await test("embedded lifecycle decorators admit fresh replacements and reject re
     {
       env: {
         ...process.env,
+        TMPDIR: temporaryRoot,
         ANTHROPIC_BASE_URL: "http://127.0.0.1:31415/anthropic",
         ANTHROPIC_AUTH_TOKEN: "fixture-host-token",
       },
@@ -87,6 +91,15 @@ await test("embedded lifecycle decorators admit fresh replacements and reject re
     assert.equal(code, 0, stderr);
     assert.equal(signal, null);
   } finally {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGTERM");
+      await exit;
+    }
+    for (const entry of await readdir(temporaryRoot)) {
+      const directory = join(temporaryRoot, entry);
+      for (const file of await readdir(directory)) await unlink(join(directory, file));
+      await rmdir(directory);
+    }
+    await rmdir(temporaryRoot);
   }
 });

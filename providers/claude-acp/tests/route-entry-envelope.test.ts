@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rmdir, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test } from "node:test";
 import * as z from "zod/mini";
@@ -40,6 +42,7 @@ async function runEntry(
   methods: string[] = [...lifecycleMethods, "setSessionConfigOption"],
   modelConfig?: string,
 ): Promise<z.infer<typeof envelopeSchema>> {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "route-entry-test-"));
   const source = await readFile(
     new URL("../../../crates/acp-provider-adapters/src/claude_metadata.mjs", import.meta.url),
     "utf8",
@@ -47,6 +50,7 @@ async function runEntry(
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: "/synthetic-route-home",
+    TMPDIR: temporaryRoot,
     ANTHROPIC_BASE_URL: hostRoute.ANTHROPIC_BASE_URL,
     ANTHROPIC_AUTH_TOKEN: hostRoute.ANTHROPIC_AUTH_TOKEN,
     ROUTER_ROUTE_FIXTURE_CASE: JSON.stringify({ params, methods }),
@@ -85,9 +89,35 @@ async function runEntry(
     assert.equal(code, 0, stderr);
     assert.equal(signal, null);
     assert.ok(row, stderr);
+    if (row.calls.length === 0) assert.deepEqual(await readdir(temporaryRoot), []);
+    // Retain the prior content/caller-contract assertions, now read from real files.
+    for (const call of row.calls) {
+      if (call.method === "setSessionConfigOption") continue;
+      const options = optionsFor(call.params);
+      const settingsPath = z.string().parse(options.settings);
+      const content: unknown = JSON.parse(await readFile(settingsPath, "utf8"));
+      const metadata = recordSchema.parse(call.params._meta);
+      const claude = recordSchema.parse(metadata.claudeCode);
+      call.params = {
+        ...call.params,
+        _meta: {
+          ...metadata,
+          claudeCode: { ...claude, options: { ...options, settings: content } },
+        },
+      };
+    }
     return row;
   } finally {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGTERM");
+      await exit;
+    }
+    for (const entry of await readdir(temporaryRoot)) {
+      const directory = join(temporaryRoot, entry);
+      for (const file of await readdir(directory)) await unlink(join(directory, file));
+      await rmdir(directory);
+    }
+    await rmdir(temporaryRoot);
   }
 }
 
@@ -278,6 +308,9 @@ const unsupportedMetadata: { params: unknown; reason: string }[] = [
     { settings: false },
     { settings: { env: [] } },
     { settings: { env: { PRIVATE: 42 } } },
+    { sandbox: {} },
+    { sandbox: null },
+    { sandbox: false },
   ].map((options) => ({
     params: { sessionId: "fixture", _meta: { claudeCode: { options } } },
     reason: "UnsupportedSdkOptions",
@@ -331,7 +364,12 @@ await test("Host capture is immutable and bounded, and preparation keeps unrelat
     });
   const nested = Object.freeze({ keep: Object.freeze(["same-reference"]) });
   const input = Object.freeze({ _meta: Object.freeze({ vendor: nested }) });
-  const result = prepareClaudeRoute(input, captured, undefined);
+  const result = prepareClaudeRoute({
+    params: input,
+    route: captured,
+    modelConfig: undefined,
+    writeSettings: () => "/synthetic-settings.json",
+  });
   assert.equal(result.kind, "prepared");
   if (result.kind === "prepared") {
     const metadata = recordSchema.parse(recordSchema.parse(result.params)._meta);

@@ -1,4 +1,6 @@
 import * as z from "zod/mini";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const methodNames = ["newSession", "loadSession", "resumeSession", "setSessionConfigOption"];
 const methodSchema = z.enum(methodNames);
@@ -10,6 +12,32 @@ function freezeInput(value: unknown): void {
   Object.freeze(value);
 }
 
+function recordSdkLaunch(options: Record<string, unknown>, sdkLaunches: unknown[]): void {
+  if (process.env.ROUTER_ROUTE_FIXTURE_SPAWN !== "1") return;
+  {
+    // Literal pinned SDK string-versus-object rule; harmless Node replaces native Claude.
+    const argument =
+      typeof options.settings === "string" ? options.settings : JSON.stringify(options.settings);
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--eval",
+        "process.stdout.write(JSON.stringify(process.argv.slice(1)))",
+        "--",
+        "--settings",
+        String(argument),
+      ],
+      { encoding: "utf8", timeout: 2000 },
+    );
+    if (child.status !== 0) throw new Error("Harmless SDK argv fixture failed");
+    const argv: unknown = JSON.parse(child.stdout);
+    sdkLaunches.push({
+      argv,
+      debugText: `Spawning Claude Code process: --settings ${String(argument)}`,
+    });
+  }
+}
+
 export function runAcp(): {
   agent: Record<string, unknown>;
   connection: { closed: Promise<void> };
@@ -18,6 +46,9 @@ export function runAcp(): {
   freezeInput(scenario.params);
   const before = JSON.stringify(scenario.params);
   const calls: unknown[] = [];
+  const settingsPaths: string[] = [];
+  const priorFilesAvailable: boolean[] = [];
+  const sdkLaunches: unknown[] = [];
   const forbiddenAccesses: string[] = [];
   const query = new Proxy(
     {},
@@ -54,6 +85,17 @@ export function runAcp(): {
       params: unknown,
     ): Promise<unknown> {
       calls.push({ method: name, params, sameReceiver: this === agent });
+      if (name !== "setSessionConfigOption") {
+        const request = z.record(z.string(), z.unknown()).parse(params);
+        const metadata = z.record(z.string(), z.unknown()).parse(request._meta);
+        const claude = z.record(z.string(), z.unknown()).parse(metadata.claudeCode);
+        const options = z.record(z.string(), z.unknown()).parse(claude.options);
+        if (typeof options.settings === "string") settingsPaths.push(options.settings);
+        priorFilesAvailable.push(settingsPaths.every((path) => existsSync(path)));
+        recordSdkLaunch(options, sdkLaunches);
+        if (process.env.ROUTER_ROUTE_FIXTURE_REJECT === name)
+          throw new Error("Controlled delegate rejection");
+      }
       return { sessionId: "fixture", configOptions, _meta: { vendorResult: "kept" } };
     };
   }
@@ -73,6 +115,8 @@ export function runAcp(): {
       process.stdout.write(
         `${JSON.stringify({
           calls,
+          priorFilesAvailable,
+          sdkLaunches,
           results,
           forbiddenAccesses,
           inputUnchanged: before === JSON.stringify(scenario.params),

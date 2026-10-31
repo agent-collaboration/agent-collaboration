@@ -37,18 +37,27 @@ function publicEnvironment(value: unknown): Record<string, string | undefined> |
   return parsed.success ? parsed.data : undefined;
 }
 
-export function prepareClaudeRoute(
-  params: unknown,
-  route: HostClaudeRoute,
-  modelConfig: string | undefined,
-): SessionCreationPreparationResult {
+interface RoutePreparationInputs {
+  readonly params: unknown;
+  readonly route: HostClaudeRoute;
+  readonly modelConfig: string | undefined;
+  readonly writeSettings: (contents: string) => string;
+}
+
+export function prepareClaudeRoute({
+  params,
+  route,
+  modelConfig,
+  writeSettings,
+}: RoutePreparationInputs): SessionCreationPreparationResult {
   const request = publicRecord(params);
   const metadata = request?._meta == null ? {} : publicRecord(request._meta);
   const claude = metadata?.claudeCode === undefined ? {} : publicRecord(metadata.claudeCode);
   if (request === undefined || metadata === undefined || claude === undefined)
     return { kind: "unsupported", reason: "MalformedMetadata" };
   const options = claude.options === undefined ? {} : publicRecord(claude.options);
-  if (options === undefined) return { kind: "unsupported", reason: "UnsupportedSdkOptions" };
+  if (options === undefined || options.sandbox !== undefined)
+    return { kind: "unsupported", reason: "UnsupportedSdkOptions" };
 
   // Stock0.81 validates the post-policy config even when caller settings win.
   let configuredModels: Record<string, unknown> = {};
@@ -89,6 +98,17 @@ export function prepareClaudeRoute(
     CLAUDE_CODE_OAUTH_TOKEN: "",
     ANTHROPIC_CUSTOM_HEADERS: "",
   };
+  let serializedSettings: string;
+  try {
+    serializedSettings = JSON.stringify({
+      ...settings,
+      apiKeyHelper: "",
+      env: { ...settingsEnvironment, ...routeEnvironment },
+    });
+  } catch {
+    return { kind: "unsupported", reason: "UnsupportedSdkOptions" };
+  }
+  const settingsPath = writeSettings(serializedSettings);
   return {
     kind: "prepared",
     params: {
@@ -100,11 +120,7 @@ export function prepareClaudeRoute(
           options: {
             ...options,
             env: { ...environment, ...routeEnvironment },
-            settings: {
-              ...settings,
-              apiKeyHelper: "",
-              env: { ...settingsEnvironment, ...routeEnvironment },
-            },
+            settings: settingsPath,
           },
         },
       },

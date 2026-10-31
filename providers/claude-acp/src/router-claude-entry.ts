@@ -6,6 +6,7 @@ import type { MetadataQuery } from "./skill-metadata.ts";
 import { ModelMetadataDecorator, decorateSessionMethods } from "./model-metadata.ts";
 import type { ModelMetadataSession } from "./model-metadata.ts";
 import { captureHostRoute, prepareClaudeRoute } from "./route-preparation.ts";
+import { SettingsFiles } from "./settings-files.ts";
 
 function isPublicObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -24,6 +25,7 @@ const [libraryUrl, sdkUrl] = z
   .tuple([z.url().check(z.startsWith("file:")), z.url().check(z.startsWith("file:"))])
   .parse(process.argv.slice(1));
 const hostRoute = captureHostRoute(process.env);
+const settingsFiles = new SettingsFiles();
 const sdk: unknown = await import(sdkUrl);
 const resolveSettings = publicFunction(publicObject(sdk).resolveSettings);
 const policy = z
@@ -82,7 +84,12 @@ function modelSession(sessionId: string): ModelMetadataSession | undefined {
 }
 const modelMetadata = new ModelMetadataDecorator({ currentSession: modelSession });
 decorateSessionMethods(agent, modelMetadata, (params) =>
-  prepareClaudeRoute(params, hostRoute, process.env.CLAUDE_MODEL_CONFIG),
+  prepareClaudeRoute({
+    params,
+    route: hostRoute,
+    modelConfig: process.env.CLAUDE_MODEL_CONFIG,
+    writeSettings: (contents) => settingsFiles.writeSettings(contents),
+  }),
 );
 function currentQuery(sessionId: string): MetadataQuery | undefined {
   const sessions = publicObject(agent.sessions);
