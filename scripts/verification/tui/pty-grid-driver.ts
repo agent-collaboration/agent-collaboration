@@ -26,6 +26,7 @@ interface WaitingLine {
 }
 export interface PtyGridTarget {
 	readonly node?: ArtifactBinding;
+	readonly product?: ArtifactBinding;
 	readonly repository: string;
 	readonly driver: string;
 	readonly surface:
@@ -93,6 +94,8 @@ export class PtyGridDriver {
 				cwd: target.repository,
 				env: {
 					...process.env,
+					TUI_GRID_PRODUCT_BINARY: target.product?.path,
+					TUI_GRID_PRODUCT_SHA256: target.product?.sha256,
 					...(target.node === undefined
 						? {}
 						: {

@@ -8,6 +8,7 @@ use super::terminal_interaction_test::{KeyboardProtocol, TerminalDriver};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, Write};
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub(super) fn emit(line: &str) -> TestResult<()> {
@@ -31,6 +32,30 @@ fn decode_hex(encoded: &str) -> TestResult<Vec<u8>> {
 }
 fn encode_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+fn verify_product_binary(path: &Path, expected: &str) -> TestResult<()> {
+    ensure(
+        path.is_absolute() && std::fs::canonicalize(path)? == path && path.is_file(),
+        "product binary must be an explicit canonical absolute file",
+    )?;
+    ensure(
+        super::capture_support::digest_file(path)? == expected,
+        "declared product binary SHA256 mismatch",
+    )
+}
+fn nominated_product_binary(
+    path: Option<&OsStr>,
+    digest: Option<&str>,
+) -> TestResult<Option<PathBuf>> {
+    match (path, digest) {
+        (None, None) => Ok(None),
+        (Some(path), Some(digest)) => {
+            let path = PathBuf::from(path);
+            verify_product_binary(&path, digest)?;
+            Ok(Some(path))
+        }
+        _ => Err("product binary path and SHA256 must be nominated together".into()),
+    }
 }
 pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let surface = std::env::var("TUI_GRID_SURFACE")?;
@@ -79,6 +104,18 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let receipt_path = std::env::var_os("TUI_GRID_COMPONENT_RECEIPT");
     let release_path = std::env::var_os("TUI_GRID_COMPONENT_RELEASE");
     let component = matches!(surface.as_str(), "normal" | "hard");
+    let product_path = std::env::var_os("TUI_GRID_PRODUCT_BINARY");
+    let product_digest = match std::env::var("TUI_GRID_PRODUCT_SHA256") {
+        Ok(digest) => Some(digest),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => return Err(error.into()),
+    };
+    let product_binary =
+        nominated_product_binary(product_path.as_deref(), product_digest.as_deref())?;
+    ensure(
+        !(component && product_binary.is_some()),
+        "product and component binaries cannot be mixed",
+    )?;
     let mut environment: Vec<(&str, &OsStr)> = Vec::new();
     let sessions_receipt_directory = std::env::var_os("TUI_SESSIONS_FIXTURE_RECEIPT_DIR");
     if let Some(directory) = sessions_receipt_directory.as_deref() {
@@ -128,6 +165,8 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         component_binary
             .as_deref()
             .ok_or("component binary required")?
+    } else if let Some(product_binary) = &product_binary {
+        product_binary.as_os_str()
     } else {
         OsStr::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness"))
     };
@@ -138,6 +177,12 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         &environment,
     )?;
     let outcome = drive_terminal(terminal, protocol)?;
+    if let Some(path) = &product_binary {
+        verify_product_binary(
+            path,
+            product_digest.as_deref().ok_or("product digest absent")?,
+        )?;
+    }
     if component {
         let receipt = std::fs::read_to_string(
             receipt_path
@@ -171,6 +216,43 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         outcome.bytes
     ))?;
     Ok(())
+}
+
+#[test]
+fn split_source_product_binding_rejects_missing_wrong_or_changed_artifact() -> TestResult<()> {
+    let directory =
+        std::env::temp_dir().join(format!("grid-product-binding-{}", std::process::id()));
+    std::fs::create_dir(&directory)?;
+    let directory = std::fs::canonicalize(directory)?;
+    let path = directory.join("picker-fixture");
+    std::fs::write(&path, b"declared product")?;
+    let result = (|| {
+        let digest = super::capture_support::digest_file(&path)?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), Some(&digest))? == Some(path.clone()),
+            "explicit product was not selected",
+        )?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), None).is_err(),
+            "missing SHA256 accepted",
+        )?;
+        ensure(
+            nominated_product_binary(None, Some(&digest)).is_err(),
+            "missing path accepted",
+        )?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), Some(&"0".repeat(64))).is_err(),
+            "wrong artifact accepted",
+        )?;
+        std::fs::write(&path, b"changed product")?;
+        ensure(
+            verify_product_binary(&path, &digest).is_err(),
+            "artifact replacement went undetected",
+        )
+    })();
+    std::fs::remove_file(path)?;
+    std::fs::remove_dir(directory)?;
+    result
 }
 
 fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {

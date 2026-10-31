@@ -27,7 +27,7 @@ import type { OptionNavigationPlan } from './option-navigation-plan.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { KeyProtocol } from './pty-grid-driver.ts';
-import { canonicalJson, sourceBinding, verifyArtifact } from './source-binding.ts';
+import { canonicalJson, sourceBinding, sourceDigest, verifyArtifact } from './source-binding.ts';
 import { readSourceQualifiedOutcome } from './source-qualified-outcome.ts';
 import { gridLines } from './terminal-grid.ts';
 import { renderOriginal } from './terminal-original.ts';
@@ -81,6 +81,13 @@ export async function checkOptionNavigationTarget(plan: OptionNavigationPlan): P
 	if (canonicalJson(sourceBinding(plan.repository)) !== canonicalJson(plan.source))
 		throw new Error('declared S6b source snapshot changed');
 	if (
+		canonicalJson(sourceBinding(plan.driverSource.repository)) !==
+			canonicalJson(plan.driverSource.source) ||
+		sourceDigest(plan.driverSource.source) !== plan.driverSourceDigest ||
+		sourceDigest(plan.source) !== plan.productSourceDigest
+	)
+		throw new Error('declared driver/product source digests changed');
+	if (
 		canonicalJson(sourceBinding(plan.observer.repository)) !== canonicalJson(plan.observer.source)
 	)
 		throw new Error('declared observer source changed');
@@ -117,6 +124,7 @@ async function observeCase(
 	mkdirSync(receiptsDirectory);
 	const driver = await PtyGridDriver.start({
 		node: plan.node,
+		product: plan.product,
 		repository: plan.repository,
 		driver: plan.driver.path,
 		surface: 'sessions-filters',
