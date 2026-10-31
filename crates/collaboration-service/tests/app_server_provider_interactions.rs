@@ -81,6 +81,16 @@ async fn app_server_approver_decides_exact_option_and_answers_question() -> Test
             .as_str()
             .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
     );
+    let skill_invalidation: Value = serde_json::from_str(
+        tokio::time::timeout(Duration::from_secs(2), client.next())
+            .await?
+            .ok_or("initial skill invalidation")??
+            .to_text()?,
+    )?;
+    assert_eq!(
+        skill_invalidation,
+        json!({"method":"skills/changed","params":{}})
+    );
     let request = ApprovalRequest {
         request_id: "approval-1".into(),
         title: "Run checks".into(),

@@ -12,6 +12,17 @@ export async function runFixture(): Promise<void> {
   for (;;) {
     const request = await agent.readRequest();
     if (request === undefined) break;
+    if (request.method === "cursor/list_available_models") {
+      agent.send({
+        jsonrpc: "2.0",
+        id: request.id,
+        error: {
+          code: -32601,
+          message: "Model discovery is unsupported by this source policy fixture",
+        },
+      });
+      continue;
+    }
     assert.ok(["session/new", "session/load", "session/resume"].includes(String(request.method)));
     appendFileSync(log, `${wireJson(request)}\n`);
     agent.respond(
