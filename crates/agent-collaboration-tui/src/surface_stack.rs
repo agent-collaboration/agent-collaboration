@@ -244,9 +244,13 @@ impl SurfaceStack {
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
     }
-    #[cfg(test)]
-    pub(crate) fn set_overlay_layout_for_test(&mut self, id: OverlayId, layout: OverlayLayout) {
-        if let Some(overlay) = self.overlays.iter_mut().find(|overlay| overlay.id == id) {
+    pub(crate) fn set_overlay_layout_if_open(&mut self, id: OverlayId, layout: OverlayLayout) {
+        if let Some(overlay) = self
+            .overlays
+            .iter_mut()
+            .chain(self.suspended_dropdown.iter_mut())
+            .find(|overlay| overlay.id == id)
+        {
             overlay.layout = layout;
         }
     }

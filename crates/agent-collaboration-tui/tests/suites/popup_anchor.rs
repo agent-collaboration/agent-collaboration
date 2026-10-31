@@ -115,6 +115,7 @@ mod tests {
                     stack,
                     surface: SurfaceId::Screen,
                 },
+                parent_scroll: None,
                 field: anchor_target(false),
                 value,
                 on_pick: Handler::from(move |key| picks.lock().unwrap().push(key)),

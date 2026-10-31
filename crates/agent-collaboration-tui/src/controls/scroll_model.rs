@@ -106,6 +106,8 @@ impl ScrollHandle {
             .get(target_id)
             .cloned();
         if let Some(target) = target {
+            // New explicit input must reveal a target displaced by manual scrolling.
+            self.forget_reveal(target.clone());
             self.reveal(target);
         }
     }
