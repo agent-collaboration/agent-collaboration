@@ -18,6 +18,7 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
+crossterm.workspace = true
 futures-util.workspace = true
 tokio.workspace = true
 unicode-width-legacy = { package = "unicode-width", version = "=0.1.14" }

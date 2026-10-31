@@ -23,14 +23,16 @@ use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
 #[derive(Props)]
 pub struct ShowcaseProps {
+    #[iocraft(required)]
+    pub initial_width: u16,
+    #[iocraft(required)]
+    pub initial_height: u16,
     #[cfg(all(feature = "test-support", debug_assertions))]
     pub receipts: Option<super::sample_receipts::SampleReceipts>,
 }
 #[component]
 pub fn Showcase(props: &ShowcaseProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    #[cfg(not(all(feature = "test-support", debug_assertions)))]
-    let _ = props;
-    let (width, height) = hooks.use_terminal_size();
+    let (width, height) = (props.initial_width, props.initial_height);
     let data = SampleData {
         model: hooks.use_state(SampleModel::default),
         filter: hooks.use_state(TextFieldState::default),

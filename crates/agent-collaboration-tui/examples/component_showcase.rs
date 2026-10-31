@@ -39,10 +39,12 @@ async fn main() -> io::Result<()> {
             "receipt support requires a debug test-support build",
         ));
     }
+    let (initial_width, initial_height) = crossterm::terminal::size()?;
     #[cfg(all(feature = "test-support", debug_assertions))]
-    let mut app = element!(sample_screen::Showcase(receipts: receipts.clone()));
+    let mut app =
+        element!(sample_screen::Showcase(initial_width,initial_height,receipts: receipts.clone()));
     #[cfg(not(all(feature = "test-support", debug_assertions)))]
-    let mut app = element!(sample_screen::Showcase);
+    let mut app = element!(sample_screen::Showcase(initial_width, initial_height));
     #[cfg(all(feature = "test-support", debug_assertions))]
     let render = app
         .render_loop()

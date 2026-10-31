@@ -245,6 +245,7 @@ dependencies = [
 name = "agent-collaboration-tui"
 version = "0.1.118"
 dependencies = [
+ "crossterm",
  "futures-util",
  "iocraft",
  "serde",

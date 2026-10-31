@@ -4,6 +4,11 @@ An ordinary public-control consumer with local keyed fixtures and recording effe
 It does not contact a Router, provider, account store or native session. Menu and
 toolbar expose the demonstrations; there is no shortcut footer or second dispatcher.
 
+Terminal size is read once at launch and passed to InputOwner. Later Resize events
+use InputOwner's existing subscription; the sample installs no terminal-event or
+terminal-size hooks. Sample R5 lint enforcement arrives with S8's crate
+`clippy.toml`, including its `--examples` check.
+
 Run the app from the repository root:
 
 ```sh
