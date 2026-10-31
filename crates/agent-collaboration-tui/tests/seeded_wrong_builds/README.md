@@ -163,3 +163,11 @@ T4 replaces the old same-row secondary clipping rule with a full secondary line 
 | `menu-reason-not-right-aligned.patch` | The menu reason leaves space before its primary key instead of aligning to that column. |
 | `menu-reason-crowds-title.patch` | A natural-width menu leaves only one separating cell between title and reason. |
 | `menu-reason-wrong-colour.patch` | The menu reason loses the muted foreground role. |
+| `field-reason-inline.patch` | The disabled reason shares the editor row and steals its width. |
+| `field-reason-wrong-colour.patch` | The disabled reason loses its muted foreground. |
+| `field-reason-nowrap.patch` | A disabled reason clips instead of wrapping below the editor. |
+| `button-always-shows-key.patch` | A button prints its primary key despite its local hidden-hint preference. |
+| `button-hidden-key-drops-binding.patch` | The hidden-hint scenario loses the live Left binding while metadata and Help retain it. |
+| `dialog-body-bottom-aligned.patch` | A fixed-height dialog puts spare blank rows above its body instead of below it. |
+
+T9 changes the disabled editor fixture from one row to two so its reason can occupy the approved next row; the value style and ignored-input assertions remain. T7 replaces the former fixed-dialog body/footer adjacency assertion with a pinned-footer and empty-space-below-body assertion. Content-sized forms retain their exact one-row footer gap, and fixed frame sizes remain asserted.

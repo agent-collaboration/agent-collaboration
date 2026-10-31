@@ -210,9 +210,9 @@ pub fn TextField(props: &TextFieldProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let disabled = !availability.is_available();
     let focused = context.is_focused(&props.id) && !disabled;
     let value = props.value.read().clone();
-    element!(View(width:100pct,min_height:1,overflow:Overflow::Hidden,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+    element!(View(width:100pct,min_height:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
         EditorLine(value,focused,disabled,placeholder:props.placeholder.clone())
-        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(View(flex_shrink:0.0_f32) {Text(content:reason,color:theme.foreground(TextRole::Disabled))}))})
+        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(View(width:100pct,flex_shrink:0.0_f32) {Text(content:reason,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))}))})
     })
 }
 #[component]

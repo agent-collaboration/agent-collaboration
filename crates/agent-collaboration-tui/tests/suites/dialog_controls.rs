@@ -79,22 +79,35 @@ mod tests {
                     let directory = row(&driver, "Directory");
                     let status = row(&driver, "Status");
                     let available = row(&driver, "Available");
-                    if form {
-                        assert_eq!(
-                            connection,
-                            title + 2,
-                            "one blank row separates pinned context from the form body"
-                        );
-                    }
+                    assert_eq!(
+                        connection,
+                        title + 2,
+                        "body starts below the pinned header and one gap; spare space follows the body"
+                    );
                     assert_eq!(client, connection + 1);
                     assert_eq!(directory, client + 1);
                     assert_eq!(status, directory + 2);
                     assert_eq!(available, status + 1);
-                    assert_eq!(
-                        actions,
-                        available + 2,
-                        "exactly one blank row before actions"
-                    );
+                    if form {
+                        assert_eq!(
+                            actions,
+                            available + 2,
+                            "content-sized form has exactly one blank row before actions"
+                        );
+                    } else {
+                        assert!(
+                            actions >= available + 2,
+                            "fixed dialog reserves the footer after the body"
+                        );
+                        for empty in available + 1..actions {
+                            assert!(
+                                grid.row_text(empty)
+                                    .chars()
+                                    .all(|cell| cell.is_whitespace() || cell == '│'),
+                                "spare space follows body content"
+                            );
+                        }
+                    }
                     let client_origin = grid.cells[client]
                         .iter()
                         .position(|cell| cell.text == "B")

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+@@ -170,3 +170,3 @@ pub fn DialogFrame<'a>(
+             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
+-            ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:false,children)
++            ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:!content_height,children)
+         }

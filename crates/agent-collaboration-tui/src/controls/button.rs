@@ -29,6 +29,8 @@ pub struct ButtonProps {
     #[iocraft(required)]
     pub action: ActionId,
     pub glyph: Option<UiGlyph>,
+    /// Hides only this button's printed key hint; unset keeps the default hint.
+    pub show_key: Option<bool>,
 }
 #[component]
 pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -65,11 +67,11 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         #(props.glyph.map(|glyph|element!(Text(content:glyph.text(),color:theme.foreground(role)))))
         #(primary.then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Primary)))))
         Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::Underline}else{TextDecoration::None})
-        #(action.keys.first().map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
+        #(action.keys.first().filter(|_|props.show_key.unwrap_or(true)).map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
         #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
     }}.into_any()
 }
 #[component]
 pub fn MenuButton(props: &ButtonProps) -> impl Into<AnyElement<'static>> {
-    element!(Button(id:props.id.clone(),action:props.action.clone(),glyph:Some(UiGlyph::Menu)))
+    element!(Button(id:props.id.clone(),action:props.action.clone(),glyph:Some(UiGlyph::Menu),show_key:props.show_key))
 }
