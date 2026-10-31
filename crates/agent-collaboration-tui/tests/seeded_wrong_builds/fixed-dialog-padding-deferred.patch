@@ -1,0 +1,17 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+@@ -124,12 +124,7 @@ pub fn DialogFrame<'a>(
+     let padding_height = if content_height {
+         content_extent
+     } else {
+-        // Fixed bounds are resolved before mount and resize; a previous draw
+-        // must not move the content column or consume two body rows later.
+-        match sizing.map(|sizing| sizing.height) {
+-            Some(Size::Length(rows)) => u16::try_from(rows).unwrap_or(u16::MAX),
+-            _ => height.get(),
+-        }
++        height.get()
+     };
+     let padding = props.padding.unwrap_or(u16::from(padding_height >= 16));
+     // Size from the current body and measured chrome, never a previous body
