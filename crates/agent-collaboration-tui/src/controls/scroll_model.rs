@@ -32,6 +32,7 @@ pub struct ScrollHandle {
     position: Arc<Mutex<ScrollPosition>>,
     last_reveal: Arc<Mutex<Option<ScrollRevealTarget>>>,
     measured_targets: Arc<Mutex<HashMap<TargetId, ScrollRevealTarget>>>,
+    pending_reveal: Arc<Mutex<Option<TargetId>>>,
     stack: SurfaceStackHandle,
 }
 impl ScrollHandle {
@@ -40,6 +41,7 @@ impl ScrollHandle {
             position: Arc::new(Mutex::new(ScrollPosition::default())),
             last_reveal: Arc::new(Mutex::new(None)),
             measured_targets: Arc::new(Mutex::new(HashMap::new())),
+            pending_reveal: Arc::new(Mutex::new(None)),
             stack,
         }
     }
@@ -50,6 +52,10 @@ impl ScrollHandle {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
     pub fn reset(&self) {
+        *self
+            .pending_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         *self
             .last_reveal
             .lock()
@@ -96,20 +102,41 @@ impl ScrollHandle {
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(target_id, target);
         }
+        self.apply_pending_reveal();
     }
-    /// Use the last drawn row geometry before selection starts the next layout.
+    /// Reveal with drawn geometry, retaining unmeasured intent until that target appears.
     pub(super) fn reveal_measured(&self, target_id: &TargetId) {
-        let target = self
-            .measured_targets
+        *self
+            .pending_reveal
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(target_id)
-            .cloned();
-        if let Some(target) = target {
-            // New explicit input must reveal a target displaced by manual scrolling.
-            self.forget_reveal(target.clone());
-            self.reveal(target);
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(target_id.clone());
+        self.apply_pending_reveal();
+    }
+    fn apply_pending_reveal(&self) {
+        let position = self.position();
+        if position.viewport_height == 0 || position.natural_height == 0 {
+            return;
         }
+        let mut pending = self
+            .pending_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let target = pending.as_ref().and_then(|target_id| {
+            self.measured_targets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(target_id)
+                .filter(|target| target.height > 0)
+                .cloned()
+        });
+        let Some(target) = target else {
+            return;
+        };
+        *pending = None;
+        drop(pending);
+        // New explicit input must reveal a target displaced by manual scrolling.
+        self.forget_reveal(target.clone());
+        self.reveal(target);
     }
     pub(super) fn forget_reveal(&self, target: ScrollRevealTarget) {
         let mut previous = self
