@@ -410,7 +410,7 @@ export async function observeIsolation(
 							.join(''),
 					)
 					.join('\n');
-				if (!helpText.includes('Surface') || !helpText.includes('Sessions'))
+				if (!helpText.includes('Screen') || !helpText.includes('Sessions'))
 					throw new Error('shared Help lacks its Sessions context');
 				if (!hasText(driver.grid(), 'never quit')) {
 					const beforeScroll = driver.frameGeneration();
