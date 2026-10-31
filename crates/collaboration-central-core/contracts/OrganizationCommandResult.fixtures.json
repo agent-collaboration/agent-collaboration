@@ -1,0 +1,9 @@
+[
+{"result":"applied"},
+{"commandId":"019a3dce-2000-7000-8000-000000000002","result":"admitted"},
+{"reason":{"kind":"notOwner"},"result":"refused"},
+{"reason":{"kind":"notFound"},"result":"refused"},
+{"reason":{"kind":"conflict"},"result":"refused"},
+{"reason":{"kind":"recordUnwritable"},"result":"refused"},
+{"reason":{"kind":"secondFactorRequired","withinSeconds":900},"result":"refused"}
+]

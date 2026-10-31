@@ -1,0 +1,5 @@
+[
+{"harness":"codex","requestedPolicy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"},
+{"harness":"claude","requestedPolicy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"},
+{"harness":"cursor","requestedPolicy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"}
+]

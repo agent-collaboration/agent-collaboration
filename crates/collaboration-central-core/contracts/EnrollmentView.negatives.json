@@ -1,0 +1,13 @@
+[
+null,
+{"approvedAt":1793448000000,"approvedBy":"019a3dce-2000-7000-8000-000000000001","state":"enrolled","unexpectedField":true},
+{"approvedAt":1793448000000,"approvedBy":"019a3dce-2000-7000-8000-000000000001","state":"expired","unexpectedField":true},
+{"approvedAt":1793448000000,"approvedBy":"019a3dce-2000-7000-8000-000000000001","state":"revoked","unexpectedField":true},
+{"approvedAt":1793448000000,"approvedBy":"019a3dce-2000-7000-8000-000000000001","state":"unrecognizedVariant"},
+{"approvedAt":1793448000000,"approved_by":"019a3dce-2000-7000-8000-000000000001","state":"enrolled"},
+{"approvedAt":1793448000000,"approved_by":"019a3dce-2000-7000-8000-000000000001","state":"expired"},
+{"approvedAt":1793448000000,"approved_by":"019a3dce-2000-7000-8000-000000000001","state":"revoked"},
+{"approvedBy":"019a3dce-2000-7000-8000-000000000001","approved_at":1793448000000,"state":"enrolled"},
+{"approvedBy":"019a3dce-2000-7000-8000-000000000001","approved_at":1793448000000,"state":"expired"},
+{"approvedBy":"019a3dce-2000-7000-8000-000000000001","approved_at":1793448000000,"state":"revoked"}
+]

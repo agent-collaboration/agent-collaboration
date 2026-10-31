@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "AbsolutePath": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^/[^\\u0000]*$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "HarnessKind": {
+      "enum": [
+        "codex",
+        "claude",
+        "cursor"
+      ],
+      "type": "string"
+    },
+    "RemoteLaunchAccess": {
+      "enum": [
+        "write-restricted",
+        "workspace-write"
+      ],
+      "type": "string"
+    },
+    "RemoteLaunchPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/RemoteLaunchAccess"
+        }
+      },
+      "required": [
+        "access"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "harness": {
+      "$ref": "#/$defs/HarnessKind"
+    },
+    "requestedPolicy": {
+      "$ref": "#/$defs/RemoteLaunchPolicy"
+    },
+    "workingDirectory": {
+      "$ref": "#/$defs/AbsolutePath"
+    }
+  },
+  "required": [
+    "harness",
+    "workingDirectory",
+    "requestedPolicy"
+  ],
+  "title": "RemoteLaunch",
+  "type": "object"
+}
