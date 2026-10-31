@@ -1,0 +1,110 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delivery plan · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="mental-model.html">How it all fits</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Firing and mail</a>
+    <a href="firing-options.html">Firing options and cost</a>
+    <a href="runs.html">On the receiving machine</a>
+    <a href="notifications.html">Notifications</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+    <a href="delivery-plan.html">Delivery plan</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-delivery-plan">Delivery plan</h1>
+
+<p><strong>The design is reviewed and ready.</strong> The Advisor's final verdict covers all four documents. Open findings went 11 → 6 → 3 → 1 → 0, and the two raised by later additions are closed too. This page is the plan to build it: <strong>nine milestones, six parallel lanes, and a named proof for every promise.</strong> Building starts when you approve it.</p>
+
+<ex-callout title="Waiting on you: approve the plan" tone="decision" icon="users">
+  <p>Approve or change this plan. Nothing is built until you do. The database PR (M0) continues regardless.</p>
+</ex-callout>
+
+<h2 id="milestones">Milestones</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th></th><th>Milestone</th><th>Done when</th></tr></thead>
+<tbody>
+<tr><td>M0</td><td>PR 1: database retention, vacuum, WAL</td><td>packages green and pushed; <code>data-retention.md</code> matches your table (in progress, nearly done)</td></tr>
+<tr><td>M1</td><td>Contracts and limits</td><td>one limits module drives the schema, the validation, and what the CLI and MCP show</td></tr>
+<tr><td>M2</td><td>Central list and clock</td><td>create, list and change on central; the alarm fires on the grid, batches, and holds until confirmed; tests green on Cloudflare <strong>and</strong> Tokio</td></tr>
+<tr><td>M3</td><td>The receiving Router</td><td>pulls, stores and confirms batches; delivers wakes; runs schedules with the frozen instruction; reports back; crash tests pass</td></tr>
+<tr><td>M4</td><td>Command cutover</td><td><code>wake</code> and <code>schedule</code> go to central; the old cross-machine path is retired</td></tr>
+<tr><td>M5</td><td>Moving to central</td><td>your data's shape moves, with kills at every step: no loss, no double fire</td></tr>
+<tr><td>M6</td><td>Notifications once per 10 minutes</td><td>the rolling per-agent limit; DMs, wakes and approvals stay immediate</td></tr>
+<tr><td>M7</td><td>Republish the board design</td><td>the decision inventory, the hand-picked docs, and a clean public-safety scan</td></tr>
+<tr><td>M8</td><td>End-to-end proof</td><td>the two-machine rig runs every promise on <a href="proof.html">How it's proven</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Order and lanes</h2>
+<ex-mermaid id="plan-dag" label="Build order" data-width="canvas"><script type="text/plain">
+flowchart LR
+  M0["M0 database<br/>(running)"]
+  M1["M1 contracts<br/>+ limits"] --> M2["M2 central list<br/>+ clock + custody"]
+  M1 --> M3["M3 receiving<br/>Router"]
+  M2 --> M3
+  M2 --> M4["M4 command<br/>cutover"]
+  M3 --> M4
+  M3 --> M5["M5 move to<br/>central"]
+  M4 --> M5
+  M1 --> M6["M6 notifications"]
+  M7["M7 republish<br/>board design"]
+  V["Verifier: rig + conformance<br/>from day one"] -.->|"runs at each gate"| M8["M8 end-to-end<br/>proof"]
+  M5 --> M8
+  M6 --> M8
+  M0 --> M8
+  class M0 slot6
+  class M1,M2 slot1
+  class M3,M4,M5 slot2
+  class M6 slot3
+  class M7 slot4
+  class V slot5
+</script></ex-mermaid>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Lane</th><th>Milestones</th><th>Who</th></tr></thead>
+<tbody>
+<tr><td>Database</td><td>M0</td><td>the current database helper (Luna)</td></tr>
+<tr><td>Contracts → Central</td><td>M1 → M2</td><td>one Sol helper</td></tr>
+<tr><td>Router</td><td>M3 → M4 → M5</td><td>one Sol helper; starts right after M1, against a stand-in for central until M2 lands</td></tr>
+<tr><td>Notifications</td><td>M6</td><td>one Sol helper, after M1</td></tr>
+<tr><td>Docs republish</td><td>M7</td><td>one Luna helper plus a separate public-safety reviewer</td></tr>
+<tr><td>Verifier</td><td>M8</td><td>one Sol helper building the two-machine rig and conformance cases from day one</td></tr>
+</tbody>
+</table>
+</div>
+<p>Every helper runs on Sunclaw, created through the Station Chief, each in its own Agent Studio worktree. The Advisor is consulted at the central, receiving and migration boundaries. I integrate each lane at its gate.</p>
+
+<h2 id="gates">What "done" means at each gate</h2>
+<ul>
+  <li><strong>Every change:</strong> a test that fails first, then passes; deliberately broken builds that must fail; lint and format clean.</li>
+  <li><strong>Central:</strong> the full central package and conformance on both runtimes.</li>
+  <li><strong>Router:</strong> the storage, runtime, service and Host packages.</li>
+  <li><strong>Repository checks:</strong> the module-cycle check, the verification tooling, and file size limits.</li>
+  <li><strong>The real proof:</strong> the two-machine rig with Haiku sessions, running each promise exactly as the verification design states it.</li>
+  <li><strong>Merging:</strong> both PRs green, an independent review, a version bump, then merged together and released. Nobody restarts your production Router.</li>
+</ul>
+
+<h2 id="risks">Risks</h2>
+<ul>
+  <li><strong>Losing or doubling work at the migration, receive and confirm boundaries.</strong> This is the Advisor's top risk, so those three tests must pass on the real paths before anything is called working.</li>
+  <li><strong>The public repo:</strong> the old design branch's history is never pushed; only the hand-picked docs are.</li>
+  <li><strong>Turso migrations</strong> (the messages store) are tested on Turso temporary databases.</li>
+</ul>
+<p>The full plan for agents: <a href="plans/2026-10-31-central-automations-delivery.md">plans/2026-10-31-central-automations-delivery.md</a>.</p>
+</ex-document>
+
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Fitting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"}]</script></body></html>
