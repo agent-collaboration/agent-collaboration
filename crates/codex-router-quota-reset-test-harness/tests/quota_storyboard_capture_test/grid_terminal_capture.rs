@@ -414,7 +414,7 @@ fn sessions_wrapper_receipt_input_reaches_its_child_on_the_existing_pty_owner() 
         std::fs::create_dir(&directory)?;
         let configuration = fixture.root.join("configuration.json");
         let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/verification/tui/fixture-child.ts");
+            .join("../../scripts/verification/tui/fixtures/fixture-child.ts");
         let mut command = CommandBuilder::new(&fixture.node);
         command.args([wrapper.as_os_str(), configuration.as_os_str()]);
         command.env_clear();

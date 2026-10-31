@@ -8,7 +8,7 @@ S6b fixture forwarding and actual produced picker bytes remain unbound.
 
 ## Acknowledgements
 
-`scripts/verification/tui/input-consumption-schema.ts` models the exact five
+`scripts/verification/tui/sessions/input-consumption-schema.ts` models the exact five
 root fields: sequence/event/surface/target/action. Events use the producer's
 nested key and mouse tags. Text and paste have no payload fields; modifier arrays
 are unique and in producer order. Overlay IDs stay canonical decimal u64 strings;
@@ -100,7 +100,7 @@ new reader/ports only after the S6b fixture entry and exact target are declared.
 
 ```sh
 pnpm --dir scripts/verification/tui exec vitest run input-consumption-readback.test.ts input-consumption-file.test.ts source-qualified-outcome.test.ts new-start-oracle.test.ts
-node scripts/verification/tui/s9-prestage.ts --check
+node scripts/verification/tui/journeys/flows/flow-catalogue.ts --check
 ```
 
 Literal wire fixtures and controlled real-filesystem writers qualify schema,

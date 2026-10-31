@@ -19,7 +19,7 @@ receipt directory. No normal/release producer, sink, environment switch or
 terminal subscription; no extra event injection path.
 
 The reader now belongs at
-`scripts/verification/tui/input-consumption-readback.ts`. Bind it to the same
+`scripts/verification/tui/sessions/input-consumption-readback.ts`. Bind it to the same
 retained child and capture source/build receipt. A fresh process uses a fresh
 file; never accept another child's receipt, concatenate runs or overwrite old
 evidence. The writer is per InputOwner, not process-global.

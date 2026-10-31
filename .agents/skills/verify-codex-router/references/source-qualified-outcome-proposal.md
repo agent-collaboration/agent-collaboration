@@ -53,7 +53,7 @@ and ForkSession to their corresponding tags; `None` is cancelled. Other picker
 outcome variants must be explicitly reported as outside this U4 fixture case,
 never coerced into Resume/Fork or a fabricated target.
 
-The reader's home is `scripts/verification/tui/source-qualified-outcome.ts`,
+The reader's home is `scripts/verification/tui/sessions/source-qualified-outcome.ts`,
 with a strict schema and whole-value comparison to an independently declared
 fixture target. The implementation now exists against the adopted wire; real S6b byte
 binding remains pending. A wrong kind, missing target, unknown field,

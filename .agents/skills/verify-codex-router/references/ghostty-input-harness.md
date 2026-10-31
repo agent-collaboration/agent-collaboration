@@ -17,7 +17,7 @@ qualifier-controlled flag is substituted for that state during a product run.
 
 The route therefore uses the [kitty keyboard specification](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)
 plus a bounded Ghostty-compatible key subset in
-`scripts/verification/tui/ghostty-input-encoding.ts`. This does **not** execute
+`scripts/verification/tui/terminal/ghostty-input-encoding.ts`. This does **not** execute
 libghostty's own encoder. Only press events in `ghosttyKeySchema` are supported;
 arbitrary modifiers, key releases, layouts, locks and IME are outside this subset.
 Printable text uses code points and respects report-all/associated-text flags;
@@ -100,8 +100,8 @@ decoder ACKs are never a product pass. Physical Option delivery remains unverifi
 From the repository root:
 
 ```sh
-node scripts/verification/tui/ghostty-input-qualification.ts FRESH_OUTPUT.json
-node scripts/verification/tui/s9-prestage.ts --check
+node scripts/verification/tui/terminal/ghostty-input-qualification.ts FRESH_OUTPUT.json
+node scripts/verification/tui/journeys/flows/flow-catalogue.ts --check
 pnpm --dir scripts/verification/tui run typecheck
 pnpm --dir scripts/verification/tui run lint
 pnpm --dir scripts/verification/tui run format:check

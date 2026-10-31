@@ -101,9 +101,11 @@ impl FailureCapture {
             return Err("failure capture Node binding differs from its qualification".into());
         }
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/verification/tui/render-pty-failure-grid.ts");
+            .join("../../scripts/verification/tui/capture/render-pty-failure-grid.ts");
         if fs::read(&script)?
-            != include_bytes!("../../../../scripts/verification/tui/render-pty-failure-grid.ts")
+            != include_bytes!(
+                "../../../../scripts/verification/tui/capture/render-pty-failure-grid.ts"
+            )
         {
             return Err("failure capture renderer differs from its compiled source binding".into());
         }

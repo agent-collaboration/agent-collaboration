@@ -1,13 +1,13 @@
-import { absentAtBase, s9Reference } from '../s9-journey-definition.ts';
-import type { S9Journey } from '../s9-journey-definition.ts';
-export const quotaRefreshJourneys: readonly S9Journey[] = (
+import { absentAtBase, flowReference } from '../journeys/flows/flow-definition.ts';
+import type { FlowJourney } from '../journeys/flows/flow-definition.ts';
+export const quotaRefreshJourneys: readonly FlowJourney[] = (
 	['all-success', 'partial', 'all-failed', 'setup-failed'] as const
 ).map((outcome) => ({
 	journeyId: 'quota-refresh-' + outcome,
 	requirements: ['U17/R18'],
 	surface: 'quota',
 	availability: absentAtBase('S7'),
-	reference: s9Reference(
+	reference: flowReference(
 		'R6,R18; Program Design U17 typed account outcomes',
 		'U17: duplicate while held, real CLI adapter partial/all-failed/setup result mapping',
 	),

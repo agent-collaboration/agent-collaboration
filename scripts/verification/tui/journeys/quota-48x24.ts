@@ -1,5 +1,5 @@
 /** Ported input/checkpoint order; active-field readiness replaces a text-gap matcher. */
-import type { JourneyDefinition } from '../journey-definition.ts';
+import type { JourneyDefinition } from './journey-definition.ts';
 export default {
 	name: 'quota-48x24',
 	groups: [

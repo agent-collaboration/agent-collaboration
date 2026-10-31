@@ -14,9 +14,9 @@ pnpm --dir scripts/verification/tui typecheck
 pnpm --dir scripts/verification/tui lint
 pnpm --dir scripts/verification/tui format:check
 pnpm --dir scripts/verification/tui test
-node scripts/verification/tui/terminal-qualification.ts OUTPUT.json
-node scripts/verification/tui/capture-run.ts PLAN.json --check
-node scripts/verification/tui/capture-run.ts PLAN.json
+node scripts/verification/tui/terminal/terminal-qualification.ts OUTPUT.json
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
 `gridCapturePlanSchema` in `capture-run.ts` declares the repository, exact source

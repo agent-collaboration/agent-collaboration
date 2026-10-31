@@ -337,7 +337,7 @@ jobs:
         run: |
           set -euo pipefail
           formula_preview="$RUNNER_TEMP/codex-router-formula.rb"
-          cp release-source/verification/tooling/tests/fixtures/current-formula.rb "$formula_preview"
+          cp release-source/verification/tooling/fixtures/current-formula.rb "$formula_preview"
           node release-source/verification/tooling/update-homebrew-formula.ts \
             --formula "$formula_preview" \
             --version "$RELEASE_VERSION" \

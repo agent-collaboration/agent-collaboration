@@ -16,8 +16,8 @@ matrix and apparatus qualification add no product passes to these 27 B cases.
 From the repository root:
 
 ```sh
-node scripts/verification/tui/s9-prestage.ts --check
-node scripts/verification/tui/s9-prestage.ts --list
+node scripts/verification/tui/journeys/flows/flow-catalogue.ts --check
+node scripts/verification/tui/journeys/flows/flow-catalogue.ts --list
 pnpm --dir scripts/verification/tui run typecheck
 pnpm --dir scripts/verification/tui run lint
 pnpm --dir scripts/verification/tui run format:check

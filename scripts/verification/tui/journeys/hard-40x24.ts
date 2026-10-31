@@ -1,5 +1,5 @@
 /** Mechanically ported input/checkpoint order; terminal waits replace scheduling delays. */
-import type { JourneyDefinition } from '../journey-definition.ts';
+import type { JourneyDefinition } from './journey-definition.ts';
 export default {
 	name: 'hard-40x24',
 	groups: [
