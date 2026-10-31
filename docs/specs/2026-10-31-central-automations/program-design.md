@@ -95,6 +95,15 @@ An old-release machine never calls Import, so the Fleet holds nothing of its def
 - Firing (central): `due` → `held` → `delivered`, then `runStarted`, then `runFinished` or `failed`; and `due`/`held` → `expired` or `cancelled`. It's monotonic, so a stale `FiringReport` is answered `stale`.
 - Handover (local): `none` → `pending` → `moved`.
 
+## Runtime behaviour: clock, delivery, scale
+
+- **The clock.** The Fleet object holds one platform alarm, owned by `AlarmOwner` (`runtime-primitives/src/alarm_owner.rs:34-53`); a request only moves it earlier. On Cloudflare, `DurableObject::alarm()` (`object_shell.rs:448`) calls `on_alarm`, which calls `durable_steps::drive_due` (`operation_engine.rs:210`). That reads every due operation in one transaction, re-arms to the next earliest deadline, and runs them with bounded concurrency. There's no polling. On Tokio, `wake_at` is a Tokio timer (`native_objects.rs:65`).
+- **Batching.** One alarm admits every Automation due at or before now in one transaction, so N automations due together cost one wake.
+- **Delivery to machines.** Each machine holds one hibernatable WebSocket to its Connection object (`object_shell.rs:1`, `binding_attachment.rs:1`). A Firing in recipient custody becomes one journaled notice plus a live hint (`machine_notice_delivery.rs:1`). The machine pulls, and when it's offline it catches up from its position on reconnect.
+- **The wake push** is unchanged: `wakeup_delivery_sender` builds the `PushKind::Wake` push, and `session_delivery_router` picks one route (Codex app-server, Claude Code peer, ACP) per attempt. The modes are `auto` (idle starts a turn; busy queues, then one prompt), `queue` and `steer`.
+- **Bounds:** one alarm per object; one socket per machine; one active Wake per session; one occupying and one waiting Run per Schedule; an undelivered Wake Firing absorbs new due times.
+- **Hot spot:** a single Fleet object holds every Automation. That's adequate for tens to hundreds. If thousands with second-level timing ever appear, round due times to the minute (deferred; not needed now).
+
 ## Failure and edge behaviour
 
 | Case | Behaviour |
