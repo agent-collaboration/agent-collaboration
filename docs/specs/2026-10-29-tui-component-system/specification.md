@@ -199,8 +199,8 @@ On either screen, Tab from the list reaches the toolbar, and the menu button is 
 - **Started by** comes from the Router's own push-line kind of the session's first message, never from matching words in a title. The groups are: You (no Router push), Messages, Board, Schedules and wakes, Questions and approvals, and Thread activity.
 - **Day** uses the session's last update: Today, Yesterday, This week, Older.
 - **Choosing.**
-  - The picker's ≡ menu shows Group by as checked items, like sort (R8), with Ctrl+G cycling None → each facet → None.
-  - The quota screen offers Group by in its Filters dialog and as checked items in its ≡ menu. Its Filters button summary names the grouping when it isn't None.
+  - The picker's ≡ menu shows Group by as checked items, like sort (R8), with F6 cycling None → each facet → None (Ctrl+G stays Machine).
+  - The quota screen offers Group by in its Filters dialog and as checked items in its ≡ menu, with the same F6 cycle. Its Filters button summary names the grouping when it isn't None.
 - **Headings.** Each non-empty group has a heading row with the group's name and its row count; the quota screen also shows the group's active clients. A heading is drawn, never focused or selected. ↑/↓, page, first/last, the Option aliases, typing to jump and the mouse wheel all move between rows as if headings weren't there, and a click on a heading selects nothing.
 - **Order.**
   - Day runs newest first.
