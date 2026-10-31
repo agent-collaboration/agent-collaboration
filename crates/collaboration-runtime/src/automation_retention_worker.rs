@@ -59,6 +59,14 @@ impl AutomationRetentionWorker {
                     }
                 }
             }
+            if pruned_total > 0 {
+                if let Err(error) = store.incremental_vacuum_step().await {
+                    tracing::warn!(
+                        error = %error,
+                        "automation incremental-vacuum step failed; the next prune will retry"
+                    );
+                }
+            }
         }
         if let Some(broker) = self.interaction_broker.as_ref() {
             match broker.prune_interaction_history(now, 500).await {
@@ -155,7 +163,8 @@ mod tests {
         let mut observer = sqlx::SqliteConnection::connect_with(
             &sqlx::sqlite::SqliteConnectOptions::new()
                 .filename(&path)
-                .foreign_keys(true),
+                .foreign_keys(true)
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
         )
         .await
         .unwrap_or_else(|error| panic!("observer should connect: {error}"));
@@ -215,6 +224,108 @@ mod tests {
             .unwrap_or_else(|error| panic!("store should close: {error}"));
         std::fs::remove_file(path)
             .unwrap_or_else(|error| panic!("fixture database should remove: {error}"));
+    }
+
+    #[tokio::test]
+    async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
+        let directory = tempfile::tempdir().expect("automation fixture directory");
+        let path = directory.path().join("automation.sqlite");
+        let store = AutomationStore::open(&path)
+            .await
+            .expect("automation store should open");
+        let mut observer = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
+        )
+        .await
+        .expect("WAL observer should open");
+        let now_ms = 1_800_000_000_000_i64;
+        let expired_at_ms = now_ms - 120_i64 * 24 * 60 * 60 * 1000;
+        let old_payload = format!("{{\"payload\":\"{}\"}}", "x".repeat(8 * 1024));
+
+        let mut transaction = observer
+            .begin()
+            .await
+            .expect("fixture transaction should begin");
+        for event_index in 0..512 {
+            sqlx::query(
+                "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'fixture','owner','fixture',?,?)",
+            )
+            .bind(format!("expired-event-{event_index}"))
+            .bind(&old_payload)
+            .bind(expired_at_ms)
+            .execute(&mut *transaction)
+            .await
+            .expect("expired event fixture should insert");
+        }
+        sqlx::query(
+            "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES ('retained-event','fixture','owner','fixture','{}',?)",
+        )
+        .bind(now_ms)
+        .execute(&mut *transaction)
+        .await
+        .expect("retained event fixture should insert");
+        transaction
+            .commit()
+            .await
+            .expect("fixture transaction should commit");
+
+        let before_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&mut observer)
+            .await
+            .expect("page count should be readable before pruning");
+        let before_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+            .fetch_one(&mut observer)
+            .await
+            .expect("freelist should be readable before pruning");
+        assert_eq!(before_freelist, 0);
+
+        let shared_store = Arc::new(Mutex::new(store));
+        let removed = AutomationRetentionWorker::new(Arc::clone(&shared_store))
+            .prune_batch(now_ms)
+            .await
+            .expect("automation prune batch should complete");
+        let after_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&mut observer)
+            .await
+            .expect("page count should be readable after pruning");
+        let after_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+            .fetch_one(&mut observer)
+            .await
+            .expect("freelist should be readable after pruning");
+        let retained_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM automation_events WHERE event_id='retained-event'",
+        )
+        .fetch_one(&mut observer)
+        .await
+        .expect("retained event should be readable");
+
+        assert_eq!(removed, 512);
+        assert_eq!(retained_count, 1);
+        assert!((1..=64).contains(&(before_pages - after_pages)));
+        assert!(after_freelist > 0);
+
+        assert_eq!(
+            AutomationRetentionWorker::new(Arc::clone(&shared_store))
+                .prune_batch(now_ms)
+                .await
+                .expect("empty automation prune batch should complete"),
+            0
+        );
+        let after_empty_pass_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&mut observer)
+            .await
+            .expect("page count should be readable after empty pass");
+        assert_eq!(after_empty_pass_pages, after_pages);
+
+        observer.close().await.expect("WAL observer should close");
+        Arc::try_unwrap(shared_store)
+            .unwrap_or_else(|_| panic!("retention worker should release automation store"))
+            .into_inner()
+            .close()
+            .await
+            .expect("automation store should close");
     }
 
     fn session(endpoint_id: &str, session_id: &str) -> SessionRef {

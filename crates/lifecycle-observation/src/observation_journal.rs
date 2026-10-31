@@ -43,7 +43,7 @@ impl ObservationJournal {
             SqliteConnectOptions::new()
                 .filename(path)
                 .create_if_missing(true)
-                .journal_mode(SqliteJournalMode::Delete)
+                .journal_mode(SqliteJournalMode::Wal)
                 .synchronous(SqliteSynchronous::Full)
                 .busy_timeout(Duration::from_secs(1)),
             path,

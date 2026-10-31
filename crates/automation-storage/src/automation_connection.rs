@@ -1,4 +1,8 @@
 //! Database connection lifecycle; schema setup precedes every repository operation.
+use sqlite_storage_maintenance::{
+    SqliteStorageMaintenanceError, configure_new_database_options, incremental_vacuum_step,
+    prepare_existing_database,
+};
 use sqlx::{
     Connection, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -11,6 +15,8 @@ pub enum StorageError {
     WakeRefused(collaboration_protocol::WakeRefusal),
     #[error("automation storage unavailable")]
     Database(#[from] sqlx::Error),
+    #[error("automation database maintenance unavailable")]
+    SqliteMaintenance(#[from] SqliteStorageMaintenanceError),
     #[error("automation database has unsupported schema version {0}")]
     UnsupportedVersion(i64),
     #[error("automation database contains an unexpected schema; existing data was not replaced")]
@@ -116,6 +122,13 @@ impl AutomationStore {
         crate::schema_initialization::initialize(&mut connection).await?;
         Ok(Self { connection })
     }
+
+    /// Reclaims one bounded batch of free pages after an automation prune.
+    pub async fn incremental_vacuum_step(&mut self) -> Result<(), StorageError> {
+        incremental_vacuum_step(&mut self.connection).await?;
+        Ok(())
+    }
+
     pub async fn close(self) -> Result<(), StorageError> {
         self.connection.close().await?;
         Ok(())
@@ -139,8 +152,98 @@ async fn connect(path: &Path, create_if_missing: bool) -> Result<SqliteConnectio
         .filename(path)
         .create_if_missing(create_if_missing)
         .foreign_keys(true)
-        .journal_mode(SqliteJournalMode::Delete)
+        .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Full)
         .busy_timeout(Duration::from_secs(1));
-    Ok(SqliteConnection::connect_with(&options).await?)
+    let options = configure_new_database_options(options, path)?;
+    let mut connection = SqliteConnection::connect_with(&options).await?;
+    prepare_existing_database(&mut connection, path).await?;
+    Ok(connection)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AutomationStore, SqliteConnection, SqliteJournalMode};
+    use sqlx::{Connection, sqlite::SqliteConnectOptions as ConnectOptions};
+
+    #[tokio::test]
+    async fn fresh_automation_database_opens_in_wal_with_incremental_auto_vacuum() {
+        let directory = tempfile::tempdir().expect("automation fixture directory");
+        let path = directory.path().join("automation.sqlite");
+        let mut store = AutomationStore::open(&path)
+            .await
+            .expect("fresh automation store should open");
+
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut store.connection)
+            .await
+            .expect("journal mode should be readable");
+        let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+            .fetch_one(&mut store.connection)
+            .await
+            .expect("auto-vacuum mode should be readable");
+
+        assert_eq!(journal_mode, "wal");
+        assert_eq!(auto_vacuum, 2);
+        store.close().await.expect("automation store should close");
+    }
+
+    #[tokio::test]
+    async fn existing_delete_mode_automation_database_reopens_in_wal_and_preserves_rows() {
+        let directory = tempfile::tempdir().expect("automation fixture directory");
+        let path = directory.path().join("automation.sqlite");
+        let mut seeded_store = AutomationStore::open(&path)
+            .await
+            .expect("automation schema should initialize");
+        sqlx::query(
+            "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES ('retained-event','fixture','owner','fixture','{}',17)",
+        )
+        .execute(&mut seeded_store.connection)
+        .await
+        .expect("automation data should be written before switching the fixture");
+        seeded_store
+            .close()
+            .await
+            .expect("seeded automation store should close");
+
+        let mut legacy_connection = SqliteConnection::connect_with(
+            &ConnectOptions::new()
+                .filename(&path)
+                .journal_mode(SqliteJournalMode::Delete),
+        )
+        .await
+        .expect("legacy DELETE database should open");
+        let legacy_journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut legacy_connection)
+            .await
+            .expect("legacy journal mode should be readable");
+        legacy_connection
+            .close()
+            .await
+            .expect("legacy connection should close");
+        assert_eq!(legacy_journal_mode, "delete");
+
+        let mut store = AutomationStore::open(&path)
+            .await
+            .expect("legacy automation store should reopen");
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut store.connection)
+            .await
+            .expect("converted journal mode should be readable");
+        let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+            .fetch_one(&mut store.connection)
+            .await
+            .expect("converted auto-vacuum mode should be readable");
+        let retained_event: Option<String> = sqlx::query_scalar(
+            "SELECT event_id FROM automation_events WHERE event_id='retained-event'",
+        )
+        .fetch_optional(&mut store.connection)
+        .await
+        .expect("legacy automation event should remain readable");
+
+        assert_eq!(journal_mode, "wal");
+        assert_eq!(auto_vacuum, 2);
+        assert_eq!(retained_event.as_deref(), Some("retained-event"));
+        store.close().await.expect("automation store should close");
+    }
 }

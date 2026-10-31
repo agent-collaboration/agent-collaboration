@@ -420,8 +420,11 @@ pub(crate) fn configure_writable_sqlite_options(
     database_path: &Path,
     options: SqliteConnectOptions,
 ) -> Result<SqliteConnectOptions, StateStoreError> {
-    sqlite_storage_maintenance::configure_new_database_options(options, database_path)
-        .map_err(sqlite_storage_maintenance_error)
+    sqlite_storage_maintenance::configure_new_database_options(
+        options.journal_mode(SqliteJournalMode::Wal),
+        database_path,
+    )
+    .map_err(sqlite_storage_maintenance_error)
 }
 
 pub(crate) async fn prepare_writable_sqlite_database(

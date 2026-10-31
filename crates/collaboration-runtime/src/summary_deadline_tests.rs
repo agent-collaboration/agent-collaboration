@@ -203,7 +203,11 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     {
         return Err("unavailable native source did not block only the summary".into());
     }
-    drop(store);
+    Arc::try_unwrap(store)
+        .unwrap_or_else(|_| panic!("summary worker should release automation store"))
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     std::fs::remove_dir(directory)?;
     Ok(())

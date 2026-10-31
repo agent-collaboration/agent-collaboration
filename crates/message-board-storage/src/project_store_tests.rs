@@ -2,8 +2,72 @@
 
 use crate::{ProjectStore, StoreSchemaState};
 use message_board::{FeedPosition, ProjectId};
+use sqlx::{
+    Connection, SqliteConnection,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode},
+};
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+async fn stored_project_journal_mode(path: &std::path::Path) -> Result<String, sqlx::Error> {
+    let options = TursoConnectOptions::new().filename(path).read_only(true);
+    let mut connection = TursoConnection::connect_with(&options).await?;
+    let journal_mode = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut connection)
+        .await?;
+    connection.close().await?;
+    Ok(journal_mode)
+}
+
+#[tokio::test]
+async fn project_writer_opens_fresh_files_in_wal_mode() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("project.sqlite");
+    let project = ProjectId::generate();
+    let store = ProjectStore::open(&path, project).await?;
+    assert!(matches!(
+        store.schema_state(),
+        StoreSchemaState::Ready { .. }
+    ));
+    store.close().await;
+
+    assert_eq!(stored_project_journal_mode(&path).await?, "wal");
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_writer_converts_existing_delete_mode_files_to_wal() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("project.sqlite");
+    let project = ProjectId::generate();
+    ProjectStore::open(&path, project.clone())
+        .await?
+        .close()
+        .await;
+
+    let mut legacy = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&path)
+            .journal_mode(SqliteJournalMode::Delete),
+    )
+    .await?;
+    let legacy_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut legacy)
+        .await?;
+    legacy.close().await?;
+    assert_eq!(legacy_mode, "delete");
+
+    let reopened = ProjectStore::open(&path, project).await?;
+    assert!(matches!(
+        reopened.schema_state(),
+        StoreSchemaState::Ready { .. }
+    ));
+    reopened.close().await;
+
+    assert_eq!(stored_project_journal_mode(&path).await?, "wal");
+    Ok(())
+}
 
 #[expect(
     clippy::panic_in_result_fn,

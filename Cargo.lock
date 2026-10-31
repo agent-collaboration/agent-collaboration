@@ -631,6 +631,7 @@ dependencies = [
  "message-board",
  "serde",
  "serde_json",
+ "sqlite-storage-maintenance",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",

@@ -310,6 +310,9 @@ mod tests {
     use crate::JournalError;
     use crate::ObservationJournal;
 
+    #[path = "wal_mode_tests.rs"]
+    mod wal_mode_tests;
+
     #[tokio::test]
     async fn new_journal_database_uses_incremental_auto_vacuum() {
         let directory = tempfile::tempdir().expect("temporary directory should be created");
@@ -321,7 +324,12 @@ mod tests {
             .fetch_one(&mut journal.connection)
             .await
             .expect("journal auto-vacuum mode should be readable");
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut journal.connection)
+            .await
+            .expect("journal mode should be readable");
         assert_eq!(mode, 2);
+        assert_eq!(journal_mode, "wal");
     }
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
