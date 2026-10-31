@@ -19,6 +19,10 @@ test('list oracle measures physical body rows and refuses a highlighted toolbar 
 			{ label: 'Alpha', visiblePrefix: 'Codex A' },
 			{ label: 'Beta', visiblePrefix: 'Codex B' },
 		];
+		// UiGlyph::Current (●) marks a choice; focused ListRow paints
+		// UiGlyph::Focus (❯), as defined by the shipped theme.rs mapping.
+		expect(() => selectedFixtureRow(snapshotGrid(core), records)).toThrow('missing or ambiguous');
+		core.writeString('\x1b[4;1H│ ❯ Codex Alpha                │');
 		expect(selectedFixtureRow(snapshotGrid(core), records)).toBe(0);
 		expect(pickerPageRows(snapshotGrid(core))).toBe(2);
 		expect(pickerPageRows({ ...snapshotGrid(core), columns: 32 })).toBe(1);

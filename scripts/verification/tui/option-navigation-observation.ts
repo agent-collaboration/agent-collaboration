@@ -15,7 +15,8 @@ export function selectedFixtureRow(
 	const rectangle = findDialog(grid, 'Session');
 	if (rectangle === null) throw new Error('picker list frame missing');
 	const lines = gridLines(grid).slice(rectangle.top + 2, rectangle.bottom);
-	const selected = lines.filter((line) => line.includes('●'));
+	// Focused ListRow uses UiGlyph::Focus (theme.rs), distinct from Current.
+	const selected = lines.filter((line) => line.includes('❯'));
 	const matches = records.flatMap((record, index) =>
 		selected.some((line) => line.includes(record.visiblePrefix)) ? [index] : [],
 	);

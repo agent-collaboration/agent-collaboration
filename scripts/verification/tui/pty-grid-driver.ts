@@ -163,6 +163,11 @@ export class PtyGridDriver {
 			throw error;
 		}
 	}
+	processId(): number {
+		const pid = this.child.pid;
+		if (pid === undefined) throw new Error('owned Rust driver PID absent');
+		return pid;
+	}
 	private nextLine(): Promise<string> {
 		const queued = this.lines.shift();
 		if (queued !== undefined) return Promise.resolve(queued);

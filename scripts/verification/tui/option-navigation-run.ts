@@ -142,19 +142,42 @@ async function observeCase(
 			},
 			1,
 		);
-		const pid = Number(readFileSync(join(directory, 'quota-child.pid'), 'utf8').trim());
-		const identity = lookupProcessIdentity(pid);
+		// This entry spawns the product directly through portable-pty; PID files
+		// belong to the separate public-wrapper entry and are not produced here.
+		const driverPid = driver.processId();
+		const children = execFileSync('/bin/ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' })
+			.trim()
+			.split('\n')
+			.flatMap((line) => {
+				const [childPid, parentPid] = line.trim().split(/\s+/u).map(Number);
+				if (parentPid !== driverPid || childPid === undefined) return [];
+				const child = lookupProcessIdentity(childPid);
+				return child !== null &&
+					child.realUid === process.getuid?.() &&
+					realpathSync(child.executable) === plan.product.path
+					? [child]
+					: [];
+			});
+		if (children.length !== 1) throw new Error('one exact owned driver product child required');
+		const identity = children[0];
 		if (
-			identity === null ||
+			identity === undefined ||
 			identity.realUid !== process.getuid?.() ||
 			realpathSync(identity.executable) !== plan.product.path
 		)
 			throw new Error('declared picker process binding mismatch');
+		const pid = identity.pid;
 		ownedIdentity = identity;
 		writeFileSync(
 			join(directory, 'child-binding.json'),
 			JSON.stringify(
-				{ identity, product: plan.product, driver: plan.driver, source: plan.source },
+				{
+					identity,
+					parentDriverPid: driverPid,
+					product: plan.product,
+					driver: plan.driver,
+					source: plan.source,
+				},
 				null,
 				2,
 			),
