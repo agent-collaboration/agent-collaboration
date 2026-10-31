@@ -77,17 +77,27 @@ pub(crate) fn ComboDropdown(
         }}
         ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
-        #(matching.into_iter().map(|option|{let highlighted=Some(&option.key)==state.highlight();let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};let primary_width=option.label.width()+3+reason.as_ref().map_or(0,|reason|reason.width()+1);let secondary=option.secondary.as_ref().map(|content|fit_secondary_text(content,row_width.saturating_sub(primary_width)));element!(ScrollReveal(focused:highlighted) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
-            View(width:1) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
-            View(flex_shrink:0.0_f32) {Text(content:option.label.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
-            #(secondary.map(|content|element!(View(min_width:0,flex_shrink:1.0_f32,flex_grow:1.0_f32,overflow:Overflow::Hidden) {Text(content,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))})))
-            #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
-        }}}).into_any()}))
+        #(matching.into_iter().map(|option| {
+            let highlighted=Some(&option.key)==state.highlight();
+            let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};
+            let label=fit_label_text(&option.label,row_width.saturating_sub(2));
+            let inline_secondary=option.secondary.as_ref().filter(|secondary|option.label.width()+secondary.width()+3<=row_width);
+            let overflow_secondary=option.secondary.as_ref().filter(|_|inline_secondary.is_none());
+            element!(ScrollReveal(focused:highlighted) {View(width:100pct,flex_shrink:0.0_f32) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
+                View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
+                    View(width:1,flex_shrink:0.0_f32) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
+                    View(flex_shrink:0.0_f32) {Text(content:label,wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
+                    #(inline_secondary.map(|content|element!(Text(content:content.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted)))))
+                }
+                #(overflow_secondary.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content:content.clone(),wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
+                #(reason.map(|content|element!(View(width:100pct,padding_left:2,flex_shrink:0.0_f32) {Text(content,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))})))
+            }}}}).into_any()
+        }))
         }
     })
 }
 
-fn fit_secondary_text(content: &str, width: usize) -> String {
+fn fit_label_text(content: &str, width: usize) -> String {
     if content.width() <= width {
         return content.to_owned();
     }

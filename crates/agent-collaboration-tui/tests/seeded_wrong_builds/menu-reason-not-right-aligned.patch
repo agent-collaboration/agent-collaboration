@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
+--- a/crates/agent-collaboration-tui/src/controls/menu.rs
++++ b/crates/agent-collaboration-tui/src/controls/menu.rs
+@@ -204,3 +204,3 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
+                 View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0,column_gap:gap,padding_left:reason_gap) {
+-                    View(flex_grow:1.0_f32,min_width:0,justify_content:JustifyContent::End) {Text(content:reason,wrap:TextWrap::NoWrap,align:TextAlign::Right,color:theme.foreground(TextRole::Muted))}
++                    View(flex_grow:1.0_f32,min_width:0) {Text(content:reason,wrap:TextWrap::NoWrap,align:TextAlign::Right,color:theme.foreground(TextRole::Muted))}
+                     View(flex_shrink:0.0_f32) {Text(content:key,wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Muted))}

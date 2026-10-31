@@ -159,6 +159,20 @@ mod tests {
                         .find(|line| line.contains("Unavailable action"))
                         .unwrap();
                     if width == 120 {
+                        let title_end = unavailable.find("Unavailable action").unwrap()
+                            + "Unavailable action".len();
+                        let reason_start = unavailable
+                            .find("Waiting for selected machine capabilities")
+                            .unwrap();
+                        assert!(
+                            unavailable
+                                .get(title_end..reason_start)
+                                .unwrap()
+                                .chars()
+                                .count()
+                                >= 2,
+                            "reason stays clear of the complete title\n{menu}"
+                        );
                         assert!(
                             unavailable.contains("Waiting for selected machine capabilities")
                                 && unavailable.contains("Ctrl+Shift+F9"),
@@ -197,6 +211,65 @@ mod tests {
                     .await
                     .unwrap();
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn menu_reason_has_a_muted_right_aligned_column_clear_of_its_full_title() {
+        use unicode_width::UnicodeWidthStr;
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:120u16,height:36u16,layout:Some(OverlayLayout::AtCells {left:1,top:1,width:110,height:14})));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                let grid = driver.frames.last().unwrap();
+                let (row, line) = (0..grid.height)
+                    .map(|row| (row, grid.row_text(row)))
+                    .find(|(_, line)| line.contains("Unavailable action"))
+                    .unwrap();
+                let reason = "Waiting for selected machine capabilities";
+                let reason_start = line.find(reason).unwrap();
+                let title_end =
+                    line.find("Unavailable action").unwrap() + "Unavailable action".len();
+                assert!(
+                    line.get(title_end..reason_start).unwrap().width() >= 2,
+                    "reason has a distinct column
+{line}"
+                );
+                let key_start = line.find("Ctrl+Shift+F9").unwrap();
+                assert_eq!(
+                    line.get(reason_start + reason.len()..key_start).unwrap(),
+                    " ",
+                    "reason aligns right beside the primary key
+{line}"
+                );
+                let help_row = (0..grid.height)
+                    .find(|row| grid.row_text(*row).contains("Help"))
+                    .unwrap();
+                let help_line = grid.row_text(help_row);
+                let muted_column = help_line
+                    .get(..help_line.find("F1").unwrap())
+                    .unwrap()
+                    .width();
+                let muted = grid.cell(muted_column, help_row).unwrap().style.foreground;
+                let reason_column = line.get(..reason_start).unwrap().width();
+                for offset in 0..reason.len() {
+                    assert_eq!(
+                        grid.cell(reason_column + offset, row)
+                            .unwrap()
+                            .style
+                            .foreground,
+                        muted,
+                        "reason uses the muted role"
+                    );
+                }
+            })
+            .await
+            .unwrap();
         }
     }
 
