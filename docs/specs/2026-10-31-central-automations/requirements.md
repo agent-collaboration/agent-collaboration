@@ -1,0 +1,72 @@
+# Requirements: central automations
+
+This set fixes a mental-model break. The owner's model of automations was never built:
+
+- **The model:** automations are definitions of scheduled messages, kept in one central place for every machine.
+- **What's on `main` (2026-10-31):** each machine keeps its own schedules and wakes in its own `automation.sqlite` and fires them itself. Only a wake aimed at a session on another machine reaches central, as mail.
+
+This set also covers the design truth that never reached `main`. The board-orchestration design, including the owner's 2026-10-19 decision that automation is never tied to a project, exists only on a local branch.
+
+It stacks on `fix/router-db-retention`: database retention, vacuum and WAL, decided by the owner on 2026-10-31. The owner merges both PRs together: "both 2 prs in the stack can go in together".
+
+## Who is affected
+
+- **The owner,** who sets schedules and wakes for agents and expects them to work across machines.
+- **Agents** (Leads, Sidekicks, Workers), which set wakes and schedules for themselves and for each other, and receive them.
+- **Every machine's Router,** which today fires automations itself.
+- **Central** (the Cloudflare and self-hosted Tokio runtimes, one core), which today holds mail only while it's in transit.
+
+## Capabilities
+
+- `definitions`: **Automation definitions.** Automations are defined once, in one central place, and look the same from every machine.
+  - U1, U2, U3, U4
+- `firing`: **Firing.** A due automation becomes a message, routed to its target session wherever it lives.
+  - U5, U6
+- `runs`: **Runs.** The machine that receives a fired automation carries it out, and its outcome can be seen from anywhere.
+  - U7, U8
+- `migration`: **Migration.** Today's per-machine schedules and wakes move to central once, with nothing lost and nothing fired twice.
+  - U9, U10
+- `design-truth`: **Published design truth.** The design on `main` says what the owner decided.
+  - U11
+
+## Rows
+
+Authority:
+- **authorized:** the owner's own words.
+- **derived:** follows directly from authorized rows, and the derivation is named.
+
+| ID | Capability | Need or outcome | Why it matters | Evidence and authority | Priority |
+| --- | --- | --- | --- | --- | --- |
+| U1 | definitions | An **automation** is the definition of a scheduled message: **when** (a schedule's timing, or a wake's time and repeat), **to whom** (an existing session, or a fresh session started on a machine in a folder), and **what** (the message or instruction it delivers). Schedules and wakes are both automations. | The owner's model, stated plainly; every other row is about this thing. | Owner, 2026-10-31: "automations are basically definitions of message schedules. routing messages." **authorized** | P1 |
+| U2 | definitions | Automation definitions live **in one central place shared by every machine**. From any machine, through the Router CLI or MCP, an authorized caller can create, list, show, change, pause, resume and cancel any automation, and sees the same list and the same state. | Today an automation exists only on the machine that made it, and nothing about it is visible elsewhere. | Owner, 2026-10-31: "it was supposed to be cross system in a central location." Owner, 2026-10-19, asking the Advisor: "did we not put wakes and automations in central not in a project?" (native rollout 01a140ac…, line 30505). **authorized** | P1 |
+| U3 | definitions | An automation is **not tied to any project**. It runs whatever any project's lease state is. | The published spec on `main` still says a project's wakes and schedules pause on lease expiry. The owner removed that rule, but the removal never reached `main`. | Owner, 2026-10-19: "ok then automation is associated or should not be associated with anything should always work" (Claude transcript 9f6bdec4…, line 72299). Board design U38 as rewritten, and U80 (`b8e63fedf`, on the local `design/board-orchestration` only). **authorized** | P1 |
+| U4 | definitions | **The wake limits stay as decided.** Wakes are bounded: one-shot at most 24 h ahead, repeating ending within 7 days, repeating at most every 5 min. A session has at most one active wake. Each wake records who set it. Long-lived timing is a schedule. | Moving definitions must not quietly change their rules. | Board design U66 and MS-10. Owner, 2026-10-15: "all wakes should have a time limit (different from schedule)"; "for now its fine the wakes the way they are and with a max period and max time. the rest is schedules". **authorized** | P1 |
+| U5 | firing | **Central keeps the time and decides when an automation is due.** Firing doesn't depend on the machine that created the automation being online. | A definition kept centrally but fired by one machine would still stop when that machine is off. | Derived from U2 ("central location") and U3 ("should always work"). This settles the timer-location decision left open since 2026-10-04: the board Lead proposed "DEFINITION (what, when, to whom) ── global: on the fabric", then "automation.sqlite (one owner, one clock)", and asked the owner to choose between the fabric and a per-project timer home (D2 / ADR-9, PROPOSED in #124 `21a9b029f`). The owner never closed it. The owner's later words close it: not per project (2026-10-19), and central (2026-10-31). Claude transcript cacb0963…, lines 7825, 7917, 7943. **derived** | P1 |
+| U6 | firing | **A fired automation travels as a message on the same path as every other message:** central's ledger, then the target machine's inbox, then local delivery. Nothing is missed. While the target machine is offline, the item is held and delivered when the machine returns, unless it carries a "valid until" that has passed. | The owner made schedules and wakes use the message path, and made that path reliable across machines. | Owner, 2026-09-27: all agents message each other through the Router, and "schedules, wakes and board listens push through this same message path, so it must actually work". Board design U63 (owner, 2026-10-15): outbox, central ledger, inbox; "Nothing is missed"; "Undelivered items are held until delivered". Owner, 2026-10-31: "automations … routing messages". **authorized** | P1 |
+| U7 | runs | **The receiving machine carries out a fired automation as today.** A wake or message is delivered into its session. A scheduled run uses its bound session, or starts a fresh session in its folder when the schedule says fresh-each-run. Each firing is carried out once, never twice. | The move to central changes who keeps time, not what a run does. | Owner, 2026-09-27: "it must actually work, not work best-effort". Today's behaviour is in the destination kinds `OwnedThread` and `FreshEachRun` (`agent-automation`). **authorized** (carried forward) | P1 |
+| U8 | runs | **The outcome of every firing can be seen from any machine** that lists the automation: held, delivered, run started, run finished (with its summary), failed, expired or cancelled. | With definitions in one place, their results must be too, or "what did my schedule do?" depends on which machine you ask. | Derived from U2 (the same list and state everywhere) and U6 ("an outcome the sender can see"). **derived** | P1 |
+| U9 | migration | **Each machine's existing schedules and active wakes move to central once.** They keep their identity, timing, target, instruction and creator. During the move, none is lost and none fires twice. Afterwards no machine keeps its own definitions or timers. | The owner has nine schedules and live wakes today; a move that drops or doubles them breaks agents' work. | Owner, 2026-10-31: "we need migrations and a bunch of changes". **authorized** | P1 |
+| U10 | migration | **Run and delivery history already recorded on a machine stays readable there** until the retention window removes it: 2 months, under the stacked database PR. | Recent history is how the owner checks what happened. | Owner, 2026-10-31: retention table ("everything two months is fine for automation"). **authorized** | P2 |
+| U11 | design-truth | **The design published on `main` says what the owner decided.** The board-orchestration design that exists only on the local `design/board-orchestration` (667 commits ahead of `main` on 2026-10-31, including U80) is published to `main`, without cache or secret material. Obligations the owner removed, such as the automation pause in U38, are gone from `main`. | Helpers read `main`; while the decisions are missing there, work is built against superseded design. That's how this break went unseen. | Owner, 2026-10-31: "we need to fix it". Root cause: `b8e63fedf` is on no remote branch. #160 (`be7e61e8b`, 2026-10-25) published the requirements blob `8695eec4…`, which is exactly `b8e63fedf`'s parent, not the corrected `c2072d35…`. On 2026-10-22 the importer's reviewer had already noticed that the design documents in the single tree were "an older copy" (Claude transcript 9f6bdec4…, line 111853), and that was never repaired (Advisor, 2026-10-31). **authorized** | P1 |
+
+## Boundary
+
+**In scope:**
+- automation definitions, their central home and timing;
+- firing as messages on the U63 path;
+- running on the receiving machine;
+- outcome visibility;
+- migration of existing definitions;
+- the CLI and MCP surface for all of the above;
+- publishing the board-orchestration design to `main`.
+
+**Out of scope:**
+- **Interactions storage.** `interaction.sqlite` stays local on each machine (owner, 2026-10-31: "interactions.sqlite should be local").
+- **Project binding of automations** (U3).
+- **Changes to the wake limits** (U4).
+- **Database retention, vacuum and WAL.** These are the stacked PR below this one. This set relies on them and doesn't change them.
+- **A terminal UI for automations.** Nobody asked for it.
+
+## Unresolved hypotheses
+
+- **H1, missed firings while offline.** For a repeating schedule whose target machine is offline across several due times, U6 says items are held. This set carries forward today's rule for how many held runs a single schedule may accumulate (its overlap policy) rather than inventing a new one. The Specification states that rule from today's behaviour.
