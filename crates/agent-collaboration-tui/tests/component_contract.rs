@@ -143,3 +143,6 @@ mod dropdown_paging;
 #[cfg(test)]
 #[path = "suites/dropdown_help.rs"]
 mod dropdown_help;
+
+#[path = "suites/dispatch_frames.rs"]
+mod dispatch_frames;

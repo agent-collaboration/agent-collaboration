@@ -1,0 +1,7 @@
+diff --git a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+--- a/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
++++ b/crates/agent-collaboration-tui/src/dispatch_frame_marker.rs
+@@ -137,2 +137,3 @@
+     fn write_bytes(&mut self, bytes: &[u8]) -> io::Result<usize> {
++        for sequence in self.state.take_prepared() {write!(self.writer,"\x1b]7770;dispatch={sequence}\x1b\\")?;}
+         let written = self.writer.write(bytes)?;
