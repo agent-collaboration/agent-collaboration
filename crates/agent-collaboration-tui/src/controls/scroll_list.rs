@@ -108,8 +108,8 @@ pub fn ScrollList<'a>(
     element!(View(width:100pct,min_height:0,flex_grow:if props.grow {1.0_f32}else{0.0_f32},flex_shrink:1.0_f32,padding_right:1,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
         #(props.align_bottom.then(||element!(View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_height:0))))
         ScrollContent(scroll:props.scroll.clone(),offset:position.offset,children)
-        #((position.maximum()>0||focused).then(||element! {View(position:Position::Absolute,right:0,top:0,width:1,height:visible,flex_direction:FlexDirection::Column) {
-            #((0..visible).map(|row|element!(Text(content:if position.maximum()==0 {if row==0 {UiGlyph::Focus.text()}else{" "}}else if row>=thumb_top&&row<thumb_top+thumb {UiGlyph::ScrollThumb.text()}else{UiGlyph::ScrollTrack.text()},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted})))))
+        #((position.maximum()>0).then(||element! {View(position:Position::Absolute,right:0,top:0,width:1,height:visible,flex_direction:FlexDirection::Column) {
+            #((0..visible).map(|row|element!(Text(content:if row>=thumb_top&&row<thumb_top+thumb {UiGlyph::ScrollThumb.text()}else{UiGlyph::ScrollTrack.text()},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted})))))
         }}))
         #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(Text(content:reason,color:theme.foreground(TextRole::Disabled))))})
     })

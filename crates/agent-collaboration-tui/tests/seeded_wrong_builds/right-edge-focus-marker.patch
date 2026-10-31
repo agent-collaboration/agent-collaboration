@@ -1,0 +1,11 @@
+diff --git b/crates/agent-collaboration-tui/src/controls/scroll_list.rs a/crates/agent-collaboration-tui/src/controls/scroll_list.rs
+index 70dacc28..11e58ebe 100644
+--- b/crates/agent-collaboration-tui/src/controls/scroll_list.rs
++++ a/crates/agent-collaboration-tui/src/controls/scroll_list.rs
+@@ -110,4 +110,4 @@ pub fn ScrollList<'a>(
+         ScrollContent(scroll:props.scroll.clone(),offset:position.offset,children)
+-        #((position.maximum()>0).then(||element! {View(position:Position::Absolute,right:0,top:0,width:1,height:visible,flex_direction:FlexDirection::Column) {
+-            #((0..visible).map(|row|element!(Text(content:if row>=thumb_top&&row<thumb_top+thumb {UiGlyph::ScrollThumb.text()}else{UiGlyph::ScrollTrack.text()},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted})))))
++        #((position.maximum()>0||focused).then(||element! {View(position:Position::Absolute,right:0,top:0,width:1,height:visible,flex_direction:FlexDirection::Column) {
++            #((0..visible).map(|row|element!(Text(content:if position.maximum()==0 {if row==0 {UiGlyph::Focus.text()}else{" "}}else if row>=thumb_top&&row<thumb_top+thumb {UiGlyph::ScrollThumb.text()}else{UiGlyph::ScrollTrack.text()},color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted})))))
+         }}))

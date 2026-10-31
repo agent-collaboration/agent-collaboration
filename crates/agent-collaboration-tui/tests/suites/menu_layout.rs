@@ -204,4 +204,40 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn menu_focus_keeps_one_left_marker_and_no_right_edge_duplicate() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(MenuScene(journal,width:76u16,height:30u16));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::F(10)), true)], true)
+                    .await;
+                for title in ["New background session…", "Refresh"] {
+                    let panel = driver.frames.last().unwrap().round_frame_text();
+                    assert_eq!(
+                        panel.matches('❯').count(),
+                        1,
+                        "only the left marker shows focus\n{panel}"
+                    );
+                    assert!(
+                        panel
+                            .lines()
+                            .any(|line| line.starts_with("│❯") && line.contains(title)),
+                        "{panel}"
+                    );
+                    if title != "Refresh" {
+                        driver
+                            .drive(&mut frames, mode, vec![(key(KeyCode::Down), true)], true)
+                            .await;
+                    }
+                }
+            })
+            .await
+            .unwrap();
+        }
+    }
 }

@@ -115,6 +115,8 @@ git apply -R crates/agent-collaboration-tui/tests/seeded_wrong_builds/duplicate-
 | `combo-secondary-not-truncated.patch` | A long secondary loses its ellipsis at constrained width. |
 | `combo-secondary-wrong-colour.patch` | Secondary text loses the shipped muted foreground role. |
 
+| `right-edge-focus-marker.patch` | Fitting lists, menus, and dropdowns add a duplicate focus glyph in the right scrollbar column. |
+
 Receipt controls require `--features test-support` with a debug test profile.
 The existing outside-fallthrough control also challenges the real receipt and
 the independent screen-effect count after an outside menu press. The three
