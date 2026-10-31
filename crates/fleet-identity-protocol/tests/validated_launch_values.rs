@@ -116,3 +116,56 @@ fn borrowed_machine_labels_and_session_ids_keep_their_byte_limits() {
     session["sessionId"] = json!(format!("{}a", "é".repeat(2048)));
     assert_rejected::<message_board::SessionRef>(session);
 }
+
+#[test]
+fn reviewed_scalar_installation_schema_rejects_non_uuid_text() {
+    assert_rejected::<fleet_identity_protocol::InstallationId>(json!("x".repeat(36)));
+}
+
+#[test]
+fn reviewed_scalar_endpoint_schema_rejects_invalid_syntax() {
+    for invalid in ["Codex", "9"] {
+        assert_rejected::<message_board::EndpointId>(json!(invalid));
+    }
+}
+
+#[test]
+fn reviewed_scalar_session_schema_rejects_nul() {
+    assert_rejected::<message_board::SessionId>(json!("a\0b"));
+}
+
+#[test]
+fn reviewed_scalar_machine_label_schema_rejects_controls_and_blank_text() {
+    for invalid in [
+        "a\0b",
+        "a\u{0008}b",
+        "a\u{001f}b",
+        " \t\n",
+        "\u{0085}\u{2003}",
+    ] {
+        assert_rejected::<message_board::MachineLabel>(json!(invalid));
+    }
+}
+
+#[test]
+fn reviewed_scalar_schemas_preserve_valid_constructor_values() {
+    for uuid in [
+        "00000000-0000-0000-0000-000000000000",
+        "00000000-0000-4000-8000-000000000001",
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    ] {
+        assert_accepted::<fleet_identity_protocol::InstallationId>(json!(uuid));
+        assert_accepted::<message_board::ServiceId>(json!(uuid));
+    }
+    assert_accepted::<message_board::EndpointId>(json!("codex-local"));
+    assert_accepted::<message_board::SessionId>(json!("provider\n\t:opaque"));
+    for label in [
+        "Machine",
+        "line\n\ttwo",
+        "a\u{007f}b",
+        "\r Machine \r",
+        "\u{0085}Machine\u{2003}",
+    ] {
+        assert_accepted::<message_board::MachineLabel>(json!(label));
+    }
+}

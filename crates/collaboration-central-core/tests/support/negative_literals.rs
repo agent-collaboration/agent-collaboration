@@ -21,7 +21,8 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         ]),
         "RepositoryLocator" => invalid.extend([json!(""), json!("r".repeat(2049)), json!(format!("{}a", "é".repeat(1024)))]),
         "ModelName" => invalid.extend([json!(""), json!("m".repeat(257)), json!(format!("{}a", "é".repeat(128))), json!("é".repeat(256))]),
-        "MachineLabel" => invalid.push(json!(format!("{}a", "é".repeat(128)))),
+        "MachineLabel" => invalid.extend([json!(format!("{}a", "é".repeat(128))), json!("a\0b"), json!(" \t\n"), json!("\u{0085}\u{2003}")]),
+        "InstallationId" => invalid.push(json!("x".repeat(36))),
         "SessionRef" => {
             if let Some(first) = literals.first() {
                 let mut value = first.clone(); value["sessionId"] = json!(format!("{}a", "é".repeat(2048))); invalid.push(value);
@@ -80,6 +81,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         _ => {}
     }
     invalid.extend(composed_byte_overflows(name, literals));
+    invalid.extend(scalar_rule_negatives(literals));
     invalid
 }
 
@@ -117,4 +119,49 @@ fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
             invalid
         })
         .collect()
+}
+
+// The review's malformed scalars must remain rejected in every composed wire shape.
+fn scalar_rule_negatives(literals: &[Value]) -> Vec<Value> {
+    fn collect(value: &Value, path: &str, cases: &mut Vec<(String, Value)>) {
+        match value {
+            Value::Object(fields) => {
+                for (field, child) in fields {
+                    let pointer = format!("{path}/{}", field.replace('~', "~0").replace('/', "~1"));
+                    let invalid = match field.as_str() {
+                        "installation" | "installationId" | "installation_id" | "serviceId" => {
+                            vec![json!("x".repeat(36))]
+                        }
+                        "endpointId" => vec![json!("Codex"), json!("9")],
+                        "sessionId" => vec![json!("a\0b")],
+                        "label" => vec![json!("a\0b"), json!(" \t\n"), json!("\u{0085}\u{2003}")],
+                        _ => Vec::new(),
+                    };
+                    cases.extend(
+                        invalid
+                            .into_iter()
+                            .map(|invalid| (pointer.clone(), invalid)),
+                    );
+                    collect(child, &pointer, cases);
+                }
+            }
+            Value::Array(items) => {
+                for (index, child) in items.iter().enumerate() {
+                    collect(child, &format!("{path}/{index}"), cases);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        }
+    }
+    let mut negatives = Vec::new();
+    for literal in literals {
+        let mut cases = Vec::new();
+        collect(literal, "", &mut cases);
+        for (pointer, invalid) in cases {
+            let mut negative = literal.clone();
+            *negative.pointer_mut(&pointer).unwrap() = invalid;
+            negatives.push(negative);
+        }
+    }
+    negatives
 }

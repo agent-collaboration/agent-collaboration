@@ -131,3 +131,14 @@ fn configured_token_lifetime_requires_the_adopted_range() {
         assert_refused::<TokenLifetimeSeconds>(json!(invalid));
     }
 }
+
+#[test]
+fn reviewed_scalar_claim_schema_rejects_invalid_installation() {
+    let fixtures: Vec<Value> = serde_json::from_str(include_str!(
+        "../contracts/MachineTokenClaims.fixtures.json"
+    ))
+    .unwrap();
+    let mut invalid = fixtures[0].clone();
+    invalid["principal"]["installation_id"] = json!("x".repeat(36));
+    assert_refused::<collaboration_central_core::identity_contract::MachineTokenClaims>(invalid);
+}
