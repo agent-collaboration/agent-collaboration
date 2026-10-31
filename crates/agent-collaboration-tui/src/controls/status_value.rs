@@ -37,5 +37,5 @@ pub fn StatusValue(props: &StatusValueProps, hooks: Hooks) -> impl Into<AnyEleme
     let theme = hooks
         .try_use_context::<SurfaceContext>()
         .map_or(Theme::default(), |context| context.theme());
-    element!(View(column_gap:1) {Text(content:props.status.label(),color:theme.foreground(props.status.role())) #(props.detail.as_ref().map(|detail|element!(Text(content:detail.clone(),color:theme.foreground(TextRole::Text)))))})
+    element!(View(max_width:100pct,column_gap:1,flex_wrap:FlexWrap::Wrap) {View(flex_shrink:0.0_f32) {Text(content:props.status.label(),wrap:TextWrap::NoWrap,color:theme.foreground(props.status.role()))} #(props.detail.as_ref().map(|detail|element!(View(max_width:100pct,flex_shrink:0.0_f32) {Text(content:detail.clone(),color:theme.foreground(TextRole::Text))})))})
 }

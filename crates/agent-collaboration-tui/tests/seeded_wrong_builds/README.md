@@ -177,5 +177,10 @@ T9 changes the disabled editor fixture from one row to two so its reason can occ
 | `switch-paints-partial-group.patch` | Paint full switch labels and keys despite the shared remaining budget. |
 | `switch-hidden-target-remains-focusable.patch` | The group is hidden but its targets remain eligible for Tab. |
 | `filter-minimum-on-inner-child.patch` | The consumer reserves its minimum only inside the child and budgets the full peer row for the switch. |
+| `form-value-refuses-reflow.patch` | The shared label column squeezes a value instead of moving above it. |
+| `form-selector-gutter-one-too-wide.patch` | An extra selector cell breaks a 36-cell UUID that fits after the correct two-cell gutter. |
+| `status-detail-starves-word.patch` | The detail text squeezes the status word into fragments. |
 
 The inner-child minimum control mutates the sample consumer allocation, including its shared remaining-width budget; all expected assertions stay unchanged. The toolbar full-title budget control follows its existing calculation into the shared Button width owner.
+
+The field palette control is mechanically refreshed for native responsive columns.

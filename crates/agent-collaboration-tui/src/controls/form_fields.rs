@@ -90,8 +90,8 @@ pub fn FormField<'a>(props: &mut FormFieldProps<'a>, hooks: Hooks) -> impl Into<
         .map_or(Theme::default(), |context| context.theme());
     let children = std::mem::take(&mut props.children);
     element! {
-        View(width:100pct,flex_direction: if columns.stacked { FlexDirection::Column } else { FlexDirection::Row }, column_gap: 2, flex_shrink: 0.0_f32) {
-            View(width: if columns.stacked { Size::Auto } else { Size::Length(columns.label_width) }, flex_shrink: 0.0_f32) {
+        View(width:100pct,flex_direction: if columns.stacked { FlexDirection::Column } else { FlexDirection::Row }, column_gap: 2, flex_wrap:FlexWrap::Wrap, flex_shrink: 0.0_f32) {
+            View(width: if columns.stacked { Size::Auto } else { Size::Length(columns.label_width) }, max_width:100pct, flex_shrink: 0.0_f32) {
                 Text(content: props.label.clone(), color: theme.foreground(TextRole::Primary))
             }
             View(flex_direction: FlexDirection::Column, flex_grow: 1.0_f32, flex_shrink:1.0_f32,min_width: 0,max_width:100pct) {
