@@ -91,13 +91,7 @@ impl ComboBoxControl {
         next.replace_options(options)
             .map_err(ComboModelError::Options)?;
         let targets = self.targets(next.options());
-        if let Some(overlay) = snapshot.overlays().iter().find(|overlay| {
-            overlay.parent == binding.parent.surface
-                && overlay.kind
-                    == OverlayKind::Dropdown {
-                        field: binding.field.clone(),
-                    }
-        }) {
+        if let Some(overlay) = snapshot.dropdown_for(binding.parent.surface, &binding.field) {
             binding
                 .parent
                 .stack
@@ -115,13 +109,29 @@ impl ComboBoxControl {
             focus: FocusModel::new(self.targets(options)).map_err(ComboModelError::Focus)?,
             actions: ActionRegistry::new(
                 ScopeId::new("dropdown").map_err(ComboModelError::Identity)?,
-                Vec::new(),
+                self.help_actions(),
             )
             .map_err(ComboModelError::Actions)?,
             primary_action: None,
         })
     }
 
+    fn help_actions(&self) -> Vec<crate::actions::ActionDef> {
+        let snapshot = self.binding.parent.stack.snapshot();
+        let event = KeyEvent::new(KeyEventKind::Press, KeyCode::F(1));
+        snapshot
+            .surface(self.binding.parent.surface)
+            .and_then(|surface| {
+                surface
+                    .actions
+                    .definitions()
+                    .iter()
+                    .find(|action| action.keys.iter().any(|key| key.matches(&event)))
+                    .cloned()
+            })
+            .into_iter()
+            .collect()
+    }
     fn targets(&self, options: &[SelectOption]) -> Vec<TargetSpec> {
         let binding = self.binding.clone();
         let input_binding = binding.clone();

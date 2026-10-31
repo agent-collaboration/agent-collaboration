@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
 --- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
 +++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
-@@ -100,7 +100,3 @@ impl ComboBoxControl {
-         }) {
+@@ -94,7 +94,3 @@
+         if let Some(overlay) = snapshot.dropdown_for(binding.parent.surface, &binding.field) {
 -            binding
 -                .parent
 -                .stack

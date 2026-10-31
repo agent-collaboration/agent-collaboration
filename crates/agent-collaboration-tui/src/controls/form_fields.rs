@@ -115,7 +115,16 @@ pub fn SelectableRow<'a>(
     props: &mut SelectableRowProps<'a>,
     mut hooks: Hooks,
 ) -> impl Into<AnyElement<'a>> {
-    super::scroll_list::use_scroll_reveal(&mut hooks, props.selected);
+    let target_id = hooks
+        .try_use_context::<SurfaceContext>()
+        .and_then(|context| {
+            context
+                .stack
+                .snapshot()
+                .surface(context.surface)
+                .and_then(|surface| surface.focus.current().cloned())
+        });
+    super::scroll_list::use_scroll_reveal(&mut hooks, props.selected, target_id);
     let theme = hooks
         .try_use_context::<SurfaceContext>()
         .map_or(Theme::default(), |context| context.theme());

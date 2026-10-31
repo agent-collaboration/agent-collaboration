@@ -139,3 +139,7 @@ mod disabled_control_focus;
 #[cfg(test)]
 #[path = "suites/dropdown_paging.rs"]
 mod dropdown_paging;
+
+#[cfg(test)]
+#[path = "suites/dropdown_help.rs"]
+mod dropdown_help;

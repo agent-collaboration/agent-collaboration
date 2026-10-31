@@ -45,6 +45,8 @@ pub struct DialogSceneProps {
     pub height: u16,
     pub combo: Arc<Mutex<Option<ComboBoxControl>>>,
     pub data: Arc<Mutex<Option<DialogData>>>,
+    pub surface_stack: Arc<Mutex<Option<SurfaceStackHandle>>>,
+    pub help_control: Arc<Mutex<Option<HelpControl>>>,
 }
 #[component]
 pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -87,10 +89,12 @@ pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyE
         .unwrap(),
         primary_action: None,
     });
+    *props.surface_stack.lock().unwrap() = Some(stack);
     let help = hooks
         .use_ref(|| HelpControl::new(stack, action("help")))
         .read()
         .clone();
+    *props.help_control.lock().unwrap() = Some(help.clone());
     let mut opened = hooks.use_ref(|| false);
     if !opened.get() {
         stack
@@ -186,7 +190,7 @@ fn dialog_spec(
         toolbar_label: None,
         id: action("help"),
         title: "Help".into(),
-        keys: vec!["F1".parse().unwrap()],
+        keys: vec!["F1".parse().unwrap(), "Ctrl+7".parse().unwrap()],
         availability: AvailabilityFn::default(),
         choice: None,
         placement: Placement::Hidden,

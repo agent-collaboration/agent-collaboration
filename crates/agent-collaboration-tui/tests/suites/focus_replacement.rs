@@ -280,6 +280,22 @@ mod tests {
                             .is_active(SurfaceId::Overlay(fixture.id))
                     );
                     replace_phase(&fixture, ReplacementPhase::Ready);
+                    let source = fixture
+                        .binding
+                        .help
+                        .source(SurfaceId::Overlay(fixture.id))
+                        .unwrap();
+                    let credits = source
+                        .definitions()
+                        .iter()
+                        .find(|definition| definition.id == action("credits"))
+                        .unwrap();
+                    assert_eq!(
+                        credits.availability.get(),
+                        Availability::Available,
+                        "Help reads the continuing model before awaiting its changed frame"
+                    );
+                    assert_eq!(credits.placement, Placement::Toolbar);
                     if matches!(phase, ReplacementPhase::Pending) {
                         driver.initial(&mut frames).await;
                     }
