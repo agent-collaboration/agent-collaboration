@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 import { artifactBindingSchema, sourceBindingSchema } from '../evidence/evidence-schema.ts';
-import { flowGridSizes } from '../journeys/flows/flow-definition.ts';
+import { journeyGridSizes } from '../journeys/journey-definition.ts';
 
 export const optionNavigationPlanSchema = z
 	.strictObject({
@@ -22,9 +22,9 @@ export const optionNavigationPlanSchema = z
 			.array(z.strictObject({ label: z.string().min(1), visiblePrefix: z.string().min(1) }))
 			.min(3),
 		grids: z
-			.array(z.enum(flowGridSizes))
+			.array(z.enum(journeyGridSizes))
 			.min(1)
-			.default([...flowGridSizes]),
+			.default([...journeyGridSizes]),
 		keys: z
 			.array(z.enum(['legacy', 'kitty']))
 			.min(1)

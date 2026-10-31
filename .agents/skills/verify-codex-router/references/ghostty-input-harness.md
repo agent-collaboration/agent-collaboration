@@ -83,9 +83,9 @@ are the independent byte oracle. Modified arrows retain CSI in application-curso
 mode. Crossterm 0.29 parses modifier3 as Alt and4 as Shift+Alt, including the
 kitty phase suffix; decoder qualification does not prove paging effects.
 
-`s9-journeys/option-navigation.ts`, indexed by `s9-prestage.ts`, contains four
+`journeys/flows/option-navigation.ts`, indexed by `journeys/flows/flow-catalogue.ts`, contains four
 **authored-not-driven** journeys: picker RowPaging, quota ContentScroll, and Help
-on each screen, across both modes and all six grids. Each requires an independently
+on each screen, across both modes and all four grids. Each requires an independently
 declared ordered fixture and per-grid first/last/page destinations. Drive through
 `GhosttyJourneyInput` with `example-ghostty-keybinds`, retain delivery hex and exact
 normalized dispatch ACKs, and observe completed visible movement. Picker pages
@@ -134,7 +134,7 @@ formats return an explicit unsupported prerequisite. It never enables modes.
 Coordinates outside the current viewport reject. Primary implementation:
 [Ghostty Surface.zig:3600–3780](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/Surface.zig#L3600).
 
-`layer-c-harness-journeys.ts` authors the Sessions and Quota pointer matrix:
+`capture/harness-journeys.ts` authors the Sessions and Quota pointer matrix:
 120×36, 76×30, 48×24, 48×12, 40×24, 32×24; both profiles/key modes; clicks,
 release and both wheel directions before/after **same-child kernel resize**,
 inside controls and at targets beneath dialog/menu/dropdown overlays. Recompute

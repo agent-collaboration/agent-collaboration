@@ -1,5 +1,5 @@
-import { absentAtBase, flowReference } from '../journeys/flows/flow-definition.ts';
-import type { FlowJourney } from '../journeys/flows/flow-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
+import type { FlowJourney } from './flow-definition.ts';
 export const quotaRefreshJourneys: readonly FlowJourney[] = (
 	['all-success', 'partial', 'all-failed', 'setup-failed'] as const
 ).map((outcome) => ({

@@ -1,7 +1,8 @@
+import { journeyGridSizes } from '../journey-definition.ts';
 /** Owner decision 2026-10-31, push 01a191b2-bfee-7452-87f9-691c69261adf.
  * Authored until a declared alias-enabled S6/S7 target and independent seeds exist.
  */
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney, FlowCheck } from './flow-definition.ts';
 
 export const optionNavigationJourneys: readonly FlowJourney[] = (
@@ -24,7 +25,7 @@ export const optionNavigationJourneys: readonly FlowJourney[] = (
 			'example Ghostty keybind profile; owner push 01a191b2-bfee-7452-87f9-691c69261adf',
 		),
 		inputProfile: 'example-ghostty-keybinds',
-		grids: [...flowGridSizes],
+		grids: [...journeyGridSizes],
 		keys: ['legacy', 'kitty'],
 		fixtures: [
 			'fixed ordered unique session/account identities with more than two viewport pages',

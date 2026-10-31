@@ -1,4 +1,5 @@
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { journeyGridSizes } from '../journey-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 
 export const claudeDetailsJourneys: readonly FlowJourney[] = [
@@ -11,7 +12,7 @@ export const claudeDetailsJourneys: readonly FlowJourney[] = [
 			'R13; owner 2026-10-30 Open-only correction',
 			'U12; U4 captured action identity',
 		),
-		grids: [...flowGridSizes],
+		grids: [...journeyGridSizes],
 		keys: ['legacy', 'kitty'],
 		fixtures: [
 			'stopped native Claude session with saved settings and exact source-qualified identity',

@@ -52,8 +52,10 @@ switch renderers or fabricate bytes to fill it.
 ## Journey index
 
 `capture-run.ts` drives the literal data in `journeys/` through
-`journey-catalogue.ts`. Suffixes are `120x36`, `76x30`, `48x24`, `48x12`, `40x24`,
-`32x24`. A wired definition is not a passing observation.
+`journeys/journey-catalogue.ts`. One file per screen under `journeys/screens/`
+contains shared actions and explicit size-specific data. The canonical grid list
+in `journeys/journey-definition.ts` is `120x36`, `76x30`, `48x12`, `32x24`;
+paired-marker cases and authored flows use that same list. A wired definition is not a passing observation.
 
 | Prefix | Entry and deciding observations |
 | --- | --- |
@@ -126,7 +128,7 @@ Explicit baseline decisions supersede stale prose checks:
   placeholders. Beta Details separately requires weekly 75%, reset unknown and
   no invented 7d; 5h No data with no percentage. This is adopted #161 behavior
   from `6388b9739`. The short-height unknown-window port still needs its Details
-  pose before it earns six-grid coverage.
+  pose before it earns four-grid coverage.
 
 ## Evidence and cleanup
 
@@ -181,7 +183,7 @@ Host. Any needed Host/effect change returns to the Lead before editing.
 ## Coverage limits
 
 The S0 pilot drives four existing journeys at 120×36 in legacy and kitty modes.
-Report their exact receipt/source dependencies. Six-grid and same-child product
+Report their exact receipt/source dependencies. Four-grid and same-child product
 resize, pending/error variants, wide-under-dialog, complete new focus/navigation,
 S5 wrong builds, real public-entry/provider/client effects and physical terminals
 remain separately required or explicitly unverified. Full rollout observation is

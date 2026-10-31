@@ -9,7 +9,7 @@ entries and their real fixture seams. An absent entry is neither a product pass
 nor a product failure. The Lead declares the later exact target before a run.
 
 The later [Ghostty input harness extension](ghostty-input-harness.md) adds a
-separate layer-C keyboard/pointer matrix to `s9-prestage.ts` output. It uses the
+separate layer-C keyboard/pointer matrix to `journeys/flows/flow-catalogue.ts` output. It uses the
 same existing PTY owner, opt-in input profiles and actual modes; its authored
 matrix and apparatus qualification add no product passes to these 27 B cases.
 
@@ -33,18 +33,18 @@ retains the same complete disclosure as `--check`.
 
 | File under `scripts/verification/tui/` | Cases and deciding outcome | Entry awaited |
 | --- | --- | --- |
-| `s9-journeys/toolbar-menus.ts` | Sessions and Quota top rows, F10/click, Tab reaches menu, live filter, right-side drop-off with every lost action retained in menu; no bottom action row. Six grids, both key modes. | S6 picker, S7 quota |
-| `s9-journeys/claude-details.ts` | Stopped native Claude Details has Open and no Resume in background. Open returns the captured source-qualified target. Six grids, both key modes. | S6 |
-| `s9-journeys/new-dialog.ts` | Open dropdown + kitty Ctrl+Enter keeps committed value and starts once; legacy Tab/Enter and click each remain available. Six grids. | S6 preparation recorder |
-| `s9-journeys/account-login.ts` | Re-login-required primary and exact displayed/routed command; captured A survives browse B/reload; command after terminal restore; fresh same-ID success, failure and exit130 cancellation. Both key modes. | S7 command/result fixture |
-| `s9-journeys/account-actions.ts` | Every command, exact captured target/root, clipboard full ID, Options/Floor, Disable/Enable, removed-target reasons. Remove only when disabled; Cancel primary/initial focus; Ctrl+Enter dispatches zero; explicit Remove selects former position, last survivor or none when empty. RequiresDisabled refusal never retries. Six grids, both key modes. | S7 command/clipboard fixtures |
-| `s9-journeys/quota-refresh.ts` | Key and menu routes, causal hold plus duplicate acknowledgments, one invocation, visible pending/unavailable reason; all-success, partial, all-failed and setup/read error preserve this invocation's typed outcomes and fresh table/open Details. Both key modes. | S7 real CLI adapter with fixture provider |
+| `journeys/flows/toolbar-menus.ts` | Sessions and Quota top rows, F10/click, Tab reaches menu, live filter, right-side drop-off with every lost action retained in menu; no bottom action row. Four grids, both key modes. | S6 picker, S7 quota |
+| `journeys/flows/claude-details.ts` | Stopped native Claude Details has Open and no Resume in background. Open returns the captured source-qualified target. Four grids, both key modes. | S6 |
+| `journeys/flows/new-dialog.ts` | Open dropdown + kitty Ctrl+Enter keeps committed value and starts once; legacy Tab/Enter and click each remain available. Four grids. | S6 preparation recorder |
+| `journeys/flows/account-login.ts` | Re-login-required primary and exact displayed/routed command; captured A survives browse B/reload; command after terminal restore; fresh same-ID success, failure and exit130 cancellation. Both key modes. | S7 command/result fixture |
+| `journeys/flows/account-actions.ts` | Every command, exact captured target/root, clipboard full ID, Options/Floor, Disable/Enable, removed-target reasons. Remove only when disabled; Cancel primary/initial focus; Ctrl+Enter dispatches zero; explicit Remove selects former position, last survivor or none when empty. RequiresDisabled refusal never retries. Four grids, both key modes. | S7 command/clipboard fixtures |
+| `journeys/flows/quota-refresh.ts` | Key and menu routes, causal hold plus duplicate acknowledgments, one invocation, visible pending/unavailable reason; all-success, partial, all-failed and setup/read error preserve this invocation's typed outcomes and fresh table/open Details. Both key modes. | S7 real CLI adapter with fixture provider |
 
-`s9-journey-definition.ts` owns the strict authored schema and pinned references.
+`journeys/flows/flow-definition.ts` owns the strict authored schema and pinned references.
 Steps name semantic targets/checkpoints, not invented screen coordinates. A
 fixture operation is an unmet binding requirement, never an implemented hook.
-The six sizes are 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24. Login/refresh
-logic cases start at 120×36; the shared visual cases cover the six-grid matrix.
+The four sizes are 120×36, 76×30, 48×12 and 32×24. Login/refresh
+logic cases start at 120×36; the shared visual cases cover the four-grid matrix.
 
 ## Bind after S6/S7, then observe
 
@@ -55,12 +55,12 @@ the real delivered entry and its action/fixture contract. Preserve exact source,
 artifact hashes, key mode, grid and same-child resize evidence. The present draft
 has no executor for these steps; schema validation cannot turn coverage green.
 
-`s9-scene-checks.ts` holds reusable scene/projection checks. Stopped-Claude checks
+`journeys/scenes/public-entry-scene-checks.ts` holds reusable scene/projection checks. Stopped-Claude checks
 scope to active Session details, so underlying Open text cannot supply its
 missing action. Closed action inventories reject omissions, additions and wrong
 keys; a toolbar prefix alone is insufficient without menu parity.
 
-`s9-effect-checks.ts` defines **verification observation** schemas, not product
+`journeys/scenes/effect-checks.ts` defines **verification observation** schemas, not product
 wire formats or new product producers. Bind them to independently retained
 command, kernel termios, service-return, fixture and rendered observations. For
 Refresh, retain the actual CLI adapter and service/provider interaction: a mock
@@ -82,7 +82,7 @@ the separate [Claude runtime recipe](claude-background.md), not claims from B.
 ## Settled picker menu census
 
 Lead push `01a18ce5-8c4d-7193-92c9-f1452715b35d` and R13 at `76803a480`
-settle all 19 base Help rows. `s9-picker-action-inventory.ts` retains their
+settle all 19 base Help rows. `journeys/flows/picker-action-inventory.ts` retains their
 independent source census and classifies each one:
 
 - Nine actions belong in the menu and Help, with the settled names and keys.

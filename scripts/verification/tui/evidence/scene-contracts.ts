@@ -308,7 +308,7 @@ export function coverageGaps(): string[] {
 		'quota/reset-result',
 		'quota/paging',
 		'48x12 usable header/actions and scrolled body (static capture wired, unobserved)',
-		'40x24 and 32x24 physical cell bounds and original visibility (wired, unobserved)',
+		'32x24 physical cell bounds and original visibility (wired, unobserved)',
 		'actual iPhone terminal operation (separate device target, unobserved)',
 		'C7 named header and current Help census associations',
 		'C7 active field/query/no-match and unavailable Select',

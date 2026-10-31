@@ -13,7 +13,6 @@ import {
 	strictArguments,
 	usageFailure,
 } from '../../cli/cli-arguments.ts';
-import { quotaRefreshJourneys } from '../../s9-journeys/quota-refresh.ts';
 import { accountActionJourneys } from './account-actions.ts';
 import { accountLoginJourneys } from './account-login.ts';
 import { claudeDetailsJourneys } from './claude-details.ts';
@@ -21,6 +20,7 @@ import { flowJourneySchema, flowDesignHead } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 import { newDialogJourneys } from './new-dialog.ts';
 import { optionNavigationJourneys } from './option-navigation.ts';
+import { quotaRefreshJourneys } from './quota-refresh.ts';
 import { sourceQualifiedJourneys } from './source-qualified-selection.ts';
 import { toolbarMenuJourneys } from './toolbar-menus.ts';
 export const authoredFlows: readonly FlowJourney[] = [

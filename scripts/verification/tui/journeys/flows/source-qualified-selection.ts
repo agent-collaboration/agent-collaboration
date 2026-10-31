@@ -1,5 +1,6 @@
+import { journeyGridSizes } from '../journey-definition.ts';
 /** U4 return-path fixtures: HostedCodex, never in-picker HostedProvider actions. */
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 export const sourceQualifiedJourneys: readonly FlowJourney[] = (['resume', 'fork'] as const).map(
 	(action) =>
@@ -9,7 +10,7 @@ export const sourceQualifiedJourneys: readonly FlowJourney[] = (['resume', 'fork
 			surface: 'sessions',
 			availability: absentAtBase('S6'),
 			reference: flowReference('R4,R16', 'U4'),
-			grids: [...flowGridSizes],
+			grids: [...journeyGridSizes],
 			keys: ['legacy', 'kitty'],
 			fixtures: [
 				'same opaque ID on HostedCodex rows with distinct services and endpoints',

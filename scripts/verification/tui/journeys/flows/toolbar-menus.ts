@@ -1,4 +1,5 @@
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { journeyGridSizes } from '../journey-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'] as const).map(
 	(surface) => ({
@@ -7,7 +8,7 @@ export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'
 		surface,
 		availability: absentAtBase(surface === 'sessions' ? 'S6' : 'S7'),
 		reference: flowReference('R6,R7,R8,R13; quota extensions R17/R18', 'U12; quota U16/U17'),
-		grids: [...flowGridSizes],
+		grids: [...journeyGridSizes],
 		keys: ['legacy', 'kitty'],
 		fixtures: [
 			'declared counts and current machine',

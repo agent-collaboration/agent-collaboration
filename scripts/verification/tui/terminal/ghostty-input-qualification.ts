@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs';
 
 import { layerCKeyboardKeys, layerCProfiles } from '../capture/harness-journeys.ts';
 import { isMain, planArgument, reportCliFailure, strictArguments } from '../cli/cli-arguments.ts';
-import { flowGridSizes } from '../journeys/flows/flow-definition.ts';
+import { journeyGridSizes } from '../journeys/journey-definition.ts';
 import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
 import { GhosttyJourneyInput } from './ghostty-journey-input.ts';
 import type { InputDeliveryRecord } from './ghostty-journey-input.ts';
@@ -45,7 +45,7 @@ export async function qualifyGhosttyInput(): Promise<{
 				await inSequence(layerCKeyboardKeys, async (key) => {
 					await input.key(key);
 				});
-				await inSequence(flowGridSizes, async (dimensions) => {
+				await inSequence(journeyGridSizes, async (dimensions) => {
 					const [columns, rows] = dimensions.split('x').map(Number);
 					if (columns === undefined || rows === undefined)
 						throw new Error('missing grid dimension');

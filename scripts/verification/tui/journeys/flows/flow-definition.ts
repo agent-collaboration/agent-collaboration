@@ -1,9 +1,10 @@
 /** Authored S9 journeys. Absent entries are coverage states, never passing runs. */
 import { z } from 'zod';
 
+import { journeyGridSizes } from '../journey-definition.ts';
+
 export const flowBaseHead = 'e23f28aff392d7c09905fe65ae64628ddaba81a4';
 export const flowDesignHead = '76803a480b21cad31dc32db1b6fbc86c31aab61b';
-export const flowGridSizes = ['120x36', '76x30', '48x24', '48x12', '40x24', '32x24'] as const;
 export const flowCheckSchema = z.enum([
 	'picker-toolbar',
 	'quota-toolbar',
@@ -91,7 +92,7 @@ export const flowJourneySchema = z.strictObject({
 		specification: z.string().min(1),
 		verificationDesign: z.string().min(1),
 	}),
-	grids: z.array(z.enum(flowGridSizes)).min(1),
+	grids: z.array(z.enum(journeyGridSizes)).min(1),
 	keys: z.array(z.enum(['legacy', 'kitty'])).min(1),
 	inputProfile: z.enum(['terminal-only', 'example-ghostty-keybinds']).optional(),
 	fixtures: z.array(z.string().min(1)),

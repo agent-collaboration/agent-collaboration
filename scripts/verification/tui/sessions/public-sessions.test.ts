@@ -151,7 +151,7 @@ test.each([undefined, 'normal codex'])(
 			env: launch.environment,
 			timeout: 2000,
 		});
-		expect(result.status).toBe(0);
+		expect(result.status, result.error?.message).toBe(0);
 		expect(readJson(fixture.record)).toEqual({
 			argv: [],
 			cwd: fixture.approved,

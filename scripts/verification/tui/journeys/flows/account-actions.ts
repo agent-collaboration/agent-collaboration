@@ -1,4 +1,5 @@
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { journeyGridSizes } from '../journey-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 const shared = {
 	requirements: ['U16/R17'],
@@ -8,7 +9,7 @@ const shared = {
 		'R17; Program Design Account actions from quota Details',
 		'U16: Actions, captured target, Remove, reselection, RequiresDisabled',
 	),
-	grids: [...flowGridSizes],
+	grids: [...journeyGridSizes],
 	keys: ['legacy', 'kitty'],
 	fixtures: [
 		'captured A and separately selected B',

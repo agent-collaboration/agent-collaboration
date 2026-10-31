@@ -1,8 +1,9 @@
 /** Coverage admission, not product proof. The source decision supplies this closed context/key set. */
 import { expect, test } from 'vitest';
 
+import { journeyGridSizes } from '../journey-definition.ts';
 import { validateAuthoredFlows } from './flow-catalogue.ts';
-import { flowGridSizes, flowJourneySchema } from './flow-definition.ts';
+import { flowJourneySchema } from './flow-definition.ts';
 import { optionNavigationJourneys } from './option-navigation.ts';
 
 test('all picker/quota list and Help aliases retain both modes, the consumed-key profile and independent expected destinations', () => {
@@ -17,7 +18,7 @@ test('all picker/quota list and Help aliases retain both modes, the consumed-key
 		const journey = flowJourneySchema.parse(candidate);
 		expect(journey.inputProfile).toBe('example-ghostty-keybinds');
 		expect(journey.keys).toEqual(['legacy', 'kitty']);
-		expect(journey.grids).toEqual([...flowGridSizes]);
+		expect(journey.grids).toEqual([...journeyGridSizes]);
 		expect(
 			journey.steps
 				.filter((step) => step.kind === 'press' && step.key.startsWith('Alt+'))

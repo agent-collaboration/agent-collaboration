@@ -1,11 +1,12 @@
-import { absentAtBase, flowGridSizes, flowReference } from './flow-definition.ts';
+import { journeyGridSizes } from '../journey-definition.ts';
+import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 const shared = {
 	requirements: ['U5/R9'],
 	surface: 'sessions',
 	availability: absentAtBase('S6'),
 	reference: flowReference('R3,R9,R13,R14', 'U5'),
-	grids: [...flowGridSizes],
+	grids: [...journeyGridSizes],
 	fixtures: [
 		'returned New outcome for local/default; counted preparation stand-in only for configured source',
 		'committed Client/Machine/Directory/Run stable identifiers',

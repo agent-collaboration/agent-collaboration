@@ -264,19 +264,52 @@ test.each([0, 1])(
 	'oracle timeout remains failure after later exit %s when own-child signal is not delivered',
 	async (exit) => {
 		const root = rootDirectory();
+		const readyPath = join(root, 'oracle-ready');
+		const releasePath = join(root, 'oracle-release');
+		const watcher = watch(root, { signal: AbortSignal.timeout(5000) });
+		const ready = new Promise<void>((resolve, reject) => {
+			const observeReady = (): void => {
+				if (existsSync(readyPath) && readFileSync(readyPath, 'utf8') === 'ready\n') resolve();
+			};
+			watcher.on('change', observeReady);
+			watcher.once('error', reject);
+			watcher.once('close', () => reject(new Error('oracle readiness closed before ready')));
+			observeReady();
+		});
 		const executable = controlledExecutable(
 			root,
 			'late-oracle',
-			`setTimeout(()=>{process.stdout.write('late observation');process.stderr.write('retained stderr');process.exitCode=${exit};},250);`,
+			`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const release=path.join(root,'oracle-release');const watcher=fs.watch(root,()=>{if(fs.existsSync(release)&&fs.readFileSync(release,'utf8')==='release\\n'){process.stdout.write('late observation');process.stderr.write('retained stderr');process.exitCode=${exit};watcher.close();}});fs.writeFileSync(path.join(root,'oracle-ready'),'ready\\n');`,
 		);
-		const refusedSignal = vi.spyOn(ChildProcess.prototype, 'kill').mockReturnValue(false);
+		// The real child owns readiness and exit; only the parent's deadline is advanced.
+		// A refused signal releases the child causally, with no child timer race.
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		const refusedSignal = vi.spyOn(ChildProcess.prototype, 'kill').mockImplementation(() => {
+			writeFileSync(releasePath, 'release\n');
+			return false;
+		});
+		const outcome = runCapturedCommand({
+			command: [executable, root],
+			repository: root,
+			timeoutSeconds: 0.1,
+		}).then(
+			() => 'unexpected success',
+			(error: unknown) => String(error),
+		);
 		try {
-			await expect(
-				runCapturedCommand({ command: [executable], repository: root, timeoutSeconds: 0.1 }),
-			).rejects.toThrow(`"exit":${exit},"timeout":true`);
+			await ready;
+			await vi.advanceTimersByTimeAsync(100);
+			const failure = await outcome;
+			expect(failure).toContain(`"exit":${exit},"timeout":true`);
+			expect(failure).toContain(Buffer.from('late observation').toString('base64'));
+			expect(failure).toContain(Buffer.from('retained stderr').toString('base64'));
 			expect(refusedSignal).toHaveBeenCalledWith('SIGKILL');
 		} finally {
+			writeFileSync(releasePath, 'release\n');
+			await outcome;
 			refusedSignal.mockRestore();
+			watcher.close();
+			vi.useRealTimers();
 		}
 	},
 );

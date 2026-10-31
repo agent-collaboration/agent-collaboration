@@ -1,4 +1,5 @@
-import { flowBaseHead, flowGridSizes } from '../journeys/flows/flow-definition.ts';
+import { flowBaseHead } from '../journeys/flows/flow-definition.ts';
+import { journeyGridSizes } from '../journeys/journey-definition.ts';
 /** S9 authoring contract; byte qualification is not a product or physical-terminal pass. */
 import type { GhosttyKey } from '../terminal/ghostty-input-encoding.ts';
 export const layerCKeyboardKeys = [
@@ -30,7 +31,7 @@ export const layerCPointerJourneys = (['sessions', 'quota'] as const).map((surfa
 		head: flowBaseHead,
 		introducedBy: surface === 'sessions' ? 'S6' : 'S7',
 	},
-	grids: flowGridSizes,
+	grids: journeyGridSizes,
 	keys: ['legacy', 'kitty'],
 	profiles: layerCProfiles,
 	steps: [
