@@ -2,6 +2,8 @@
 
 The existing face speaks Codex app-server. The existing actor speaks ACP and owns sending. **Dependency injection means a constructor receives a Rust trait object.** Host composition constructs the selected concrete provider behavior; the shared runtime and actor consume that dependency without choosing providers.
 
+The complete Program Design includes the [model information and setting-intent chapter](program-design.html#model-metadata), retained in `program-design.source.html` and embedded in the same reader. That chapter owns model bootstrap, exact-session catalogue reads, provider-controlled effort, metadata carriers and implicit-setting replay rules. The core bridge chapters below retain skills, lifecycle, command and DI ownership.
+
 ```mermaid
 flowchart TD
   Host["Host composition<br/>qualifies launch and constructs one behavior"] -->|Claude qualification result| Claude["ClaudeAcpBehavior<br/>immutable skill-source configuration"]
@@ -47,7 +49,7 @@ Source: `codex-router-host/src/collaboration_runtime/startup_composition.rs` con
 | Read skills | Native face returns empty | Face reads current session skill view; existing `skills/changed` invalidates it |
 | Invoke selected skill | Native decoder rejects Skill | Decode → Host/FIFO carries selection → actor revalidates → injected adapter prepares content → same ACP prompt; normal hub outcome returns |
 | Compact | Native method absent | Dedicated command → same idle actor → qualified provider operation; marker and terminal drive native item/turn, otherwise typed refusal/failure |
-| Model/mode | Existing catalogue and settings path | Keep it; reject invalid/unmapped values before sending rather than defaulting |
+| Model/mode | Existing catalogue and settings path | Validate actual model IDs against the addressed session's fresh catalogue before requested setting/prompt effects; report any already-created requested session explicitly. Never substitute a default for an invalid model. |
 
 ## Entity homes and boundary shapes
 
