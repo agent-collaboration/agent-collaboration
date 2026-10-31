@@ -1,0 +1,12 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+--- a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
++++ b/crates/agent-collaboration-tui/src/controls/dialog_frame.rs
+@@ -212,7 +212,7 @@ pub fn DialogFrame<'a>(
+             }).into_any()))
+             ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:false,children)
+         }
+-        #(pinned_status.map(|status|element!(View(width:100pct,padding_top:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
++        #(pinned_status.filter(|_| width_hint > 26).map(|status|element!(View(width:100pct,padding_top:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+             MeasuredFixedSlot(height:status_height,children:vec![status])
+         }).into_any()))
+         #(has_actions.then(||element!(MeasuredFooter(height:footer_height,children:actions,hints:action_hints))))

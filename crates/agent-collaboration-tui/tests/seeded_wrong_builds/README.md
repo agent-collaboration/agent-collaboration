@@ -262,3 +262,18 @@ The first-frame scenarios retain every native synchronized frame before the sett
 | `fixed-dialog-padding-deferred.patch` | The first marked F1 frame uses zero padding; Down then consumes two body rows and shifts the content column by one. |
 
 The Help padding cases compare the painted scrollbar and content column in the first marked F1 and Down canvases at120x36 and76x30. They derive geometry from each retained canvas; reading shared measurement state after receiving queued frames could observe a later layout instead. The first frame also keeps the shipped one-cell padding for these fixed-height dialogs. The existing content-dialog padding mutation retains its previous-height defect for both sizing policies.
+
+| Patch | Intended failure |
+| --- | --- |
+| `pinned-controls-scroll-with-body.patch` | The controls disappear when the body pages. |
+| `pinned-controls-hidden-at-phone-width.patch` | The32-column dialog drops its controls. |
+| `pinned-slots-ignore-header-body-budget.patch` | A second context row consumes the third feasible body row. |
+| `pinned-status-scrolls-with-body.patch` | A status at the end of a long body is initially hidden. |
+| `pinned-status-hidden-at-phone-width.patch` | The32-column dialog drops its fixed status. |
+| `pinned-status-doubles-action-gap.patch` | An extra footer gap separates status from actions. |
+| `empty-pinned-controls-add-gap.patch` | An absent controls slot changes the original dialog bytes. |
+| `empty-pinned-status-retains-height.patch` | Clearing a displayed status leaves its cached height in the content-sized dialog. |
+| `pinned-slot-heights-hardcoded.patch` | Multiline slots are counted as one row and steal body space. |
+| `pinned-slots-missing-content-extent.patch` | Content-sized forms omit the fixed slots from their height. |
+
+The fixed-slot cases use native layout, published pointer cells and the declared focus order. Both slots remain visible at32x24 and48x12, and paging reaches every body row. The existing three-row rule guards header context separation after subtracting fixed slots and gaps; at physically shorter heights the body scrolls with fewer rows. No gap compression or new fallback is added. An independent pre-change52944-byte ANSI baseline freezes12 existing no-slot dialogs across six grids and both sizing policies. Its explicit ignored exporter writes only a new absolute file selected by TUI_DIALOG_BASELINE_EXPORT; normal runs never regenerate the fixture.

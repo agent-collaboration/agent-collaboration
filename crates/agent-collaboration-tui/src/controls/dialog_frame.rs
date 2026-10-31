@@ -36,6 +36,21 @@ fn MeasuredFooter<'a>(
     element!(View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {DialogFooter(children,hints)})
 }
 #[derive(Props)]
+struct MeasuredFixedSlotProps<'a> {
+    #[iocraft(required)]
+    height: State<u16>,
+    children: Vec<AnyElement<'a>>,
+}
+#[component]
+fn MeasuredFixedSlot<'a>(
+    props: &mut MeasuredFixedSlotProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    hooks.use_hook(|| FrameMeasure(props.height)).0 = props.height;
+    let children = std::mem::take(&mut props.children);
+    element!(View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {#(children)})
+}
+#[derive(Props)]
 pub struct DialogFrameProps<'a> {
     pub title: String,
     #[iocraft(required)]
@@ -48,6 +63,9 @@ pub struct DialogFrameProps<'a> {
     pub border_color: Option<Color>,
     pub help_action: Option<AnyElement<'a>>,
     pub context: Option<PinnedContext>,
+    /// Declare their focus targets after header actions and before body targets.
+    pub pinned_controls: Vec<AnyElement<'a>>,
+    pub pinned_status: Option<AnyElement<'a>>,
     pub children: Vec<AnyElement<'a>>,
     pub actions: Vec<AnyElement<'a>>,
     pub action_hints: Vec<AnyElement<'a>>,
@@ -81,6 +99,12 @@ pub fn DialogFrame<'a>(
     hooks.use_hook(|| FrameMeasure(height)).0 = height;
     let footer_height = hooks.use_state(|| 0u16);
     let header_height = hooks.use_state(|| 1u16);
+    let controls_height = hooks.use_state(|| 0u16);
+    let status_height = hooks.use_state(|| 0u16);
+    let pinned_controls = std::mem::take(&mut props.pinned_controls);
+    let pinned_status = props.pinned_status.take();
+    let has_controls = !pinned_controls.is_empty();
+    let has_status = pinned_status.is_some();
     let children = std::mem::take(&mut props.children);
     let mut actions = std::mem::take(&mut props.actions);
     let action_hints = std::mem::take(&mut props.action_hints);
@@ -112,6 +136,17 @@ pub fn DialogFrame<'a>(
     let border_style = props.border_style.unwrap_or(BorderStyle::Round);
     let border_rows = u16::from(border_style != BorderStyle::None) * 2;
     let header_chrome = header_height.get().saturating_add(border_rows);
+    // Slots contribute their measured content and one additional R12 gap each.
+    let fixed_slot_rows = (if has_controls {
+        controls_height.get().saturating_add(1)
+    } else {
+        0
+    })
+    .saturating_add(if has_status {
+        status_height.get().saturating_add(1)
+    } else {
+        0
+    });
     // Content padding follows the current body, never the previous Help frame.
     let content_extent = props
         .scroll
@@ -120,6 +155,7 @@ pub fn DialogFrame<'a>(
         .saturating_add(header_chrome)
         .saturating_add(u16::from(has_context))
         .saturating_add(if has_actions { footer_height.get() } else { 0 })
+        .saturating_add(fixed_slot_rows)
         .min(sizing.map_or(u16::MAX, |sizing| sizing.max_height));
     let padding_height = if content_height {
         content_extent
@@ -156,7 +192,8 @@ pub fn DialogFrame<'a>(
             header_chrome
                 + padding.saturating_mul(2)
                 + if has_actions { footer_height.get() } else { 0 },
-        );
+        )
+        .saturating_sub(fixed_slot_rows);
     let context_gap = u16::from(has_context && body_budget > 1);
     let available_rows = sizing
         .map_or(u16::MAX, |sizing| sizing.max_height)
@@ -165,7 +202,8 @@ pub fn DialogFrame<'a>(
                 + padding.saturating_mul(2)
                 + if has_actions { footer_height.get() } else { 0 }
                 + context_gap,
-        );
+        )
+        .saturating_sub(fixed_slot_rows);
     let width_hint = sizing
         .map_or(0, |sizing| sizing.max_width)
         .saturating_sub(border_rows + padding.saturating_mul(2));
@@ -173,8 +211,15 @@ pub fn DialogFrame<'a>(
         border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
         View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
+            // The column's context gap already supplies zero or one of this gap's rows.
+            #(has_controls.then(||element!(View(width:100pct,padding_bottom:1u16.saturating_sub(context_gap),flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                MeasuredFixedSlot(height:controls_height,children:pinned_controls)
+            }).into_any()))
             ScrollList(id:props.scroll_target.clone(),scroll:props.scroll.clone(),keyboard_target:props.scroll_focus.clone(),grow:!content_height,align_bottom:false,children)
         }
+        #(pinned_status.map(|status|element!(View(width:100pct,padding_top:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+            MeasuredFixedSlot(height:status_height,children:vec![status])
+        }).into_any()))
         #(has_actions.then(||element!(MeasuredFooter(height:footer_height,children:actions,hints:action_hints))))
     })
 }
