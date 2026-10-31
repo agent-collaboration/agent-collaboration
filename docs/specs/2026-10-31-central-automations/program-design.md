@@ -7,15 +7,16 @@ Realizes [specification.md](specification.md). Revised twice on 2026-10-31: firs
 **The Fleet face owns definitions, content and the clock** (one per organization). **Central reaches a machine through the existing Fleet→Delivery machine-notice edge, and the machine pulls through Session→Fleet.** Both edges already exist in the sealed call graph (`call_graph.rs:162–168`: `SessionKind=>FleetKind`, `FleetKind=>DeliveryKind`), so no edge or rank changes. The Registry and the mailboxes are not involved in automations, and session-to-session mail is untouched. **The target Router owns execution**, through today's drivers. Only due-time admission and the waiting slot move to central.
 
 ```text
-Router (any) ──Session→Fleet: AutomationCall──► Fleet: catalog + content + clock operation
-                                                 │ clock op (journal) on alarm: admit due → freeze Batch(es)
-                                                 ▼ durable step
+Router (any) ──Session→Fleet: AutomationCall──► Fleet: catalog + content + automation_timing
+                                                 │ on_alarm → AutomationClock::evaluate(now): admit effective-due → freeze Batch(es)
+                                                 │           + admit due-now notice operations + wake_at(next) via shared AlarmOwner
+                                                 ▼ durable notice step (journal, due now)
                               Fleet→Delivery: DeliverMachineNotice(BoardNotice::AutomationBatchReady{batch_id})
-                                                 ▼ (journaled per machine, position, live hint, catch-up)
-target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, hint, CursorExpired)──► unacked batch IDs
-             ──Session→Fleet: FetchAutomationBatch / FetchContent──► frozen bytes, content by revision
-             ──local admission (one txn)──► AckAutomationBatch(batch_id, digest) ──► today's wake delivery sender / run driver
-             ──Session→Fleet: FiringReport{firing_id, seq, state}──► outcome
+                                                 ▼ (journaled per machine, a hint only)
+target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnect, hint, CursorExpired)──► unacked batches + bytes
+             ──Session→Fleet: FetchContents([content_id, digest])──► content by revision
+             ──local admission (one txn)──► today's wake delivery sender / run driver
+             ──Session→Fleet: AckAutomationBatches + ReportFirings (one frame, every 500 ms or 100 items)──► custody + outcome
 ```
 
 ## Entity binding
@@ -58,11 +59,11 @@ target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, 
 
 ## Flows
 
-1. **Create or change.** Over Session→Fleet: operation-ID replay or conflict; validate the Limits and the slot; write the definition, content, timing and the clock operation's admit and reschedule; call `wake_at`; write the operation receipt. All in one Fleet transaction.
+1. **Create or change.** Over Session→Fleet: operation-ID replay or conflict; validate the Limits and the slot; write the definition, content and `automation_timing`; call `wake_at(next effective due)` through the shared `AlarmOwner`; write the operation receipt. All in one Fleet transaction. No journal operation is admitted for time.
 2. **Due.**
    1. The alarm runs `on_alarm`, which drives the journal and runs `AutomationClock::evaluate(now)`. In one transaction, evaluate admits Firings whose effective due time is ≤ now, folds, batches, freezes, admits the notice operations, advances timing and re-arms. That commit is **the cutoff** (U17).
    2. The notifier appends `AutomationBatchReady` to each machine's journal, and the Firings become held.
-   3. The machine lists and fetches the Batch, admits it locally, and acknowledges it; the Firings become received.
+   3. The machine pulls its unacknowledged Batches, fetches missing content, admits them locally, and acknowledges them (batched with reports); the Firings become received.
 3. **Pause, cancel or change.** Applied in the catalog. A Firing still pending is cancelled; one past the cutoff gets the answer `alreadySent`, and nothing is sent to the machine.
 4. **Receive.** Fetch, then content fetch (cached by digest), then local admission per entry, then today's drivers, then reports (delivered, run started, run finished or failed, uncertain, then the reconciled state).
 5. **Handover.**
@@ -90,7 +91,7 @@ target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, 
   - an uncertain state may sit between received and its result.
 - **Reports:** applied in `seq` order; anything at or below the current one is ignored; terminal states are final.
 - **Receipt:** admitted → done.
-- **Handover:** none → pending → (waiting for local work to finish) → moved.
+- **Handover:** none → pending (frozen, import in flight; any external occupant keeps running) → moved.
 
 ## Failure and edge behaviour
 
@@ -104,7 +105,7 @@ target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, 
 | A crash during local admission | it's one transaction, so the entry is either fully admitted or not at all; a re-fetch re-admits idempotently by receipt |
 | A crash after native acceptance | today's uncertain handling, reported as uncertain, then the reconciled state |
 | An instruction edited after admission | the Firing keeps its `content_id`; the new revision applies only to later Firings |
-| An empty Fleet journal at the first create | the create admits the clock operation in its own transaction |
+| An empty Fleet at the first create | the create writes `automation_timing` and calls `wake_at`; the alarm then runs `evaluate`. No journal operation is involved |
 | An old-release target | `targetNeedsUpgrade` at create |
 | A stored row breaks a Limit | refused on decode |
 
@@ -128,8 +129,8 @@ target Router ──Session→Fleet: ListPendingBatches (on connect, reconnect, 
 | definitions | R5 | limits | schema against acceptance; decode refusal |
 | cadence | R6g | clock (nominal → effective) | `automation_firings` rows |
 | cadence | R6n | notification limiter | push count per recipient; listing |
-| firing | R7f | clock operation + notifier | Batch rows; journal; alarm drive |
-| firing | R6 | notice contract + fetch + local admission | per-entry outcomes; capability refusal |
+| firing | R7f | `AutomationClock::evaluate` + notifier | Batch rows; `automation_timing`; alarm callbacks |
+| firing | R6 | notice contract + batched custody calls + local admission | per-entry outcomes; capability refusal |
 | firing | R6a | clock commit (the cutoff) + catalog | the command answers; Batch membership |
 | firing | R7 | local admission + drivers | receipts; effect counts |
 | runs | R8, R9 | drivers + `admit_central_run` | session input; frozen revision; summary |
