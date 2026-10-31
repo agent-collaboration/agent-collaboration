@@ -13,7 +13,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::use_surface_stack,
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     fn action(name: &str) -> ActionId {
@@ -77,12 +77,7 @@ mod tests {
                             menu_overlay(
                                 stack,
                                 &snapshot.top().actions,
-                                OverlayLayout::AtCells {
-                                    left: 10,
-                                    top: 3,
-                                    width: 36,
-                                    height: 7,
-                                },
+                                TargetId::for_action(&action("menu")),
                             )
                             .unwrap(),
                         )
@@ -110,7 +105,29 @@ mod tests {
     }
     fn click_label(driver: &EventDriver, label: &str, menu: bool) -> TerminalEvent {
         let grid = driver.frames.last().unwrap();
-        let rows = if menu { 4..9 } else { 0..1 };
+        let (rows, left, right) = if menu {
+            let (top, left) = grid
+                .cells
+                .iter()
+                .enumerate()
+                .find_map(|(row, cells)| {
+                    cells
+                        .iter()
+                        .position(|cell| cell.text == "╭")
+                        .map(|column| (row, column))
+                })
+                .unwrap();
+            let right = grid.cells[top]
+                .iter()
+                .rposition(|cell| cell.text == "╮")
+                .unwrap();
+            let bottom = (top..grid.height)
+                .find(|row| grid.cells[*row][left].text == "╰")
+                .unwrap();
+            (top + 1..bottom, left, right)
+        } else {
+            (0..1, 0, grid.width - 1)
+        };
         let row = rows
             .into_iter()
             .find(|row| grid.row_text(*row).contains(label))
@@ -119,7 +136,7 @@ mod tests {
         let column = grid.cells[row]
             .iter()
             .enumerate()
-            .find(|(column, cell)| cell.text == first && (!menu || *column >= 10))
+            .find(|(column, cell)| cell.text == first && *column >= left && *column <= right)
             .unwrap()
             .0;
         TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
@@ -136,14 +153,8 @@ mod tests {
     }
     fn checked_menu(driver: &EventDriver, label: &str) {
         let grid = driver.frames.last().unwrap();
-        let rows = (4..9)
-            .map(|row| {
-                grid.cells[row][10..46]
-                    .iter()
-                    .map(|cell| cell.text.as_str())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>();
+        let panel = grid.round_frame_text();
+        let rows = panel.lines().collect::<Vec<_>>();
         assert_eq!(
             rows.iter()
                 .map(|row| row.matches('✓').count())

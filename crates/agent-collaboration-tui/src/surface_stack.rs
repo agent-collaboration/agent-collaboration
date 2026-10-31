@@ -64,8 +64,14 @@ pub struct OverlaySpec {
     pub layout: OverlayLayout,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OverlayLayout {
+    Anchored {
+        target: TargetId,
+        preferred_width: u16,
+        maximum_width: u16,
+        maximum_height: u16,
+    },
     Dialog {
         presentation: crate::DialogPresentation,
         margins: crate::DialogMargins,
@@ -89,8 +95,14 @@ impl Default for OverlayLayout {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OverlayPlacement {
+    Anchored {
+        target: TargetId,
+        preferred_width: u16,
+        maximum_width: u16,
+        maximum_height: u16,
+    },
     Fixed {
         left: u16,
         top: u16,
@@ -108,6 +120,17 @@ pub enum OverlayPlacement {
 impl OverlayLayout {
     pub fn resolve(self, viewport: (u16, u16)) -> OverlayPlacement {
         match self {
+            Self::Anchored {
+                target,
+                preferred_width,
+                maximum_width,
+                maximum_height,
+            } => OverlayPlacement::Anchored {
+                target,
+                preferred_width,
+                maximum_width,
+                maximum_height,
+            },
             Self::Dialog {
                 presentation,
                 margins,

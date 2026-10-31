@@ -1,8 +1,14 @@
 diff --git a/crates/agent-collaboration-tui/src/controls/menu.rs b/crates/agent-collaboration-tui/src/controls/menu.rs
+index 4b4552db..1608b31e 100644
 --- a/crates/agent-collaboration-tui/src/controls/menu.rs
 +++ b/crates/agent-collaboration-tui/src/controls/menu.rs
-@@ -93,3 +93,3 @@ pub fn menu_overlay(
+@@ -70,7 +70,8 @@ pub fn menu_overlay(
+     registry: &ActionRegistry,
+     anchor: TargetId,
  ) -> Result<OverlaySpec, MenuModelError> {
--    let layout = menu_layout(registry, layout, stack.viewport());
-+    let _preferred = menu_layout(registry, layout, stack.viewport());
-     let actions = registry
+-    let (preferred_width, maximum_height) = menu_dimensions(registry);
++    let (_, maximum_height) = menu_dimensions(registry);
++    let preferred_width = 18;
+     let layout = OverlayLayout::Anchored {
+         target: anchor,
+         preferred_width,

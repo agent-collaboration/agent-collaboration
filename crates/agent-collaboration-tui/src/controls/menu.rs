@@ -12,11 +12,7 @@ use crate::{
 use iocraft::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-fn menu_layout(
-    registry: &ActionRegistry,
-    layout: OverlayLayout,
-    viewport: (u16, u16),
-) -> OverlayLayout {
+fn menu_dimensions(registry: &ActionRegistry) -> (u16, u16) {
     let entries = ActionProjections::from_registry(registry).menu;
     let content_height = u16::try_from(entries.len())
         .unwrap_or(u16::MAX)
@@ -34,52 +30,7 @@ fn menu_layout(
         .max()
         .unwrap_or(0);
     let preferred = u16::try_from(preferred).unwrap_or(u16::MAX);
-    match layout {
-        OverlayLayout::AtCells {
-            left,
-            top,
-            width,
-            height,
-        } => {
-            let width = width.max(preferred);
-            OverlayLayout::AtCells {
-                left: left.min(viewport.0.saturating_sub(width)),
-                top,
-                width,
-                height: height.min(content_height),
-            }
-        }
-        OverlayLayout::CenteredCells { width, height } => OverlayLayout::CenteredCells {
-            width: width.max(preferred),
-            height: height.min(content_height),
-        },
-        OverlayLayout::Dialog {
-            presentation,
-            margins,
-        } => {
-            let available_width = viewport
-                .0
-                .saturating_sub(margins.left.saturating_add(margins.right));
-            let available_height = viewport
-                .1
-                .saturating_sub(margins.top.saturating_add(margins.bottom));
-            let (width, height) = match presentation {
-                crate::DialogPresentation::FullScreen => (
-                    crate::DialogAxisSize::cells(available_width),
-                    crate::DialogAxisSize::cells(available_height),
-                ),
-                crate::DialogPresentation::Sized { width, height } => (width, height),
-            };
-            let (_, maximum) = height.resolve(available_height);
-            OverlayLayout::Dialog {
-                presentation: crate::DialogPresentation::Sized {
-                    width,
-                    height: crate::DialogAxisSize::cells(maximum.min(content_height)),
-                },
-                margins,
-            }
-        }
-    }
+    (preferred, content_height)
 }
 
 fn ellipsize(content: &str, width: usize) -> String {
@@ -117,9 +68,15 @@ impl std::error::Error for MenuModelError {}
 pub fn menu_overlay(
     stack: SurfaceStackHandle,
     registry: &ActionRegistry,
-    layout: OverlayLayout,
+    anchor: TargetId,
 ) -> Result<OverlaySpec, MenuModelError> {
-    let layout = menu_layout(registry, layout, stack.viewport());
+    let (preferred_width, maximum_height) = menu_dimensions(registry);
+    let layout = OverlayLayout::Anchored {
+        target: anchor,
+        preferred_width,
+        maximum_width: u16::MAX,
+        maximum_height,
+    };
     let actions = registry
         .definitions()
         .iter()

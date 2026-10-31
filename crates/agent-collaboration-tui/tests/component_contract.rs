@@ -84,6 +84,9 @@ mod live_actions;
 #[path = "suites/menu_layout.rs"]
 mod menu_layout;
 #[cfg(test)]
+#[path = "suites/popup_anchor.rs"]
+mod popup_anchor;
+#[cfg(test)]
 #[path = "suites/scroll_geometry.rs"]
 mod scroll_geometry;
 #[cfg(test)]

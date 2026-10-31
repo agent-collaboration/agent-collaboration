@@ -56,7 +56,7 @@ pub fn StaticDialogFrame<'a>(
                     kind: OverlayKind::Dialog,
                     model: model(),
                     view: OverlayView::default(),
-                    layout,
+                    layout: layout.clone(),
                 })
                 .unwrap(),
         ));

@@ -17,7 +17,7 @@ mod tests {
         input_owner::InputOwner,
         overlay_host::OverlayHost,
         surface_handle::{SurfaceContext, SurfaceStackHandle, use_surface_stack},
-        surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+        surface_stack::{SurfaceId, SurfaceModel},
     };
     use iocraft::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -84,8 +84,6 @@ mod tests {
                     picks.set(picks.get() + 1);
                 }),
             });
-            let width = props.width;
-            let height = props.height;
             let open = ActionDef {
                 id: action(),
                 title: "Client".into(),
@@ -95,14 +93,7 @@ mod tests {
                 choice: None,
                 placement: Placement::Toolbar,
                 run: Handler::from(move |()| {
-                    control
-                        .open(OverlayLayout::AtCells {
-                            left: 2,
-                            top: 2,
-                            width: width.saturating_sub(4).min(48),
-                            height: height.saturating_sub(4).min(8),
-                        })
-                        .unwrap();
+                    control.open().unwrap();
                 }),
             };
             SurfaceModel {
