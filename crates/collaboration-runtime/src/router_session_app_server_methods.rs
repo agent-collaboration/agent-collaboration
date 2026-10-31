@@ -100,6 +100,9 @@ pub(super) fn handle_app_server_request(
         "hooks/list" => {
             return json!({"id":id,"error":{"code":-32000,"message":"Hook discovery is not supported on this ACP endpoint"}});
         }
+        "permissionProfile/list" => {
+            return json!({"id":id,"error":{"code":-32000,"message":"Permission profile discovery is not supported on this ACP endpoint"}});
+        }
         "collaborationMode/list" => Some(json!({"data":[],"nextCursor":null})),
         _ => None,
     };
@@ -274,9 +277,14 @@ pub(super) async fn handle_app_server_thread_request(
                 Ok(result)
             } else {
                 let mut thread = render_thread(&summary);
-                if params.get("includeTurns").and_then(Value::as_bool) == Some(true)
-                    && summary.state != session_event_model::SessionState::Unloaded
-                {
+                if params.get("includeTurns").and_then(Value::as_bool) == Some(true) {
+                    if matches!(
+                        summary.state,
+                        session_event_model::SessionState::Unloaded
+                            | session_event_model::SessionState::Closed
+                    ) {
+                        return Err(ThreadMethodError::Unavailable);
+                    }
                     let attachment = events
                         .attach(summary.session.clone())
                         .await

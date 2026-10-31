@@ -6,6 +6,130 @@ use tokio::net::UnixListener;
 use tokio_tungstenite::client_async;
 use tokio_util::sync::CancellationToken;
 
+async fn check_history_read_availability(
+    state: SessionState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let socket_path = directory.path().join("history.sock");
+    let listener = UnixListener::bind(&socket_path)?;
+    let backend = ScriptedSessionBackend::new()?;
+    backend
+        .durable_inventory
+        .lock()
+        .map_err(|_| "inventory lock")?
+        .push(HubSessionSummary {
+            session: backend.session.clone(),
+            approver: backend.approver.clone(),
+            working_directory: directory.path().into(),
+            updated_at_seconds: 1,
+            preview: String::new(),
+            name: None,
+            model: None,
+            mode: None,
+            state: state.clone(),
+        });
+    backend
+        .live_states
+        .lock()
+        .map_err(|_| "state lock")?
+        .insert(backend.session.clone(), state.clone());
+    let context = Arc::new(RouterSessionAppServerContext::new(
+        backend.endpoint.clone(),
+        ScriptedSessionBackend::actor()?,
+        backend.clone(),
+        backend.clone(),
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
+    ));
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await?;
+        serve_router_session_app_server_connection(stream, context).await?;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    });
+    let stream = UnixStream::connect(&socket_path).await?;
+    let (mut client, _) = client_async("ws://localhost/rpc", stream).await?;
+    client
+        .send(Message::Text(
+            json!({"id":"history-41","method":"thread/read",
+        "params":{"threadId":thread_alias(&backend.session),"includeTurns":true}})
+            .to_string()
+            .into(),
+        ))
+        .await?;
+    let response = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("history response")??;
+    let response: Value = serde_json::from_str(response.to_text()?)?;
+    if matches!(state, SessionState::Unloaded | SessionState::Closed) {
+        let expected = json!({"id":"history-41","error":{"code":-32000,"message":"provider session unavailable"}});
+        if response != expected {
+            return Err(format!("unavailable history must refuse: {response}").into());
+        }
+    } else if response.get("id") != Some(&json!("history-41"))
+        || response.pointer("/result/thread/turns") != Some(&json!([]))
+    {
+        return Err(format!("loaded empty history must remain successful: {response}").into());
+    }
+    // Metadata-only reads remain available on the same connection after refusal.
+    client
+        .send(Message::Text(
+            json!({"id":"metadata-42","method":"thread/read",
+        "params":{"threadId":thread_alias(&backend.session),"includeTurns":false}})
+            .to_string()
+            .into(),
+        ))
+        .await?;
+    let metadata = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("metadata response")??;
+    let metadata: Value = serde_json::from_str(metadata.to_text()?)?;
+    if metadata.get("id") != Some(&json!("metadata-42"))
+        || metadata.pointer("/result/thread/turns") != Some(&json!([]))
+    {
+        return Err(format!("metadata-only read changed: {metadata}").into());
+    }
+    if !backend
+        .create_commands
+        .lock()
+        .map_err(|_| "create lock")?
+        .is_empty()
+        || !backend
+            .load_commands
+            .lock()
+            .map_err(|_| "load lock")?
+            .is_empty()
+        || !backend
+            .prompt_commands
+            .lock()
+            .map_err(|_| "prompt lock")?
+            .is_empty()
+        || !backend
+            .setting_commands
+            .lock()
+            .map_err(|_| "setting lock")?
+            .is_empty()
+    {
+        return Err("read-only history requests dispatched provider effects".into());
+    }
+    client.close(None).await?;
+    server.await?.map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn unloaded_history_read_refuses_without_loading() -> Result<(), Box<dyn std::error::Error>> {
+    check_history_read_availability(SessionState::Unloaded).await
+}
+
+#[tokio::test]
+async fn closed_history_read_refuses_without_loading() -> Result<(), Box<dyn std::error::Error>> {
+    check_history_read_availability(SessionState::Closed).await
+}
+
+#[tokio::test]
+async fn loaded_empty_history_read_remains_successful() -> Result<(), Box<dyn std::error::Error>> {
+    check_history_read_availability(SessionState::Idle).await
+}
+
 async fn scripted_exchange(
     socket_path: &Path,
     method: &str,

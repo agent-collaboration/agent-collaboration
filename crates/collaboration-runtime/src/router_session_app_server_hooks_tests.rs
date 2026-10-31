@@ -5,6 +5,97 @@ use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio_tungstenite::client_async;
 
+/// Pinned Codex permission_discovery.rs:159-170 interprets -32601 as upgrade advice.
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal wire and zero-effect assertions; fixture errors propagate."
+)]
+async fn permission_discovery_refuses_without_effects_and_keeps_connection_usable()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let socket_path = directory.path().join("permissions.sock");
+    let listener = UnixListener::bind(&socket_path)?;
+    let backend = ScriptedSessionBackend::new()?;
+    let context = Arc::new(RouterSessionAppServerContext::new(
+        backend.endpoint.clone(),
+        ScriptedSessionBackend::actor()?,
+        backend.clone(),
+        backend.clone(),
+        super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
+    ));
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await?;
+        serve_router_session_app_server_connection(stream, context).await?;
+        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+    });
+    let stream = UnixStream::connect(&socket_path).await?;
+    let (mut client, _) = client_async("ws://localhost/rpc", stream).await?;
+    client
+        .send(Message::Text(
+            json!({"id":"permissions-41","method":"permissionProfile/list",
+        "params":{"cursor":null,"limit":100,"cwd":directory.path()}})
+            .to_string()
+            .into(),
+        ))
+        .await?;
+    let refusal = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("permission response")??;
+    let refusal: Value = serde_json::from_str(refusal.to_text()?)?;
+    assert_eq!(
+        refusal,
+        json!({"id":"permissions-41","error":{"code":-32000,
+        "message":"Permission profile discovery is not supported on this ACP endpoint"}})
+    );
+    client
+        .send(Message::Text(
+            json!({"id":"read-42","method":"account/read","params":{}})
+                .to_string()
+                .into(),
+        ))
+        .await?;
+    let read = super::test_support::next_non_skill_frame(&mut client)
+        .await
+        .ok_or("supported read")??;
+    let read: Value = serde_json::from_str(read.to_text()?)?;
+    assert_eq!(
+        read,
+        json!({"id":"read-42","result":{"account":null,"requiresOpenaiAuth":false}})
+    );
+    assert!(
+        backend
+            .create_commands
+            .lock()
+            .expect("create commands")
+            .is_empty()
+    );
+    assert!(
+        backend
+            .load_commands
+            .lock()
+            .expect("load commands")
+            .is_empty()
+    );
+    assert!(
+        backend
+            .prompt_commands
+            .lock()
+            .expect("prompt commands")
+            .is_empty()
+    );
+    assert!(
+        backend
+            .setting_commands
+            .lock()
+            .expect("setting commands")
+            .is_empty()
+    );
+    client.close(None).await?;
+    server.await?.map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// Oracle: R3 requires an honest refusal when no hook discovery exists;
 /// an empty success would be displayed as a real empty hook inventory.
 #[tokio::test]
