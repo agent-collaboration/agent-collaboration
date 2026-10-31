@@ -22,77 +22,84 @@
 <ex-document id="content">
 <h1 id="heading-firing-options-and-cost">Firing options and cost</h1>
 
-<p><strong>Short answer: at your real volume, all the options cost about nothing on Cloudflare.</strong> Your busiest day had about 1,250 firings. Option A, where central wakes at every due time, comes to roughly <strong>11,000 billed requests a day, about 0.34 million a month</strong>. That's inside the 1 million requests a month the paid plan already includes. At 10 times your peak it's about <strong>$0.45 a month</strong>; Cloudflare rounds billable usage up to the next million. So the choice should rest on reliability and complexity, not on alarm cost.</p>
+<p><strong>Priced as a service on the Workers Paid plan, with one central per organization: about $12 per million firings with option A as designed, and about half that with per-machine batching at send time.</strong> SQLite rows written are about 80% of the cost. The alarm itself is noise. A busy org with 50 agents on 5-minute wakes around the clock pays about $5 a month. The cost lever is <em>rows written per firing</em>, not the number of alarms.</p>
 
 <ex-callout title="What's measured and what's estimated" tone="risk" icon="chart-line">
   <ul>
-    <li><strong>Measured:</strong> your firings per day, read from your <code>automation.sqlite</code>.</li>
-    <li><strong>From Cloudflare's pricing page:</strong> the billing rules.</li>
-    <li><strong>Estimated:</strong> how many billed requests one firing makes as it hops between central objects. That count comes from reading our code paths, not from a run. The last section says how to measure it.</li>
+    <li><strong>From Cloudflare's docs:</strong> the paid-plan rates and the per-object limits.</li>
+    <li><strong>Measured:</strong> the firing volumes, from your own <code>automation.sqlite</code>.</li>
+    <li><strong>Estimated from our code paths:</strong> requests, rows and active time per firing. A's central-sent mail route isn't designed yet, so treat these as a planning model until the measurement below.</li>
   </ul>
 </ex-callout>
 
-<h2 id="workload">Your workload (last 30 days, this Mac)</h2>
+<h2 id="billing">Paid-plan rates (Workers Paid)</h2>
 <div class="ex-table-scroll">
 <table>
-<thead><tr><th></th><th>Typical day</th><th>Busiest day</th></tr></thead>
+<thead><tr><th>Dimension</th><th>Rate after the included monthly amount</th><th>What counts</th></tr></thead>
 <tbody>
-<tr><td>Wake firings</td><td>120–320</td><td>966 (15 Oct)</td></tr>
-<tr><td>Schedule runs</td><td>about 15 now</td><td>288 a day for two weeks (one 5-minute schedule)</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>about 150–350</strong></td><td><strong>about 1,250</strong></td></tr>
+<tr><td>Requests</td><td>$0.15 per million (1 M a month included)</td><td>each alarm, each HTTP or RPC call between objects; incoming WebSocket messages at 1/20; outgoing free</td></tr>
+<tr><td>Rows written (SQLite)</td><td>$1.00 per million (50 M a month included)</td><td>each insert, update or delete row; each <code>setAlarm</code> is one row</td></tr>
+<tr><td>Duration</td><td>$12.50 per million GB-s (400,000 GB-s included)</td><td>only while an object is actively running, at 128 MB; hibernating sockets are free</td></tr>
+<tr><td>Storage</td><td>$0.20 per GB-month</td><td>finished firings are kept 2 months</td></tr>
+<tr><td>Base</td><td>$5 a month per Cloudflare account</td><td>once for the whole service, not per organization</td></tr>
 </tbody>
 </table>
 </div>
+<p>Sources: <a href="https://developers.cloudflare.com/durable-objects/platform/pricing/">pricing</a> and <a href="https://developers.cloudflare.com/durable-objects/platform/limits/">limits</a>. Billable usage is rounded up to the next unit. The included amounts are per account, so at service scale they only shave the first bill.</p>
 
-<h2 id="billing">What Cloudflare bills</h2>
-<div class="ex-table-scroll">
-<table>
-<thead><tr><th>Item</th><th>Paid plan</th><th>Free plan</th></tr></thead>
-<tbody>
-<tr><td>Requests: each alarm, HTTP or RPC call, and <em>incoming</em> WebSocket messages at 1/20. Outgoing WebSocket messages are free.</td><td>1 M a month included, then $0.15 per million</td><td>100,000 a day</td></tr>
-<tr><td>Duration: only while an object is actively running. Idle objects that can hibernate are free.</td><td>400,000 GB-s a month included, then $12.50 per million GB-s</td><td>13,000 GB-s a day</td></tr>
-<tr><td>SQLite rows written, with each <code>setAlarm</code> counting as one row</td><td>50 M a month included, then $1 per million</td><td>100,000 a day</td></tr>
-</tbody>
-</table>
-</div>
-<p>Source: <a href="https://developers.cloudflare.com/durable-objects/platform/pricing/">Cloudflare Durable Objects pricing</a>. Alarms are delivered <a href="https://developers.cloudflare.com/durable-objects/api/alarms/">at least once, with retries</a>.</p>
-
-<h2 id="one-firing">What one firing costs (estimated from the code path)</h2>
+<h2 id="unit">Cost of one firing (estimate)</h2>
 <ex-mermaid id="hops" label="Billed hops for one firing"><script type="text/plain">
 flowchart LR
-  alarm["Fleet alarm<br/>1 request (A only)"] --> reg["Fleet → Registry<br/>1"]
+  alarm["Fleet alarm<br/>1 request + 1 row, shared<br/>by everything due together"] --> reg["Fleet → Registry<br/>1"]
   reg --> mb["Registry → Mailbox<br/>1"]
   mb --> conn["Mailbox → Connection notice<br/>1"]
   conn -->|"hint: outgoing WS, free"| mach["machine"]
-  mach -->|"pull + ack: incoming WS, 2 × 1/20"| conn2["Connection → Mailbox<br/>fetch + ack, 2"]
+  mach -->|"pull + ack: incoming WS"| conn2["Connection → Mailbox<br/>2"]
   conn2 --> status["status back to sender<br/>1"]
-  mach -->|"FiringReport ×1–2:<br/>incoming WS 1/20 + 1 each"| fleet2["Fleet"]
+  mach -->|"FiringReport ×1–2"| fleet2["Fleet<br/>1–2"]
 </script></ex-mermaid>
-<p><strong>About 9 billed requests and about 10 rows written per firing, all-in: an estimate.</strong> A's central-sent mail route and its status route aren't designed yet, so there's no exact hop count until they are. Batched notices, journaled connection appends and status flows can each add calls. The alarm is only one of those requests. Most of the cost is the mail hops, which every option pays unless firings are batched.</p>
-
-<h2 id="totals">Totals</h2>
 <div class="ex-table-scroll">
 <table>
-<thead><tr><th>Volume</th><th>A: central wakes at every due time</th><th>B: hourly window, one batch per machine</th><th>Paid-plan cost difference</th></tr></thead>
+<thead><tr><th>Per firing</th><th>A, one mail item per firing</th><th>A + send-time batching (about 5 firings per machine per batch)</th></tr></thead>
 <tbody>
-<tr><td>Your busiest day (about 1,250 a day)</td><td>about 11,000 requests a day; 0.34 M a month</td><td>about 2,500 a day; 0.07 M a month</td><td>$0: both are inside the included 1 M</td></tr>
-<tr><td>10× (about 12,500 a day)</td><td>3.4 M a month: 2.4 M billable, rounded up to 3 M, about $0.45</td><td>about 0.6 M a month, $0</td><td>about $0.45 a month</td></tr>
-<tr><td>100× (about 125,000 a day)</td><td>34 M a month: 33 M billable, about $4.95</td><td>about 6 M a month: 5 M billable, about $0.75</td><td>about $4.20 a month</td></tr>
+<tr><td>Requests</td><td>about 9 → $1.35 per M firings</td><td>about 3 → $0.45 per M</td></tr>
+<tr><td>Rows written</td><td>about 10 → <strong>$10.00 per M</strong></td><td>about 5 → <strong>$5.00 per M</strong></td></tr>
+<tr><td>Active time</td><td>about 8 activations × 30 ms → $0.38 per M</td><td>about $0.15 per M</td></tr>
+<tr><td>Storage, 2 months at about 1 KB</td><td>about $0.40 per M</td><td>about $0.40 per M</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>about $12 per million firings</strong></td><td><strong>about $6 per million firings</strong></td></tr>
 </tbody>
 </table>
 </div>
-<ul>
-  <li><strong>Rows written:</strong> about 12,500 a day at your peak (0.4 M a month, against 50 M included).</li>
-  <li><strong>Duration:</strong> about 70 GB-s a day (2,000 a month, against 400,000 included). That's because the sockets hibernate and each hop is short.</li>
-  <li><strong>Free plan:</strong> all three of those fit comfortably under the daily limits.</li>
-</ul>
+
+<h2 id="orgs">Cost per organization per month (A as designed / A + batching)</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Organization</th><th>Firings a month</th><th>A</th><th>A + batching</th><th>Load on its Registry</th></tr></thead>
+<tbody>
+<tr><td>Small team: 5 agents, about 50 firings a day each</td><td>7,500</td><td>$0.09</td><td>$0.05</td><td>well under 1 per second</td></tr>
+<tr><td>You today: 150–1,250 firings a day</td><td>4,500–37,500</td><td>$0.05–$0.45</td><td>$0.03–$0.23</td><td>under 1 per second</td></tr>
+<tr><td>Busy: 50 agents, 5-minute wakes around the clock</td><td>432,000</td><td>$5.20</td><td>$2.60</td><td>about 0.2 firings a second</td></tr>
+<tr><td>Large: 500 agents, 5-minute wakes around the clock</td><td>4.3 M</td><td>$52</td><td>$26</td><td>about 2 firings a second, against a 1,000 a second soft limit</td></tr>
+</tbody>
+</table>
+</div>
+<p>With one central per organization, each org's Registry and Fleet are its own single objects. That isolates each org, and leaves several hundred times the headroom even for the large case. High-frequency repeating wakes drive volume, because one 5-minute wake is 8,640 firings a month. That makes per-firing pricing, or a minimum wake period per plan, a product lever.</p>
+
+<h2 id="levers">What actually moves the cost</h2>
+<ol>
+  <li><strong>Rows written per firing, about 80% of the cost.</strong> Record each firing's state once per transition, and don't journal the same fact on every hop.</li>
+  <li><strong>Batching at send time.</strong> Firings due in the same alarm for the same machine go as one mail item, sent <em>now</em>, not held for later. That roughly halves the cost and needs none of B's hold or cancel machinery.</li>
+  <li><strong>Minute-aligned due times.</strong> Schedules are minute-based already. Aligning wakes too means more firings share one alarm and one batch.</li>
+  <li><strong>Batching reports.</strong> A machine's run reports go back once a minute instead of one per state change.</li>
+  <li><strong>Not the alarm count.</strong> One alarm is 1 request and 1 row, shared by everything due at that moment.</li>
+</ol>
 
 <h2 id="tradeoffs">The tradeoffs that actually matter</h2>
 <div class="ex-table-scroll">
 <table>
 <thead><tr><th></th><th>A: central fires at the due time</th><th>B: central plans an hour ahead, machine releases</th><th>C: machine owns the timer for a window</th></tr></thead>
 <tbody>
-<tr><td>Cost at your volume</td><td>about $0 extra</td><td>about $0 extra</td><td>about $0 extra</td></tr>
+<tr><td>Cost per million firings</td><td>about $12, or about $6 with send-time batching</td><td>about $5–6, with batching built in</td><td>about the same as B</td></tr>
 <tr><td>On time if central blips at the due time</td><td>late by the length of the blip</td><td>on time (it's already on the machine)</td><td>on time</td></tr>
 <tr><td>Edits and cancels</td><td>simple: nothing has been sent yet</td><td>must chase already-sent firings with a cancel; a cancel can lose the race to a local release</td><td>must revoke a window: two owners</td></tr>
 <tr><td>Double-fire risk</td><td>lowest: one owner</td><td>low: central admits, the machine only releases</td><td>highest: timers change hands</td></tr>
@@ -102,8 +109,8 @@ flowchart LR
 </table>
 </div>
 
-<ex-callout title="Recommendation, revised after counting" tone="decision" icon="clock">
-  <p><strong>A: central fires at the due time.</strong> I recommended B earlier to save alarms, but the alarm is about one ninth of a firing's cost. At your peak the total is inside the included monthly allowance; at 10 times your peak it's about $0.45 a month. B's real gain is staying on time through a central blip. It costs a local hold store and a cancel-versus-release race. Switch to B only if on-time delivery through outages matters more than that complexity. Your call; nothing is built yet.</p>
+<ex-callout title="Recommendation" tone="decision" icon="clock">
+  <p><strong>A, with send-time batching per machine and minute-aligned due times.</strong> It gets most of B's saving, about $6 instead of $12 per million firings, by putting everything due together for one machine into one message, sent right away. Nothing is held on the machine for later, so B's cancel race and amendment messages never arise. Choose B only if being on time through a central outage matters more than that machinery.</p>
 </ex-callout>
 
 <h2 id="measure">How to measure instead of estimate</h2>
@@ -115,4 +122,4 @@ flowchart LR
 </ex-document>
 
 
-<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Your workload (last 30 days, this Mac)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#workload"},{"kind":"heading","title":"What Cloudflare bills","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"What one firing costs (estimated from the code path)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#one-firing"},{"kind":"heading","title":"Totals","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#totals"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"How to measure instead of estimate","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The design, page by page","pageTitle":"Central automations","ancestors":[],"href":"index.html#pages"},{"kind":"heading","title":"Today versus the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#today-vs-design"},{"kind":"heading","title":"Today (main)","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-today-main"},{"kind":"heading","title":"The design","pageTitle":"Central automations","ancestors":["Today versus the design"],"href":"index.html#heading-the-design"},{"kind":"heading","title":"What the design promises","pageTitle":"Central automations","ancestors":[],"href":"index.html#rules"},{"kind":"heading","title":"How it went wrong","pageTitle":"Central automations","ancestors":[],"href":"index.html#timeline"},{"kind":"heading","title":"Fixing the published design","pageTitle":"Central automations","ancestors":[],"href":"index.html#fix-docs"},{"kind":"heading","title":"Status","pageTitle":"Central automations","ancestors":[],"href":"index.html#status"},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"page","title":"Firing and mail","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#heading-firing-and-mail"},{"kind":"heading","title":"One firing, end to end","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#clock"},{"kind":"heading","title":"The message","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#mail"},{"kind":"heading","title":"Repeats and overlaps, kept as today","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#repeats"},{"kind":"heading","title":"Edits, cancels and unknowns","pageTitle":"Firing and mail","ancestors":[],"href":"firing.html#races"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (estimate)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per organization per month (A as designed / A + batching)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"How to measure instead of estimate","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"On the receiving machine","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#heading-on-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"What stays local","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"heading","title":"Reporting back","pageTitle":"On the receiving machine","ancestors":[],"href":"runs.html#report"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Local states","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#states"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"}]</script></body></html>
