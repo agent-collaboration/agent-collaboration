@@ -97,6 +97,7 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 
 | Case | Behaviour |
 | --- | --- |
+| The alarm handler fails, or the alarm is lost after exhausted retries | per-Automation errors are caught and recorded, and the handler always re-arms; any later central request re-arms for the earliest pending due time; no Firing is lost or doubled |
 | A duplicate or retried alarm | `evaluate`'s admission is unique on (automation, nominal due); the same Batch bytes |
 | A lost notice answer | retried; reconciled against the machine's notice position; unknown until then |
 | The machine is offline beyond the notice window | the notice is gone, but the Batch stays in central's custody. On reconnect, or on `CursorExpired`, the machine lists its unacknowledged Batches, fetches, admits, acknowledges, and expires each Wake entry past its end |
@@ -111,6 +112,10 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 
 ## Runtime behaviour and cost
 
+- **The scheduler model** (Cloudflare's "multiple events with a single alarm" pattern). The stored schedule is `automation_timing` (next effective due time and repeat rule per Automation). Scheduling an event means writing its row, then `wake_at`, which sets the alarm only if none is set or the new time is earlier: `AlarmOwner`, constructor-safe because it checks before it sets. `alarm()` processes everything due, then sets the alarm for the next. On Tokio, the same interface is a timer.
+- **Retries and self-healing.** The platform retries a failed `alarm()` with backoff (2 s, up to 6 times), only for the latest `setAlarm`, and then gives up.
+  - So `evaluate` catches each Automation's error, records it on that Firing (`failed` with its reason), and always finishes by calling `wake_at(next)`. One bad Automation can't stop the others or the re-arming.
+  - **Self-healing:** every catalog call and every machine pull ends with `AlarmOwner::wake_at(min pending due)`, a `getAlarm` read and at most one set. If the alarm was lost after exhausted retries, the next request restores it, and the overdue Firings are sent once (admission is unique on automation and nominal due).
 - **The clock is a callback.** `alarm()` calls `on_alarm`, which runs `drive_due` and `AutomationClock::evaluate`, and each re-arms through the shared `AlarmOwner`. Alarms are at least once, and nothing polls.
 - **Batched machine-to-central traffic:** pulls, content fetches, acknowledgements and reports are envelopes of many items, following Cloudflare's WebSocket best practice (fewer, larger frames; flushing every 50–100 ms or 50–100 messages). That cuts incoming frames and Connection→Fleet requests in proportion to the batch size.
 - **Hops per Batch (planning model):**

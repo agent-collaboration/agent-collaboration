@@ -113,6 +113,15 @@ flowchart TD
   alarm --> eval["one transaction: what's due by now?<br/>freeze batches, queue 'batch ready' notices,<br/>set the alarm for the next due time"]
   eval --> idle["object sleeps until then"]
 </script></ex-mermaid>
+<p><strong>It's a scheduler, the way Cloudflare describes it:</strong> stored events plus one alarm, like <code>setTimeout</code> for a Durable Object. The automation schedule lives in central's table, and the alarm handler processes everything due, then sets itself for the next. On self-hosted Tokio, the same interface is a real timer.</p>
+<ex-callout title="The scheduler can't stay stopped" tone="risk" icon="clock">
+  <p>Cloudflare retries a failed alarm up to 6 times, then gives up. If that ever happened, every automation would stop. So:</p>
+  <ul>
+    <li>one automation's error is recorded on that firing and never stops the others;</li>
+    <li>the handler always sets the next alarm;</li>
+    <li>every request to central (create, list, a machine pulling) checks the alarm is set for the earliest pending time, and restores it if needed. Overdue firings are then sent once.</li>
+  </ul>
+</ex-callout>
 <p>Between due times nothing runs: there are no ticks and no retries standing in for a timer. The notice journal runs on its own alarm, so one batch is a few object events, not one. The <a href="firing-options.html">cost page</a> keeps that as a planning model until it's measured.</p>
 </ex-document>
 
