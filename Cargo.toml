@@ -32,15 +32,15 @@ members = [
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",
     "crates/agent-session-inventory",
-    "crates/agent-session-picker",
+    "crates/agent-session-tui",
     "crates/node-test-fixture",
     "crates/codex-router-auth",
     "crates/codex-router-cli",
     "crates/codex-router-quota-service",
-    "crates/codex-router-quota-tui",
+    "crates/agent-router-quota-tui",
     "crates/codex-native-integration",
     "crates/codex-router-core",
-    "crates/codex-router-tui",
+    "crates/agent-collaboration-tui",
     "crates/codex-router-host",
     "crates/codex-router-quota-reset-test-harness",
     "crates/codex-router-proxy",
@@ -80,7 +80,7 @@ fs2 = "=0.4.3"
 keyring-core = "1"
 uuid = { version = "1.26.0", features = ["v5", "v7"] }
 codex-router-core = { path = "crates/codex-router-core", version = "0.1.6" }
-codex-router-tui = { path = "crates/codex-router-tui", version = "0.1.96" }
+agent-collaboration-tui = { path = "crates/agent-collaboration-tui", version = "0.1.96" }
 codex-native-integration = { path = "crates/codex-native-integration", version = "0.1.6" }
 codex-router-host = { path = "crates/codex-router-host", version = "0.1.6" }
 codex-router-quota = { path = "crates/codex-router-quota", version = "0.1.6" }

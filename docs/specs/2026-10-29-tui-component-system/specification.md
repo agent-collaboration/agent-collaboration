@@ -225,6 +225,27 @@ Quota keeps the 2026-10-23 contract, which governs where it changed 10-17:
 
 Field columns stay aligned with a reserved selector gutter, and dialogs keep the existing sizing contract. The identity and effect guards hold: source-qualified session identity and AccountId are captured exactly; drafts stay separate from committed filters; Start runs once; a pending or unknown outcome is never retried automatically; no ID is fabricated. Only these superseded rules change, each by owner decision: inline choices become dropdowns (R14), and Esc no longer exits the quota screen (R4). Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
 
+**R17 — log in again from account Details** (U16).
+
+- The quota screen's Account details offers "Log in again". It shows the exact command it will run: `codex-router account login --provider <provider> --label <label>`, with that account's own provider and label.
+- It is the dialog's primary action when the account's status says re-login is required. Otherwise it is an ordinary action. It is also in the ≡ menu for the selected account.
+- Activating it ends the quota screen's terminal session cleanly (terminal modes restored), runs exactly that command in the same terminal with the same Router root, then restarts the quota screen with fresh data, the same account selected.
+- If the command fails or is cancelled, the quota screen returns to that account and shows the result in a plain sentence. Nothing is retried automatically.
+- It never runs for a different account than the one shown, and never with a label or provider typed or guessed by the screen.
+- Account details has an **Actions ▾** menu button (the same menu control as the screen's ≡ menu) listing, each with its key: Log in again, Options… (Ctrl+R), Weekly floor… (Ctrl+E), Disable or Enable account, Copy account ID, and Remove account…. Remove is available only for a disabled account, and asks to confirm. In that confirmation, Cancel is the primary action and has the initial focus, so Ctrl+Enter cancels; Remove runs only when explicitly activated. After a successful removal the account is gone, so the screen selects the account now in its place. Each item runs the existing action or CLI command for **this** account only.
+- The dialog's actions row shows the primary action, Actions ▾ and Close. The primary action is Log in again when re-login is required, otherwise Close.
+
+*Entities: E2, E5.*
+
+**R18 — refresh quota from the menu** (U17).
+
+- The quota ≡ menu lists Refresh with its key, R. The same action is bound to R on the main quota screen.
+- Refresh fetches fresh quota for the same accounts and with the same rules as `codex-router quota refresh`, while the screen stays open and keeps its current selection.
+- While it runs, the top row says "Refreshing…", and Refresh is unavailable with that reason (R6), so a second press does nothing.
+- When it finishes, the table and any open Details show the new data. Failures appear as one plain sentence, naming the account where the failure is per-account. Nothing is retried automatically.
+
+*Entities: E5.*
+
 ## Constraints
 
 | ID | Constraint | Basis |
@@ -268,6 +289,8 @@ Each states what decides pass or fail and what it is judged against. How each is
 | V14 | R14 | Each R14 behaviour holds: the highlight follows its option through filtering, reordering and updates; own typing that hides it moves it to the first match; an outside removal leaves nothing highlighted and Enter picks nothing until ↑/↓; an unavailable option is highlightable but not pickable; nothing matching is said. | A highlight jumping to a different option by position; Enter picking an option after an outside removal; an unavailable option being picked; a cancelled dropdown changing the field. | R14 text; mock 3 |
 | V15 | R15 | Each control kind behaves and looks the same on the picker and the quota screen. | Any difference in behaviour or state for the same control kind. | R15 text |
 | V16 | R16 | Every capability in R16's list is reachable on the rebuilt screens by keyboard and by mouse, and behaves as the 10-17 design and its verification design specify. | Any listed capability missing, unreachable by one input method, or behaving differently. | 2026-10-17 Requirements, Specification and Verification Design; 2026-10-23 quota dialog visuals |
+| V17 | R17 | Activating "Log in again" in a given account's Details runs exactly `codex-router account login --provider <its provider> --label <its label>` once, after the quota screen has restored the terminal, then returns to quota with the same account selected; it is primary exactly when re-login is required; a failed or cancelled login returns with a plain message and no retry. The Actions ▾ menu lists exactly R17's items with their keys; each acts on the dialog's own account; Remove appears only for a disabled account and runs only after confirmation. | Another account's label, a guessed provider, the command running while the quota screen still owns the terminal, a duplicate run, or no return to quota. | U16; R17; `account_login_identity.rs` |
+| V18 | R18 | R and the menu item both start one refresh that uses the existing refresh rules; the screen stays up with the selection kept; "Refreshing…" shows and Refresh is unavailable until it ends; new values replace old ones; a failure shows a plain sentence and no retry. | A second refresh while one runs, the old values still shown after success, the app leaving the screen to refresh, or a silent failure. | U17; R18 |
 
 ## Coverage
 
@@ -287,5 +310,7 @@ Each states what decides pass or fail and what it is judged against. How each is
 | U12 | E1, E4, E5 | P5 / O5 | R13 | V13 | |
 | U13 | E2, E4, E8 | P5 / O5 | R14 | V14 | |
 | U14 | E4 | P5 / O5 | R15 | V15 | |
+| U16 | E2, E5 | P5 / O5 | R17 | V17 | Real OAuth login is interactive; automated proof uses a recording stand-in for the command, and the real login is the owner's check |
+| U17 | E5 | P5 / O5 | R18 | V18 | |
 | U15 | E1, E4, E5 | P3 / O3 | R5 | V5 | |
 | 10-17 baseline | E1, E4, E5 | P5 / O5 | R16 | V16 | Three 10-17 rules superseded pending owner confirmation |

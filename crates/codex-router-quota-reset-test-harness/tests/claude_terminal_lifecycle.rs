@@ -145,6 +145,50 @@ fn wait_for(
 
 #[test]
 fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> TestResult<()> {
+    run_claude_terminal_lifecycle("Claude Code", "Foreground")
+}
+
+#[test]
+fn background_claude_starts_and_attaches_after_picker_teardown() -> TestResult<()> {
+    run_claude_terminal_lifecycle("Claude Code · background", "BackgroundThenAttach")
+}
+
+struct LifecycleDirectory(std::path::PathBuf);
+
+impl Drop for LifecycleDirectory {
+    fn drop(&mut self) {
+        let _cleanup = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn run_claude_terminal_lifecycle(client_label: &str, expected_mode: &str) -> TestResult<()> {
+    let directory = LifecycleDirectory(std::env::temp_dir().join(format!(
+        "claude-terminal-lifecycle-{}-{expected_mode}",
+        std::process::id()
+    )));
+    std::fs::create_dir(&directory.0)?;
+    let node = std::process::Command::new("node")
+        .args(["-p", "process.execPath"])
+        .output()?;
+    if !node.status.success() {
+        return Err("Node fixture executable unavailable".into());
+    }
+    let node = String::from_utf8(node.stdout)?;
+    let executable = directory.0.join("claude.mjs");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../verification/fixtures/native-claude-background-agent.ts")
+        .canonicalize()?;
+    std::fs::write(
+        &executable,
+        format!(
+            "#!{}\nimport {{runFixture}} from {:?};\nrunFixture(null);\n",
+            node.trim(),
+            fixture
+        ),
+    )?;
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
+    let flow = directory.0.join("flow.jsonl");
     let signing = std::process::Command::new(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../scripts/cargo_debug_signing_runner.sh"),
@@ -171,6 +215,18 @@ fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> T
     command.env("HOME", std::env::temp_dir());
     command.env("PATH", "/usr/bin:/bin");
     command.env("LANG", "C.UTF-8");
+    command.env("CLAUDE_TERMINAL_FIXTURE_EXECUTABLE", &executable);
+    command.env(
+        "CLAUDE_FIXTURE_TEARDOWN_MARKER",
+        directory.0.join("picker-returned"),
+    );
+    command.env("CLAUDE_FIXTURE_FLOW", &flow);
+    command.env("CLAUDE_FIXTURE_COUNT", directory.0.join("count.txt"));
+    command.env("CLAUDE_FIXTURE_RECORD", directory.0.join("record.json"));
+    command.env(
+        "CLAUDE_FIXTURE_RECEIPT",
+        include_str!("../../agent-collaboration/tests/claude_background_cli/claude_bg_2_1_312.txt"),
+    );
     command.cwd(env!("CARGO_MANIFEST_DIR"));
     let mut child = OwnedChild(pair.slave.spawn_command(command)?);
     drop(pair.slave);
@@ -220,11 +276,21 @@ fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> T
     send(b"\x1b[Z\x1b[Z\x1b[Z\x1b[Z\r")?;
     wait_for(&receiver, &mut transcript, start, "Search:")?;
     let start = transcript.len();
-    send(b"\x1b[200~Claude Code\x1b[201~")?;
-    wait_for(&receiver, &mut transcript, start, "Search: Claude Code")?;
+    send(format!("\x1b[200~{client_label}\x1b[201~").as_bytes())?;
+    wait_for(
+        &receiver,
+        &mut transcript,
+        start,
+        &format!("Search: {client_label}"),
+    )?;
     let start = transcript.len();
     send(b"\r")?;
-    wait_for(&receiver, &mut transcript, start, "Claude Code ▾")?;
+    wait_for(
+        &receiver,
+        &mut transcript,
+        start,
+        &format!("{client_label} ▾"),
+    )?;
     let start = transcript.len();
     send(b"\t\t\t\t\r")?;
     wait_for(&receiver, &mut transcript, start, "CLAUDE_TERMINAL_HANDOFF")?;
@@ -245,6 +311,23 @@ fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> T
         return Err(format!("keyboard stack changed after handoff: {:?}", terminal.stack).into());
     }
     let text = String::from_utf8_lossy(&terminal.transcript);
+    if !text.contains(&format!("CLAUDE_TERMINAL_MODE {expected_mode}")) {
+        return Err("terminal handoff lost its typed launch mode".into());
+    }
+    let calls = std::fs::read_to_string(flow)?;
+    let calls = calls.lines().collect::<Vec<_>>();
+    match (expected_mode, calls.as_slice()) {
+        ("BackgroundThenAttach", [background_start, attach_call])
+            if background_start.contains(r#""arguments": ["--bg", "--model", "haiku"]"#)
+                && attach_call.contains(r#""arguments": ["attach", "a1b2c3d4"]"#) => {}
+        ("Foreground", [foreground_start])
+            if foreground_start.contains(r#""arguments": ["--model", "haiku"]"#) => {}
+        _ => {
+            return Err(
+                format!("native arguments or start/attach order changed: {calls:?}").into(),
+            );
+        }
+    }
     let before = Regex::new(r"CLAUDE_TERMIOS_BEFORE ([^\r\n]+)")?
         .captures(&text)
         .ok_or("missing pre-picker termios")?;
@@ -253,6 +336,12 @@ fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> T
         .ok_or("missing post-picker termios")?;
     if before.get(1).map(|value| value.as_str()) != after.get(1).map(|value| value.as_str()) {
         return Err("termios must match before client dispatch".into());
+    }
+    let returned = Regex::new(r"CLAUDE_TERMIOS_RETURNED ([^\r\n]+)")?
+        .captures(&text)
+        .ok_or("missing post-native termios")?;
+    if before.get(1).map(|value| value.as_str()) != returned.get(1).map(|value| value.as_str()) {
+        return Err("termios must match after native client returns".into());
     }
     Ok(())
 }

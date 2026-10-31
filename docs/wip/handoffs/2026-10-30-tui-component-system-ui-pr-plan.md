@@ -78,7 +78,7 @@ Proof-layer names: project silent. The plan uses the Verification Design's layer
 
 ## Mechanism choices made here (recorded, reversible)
 
-- **Layer A's frame reader.** This is a test-only parser in `agent-collaboration-tui`'s test support. It reads `Canvas::write_ansi` output: SGR, printable text with `unicode-width` 0.2 widths, and CRLF, ignoring the trailing CRLF. It **rejects any other escape sequence**, so an unknown sequence fails loudly instead of passing. It is chosen over a new dev-dependency because `write_ansi`'s output is a small closed grammar, and a new crate would need `cargo deny`/`cargo audit` admission for a few dozen lines of parsing.
+- **Layer A's frame reader.** This is a test-only parser in `agent-collaboration-tui`'s test support. It reads `Canvas::write_ansi` output: SGR, printable text with `unicode-width` 0.2 widths, CSI K (erase to the end of the row, which the pinned `write_row_impl` emits on every row, `canvas.rs:449-450`) with real erase semantics at the known width, and CRLF, ignoring the trailing CRLF. It **rejects any other escape sequence**, OSC 8 hyperlinks included (the crate never emits them; out of scope), so an unknown sequence fails loudly instead of passing. (Corrected 2026-10-30 from the Implementer's ground-truth check.) It is chosen over a new dev-dependency because `write_ansi`'s output is a small closed grammar, and a new crate would need `cargo deny`/`cargo audit` admission for a few dozen lines of parsing.
 - **Verification languages.** TypeScript and Rust only (owner). The B oracle is wterm's (libghostty) cell grid, not screenshot OCR; no xterm.js (owner). Swift, VHS tapes and shell runners leave the TUI journeys in S0.
 - **Layer E's sanctioned call site.** It is `#[expect(clippy::disallowed_methods, reason = "InputOwner is the only terminal subscriber (R5)")]`. This is the one marked boundary; there is no other lint suppression.
 - **Old components are removed in S8**, after both consumers have moved. They are not removed in S4, because the consumers still use them until then. Nothing ships with two input paths, because all of this is one PR.
@@ -152,12 +152,13 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Theme roles from the current shipped `codex-router-tui` roles (base, raised, group panel, text, muted, accent, focused, primary, disabled, dimmed, good/warning/error), each background with a dimmed form;
   - the glyph set;
   - the layer-A test support:
-    - burst and frame-separated event driver over `mock_terminal_render_loop`, with event-processed acknowledgements and the initial frame drained;
+    - burst and frame-separated event driver over iocraft's real render loop with a test-only recording backend (`ui.render_loop().backend(recording_backend).ignore_ctrl_c()`, public seams element.rs:439,457 at the pin), mirroring the pin's MockTerminal backend and yielding `Canvas` clones; event-processed acknowledgements and the initial frame drained. Correction 2026-10-30: `mock_terminal_render_loop` (render.rs:560-572) builds `Terminal::mock` with `ignore_ctrl_c=false` and exposes no builder, so it cannot earn the C3 Ctrl+C rows. Proof for the backend: frame parity with `mock_terminal_render_loop` on a scenario without Ctrl+C, and the Ctrl+C row failing when `.ignore_ctrl_c()` is removed;
     - serialized-frame reader;
     - per-surface state snapshot and handler log.
 - **Writes:** `agent-collaboration-tui/src/{surface_stack,focus_model,actions,theme}.rs` and `tests/support/`.
 - **Consumer:** S3.
 - **Proof (unit):**
+  - Command: `env -u NO_COLOR cargo nextest run --profile ci -p agent-collaboration-tui`. The colour-sensitive A setup fails immediately when `NO_COLOR` is set, because the pin memoizes it privately with no public override. No skipping and no uncoloured expectations (Lead decision, 2026-10-30).
   - Duplicate key in one scope is rejected. Wrong build: last binding silently wins.
   - Push/pop/restore by `TargetId`, falling back to the first enabled target. Wrong build: restore by index.
   - Focus traversal and groups: a table over target layouts. This is a property, since one rule covers all layouts.
@@ -177,7 +178,7 @@ Each slice: what it covers, where it writes, the Verification Design rows it ear
   - Overlays as root siblings with the one-cell gutter.
   - Dimmed covered surfaces.
 - **Writes:** `agent-collaboration-tui/src/{input_owner,hit_regions,overlay_host}.rs`.
-- **Earns, at layer A** (`cargo nextest run --profile ci -p agent-collaboration-tui`, every change, Sunclaw and CI):
+- **Earns, at layer A** (`env -u NO_COLOR cargo nextest run --profile ci -p agent-collaboration-tui`, every change, Sunclaw and CI):
   - U1 · R1, A part: every boundary case as a burst and frame-separated; beneath snapshots byte-equal; only R1's exceptions.
   - U2 · R2, A part: beneath inert; dimmed roles outside the overlay-plus-gutter footprint; restored in the closing redraw.
   - U3 · R3, A part: Tab, arrows and click reach; exactly one focus; published map equals draw geometry each frame. Clip cases: fully hidden target; half-visible target; plain `overflow: Hidden` consumer view; nested and bordered; each axis; after resize.
@@ -244,7 +245,8 @@ The paired Verifier independently runs the S2–S4 layer-A suite at the declared
   - New dialog: ComboBoxes for Client and Machine, a Run choice when the client supports both, the "Ctrl+Enter start · Esc close" hint;
   - keys: Enter shows Details; Ctrl+Enter opens; Ctrl+Shift+Enter forks; the Esc ladder; Ctrl+C via `.ignore_ctrl_c()` with the picker outcome read back;
   - initial size from the launch boundary;
-  - a consumer `clippy.toml` with the three disallowed methods.
+  - a consumer `clippy.toml` with the three disallowed methods;
+  - a test-only recording source-preparation stand-in, wired into the existing storyboard fixture entry (`picker_entrypoint.rs`, fixture path only). It writes a durable readback (call count plus the captured request: client, machine, directory, run mode) to the harness's receipt path, so the B "New session dialog" journey can prove Start runs once with the committed field values. Added at the Verifier's coverage audit, 2026-10-30.
 - **Writes:** `crates/agent-session-picker/src/session_picker/*`, plus `crates/agent-collaboration` where the picker root is launched.
 - **Earns:**
   - U4 · R4, reused part: `picker_details_navigation_tests.rs`, migrated: Enter inspects and cannot launch; Ctrl+Enter resumes without Details; Ctrl+Shift+Enter shows the fork confirmation. Package nextest, every change.
@@ -273,8 +275,11 @@ The paired Verifier independently runs the S2–S4 layer-A suite at the declared
   - the Committing guard unchanged;
   - dialogs on DialogFrame and DialogSection (Account details, Pool details, options, floor, reset) with the rhythm, group panels and StatusValue;
   - the four 2026-10-23 groups and layout kept;
-  - a consumer `clippy.toml`.
-- **Writes:** `crates/codex-router-quota-tui/src/*`.
+  - a consumer `clippy.toml`;
+  - **"Log in again"** (U16/R17, owner 2026-10-30) in Account details and the ≡ menu: a quota terminal outcome carrying the account's label and provider; `codex-router-cli` runs `codex-router account login --provider <p> --label <l>` after teardown, then restarts quota on the same account; plain message on failure, no retry;
+  - Account details **Actions ▾** menu (R17): Log in again, Options…, Weekly floor…, Disable/Enable, Copy account ID, Remove account… (disabled accounts only, confirmed); the primary button follows the account's state;
+  - **Refresh** (U17/R18, owner 2026-10-30) in the quota ≡ menu and on R: an injected `QuotaRefresher` (CLI adapter over `refresh_quota_with_dependencies`), "Refreshing…" while it runs, one at a time, reload under the existing lock; `QuotaRefreshReport` gains additive typed `account_outcomes` (F12), mapped to Refreshed/Partial/Failed, with no output parsing.
+- **Writes:** `crates/codex-router-quota-tui/src/*` (renamed `agent-router-quota-tui`), plus the quota run loop in `codex-router-cli`.
 - **Earns:**
   - U4 · R4, quota part: `quota_account_options_test.rs:161-208` kept and passing. Committing ignores Ctrl+C; other phases keep `ExitPrecommit`.
   - U15 · R5, quota half: workspace clippy.
@@ -361,6 +366,8 @@ parallel S6 || S7       (advisory; separate worktree lanes on the one PR branch,
 | U14 · R15 | S7 (A, parameterised), S9 (D) | crate nextest; gallery |
 | U15 · R5 | S6, S7, S8 (E) | workspace clippy plus three negative controls |
 | 10-17 baseline · R16 | S9 (B, F) | existing journeys re-run; public-entry journeys |
+| U17 · R18 | S7 (A), S9 (B) | quota refresh component tests with a stand-in refresher; "Quota refresh" journey |
+| U16 · R17 | S7, S9 (B, C) | quota "Log in again" journey with a recording login stand-in; owner's real re-login |
 
 Every slice also runs the package gates for what it touched: fmt, `cargo clippy --workspace --all-targets -- -D warnings`, file-size, the module-cycle ratchet and `cargo deny check`. The full workspace nextest runs once, at S8's head before S9, on Sunclaw. Per the owner's rule, any declared red must come from a full package run at that head.
 

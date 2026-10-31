@@ -33,7 +33,7 @@ Each test sends terminal events in two ways:
 The initial frame is drained first. An unchanged canvas produces no new frame, so an ignored key is confirmed by an event-processed counter rather than by waiting for a redraw. The mock loop has no terminal size and no Ctrl+C opt-in, so A uses fixed layout dimensions with the root's real resize handling. B owns real size changes and quitting.
 
 Each test reads two things back:
-- **the serialized frame**: iocraft's mock render loop yields each frame as a `Canvas`. The test serializes it with iocraft's own `Canvas::write_ansi` and feeds those bytes through a terminal-screen parser into a cell grid of characters, colours and attributes. That runs the serializer that dropped the overlay corner in Probe 1, which reading canvas cells alone would miss. It does not run the terminal backend's full, diff and resize writes; B covers those. The parser ignores the trailing CRLF that `write_ansi` appends.
+- **the serialized frame**: iocraft's real render loop, driven through a test-only recording backend that mirrors the pinned mock backend, yields each frame as a `Canvas` (the pinned `mock_terminal_render_loop` cannot opt into `.ignore_ctrl_c()`, so it cannot carry the C3 rows). The test serializes it with iocraft's own `Canvas::write_ansi` and feeds those bytes through a terminal-screen parser into a cell grid of characters, colours and attributes. That runs the serializer that dropped the overlay corner in Probe 1, which reading canvas cells alone would miss. It does not run the terminal backend's full, diff and resize writes; B covers those. The parser ignores the trailing CRLF that `write_ansi` appends.
 - **each surface's input state**: field text and cursor, selection, focus, a counter per surface, and a log of every action handler that ran with its target.
 
 Targets: Linux CI, and macOS arm64 on Sunclaw (owner: tests run on Sunclaw). Debug profile, signed through `scripts/cargo_debug_signing_runner.sh`.
@@ -99,6 +99,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U14 Same building blocks everywhere | The same control kinds on the picker and the quota screen go through the same behaviour tests and are compared in the gallery. | — |
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
 | 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. The real `agent-sessions` entry is driven through to Claude and Cursor actions on local and remote machines, and they still work. | Any case those routes haven't observed yet stays open, named, not waived. |
+| U16 Log in again from Details | From an account's Details, "Log in again" runs exactly that account's `account login` command after the quota screen has handed back the terminal, then quota returns on the same account. | The real OAuth login (browser or device code) is checked by you once. |
 
 ## Coverage rows
 
@@ -313,6 +314,44 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Wrong build that fails:* a capability that silently disappears in the move, such as a Sessions filter or a quota reset step. Or a picker whose components and fixture outcomes work while the public executable dispatches the wrong client, retargets the source, or no longer launches native Claude.
 - *Reuses:* the existing journeys and the PTY tests `compiled_quota_filters_real_stored_providers_and_disabled_intersections` and `compiled_sessions_atomic_paste_searches_literal_id_and_restores_terminal_modes`. Both are named in the journey reference as real PTY tests on the compiled fixture.
 - *Unverified:* whatever those journeys already list.
+
+**U16 · R17** (controls)
+- *Seam:* the quota Details actions and `AccountActionTarget`; `QuotaOutcome::AccountCommand` and `AccountCommandResult`; the CLI's run-then-restart.
+- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. C, once: the owner logs in again for real from Details.
+- *Target and journey:* B, `needed:` "Log in again" on the quota binary, legacy and kitty modes. Lasting. C is temporary.
+- *Reference:* R17; U16.
+- *Passes when:*
+  - The stand-in records exactly one invocation with `account login --provider <that account's provider> --label <that account's label>` and the same Router root.
+  - The invocation happens after the quota screen restored terminal modes; the grid shows the stand-in's output on a normal screen, not inside the quota frame.
+  - Quota then returns with the same account selected.
+  - A stand-in exit with failure returns to quota with a plain message, and no second invocation.
+  - The action is the primary one for an account whose status is re-login required, and ordinary otherwise.
+  - **Fresh data:** the fixture's report for that account changes when the stand-in login succeeds (status re-login required → available). After return, the grid shows the new status, so a restart with the old cached report fails.
+  - **Cancel:** the stand-in exits as an interrupted login (status 130). Quota comes back on the same account with "Login cancelled", the process is still running, and there is no second invocation.
+  - **Captured target:** open Details for account A, then move browse focus to B and trigger a reload. Every item still targets A: Options and Weekly floor open for A, and the stand-in argv carries A's label.
+  - **Remove confirmation:** the first confirmation grid has focus on Cancel, the primary-role marking on Cancel, and Remove unfocused. Ctrl+Enter there closes the confirmation back to Details and dispatches nothing (zero stand-in invocations). Only an explicit Remove activation dispatches `account remove --account <label>`.
+  - **After a successful Remove:** quota returns without the removed account, selects the account now in its place (the last, if it was last), and shows "Removed <label>". A build that tries to reselect the removed ID and falls back to the top, or shows nothing selected while accounts remain, fails.
+  - **Disabled-first refusal through the UI:** the stand-in for remove answers with the owner's `RequiresDisabled` refusal (as if the account was re-enabled after the confirmation opened). Quota returns with a plain refusal message and no retry. The real refusal itself is decided by the reused owner tests.
+  - The Actions ▾ menu lists exactly R17's items with their keys, and each acts on the dialog's account: Options and Weekly floor open their existing dialogs for it; Disable/Enable flips its status; Copy puts its ID on the clipboard stand-in. Remove is absent for an enabled account. For a disabled one, it runs `account remove` only after the confirmation is accepted, and cancelling changes nothing.
+- *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login; restarting with the cached report; exiting the app on a cancelled login; a preselected Remove or a Ctrl+Enter that removes; an item acting on the browse-focused account instead of the captured one.
+- *Reuses:* the existing removal owner tests for the real refusal and retention: `account_removal_tests.rs:162-173` (enabled refusal, credentials and rows intact), `289-321` (a target re-enabled before the writer → `RequiresDisabled`), and the compiled `account_removal_cli.rs:126-139`.
+- *Unverified:* the real OAuth flows (C).
+
+**U17 · R18** (commands)
+- *Seam:* the quota `Refresh` action; the injected `QuotaRefresher`; the existing view-model reload under its lock.
+- *Observation:* A, with a stand-in `QuotaRefresher` that changes fixture values and counts calls. B, the quota binary with its fixture provider, at 120x36 in legacy and kitty modes.
+- *Target and journey:* B, `needed:` "Quota refresh". Lasting.
+- *Reference:* R18; U17.
+- *Passes when:*
+  - R and the menu item each start exactly one refresh. A second R during it does nothing, and the stand-in counts 1.
+  - "Refreshing…" shows in the top row while it runs, and the menu shows Refresh disabled with that reason.
+  - After it ends, the grid shows the changed values for the same selected account. An open Details shows them too.
+  - A stand-in failure shows one plain sentence (per account where it applies), with no second call.
+- *Wrong build that fails:* a double refresh; stale values after success; leaving or blanking the screen to refresh; a silent failure; an adapter that maps every service `Ok` to `Refreshed` and drops a partial failure.
+  - **Through the real CLI adapter** (not a stand-in port), with the fixture provider serving one healthy and one failing account: the service returns `Ok`, the healthy account's value updates, and the screen shows a plain sentence naming the failing account. The adapter returns `Partial` naming exactly that account. All-success maps to `Refreshed` with no message. **All-failed** (every account failing through the real adapter) maps to `Failed` naming each failing account. An overall setup or read failure maps to `Failed` with the overall message and no account list. Each makes exactly one service call.
+  - The in-flight check holds the first call open with a causal control (the stand-in waits for a release signal), observes the duplicate press and the "Refreshing…" grid, then releases. There are no sleeps.
+- *Reuses:* the existing quota refresh command tests (including `quota_refresh_continues_after_one_account_provider_failure`, `quota_auth_tests.rs:684-777`) for the fetch rules themselves.
+- *Unverified:* real provider latency and real provider errors.
 
 ## Journeys still needed
 

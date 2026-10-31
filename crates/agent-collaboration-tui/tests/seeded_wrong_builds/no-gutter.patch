@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/overlay_host.rs b/crates/agent-collaboration-tui/src/overlay_host.rs
+--- a/crates/agent-collaboration-tui/src/overlay_host.rs
++++ b/crates/agent-collaboration-tui/src/overlay_host.rs
+@@ -19,3 +19,3 @@ impl Hook for SurfacePaintHook {
+         let size = drawer.size();
+-        let gutter = self.overlay && drawer.canvas_position().x > 0;
++        let gutter = false;
+         let left = if gutter { -1 } else { 0 };

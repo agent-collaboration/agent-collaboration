@@ -1,0 +1,25 @@
+diff --git a/crates/agent-collaboration-tui/tests/support/event_driver.rs b/crates/agent-collaboration-tui/tests/support/event_driver.rs
+--- a/crates/agent-collaboration-tui/tests/support/event_driver.rs
++++ b/crates/agent-collaboration-tui/tests/support/event_driver.rs
+@@ -117,19 +117,4 @@ impl EventDriver {
+             InputMode::Burst => {
+-                let count = steps.len();
+-                let before = self.frames.len();
+-                // No await, render polling, or controller handoff between sends.
+-                for (event, _) in steps {
+-                    self.sender.send(event).unwrap();
+-                }
+-                let mut acknowledgements = Vec::new();
+-                for _ in 0..count {
+-                    let acknowledgement = self.wait_ack(canvases).await;
+-                    verify_processed(&acknowledgement);
+-                    acknowledgements.push(acknowledgement);
+-                }
+-                if burst_redraw && self.frames.len() == before {
+-                    self.next_frame(canvases).await;
+-                }
+-                self.drain_ready(canvases);
+-                acknowledgements
++                let _=burst_redraw;
++                self.separated(canvases,steps,&mut verify_processed).await
+             }

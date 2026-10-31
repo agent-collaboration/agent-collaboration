@@ -331,7 +331,7 @@ mod weekly_floor_save_error_tests {
             .expect("system clock should be after epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "codex-router-tui-weekly-floor-{}-{unique}",
+            "agent-collaboration-tui-weekly-floor-{}-{unique}",
             std::process::id()
         ));
         std::fs::create_dir_all(&root).expect("temporary router root should be created");
@@ -379,7 +379,7 @@ mod weekly_floor_save_error_tests {
             .expect("system clock should be after epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "codex-router-tui-credit-policy-{}-{unique}",
+            "agent-collaboration-tui-credit-policy-{}-{unique}",
             std::process::id()
         ));
         std::fs::create_dir_all(&root).expect("temporary router root should be created");

@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/tests/support/recording_backend.rs b/crates/agent-collaboration-tui/tests/support/recording_backend.rs
+--- a/crates/agent-collaboration-tui/tests/support/recording_backend.rs
++++ b/crates/agent-collaboration-tui/tests/support/recording_backend.rs
+@@ -64,3 +64,3 @@ pub fn recording_terminal_render_loop<'a, TElement: ElementExt + Send + 'a>(
+     };
+-    let render_loop = Box::pin(ui.render_loop().backend(backend).ignore_ctrl_c());
++    let render_loop = Box::pin(ui.render_loop().backend(backend));
+     RecordingRenderLoop {

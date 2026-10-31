@@ -192,8 +192,9 @@ name = "agent-collaboration"
 version = "0.1.118"
 dependencies = [
  "agent-automation",
+ "agent-collaboration-tui",
  "agent-session-inventory",
- "agent-session-picker",
+ "agent-session-tui",
  "automation-storage",
  "axum",
  "board-central-test-support",
@@ -205,7 +206,6 @@ dependencies = [
  "codex-native-integration",
  "codex-router-host",
  "codex-router-test-support",
- "codex-router-tui",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-client",
@@ -255,6 +255,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-collaboration-tui"
+version = "0.1.118"
+dependencies = [
+ "futures-util",
+ "iocraft",
+ "tokio",
+ "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
+name = "agent-router-quota-tui"
+version = "0.1.118"
+dependencies = [
+ "agent-collaboration-tui",
+ "chrono",
+ "codex-router-core",
+ "codex-router-quota-service",
+ "codex-router-selection",
+ "crossterm",
+ "futures-util",
+ "iocraft",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
 name = "agent-session-inventory"
 version = "0.1.118"
 dependencies = [
@@ -289,12 +320,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-session-picker"
+name = "agent-session-tui"
 version = "0.1.118"
 dependencies = [
+ "agent-collaboration-tui",
  "agent-session-inventory",
  "codex-native-integration",
- "codex-router-tui",
  "collaboration-client",
  "crossterm",
  "futures-util",
@@ -1314,6 +1345,8 @@ dependencies = [
 name = "codex-router-cli"
 version = "0.1.118"
 dependencies = [
+ "agent-collaboration-tui",
+ "agent-router-quota-tui",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",
@@ -1324,12 +1357,10 @@ dependencies = [
  "codex-router-host",
  "codex-router-proxy",
  "codex-router-quota-service",
- "codex-router-quota-tui",
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
  "codex-router-test-support",
- "codex-router-tui",
  "collaboration-central-core",
  "collaboration-central-tokio",
  "collaboration-client",
@@ -1538,26 +1569,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-router-quota-tui"
-version = "0.1.118"
-dependencies = [
- "chrono",
- "codex-router-core",
- "codex-router-quota-service",
- "codex-router-selection",
- "codex-router-tui",
- "crossterm",
- "futures-util",
- "iocraft",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "unicode-width 0.2.2",
-]
-
-[[package]]
 name = "codex-router-secret-store"
 version = "0.1.118"
 dependencies = [
@@ -1648,16 +1659,6 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tungstenite 0.28.0",
-]
-
-[[package]]
-name = "codex-router-tui"
-version = "0.1.118"
-dependencies = [
- "futures-util",
- "iocraft",
- "tokio",
- "unicode-width 0.2.2",
 ]
 
 [[package]]

@@ -86,6 +86,7 @@ export function readTerminalGrid(path: string): TerminalGrid {
 export async function checkGridControls(
 	directory: string,
 	journeyName: string,
+	outputPath: string = join(directory, 'wrong-scene-controls.json'),
 ): Promise<readonly unknown[]> {
 	const journey = journeyCatalogue[journeyName];
 	if (journey === undefined) throw new Error('unknown journey');
@@ -118,16 +119,18 @@ export async function checkGridControls(
 			unexpected: rejected.unexpected,
 		});
 	}
-	writeFileSync(join(directory, 'wrong-scene-controls.json'), JSON.stringify(results, null, 2));
+	writeFileSync(outputPath, JSON.stringify(results, null, 2), { flag: 'wx' });
 	return results;
 }
 if (isMain(import.meta.url)) {
 	const directory = process.argv[2],
 		journey = process.argv[3];
 	if (directory === undefined || journey === undefined)
-		reportCliFailure(new Error('usage: grid-control-checks.ts CAPTURE_DIRECTORY JOURNEY'));
+		reportCliFailure(
+			new Error('usage: grid-control-checks.ts CAPTURE_DIRECTORY JOURNEY [FRESH_OUTPUT.json]'),
+		);
 	else
-		await checkGridControls(directory, journey)
+		await checkGridControls(directory, journey, process.argv[4])
 			.then((rows) => process.stdout.write(`${rows.length} wrong-scene controls rejected\n`))
 			.catch(reportCliFailure);
 }
