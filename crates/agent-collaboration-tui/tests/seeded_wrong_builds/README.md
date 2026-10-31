@@ -166,5 +166,7 @@ T4 replaces the old same-row secondary clipping rule with a full secondary line 
 | `field-reason-inline.patch` | The disabled reason shares the editor row and steals its width. |
 | `field-reason-wrong-colour.patch` | The disabled reason loses its muted foreground. |
 | `field-reason-nowrap.patch` | A disabled reason clips instead of wrapping below the editor. |
+| `button-always-shows-key.patch` | A button prints its primary key despite its local hidden-hint preference. |
+| `button-hidden-key-drops-binding.patch` | The hidden-hint scenario loses the live Left binding while metadata and Help retain it. |
 
 T9 changes the disabled editor fixture from one row to two so its reason can occupy the approved next row; the value style and ignored-input assertions remain.

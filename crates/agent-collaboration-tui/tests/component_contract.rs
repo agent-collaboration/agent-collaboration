@@ -107,3 +107,7 @@ mod combo_option_layout;
 #[cfg(test)]
 #[path = "suites/field_reason_layout.rs"]
 mod field_reason_layout;
+
+#[cfg(test)]
+#[path = "suites/button_key_hint.rs"]
+mod button_key_hint;
