@@ -89,7 +89,7 @@
       "path": "docs/specs/2026-10-04-board-orchestration-design/spec-3-central-fleet.md",
       "beforeMain": "afd7a1800a8d44b915a6f96ae3010ce5f8e003d4",
       "beforeStack": "afd7a1800a8d44b915a6f96ae3010ce5f8e003d4",
-      "after": "99b2758784bbf926618fc32b3da501d89ced7f81"
+      "after": "dacfadae25bc141a0fa2a822cc986b56316c505f"
     },
     {
       "path": "docs/specs/2026-10-04-board-orchestration-design/verification-design.md",
