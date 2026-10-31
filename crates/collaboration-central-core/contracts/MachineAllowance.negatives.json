@@ -1,0 +1,8 @@
+[
+null,
+{"installation":"019a3dce-2000-7000-8000-000000000001","state":"active","unexpectedField":true,"workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"installation":"019a3dce-2000-7000-8000-000000000001","state":"active","workspace_id":"019a3dce-2000-7000-8000-000000000002"},
+{"installation":"019a3dce-2000-7000-8000-000000000001","state":"unrecognizedVariant","workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"installation":"019a3dce-2000-7000-8000-000000000001","state":"withdrawn","unexpectedField":true,"workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"installation":"019a3dce-2000-7000-8000-000000000001","state":"withdrawn","workspace_id":"019a3dce-2000-7000-8000-000000000002"}
+]

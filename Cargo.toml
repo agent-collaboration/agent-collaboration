@@ -7,6 +7,7 @@ members = [
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",
+    "crates/fleet-identity-protocol",
     "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",

@@ -1,0 +1,17 @@
+[
+null,
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","result":"registered","unexpectedField":true,"workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","result":"registered","workspace_id":"019a3dce-2000-7000-8000-000000000002"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","result":"unrecognizedVariant","workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"organization_id":"019a3dce-2000-7000-8000-000000000001","result":"registered","workspaceId":"019a3dce-2000-7000-8000-000000000002"},
+{"reason":{"kind":"alreadyEnded","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"alreadyEnded"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"alreadyEnded"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"machineNotAllowed","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"machineNotAllowed"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"machineNotAllowed"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"projectUnknown","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"projectUnknown"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"projectUnknown"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"unrecognizedVariant"},"result":"refused"}
+]

@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "DeviceLoginRequestId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "MachineLabel": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RecordId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowedWorkspaces": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceId"
+      },
+      "type": "array"
+    },
+    "approver": {
+      "$ref": "#/$defs/PersonId"
+    },
+    "approverSecondFactorAt": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnixSeconds"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "installation": {
+      "$ref": "#/$defs/InstallationId"
+    },
+    "label": {
+      "$ref": "#/$defs/MachineLabel"
+    },
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "peer": {
+      "$ref": "#/$defs/RecordId"
+    },
+    "requestId": {
+      "$ref": "#/$defs/DeviceLoginRequestId"
+    }
+  },
+  "required": [
+    "organizationId",
+    "approver",
+    "requestId",
+    "installation",
+    "peer",
+    "label",
+    "allowedWorkspaces"
+  ],
+  "title": "DecideDeviceLogin",
+  "type": "object"
+}

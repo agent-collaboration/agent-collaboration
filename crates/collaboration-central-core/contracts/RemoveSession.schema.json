@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionRef"
+    }
+  },
+  "required": [
+    "organizationId",
+    "session"
+  ],
+  "title": "RemoveSession",
+  "type": "object"
+}

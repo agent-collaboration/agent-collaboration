@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "MachineLabel": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "installation": {
+      "$ref": "#/$defs/InstallationId"
+    },
+    "label": {
+      "$ref": "#/$defs/MachineLabel"
+    }
+  },
+  "required": [
+    "installation",
+    "label"
+  ],
+  "title": "WorkspaceMachine",
+  "type": "object"
+}

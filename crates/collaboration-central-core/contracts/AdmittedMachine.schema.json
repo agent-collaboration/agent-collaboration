@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RecordId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "enrollmentId": {
+      "$ref": "#/$defs/EnrollmentId"
+    },
+    "installation": {
+      "$ref": "#/$defs/InstallationId"
+    },
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "peer": {
+      "$ref": "#/$defs/RecordId"
+    },
+    "tokenExpiresAt": {
+      "$ref": "#/$defs/UnixSeconds"
+    }
+  },
+  "required": [
+    "installation",
+    "peer",
+    "organizationId",
+    "enrollmentId",
+    "tokenExpiresAt"
+  ],
+  "title": "AdmittedMachine",
+  "type": "object"
+}

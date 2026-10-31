@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "AbsolutePath": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^/[^\\u0000]*$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "HarnessKind": {
+      "enum": [
+        "codex",
+        "claude",
+        "cursor"
+      ],
+      "type": "string"
+    },
+    "ProjectId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RemoteLaunch": {
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "$ref": "#/$defs/HarnessKind"
+        },
+        "requestedPolicy": {
+          "$ref": "#/$defs/RemoteLaunchPolicy"
+        },
+        "workingDirectory": {
+          "$ref": "#/$defs/AbsolutePath"
+        }
+      },
+      "required": [
+        "harness",
+        "workingDirectory",
+        "requestedPolicy"
+      ],
+      "type": "object"
+    },
+    "RemoteLaunchAccess": {
+      "enum": [
+        "write-restricted",
+        "workspace-write"
+      ],
+      "type": "string"
+    },
+    "RemoteLaunchPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/RemoteLaunchAccess"
+        }
+      },
+      "required": [
+        "access"
+      ],
+      "type": "object"
+    },
+    "RemoteStartId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "deadline": {
+      "$ref": "#/$defs/UnixSeconds"
+    },
+    "launch": {
+      "$ref": "#/$defs/RemoteLaunch"
+    },
+    "projectId": {
+      "$ref": "#/$defs/ProjectId"
+    },
+    "requestId": {
+      "$ref": "#/$defs/RemoteStartId"
+    },
+    "requester": {
+      "$ref": "#/$defs/SessionRef"
+    },
+    "workspaceId": {
+      "$ref": "#/$defs/WorkspaceId"
+    }
+  },
+  "required": [
+    "requestId",
+    "requester",
+    "workspaceId",
+    "projectId",
+    "launch",
+    "deadline"
+  ],
+  "title": "StartRequestedSession",
+  "type": "object"
+}

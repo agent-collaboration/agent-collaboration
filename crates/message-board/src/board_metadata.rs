@@ -22,7 +22,7 @@ macro_rules! bounded_text {
         impl JsonSchema for $name {
             fn schema_name() -> Cow<'static, str> { stringify!($name).into() }
             fn json_schema(_: &mut SchemaGenerator) -> Schema {
-                json_schema!({"type":"string","minLength":$min,"maxLength":$max})
+                json_schema!({"type":"string","minLength":$min,"maxLength":$max,"x-maxUtf8Bytes":$max})
             }
         }
         impl TryFrom<String> for $name {

@@ -1,0 +1,4 @@
+[
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","sequence":0,"sessions":[]},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","sequence":9007199254740991,"sessions":[{"activity":"working","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"}}]}
+]

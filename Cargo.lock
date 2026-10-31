@@ -1738,6 +1738,7 @@ dependencies = [
  "collaboration-mail-protocol",
  "durable-steps",
  "fleet-admission",
+ "fleet-identity-protocol",
  "fleet-sync-delivery",
  "fleet-sync-lease",
  "fleet-sync-protocol",
@@ -1746,8 +1747,10 @@ dependencies = [
  "fleet-sync-session",
  "futures-channel",
  "http",
+ "jsonschema",
  "message-board",
  "runtime-primitives",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1928,6 +1931,7 @@ dependencies = [
  "agent-automation",
  "chrono",
  "collaboration-mail-protocol",
+ "fleet-identity-protocol",
  "jsonschema",
  "message-board",
  "proptest",
@@ -2767,6 +2771,18 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fleet-identity-protocol"
+version = "0.1.118"
+dependencies = [
+ "chrono",
+ "jsonschema",
+ "message-board",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

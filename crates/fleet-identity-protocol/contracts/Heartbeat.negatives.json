@@ -1,0 +1,8 @@
+[
+null,
+{"capabilities":["RemoteStart"]},
+{"capabilities":[],"unexpectedField":true},
+{"capabilities":[{"kind":"remoteStart","unexpectedField":true}]},
+{"capabilities":[{"kind":"remoteStart"}],"unexpectedField":true},
+{"capabilities":[{"kind":"unrecognizedVariant"}]}
+]
