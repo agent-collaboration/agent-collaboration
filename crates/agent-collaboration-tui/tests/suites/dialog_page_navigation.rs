@@ -5,8 +5,8 @@ mod tests {
         recording_backend::recording_terminal_render_loop,
     };
     use agent_collaboration_tui::{
-        actions::{ActionId, ActionRegistry, ScopeId},
-        controls::{DialogFrame, ScrollHandle, ScrollReveal},
+        actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+        controls::{DialogFrame, HelpControl, HelpDialog, ScrollHandle, ScrollReveal},
         focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
         hit_regions::{HitRegion, HitRegionKind},
         input_owner::InputOwner,
@@ -26,6 +26,7 @@ mod tests {
     struct PageFixture {
         stack: SurfaceStackHandle,
         scroll: ScrollHandle,
+        help: HelpControl,
     }
     #[derive(Props)]
     struct PageSceneProps {
@@ -42,6 +43,21 @@ mod tests {
             ScrollReveal(focused:context.is_focused(&target("destination"))) {View(height:1,flex_shrink:0.0_f32) {HitRegion(target:target("destination"),kind:HitRegionKind::Target) {Text(content:"Destination field")}}}
         })
     }
+    #[derive(Props)]
+    struct PageFrameProps {
+        #[iocraft(required)]
+        scroll: ScrollHandle,
+        #[iocraft(required)]
+        help: HelpControl,
+    }
+    #[component]
+    fn PageFrame(props: &PageFrameProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
+        let context = *hooks.use_context::<SurfaceContext>();
+        if let Some(scroll) = props.help.scroll(context.surface) {
+            return element!(DialogFrame(title:"Form pages".to_owned(),padding:Some(0u16),scroll,scroll_target:props.help.scroll_target(),scroll_focus:Some(props.help.body_target())) {HelpDialog(control:props.help.clone())}).into_any();
+        }
+        element!(DialogFrame(title:"Form pages".to_owned(),padding:Some(0u16),scroll:props.scroll.clone(),scroll_target:target("body")) {PageBody}).into_any()
+    }
     #[component]
     fn PageScene(props: &PageSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         record_draw(&mut hooks, &props.journal);
@@ -54,19 +70,59 @@ mod tests {
         let mut opened = hooks.use_ref(|| false);
         if !opened.get() {
             let scroll = ScrollHandle::new(stack);
+            let help = HelpControl::new(stack, ActionId::new("help").unwrap());
+            let view_help = help.clone();
+            let help_action = ActionDef {
+                id: ActionId::new("help").unwrap(),
+                title: "Help".into(),
+                toolbar_label: None,
+                keys: vec!["F1".parse().unwrap()],
+                availability: AvailabilityFn::default(),
+                choice: None,
+                placement: Placement::Hidden,
+                run: help.open_handler(Default::default, Handler::from(|error| panic!("{error}"))),
+            };
             let input = scroll.pages_input_handler();
             let group = GroupId::new("form-fields").unwrap();
             let view_scroll = scroll.clone();
-            stack.open_overlay(OverlaySpec {
-                kind:OverlayKind::Dialog,
-                model:SurfaceModel {
-                    focus:FocusModel::new(vec![TargetSpec::new(target("source")).in_group(group.clone()).with_input(input.clone()),TargetSpec::new(target("destination")).in_group(group).with_input(input.clone()),TargetSpec::new(target("body")).pointer_only().with_input(input)]).unwrap(),
-                    actions:ActionRegistry::new(ScopeId::new("pages-form").unwrap(),Vec::new()).unwrap(),primary_action:None,
-                },
-                view:OverlayView::new(move ||element!(DialogFrame(title:"Form pages".to_owned(),padding:Some(0u16),scroll:view_scroll.clone(),scroll_target:target("body")) {PageBody}).into_any()),
-                layout:OverlayLayout::CenteredCells {width:42,height:11},
-            }).unwrap();
-            *props.handle.lock().unwrap() = Some(PageFixture { stack, scroll });
+            stack
+                .open_overlay(OverlaySpec {
+                    kind: OverlayKind::Dialog,
+                    model: SurfaceModel {
+                        focus: FocusModel::new(vec![
+                            TargetSpec::new(target("source"))
+                                .in_group(group.clone())
+                                .with_input(input.clone()),
+                            TargetSpec::new(target("destination"))
+                                .in_group(group)
+                                .with_input(input.clone()),
+                            TargetSpec::new(target("body"))
+                                .pointer_only()
+                                .with_input(input),
+                        ])
+                        .unwrap(),
+                        actions: ActionRegistry::new(
+                            ScopeId::new("pages-form").unwrap(),
+                            vec![help_action],
+                        )
+                        .unwrap(),
+                        primary_action: None,
+                    },
+                    view: OverlayView::new(move || {
+                        element!(PageFrame(scroll:view_scroll.clone(),help:view_help.clone()))
+                            .into_any()
+                    }),
+                    layout: OverlayLayout::CenteredCells {
+                        width: 42,
+                        height: 11,
+                    },
+                })
+                .unwrap();
+            *props.handle.lock().unwrap() = Some(PageFixture {
+                stack,
+                scroll,
+                help,
+            });
             opened.set(true);
         }
         let journal = props.journal.clone();
@@ -273,6 +329,79 @@ mod tests {
                         },
                     )
                     .await;
+            })
+            .await
+            .unwrap();
+        }
+    }
+    #[tokio::test]
+    async fn closing_help_keeps_the_form_manual_scroll_instead_of_revealing_its_unchanged_focused_field_again()
+     {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let handle = Arc::new(Mutex::new(None));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(PageScene(journal,handle:handle.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.lock().unwrap().clone().unwrap();
+                let parent = fixture.stack.snapshot().top_id();
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::Down), true)], true)
+                    .await;
+                assert_eq!(
+                    fixture.scroll.position().offset,
+                    fixture.scroll.position().maximum(),
+                    "focus reveal has drawn before manual scrolling"
+                );
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::Home), true)], true)
+                    .await;
+                assert_eq!(
+                    fixture.stack.snapshot().top().focus.current(),
+                    Some(&target("destination"))
+                );
+                let position = fixture.scroll.position();
+                assert_eq!(position.offset, 0);
+                let before = driver.frames.last().unwrap().clone();
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::F(1)), true)],
+                        true,
+                        |_| assert!(fixture.help.is_active(parent)),
+                    )
+                    .await;
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::Esc), true)],
+                        true,
+                        |_| assert!(!fixture.help.is_active(parent)),
+                    )
+                    .await;
+                assert_eq!(
+                    fixture.scroll.position().natural_height,
+                    position.natural_height,
+                    "same form content"
+                );
+                assert_eq!(
+                    fixture.scroll.position().viewport_height,
+                    position.viewport_height,
+                    "same form viewport"
+                );
+                assert_eq!(
+                    fixture.scroll.position().offset,
+                    position.offset,
+                    "Help close restores manual scroll instead of repeating old focus reveal"
+                );
+                assert_eq!(
+                    driver.frames.last().unwrap(),
+                    &before,
+                    "same manual form viewport after Help"
+                );
             })
             .await
             .unwrap();

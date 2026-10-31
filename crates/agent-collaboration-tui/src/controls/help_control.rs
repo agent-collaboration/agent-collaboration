@@ -1,5 +1,5 @@
 //! Help projects the source scope; the stack owns suspended dialog models.
-use super::{HelpContent, ScrollHandle, button_target};
+use super::{HelpContent, HelpInputConvention, ScrollHandle, button_target};
 use crate::{
     actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
     focus_model::{FocusModel, InputUse, TargetId, TargetInputHandler, TargetSpec},
@@ -31,11 +31,22 @@ impl std::error::Error for HelpError {}
 enum HelpPresentation {
     WithinDialog(OverlayId),
     OwnDialog(OverlayId),
+    DropdownInDialog {
+        dialog: OverlayId,
+        dropdown: OverlayId,
+    },
+    DropdownOnScreen {
+        dialog: OverlayId,
+        dropdown: OverlayId,
+    },
 }
 impl HelpPresentation {
     fn surface(&self) -> SurfaceId {
         match self {
             Self::WithinDialog(id) | Self::OwnDialog(id) => SurfaceId::Overlay(*id),
+            Self::DropdownInDialog { dialog, .. } | Self::DropdownOnScreen { dialog, .. } => {
+                SurfaceId::Overlay(*dialog)
+            }
         }
     }
 }
@@ -75,6 +86,10 @@ impl HelpControl {
         match session.presentation {
             HelpPresentation::WithinDialog(id) => stack.overlay_base_model(id),
             HelpPresentation::OwnDialog(_) => stack.surface(SurfaceId::Screen),
+            HelpPresentation::DropdownInDialog { dropdown, .. }
+            | HelpPresentation::DropdownOnScreen { dropdown, .. } => {
+                stack.surface(SurfaceId::Overlay(dropdown))
+            }
         }
         .map(|model| model.actions.clone())
     }
@@ -111,7 +126,7 @@ impl HelpControl {
             }
         })
     }
-    pub fn show(&self, content: HelpContent) -> Result<bool, HelpError> {
+    pub fn show(&self, mut content: HelpContent) -> Result<bool, HelpError> {
         let stack = self.0.stack.snapshot();
         {
             let mut session = self
@@ -128,8 +143,85 @@ impl HelpControl {
             *session = None;
         }
         let scroll = ScrollHandle::new(self.0.stack);
-        let model = self.model(scroll.clone())?;
-        let presentation = if stack
+        let opening_keys = stack
+            .top()
+            .actions
+            .definitions()
+            .iter()
+            .find(|action| action.id == self.0.action)
+            .map_or_else(Vec::new, |action| action.keys.clone());
+        let model = self.model(scroll.clone(), opening_keys)?;
+        let presentation = if let Some(dropdown) = stack
+            .overlays()
+            .last()
+            .filter(|overlay| matches!(overlay.kind, OverlayKind::Dropdown { .. }))
+        {
+            let source = dropdown.id;
+            let parent = dropdown.parent;
+            if let SurfaceId::Overlay(id) = parent
+                && !stack
+                    .overlays()
+                    .iter()
+                    .any(|overlay| overlay.id == id && overlay.kind == OverlayKind::Dialog)
+            {
+                return Err(HelpError::SourceUnavailable);
+            }
+            if !self.0.stack.update(|stack| stack.suspend_dropdown(source)) {
+                return Err(HelpError::SourceUnavailable);
+            }
+            let opened = match parent {
+                SurfaceId::Overlay(dialog) => {
+                    if self
+                        .0
+                        .stack
+                        .update(|stack| stack.suspend_dialog_model(dialog, model))
+                    {
+                        Ok(HelpPresentation::DropdownInDialog {
+                            dialog,
+                            dropdown: source,
+                        })
+                    } else {
+                        Err(HelpError::SourceUnavailable)
+                    }
+                }
+                SurfaceId::Screen => {
+                    self.open_help_dialog(model)
+                        .map(|dialog| HelpPresentation::DropdownOnScreen {
+                            dialog,
+                            dropdown: source,
+                        })
+                }
+            };
+            let presentation = match opened {
+                Ok(presentation) => presentation,
+                Err(error) => {
+                    self.0.stack.update(|stack| stack.restore_dropdown());
+                    return Err(error);
+                }
+            };
+            content.conventions = vec![
+                HelpInputConvention {
+                    key: "↑/↓".into(),
+                    description: "Move highlight".into(),
+                },
+                HelpInputConvention {
+                    key: "Typing".into(),
+                    description: "Filter options".into(),
+                },
+                HelpInputConvention {
+                    key: "Enter".into(),
+                    description: "Choose option".into(),
+                },
+                HelpInputConvention {
+                    key: "Esc".into(),
+                    description: "Close dropdown".into(),
+                },
+            ];
+            content
+                .conventions
+                .extend(HelpContent::default().conventions);
+            presentation
+        } else if stack
             .overlays()
             .last()
             .is_some_and(|overlay| overlay.kind == OverlayKind::Dialog)
@@ -147,22 +239,7 @@ impl HelpControl {
             }
             HelpPresentation::WithinDialog(id)
         } else if stack.top_id() == SurfaceId::Screen {
-            let control = self.clone();
-            let id = self
-                .0
-                .stack
-                .open_overlay(OverlaySpec {
-                    kind: OverlayKind::Dialog,
-                    model,
-                    view: OverlayView::new(move || {
-                        element!(super::help_dialog::HelpFrame(control:control.clone())).into_any()
-                    }),
-                    layout: OverlayLayout::Dialog {
-                        presentation: crate::DialogPresentation::default(),
-                        margins: crate::DialogMargins::default(),
-                    },
-                })
-                .map_err(HelpError::Overlay)?;
+            let id = self.open_help_dialog(model)?;
             HelpPresentation::OwnDialog(id)
         } else {
             return Err(HelpError::SourceUnavailable);
@@ -199,9 +276,37 @@ impl HelpControl {
                     false
                 }
             }
+            HelpPresentation::DropdownInDialog { dialog, .. } => {
+                stack.restore_dialog_model(dialog) && stack.restore_dropdown()
+            }
+            HelpPresentation::DropdownOnScreen { dialog, .. } => {
+                if stack.top_id() != SurfaceId::Overlay(dialog) {
+                    false
+                } else {
+                    stack.close_top();
+                    stack.restore_dropdown()
+                }
+            }
         });
         self.0.stack.hit_regions().invalidate();
         closed
+    }
+    fn open_help_dialog(&self, model: SurfaceModel) -> Result<OverlayId, HelpError> {
+        let control = self.clone();
+        self.0
+            .stack
+            .open_overlay(OverlaySpec {
+                kind: OverlayKind::Dialog,
+                model,
+                view: OverlayView::new(move || {
+                    element!(super::help_dialog::HelpFrame(control:control.clone())).into_any()
+                }),
+                layout: OverlayLayout::Dialog {
+                    presentation: crate::DialogPresentation::default(),
+                    margins: crate::DialogMargins::default(),
+                },
+            })
+            .map_err(HelpError::Overlay)
     }
     fn close_handler(&self) -> Handler<()> {
         let weak = Arc::downgrade(&self.0);
@@ -211,14 +316,18 @@ impl HelpControl {
             }
         })
     }
-    fn model(&self, scroll: ScrollHandle) -> Result<SurfaceModel, HelpError> {
+    fn model(
+        &self,
+        scroll: ScrollHandle,
+        opening_keys: Vec<crate::actions::KeyChord>,
+    ) -> Result<SurfaceModel, HelpError> {
         let close_id = ActionId::new(format!("{}:close-help", self.0.action.as_str()))
             .map_err(HelpError::Identity)?;
         let back = ActionDef {
             toolbar_label: None,
             id: self.0.action.clone(),
             title: "Back".into(),
-            keys: vec!["F1".parse().map_err(HelpError::Keys)?],
+            keys: opening_keys,
             availability: AvailabilityFn::default(),
             choice: None,
             placement: Placement::Hidden,

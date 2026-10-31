@@ -1,5 +1,5 @@
 //! In-flow measurement, actual clipped hits, focus reveal and a visible scrollbar.
-use super::ScrollHandle;
+use super::{ScrollHandle, scroll_model::ScrollRevealTarget};
 use crate::{
     actions::Availability,
     focus_model::TargetId,
@@ -117,35 +117,49 @@ pub fn ScrollList<'a>(
 struct RevealHook {
     context: Option<ScrollContext>,
     focused: bool,
-    last_target: Option<(i32, u16, u16)>,
+    target_id: Option<TargetId>,
+    last_target: Option<ScrollRevealTarget>,
 }
 impl Hook for RevealHook {
     fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
         let Some(context) = self.context.as_ref().filter(|_| self.focused) else {
-            self.last_target = None;
+            if let Some(previous) = self.last_target.take()
+                && let Some(context) = self.context.as_ref()
+            {
+                context.scroll.forget_reveal(previous);
+            }
             return;
         };
         let position = context.scroll.position();
         let logical_top = i32::from(drawer.canvas_position().y) - i32::from(position.viewport_top)
             + i32::from(context.layout_offset);
-        let target = (logical_top, drawer.size().height, position.viewport_height);
-        if self.last_target != Some(target) {
-            self.last_target = Some(target);
-            context.scroll.reveal(logical_top, target.1);
-        }
+        let target = ScrollRevealTarget {
+            target_id: self.target_id.clone(),
+            logical_top,
+            height: drawer.size().height,
+            viewport_height: position.viewport_height,
+        };
+        self.last_target = Some(target.clone());
+        context.scroll.reveal(target);
     }
 }
-pub(crate) fn use_scroll_reveal(hooks: &mut Hooks<'_, '_>, focused: bool) {
+pub(crate) fn use_scroll_reveal(
+    hooks: &mut Hooks<'_, '_>,
+    focused: bool,
+    target_id: Option<TargetId>,
+) {
     let context = hooks
         .try_use_context::<ScrollContext>()
         .map(|context| context.clone());
     let hook = hooks.use_hook(|| RevealHook {
         context: context.clone(),
         focused,
+        target_id: target_id.clone(),
         last_target: None,
     });
     hook.context = context;
     hook.focused = focused;
+    hook.target_id = target_id;
 }
 #[derive(Props)]
 pub struct ScrollRevealProps<'a> {
@@ -157,7 +171,35 @@ pub fn ScrollReveal<'a>(
     props: &mut ScrollRevealProps<'a>,
     mut hooks: Hooks,
 ) -> impl Into<AnyElement<'a>> {
-    use_scroll_reveal(&mut hooks, props.focused);
+    let target_id = hooks
+        .try_use_context::<SurfaceContext>()
+        .and_then(|context| {
+            context
+                .stack
+                .snapshot()
+                .surface(context.surface)
+                .and_then(|surface| surface.focus.current().cloned())
+        });
+    use_scroll_reveal(&mut hooks, props.focused, target_id);
+    match props.children.first_mut() {
+        Some(child) => child.into(),
+        None => element!(View).into_any(),
+    }
+}
+
+#[derive(Props)]
+pub(crate) struct TargetScrollRevealProps<'a> {
+    #[iocraft(required)]
+    pub(crate) target: TargetId,
+    pub(crate) focused: bool,
+    pub(crate) children: Vec<AnyElement<'a>>,
+}
+#[component]
+pub(crate) fn TargetScrollReveal<'a>(
+    props: &mut TargetScrollRevealProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    use_scroll_reveal(&mut hooks, props.focused, Some(props.target.clone()));
     match props.children.first_mut() {
         Some(child) => child.into(),
         None => element!(View).into_any(),

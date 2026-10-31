@@ -7,8 +7,8 @@ mod tests {
     use agent_collaboration_tui::{
         actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
         controls::{
-            ComboBox, ComboBoxBinding, ComboBoxControl, ComboBoxState, OptionKey, SelectOption,
-            button_target,
+            ComboBox, ComboBoxBinding, ComboBoxControl, ComboBoxState, HelpControl, OptionKey,
+            SelectOption, button_target,
         },
         focus_model::{FocusModel, TargetId},
         hit_regions::HitRegionKind,
@@ -33,11 +33,12 @@ mod tests {
         event.modifiers = modifiers;
         TerminalEvent::Key(event)
     }
-    #[derive(Clone, Copy)]
+    #[derive(Clone)]
     struct Fixture {
         stack: SurfaceStackHandle,
         value: State<ComboBoxState>,
         picks: State<usize>,
+        help: HelpControl,
     }
     #[derive(Props)]
     struct SceneProps {
@@ -95,17 +96,32 @@ mod tests {
                         .unwrap();
                 }),
             };
+            let help = HelpControl::new(stack, ActionId::new("help").unwrap());
+            let help_action = ActionDef {
+                id: ActionId::new("help").unwrap(),
+                title: "Help".into(),
+                toolbar_label: None,
+                keys: vec!["F1".parse().unwrap(), "Ctrl+7".parse().unwrap()],
+                availability: AvailabilityFn::default(),
+                choice: None,
+                placement: Placement::Hidden,
+                run: help.open_handler(Default::default, Handler::from(|error| panic!("{error}"))),
+            };
+            *props.handle.lock().unwrap() = Some(Fixture {
+                stack,
+                value,
+                picks,
+                help,
+            });
             SurfaceModel {
                 focus: FocusModel::new(vec![button_target(field(), &open)]).unwrap(),
-                actions: ActionRegistry::new(ScopeId::new("dropdown-pages").unwrap(), vec![open])
-                    .unwrap(),
+                actions: ActionRegistry::new(
+                    ScopeId::new("dropdown-pages").unwrap(),
+                    vec![open, help_action],
+                )
+                .unwrap(),
                 primary_action: None,
             }
-        });
-        *props.handle.lock().unwrap() = Some(Fixture {
-            stack,
-            value,
-            picks,
         });
         let journal = props.journal.clone();
         element!(InputOwner(stack,width:76u16,height:28u16,quit_action:ActionId::new("quit").unwrap(),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(stack.snapshot().top_id(),value.read().query().text().as_bytes().to_vec()),(stack.snapshot().top_id(),vec![u8::from(stack.hit_regions().published().is_none())])]))) {OverlayHost {View(width:35) {ComboBox(id:field(),value)}}})
@@ -121,7 +137,7 @@ mod tests {
                 let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
                 tokio::time::timeout(std::time::Duration::from_secs(5), async {
                     driver.initial(&mut frames).await;
-                    let fixture = handle.lock().unwrap().unwrap();
+                    let fixture = handle.lock().unwrap().clone().unwrap();
                     driver
                         .drive(
                             &mut frames,
@@ -262,5 +278,59 @@ mod tests {
                 .unwrap();
             }
         }
+    }
+    #[tokio::test]
+    async fn manually_paged_dropdown_keeps_its_scroll_query_and_highlight_after_help() {
+        let handle = Arc::new(Mutex::new(None));
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(Scene(journal,handle:handle.clone()));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            driver.initial(&mut frames).await;
+            let fixture = handle.lock().unwrap().clone().unwrap();
+            driver
+                .drive(
+                    &mut frames,
+                    InputMode::FrameSeparated,
+                    vec![
+                        (key(KeyCode::Enter, KeyModifiers::NONE), true),
+                        (TerminalEvent::BracketedPaste("Option".into()), true),
+                        (key(KeyCode::PageDown, KeyModifiers::NONE), true),
+                    ],
+                    true,
+                )
+                .await;
+            let popup = fixture.stack.snapshot().top_id();
+            let before = driver.frames.last().unwrap().clone();
+            let choice = fixture.value.read().clone();
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::F(1), KeyModifiers::NONE), true)],
+                    true,
+                    |_| assert!(fixture.help.is_active(fixture.stack.snapshot().top_id())),
+                )
+                .await;
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::Burst,
+                    vec![(key(KeyCode::Char('7'), KeyModifiers::CONTROL), true)],
+                    true,
+                    |_| {
+                        assert_eq!(fixture.stack.snapshot().top_id(), popup);
+                        assert_eq!(*fixture.value.read(), choice);
+                    },
+                )
+                .await;
+            assert_eq!(
+                driver.frames.last().unwrap(),
+                &before,
+                "Help returns to the exact manually paged popup"
+            );
+        })
+        .await
+        .unwrap();
     }
 }

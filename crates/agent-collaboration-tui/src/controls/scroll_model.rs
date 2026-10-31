@@ -1,6 +1,6 @@
 //! A scroll model can be constructed with its overlay before any component mounts.
 use crate::{
-    focus_model::{InputUse, TargetInputHandler},
+    focus_model::{InputUse, TargetId, TargetInputHandler},
     surface_handle::SurfaceStackHandle,
 };
 use iocraft::prelude::*;
@@ -17,15 +17,24 @@ impl ScrollPosition {
         self.natural_height.saturating_sub(self.viewport_height)
     }
 }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ScrollRevealTarget {
+    pub target_id: Option<TargetId>,
+    pub logical_top: i32,
+    pub height: u16,
+    pub viewport_height: u16,
+}
 #[derive(Clone)]
 pub struct ScrollHandle {
     position: Arc<Mutex<ScrollPosition>>,
+    last_reveal: Arc<Mutex<Option<ScrollRevealTarget>>>,
     stack: SurfaceStackHandle,
 }
 impl ScrollHandle {
     pub fn new(stack: SurfaceStackHandle) -> Self {
         Self {
             position: Arc::new(Mutex::new(ScrollPosition::default())),
+            last_reveal: Arc::new(Mutex::new(None)),
             stack,
         }
     }
@@ -36,6 +45,10 @@ impl ScrollHandle {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
     pub fn reset(&self) {
+        *self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.update(|position| position.offset = 0);
     }
     fn update(&self, update: impl FnOnce(&mut ScrollPosition)) -> bool {
@@ -66,7 +79,28 @@ impl ScrollHandle {
     pub(crate) fn measure_content(&self, height: u16) {
         self.update(|position| position.natural_height = height);
     }
-    pub(crate) fn reveal(&self, logical_top: i32, height: u16) {
+    pub(super) fn forget_reveal(&self, target: ScrollRevealTarget) {
+        let mut previous = self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if previous.as_ref() == Some(&target) {
+            *previous = None;
+        }
+    }
+    pub(super) fn reveal(&self, target: ScrollRevealTarget) {
+        let logical_top = target.logical_top;
+        let height = target.height;
+        {
+            let mut previous = self
+                .last_reveal
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if previous.as_ref() == Some(&target) {
+                return;
+            }
+            *previous = Some(target);
+        }
         self.update(|position| {
             let top = i32::from(position.offset);
             let bottom = top + i32::from(position.viewport_height);

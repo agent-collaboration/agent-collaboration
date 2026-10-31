@@ -183,6 +183,7 @@ impl std::error::Error for OverlayIdentityExhausted {}
 pub struct SurfaceStack {
     screen: SurfaceModel,
     overlays: Vec<Overlay>,
+    suspended_dropdown: Option<Overlay>,
     next_identity: u64,
 }
 impl SurfaceStack {
@@ -198,6 +199,7 @@ impl SurfaceStack {
         Self {
             screen,
             overlays: Vec::new(),
+            suspended_dropdown: None,
             next_identity: 1,
         }
     }
@@ -231,6 +233,7 @@ impl SurfaceStack {
             SurfaceId::Overlay(id) => self
                 .overlays
                 .iter()
+                .chain(self.suspended_dropdown.iter())
                 .find(|overlay| overlay.id == id)
                 .map(|overlay| &overlay.model),
         }
@@ -241,6 +244,7 @@ impl SurfaceStack {
             SurfaceId::Overlay(id) => self
                 .overlays
                 .iter_mut()
+                .chain(self.suspended_dropdown.iter_mut())
                 .find(|overlay| overlay.id == id)
                 .map(|overlay| &mut overlay.model),
         }
@@ -248,12 +252,14 @@ impl SurfaceStack {
     pub(crate) fn overlay_base_model(&self, id: OverlayId) -> Option<&SurfaceModel> {
         self.overlays
             .iter()
+            .chain(self.suspended_dropdown.iter())
             .find(|overlay| overlay.id == id)
             .map(|overlay| overlay.suspended_model.as_ref().unwrap_or(&overlay.model))
     }
     pub(crate) fn overlay_base_model_mut(&mut self, id: OverlayId) -> Option<&mut SurfaceModel> {
         self.overlays
             .iter_mut()
+            .chain(self.suspended_dropdown.iter_mut())
             .find(|overlay| overlay.id == id)
             .map(|overlay| {
                 overlay
@@ -281,6 +287,40 @@ impl SurfaceStack {
             return false;
         };
         overlay.model = model;
+        true
+    }
+    pub(crate) fn dropdown_for(&self, parent: SurfaceId, field: &TargetId) -> Option<&Overlay> {
+        self.overlays
+            .iter()
+            .chain(self.suspended_dropdown.iter())
+            .find(|overlay| {
+                overlay.parent == parent
+                    && overlay.kind
+                        == OverlayKind::Dropdown {
+                            field: field.clone(),
+                        }
+            })
+    }
+    pub(crate) fn suspend_dropdown(&mut self, id: OverlayId) -> bool {
+        if self.suspended_dropdown.is_some()
+            || !self.overlays.last().is_some_and(|overlay| {
+                overlay.id == id && matches!(overlay.kind, OverlayKind::Dropdown { .. })
+            })
+        {
+            return false;
+        }
+        self.suspended_dropdown = self.overlays.pop();
+        true
+    }
+    pub(crate) fn restore_dropdown(&mut self) -> bool {
+        let Some(dropdown) = self.suspended_dropdown.take() else {
+            return false;
+        };
+        if self.top_id() != dropdown.parent {
+            self.suspended_dropdown = Some(dropdown);
+            return false;
+        }
+        self.overlays.push(dropdown);
         true
     }
     pub fn is_covered(&self, id: SurfaceId) -> bool {
@@ -312,6 +352,13 @@ impl SurfaceStack {
     }
     pub fn close_top(&mut self) -> Option<OverlayId> {
         let closed = self.overlays.pop()?;
+        if self
+            .suspended_dropdown
+            .as_ref()
+            .is_some_and(|dropdown| dropdown.parent == SurfaceId::Overlay(closed.id))
+        {
+            self.suspended_dropdown = None;
+        }
         self.top_mut().focus.restore(closed.restore_focus.as_ref());
         Some(closed.id)
     }

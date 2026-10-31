@@ -1,5 +1,5 @@
 //! ComboBox presentation uses the scoped control model and the shared input owner.
-use super::{ComboBoxState, ScrollHandle, ScrollList, ScrollReveal};
+use super::{ComboBoxState, ScrollHandle, ScrollList, scroll_list::TargetScrollReveal};
 use crate::{
     actions::Availability,
     focus_model::TargetId,
@@ -79,11 +79,12 @@ pub(crate) fn ComboDropdown(
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
         #(matching.into_iter().map(|option| {
             let highlighted=Some(&option.key)==state.highlight();
+            let target=props.field.child(&format!("option:{}",option.key.as_str()));
             let reason=match &option.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason.clone())};
             let label=fit_label_text(&option.label,row_width.saturating_sub(2));
             let inline_secondary=option.secondary.as_ref().filter(|secondary|option.label.width()+secondary.width()+3<=row_width);
             let overflow_secondary=option.secondary.as_ref().filter(|_|inline_secondary.is_none());
-            element!(ScrollReveal(focused:highlighted) {View(width:100pct,flex_shrink:0.0_f32) {HitRegion(target:props.field.child(&format!("option:{}",option.key.as_str())),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
+            element!(TargetScrollReveal(target:target.clone(),focused:highlighted) {View(width:100pct,flex_shrink:0.0_f32) {HitRegion(target,kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,background_color:theme.background(if highlighted {SurfaceRole::Selected}else{SurfaceRole::Raised})) {
                 View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
                     View(width:1,flex_shrink:0.0_f32) {Text(content:if Some(&option.key)==state.value(){UiGlyph::Current.text()}else{UiGlyph::Empty.text()},color:theme.foreground(TextRole::Muted))}
                     View(flex_shrink:0.0_f32) {Text(content:label,wrap:TextWrap::NoWrap,color:theme.foreground(if !option.availability.is_available(){TextRole::Disabled}else if highlighted {TextRole::Focused}else{TextRole::Text}))}
