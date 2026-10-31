@@ -130,6 +130,21 @@ fn outcome_readback<'a>(
             },
         }),
         Some(SessionsPickerOutcome::LaunchNativeClaude(captured, mode)) => {
+            if let SessionClientEffect::Native { action, .. } = &captured.effect {
+                match action {
+                    SourceNativeClaudeAction::Resume { target, .. } => {
+                        return Ok(PickerOutcomeReadback::Resume {
+                            identity: PickerIdentityReadback::NativeClaude { target },
+                        });
+                    }
+                    SourceNativeClaudeAction::Fork { target, .. } => {
+                        return Ok(PickerOutcomeReadback::Fork {
+                            identity: PickerIdentityReadback::NativeClaude { target },
+                        });
+                    }
+                    SourceNativeClaudeAction::New { .. } => {}
+                }
+            }
             let SessionClientEffect::Native {
                 action: SourceNativeClaudeAction::New { directory, .. },
                 ..
@@ -418,3 +433,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "picker_fixture_scenario_tests.rs"]
+mod scenario_tests;

@@ -113,8 +113,21 @@ pub fn run_sessions_picker_test_harness() -> io::Result<()> {
         )),
     };
     #[cfg(debug_assertions)]
+    let scenario = variant
+        .as_deref()
+        .and_then(super::super::picker_fixture_scenarios::PickerFixtureScenario::from_name);
+    #[cfg(debug_assertions)]
+    let record_loader = super::super::picker_fixture_scenarios::source_updates::record_loader(
+        scenario,
+        receipt_directory.as_deref(),
+    )?;
+    #[cfg(debug_assertions)]
+    let client_ports = super::super::picker_fixture_scenarios::client_ports(scenario, &request);
+    #[cfg(not(debug_assertions))]
+    let (record_loader, client_ports) = (None, None);
+    #[cfg(debug_assertions)]
     let captured_request = request.clone();
-    let outcome = render_picker(request, None, None, initial_size, support)?;
+    let outcome = render_picker(request, record_loader, client_ports, initial_size, support)?;
     #[cfg(debug_assertions)]
     {
         if let Some(sink) = dispatch_receipt {

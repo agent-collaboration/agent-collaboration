@@ -13,8 +13,8 @@ use collaboration_client::protocol::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const FIXTURE_SERVICE: &str = "00000000-0000-4000-8000-000000000001";
-const SHARED_SESSION: &str = "00000000-0000-4000-8000-000000000011";
+pub(super) const FIXTURE_SERVICE: &str = "00000000-0000-4000-8000-000000000001";
+pub(super) const SHARED_SESSION: &str = "00000000-0000-4000-8000-000000000011";
 
 pub(super) fn apply_storyboard_variant(
     mut request: SessionsPickerRequest,
@@ -124,10 +124,14 @@ pub(super) fn apply_storyboard_variant(
             }
             Ok(request)
         }
-        Some(value) => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("unknown storyboard variant: {value}"),
-        )),
+        Some(value) => super::picker_fixture_scenarios::PickerFixtureScenario::from_name(value)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("unknown storyboard variant: {value}"),
+                )
+            })?
+            .apply(request),
     }
 }
 

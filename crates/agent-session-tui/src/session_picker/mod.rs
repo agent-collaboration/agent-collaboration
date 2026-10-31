@@ -10,6 +10,8 @@ pub use new_session_client_inventory::SessionClientPorts;
 mod picker_actions;
 mod picker_component;
 mod picker_filters;
+#[cfg(feature = "quota-reset-test-harness")]
+mod picker_fixture_scenarios;
 mod picker_fork_confirmation;
 mod picker_fork_view;
 mod picker_machine_controls;
