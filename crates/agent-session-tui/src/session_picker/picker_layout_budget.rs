@@ -1,18 +1,6 @@
 //! Picker layout budget.
 use super::SessionsPickerModel;
 
-pub(super) fn picker_body_budget(
-    height: usize,
-    control_height: usize,
-    minimum_render_height: usize,
-) -> usize {
-    let root_border_height = 2;
-    let title_height = 1;
-    height
-        .max(minimum_render_height)
-        .saturating_sub(root_border_height + title_height + control_height)
-}
-
 pub(super) fn session_visible_row_budget(
     model: &SessionsPickerModel,
     available_height: usize,

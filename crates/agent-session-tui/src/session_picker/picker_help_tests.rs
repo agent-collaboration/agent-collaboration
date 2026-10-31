@@ -1,3 +1,5 @@
+// R7/R13: generated Help and Menu replace hand-written Help and header actions.
+// R7: shared Help replaces the screen-specific Help title.
 //! Real component claims for Help chrome and retained underlying modal state.
 use super::*;
 
@@ -10,51 +12,103 @@ async fn sessions_help_top_line_hides_shortcuts_outside_help() {
     let frame = render_picker_capture_at(picker_request(), 120, 36, vec![ctrl_key('d')]).await;
     let title = frame
         .lines()
-        .find(|line| line.contains("Sessions ·"))
+        .find(|line| line.contains(" sessions ·"))
         .unwrap();
-    assert!(title.contains("Help"), "top line must expose Help: {frame}");
-    for shortcut in [
-        "F1",
-        "F2",
-        "F3",
-        "F4",
-        "ctrl-",
-        "Ctrl+",
-        "enter apply",
-        "esc cancel",
-    ] {
+    assert!(
+        title.contains("sessions") && frame.contains("Menu F10"),
+        "toolbar exposes Menu: {frame}"
+    );
+    // F10 is an actual toolbar binding, so F1 must be matched as a whole key.
+    for shortcut in ["F1", "F2", "F3", "F4"] {
         assert!(
-            !frame.contains(shortcut),
+            !frame.split_whitespace().any(|token| token == shortcut),
             "shortcut {shortcut} leaked: {frame}"
         );
     }
+    for phrase in ["ctrl-", "enter apply", "esc cancel"] {
+        assert!(!frame.contains(phrase), "shortcut {phrase} leaked: {frame}");
+    }
 }
 
+// R7: context precedes the generated action reference and scrollable conventions.
+async fn capture_help_scroll(
+    width: usize,
+    height: usize,
+    opening: Vec<TerminalEvent>,
+    reached: fn(&str) -> bool,
+) -> Vec<String> {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(SessionsPickerComponent(request:picker_request(),width,height));
+    let mut phase = 0;
+    let mut opening = Some(opening);
+    let mut captured = Vec::new();
+    let journey = component
+        .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
+        .map(|canvas| {
+            let frame = canvas.to_string();
+            if phase == 0 {
+                for event in opening.take().unwrap() {
+                    sender.send(event).unwrap();
+                }
+                phase = 1;
+            } else if phase == 1 && frame.contains("Close Help") {
+                let body = dialog_text(&frame, dialog_bounds(&frame, "Close Help"));
+                let done = reached(&body);
+                captured.push(body);
+                if done {
+                    sender.send(ctrl_key('d')).unwrap();
+                    phase = 2;
+                } else {
+                    sender.send(key(KeyCode::PageDown)).unwrap();
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    tokio::time::timeout(Duration::from_secs(2), journey)
+        .await
+        .expect("generated Help context/conventions remain reachable");
+    assert_eq!(phase, 2);
+    captured
+}
 #[tokio::test]
 async fn sessions_help_phone_shows_filter_context_before_general_navigation() {
-    let frame = render_picker_capture_at(
-        picker_request(),
+    let frames = capture_help_scroll(
         48,
         24,
-        vec![
-            ctrl_key('f'),
-            key(KeyCode::Down),
-            key(KeyCode::F(1)),
-            ctrl_key('d'),
-        ],
+        vec![ctrl_key('f'), key(KeyCode::Down), key(KeyCode::F(1))],
+        |body| {
+            body.chars()
+                .filter(|character| !character.is_whitespace() && !matches!(character, '│' | '┃'))
+                .collect::<String>()
+                .contains("Movefieldfocus")
+        },
     )
     .await;
-    assert!(frame.contains("Sessions Help"), "{frame}");
+    let context = frames
+        .iter()
+        .position(|body| body.contains("Session filters"))
+        .expect("current scope context");
+    let conventions = frames
+        .iter()
+        .position(|body| {
+            body.chars()
+                .filter(|character| !character.is_whitespace())
+                .collect::<String>()
+                .contains("Movefieldfocus")
+        })
+        .expect("focus convention");
     assert!(
-        frame.contains("Session filters"),
-        "current dialog context must be visible: {frame}"
+        context <= conventions,
+        "scope context precedes the general conventions: {frames:?}"
     );
-    assert!(frame.contains("Move field focus"), "{frame}");
 }
 
 #[tokio::test]
 async fn sessions_help_preserves_provider_draft_and_blocks_background_keys() {
-    let frame = render_picker_capture_at(
+    let capture = render_counted_picker_capture_at(
         picker_request(),
         120,
         36,
@@ -72,18 +126,21 @@ async fn sessions_help_preserves_provider_draft_and_blocks_background_keys() {
         ],
     )
     .await;
+    let frame = capture.text;
     assert!(
         frame.contains("Codex ▾"),
         "Help close must restore draft: {frame}"
     );
     assert!(
-        frame.contains("Filters · All providers"),
+        frame.contains("1/3 sessions"),
         "Help must not apply draft: {frame}"
     );
-    assert!(
-        !frame.contains("Search: [x]"),
-        "background search leaked: {frame}"
+    assert_eq!(
+        capture.committed_provider_filter,
+        Some(SessionProviderFilter::All),
+        "Help must retain the committed provider, even when All and Codex have the same visible count: {frame}"
     );
+    assert!(!frame.contains("/  x"), "background search leaked: {frame}");
 }
 
 #[tokio::test]
@@ -118,60 +175,40 @@ async fn sessions_help_precedes_existing_machine_fork_and_details_input() {
     }
 }
 
-#[tokio::test]
-async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
-        receiver.recv().await.map(|event| (event, receiver))
-    });
-    tokio::time::timeout(Duration::from_secs(2), async {
-        let mut picker = element! { SessionsPickerComponent(request: picker_request(), width: 120usize, height: 36usize) };
-        let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-        tokio::pin!(frames);
-        let mut opened = false;
-        while let Some(canvas) = frames.next().await {
-            let text = canvas.to_string();
-            if !opened {
-                let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Sessions ·") && line.contains("Help")).unwrap();
-                let column = line.chars().position(|character| character == 'H').unwrap();
-                let title_column = line.chars().position(|character| character == 'S').unwrap();
-                let title_style = canvas.cell(title_column, row).unwrap().text_style().unwrap();
-                assert_eq!(title_style.color, Some(Color::Cyan));
-                assert_eq!(title_style.weight, Weight::Bold);
-                let help_style = canvas.cell(column, row).unwrap().text_style().unwrap();
-                assert_eq!(help_style.color, Some(Color::Grey), "Help is secondary, not a second heading");
-                assert_eq!(help_style.weight, Weight::Normal);
-                sender.send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), u16::try_from(column).expect("captured fixture coordinates fit terminal cells"), u16::try_from(row).expect("captured fixture coordinates fit terminal cells")))).unwrap();
-                opened = true;
-            } else if text.contains("Sessions Help") {
-                let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Sessions") && !line.contains("Sessions Help") && !line.contains("Sessions ·")).unwrap_or_else(|| panic!("actual Help section must be painted: {text}"));
-                let column = line.chars().position(|character| character == 'S').unwrap();
-                let section_style = canvas.cell(column, row).unwrap().text_style().unwrap();
-                assert_eq!(section_style.color, Some(Color::Rgb {r:156,g:188,b:251}));
-                assert_eq!(section_style.weight, Weight::Bold);
-                sender.send(ctrl_key('c')).unwrap();
-                return;
-            }
-        }
-        panic!("Help click must reach actual overlay");
-    }).await.expect("Help click must finish within bounded event wait");
-}
+#[path = "picker_help_projection_tests.rs"]
+mod generated_projection;
 
 #[tokio::test]
 async fn owner_feedback_help_page_keys_fit_one_row() {
     for (width, height) in [(48, 24), (76, 30), (120, 36)] {
-        let frame = render_picker_capture_at(
-            picker_request(),
-            width,
-            height,
-            vec![key(KeyCode::F(1)), ctrl_key('d')],
-        )
+        let frames = capture_help_scroll(width, height, vec![key(KeyCode::F(1))], |body| {
+            body.lines()
+                .any(|line| line.contains("PgUp/PgDn · Option+↑/↓") && line.contains("Page"))
+        })
         .await;
         assert!(
-            frame
+            frames.iter().any(|body| body
                 .lines()
-                .any(|line| line.contains("PgUp / PgDn") && line.contains("Move a page")),
-            "page keys must stay together at {width}: {frame}"
+                .any(|line| line.contains("PgUp/PgDn · Option+↑/↓") && line.contains("Page"))),
+            "page keys stay together at {width}: {frames:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn help_boundary_aliases_remain_whole_at_responsive_widths() {
+    for (width, height) in [(48, 24), (76, 30), (120, 36)] {
+        let frames = capture_help_scroll(width, height, vec![key(KeyCode::F(1))], |body| {
+            body.lines().any(|line| {
+                line.contains("Home/End · Option+Shift+↑/↓") && line.contains("First/last")
+            })
+        })
+        .await;
+        assert!(
+            frames.iter().any(|body| body.lines().any(|line| {
+                line.contains("Home/End · Option+Shift+↑/↓") && line.contains("First/last")
+            })),
+            "boundary aliases stay whole at {width}: {frames:?}"
         );
     }
 }
@@ -192,14 +229,16 @@ async fn owner_feedback_atomic_paste_searches_full_session_id_without_executing_
                 SESSION_ID.to_owned(),
             );
         let mut outcome: Option<SessionsPickerOutcome> = None;
+        let query = Arc::new(Mutex::new(String::new()));
+        let sink = query.clone();
         let canvases = element! {
-            SessionsPickerComponent(request, width: 120usize, height: 36usize, selected_outcome_out: &mut outcome)
+            SessionsPickerComponent(request, width: 120usize, height: 36usize, selected_outcome_out: &mut outcome, surface_observer:move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *sink.lock().unwrap()=model.read().search.clone())
         }.mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(vec![
             TerminalEvent::BracketedPaste(pasted), ctrl_key('d'),
         ]))).collect::<Vec<_>>().await;
         let frame = canvases.last().unwrap().to_string();
         assert!(
-            frame.contains(&format!("Search: [{SESSION_ID}]")),
+            frame.contains("1/3 sessions") && *query.lock().unwrap() == SESSION_ID,
             "paste must reach search atomically: {frame}"
         );
         assert!(frame.contains("Feature design session"), "{frame}");
@@ -236,7 +275,7 @@ async fn owner_feedback_modal_input_blocks_atomic_paste() {
         )
         .await;
         assert!(
-            !frame.contains("Search: [thread-b]"),
+            !frame.contains("/  thread-b"),
             "modal paste leaked into the background query: {frame}"
         );
         assert!(
@@ -263,7 +302,7 @@ async fn owner_feedback_session_metadata_keeps_readable_secondary_contrast() {
     for (row, line) in frame
         .lines()
         .enumerate()
-        .filter(|(_, line)| line.contains("Codex This machine"))
+        .filter(|(_, line)| line.contains("Codex · This machine"))
     {
         let offset = line.find("Codex").unwrap();
         let column = line
@@ -342,17 +381,24 @@ async fn owner_feedback_atomic_paste_advances_the_real_source_query_once() {
                 frame = frames.next() => {
                     let Some(canvas) = frame else { break; };
                     last_frame = canvas.to_string();
-                    if !observed && last_frame.contains("Paste source result") && last_frame.contains(SESSION_ID) {
-                        observed = true;
-                    }
                 }
+            }
+            // The shared toolbar clips long text; the source query retains the full UUID.
+            if last_frame.contains("Paste source result")
+                && queries.iter().any(|(_, search)| search == SESSION_ID)
+            {
+                observed = true;
             }
             if observed && !exit_sent && queries.iter().any(|(_, search)| !search.is_empty()) {
                 exit_sent = true;
                 sender.send(ctrl_key('d')).unwrap();
             }
         }
-    }).await.unwrap_or_else(|_| panic!("paste must supersede the pending read and render its own result: {last_frame}"));
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!("paste must supersede the pending read and render its own result: {last_frame}")
+    });
     assert!(observed, "{last_frame}");
     let pasted_queries = queries
         .into_iter()
@@ -379,10 +425,18 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
             .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).collect::<Vec<_>>().await;
         let canvas = canvases.last().unwrap();
         let text = canvas.to_string();
+        // T7 exposes the covered closed field above its open dropdown. Inspect
+        // selected option styling on the active dropdown, not the parent value.
+        let option_bounds = choices_open.then(|| dialog_bounds(&text, "Filter:"));
         let locate = |label: &str| {
             let (row, line) = text
                 .lines()
                 .enumerate()
+                .filter(|(row, _)| {
+                    option_bounds
+                        .as_ref()
+                        .is_none_or(|bounds| *row > bounds.top && *row < bounds.bottom)
+                })
                 .find(|(_, line)| {
                     line.contains(label) && !(label == "Codex" && line.contains("Thi"))
                 })
@@ -417,7 +471,7 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
             let (column, row) = locate("Codex");
             let style = canvas.cell(column, row).unwrap().text_style().unwrap();
             assert_eq!(style.color, Some(Color::White), "available choice: {text}");
-            let (column, row) = locate("❯ All providers");
+            let (column, row) = locate("All providers");
             let style = canvas.cell(column, row).unwrap().text_style().unwrap();
             assert_eq!(style.color, Some(Color::Yellow), "selected choice: {text}");
         }
@@ -435,19 +489,27 @@ async fn sessions_help_wide_overlay_preserves_background_top_bottom_and_inactive
     let (row, line) = text
         .lines()
         .enumerate()
-        .find(|(_, line)| line.contains("Sessions ·"))
+        .find(|(_, line)| line.contains(" sessions ·"))
         .unwrap();
     assert_eq!(row, 1, "background title must retain top row: {text}");
     assert!(
-        line.contains("Help"),
-        "background top Help remains mounted: {text}"
+        line.contains("Menu"),
+        "background top Menu remains mounted: {text}"
     );
-    let column = line.chars().position(|character| character == 'S').unwrap();
+    let column =
+        unicode_width::UnicodeWidthStr::width(line.get(..line.find("sessions").unwrap()).unwrap());
     let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-    assert_eq!(style.color, Some(Color::Grey));
+    // R2: the shared covered-surface role replaces the old inactive title flag.
+    assert_eq!(
+        style.color,
+        Some(
+            agent_collaboration_tui::theme::Theme::covered()
+                .foreground(agent_collaboration_tui::theme::TextRole::Accent)
+        )
+    );
     assert_eq!(style.weight, Weight::Bold);
     assert!(
-        text.lines().nth(1).unwrap().contains("Details"),
+        text.lines().nth(1).unwrap().contains("Menu"),
         "background Details action must retain title row: {text}"
     );
     assert!(
@@ -455,7 +517,7 @@ async fn sessions_help_wide_overlay_preserves_background_top_bottom_and_inactive
         "background border must retain viewport: {text}"
     );
     assert!(
-        text.contains("Sessions Help"),
+        text.contains("Close Help"),
         "Help is the active dialog: {text}"
     );
     let restored = render_picker_capture_at(
@@ -476,7 +538,7 @@ async fn sessions_help_wide_overlay_preserves_background_top_bottom_and_inactive
         "Help must preserve identity focus: {restored}"
     );
     assert!(
-        !restored.contains("Search: [x]"),
+        !restored.contains("/  x"),
         "Help must preserve query: {restored}"
     );
 }

@@ -116,6 +116,7 @@ async fn assert_held_switch(result: SwitchResult) {
         while let Some(canvas) = canvases.next().await {
             let text = canvas.to_string();
             if !selected && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter, KeyModifiers::NONE)).unwrap();
                 selected = true;
                 for code in [KeyCode::Down, KeyCode::Down, KeyCode::Enter] {
                     sender.send(key(code, KeyModifiers::NONE)).unwrap();
@@ -144,7 +145,7 @@ async fn assert_held_switch(result: SwitchResult) {
             }
             if settled && !exiting {
                 match result {
-                    SwitchResult::Ready if text.contains("Machine: Sunbook") && text.contains("Fresh selected row") => {
+                    SwitchResult::Ready if text.contains("sessions · Sunbook") && text.contains("Fresh selected row") => {
                         exiting = true;
                         sender.send(key(KeyCode::Char('n'), KeyModifiers::CONTROL)).unwrap();
                     }
@@ -152,7 +153,7 @@ async fn assert_held_switch(result: SwitchResult) {
                         exiting = true;
                         sender.send(key(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
                     }
-                    SwitchResult::Canceled if text.contains("Machine: This machine") && text.contains("Retained original row") => {
+                    SwitchResult::Canceled if text.contains("sessions · This machine") && text.contains("Retained original row") => {
                         exiting = true;
                         sender.send(key(KeyCode::Char('c'), KeyModifiers::CONTROL)).unwrap();
                     }
@@ -164,7 +165,7 @@ async fn assert_held_switch(result: SwitchResult) {
                         assert!(text.lines().any(|line|line.contains("Machine")&&line.contains("Sunbook")), "NEW must preselect the committed alias");
                         sender.send(key(KeyCode::Char('c'), KeyModifiers::CONTROL)).unwrap();
                     }
-                    SwitchResult::Rejected if text.contains("Machine: This machine") && text.contains("Retained original row") => {
+                    SwitchResult::Rejected if text.contains("sessions · This machine") && text.contains("Retained original row") => {
                         sender.send(key(KeyCode::Char('c'), KeyModifiers::CONTROL)).unwrap();
                     }
                     _ => {}
@@ -185,17 +186,21 @@ async fn assert_held_switch(result: SwitchResult) {
             .iter()
             .any(|frame| frame.contains("Loading machine: Sunbook"))
     );
-    assert!(frames.iter().all(|frame| !frame.contains("Search: [x]")));
+    assert!(frames.iter().all(|frame| !frame.contains("/  x")));
     match result {
         SwitchResult::Ready => {
-            assert!(frames.iter().any(|frame| frame.contains("Machine: Sunbook")
-                && !frame.contains("Retained original row")))
+            assert!(
+                frames
+                    .iter()
+                    .any(|frame| frame.contains("sessions · Sunbook")
+                        && !frame.contains("Retained original row"))
+            )
         }
         SwitchResult::Rejected | SwitchResult::Canceled => {
             assert!(
                 frames
                     .iter()
-                    .any(|frame| frame.contains("Machine: This machine")
+                    .any(|frame| frame.contains("sessions · This machine")
                         && frame.contains("Retained original row"))
             );
             assert!(

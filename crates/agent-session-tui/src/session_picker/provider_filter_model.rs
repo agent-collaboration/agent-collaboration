@@ -42,34 +42,11 @@ pub(super) enum ProviderFilterFocus {
     Source,
     Runtime,
     Sort,
-    Apply,
-    Cancel,
-}
-
-impl ProviderFilterFocus {
-    fn shifted(self, reverse: bool) -> Self {
-        let fields = [
-            Self::Provider,
-            Self::Folder,
-            Self::ModelProvider,
-            Self::Source,
-            Self::Runtime,
-            Self::Sort,
-            Self::Apply,
-            Self::Cancel,
-        ];
-        let index = fields.iter().position(|field| *field == self).unwrap_or(0);
-        fields
-            .get((index + if reverse { fields.len() - 1 } else { 1 }) % fields.len())
-            .copied()
-            .unwrap_or(Self::Provider)
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ProviderFilterDraft {
     pub(super) selection: SessionProviderFilter,
-    pub(super) focus: ProviderFilterFocus,
     pub(super) query: super::SessionsPickerDataQuery,
     pub(super) runtime_view: super::picker_model::SessionsPickerRuntimeView,
 }
@@ -84,12 +61,7 @@ impl ProviderFilterDraft {
             selection,
             query,
             runtime_view,
-            focus: ProviderFilterFocus::Provider,
         }
-    }
-
-    pub(super) fn move_focus(&mut self, reverse: bool) {
-        self.focus = self.focus.shifted(reverse);
     }
 }
 
@@ -105,8 +77,8 @@ pub(super) enum SessionFilterValue {
 }
 
 impl ProviderFilterDraft {
-    pub(super) fn focused_value(&self) -> Option<SessionFilterValue> {
-        Some(match self.focus {
+    pub(super) fn field_value(&self, field: ProviderFilterFocus) -> Option<SessionFilterValue> {
+        Some(match field {
             ProviderFilterFocus::Provider => SessionFilterValue::Client(self.selection),
             ProviderFilterFocus::Folder => SessionFilterValue::Folder(self.query.root),
             ProviderFilterFocus::ModelProvider => {
@@ -115,7 +87,6 @@ impl ProviderFilterDraft {
             ProviderFilterFocus::Source => SessionFilterValue::Source(self.query.source),
             ProviderFilterFocus::Runtime => SessionFilterValue::Runtime(self.runtime_view),
             ProviderFilterFocus::Sort => SessionFilterValue::Sort(self.query.sort),
-            ProviderFilterFocus::Apply | ProviderFilterFocus::Cancel => return None,
         })
     }
     pub(super) fn select_value(&mut self, value: SessionFilterValue) {
@@ -235,7 +206,6 @@ pub(super) fn filter_choices(
             ChoiceOption::available(SessionFilterValue::Sort(SessionsSort::Updated), "Updated"),
             ChoiceOption::available(SessionFilterValue::Sort(SessionsSort::Created), "Created"),
         ],
-        ProviderFilterFocus::Apply | ProviderFilterFocus::Cancel => Vec::new(),
     };
     for choice in &mut choices {
         let reason = match &choice.key {

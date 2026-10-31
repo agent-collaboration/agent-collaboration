@@ -92,22 +92,27 @@ async fn individual_machine_switch_reads_and_publishes_only_its_bound_source() {
         while let Some(canvas) = canvases.next().await {
             let text = canvas.to_string();
             if !selected && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 selected = true;
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Enter)).unwrap();
             }
-            if !activated && text.contains("Machine: Sunbook") && text.contains("Source-only result") {
+            if !activated && text.contains("sessions · Sunbook") && text.contains("Source-only result") {
                 activated = true;
                 sender.send(key(KeyCode::Home)).unwrap();
-                sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(resume_key()).unwrap();
             }
             frames.push(text);
         }
         frames
     }).await.expect("individual source must publish through the existing loader before activation");
-    assert!(frames.iter().any(|frame| frame.contains("Machine: Sunbook") && frame.contains("Source-only result")));
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame.contains("sessions · Sunbook")
+                && frame.contains("Source-only result"))
+    );
     let Some(SessionsPickerOutcome::ResumeSession(selection)) = outcome else {
         panic!("source row must resume");
     };
@@ -153,6 +158,7 @@ async fn all_view_reports_each_loading_and_rejected_source_without_empty_success
         while let Some(canvas) = canvases.next().await {
             let text = canvas.to_string();
             if !opened && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 opened = true;
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Enter)).unwrap();
@@ -244,6 +250,7 @@ async fn all_view_renders_qualified_alias_labels_from_simulated_bound_source_rep
         while let Some(canvas) = canvases.next().await {
             let text = canvas.to_string();
             if !opened && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 opened = true;
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Enter)).unwrap();
@@ -349,6 +356,7 @@ async fn selecting_all_reports_unqualified_sources_instead_of_empty_success() {
         configured_request().unwrap(),
         vec![
             key(KeyCode::F(2)),
+            key(KeyCode::Enter),
             key(KeyCode::Down),
             key(KeyCode::Enter),
             control_key('c'),
@@ -360,7 +368,7 @@ async fn selecting_all_reports_unqualified_sources_instead_of_empty_success() {
     assert!(
         frames
             .iter()
-            .any(|frame| frame.contains("Machine: All machines"))
+            .any(|frame| frame.contains("sessions · All machines"))
     );
     assert!(
         frames
@@ -375,6 +383,7 @@ async fn unavailable_machine_keeps_the_previous_view_and_cannot_fall_back_to_new
         configured_request().unwrap(),
         vec![
             control_key('g'),
+            key(KeyCode::Enter),
             key(KeyCode::Down),
             key(KeyCode::Down),
             key(KeyCode::Enter),
@@ -394,7 +403,7 @@ async fn unavailable_machine_keeps_the_previous_view_and_cannot_fall_back_to_new
         frames
             .iter()
             .rev()
-            .any(|frame| frame.contains("Machine: This machine"))
+            .any(|frame| frame.contains("sessions · This machine"))
     );
 }
 
@@ -418,20 +427,17 @@ async fn named_new_uses_configured_remote_cwd_and_cannot_create_before_route_qua
                     sender.send(control_key('n')).unwrap();
                     phase = 1;
                 } else if phase == 1 && text.contains("New session") {
-                    for code in [
-                        KeyCode::BackTab,
-                        KeyCode::BackTab,
-                        KeyCode::BackTab,
-                        KeyCode::Enter,
-                    ] {
+                    for code in [KeyCode::Tab, KeyCode::Enter] {
                         sender.send(key(code)).unwrap();
                     }
                     phase = 2;
                 } else if phase == 2
-                    && text.contains("Machine:")
+                    && text.contains("Filter:")
                     && text.contains("/remote/only/project")
                     && {
-                        let body = dialog_text(&text, dialog_bounds(&text, "New session"));
+                        // T4: the wrapped reason belongs to the dropdown, which
+                        // may extend below its parent New dialog.
+                        let body = dialog_text(&text, dialog_bounds(&text, "Filter:"));
                         let lines = body
                             .lines()
                             .map(|line| line.trim().trim_end_matches(['│', '┃']).trim())
@@ -472,6 +478,11 @@ async fn tab_and_enter_open_machine_control_while_control_enter_resumes() {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     sender.send(key(KeyCode::Tab)).unwrap();
     sender.send(key(KeyCode::Enter)).unwrap();
+    // R13: machine control is reached through the menu.
+    for _ in 0..7 {
+        sender.send(key(KeyCode::Down)).unwrap();
+    }
+    sender.send(key(KeyCode::Enter)).unwrap();
     let input = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
@@ -482,6 +493,7 @@ async fn tab_and_enter_open_machine_control_while_control_enter_resumes() {
         let mut observed=false;
         while let Some(canvas)=frames.next().await {
             if !observed&&canvas.to_string().contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 observed=true;sender.send(key(KeyCode::Esc)).unwrap();sender.send(control_key('c')).unwrap();
             }
         }
@@ -538,18 +550,18 @@ async fn configured_machine_renderer_reads_real_mcp_sqlite_rows_without_launchin
             let text = canvas.to_string();
             last_frame = text.clone();
             if !chosen && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 chosen = true;
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Enter)).unwrap();
             }
-            if !observed && text.contains("Machine: API machine") && text.contains("Source session") {
+            if !observed && text.contains("sessions · API machine") && text.contains("Source session") {
                 if text.contains("Session ID: shared-source-id") {
                     observed = true;
                     sender.send(control_key('c')).unwrap();
                 } else {
                     sender.send(key(KeyCode::Home)).unwrap();
-                    sender.send(key(KeyCode::Down)).unwrap();
                 }
             }
         }

@@ -70,7 +70,6 @@ pub(super) struct ForkConfirmation {
     pub(super) destinations: Vec<ForkDestination>,
     pub(super) focused_destination: usize,
     pub(super) notice: Option<&'static str>,
-    pub(super) search: agent_collaboration_tui::SearchSelectState<ForkDestinationKey>,
 }
 
 impl ForkConfirmation {
@@ -168,7 +167,6 @@ impl ForkConfirmation {
             destinations,
             focused_destination: 0,
             notice: None,
-            search: agent_collaboration_tui::SearchSelectState::Closed,
         }
     }
 
@@ -244,9 +242,9 @@ impl ForkConfirmation {
             self.focused_destination = index;
             self.notice = None;
         }
-        self.search = agent_collaboration_tui::SearchSelectState::Closed;
     }
 
+    #[cfg(test)]
     pub(super) fn move_destination(&mut self, delta: isize) {
         self.focused_destination = self
             .focused_destination
@@ -256,9 +254,6 @@ impl ForkConfirmation {
     }
 
     pub(super) fn confirm(&mut self) -> Option<ForkLaunchTarget> {
-        if self.search.is_open() {
-            return None;
-        }
         let destination = self.destinations.get(self.focused_destination)?;
         if let Some(reason) = destination.availability.explanation() {
             self.notice = Some(reason);

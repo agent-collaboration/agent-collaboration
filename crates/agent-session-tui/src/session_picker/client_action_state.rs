@@ -102,14 +102,7 @@ pub(super) enum PickerClientAction {
     Finished {
         request: CapturedClientAction,
         result: Result<SourceReply, SourceReadError>,
-        focus: ClientResultAction,
     },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ClientResultAction {
-    Close,
-    CheckOperation,
 }
 
 impl PickerClientAction {
@@ -152,7 +145,7 @@ pub(super) fn use_client_actions(hooks: &mut Hooks<'_, '_>, context: ClientActio
             let current=matches!(&model.read().client_action,PickerClientAction::Running(current) if current.attempt==request.attempt);
             if current {
                 let background_started = matches!(&result, Ok(SourceReply::NativeClaude { result }) if matches!(&result.observation, SourceNativeObservation::Observed {status: SourceNativeExitStatus::Exited {code:0},stdout,..} if agent_session_inventory::sessions::claude_terminal_launch::parse_background_receipt(stdout).is_ok()));
-                model.write().client_action=PickerClientAction::Finished {request,result,focus:ClientResultAction::Close};
+                model.write().client_action=PickerClientAction::Finished {request,result};
                 if background_started {
                     background_completed();
                 }

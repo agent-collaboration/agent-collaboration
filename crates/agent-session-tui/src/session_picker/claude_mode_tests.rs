@@ -3,7 +3,7 @@ use super::*;
 use crate::session_picker::{
     details_client_inventory::{DetailsClientCapabilities, DetailsClientReadState},
     details_dialog_state::SessionDetailsDialog,
-    new_session_form::{NewFormFocus, active_new_choices},
+    new_session_form::{NewSessionClient, run_choices},
     test_support::picker_request,
 };
 use agent_session_inventory::sessions::{
@@ -31,14 +31,11 @@ fn binding() -> SourceNativeBinding {
 fn claude_new_offers_explicit_foreground_and_background_choices() {
     let mut model = SessionsPickerModel::new(picker_request(), 120);
     model.open_new_form();
-    model.new_session.as_mut().unwrap().focus = NewFormFocus::Client;
-    let choices = active_new_choices(&model);
-    assert!(choices.iter().any(|choice| choice.label == "Claude Code"));
-    assert!(
-        choices
-            .iter()
-            .any(|choice| choice.label == "Claude Code · background")
-    );
+    // Owner R13: one Claude client, with a separate Run choice.
+    model.new_session.as_mut().unwrap().client = NewSessionClient::ClaudeNativeForeground;
+    let choices = run_choices(&model);
+    assert!(choices.iter().any(|choice| choice.label == "Foreground"));
+    assert!(choices.iter().any(|choice| choice.label == "Background"));
 }
 
 #[test]

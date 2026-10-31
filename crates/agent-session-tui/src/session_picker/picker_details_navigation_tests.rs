@@ -1,3 +1,4 @@
+// R13: Menu replaces the old header actions and no main shortcut footer remains.
 //! Owner-selected browse navigation, observed through the actual iocraft component.
 use super::*;
 
@@ -53,7 +54,7 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
                     phase = 1;
                 } else if phase == 1 && frame.contains("DETAIL_BODY 39") {
                     assert!(
-                        frame.contains("Tab Focus · Enter Select · Esc Close"),
+                        frame.contains("Close") && frame.contains("Copy session ID"),
                         "the concise shortcut row remains visible after body scroll: {frame}"
                     );
                     // These must neither change the captured row nor invoke a
@@ -83,7 +84,7 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
                         "wrong fork target: {frame}"
                     );
                     sender
-                        .send(details_key(KeyCode::Enter, KeyModifiers::empty()))
+                        .send(details_key(KeyCode::Enter, KeyModifiers::CONTROL))
                         .unwrap();
                     phase = 3;
                 }
@@ -117,19 +118,13 @@ async fn owner_details_navigation_title_exposes_details_without_standalone_foote
     for width in [120, 76, 48] {
         let frame =
             render_picker_capture_at(picker_request(), width, 30, vec![ctrl_key('d')]).await;
-        let header = frame
-            .lines()
-            .find(|line| line.contains("Sessions ·"))
-            .unwrap();
+        let header = frame.lines().find(|line| line.contains("Menu")).unwrap();
         assert!(
-            header.contains("Details") && header.contains("Help"),
+            header.contains("Filter") && frame.contains("Menu") && frame.contains("F10"),
             "both actions share title row: {frame}"
         );
         assert_eq!(
-            frame
-                .lines()
-                .filter(|line| line.contains("Details"))
-                .count(),
+            frame.lines().filter(|line| line.contains("Menu")).count(),
             1,
             "no separate Details footer: {frame}"
         );

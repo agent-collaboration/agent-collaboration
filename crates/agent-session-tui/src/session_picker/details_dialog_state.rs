@@ -43,23 +43,16 @@ pub(super) struct SessionDetailsDialog {
     pub(super) target: SessionDetailsTarget,
     pub(super) generation: u64,
     pub(super) client_inventory: super::details_client_inventory::DetailsClientReadState,
-    pub(super) focused_action: DetailsAction,
     pub(super) clipboard_status: ClipboardRequestStatus,
 }
 
 impl SessionDetailsDialog {
     pub(super) fn capture(record: &SessionPickerRecord) -> Self {
         let target = SessionDetailsTarget::Session(Box::new(record.clone()));
-        let focused_action = if record.identity.is_provider() {
-            DetailsAction::CopySessionId
-        } else {
-            DetailsAction::Resume
-        };
         Self {
             generation: 0,
             client_inventory: super::details_client_inventory::DetailsClientReadState::Unobserved,
             target,
-            focused_action,
             clipboard_status: ClipboardRequestStatus::Idle,
         }
     }
@@ -156,22 +149,6 @@ impl SessionDetailsDialog {
             "Open"
         } else {
             action.label()
-        }
-    }
-
-    pub(super) fn move_focus(&mut self, backwards: bool) {
-        let actions = self.actions();
-        let index = actions
-            .iter()
-            .position(|action| *action == self.focused_action)
-            .unwrap_or(0);
-        let next_index = if backwards {
-            (index + actions.len() - 1) % actions.len()
-        } else {
-            (index + 1) % actions.len()
-        };
-        if let Some(action) = actions.get(next_index) {
-            self.focused_action = *action;
         }
     }
 }

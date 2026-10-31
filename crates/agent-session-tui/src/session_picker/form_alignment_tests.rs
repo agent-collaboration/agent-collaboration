@@ -1,45 +1,15 @@
-use super::super::*;
-use super::picker_detail_view;
-use iocraft::prelude::*;
+use super::*;
 
-#[derive(Props)]
-struct DialogFixtureProps {
-    dialog: usize,
-}
-
-#[component]
-fn DialogFixture(props: &DialogFixtureProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let mut request = test_support::picker_request();
+async fn dialog_frame(dialog: usize) -> String {
+    let mut request = crate::session_picker::test_support::picker_request();
     request.new_session_args_display = "--model fixture-model".to_owned();
-    let mut model = picker_model::SessionsPickerModel::new(request.clone(), 120);
-    model.open_new_form();
-    model.machine_controls.open_browse(&request.router_registry);
-    let state = hooks.use_state(|| model.clone());
-    let outcome = hooks.use_state(|| None);
-    let dialog = match props.dialog {
-        0 => new_session_form::render_new_form(&model, state, outcome, 36),
-        1 => picker_fork_view::render_fork_confirmation(
-            &picker_fork_confirmation::ForkConfirmation::capture(&request.records[0], &request),
-            120,
-            36,
-            element!(View).into_any(),
-            false,
-            state,
-            outcome,
-        )
-        .into_any(),
-        2 => picker_machine_view::render_machine_choices(
-            &model,
-            36,
-            element!(View).into_any(),
-            Handler::default(),
-            Handler::default(),
-            state,
-        )
-        .into_any(),
-        _ => picker_detail_view::render_details(&request.records[0], 100, None, Size::Auto),
+    let event = match dialog {
+        0 => tests::ctrl_key('n'),
+        1 => tests::control_shift_enter_key(),
+        2 => TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(2))),
+        _ => TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(4))),
     };
-    element!(View(width:120,height:36) {#(dialog)})
+    tests::render_picker_capture_at(request, 120, 36, vec![event, tests::ctrl_key('d')]).await
 }
 
 fn assert_field_origins(frame: &str, pairs: &[(&str, &str)]) {
@@ -63,11 +33,9 @@ fn assert_field_origins(frame: &str, pairs: &[(&str, &str)]) {
     }
 }
 
-#[test]
-fn luna_422_new_session_fields_share_value_origin() {
-    let frame = element!(DialogFixture(dialog:0usize))
-        .render(Some(120))
-        .to_string();
+#[tokio::test]
+async fn luna_422_new_session_fields_share_value_origin() {
+    let frame = dialog_frame(0).await;
     assert_field_origins(
         &frame,
         &[
@@ -79,11 +47,9 @@ fn luna_422_new_session_fields_share_value_origin() {
     );
 }
 
-#[test]
-fn luna_422_fork_fields_share_value_origin() {
-    let frame = element!(DialogFixture(dialog:1usize))
-        .render(Some(120))
-        .to_string();
+#[tokio::test]
+async fn luna_422_fork_fields_share_value_origin() {
+    let frame = dialog_frame(1).await;
     assert_field_origins(
         &frame,
         &[
@@ -94,19 +60,16 @@ fn luna_422_fork_fields_share_value_origin() {
     );
 }
 
-#[test]
-fn luna_422_machine_field_reserves_shared_value_gutter() {
-    let frame = element!(DialogFixture(dialog:2usize))
-        .render(Some(120))
-        .to_string();
-    assert_field_origins(&frame, &[("Machine", "Search:")]);
+#[tokio::test]
+async fn luna_422_machine_field_reserves_shared_value_gutter() {
+    let frame = dialog_frame(2).await;
+    // Owner R14: inline choices become closed fields with a dropdown.
+    assert_field_origins(&frame, &[("Machine", "This machine (current/default) ▾")]);
 }
 
-#[test]
-fn luna_422_session_details_share_value_origin() {
-    let frame = element!(DialogFixture(dialog:3usize))
-        .render(Some(120))
-        .to_string();
+#[tokio::test]
+async fn luna_422_session_details_share_value_origin() {
+    let frame = dialog_frame(3).await;
     assert_field_origins(
         &frame,
         &[

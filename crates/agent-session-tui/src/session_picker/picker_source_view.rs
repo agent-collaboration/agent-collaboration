@@ -85,10 +85,8 @@ impl SessionsPickerModel {
                 SourceRecordsUpdate::Rejected(reason) => {
                     self.machine_controls.complete_source_switch(Err(reason));
                     let failed_choice = self.machine_controls.stage.clone();
-                    let failed_search = self.machine_controls.search.clone();
                     if let Some(acceptance) = self.restore_switch_checkpoint(request, reason) {
                         self.machine_controls.stage = failed_choice;
-                        self.machine_controls.search = failed_search;
                         return acceptance;
                     }
                 }
@@ -159,10 +157,6 @@ impl SessionsPickerModel {
         previous.fork_confirmation = self.fork_confirmation.take();
         previous.new_session = self.new_session.take();
         previous.provider_filter_draft = self.provider_filter_draft.take();
-        previous.provider_choice = std::mem::replace(
-            &mut self.provider_choice,
-            agent_collaboration_tui::SearchSelectState::Closed,
-        );
         previous.show_help = self.show_help;
         previous.source_action = std::mem::take(&mut self.source_action);
         previous.client_action = std::mem::take(&mut self.client_action);

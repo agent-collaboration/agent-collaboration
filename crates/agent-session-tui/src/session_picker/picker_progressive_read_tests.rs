@@ -56,9 +56,10 @@ async fn review_partial_switch_query_change_keeps_selected_source_and_input() {
         let mut selected=false;let mut typed=false;let mut observed=false;
         while let Some(canvas)=frames.next().await {
             let text=canvas.to_string();last_frame=text.clone();
-            if !selected&&text.contains("Choose machine") {selected=true;for code in [KeyCode::Down,KeyCode::Down,KeyCode::Enter] {sender.send(key(code)).unwrap();}}
-            if !typed&&text.contains("Machine: Source peer")&&text.contains("Literal source title") {typed=true;sender.send(key(KeyCode::Char('x'))).unwrap();}
-            if typed&&!observed&&text.contains("Machine: Source peer")&&text.contains("Search: [x]")&&text.contains("source does not support this search expression") {
+            if !selected&&text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();selected=true;for code in [KeyCode::Down,KeyCode::Down,KeyCode::Enter] {sender.send(key(code)).unwrap();}}
+            if !typed&&text.contains("sessions · Source peer")&&text.contains("Literal source title") {typed=true;sender.send(key(KeyCode::Char('x'))).unwrap();}
+            if typed&&!observed&&text.contains("sessions · Source peer")&&text.contains("/ x")&&text.contains("source does not support this search expression") {
                 observed=true;sender.send(control_key('c')).unwrap();
             }
         }
@@ -127,12 +128,13 @@ async fn late_source_failure_restores_the_previous_machine_and_literal_row() {
         while let Some(canvas)=canvases.next().await {
             let text=canvas.to_string();
             if !selected&&text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 selected=true;for code in [KeyCode::Down,KeyCode::Down,KeyCode::Enter] {sender.send(key(code)).unwrap();}
             }
-            if !partial&&text.contains("Machine: Source peer")&&text.contains("Literal source title") {
+            if !partial&&text.contains("sessions · Source peer")&&text.contains("Literal source title") {
                 partial=true;peer.wait_for_held_page().await;peer.release_held_page().await;
             }
-            if partial&&text.contains("Machine: This machine")&&text.contains("Previous committed row") {
+            if partial&&text.contains("sessions · This machine")&&text.contains("Previous committed row") {
                 assert!(!text.contains("Literal source title"));restored=true;sender.send(control_key('c')).unwrap();
             }
         }
@@ -173,8 +175,9 @@ async fn first_source_page_renders_while_the_second_page_is_still_pending() {
         let mut chosen=false;let mut observed=false;
         while let Some(canvas)=canvases.next().await {
             let text=canvas.to_string();last_frame=text.clone();
-            if !chosen&&text.contains("Choose machine") {chosen=true;sender.send(key(KeyCode::Down)).unwrap();sender.send(key(KeyCode::Down)).unwrap();sender.send(key(KeyCode::Enter)).unwrap();}
-            if !observed&&text.contains("Machine: Source peer")&&text.contains("Literal source title") {
+            if !chosen&&text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();chosen=true;sender.send(key(KeyCode::Down)).unwrap();sender.send(key(KeyCode::Down)).unwrap();sender.send(key(KeyCode::Enter)).unwrap();}
+            if !observed&&text.contains("sessions · Source peer")&&text.contains("Literal source title") {
                 assert!(text.contains("fetched")&&text.contains("unfinished"),"first page must be visibly incomplete: {text}");
                 observed=true;sender.send(control_key('c')).unwrap();
             }

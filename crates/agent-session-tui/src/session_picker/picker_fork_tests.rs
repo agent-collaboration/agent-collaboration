@@ -94,10 +94,15 @@ async fn after_popup(
     after_popup_until(request, events, None).await
 }
 
+struct PopupCheckpoint {
+    reached: fn(&str) -> bool,
+    events: Vec<TerminalEvent>,
+}
+
 async fn after_popup_until(
     request: SessionsPickerRequest,
     events: Vec<TerminalEvent>,
-    checkpoint: Option<(&'static str, Vec<TerminalEvent>)>,
+    checkpoint: Option<PopupCheckpoint>,
 ) -> (Vec<String>, Option<SessionsPickerOutcome>) {
     let mut outcome = None;
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -117,9 +122,9 @@ async fn after_popup_until(
             if text.contains("Fork session") && let Some(events) = pending.take() {
                 for event in events { sender.send(event).unwrap(); }
             }
-            if checkpoint.as_ref().is_some_and(|(label, _)| text.contains(label))
-                && let Some((_, events)) = checkpoint.take() {
-                for event in events { sender.send(event).unwrap(); }
+            if checkpoint.as_ref().is_some_and(|checkpoint| (checkpoint.reached)(&text))
+                && let Some(checkpoint) = checkpoint.take() {
+                for event in checkpoint.events { sender.send(event).unwrap(); }
             }
             frames.push(text);
         }
@@ -135,7 +140,7 @@ async fn fork_confirmation_displays_actual_override_and_returns_frozen_selection
     request.records[0].model = Some("gpt-6.1-sol".to_owned());
     request.records[0].reasoning_effort = Some("high".to_owned());
     let expected = SessionActionSelection::from_picker_record(&request.records[0]);
-    let (frames, outcome) = after_popup(request, vec![key(KeyCode::Enter)]).await;
+    let (frames, outcome) = after_popup(request, vec![resume_key()]).await;
     assert!(frames.iter().any(|frame| {
         frame
             .lines()
@@ -157,10 +162,10 @@ async fn fork_confirmation_displays_actual_override_and_returns_frozen_selection
 async fn fork_popup_blocks_other_machine_and_does_not_leak_main_shortcuts() {
     let (frames, outcome) = after_popup_until(
         named_request(),
-        vec![key(KeyCode::Down), key(KeyCode::Enter)],
-        Some((
-            "History remains on the source machine",
-            vec![
+        vec![key(KeyCode::Enter), key(KeyCode::Down), key(KeyCode::Enter)],
+        Some(PopupCheckpoint {
+            reached: history_reason_visible,
+            events: vec![
                 ctrl_key('n'),
                 ctrl_key('r'),
                 ctrl_key('g'),
@@ -169,19 +174,15 @@ async fn fork_popup_blocks_other_machine_and_does_not_leak_main_shortcuts() {
                 key(KeyCode::Esc),
                 ctrl_key('c'),
             ],
-        )),
+        }),
     )
     .await;
     assert_eq!(outcome, None);
+    assert!(frames.iter().any(|frame| history_reason_visible(frame)));
     assert!(
         frames
             .iter()
-            .any(|frame| frame.contains("History remains on the source machine"))
-    );
-    assert!(
-        frames
-            .iter()
-            .all(|frame| !frame.contains("Search: [x]") && !frame.contains("Choose machine"))
+            .all(|frame| !frame.contains("/  x") && !frame.contains("Choose machine"))
     );
     assert!(frames.iter().any(|frame| {
         frame
@@ -189,6 +190,18 @@ async fn fork_popup_blocks_other_machine_and_does_not_leak_main_shortcuts() {
             .any(|line| line.contains("Source") && line.contains("This machine"))
             && frame.contains("invoking directory")
     }));
+}
+
+fn history_reason_visible(frame: &str) -> bool {
+    if !frame.contains("Filter:") {
+        return false;
+    }
+    let body = dialog_text(frame, dialog_bounds(frame, "Filter:"));
+    let compact = body
+        .chars()
+        .filter(|character| !character.is_whitespace() && !matches!(character, '│' | '┃' | '█'))
+        .collect::<String>();
+    compact.contains("Historyremainsonthesourcemachine")
 }
 
 #[tokio::test]
@@ -248,7 +261,7 @@ async fn unqualified_source_fork_displays_source_directory_and_never_falls_back(
     let profile = registry.routers[0].clone();
     request.records[0].source_context = Some(PickerSourceContext::ConfiguredHosted(profile));
     request.records[0].cwd = Some("/source/fork-directory".to_owned());
-    let (frames, outcome) = after_popup(request, vec![key(KeyCode::Enter), ctrl_key('d')]).await;
+    let (frames, outcome) = after_popup(request, vec![resume_key(), ctrl_key('d')]).await;
     assert_eq!(outcome, None);
     assert!(frames.iter().any(|frame| {
         frame
@@ -278,7 +291,7 @@ async fn provider_fork_opens_an_explanation_without_a_native_action() {
         &summary,
         "Claude fixture",
     )];
-    let (frames, outcome) = after_popup(request, vec![key(KeyCode::Enter), ctrl_key('c')]).await;
+    let (frames, outcome) = after_popup(request, vec![resume_key(), ctrl_key('c')]).await;
     assert_eq!(outcome, None);
     assert!(frames.iter().any(|frame| frame.contains("Fork session")
         && frame.contains("Provider fork is unavailable in this launcher")));

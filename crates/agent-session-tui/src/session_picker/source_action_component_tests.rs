@@ -1,3 +1,4 @@
+// R7: shared Help replaces the screen-specific Help title.
 //! Real component input around an explicitly held read-only preparation boundary.
 use super::*;
 use crate::session_picker::{
@@ -14,12 +15,14 @@ fn key(code: KeyCode) -> TerminalEvent {
 }
 
 fn configured_new_events() -> Vec<TerminalEvent> {
-    let mut events = vec![ctrl_key('n')];
-    events.extend((0..3).map(|_| key(KeyCode::BackTab)));
-    events.extend([key(KeyCode::Enter), key(KeyCode::Down), key(KeyCode::Enter)]);
-    events.extend((0..3).map(|_| key(KeyCode::Tab)));
-    events.push(key(KeyCode::Enter));
-    events
+    vec![
+        ctrl_key('n'),
+        key(KeyCode::Tab),
+        key(KeyCode::Enter),
+        key(KeyCode::Down),
+        key(KeyCode::Enter),
+        resume_key(),
+    ]
 }
 
 #[tokio::test]
@@ -44,26 +47,29 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
         receiver.recv().await.map(|event| (event, receiver))
     });
     let mut outcome = Option::<SessionsPickerOutcome>::None;
-    tokio::time::timeout(Duration::from_secs(2), async {
+    let mut phase = 0;
+    let mut last_frame = String::new();
+    let result = tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! { SessionsPickerComponent(request: source_model().request, source_preparer: Some(preparer), width: 0usize, height: 0usize, selected_outcome_out: &mut outcome) };
         let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
-        let mut phase = 0;
         let mut finish = Some(finish);
         while let Some(canvas) = frames.next().await {
             let text = canvas.to_string();
+            last_frame = text.clone();
             if phase == 0 {
                 for event in std::iter::once(TerminalEvent::Resize(120,36)).chain(configured_new_events()) { sender.send(event).unwrap(); }
                 phase = 1;
             } else if phase == 1 && text.contains("Checking source") {
-                for event in [key(KeyCode::Enter), ctrl_key('n'), ctrl_key('f'), key(KeyCode::F(1)), key(KeyCode::Down), TerminalEvent::BracketedPaste("do-not-search".to_owned()), TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), 5, 1)), TerminalEvent::Resize(100,30)] { sender.send(event).unwrap(); }
+                // R9: Enter activates the focused Cancel button, so use unbound input here.
+                for event in [ctrl_key('n'), ctrl_key('f'), key(KeyCode::F(1)), key(KeyCode::Down), TerminalEvent::BracketedPaste("do-not-search".to_owned()), TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), 5, 1)), TerminalEvent::Resize(100,30)] { sender.send(event).unwrap(); }
                 phase = 2;
             } else if phase == 2 && text.lines().count() == 30 {
-                assert!(text.contains("Sessions Help"), "Help must open above the pending source check: {text}");
+                assert!(text.contains("Close Help"), "Help must open above the pending source check: {text}");
                 assert!(!text.contains("do-not-search"));
                 sender.send(key(KeyCode::Esc)).unwrap();
                 phase = 3;
-            } else if phase == 3 && text.contains("Checking source") && !text.contains("Sessions Help") {
+            } else if phase == 3 && text.contains("Checking source") && !text.contains("Close Help") {
                 sender.send(key(KeyCode::Esc)).unwrap();
                 phase = 4;
             } else if phase == 4 && !text.contains("Checking source") && text.contains("New session") {
@@ -73,7 +79,11 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
             }
         }
         assert_eq!(phase, 5);
-    }).await.expect("event-controlled Checking cancellation must finish");
+    }).await;
+    assert!(
+        result.is_ok(),
+        "event-controlled Checking cancellation phase{phase}: {last_frame}"
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(outcome, None);
 }
@@ -115,7 +125,7 @@ async fn source_action_component_current_prepared_new_returns_exact_captured_out
             if phase == 0 && text.contains("Checking source") {
                 sender.send(key(KeyCode::F(1))).unwrap();
                 phase = 1;
-            } else if phase == 1 && text.contains("Sessions Help") {
+            } else if phase == 1 && text.contains("Close Help") {
                 finish.take().unwrap().send(()).unwrap();
                 phase = 2;
             }

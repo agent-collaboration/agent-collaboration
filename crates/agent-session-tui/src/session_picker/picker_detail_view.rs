@@ -1,40 +1,12 @@
 //! Picker detail view.
-use super::{
-    START_NEW_DETAILS_HEIGHT, SessionConversationPreview, SessionPickerRecord, SessionsPickerModel,
-    fit_line, no_matching_sessions_label, start_new_args_label,
-};
+use super::{SessionConversationPreview, SessionPickerRecord, fit_line};
 use crate::session_picker::picker_rendering::iocraft_cell_count;
-use agent_collaboration_tui::{UiHeading, UiHeadingLevel};
+use agent_collaboration_tui::{
+    UiHeading, UiHeadingLevel,
+    surface_handle::SurfaceContext,
+    theme::{TextRole, Theme},
+};
 use iocraft::prelude::*;
-
-pub(super) fn render_start_new_details(
-    model: &SessionsPickerModel,
-    width: usize,
-    height: usize,
-) -> AnyElement<'static> {
-    let detail_width = width.saturating_sub(4);
-    element! {
-        View(
-            width: iocraft_cell_count(width),
-            height: iocraft_cell_count(height.max(START_NEW_DETAILS_HEIGHT)),
-            flex_direction: FlexDirection::Column,
-            border_style: BorderStyle::Single,
-            border_color: Color::DarkGrey,
-            padding_left: 1,
-            padding_right: 1,
-            overflow: Overflow::Hidden,
-        ) {
-            UiHeading(content: "New Codex session".to_owned(), level: UiHeadingLevel::Section)
-            #((!model.request.new_session_args_display.is_empty()).then(||element!(Text(content: fit_line(&start_new_args_label(model), detail_width), color: Color::White, wrap: TextWrap::NoWrap))))
-            #(if model.visible_record_len() == 0 {
-                Some(detail_text(no_matching_sessions_label(model), detail_width, Color::Grey))
-            } else {
-                None
-            })
-        }
-    }
-    .into_any()
-}
 
 pub(super) fn render_details(
     record: &SessionPickerRecord,
@@ -42,8 +14,43 @@ pub(super) fn render_details(
     selected_conversation: Option<&SessionConversationPreview>,
     height: Size,
 ) -> AnyElement<'static> {
+    element!(SessionDetailsBody(record:record.clone(),width,conversation:selected_conversation.cloned(),height)).into_any()
+}
+
+#[derive(Props)]
+struct SessionDetailsBodyProps {
+    #[iocraft(required)]
+    record: SessionPickerRecord,
+    width: usize,
+    conversation: Option<SessionConversationPreview>,
+    height: Size,
+}
+#[component]
+fn SessionDetailsBody(
+    props: &SessionDetailsBodyProps,
+    hooks: Hooks,
+) -> impl Into<AnyElement<'static>> {
+    let theme = hooks
+        .try_use_context::<SurfaceContext>()
+        .map_or(Theme::default(), |surface| surface.theme());
+    render_details_content(
+        &props.record,
+        props.width,
+        props.conversation.as_ref(),
+        props.height,
+        theme,
+    )
+}
+
+fn render_details_content(
+    record: &SessionPickerRecord,
+    width: usize,
+    selected_conversation: Option<&SessionConversationPreview>,
+    height: Size,
+    theme: Theme,
+) -> AnyElement<'static> {
     if height == Size::Auto {
-        return render_structured_details(record, width, selected_conversation);
+        return render_structured_details(record, width, selected_conversation, theme);
     }
     // Passive sidecar keeps its existing bounded, single-line facts.
     let wrap = TextWrap::NoWrap;
@@ -59,23 +66,23 @@ pub(super) fn render_details(
                 flex_direction: FlexDirection::Column,
                 flex_shrink: 0.0_f32,
                 border_style: BorderStyle::Single,
-                border_color: Color::DarkGrey,
+                border_color: theme.foreground(TextRole::Dimmed),
                 overflow: Overflow::Hidden,
                 padding_left:1,
                 padding_right:1,
             ) {
-                Text(content:record.full_title.clone(),color:Color::White,wrap)
-                Text(content:format!("Client: {}",record.client_provider_family().label()),color:Color::White,wrap)
-                Text(content:display_line(format!("Machine: {}",record.machine_label())),color:Color::Grey,wrap)
-                Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
-                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job handle: {}",String::from(job.job_handle.clone()))),color:Color::Grey,wrap))))
-                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job state: {}",native_job_state_label(&job.state))),color:Color::Grey,wrap))))
-                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job directory: {}",String::from(job.working_directory.clone()))),color:Color::Grey,wrap))))
-                #(record.native_conflict.as_ref().map(|reason|element!(Text(content:display_line(format!("Conflict: {}",reason.description())),color:agent_collaboration_tui::UiTextRole::Warning.color(),wrap))))
-                #(record.native_peer.as_ref().map(|peer|element!(Text(content:display_line(format!("Peer status: {:?}",peer.status)),color:Color::Grey,wrap))))
-                Text(content: display_line(format!("Endpoint: {endpoint}")), color: Color::Grey, wrap)
-                Text(content: display_line(format!("State: {state}")), color: Color::Grey, wrap)
-                Text(content: display_line(format!("Working directory: {}", record.cwd.as_deref().unwrap_or("-"))), color: Color::Grey, wrap)
+                Text(content:record.full_title.clone(),color:theme.foreground(TextRole::Text),wrap)
+                Text(content:format!("Client: {}",record.client_provider_family().label()),color:theme.foreground(TextRole::Text),wrap)
+                Text(content:display_line(format!("Machine: {}",record.machine_label())),color:theme.foreground(TextRole::Muted),wrap)
+                Text(content: display_line(format!("Session ID: {}", record.session_id)), color: theme.foreground(TextRole::Muted), wrap)
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job handle: {}",String::from(job.job_handle.clone()))),color:theme.foreground(TextRole::Muted),wrap))))
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job state: {}",native_job_state_label(&job.state))),color:theme.foreground(TextRole::Muted),wrap))))
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job directory: {}",String::from(job.working_directory.clone()))),color:theme.foreground(TextRole::Muted),wrap))))
+                #(record.native_conflict.as_ref().map(|reason|element!(Text(content:display_line(format!("Conflict: {}",reason.description())),color:theme.foreground(TextRole::Warning),wrap))))
+                #(record.native_peer.as_ref().map(|peer|element!(Text(content:display_line(format!("Peer status: {:?}",peer.status)),color:theme.foreground(TextRole::Muted),wrap))))
+                Text(content: display_line(format!("Endpoint: {endpoint}")), color: theme.foreground(TextRole::Muted), wrap)
+                Text(content: display_line(format!("State: {state}")), color: theme.foreground(TextRole::Muted), wrap)
+                Text(content: display_line(format!("Working directory: {}", record.cwd.as_deref().unwrap_or("-"))), color: theme.foreground(TextRole::Muted), wrap)
             }
         }
         .into_any();
@@ -87,13 +94,15 @@ pub(super) fn render_details(
                 .unavailable_reason
                 .as_deref()
                 .unwrap_or("history unavailable"),
-            Color::DarkGrey,
+            theme.foreground(TextRole::Dimmed),
         )]
     } else {
         conversation
             .snippets
             .iter()
-            .map(|snippet| conversation_text(&format!("• {snippet}"), Color::Grey))
+            .map(|snippet| {
+                conversation_text(&format!("• {snippet}"), theme.foreground(TextRole::Muted))
+            })
             .collect::<Vec<_>>()
     };
 
@@ -104,12 +113,12 @@ pub(super) fn render_details(
             flex_shrink: 0.0_f32,
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
-            border_color: Color::DarkGrey,
+            border_color: theme.foreground(TextRole::Dimmed),
             overflow: Overflow::Hidden,
             padding_left:1,
             padding_right:1,
         ) {
-            Text(content: format!("Session ID: {}", record.session_id), color: Color::Grey, weight: Weight::Normal, wrap)
+            Text(content: format!("Session ID: {}", record.session_id), color: theme.foreground(TextRole::Muted), weight: Weight::Normal, wrap)
             View(height: 1) { Text(content: "") }
             UiHeading(content: "Conversation".to_owned(), level: UiHeadingLevel::Section)
             #(conversation_rows)
@@ -146,23 +155,12 @@ pub(super) fn conversation_text(value: &str, color: Color) -> AnyElement<'static
     .into_any()
 }
 
-pub(super) fn detail_text(value: &str, width: usize, color: Color) -> AnyElement<'static> {
-    element! {
-        Text(
-            content: fit_line(value, width),
-            color,
-            weight: Weight::Normal,
-            wrap: TextWrap::NoWrap,
-        )
-    }
-    .into_any()
-}
-
 /// The modal body retains original values; its fixed context may shorten a title.
 fn render_structured_details(
     record: &SessionPickerRecord,
     width: usize,
     selected_conversation: Option<&SessionConversationPreview>,
+    theme: Theme,
 ) -> AnyElement<'static> {
     let field = |label: &str, value: String, secondary: bool| {
         element! {
@@ -226,22 +224,30 @@ fn render_structured_details(
                 .unavailable_reason
                 .as_deref()
                 .unwrap_or("history unavailable"),
-            Color::DarkGrey,
+            theme.foreground(TextRole::Dimmed),
         )]
     } else {
         conversation
             .snippets
             .iter()
-            .map(|snippet| conversation_text(&format!("• {snippet}"), Color::Grey))
+            .map(|snippet| {
+                conversation_text(&format!("• {snippet}"), theme.foreground(TextRole::Muted))
+            })
             .collect()
     };
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            agent_collaboration_tui::FormFields(stacked:width<52) {#(fields)}
-            UiHeading(content:"Original title",level:UiHeadingLevel::Section)
-            agent_collaboration_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)
-            UiHeading(content:"Conversation",level:UiHeadingLevel::Section)
-            #(history)
+            agent_collaboration_tui::controls::DialogSections {
+                agent_collaboration_tui::controls::DialogSection {
+                    agent_collaboration_tui::FormFields(stacked:width<52) {#(fields)}
+                }
+                agent_collaboration_tui::controls::DialogSection(heading:"Original title".to_owned()) {
+                    agent_collaboration_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)
+                }
+                agent_collaboration_tui::controls::DialogSection(heading:"Conversation".to_owned()) {
+                    #(history)
+                }
+            }
         }
     }.into_any()
 }

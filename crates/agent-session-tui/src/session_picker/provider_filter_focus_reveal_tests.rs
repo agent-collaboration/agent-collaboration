@@ -1,18 +1,16 @@
-//! A focused expanded field must remain attributable after the body settles.
+//! R14: dropdowns replace inline choice/action rows; refusal and draft identity remain.
 use super::*;
-use crate::session_picker::provider_filter_tests::mixed_request;
+use crate::session_picker::{
+    provider_filter_model::SessionProviderFilter, provider_filter_tests::mixed_request,
+};
+use agent_collaboration_tui::{surface_handle::SurfaceStackHandle, surface_stack::OverlayKind};
 
 fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
-
-fn is_field_label(line: &str, label: &str) -> bool {
-    line.trim_matches(|character: char| character.is_whitespace() || matches!(character, '│' | '┃'))
-        == label
-}
-
-fn rendered_text_without_spacing(body: &str) -> String {
-    body.chars()
+fn compact_text(value: &str) -> String {
+    value
+        .chars()
         .filter(|character| !character.is_whitespace() && !matches!(character, '│' | '┃'))
         .collect()
 }
@@ -21,214 +19,237 @@ fn rendered_text_without_spacing(body: &str) -> String {
 async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_frame() {
     assert_source_choice_frame(48, 24).await;
 }
-
 #[tokio::test]
 async fn source_choice_48x12_keeps_query_reasons_and_selection_in_settled_frame() {
     assert_source_choice_frame(48, 12).await;
 }
-
 #[tokio::test]
 async fn filter_choices_32x24_keep_labels_queries_and_full_reasons() {
     assert_source_choice_frame(32, 24).await;
 }
-
 #[tokio::test]
 async fn filter_choices_40x24_keep_labels_queries_and_full_reasons() {
     assert_source_choice_frame(40, 24).await;
 }
 
 async fn assert_source_choice_frame(width: usize, height: usize) {
+    let observed = Arc::new(Mutex::new(
+        None::<(SurfaceStackHandle, State<SessionsPickerModel>)>,
+    ));
+    let sink = observed.clone();
+    let processed = Arc::new(AtomicUsize::new(0));
+    let processed_sink = processed.clone();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut picker = element!(SessionsPickerComponent(request:mixed_request(),width,height));
-    let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-    tokio::pin!(canvases);
+    let mut outcome: Option<SessionsPickerOutcome> = None;
+    let mut picker = element!(SessionsPickerComponent(request:mixed_request(),width,height,selected_outcome_out:&mut outcome,
+        surface_observer:move |value| *sink.lock().unwrap()=Some(value),
+        input_observer:move |()| {processed_sink.fetch_add(1,Ordering::SeqCst);}));
     let mut phase = 0;
+    let mut expected_processed = 0;
     let mut last = String::new();
-    let send = |event| {
-        sender
-            .send(event)
-            .expect("mounted witness input remains connected")
-    };
-    let journey = async {
-        while let Some(canvas) = next_current_canvas(canvases.as_mut()).await.unwrap() {
-            let frame = canvas.to_string();
-            let body = if frame.contains("Session filters") {
-                dialog_text(&frame, dialog_bounds(&frame, "Session filters"))
-            } else {
-                String::new()
-            };
-            match phase {
-                0 if frame.contains("Sessions") => {
-                    send(ctrl_key('f'));
-                    phase = 1;
-                }
-                1 if body.contains("Client") && !body.contains("Search:") => {
-                    send(key(KeyCode::Enter));
-                    phase = 2;
-                }
-                2 if body.contains("Search:") => {
-                    send(TerminalEvent::BracketedPaste("Claude".to_owned()));
-                    phase = 3;
-                }
-                3 if body.contains("Search: Claude") => {
-                    send(key(KeyCode::Enter));
-                    phase = 4;
-                }
-                4 if body.contains("Claude Code ▾") && !body.contains("Search:") => {
-                    for _ in 0..6 {
-                        send(key(KeyCode::Tab));
-                    }
-                    send(key(KeyCode::Enter));
-                    phase = 5;
-                }
-                5 if !frame.contains("Session filters") && frame.contains("Claude Code") => {
-                    send(ctrl_key('f'));
-                    phase = 6;
-                }
-                6 if body.contains("Client") && !body.contains("Search:") => {
-                    send(key(KeyCode::Tab));
-                    send(key(KeyCode::Enter));
-                    phase = 7;
-                }
-                7 if body.contains("Search:") => {
-                    let lines = body.lines().collect::<Vec<_>>();
-                    let folder = lines.iter().position(|line| is_field_label(line, "Folder"));
-                    let search = lines.iter().position(|line| line.contains("Search:"));
-                    let selected = lines
-                        .iter()
-                        .position(|line| line.contains('❯') && line.contains("Any folder"));
-                    assert!(
-                        folder.is_some() && search.is_some() && selected.is_some(),
-                        "{frame}"
-                    );
-                    assert!(folder < search && search < selected, "{frame}");
-                    let normalized = rendered_text_without_spacing(&body);
-                    assert!(body.contains("Current directory"), "{frame}");
-                    assert!(normalized.contains("Repository/linkedworktrees"), "{frame}");
-                    if width >= 48 {
-                        assert!(body.contains("Repository / linked worktrees"), "{frame}");
-                    }
-                    // Wrapping may split the literal --checkout token; require
-                    // every non-space character in order across rendered rows.
-                    assert!(
-                        normalized.contains("CheckoutscopeissupportedbyCLI--checkout--listonly"),
-                        "{frame}"
-                    );
-                    assert!(
-                        body.contains("Cancel") && body.contains("Select"),
-                        "{frame}"
-                    );
-                    send(TerminalEvent::BracketedPaste("Checkout".to_owned()));
-                    // Checkout is unavailable. Enter must leave its choice open.
-                    send(key(KeyCode::Enter));
-                    phase = 8;
-                }
-                8 if body.contains("Search: Checkout") => {
-                    send(key(KeyCode::Esc));
-                    send(key(KeyCode::Tab));
-                    send(key(KeyCode::Enter));
-                    phase = 9;
-                }
-                9 if body.contains("Search:")
-                    && rendered_text_without_spacing(&body).contains("❯Anymodelprovider") =>
-                {
-                    send(key(KeyCode::Esc));
-                    send(key(KeyCode::Tab));
-                    phase = 10;
-                }
-                10 if body.contains("All sources ▾") && !body.contains("Search:") => {
-                    assert!(
-                        body.lines().any(|line| is_field_label(line, "Source")),
-                        "closed Source field must be visible before expansion: {frame}"
-                    );
-                    send(key(KeyCode::Enter));
-                    phase = 11;
-                }
-                11 if body
-                    .lines()
-                    .any(|line| line.contains('❯') && line.contains("All sources")) =>
-                {
-                    println!("SOURCE{width}x{height} SETTLED ORIGINAL:\n{frame}");
-                    let lines = body.lines().collect::<Vec<_>>();
-                    let source = lines.iter().position(|line| is_field_label(line, "Source"));
-                    let search = lines.iter().position(|line| line.contains("Search:"));
-                    let selected = lines
-                        .iter()
-                        .position(|line| line.contains('❯') && line.contains("All sources"));
-                    assert!(
-                        source.is_some(),
-                        "expanded Source must have its own label row above the query: {frame}"
-                    );
-                    assert!(
-                        search.is_some(),
-                        "expanded Source query disappeared: {frame}"
-                    );
-                    assert!(
-                        source < search && search < selected,
-                        "stacked field/query/selection must remain associated in this same dialog: {frame}"
-                    );
-                    assert_eq!(
-                        source.map(|row| row + 1),
-                        search,
-                        "the standalone Source label must be immediately above its query: {frame}"
-                    );
-                    let normalized = rendered_text_without_spacing(&body);
-                    assert!(normalized.contains("InteractiveExternalproviderinventoriesrequireAllsourcesSubagentsExternalproviderinventoriesrequireAllsources❯Allsources"), "{frame}");
-                    if width >= 48 {
-                        assert_eq!(
-                            normalized
-                                .matches("ExternalproviderinventoriesrequireAllsources")
-                                .count(),
-                            2,
-                            "{frame}"
-                        );
-                    }
-                    assert!(
-                        body.contains("Interactive") && body.contains("Subagents"),
-                        "{frame}"
-                    );
-                    assert!(
-                        body.lines()
-                            .any(|line| line.contains("Cancel") && line.contains("Select")),
-                        "choice actions must remain fixed and reachable: {frame}"
-                    );
-                    send(TerminalEvent::BracketedPaste("All".to_owned()));
-                    phase = 15;
-                }
-                15 if body.contains("Search: All") => {
-                    assert!(
-                        body.contains("Source") && body.contains("All sources"),
-                        "{frame}"
-                    );
-                    assert!(
-                        !body.contains("Interactive") && !body.contains("Subagents"),
-                        "{frame}"
-                    );
-                    send(key(KeyCode::Esc));
-                    phase = 12;
-                }
-                12 if !body.contains("Search:") && body.contains("All sources ▾") => {
-                    assert!(body.contains("Apply") && body.contains("Cancel"), "{frame}");
-                    send(key(KeyCode::Esc));
-                    phase = 13;
-                }
-                13 if !frame.contains("Session filters") => {
-                    assert!(
-                        frame.contains("Claude Code"),
-                        "choice cancel changed the applied client: {frame}"
-                    );
-                    send(ctrl_key('d'));
-                    phase = 14;
-                }
-                _ => {}
-            }
-            last = frame;
+    let mut send = |events: Vec<TerminalEvent>| {
+        expected_processed += events.len();
+        for event in events {
+            sender.send(event).unwrap();
         }
+        expected_processed
     };
-    let result = tokio::time::timeout(Duration::from_secs(4), journey).await;
-    assert!(result.is_ok(), "source witness phase={phase}: {last}");
-    assert_eq!(phase, 14, "source witness did not complete: {last}");
+    let mut barrier = 0;
+    let result = {
+        let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(canvases);
+        let journey = async {
+            while let Some(canvas) = next_current_canvas(canvases.as_mut()).await.unwrap() {
+                if phase == 10 {
+                    continue;
+                }
+                let frame = canvas.to_string();
+                let (stack, model) = observed.lock().unwrap().as_ref().cloned().unwrap();
+                let snapshot = stack.snapshot();
+                if processed.load(Ordering::SeqCst) < barrier {
+                    continue;
+                }
+                let active_field =
+                    snapshot
+                        .overlays()
+                        .last()
+                        .and_then(|overlay| match &overlay.kind {
+                            OverlayKind::Dropdown { field } => Some(field.as_str()),
+                            _ => None,
+                        });
+                let dropdown = active_field
+                    .map(|_| dialog_text(&frame, dialog_bounds(&frame, "Filter:")))
+                    .unwrap_or_default();
+                let compact = compact_text(&dropdown);
+                match phase {
+                    0 => {
+                        barrier = send(vec![
+                            ctrl_key('f'),
+                            key(KeyCode::Enter),
+                            TerminalEvent::BracketedPaste("Claude".into()),
+                        ]);
+                        phase = 1;
+                    }
+                    1 if compact.contains("Filter:Claude") => {
+                        barrier = send(vec![key(KeyCode::Enter), resume_key()]);
+                        phase = 2;
+                    }
+                    2 if snapshot.overlays().is_empty() => {
+                        assert_eq!(
+                            model.read().provider_filter,
+                            SessionProviderFilter::ClaudeCode
+                        );
+                        barrier = send(vec![
+                            ctrl_key('f'),
+                            key(KeyCode::Tab),
+                            key(KeyCode::Enter),
+                            TerminalEvent::BracketedPaste("Checkout".into()),
+                            key(KeyCode::Enter),
+                        ]);
+                        phase = 3;
+                    }
+                    3 if compact.contains("Filter:Checkout") => {
+                        assert_eq!(
+                            active_field,
+                            Some("filter-folder"),
+                            "query belongs to Folder"
+                        );
+                        assert!(
+                            dropdown_reason_text(&dropdown, "Checkout scope")
+                                .contains("CheckoutscopeissupportedbyCLI--checkout--listonly"),
+                            "full refusal: {frame}"
+                        );
+                        assert_eq!(
+                            model
+                                .read()
+                                .provider_filter_draft
+                                .as_ref()
+                                .unwrap()
+                                .query
+                                .root,
+                            SessionsRoot::Any,
+                            "unavailable Checkout cannot change the draft"
+                        );
+                        barrier = send(vec![
+                            key(KeyCode::Esc),
+                            key(KeyCode::Tab),
+                            key(KeyCode::Enter),
+                        ]);
+                        phase = 4;
+                    }
+                    4 if active_field == Some("filter-model-provider") => {
+                        assert!(
+                            compact.contains("Anymodelprovider"),
+                            "selected provider remains visible: {frame}"
+                        );
+                        barrier = send(vec![
+                            key(KeyCode::Esc),
+                            key(KeyCode::Tab),
+                            key(KeyCode::Enter),
+                            TerminalEvent::BracketedPaste("Interactive".into()),
+                            key(KeyCode::Enter),
+                        ]);
+                        phase = 5;
+                    }
+                    5 if compact.contains("Filter:Interactive") => {
+                        assert_eq!(
+                            active_field,
+                            Some("filter-source"),
+                            "query belongs to Source"
+                        );
+                        assert!(
+                            dropdown_reason_text(&dropdown, "External provider")
+                                .contains("ExternalproviderinventoriesrequireAllsources"),
+                            "full source refusal: {frame}"
+                        );
+                        assert_eq!(
+                            model
+                                .read()
+                                .provider_filter_draft
+                                .as_ref()
+                                .unwrap()
+                                .query
+                                .source,
+                            SessionsSource::All
+                        );
+                        barrier = send(vec![
+                            key(KeyCode::Esc),
+                            key(KeyCode::Enter),
+                            TerminalEvent::BracketedPaste("Subagents".into()),
+                            key(KeyCode::Enter),
+                        ]);
+                        phase = 6;
+                    }
+                    6 if compact.contains("Filter:Subagents") => {
+                        assert!(
+                            dropdown_reason_text(&dropdown, "External provider")
+                                .contains("ExternalproviderinventoriesrequireAllsources"),
+                            "full subagent refusal: {frame}"
+                        );
+                        assert_eq!(
+                            model
+                                .read()
+                                .provider_filter_draft
+                                .as_ref()
+                                .unwrap()
+                                .query
+                                .source,
+                            SessionsSource::All
+                        );
+                        barrier = send(vec![
+                            key(KeyCode::Esc),
+                            key(KeyCode::Enter),
+                            TerminalEvent::BracketedPaste("All".into()),
+                        ]);
+                        phase = 7;
+                    }
+                    7 if compact.contains("Filter:All") => {
+                        assert!(compact.contains("Allsources"));
+                        assert!(
+                            !compact.contains("Interactive") && !compact.contains("Subagents"),
+                            "query removes nonmatching choices"
+                        );
+                        barrier = send(vec![key(KeyCode::Esc)]);
+                        phase = 8;
+                    }
+                    8 if active_field.is_none() => {
+                        assert_eq!(
+                            model
+                                .read()
+                                .provider_filter_draft
+                                .as_ref()
+                                .unwrap()
+                                .query
+                                .source,
+                            SessionsSource::All
+                        );
+                        barrier = send(vec![key(KeyCode::Esc)]);
+                        phase = 9;
+                    }
+                    9 if snapshot.overlays().is_empty() => {
+                        assert_eq!(
+                            model.read().provider_filter,
+                            SessionProviderFilter::ClaudeCode,
+                            "choice cancellation preserves the applied client"
+                        );
+                        send(vec![ctrl_key('d')]);
+                        phase = 10;
+                    }
+                    _ => {}
+                }
+                last = frame;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(4), journey).await
+    };
+    drop(picker);
+    assert!(result.is_ok(), "source witness phase{phase}: {last}");
+    assert_eq!(phase, 10, "source witness did not complete: {last}");
+    assert!(
+        outcome.is_none(),
+        "choice navigation cannot launch a session"
+    );
 }

@@ -1,3 +1,5 @@
+// R14: dropdown Filter replaces inline choice Search.
+// R7: shared Help replaces the screen-specific Help title.
 use super::*;
 use crate::session_picker::{
     picker_component::SessionsPickerComponent, test_support::picker_request,
@@ -52,7 +54,7 @@ async fn closing_new_form_cancels_its_read_while_picker_remains_usable() {
             .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
             .map(|canvas| {
                 let frame = canvas.to_string();
-                if !observed && frame.contains("Sessions Help") {
+                if !observed && frame.contains("Close Help") {
                     assert_eq!(
                         dropped.load(Ordering::SeqCst),
                         1,
@@ -79,6 +81,11 @@ fn key(code: KeyCode) -> TerminalEvent {
 }
 fn control(character: char) -> TerminalEvent {
     let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Char(character));
+    event.modifiers = KeyModifiers::CONTROL;
+    TerminalEvent::Key(event)
+}
+fn primary_key() -> TerminalEvent {
+    let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
     event.modifiers = KeyModifiers::CONTROL;
     TerminalEvent::Key(event)
 }
@@ -129,28 +136,20 @@ async fn new_form_qualified_cursor_choice_changes_only_the_client_draft() {
                         phase = 1;
                     }
                     1 if frame.contains("New session") => {
-                        for code in [
-                            KeyCode::BackTab,
-                            KeyCode::BackTab,
-                            KeyCode::BackTab,
-                            KeyCode::BackTab,
-                            KeyCode::Enter,
-                        ] {
-                            sender.send(key(code)).unwrap();
-                        }
+                        sender.send(key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
-                    2 if frame.contains("Search:") => {
+                    2 if frame.contains("Filter:") => {
                         sender
                             .send(TerminalEvent::BracketedPaste("Cursor".to_owned()))
                             .unwrap();
                         phase = 3;
                     }
-                    3 if frame.contains("Search: Cursor") => {
+                    3 if frame.contains("Filter: Cursor") => {
                         sender.send(key(KeyCode::Enter)).unwrap();
                         phase = 4;
                     }
-                    4 if !frame.contains("Search:")
+                    4 if !frame.contains("Filter:")
                         && frame.lines().any(|line| {
                             line.contains("Client") && line.contains("Cursor") && line.contains('▾')
                         }) =>
@@ -208,29 +207,24 @@ async fn new_form_constrained_focus_and_resize_retain_query_and_directory_withou
                         && canvas.height() == 12 =>
                     {
                         assert!(text.contains("Start") && text.contains("Cancel"), "{text}");
-                        for event in [
-                            key(KeyCode::BackTab),
-                            key(KeyCode::BackTab),
-                            key(KeyCode::BackTab),
-                            key(KeyCode::Enter),
-                        ] {
+                        for event in [key(KeyCode::Tab), key(KeyCode::Enter)] {
                             sender.send(event).unwrap();
                         }
                         phase = 2;
                     }
-                    2 if text.contains("Search:") => {
+                    2 if text.contains("Filter:") => {
                         sender
                             .send(TerminalEvent::BracketedPaste("this".to_owned()))
                             .unwrap();
                         phase = 3;
                     }
-                    3 if text.contains("Search: this") => {
+                    3 if text.contains("Filter: this") => {
                         sender.send(TerminalEvent::Resize(76, 30)).unwrap();
                         phase = 4;
                     }
                     4 if canvas.width() == 76
                         && canvas.height() == 30
-                        && text.contains("Search: this") =>
+                        && text.contains("Filter: this") =>
                     {
                         sender.send(key(KeyCode::Esc)).unwrap();
                         sender.send(key(KeyCode::Tab)).unwrap();
@@ -314,7 +308,7 @@ async fn new_form_shows_supplied_arguments_before_explicit_start() {
                             frame.contains("Start") && frame.contains("Cancel"),
                             "{frame}"
                         );
-                        sender.send(key(KeyCode::Enter)).unwrap();
+                        sender.send(primary_key()).unwrap();
                         phase = 2;
                     }
                     _ => {}
@@ -361,29 +355,21 @@ async fn new_form_client_choice_search_cancel_retains_one_draft_before_start() {
                                 && line.contains('▾')),
                             "New must expose the selected client before Start:\n{frame}"
                         );
-                        for event in [
-                            key(KeyCode::BackTab),
-                            key(KeyCode::BackTab),
-                            key(KeyCode::BackTab),
-                            key(KeyCode::BackTab),
-                            key(KeyCode::Enter),
-                        ] {
-                            sender.send(event).unwrap();
-                        }
+                        sender.send(key(KeyCode::Enter)).unwrap();
                         phase = 2;
                     }
-                    2 if frame.contains("Search:") => {
+                    2 if frame.contains("Filter:") => {
                         sender
                             .send(TerminalEvent::BracketedPaste("cUrSoR".to_owned()))
                             .unwrap();
                         phase = 3;
                     }
-                    3 if frame.contains("Search: cUrSoR") => {
+                    3 if frame.contains("Filter: cUrSoR") => {
                         assert!(frame.contains("Cursor"), "{frame}");
                         sender.send(key(KeyCode::Esc)).unwrap();
                         phase = 4;
                     }
-                    4 if frame.contains("New session") && !frame.contains("Search:") => {
+                    4 if frame.contains("New session") && !frame.contains("Filter:") => {
                         assert!(
                             frame.contains("Codex") && frame.contains("/repo/project-a"),
                             "cancel choice must retain draft fields: {frame}"

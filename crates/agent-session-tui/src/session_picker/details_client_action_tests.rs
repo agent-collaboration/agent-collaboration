@@ -1,3 +1,4 @@
+// R13: shared action buttons and bindings replace literal footer spacing.
 //! Mounted Details actions capture identity before an external effect port starts.
 use super::*;
 use crate::session_picker::{
@@ -14,6 +15,11 @@ use iocraft::prelude::*;
 use std::sync::Mutex;
 fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
+}
+fn primary_key() -> TerminalEvent {
+    let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
+    key.modifiers = KeyModifiers::CONTROL;
+    TerminalEvent::Key(key)
 }
 fn control(character: char) -> TerminalEvent {
     let mut key = KeyEvent::new(KeyEventKind::Press, KeyCode::Char(character));
@@ -121,8 +127,8 @@ async fn details_close_cancels_read_and_reopen_rejects_another_endpoint_without_
                         "old owned read settled before reopen"
                     );
                     assert_eq!(reads.load(Ordering::SeqCst), 2);
-                    assert!(frame.contains("Close  Copy session ID"));
-                    assert!(!frame.contains("Copy session ID  Load"));
+                    assert!(frame.contains("Close") && frame.contains("Copy session ID"));
+                    assert!(!frame.contains(" Load"));
                     sender.send(key(KeyCode::Tab)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(control('d')).unwrap();
@@ -203,9 +209,7 @@ async fn managed_details_load_is_explicit_once_and_keeps_captured_source_target_
                     let frame = canvas.to_string();
                     if phase == 0
                         && frame.contains("Session details")
-                        && frame
-                            .lines()
-                            .any(|line| line.contains("Load") && line.contains("Resume"))
+                        && (frame.contains("Load") && frame.contains("Resume"))
                     {
                         assert!(
                             effects.lock().unwrap().is_empty(),
@@ -323,9 +327,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
                     let frame = canvas.to_string();
                     if phase == 0
                         && frame.contains("Session details")
-                        && frame
-                            .lines()
-                            .any(|line| line.contains("Fork") && line.contains("Open"))
+                        && (frame.contains("Fork") && frame.contains("Open"))
                     {
                         assert!(effects.lock().unwrap().is_empty());
                         sender.send(key(KeyCode::Tab)).unwrap();
@@ -345,7 +347,7 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
                             effects.lock().unwrap().is_empty(),
                             "confirmation must precede effects"
                         );
-                        sender.send(key(KeyCode::Enter)).unwrap();
+                        sender.send(primary_key()).unwrap();
                         phase = 2;
                     } else if phase == 2 && frame.contains("Waiting for the selected source result")
                     {

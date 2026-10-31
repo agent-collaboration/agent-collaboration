@@ -3,7 +3,6 @@ mod client_action_view;
 pub mod details_client_inventory;
 mod details_dialog_actions;
 mod details_dialog_state;
-mod interactive_row;
 pub mod new_session_client_inventory;
 mod new_session_form;
 pub use new_session_client_inventory::NewClientInventoryLoader;
@@ -14,17 +13,13 @@ mod picker_filters;
 mod picker_fork_confirmation;
 mod picker_fork_view;
 mod picker_machine_controls;
-mod picker_machine_view;
 mod picker_model;
 mod picker_source_view;
-mod provider_filter_input;
 mod provider_filter_model;
 #[cfg(feature = "quota-reset-test-harness")]
 mod provider_filter_storyboard_fixture;
 #[cfg(test)]
 mod provider_filter_tests;
-mod provider_filter_view;
-mod session_dialog_context;
 mod session_id_clipboard;
 pub use picker_machine_controls::PickerMachineSourceMode;
 #[cfg(test)]
@@ -56,12 +51,9 @@ pub use picker_component::run_sessions_picker_test_harness;
 pub use picker_request::SessionsPickerRecordLoader;
 pub use picker_request::SessionsPickerRequest;
 
-mod picker_help_view;
-
 mod source_action_state;
 #[cfg(test)]
 mod source_action_tests;
-mod source_action_view;
 mod source_action_worker;
 
 mod source_reload_port;

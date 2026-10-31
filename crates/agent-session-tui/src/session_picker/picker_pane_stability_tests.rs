@@ -26,7 +26,8 @@ async fn sessions_list_viewport_is_independent_of_hidden_conversation_height() {
     );
     assert!(!short_text.contains("SHORT_CONVERSATION_MARKER"));
     assert!(!long_text.contains("LONG_MESSAGE"));
-    assert!(short_text.contains("Details"));
+    // R13: Menu carries Details; hidden conversation still cannot affect geometry.
+    assert!(short_text.contains("Menu"));
     assert!(
         visible_followup_row_count(&short_text) > 1,
         "list must use reclaimed height: {short_text}"
@@ -54,7 +55,7 @@ async fn sessions_details_dialog_scrolls_without_launching_or_mutating_search() 
         let journey = async {
             while let Some(canvas) = frames.next().await {
                 let frame = canvas.to_string();
-                if phase == 0 && frame.contains("Details") {
+                if phase == 0 && frame.contains("Menu") {
                     sender
                         .send(TerminalEvent::Key(KeyEvent::new(
                             KeyEventKind::Press,
@@ -62,7 +63,10 @@ async fn sessions_details_dialog_scrolls_without_launching_or_mutating_search() 
                         )))
                         .unwrap();
                     phase = 1;
-                } else if phase == 1 && frame.contains("Session details") && frame.contains('┃') {
+                } else if phase == 1
+                    && frame.contains("Session details")
+                    && frame.contains("MESSAGE 0")
+                {
                     sender.send(ctrl_key('n')).unwrap();
                     let mut retired_fork_key = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
                     retired_fork_key.modifiers = KeyModifiers::ALT;
@@ -85,7 +89,7 @@ async fn sessions_details_dialog_scrolls_without_launching_or_mutating_search() 
                         frame.contains("Close"),
                         "scroll must keep close action: {frame}"
                     );
-                    assert!(!frame.contains("Search: [x]"));
+                    assert!(!frame.contains("/  x"));
                     assert!(frame.lines().count() <= 30, "{frame}");
                     sender.send(ctrl_key('d')).unwrap();
                     phase = 3;

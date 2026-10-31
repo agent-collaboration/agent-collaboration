@@ -1,3 +1,5 @@
+// R13: the toolbar and menu replace header Help/Details and the old shortcut footer.
+// R7: shared Help replaces the screen-specific Help title.
 use super::*;
 
 #[tokio::test]
@@ -18,6 +20,7 @@ async fn sessions_picker_phone_row_keeps_identity_with_status_and_ages() {
         vec![
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )
     .await;
@@ -48,6 +51,7 @@ async fn sessions_picker_selected_row_uses_contract_marker_and_metadata() {
         vec![
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )))
     .collect::<Vec<_>>()
@@ -82,9 +86,9 @@ async fn sessions_picker_start_new_is_a_header_action_without_synthetic_session_
     )
     .await;
     assert!(
-        text.lines().any(|line| line.contains("Sessions ·")
+        text.lines().any(|line| line.contains(" sessions ·")
             && line.contains("New")
-            && line.contains("Details")),
+            && line.contains("Menu")),
         "{text}"
     );
     assert!(
@@ -150,7 +154,7 @@ async fn sessions_picker_width_contract_preserves_layout() {
             text.contains("+"),
             "capture should show the more-below affordance:\n{text}"
         );
-        let help_label = "Help";
+        let help_label = "Menu";
         assert!(
             text.contains(help_label),
             "capture should expose help:\n{text}"
@@ -158,7 +162,7 @@ async fn sessions_picker_width_contract_preserves_layout() {
         let lines = text.lines().collect::<Vec<_>>();
         let footer_index = lines
             .iter()
-            .rposition(|line| line.contains("Details"))
+            .rposition(|line| line.contains("Menu"))
             .unwrap_or_else(|| panic!("capture should render Details title action:\n{text}"));
         let bottom_border_index = lines
             .iter()
@@ -189,7 +193,7 @@ async fn sessions_picker_width_contract_preserves_layout() {
     assert!(
         empty_text
             .lines()
-            .any(|line| line.contains("Sessions ·") && line.contains("New")),
+            .any(|line| line.contains(" sessions ·") && line.contains("New")),
         "empty state should offer a new session:\n{empty_text}"
     );
 }
@@ -246,7 +250,7 @@ async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_m
                     )))
                     .unwrap();
                 phase = 2;
-            } else if phase == 2 && text.contains("Sessions Help") {
+            } else if phase == 2 && text.contains("Close Help") {
                 sender
                     .send(TerminalEvent::Key(KeyEvent::new(
                         KeyEventKind::Press,
@@ -375,6 +379,7 @@ async fn sessions_picker_live_resize_uses_terminal_height_and_taller_heights() {
         vec![
             TerminalEvent::Resize(160, 12),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )
     .await;
@@ -385,6 +390,7 @@ async fn sessions_picker_live_resize_uses_terminal_height_and_taller_heights() {
         vec![
             TerminalEvent::Resize(160, 32),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )
     .await;
@@ -432,7 +438,7 @@ async fn sessions_picker_sidecar_clamps_tall_details_to_body_budget() {
         "sidecar details should stay within the 24-row frame:\n{text}"
     );
     assert!(
-        text.contains("Details"),
+        text.contains("Menu"),
         "sidecar details should not clip the footer at 160x24:\n{text}"
     );
 }
@@ -455,7 +461,7 @@ async fn sessions_picker_sidecar_panels_reach_bottom_without_footer_gap() {
         .rposition(|line| line.contains('╰'))
         .unwrap_or_else(|| panic!("outer bottom should render:\n{text}"));
     assert!(
-        lines[1].contains("Details"),
+        lines[1].contains("Menu"),
         "Details belongs in the title row: {text}"
     );
     let panel_bottom_index = lines[..outer_bottom_index]
@@ -485,7 +491,7 @@ async fn sessions_picker_renders_one_line_controls_when_width_allows() {
 
     assert!(
         text.lines().any(|line| {
-            line.contains("Machine: This machine") && line.contains("Filters · All providers")
+            line.contains("sessions · This machine") && line.contains("This folder")
         }),
         "wide sessions controls should fit on one line:\n{text}"
     );
@@ -494,7 +500,7 @@ async fn sessions_picker_renders_one_line_controls_when_width_allows() {
         "{text}"
     );
     assert!(
-        text.contains("Details"),
+        text.contains("Menu"),
         "wide footer should keep only the compact help hint by default:\n{text}"
     );
     assert!(!text.contains("type search"), "{text}");
@@ -526,7 +532,7 @@ async fn sessions_picker_budgets_wrapped_controls_from_actual_search_text() {
         "long search controls should not grow the picker past the 24-row frame:\n{text}"
     );
     assert!(
-        text.contains("Details"),
+        text.contains("Menu"),
         "wrapped controls should not clip the footer at 100x24:\n{text}"
     );
     assert!(
@@ -550,7 +556,7 @@ async fn sessions_picker_stacked_layout_removes_top_padding_and_keeps_panels_adj
     let lines = text.lines().collect::<Vec<_>>();
     let title_index = lines
         .iter()
-        .position(|line| line.contains("Sessions ·"))
+        .position(|line| line.contains(" sessions ·"))
         .unwrap_or_else(|| panic!("sessions title should render:\n{text}"));
     let top_border_index = lines
         .iter()
@@ -589,7 +595,7 @@ async fn sessions_picker_stacked_layout_removes_top_padding_and_keeps_panels_adj
         })
         .unwrap_or_else(|| panic!("sessions list bottom border should render:\n{text}"));
     assert!(
-        lines[title_index].contains("Details")
+        lines[title_index].contains("Menu")
             && lines
                 .get(list_bottom_border_index + 1)
                 .is_some_and(|line| line.contains('╰')),
@@ -641,6 +647,7 @@ async fn sessions_picker_reflows_when_terminal_width_changes() {
             TerminalEvent::Resize(139, 40),
             TerminalEvent::Resize(140, 40),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )))
     .map(|canvas| canvas.to_string())

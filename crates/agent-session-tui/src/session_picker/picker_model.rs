@@ -20,6 +20,7 @@ use agent_session_inventory::sessions::SessionsSort;
 use agent_session_inventory::sessions::SessionsSource;
 use agent_session_inventory::sessions::{SessionPickerIdentity, SessionPickerRecord};
 
+#[cfg(test)]
 pub(super) const VISIBLE_SESSION_ROWS: usize = 8;
 
 #[path = "picker_runtime_view.rs"]
@@ -51,9 +52,6 @@ pub struct SessionsPickerModel {
     pub(super) show_help: bool,
     pub(super) source_action: super::source_action_state::PickerSourceAction,
     pub(super) client_action: super::client_action_state::PickerClientAction,
-    pub(super) provider_choice: agent_collaboration_tui::SearchSelectState<
-        super::provider_filter_model::SessionFilterValue,
-    >,
     pub(super) provider_filter: super::provider_filter_model::SessionProviderFilter,
     pub(super) provider_filter_draft: Option<super::provider_filter_model::ProviderFilterDraft>,
     pub(super) new_session: Option<super::new_session_form::NewSessionDraft>,
@@ -97,7 +95,6 @@ impl SessionsPickerModel {
             show_help: false,
             source_action: super::source_action_state::PickerSourceAction::default(),
             client_action: super::client_action_state::PickerClientAction::Idle,
-            provider_choice: agent_collaboration_tui::SearchSelectState::Closed,
             provider_filter: super::provider_filter_model::SessionProviderFilter::All,
             provider_filter_draft: None,
             details_dialog: None,
@@ -116,22 +113,29 @@ impl SessionsPickerModel {
     }
 
     pub fn handle_key(&mut self, key: SessionsPickerKey) {
-        if self.source_action.pending.is_some() && !matches!(key, SessionsPickerKey::ToggleHelp) {
+        #[cfg(test)]
+        let help_key = matches!(key, SessionsPickerKey::ToggleHelp);
+        #[cfg(not(test))]
+        let help_key = false;
+        if self.source_action.pending.is_some() && !help_key {
             return;
         }
-        if !matches!(key, SessionsPickerKey::ToggleHelp) {
+        if !help_key {
             self.pointer_window_start = None;
         }
         match key {
+            #[cfg(test)]
             SessionsPickerKey::MoveDown => {
                 let visible_len = self.visible_len();
                 self.focus_visible_index(
                     (self.focused_visible_index() + 1).min(visible_len.saturating_sub(1)),
                 );
             }
+            #[cfg(test)]
             SessionsPickerKey::MoveUp => {
                 self.focus_visible_index(self.focused_visible_index().saturating_sub(1));
             }
+            #[cfg(test)]
             SessionsPickerKey::PageDown => {
                 let visible_len = self.visible_len();
                 self.focus_visible_index(
@@ -139,15 +143,18 @@ impl SessionsPickerModel {
                         .min(visible_len.saturating_sub(1)),
                 );
             }
+            #[cfg(test)]
             SessionsPickerKey::PageUp => {
                 self.focus_visible_index(
                     self.focused_visible_index()
                         .saturating_sub(VISIBLE_SESSION_ROWS),
                 );
             }
+            #[cfg(test)]
             SessionsPickerKey::MoveFirst => {
                 self.focus_start_new();
             }
+            #[cfg(test)]
             SessionsPickerKey::MoveLast => {
                 let visible_len = self.visible_len();
                 self.focus_visible_index(visible_len.saturating_sub(1));
@@ -170,9 +177,11 @@ impl SessionsPickerModel {
                 self.rebuild_visible_rows();
                 self.restore_focus_or_fallback(previous_index);
             }
+            #[cfg(test)]
             SessionsPickerKey::ToggleHelp => {
                 self.show_help = !self.show_help;
             }
+            #[cfg(test)]
             SessionsPickerKey::SearchChar(character) => {
                 let previous_index = self.focused_visible_index();
                 if !character.is_control() {
@@ -181,6 +190,7 @@ impl SessionsPickerModel {
                 }
                 self.restore_focus_or_fallback(previous_index);
             }
+            #[cfg(test)]
             SessionsPickerKey::SearchBackspace => {
                 let previous_index = self.focused_visible_index();
                 if self.search.pop().is_some() {
@@ -219,6 +229,13 @@ impl SessionsPickerModel {
         self.width = width;
     }
 
+    pub(super) fn rebuild_browse_choices(&mut self) {
+        let previous_index = self.focused_visible_index();
+        self.pointer_window_start = None;
+        self.rebuild_visible_rows();
+        self.restore_focus_or_fallback(previous_index);
+    }
+
     pub(super) fn open_provider_filters(&mut self) {
         if self.fork_confirmation.is_none()
             && matches!(
@@ -228,7 +245,6 @@ impl SessionsPickerModel {
             && self.provider_filter_draft.is_none()
             && self.details_dialog.is_none()
         {
-            self.provider_choice = agent_collaboration_tui::SearchSelectState::Closed;
             self.provider_filter_draft =
                 Some(super::provider_filter_model::ProviderFilterDraft::new(
                     self.provider_filter,
@@ -239,9 +255,6 @@ impl SessionsPickerModel {
     }
 
     pub(super) fn apply_provider_filters(&mut self) {
-        if self.provider_choice.is_open() {
-            return;
-        }
         let Some(draft) = self.provider_filter_draft.take() else {
             return;
         };
@@ -251,7 +264,6 @@ impl SessionsPickerModel {
         self.source = draft.query.source;
         self.sort = draft.query.sort;
         self.runtime_view = draft.runtime_view;
-        self.provider_choice = agent_collaboration_tui::SearchSelectState::Closed;
         self.pointer_window_start = None;
         self.rebuild_visible_rows();
         if self
@@ -494,6 +506,7 @@ impl SessionsPickerModel {
         self.visible_choice_record_at(self.focused_visible_index())
     }
 
+    #[cfg(test)]
     pub(super) fn focused_window_start(&self, visible_rows: usize) -> usize {
         let visible_len = self.visible_len();
         let maximum_window_start = visible_len.saturating_sub(visible_rows);
@@ -609,4 +622,5 @@ impl SessionsPickerModel {
 
 #[path = "picker_visible_window.rs"]
 mod picker_visible_window;
+#[cfg(test)]
 pub(super) use picker_visible_window::visible_window_start;

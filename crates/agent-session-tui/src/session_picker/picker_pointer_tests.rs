@@ -64,10 +64,10 @@ async fn sessions_picker_existing_row_pointer_focus_updates_conversation_without
     let (frames, outcome) = observe_session_pointer(
         "Provider migration",
         MouseEventKind::Moved,
-        vec![TerminalEvent::Key(KeyEvent::new(
-            KeyEventKind::Press,
-            KeyCode::Esc,
-        ))],
+        vec![
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
+        ],
     )
     .await;
     assert_eq!(outcome, None);
@@ -131,7 +131,7 @@ async fn sessions_picker_start_new_click_opens_form_and_start_is_explicit() {
                     let (row, line) = frame
                         .lines()
                         .enumerate()
-                        .find(|(_, line)| line.contains("Sessions ·"))
+                        .find(|(_, line)| line.contains(" sessions ·"))
                         .unwrap();
                     let byte = line.find("New").unwrap();
                     let column = unicode_width::UnicodeWidthStr::width(
@@ -156,12 +156,7 @@ async fn sessions_picker_start_new_click_opens_form_and_start_is_explicit() {
                             && frame.contains("Start"),
                         "{frame}"
                     );
-                    sender
-                        .send(TerminalEvent::Key(KeyEvent::new(
-                            KeyEventKind::Press,
-                            KeyCode::Enter,
-                        )))
-                        .unwrap();
+                    sender.send(resume_key()).unwrap();
                     phase = 2;
                 }
             }

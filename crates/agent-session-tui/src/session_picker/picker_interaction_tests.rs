@@ -1,3 +1,4 @@
+// R7: shared Help replaces the screen-specific Help title.
 use super::*;
 use crate::session_picker::test_support::picker_action_selection;
 
@@ -149,10 +150,7 @@ async fn sessions_picker_control_shift_enter_forks_the_focused_existing_session(
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            control_shift_enter_key(),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        ],
+        vec![control_shift_enter_key(), resume_key()],
     )))
     .map(|canvas| canvas.to_string())
     .collect::<Vec<_>>()
@@ -179,20 +177,24 @@ async fn sessions_picker_iocraft_mock_terminal_ctrl_shortcuts_drive_filters() {
             ctrl_key('s'),
             ctrl_key('t'),
             ctrl_key('o'),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(10))),
+            ctrl_key('d'),
         ],
     )))
     .map(|canvas| canvas.to_string())
     .collect::<Vec<_>>()
     .await;
 
+    // R13: the same changed values are checked in Menu instead of an idle status row.
     assert!(
         actual.iter().any(
-            |snapshot| snapshot.lines().any(|line| line.contains("[repo]")
-                && line.contains("View: [Blocked]")
-                && line.contains("Sort: [created]"))
+            |frame| ["Repo", "Runtime: Blocked", "Sort: Created"]
+                .iter()
+                .all(|value| frame
+                    .lines()
+                    .any(|line| line.contains(value) && line.contains('✓')))
         ),
-        "ctrl shortcuts should cycle scope, threads, and sort: {actual:?}"
+        "Ctrl shortcuts must update all checked settings: {actual:?}"
     );
 }
 
@@ -213,7 +215,7 @@ async fn sessions_picker_help_toggles_and_escape_closes_help_before_picker() {
         tokio::pin!(frames);
         tokio::time::timeout(Duration::from_secs(2), async {
             while let Some(canvas) = frames.next().await {
-                if canvas.to_string().contains("Sessions Help") {
+                if canvas.to_string().contains("Close Help") {
                     return;
                 }
             }
@@ -233,7 +235,7 @@ async fn sessions_picker_help_toggles_and_escape_closes_help_before_picker() {
             ctrl_key('/'),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
             ctrl_key('n'),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+            resume_key(),
         ]),
     ));
     let actual = tokio::time::timeout(Duration::from_secs(2), frames.collect::<Vec<_>>())
@@ -247,7 +249,7 @@ async fn sessions_picker_help_toggles_and_escape_closes_help_before_picker() {
     assert!(
         actual
             .last()
-            .is_some_and(|canvas| canvas.to_string().contains("Help"))
+            .is_some_and(|canvas| canvas.to_string().contains("Menu"))
     );
 }
 
@@ -262,10 +264,7 @@ async fn sessions_picker_iocraft_mock_terminal_ctrl_n_starts_new_thread() {
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            ctrl_key('n'),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        ],
+        vec![ctrl_key('n'), resume_key()],
     )))
     .collect::<Vec<_>>()
     .await;
@@ -288,12 +287,14 @@ async fn sessions_picker_iocraft_mock_terminal_esc_clears_search_before_exit() {
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
         vec![
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('/'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('r'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('u'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('s'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('t'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )))
     .map(|canvas| canvas.to_string())
@@ -304,7 +305,7 @@ async fn sessions_picker_iocraft_mock_terminal_esc_clears_search_before_exit() {
         actual
             .last()
             .is_some_and(|snapshot| snapshot.contains("Feature design session")
-                && !snapshot.contains("Search: [rust]")),
+                && !snapshot.contains("/  rust")),
         "first escape should clear search instead of exiting immediately: {actual:?}"
     );
     assert_eq!(selected_outcome, None);
@@ -334,10 +335,20 @@ async fn sessions_picker_iocraft_mock_terminal_ctrl_c_and_ctrl_d_exit() {
 
 #[tokio::test]
 async fn sessions_picker_iocraft_mock_terminal_search_keeps_plain_letters() {
+    let observations = Arc::new(Mutex::new(Vec::new()));
+    let sink = observations.clone();
+    let observed_model = Arc::new(Mutex::new(None::<State<SessionsPickerModel>>));
+    let model_sink = observed_model.clone();
     let actual = element! {
         SessionsPickerComponent(
             request: picker_request(),
             width: 100usize,
+            surface_observer:move |(_,model)| *model_sink.lock().unwrap()=Some(model),
+            input_observer:move |()| {
+                let model=observed_model.lock().unwrap().unwrap();
+                let model=model.read();
+                sink.lock().unwrap().push((model.root,model.runtime_view,model.sort,model.search.clone()));
+            },
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
@@ -348,19 +359,25 @@ async fn sessions_picker_iocraft_mock_terminal_search_keeps_plain_letters() {
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('t'))),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            ctrl_key('d'),
         ],
     )))
     .map(|canvas| canvas.to_string())
     .collect::<Vec<_>>()
     .await;
 
+    let observations = observations.lock().unwrap();
     assert!(
-        actual.iter().any(|snapshot| snapshot.contains("[📂 cwd]")
-            && !snapshot.contains("View: [Blocked]")
-            && !snapshot.contains("View: [Active]")
-            && !snapshot.contains("View: [Idle]")
-            && !snapshot.contains("Sort: [created]")),
-        "plain search input should leave filters unchanged: {actual:?}"
+        observations
+            .iter()
+            .all(|(root, view, sort, _)| *root == SessionsRoot::Cwd
+                && *view == crate::session_picker::picker_model::SessionsPickerRuntimeView::All
+                && *sort == SessionsSort::Updated),
+        "plain search must leave every setting unchanged: {observations:?}"
+    );
+    assert!(
+        observations.iter().any(|(_, _, _, query)| query == "rust"),
+        "plain letters must reach the real search model: {actual:?}"
     );
 }
 

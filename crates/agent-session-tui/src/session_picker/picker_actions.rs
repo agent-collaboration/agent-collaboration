@@ -1,17 +1,26 @@
 /// Keyboard action understood by the sessions picker model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionsPickerKey {
+    #[cfg(test)]
     MoveDown,
+    #[cfg(test)]
     MoveUp,
+    #[cfg(test)]
     PageDown,
+    #[cfg(test)]
     PageUp,
+    #[cfg(test)]
     MoveFirst,
+    #[cfg(test)]
     MoveLast,
     CycleRoot,
     CycleRuntimeView,
     CycleSort,
+    #[cfg(test)]
     ToggleHelp,
+    #[cfg(test)]
     SearchChar(char),
+    #[cfg(test)]
     SearchBackspace,
     ClearSearch,
 }

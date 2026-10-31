@@ -1,4 +1,5 @@
 //! Pure visible-window positioning, shared with model snapshot tests.
+#[cfg(test)]
 pub(in super::super) fn visible_window_start(
     focused_index: usize,
     visible_len: usize,

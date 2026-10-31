@@ -136,14 +136,7 @@ fn provider_filters_cancel_and_modal_open_guards_preserve_focus() {
     draft.select_value(super::provider_filter_model::SessionFilterValue::Client(
         SessionProviderFilter::Codex,
     ));
-    for _ in 0..6 {
-        draft.move_focus(false);
-    }
-    assert_eq!(draft.focus, ProviderFilterFocus::Apply);
-    draft.move_focus(false);
-    assert_eq!(draft.focus, ProviderFilterFocus::Cancel);
-    draft.move_focus(true);
-    assert_eq!(draft.focus, ProviderFilterFocus::Apply);
+    // InputOwner focus traversal is covered by picker_scope_contract_tests.
     model.provider_filter_draft = None;
     assert_eq!(model.provider_filter, SessionProviderFilter::All);
     assert_eq!(model.focused_identity(), identity.as_ref());

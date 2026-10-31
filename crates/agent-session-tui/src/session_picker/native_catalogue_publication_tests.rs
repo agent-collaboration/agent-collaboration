@@ -86,6 +86,7 @@ async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_w
             while let Some(canvas) = frames.next().await {
                 let frame = canvas.to_string();
                 if phase == 0 && frame.contains("Choose machine") {
+                    sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(key(KeyCode::Down)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 1;
@@ -469,6 +470,7 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
             while let Some(canvas) = frames.next().await {
                 let frame = canvas.to_string();
                 if phase == 0 && frame.contains("Choose machine") {
+                    sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(key(KeyCode::Down)).unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();
                     phase = 1;
@@ -505,7 +507,7 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
                         frame.contains("Job handle: distinct-job-handle"),
                         "handle must remain a separately labeled fact: {frame}"
                     );
-                    assert!(frame.contains("Machine: Observed source"));
+                    assert!(frame.contains("Machine: Observed source"), "{frame}");
                     assert!(
                         frame.contains("Job state: Blocked"),
                         "job lifecycle remains separately visible: {frame}"

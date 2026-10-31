@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-quota-reset-test-harness = []
+quota-reset-test-harness = ["agent-collaboration-tui/test-support", "dep:serde"]
 
 [dependencies]
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
@@ -20,6 +20,7 @@ crossterm = { workspace = true, features = ["osc52"] }
 iocraft.workspace = true
 agent-collaboration-tui.workspace = true
 serde_json.workspace = true
+serde = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 

@@ -1,3 +1,4 @@
+// R7: shared Help replaces the screen-specific Help title.
 //! Actual renderer/controller/configured dispatcher status proof; default catalog is a stand-in.
 use super::*;
 use agent_session_inventory::test_support::source_api_fixture::SourceApiFixture;
@@ -74,12 +75,13 @@ async fn capture_all_status(
             let text = canvas.to_string();
             last_frame = text.clone();
             if !selected && text.contains("Choose machine") {
+                sender.send(key(KeyCode::Enter)).unwrap();
                 selected = true;
                 sender.send(key(KeyCode::Down)).unwrap();
                 sender.send(key(KeyCode::Enter)).unwrap();
             }
             if captured.is_none()
-                && text.contains("Machine: All machines")
+                && text.contains("sessions · All machines")
                 && text.contains(marker)
                 && held_ready.load(std::sync::atomic::Ordering::SeqCst)
             {
@@ -215,17 +217,14 @@ async fn review_machine_help_is_visible_in_collapsed_and_expanded_responsive_fra
                         sender.send(key(KeyCode::F(1))).unwrap();
                         continue;
                     }
-                    if expanded
-                        && text.contains("Sessions Help")
-                        && !text.contains("Choose machine")
-                    {
+                    if expanded && text.contains("Close Help") && !text.contains("Machine…") {
                         if scroll_frame != text {
                             scroll_frame = text;
                             sender.send(key(KeyCode::Down)).unwrap();
                         }
                         continue;
                     }
-                    if captured.is_none() && (!expanded || text.contains("Sessions Help")) {
+                    if captured.is_none() && (!expanded || text.contains("Close Help")) {
                         captured = Some(text);
                         sender.send(control_key('c')).unwrap();
                     }
@@ -237,9 +236,9 @@ async fn review_machine_help_is_visible_in_collapsed_and_expanded_responsive_fra
                 .unwrap_or_else(|_| panic!("width={width} expanded={expanded}: {last_frame}"));
             assert!(
                 if expanded {
-                    frame.contains("Choose machine")
+                    frame.contains("Machine…")
                 } else {
-                    frame.contains("▾")
+                    frame.contains("Menu F10")
                 },
                 "width{width}/expanded{expanded}: {frame}"
             );
@@ -347,7 +346,7 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
             "Observed source: Unavailable",
             false,
         ),
-        (NativeScenario::PrefixHeld, "Machine: This machine", true),
+        (NativeScenario::PrefixHeld, "sessions · This machine", true),
     ] {
         let peer = ReadPeer::start(ReplyScenario::NativePartition(scenario)).await;
         let PickerSourceContext::ConfiguredHosted(mut profile) = peer.request().source_context
@@ -410,6 +409,7 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
             while let Some(canvas) = frames.next().await {
                 let frame = canvas.to_string();
                 if phase == 0 && frame.contains("Choose machine") {
+                    sender.send(key(KeyCode::Enter)).unwrap();
                     sender.send(key(KeyCode::Down)).unwrap();
                     if single {
                         sender.send(key(KeyCode::Down)).unwrap();
@@ -418,12 +418,12 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
                     phase = 1;
                 } else if phase == 1
                     && held_ready.load(std::sync::atomic::Ordering::SeqCst)
-                    && frame.contains("Sessions Help")
+                    && frame.contains("Close Help")
                 {
                     sender.send(key(KeyCode::Esc)).unwrap();
                     phase = 2;
                 } else if phase == 2
-                    && !frame.contains("Sessions Help")
+                    && !frame.contains("Close Help")
                     && frame.contains("Native equal ID")
                 {
                     let (row, line) = frame

@@ -4,48 +4,36 @@ use std::time::Duration;
 use super::picker_machine_controls::{PickerMachineFilter, PickerMachineStage};
 use iocraft::prelude::*;
 
-use crate::session_picker::interactive_row::InteractiveSessionChoiceRow;
 use crate::session_picker::picker_actions::SessionsPickerKey;
 use crate::session_picker::picker_actions::SessionsPickerOutcome;
 use crate::session_picker::picker_model::SessionsPickerModel;
 use crate::session_picker::picker_rendering::MIN_PICKER_WIDTH;
 use crate::session_picker::picker_request::SessionsPickerRecordLoader;
 use crate::session_picker::picker_request::SessionsPickerRequest;
-use agent_session_inventory::picker_data_query::SessionsPickerRoot;
 use agent_session_inventory::sessions::SessionConversationPreview;
 #[cfg(test)]
 use agent_session_inventory::sessions::SessionConversationSource;
 use agent_session_inventory::sessions::SessionPickerRecord;
-use agent_session_inventory::sessions::SessionsSort;
-
-#[path = "picker_frame_view.rs"]
-mod picker_frame_view;
-use picker_frame_view::render_picker_view;
-
-#[path = "details_dialog_view.rs"]
-mod details_dialog_view;
 
 #[path = "picker_layout_budget.rs"]
+#[cfg(test)]
 mod picker_layout_budget;
-use picker_layout_budget::{picker_body_budget, session_visible_row_budget};
-
+#[cfg(test)]
+use picker_layout_budget::session_visible_row_budget;
 #[path = "picker_list_view.rs"]
 mod picker_list_view;
-use picker_list_view::{no_matching_sessions_label, render_session_list, start_new_args_label};
 
 #[path = "picker_detail_view.rs"]
 mod picker_detail_view;
-use picker_detail_view::{render_details, render_start_new_details};
+use picker_detail_view::render_details;
 
 #[path = "picker_display_text.rs"]
 mod picker_display_text;
-use picker_display_text::{compact_age, root_label, runtime_view_label, sort_label, truncate_end};
+use picker_display_text::compact_age;
 
 pub(super) use picker_display_text::fit_line;
 
 const MIN_RENDER_HEIGHT: usize = 24;
-const SIDECAR_PICKER_WIDTH: usize = 140;
-const START_NEW_DETAILS_HEIGHT: usize = 6;
 
 #[path = "conversation_preview_state.rs"]
 mod conversation_preview_state;
@@ -66,6 +54,16 @@ pub struct SessionsPickerComponentProps<'a> {
     width: usize,
     height: usize,
     selected_outcome_out: Option<&'a mut Option<SessionsPickerOutcome>>,
+    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+    dispatch_receipt:
+        Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
+    #[cfg(test)]
+    surface_observer: Handler<(
+        agent_collaboration_tui::surface_handle::SurfaceStackHandle,
+        State<SessionsPickerModel>,
+    )>,
+    #[cfg(test)]
+    input_observer: Handler<()>,
 }
 
 use super::source_reload_port::SessionRecordsReloadPort;
@@ -81,37 +79,22 @@ pub fn SessionsPickerComponent<'a>(
         .clone()
         .unwrap_or_else(super::session_id_clipboard::unavailable_session_clipboard_writer);
     let mut system = hooks.use_context_mut::<SystemContext>();
-    let (terminal_width, terminal_height) = hooks.use_terminal_size();
-    let live_terminal_width = props.width == 0;
-    let live_terminal_height = props.height == 0 && live_terminal_width;
-    let observed_width = hooks.use_state(|| {
-        if live_terminal_width {
-            let width = usize::from(terminal_width);
-            if width == 0 { MIN_PICKER_WIDTH } else { width }
-        } else {
-            props.width
+    let width = if props.width == 0 { 76 } else { props.width };
+    let height = if props.height == 0 {
+        MIN_RENDER_HEIGHT
+    } else {
+        props.height
+    };
+    let mut model = hooks.use_state(|| {
+        let mut model = SessionsPickerModel::new(props.request.clone(), width);
+        if let Some(identity) = model
+            .visible_record_at(0)
+            .map(|record| record.identity.clone())
+        {
+            model.focus_visible_identity_in_window(&identity, None);
         }
+        model
     });
-    let observed_height = hooks.use_state(|| {
-        if live_terminal_height {
-            let height = usize::from(terminal_height);
-            if height == 0 {
-                MIN_RENDER_HEIGHT
-            } else {
-                height
-            }
-        } else if props.height == 0 {
-            MIN_RENDER_HEIGHT
-        } else {
-            props.height.max(1)
-        }
-    });
-    let width = observed_width.get();
-    let height = observed_height.get();
-    let mut model = hooks.use_state(|| SessionsPickerModel::new(props.request.clone(), width));
-    if model.read().width != width {
-        model.write().set_width(width);
-    }
     let mut conversation_cache = hooks.use_state(ConversationPreviewCache::default);
     let reload_generation = hooks.use_state(|| 0_u64);
     let reload_port = hooks.use_memo(
@@ -227,24 +210,74 @@ pub fn SessionsPickerComponent<'a>(
         selected_outcome,
         props.source_preparer.clone(),
     );
-    picker_input::use_picker_input(
-        &mut hooks,
-        picker_input::PickerInputContext {
-            model,
-            session_clipboard_writer: session_clipboard_writer.clone(),
-            observed_width,
-            observed_height,
-            reload_generation,
-            can_load_source: props.record_loader.is_some(),
-            selected_outcome,
-            should_cancel,
-            conversation_cache,
-            reload_port: reload_port.clone(),
-            live_terminal_width,
-            live_terminal_height,
-            width,
-        },
-    );
+    use agent_collaboration_tui::{
+        actions::ActionId,
+        controls::{ComboBoxState, ListSelectionState, TextFieldState},
+        input_owner::{InputOwner, Routed},
+        overlay_host::OverlayHost,
+        surface_handle::use_surface_stack,
+    };
+    let setup = (|| -> picker_surface::SurfaceResult<_> {
+        let rows = picker_surface::selection_rows(&model.read())?;
+        let list = ListSelectionState::new(rows, None)?;
+        let combo = ComboBoxState::new(Vec::new(), None)?;
+        let empty = picker_surface::empty_model()?;
+        let quit = ActionId::new("quit")?;
+        let quit_aliases = vec!["Ctrl+D".parse()?];
+        Ok((list, combo, empty, quit, quit_aliases))
+    })();
+    let (initial_list, empty_combo, empty_surface, quit_action, global_quit_aliases) = match setup {
+        Ok(setup) => setup,
+        Err(error) => return element!(Text(content: error.to_string())).into_any(),
+    };
+    let surface_context = picker_surface::PickerSurfaceContext {
+        model,
+        outcome: selected_outcome,
+        cancelled: should_cancel,
+        error: hooks.use_state(|| None),
+        reload_port,
+        reload_generation,
+        conversation_cache,
+        copier: session_clipboard_writer.clone(),
+        can_load_source: props.record_loader.is_some(),
+        filter: hooks.use_state(TextFieldState::default),
+        list: hooks.use_state(|| initial_list),
+        list_control: hooks.use_state(|| None),
+        help: hooks.use_state(|| None),
+        combos: std::array::from_fn(|_| hooks.use_state(|| empty_combo.clone())),
+        active_dialog: hooks.use_state(|| None),
+    };
+    let stack = use_surface_stack(&mut hooks, |stack| {
+        match picker_surface::build_screen(surface_context.clone(), stack) {
+            Ok(surface) => surface,
+            Err(error) => {
+                surface_context.report(error);
+                empty_surface
+            }
+        }
+    });
+    let viewport = stack.viewport();
+    #[cfg(test)]
+    (props.surface_observer)((stack, model));
+    let width = if viewport.0 == 0 {
+        width
+    } else {
+        usize::from(viewport.0)
+    };
+    let height = if viewport.1 == 0 {
+        height
+    } else {
+        usize::from(viewport.1)
+    };
+    if model.read().width != width {
+        model.write().set_width(width);
+    }
+    if let Some(help) = surface_context.help.read().clone() {
+        surface_context.synchronize_dialog(stack, &help);
+    }
+    if let Err(error) = picker_surface::synchronize_rows(&surface_context, stack) {
+        surface_context.report(error);
+    }
 
     if should_cancel.get() {
         selected_outcome.set(None);
@@ -271,42 +304,11 @@ pub fn SessionsPickerComponent<'a>(
             View(width: iocraft_cell_count(width), flex_direction: FlexDirection::Column) {
                 Text(content: "terminal too narrow\n")
             }
-        };
+        }
+        .into_any();
     }
 
-    if model.read().client_action.is_active() {
-        return super::client_action_view::render_client_action(
-            &model.read(),
-            model,
-            selected_outcome,
-            height,
-        );
-    }
-
-    let machine_context = picker_machine_input::MachineSelectionContext {
-        model,
-        can_load_source: props.record_loader.is_some(),
-        reload_port: reload_port.clone(),
-        reload_generation,
-        conversation_cache,
-    };
-    if let Some(background) = super::picker_help_view::render_choice_surface(
-        &model.read(),
-        model,
-        height,
-        Handler::from({
-            let context = machine_context.clone();
-            move |key| picker_machine_input::select_machine_choice(context.clone(), key)
-        }),
-        Handler::from(move |_| {
-            picker_machine_input::cancel_machine_choice(machine_context.clone())
-        }),
-        selected_outcome,
-    ) {
-        return background;
-    }
-
-    let selected_conversation = {
+    let _selected_conversation = {
         let model_value = model.read();
         model_value
             .details_dialog
@@ -326,35 +328,36 @@ pub fn SessionsPickerComponent<'a>(
             })
     };
 
-    let minimum_render_height = if live_terminal_height {
-        1
-    } else {
-        MIN_RENDER_HEIGHT.min(height)
-    };
-    render_picker_view(
-        &model.read(),
-        model,
-        selected_outcome,
-        selected_conversation.as_ref(),
-        picker_frame_view::PickerViewportBudget {
-            height,
-            minimum_render_height,
-        },
-        session_clipboard_writer,
-        Handler::from(move |_| {
-            let mut model = model;
-            let mut cache = conversation_cache;
-            let mut generation = reload_generation;
-            let previous = model.read().data_query();
-            model.write().apply_provider_filters();
-            if model.read().data_query() != previous {
-                cache.write().invalidate();
-                let next = generation.get().saturating_add(1);
-                generation.set(next);
-                reload_port.send(model.write().prepare_source_reload(next));
+    let routed_context = surface_context.clone();
+    #[cfg(test)]
+    let input_observer = props.input_observer.clone();
+    let root = element!(InputOwner(stack, width: u16::try_from(width).unwrap_or(u16::MAX),
+        height: u16::try_from(height).unwrap_or(u16::MAX), quit_action, global_quit_aliases,
+        on_routed: move |routed| {
+            if let Routed::OverlayClosed(id) = routed {
+                let active = routed_context.active_dialog.read().clone();
+                if let Some(active) = active.filter(|dialog| dialog.id == id) {
+                    routed_context.close_dialog(stack, active.kind);
+                }
             }
-        }),
-    )
+            if let Some(help) = routed_context.help.read().clone() {
+                routed_context.synchronize_dialog(stack, &help);
+            }
+            if let Err(error) = picker_surface::synchronize_rows(&routed_context, stack) {
+                routed_context.report(error);
+            }
+            #[cfg(test)]
+            input_observer(());
+        }) {
+        OverlayHost {picker_surface::PickerSurfaceView(context:surface_context)}
+    });
+    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+    let root = {
+        let mut root = root;
+        root.props.dispatch_receipt = props.dispatch_receipt.clone();
+        root
+    };
+    root.into_any()
 }
 
 #[path = "picker_entrypoint.rs"]
@@ -367,11 +370,11 @@ pub use picker_entrypoint::run_sessions_picker_test_harness;
 #[path = "picker_component_tests.rs"]
 mod tests;
 
-#[path = "picker_machine_input.rs"]
-mod picker_machine_input;
+#[path = "picker_machine_selection.rs"]
+mod picker_machine_selection;
 
 #[cfg(test)]
 #[path = "form_alignment_tests.rs"]
 mod form_alignment_tests;
-#[path = "picker_input.rs"]
-mod picker_input;
+#[path = "picker_surface.rs"]
+mod picker_surface;

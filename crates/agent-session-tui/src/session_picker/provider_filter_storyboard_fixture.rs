@@ -2,6 +2,7 @@
 use super::picker_request::SessionsPickerRequest;
 use super::test_support::{picker_record, picker_request};
 use agent_session_inventory::picker_data_query::SessionsPickerRoot;
+use agent_session_inventory::session_provider_family::SessionProviderFamily;
 use agent_session_inventory::sessions::{SessionPickerRecord, SessionsProvider, SessionsSource};
 use collaboration_client::protocol::{
     ChannelDescription, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
@@ -22,6 +23,36 @@ pub(super) fn apply_storyboard_variant(
     match variant {
         None => Ok(request),
         Some("wide-glyph-left-border") => {
+            // Move a real Codex row under New without changing any identity or
+            // provider family. Its shorter metadata label places 📂 at x=15.
+            let codex_index = request
+                .records
+                .iter()
+                .enumerate()
+                .filter(|(_, record)| {
+                    record.client_provider_family() == SessionProviderFamily::Codex
+                })
+                .nth(1)
+                .map(|(index, _)| index)
+                .ok_or_else(|| {
+                    std::io::Error::other("wide-glyph fixture requires two Codex rows")
+                })?;
+            let cursor_index = request
+                .records
+                .iter()
+                .position(|record| {
+                    record.client_provider_family()
+                        == SessionProviderFamily::External(ProviderKind::Cursor)
+                })
+                .ok_or_else(|| {
+                    std::io::Error::other("wide-glyph fixture requires its Cursor row")
+                })?;
+            request.records.swap(codex_index, cursor_index);
+            request
+                .records
+                .get_mut(cursor_index)
+                .ok_or_else(|| std::io::Error::other("wide-glyph metadata row missing"))?
+                .machine_display_label = Some("📂 boundary-meta".to_owned());
             // The title starts at x=7. Eight ASCII cells put the wide glyph at
             // x=15, one cell left of the 120x36 dialog's measured left edge.
             for (record, glyph) in request
@@ -31,6 +62,65 @@ pub(super) fn apply_storyboard_variant(
             {
                 record.title = format!("12345678{glyph} boundary-row");
                 record.full_title.clone_from(&record.title);
+            }
+            Ok(request)
+        }
+        Some("configured-source-new") => {
+            // This synthetic route is consumed by the fixture's recording
+            // SourceActionPreparer; no SSH process or client is started.
+            request.router_registry = agent_session_inventory::sessions::RouterRegistryRead::Ready(
+                agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(
+                    &serde_json::json!({"version":1,"routers":[{
+                        "name":"Fixture remote","connection":{"kind":"ssh","serviceId":FIXTURE_SERVICE,
+                        "destination":"fixture.example.invalid","executable":"/fixture/agent-sessions",
+                        "serviceDirectory":"/fixture/router","clientProfile":"routerDebug"},
+                        "defaultRemoteCwd":"/fixture/remote"
+                    }]}).to_string(),
+                ).map_err(std::io::Error::other)?
+            );
+            Ok(request)
+        }
+        Some("source-qualified-outcome") => {
+            // U4 exercises the real returned ResumeSession/ForkSession boundary.
+            // Provider rows retain their separate in-picker client-action route.
+            let original = request.records.first().cloned().ok_or_else(|| {
+                std::io::Error::other("source-qualified fixture requires its local Codex row")
+            })?;
+            for (name, service, endpoint) in [
+                ("Hosted Codex Quartz", FIXTURE_SERVICE, "codex-source-a"),
+                (
+                    "Hosted Codex Cedar",
+                    "00000000-0000-4000-8000-000000000002",
+                    "codex-source-a",
+                ),
+                (
+                    "Hosted Codex Indigo",
+                    "00000000-0000-4000-8000-000000000002",
+                    "codex-source-b",
+                ),
+            ] {
+                let mut registry = agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry::parse(
+                    &serde_json::json!({"version":1,"routers":[{
+                        "name":name,"connection":{"kind":"remote","serviceId":service,
+                        "mcpUrl":"https://fixture.example.invalid/mcp",
+                        "nativeCodex":{"address":"wss://fixture.example.invalid:443/"}},
+                        "defaultRemoteCwd":"/repo/project-a"
+                    }]}).to_string(),
+                ).map_err(std::io::Error::other)?;
+                let profile = registry.routers.pop().ok_or_else(|| {
+                    std::io::Error::other("source-qualified fixture profile missing")
+                })?;
+                let target:SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service,"endpointId":endpoint},"sessionId":SHARED_SESSION})).map_err(std::io::Error::other)?;
+                let mut record = original.clone();
+                record.identity =
+                    agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(target);
+                record.provenance =
+                    agent_session_inventory::sessions::SessionRowProvenance::ObservedHosted;
+                record.source_context=Some(agent_session_inventory::source_inventory_request::PickerSourceContext::ConfiguredHosted(profile));
+                record.title = name.to_owned();
+                record.full_title = name.to_owned();
+                record.machine_display_label = Some(name.to_owned());
+                request.records.push(record);
             }
             Ok(request)
         }

@@ -1,12 +1,8 @@
 //! Shared dialog presentation of one captured client action and its observation.
 use super::{
     SessionsPickerOutcome,
-    client_action_state::{ClientResultAction, PickerClientAction, interrupt_client_action},
+    client_action_state::{PickerClientAction, interrupt_client_action},
     picker_model::SessionsPickerModel,
-};
-use crate::session_picker::picker_rendering::iocraft_cell_count;
-use agent_collaboration_tui::{
-    DialogAction, DialogFrame, DialogHost, DialogKeyboardOwner, DialogMargins,
 };
 use agent_session_inventory::sessions::{
     source_client_action::{CapturedClientAction, SessionClientEffect},
@@ -72,46 +68,6 @@ pub(super) fn check_operation(mut model: State<SessionsPickerModel>) {
     });
 }
 
-pub(super) fn handle_client_key(
-    mut model: State<SessionsPickerModel>,
-    outcome: State<Option<SessionsPickerOutcome>>,
-    code: KeyCode,
-    modifiers: KeyModifiers,
-) {
-    if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER) {
-        return;
-    }
-    match code {
-        KeyCode::Tab | KeyCode::BackTab | KeyCode::Left | KeyCode::Right
-            if !modifiers.contains(KeyModifiers::SHIFT)
-                || matches!(code, KeyCode::Tab | KeyCode::BackTab) =>
-        {
-            if let PickerClientAction::Finished { request, focus, .. } =
-                &mut model.write().client_action
-                && !matches!(request.effect, SessionClientEffect::Native { .. })
-            {
-                *focus = match focus {
-                    ClientResultAction::Close => ClientResultAction::CheckOperation,
-                    ClientResultAction::CheckOperation => ClientResultAction::Close,
-                };
-            }
-        }
-        KeyCode::Esc => finish_or_detach(model, outcome),
-        KeyCode::Enter => {
-            let action = match &model.read().client_action {
-                PickerClientAction::Finished { focus, .. } => Some(*focus),
-                _ => None,
-            };
-            match action {
-                Some(ClientResultAction::Close) => finish_or_detach(model, outcome),
-                Some(ClientResultAction::CheckOperation) => check_operation(model),
-                None => {}
-            }
-        }
-        _ => {}
-    }
-}
-
 fn observation_lines(
     request: &CapturedClientAction,
     result: &Result<
@@ -173,12 +129,7 @@ fn observation_lines(
     lines
 }
 
-pub(super) fn render_client_action(
-    model: &SessionsPickerModel,
-    state: State<SessionsPickerModel>,
-    outcome: State<Option<SessionsPickerOutcome>>,
-    height: usize,
-) -> Element<'static, View> {
+pub(super) fn render_client_body(model: &SessionsPickerModel) -> AnyElement<'static> {
     let (request, result) = match &model.client_action {
         PickerClientAction::Terminal(request, _)
         | PickerClientAction::Queued(request)
@@ -186,41 +137,9 @@ pub(super) fn render_client_action(
         PickerClientAction::Finished {
             request, result, ..
         } => (request, Some(result)),
-        PickerClientAction::Idle => return element!(View),
+        PickerClientAction::Idle => return element!(View).into_any(),
     };
     let mut lines = vec![format!("Source: {}", request.source_label())];
-    match &request.effect {
-        SessionClientEffect::Native { action, .. } => {
-            use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction;
-            lines.push("Client: Claude Code · background".to_owned());
-            match action {
-                SourceNativeClaudeAction::New { directory, .. } => {
-                    lines.push(format!("New · {}", directory.as_str()))
-                }
-                SourceNativeClaudeAction::Resume {
-                    target, directory, ..
-                }
-                | SourceNativeClaudeAction::Fork {
-                    target, directory, ..
-                } => lines.push(format!(
-                    "Session {} · {}",
-                    String::from(target.session_id.clone()),
-                    directory.as_str()
-                )),
-            }
-        }
-        SessionClientEffect::Managed {
-            binding,
-            operation_id,
-            ..
-        } => {
-            lines.push(format!("Client: {:?}", binding.runtime.provider));
-            lines.push(format!("Operation: {}", operation_id.as_str()));
-        }
-        SessionClientEffect::ReadManaged { operation_id, .. } => {
-            lines.push(format!("Operation: {}", operation_id.as_str()))
-        }
-    }
     if let Some(result) = result {
         lines.extend(observation_lines(request, result));
     } else {
@@ -229,21 +148,7 @@ pub(super) fn render_client_action(
                 .to_owned(),
         );
     }
-    let focus = match &model.client_action {
-        PickerClientAction::Finished { focus, .. } => *focus,
-        _ => ClientResultAction::Close,
-    };
-    let mut actions=vec![element!(DialogAction(label:if result.is_some() {"Close"}else {"Stop waiting"},has_focus:focus==ClientResultAction::Close,keyboard_owner:DialogKeyboardOwner::Caller,handler:move |_|finish_or_detach(state,outcome))).into_any()];
-    if result.is_some() && !matches!(request.effect, SessionClientEffect::Native { .. }) {
-        actions.push(element!(DialogAction(label:"Check operation",has_focus:focus==ClientResultAction::CheckOperation,keyboard_owner:DialogKeyboardOwner::Caller,handler:move |_|check_operation(state))).into_any());
-    }
-    let background=element!(DialogFrame(width:u16::try_from(model.width).unwrap_or(u16::MAX),height:u16::try_from(height).unwrap_or(u16::MAX),title:"Client action".to_owned(),keyboard_owner:DialogKeyboardOwner::Caller,scroll_keys:agent_collaboration_tui::DialogScrollKeys::Navigation,margins:DialogMargins {top:1,right:2,bottom:1,left:2},help_action:Some(super::picker_help_view::help_action(state)),actions) {
-        #(lines.into_iter().map(|line|element!(Text(content:line))))
-    }).into_any();
-    let dialog = model
-        .show_help
-        .then(|| super::picker_help_view::render_help(model, state, height));
-    element!(View(width:iocraft_cell_count(model.width),height:iocraft_cell_count(height)) {
-        DialogHost(width:u16::try_from(model.width).unwrap_or(u16::MAX),height:u16::try_from(height).unwrap_or(u16::MAX),background:vec![background],dialog)
-    })
+    element!(View(width:100pct,flex_direction:FlexDirection::Column) {
+        #(lines.into_iter().map(|content|element!(agent_collaboration_tui::UiText(content,role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap))))
+    }).into_any()
 }

@@ -254,6 +254,8 @@ async fn sessions_picker_view_shortcut_filters_the_latest_loaded_records() {
 
     let events =
         futures_util::stream::once(async { ctrl_key('t') }).chain(futures_util::stream::pending());
+    let runtime_view = Arc::new(Mutex::new(None));
+    let view_sink = runtime_view.clone();
     let mut picker = element! {
         SessionsPickerComponent(
             request,
@@ -261,6 +263,7 @@ async fn sessions_picker_view_shortcut_filters_the_latest_loaded_records() {
             width: 100usize,
             // This test observes reload behavior, so keep both Start New and the loaded row visible.
             height: 40usize,
+            surface_observer: move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *view_sink.lock().unwrap()=Some(model.read().runtime_view),
         )
     };
     let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
@@ -268,7 +271,11 @@ async fn sessions_picker_view_shortcut_filters_the_latest_loaded_records() {
     let actual = tokio::time::timeout(Duration::from_secs(2), async {
         while let Some(canvas) = frames.next().await {
             let snapshot = canvas.to_string();
-            if snapshot.contains("View: [Blocked]") && snapshot.contains("Reloaded SQL result") {
+            // R13 moves runtime to Menu; observe the real state and its filtered row.
+            if *runtime_view.lock().unwrap()
+                == Some(crate::session_picker::picker_model::SessionsPickerRuntimeView::Blocked)
+                && snapshot.contains("Reloaded SQL result")
+            {
                 return snapshot;
             }
         }

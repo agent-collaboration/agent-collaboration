@@ -1,9 +1,6 @@
 //! Machine keyboard and pointer commits share the existing source-reload boundary.
-use super::{
-    ConversationPreviewCache, KeyCode, SessionRecordsReloadPort, SessionsPickerModel, State,
-};
+use super::{ConversationPreviewCache, SessionRecordsReloadPort, SessionsPickerModel, State};
 use crate::session_picker::picker_machine_controls::{MachineChoiceKey, PickerMachineStage};
-use agent_collaboration_tui::ChoiceTransition;
 
 #[derive(Clone)]
 pub(super) struct MachineSelectionContext {
@@ -47,12 +44,6 @@ pub(super) fn select_machine_choice(mut context: MachineSelectionContext, key: M
     model
         .machine_controls
         .select_choice(&registry, mode, context.can_load_source);
-    if matches!(
-        model.machine_controls.stage,
-        PickerMachineStage::Choosing { .. }
-    ) {
-        model.machine_controls.search.open(key);
-    }
     context.conversation_cache.write().invalidate();
     if model.machine_controls.filter != previous_filter
         || matches!(
@@ -65,23 +56,5 @@ pub(super) fn select_machine_choice(mut context: MachineSelectionContext, key: M
         context
             .reload_port
             .send(model.prepare_source_reload(generation));
-    }
-}
-
-pub(super) fn handle_machine_choice_key(context: MachineSelectionContext, code: KeyCode) {
-    let transition = {
-        let mut state = context.model;
-        let mut model = state.write();
-        let options = model
-            .machine_controls
-            .choice_options(&model.request.router_registry, model.request.machine_mode);
-        model.machine_controls.search.handle_key(code, &options)
-    };
-    match transition {
-        ChoiceTransition::Selected(key) => select_machine_choice(context, key),
-        ChoiceTransition::Cancelled => {
-            cancel_machine_choice(context);
-        }
-        ChoiceTransition::Handled | ChoiceTransition::Unhandled => {}
     }
 }

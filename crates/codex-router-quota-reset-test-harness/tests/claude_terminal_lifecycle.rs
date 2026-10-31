@@ -119,12 +119,15 @@ fn wait_for(
     expected: &str,
 ) -> TestResult<()> {
     let deadline = Instant::now() + Duration::from_secs(15);
+    // R14: separately styled Text children still form one visible input label.
+    let text_styles = Regex::new(r"\x1b\[[0-9;]*m")?;
     loop {
         let text = String::from_utf8_lossy(
             transcript
                 .get(start..)
                 .ok_or("invalid transcript checkpoint")?,
         );
+        let text = text_styles.replace_all(&text, "");
         if text.contains("CLAUDE_ASYNC_NATIVE_EXECUTION") {
             return Err("native foreground action ran inside the mounted picker".into());
         }
@@ -145,12 +148,12 @@ fn wait_for(
 
 #[test]
 fn foreground_claude_handoff_restores_termios_and_the_keyboard_flag_stack() -> TestResult<()> {
-    run_claude_terminal_lifecycle("Claude Code", "Foreground")
+    run_claude_terminal_lifecycle("Foreground")
 }
 
 #[test]
 fn background_claude_starts_and_attaches_after_picker_teardown() -> TestResult<()> {
-    run_claude_terminal_lifecycle("Claude Code · background", "BackgroundThenAttach")
+    run_claude_terminal_lifecycle("BackgroundThenAttach")
 }
 
 struct LifecycleDirectory(std::path::PathBuf);
@@ -161,7 +164,7 @@ impl Drop for LifecycleDirectory {
     }
 }
 
-fn run_claude_terminal_lifecycle(client_label: &str, expected_mode: &str) -> TestResult<()> {
+fn run_claude_terminal_lifecycle(expected_mode: &str) -> TestResult<()> {
     let directory = LifecycleDirectory(std::env::temp_dir().join(format!(
         "claude-terminal-lifecycle-{}-{expected_mode}",
         std::process::id()
@@ -268,31 +271,34 @@ fn run_claude_terminal_lifecycle(client_label: &str, expected_mode: &str) -> Tes
         writer.flush()
     };
     let mut transcript = Vec::new();
-    wait_for(&receiver, &mut transcript, 0, "Sessions")?;
+    // Taste item 5: the main toolbar replaces the former Sessions title.
+    wait_for(&receiver, &mut transcript, 0, "Menu")?;
     let start = transcript.len();
     send(b"\x0e")?;
     wait_for(&receiver, &mut transcript, start, "New session")?;
     let start = transcript.len();
-    send(b"\x1b[Z\x1b[Z\x1b[Z\x1b[Z\r")?;
-    wait_for(&receiver, &mut transcript, start, "Search:")?;
+    // R13/R14: Client starts focused; background is chosen through Run.
+    send(b"\r")?;
+    wait_for(&receiver, &mut transcript, start, "Filter:")?;
     let start = transcript.len();
-    send(format!("\x1b[200~{client_label}\x1b[201~").as_bytes())?;
-    wait_for(
-        &receiver,
-        &mut transcript,
-        start,
-        &format!("Search: {client_label}"),
-    )?;
+    send(b"\x1b[200~Claude Code\x1b[201~")?;
+    wait_for(&receiver, &mut transcript, start, "Filter: Claude Code")?;
     let start = transcript.len();
     send(b"\r")?;
-    wait_for(
-        &receiver,
-        &mut transcript,
-        start,
-        &format!("{client_label} ▾"),
-    )?;
+    wait_for(&receiver, &mut transcript, start, "Claude Code ▾")?;
+    if expected_mode == "BackgroundThenAttach" {
+        let start = transcript.len();
+        send(b"\t\t\r")?;
+        wait_for(&receiver, &mut transcript, start, "Filter:")?;
+        let start = transcript.len();
+        send(b"\x1b[200~Background\x1b[201~")?;
+        wait_for(&receiver, &mut transcript, start, "Filter: Background")?;
+        let start = transcript.len();
+        send(b"\r")?;
+        wait_for(&receiver, &mut transcript, start, "Background ▾")?;
+    }
     let start = transcript.len();
-    send(b"\t\t\t\t\r")?;
+    send(b"\x1b[13;5u")?;
     wait_for(&receiver, &mut transcript, start, "CLAUDE_TERMINAL_HANDOFF")?;
     if !child.0.wait()?.success() {
         return Err("lifecycle fixture must exit normally".into());

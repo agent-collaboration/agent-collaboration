@@ -8,10 +8,12 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use super::*;
+use crate::session_picker::provider_filter_model::SessionProviderFilter;
 use crate::session_picker::test_support::observed_records;
 use crate::session_picker::test_support::picker_record;
 use crate::session_picker::test_support::picker_request;
 use agent_session_inventory::picker_data_query::SessionsPickerDataQuery;
+use agent_session_inventory::picker_data_query::SessionsPickerRoot;
 use agent_session_inventory::picker_data_query::SessionsPickerRoot as SessionsRoot;
 use agent_session_inventory::picker_runtime_status::PickerRuntimeStatus;
 use agent_session_inventory::sessions::SessionConversationPreview;
@@ -28,6 +30,12 @@ mod picker_performance_tests;
 
 #[path = "picker_details_navigation_tests.rs"]
 mod picker_details_navigation_tests;
+
+#[path = "picker_scope_contract_tests.rs"]
+mod picker_scope_contract_tests;
+
+#[path = "picker_taste_review_tests.rs"]
+mod picker_taste_review_tests;
 
 #[path = "session_choice_ux_tests.rs"]
 mod session_choice_ux_tests;
@@ -82,17 +90,49 @@ async fn render_picker_capture(
     render_picker_capture_at(request, width, MIN_RENDER_HEIGHT, events).await
 }
 
-async fn render_picker_capture_at(
+pub(super) async fn render_picker_capture_at(
     request: SessionsPickerRequest,
     width: usize,
     height: usize,
     events: Vec<TerminalEvent>,
 ) -> String {
+    render_counted_picker_capture_at(request, width, height, events)
+        .await
+        .text
+}
+
+#[derive(Clone, Default)]
+struct PickerCapture {
+    text: String,
+    visible_records: usize,
+    total_records: usize,
+    machine_label: String,
+    committed_provider_filter: Option<SessionProviderFilter>,
+}
+
+async fn render_counted_picker_capture_at(
+    request: SessionsPickerRequest,
+    width: usize,
+    height: usize,
+    mut events: Vec<TerminalEvent>,
+) -> PickerCapture {
+    // R4: Escape is no longer a test termination path.
+    events.push(ctrl_key('d'));
+    let observed = Arc::new(Mutex::new(PickerCapture::default()));
+    let sink = observed.clone();
     let frames = element! {
         SessionsPickerComponent(
             request,
             width,
             height,
+            surface_observer: move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| {
+                let model=model.read();
+                let mut snapshot=sink.lock().unwrap();
+                snapshot.visible_records=model.visible_record_len();
+                snapshot.total_records=model.request.records.len();
+                snapshot.machine_label=model.machine_controls.label(model.request.machine_mode).to_owned();
+                snapshot.committed_provider_filter=Some(model.provider_filter);
+            },
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
@@ -102,10 +142,12 @@ async fn render_picker_capture_at(
     .collect::<Vec<_>>()
     .await;
 
-    frames
+    let mut capture = observed.lock().unwrap().clone();
+    capture.text = frames
         .last()
         .cloned()
-        .unwrap_or_else(|| panic!("picker should render at least one frame"))
+        .unwrap_or_else(|| panic!("picker should render at least one frame"));
+    capture
 }
 
 fn meaningful_line_count(text: &str) -> usize {
@@ -123,13 +165,13 @@ fn has_sidecar_details(text: &str) -> bool {
         .any(|line| line.matches('┌').count() >= 2 && line.matches('┐').count() >= 2)
 }
 
-fn ctrl_key(character: char) -> TerminalEvent {
+pub(super) fn ctrl_key(character: char) -> TerminalEvent {
     let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Char(character));
     event.modifiers = KeyModifiers::CONTROL;
     TerminalEvent::Key(event)
 }
 
-fn control_shift_enter_key() -> TerminalEvent {
+pub(super) fn control_shift_enter_key() -> TerminalEvent {
     let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
     event.modifiers = KeyModifiers::CONTROL | KeyModifiers::SHIFT;
     TerminalEvent::Key(event)
@@ -361,11 +403,13 @@ fn dialog_bounds(frame: &str, title: &str) -> DialogBounds {
     );
     let bottom = (title_row..lines.len())
         .find(|row| {
-            lines[*row].find('╰').is_some_and(|byte| {
+            lines[*row].match_indices('╰').any(|(byte, _)| {
                 unicode_width::UnicodeWidthStr::width(lines[*row].get(..byte).unwrap()) == left
             })
         })
-        .expect("matching modal bottom border");
+        .unwrap_or_else(|| {
+            panic!("matching modal bottom border for {title}, top {top}, left {left}: {frame}")
+        });
     DialogBounds {
         top,
         left,
@@ -392,4 +436,32 @@ fn dialog_text(frame: &str, bounds: DialogBounds) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn dropdown_reason_text(dropdown: &str, prefix: &str) -> String {
+    let lines = dropdown.lines().collect::<Vec<_>>();
+    let (row, line) = lines
+        .iter()
+        .enumerate()
+        .find(|(_, line)| line.contains(prefix))
+        .expect("visible refusal prefix");
+    let column = line
+        .get(..line.find(prefix).unwrap())
+        .unwrap()
+        .chars()
+        .count();
+    lines[row..]
+        .iter()
+        .map(|line| {
+            let count = line.chars().count();
+            line.chars()
+                .skip(column)
+                .take(count.saturating_sub(column + 1))
+                .collect::<String>()
+        })
+        .take_while(|line| !line.trim().is_empty())
+        .collect::<String>()
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
 }

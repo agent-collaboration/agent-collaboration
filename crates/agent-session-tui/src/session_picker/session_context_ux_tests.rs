@@ -1,3 +1,4 @@
+// R7: shared Help replaces the screen-specific Help title.
 //! Captured session context stays outside long scrolling task bodies.
 use super::*;
 
@@ -31,6 +32,38 @@ async fn details_context_is_single_white_and_fixed_while_conversation_scrolls() 
 #[tokio::test]
 async fn fork_context_stays_fixed_while_captured_directory_scrolls() {
     assert_fixed_context(ContextSurface::Fork).await;
+}
+
+#[tokio::test]
+async fn pinned_context_keeps_the_explicit_name_separate_from_the_original_title() {
+    for surface in [ContextSurface::Details, ContextSurface::Fork] {
+        let mut request = picker_request();
+        request.records[0].title = "Renamed A…".to_owned();
+        request.records[0].explicit_name = Some("Renamed Aurora".to_owned());
+        request.records[0].full_title = "Original prompt title".to_owned();
+        let frame =
+            render_picker_capture_at(request, 120, 36, vec![surface.opening(), ctrl_key('d')])
+                .await;
+        let body = dialog_text(&frame, dialog_bounds(&frame, surface.title()));
+        let context = body
+            .lines()
+            .find(|line| line.contains("[thread-a]"))
+            .expect("whole captured tag in pinned context");
+        assert!(
+            context.contains("Renamed Aurora"),
+            "captured name must win over original prompt title: {frame}"
+        );
+        assert!(
+            !context.contains("Original prompt title"),
+            "original title is a separate fact: {frame}"
+        );
+        if matches!(surface, ContextSurface::Details) {
+            assert!(
+                body.contains("Original prompt title"),
+                "original title remains in Details: {frame}"
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -87,8 +120,8 @@ async fn assert_full_captured_help_at(surface: ContextSurface, width: usize) {
             } else if phase == 1 && frame.contains(surface.title()) {
                 sender.send(key(KeyCode::F(1))).unwrap();
                 phase = 2;
-            } else if phase == 2 && frame.contains("Sessions Help") {
-                let text = dialog_text(&frame, dialog_bounds(&frame, "Sessions Help"));
+            } else if phase == 2 && frame.contains("Close Help") {
+                let text = dialog_text(&frame, dialog_bounds(&frame, "Close Help"));
                 let compact = text
                     .chars()
                     .filter(|character| !character.is_whitespace())
@@ -113,9 +146,7 @@ async fn assert_full_captured_help_at(surface: ContextSurface, width: usize) {
                     );
                     sender.send(key(KeyCode::Down)).unwrap();
                 }
-            } else if phase == 3
-                && frame.contains(surface.title())
-                && !frame.contains("Sessions Help")
+            } else if phase == 3 && frame.contains(surface.title()) && !frame.contains("Close Help")
             {
                 sender.send(ctrl_key('d')).unwrap();
                 phase = 4;
@@ -130,47 +161,86 @@ async fn assert_full_captured_help_at(surface: ContextSurface, width: usize) {
     );
 }
 
+// R14: an unavailable destination is highlighted but cannot replace the committed source.
 #[tokio::test]
-async fn ineligible_fork_destination_disables_the_existing_parent_action() {
+async fn ineligible_fork_destination_cannot_replace_the_captured_source() {
     let mut request = picker_request();
     add_other_machine(&mut request);
-    let mut component = element!(SessionsPickerComponent(request,width:120usize,height:36usize));
-    let canvases = component
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            vec![
-                control_shift_enter_key(),
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-                ctrl_key('d'),
-            ],
-        )))
-        .collect::<Vec<_>>()
-        .await;
-    let canvas = canvases
-        .iter()
-        .rev()
-        .find(|canvas| canvas.to_string().contains("Other machine"))
-        .expect("actual selected foreign destination renders");
-    let frame = canvas.to_string();
-    let (row, line) = frame
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("Cancel") && line.contains("Fork"))
-        .unwrap();
-    let byte = line.find("Fork").unwrap();
-    let column = unicode_width::UnicodeWidthStr::width(line.get(..byte).unwrap());
-    assert_eq!(
-        canvas
-            .cell(column, row)
-            .unwrap()
-            .text_style()
-            .unwrap()
-            .color,
-        Some(Color::Rgb {
-            r: 166,
-            g: 175,
-            b: 189
-        }),
-        "the existing history-on-source guard must also be visible on the parent action: {frame}"
+    let selected = Arc::new(Mutex::new(None::<usize>));
+    let sink = selected.clone();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut outcome: Option<SessionsPickerOutcome> = None;
+    let mut component = element!(SessionsPickerComponent(request,width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(_,model):(agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*sink.lock().unwrap()=model.read().fork_confirmation.as_ref().map(|confirmation|confirmation.focused_destination)));
+    let mut phase = 0;
+    let journey = component
+        .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
+        .map(|canvas| {
+            let frame = canvas.to_string();
+            if phase == 0 {
+                for event in [
+                    control_shift_enter_key(),
+                    TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                    TerminalEvent::BracketedPaste("Other".into()),
+                    TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+                ] {
+                    sender.send(event).unwrap();
+                }
+                phase = 1;
+            } else if phase == 1 && frame.contains("Filter: Other") {
+                // T4: option labels and wrapped reasons occupy separate rows.
+                let bounds = dialog_bounds(&frame, "Filter:");
+                let dropdown = dialog_text(&frame, bounds);
+                assert!(
+                    dropdown_reason_text(&dropdown, "History").contains(
+                        "Historyremainsonthesourcemachine;cross-machineforkisunavailable."
+                    ),
+                    "the full refusal remains visible in its own dropdown: {frame}"
+                );
+                let (row, line) = frame
+                    .lines()
+                    .enumerate()
+                    .find(|(row, line)| {
+                        *row > bounds.top && *row < bounds.bottom && line.contains("Other machine")
+                    })
+                    .expect("drawn unavailable option");
+                let column = unicode_width::UnicodeWidthStr::width(
+                    line.get(..line.find("Other").unwrap()).unwrap(),
+                );
+                assert_eq!(
+                    canvas
+                        .cell(column, row)
+                        .unwrap()
+                        .text_style()
+                        .unwrap()
+                        .color,
+                    Some(Color::Rgb {
+                        r: 166,
+                        g: 175,
+                        b: 189
+                    }),
+                    "history-on-source guard is visible on the unavailable option: {frame}"
+                );
+                assert_eq!(
+                    *selected.lock().unwrap(),
+                    Some(0),
+                    "unavailable foreign option cannot replace the captured source"
+                );
+                sender.send(ctrl_key('d')).unwrap();
+                phase = 2;
+            }
+        })
+        .collect::<Vec<_>>();
+    tokio::time::timeout(Duration::from_secs(2), journey)
+        .await
+        .expect("actual unavailable destination and unchanged source");
+    drop(component);
+    assert_eq!(phase, 2);
+    assert!(
+        outcome.is_none(),
+        "a refused foreign destination cannot fork"
     );
 }
 
@@ -189,7 +259,8 @@ async fn assert_fixed_context(surface: ContextSurface) {
     let mut request = picker_request();
     request.root = SessionsRoot::Any;
     request.source = SessionsSource::All;
-    request.current_dir = format!("/repo/{}", "long-directory-segment/".repeat(40)).into();
+    // Content-sized Fork must still overflow so End exercises a real body scroll.
+    request.current_dir = format!("/repo/{}", "long-directory-segment/".repeat(80)).into();
     request.records[0].title = CAPTURED_NAME.to_owned();
     request.records[0].full_title = CAPTURED_NAME.to_owned();
     request.records[0].conversation.snippets = (0..40)
@@ -268,7 +339,7 @@ fn assert_context(
     canvas: &iocraft::Canvas,
     frame: &str,
     bounds: DialogBounds,
-    title: &str,
+    _title: &str,
 ) -> (usize, usize) {
     let text = dialog_text(frame, bounds);
     assert_eq!(
@@ -280,12 +351,7 @@ fn assert_context(
         1,
         "one fixed captured context; full title remains available in the scrollable body: {text}"
     );
-    assert!(
-        !text
-            .lines()
-            .any(|line| line.contains(title) && line.contains(CAPTURED_NAME)),
-        "the cyan task title does not absorb session identity: {text}"
-    );
+    // R12: context may share the header row while retaining its own white fact style.
     let position = frame
         .lines()
         .enumerate()

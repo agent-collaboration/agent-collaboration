@@ -75,7 +75,6 @@ pub(super) struct PickerMachineControls {
     pub(super) filter: PickerMachineFilter,
     pub(super) stage: PickerMachineStage,
     pub(super) control_focused: bool,
-    pub(super) search: agent_collaboration_tui::SearchSelectState<MachineChoiceKey>,
 }
 
 impl PickerMachineControls {
@@ -93,7 +92,6 @@ impl PickerMachineControls {
     }
 
     pub(super) fn open_browse(&mut self, registry: &RouterRegistryRead) {
-        self.search.open(MachineChoiceKey::Default);
         self.stage = PickerMachineStage::Choosing {
             purpose: MachineChoicePurpose::Browse,
             focus: 0,
@@ -136,7 +134,6 @@ impl PickerMachineControls {
     }
 
     pub(super) fn cancel_choice(&mut self) {
-        self.search = agent_collaboration_tui::SearchSelectState::Closed;
         self.stage = PickerMachineStage::Browsing;
         self.control_focused = false;
     }
@@ -205,8 +202,6 @@ impl PickerMachineControls {
                 self.cancel_choice();
             }
             Err(reason) => {
-                self.search
-                    .open(MachineChoiceKey::Configured(source.as_ref().clone()));
                 let name = match source.as_ref() {
                     PickerSourceContext::ConfiguredHosted(profile) => {
                         profile.name.as_str().to_owned()

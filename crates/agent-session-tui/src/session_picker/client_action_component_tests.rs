@@ -1,3 +1,4 @@
+// R14: dropdown Filter replaces inline choice Search.
 //! Mounted UI capture/admission/detachment. The executor is the external effect
 //! port; actual source/API/vendor interactions have their own process gates.
 use super::*;
@@ -57,7 +58,7 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
         }
         let arguments = request.native_arguments.clone();
         let search_query = if client_name == "Claude" {
-            "Claude Code · background"
+            "Claude Code"
         } else {
             client_name
         };
@@ -81,28 +82,20 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
                             phase = 1;
                         }
                         1 if frame.contains("New session") => {
-                            for code in [
-                                KeyCode::BackTab,
-                                KeyCode::BackTab,
-                                KeyCode::BackTab,
-                                KeyCode::BackTab,
-                                KeyCode::Enter,
-                            ] {
-                                sender.send(key(code)).unwrap();
-                            }
+                            sender.send(key(KeyCode::Enter)).unwrap();
                             phase = 2;
                         }
-                        2 if frame.contains("Search:") => {
+                        2 if frame.contains("Filter:") => {
                             sender
                                 .send(TerminalEvent::BracketedPaste(search_query.to_owned()))
                                 .unwrap();
                             phase = 3;
                         }
-                        3 if frame.contains(&format!("Search: {search_query}")) => {
+                        3 if frame.contains(&format!("Filter: {search_query}")) => {
                             sender.send(key(KeyCode::Enter)).unwrap();
                             phase = 4;
                         }
-                        4 if !frame.contains("Search:")
+                        4 if !frame.contains("Filter:")
                             && frame.lines().any(|line| {
                                 line.contains("Client")
                                     && line.contains(client_name)
@@ -110,14 +103,30 @@ async fn client_start_captures_one_effect_and_detach_retains_native_or_managed_i
                             }) =>
                         {
                             assert!(captured.lock().unwrap().is_empty(), "choice cannot submit");
-                            for code in [
-                                KeyCode::Tab,
-                                KeyCode::Tab,
-                                KeyCode::Tab,
-                                KeyCode::Tab,
-                                KeyCode::Enter,
-                            ] {
-                                sender.send(key(code)).unwrap();
+                            if client_name == "Claude" {
+                                // R13/R14: Claude's mode is a separate Run dropdown.
+                                for code in [
+                                    KeyCode::Tab,
+                                    KeyCode::Tab,
+                                    KeyCode::Enter,
+                                    KeyCode::Down,
+                                    KeyCode::Enter,
+                                ] {
+                                    sender.send(key(code)).unwrap();
+                                }
+                                let mut start = KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
+                                start.modifiers = KeyModifiers::CONTROL;
+                                sender.send(TerminalEvent::Key(start)).unwrap();
+                            } else {
+                                for code in [
+                                    KeyCode::Tab,
+                                    KeyCode::Tab,
+                                    KeyCode::Tab,
+                                    KeyCode::Tab,
+                                    KeyCode::Enter,
+                                ] {
+                                    sender.send(key(code)).unwrap();
+                                }
                             }
                             phase = 5;
                         }
