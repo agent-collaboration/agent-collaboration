@@ -156,12 +156,14 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
         hint: MaintenanceHint,
     ) -> BoxFuture<'a, Result<(), MaintenanceRepositoryError>> {
         Box::pin(async move {
+            let mut should_vacuum = false;
             match hint {
                 MaintenanceHint::CleanupStaleSessionAccountAffinities {
                     stale_before_unix_seconds,
                 } => {
                     self.purge_session_account_affinities_before(stale_before_unix_seconds)
                         .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::CleanupStaleActiveClients {
                     route_band,
@@ -173,6 +175,7 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                         0,
                     )
                     .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::RefreshActiveSessionRollups {
                     route_band,
@@ -194,6 +197,7 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                 } => {
                     self.purge_active_session_rollups_before(retain_after_unix_seconds)
                         .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::CompactActiveSessionHistory {
                     route_band,
@@ -204,6 +208,7 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                         compact_before_unix_seconds,
                     )
                     .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::PrunePreviousResponseAffinityOwners {
                     created_before_unix_seconds,
@@ -230,7 +235,11 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                         maintenance.batch_count = batch_count,
                         "codex_router.maintenance_completed"
                     );
+                    should_vacuum = true;
                 }
+            }
+            if should_vacuum {
+                self.incremental_vacuum_step().await?;
             }
             Ok(())
         })
@@ -592,3 +601,7 @@ mod tests;
 #[cfg(test)]
 #[path = "maintenance_actor/affinity_retention_tests.rs"]
 mod affinity_retention_tests;
+
+#[cfg(test)]
+#[path = "maintenance_actor/incremental_vacuum_tests.rs"]
+mod incremental_vacuum_tests;

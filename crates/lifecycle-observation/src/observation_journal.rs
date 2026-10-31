@@ -2,6 +2,7 @@
 use collaboration_protocol::AddressEntry;
 use collaboration_protocol::JournalPosition;
 use collaboration_protocol::{LifecycleObservation, LifecycleSubject, ThreadAddress, UuidIdentity};
+use sqlite_storage_maintenance::{configure_new_database_options, prepare_existing_database};
 use sqlx::{
     Connection, Row, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -24,6 +25,8 @@ pub enum JournalError {
     InvalidStorage,
     #[error("lifecycle storage capacity exceeded")]
     Capacity,
+    #[error("lifecycle storage maintenance failed")]
+    StorageMaintenance(#[from] sqlite_storage_maintenance::SqliteStorageMaintenanceError),
 }
 pub struct JournalRow {
     pub sequence: u64,
@@ -36,13 +39,17 @@ pub struct ObservationJournal {
 }
 impl ObservationJournal {
     pub async fn open(path: &Path, new_identity: UuidIdentity) -> Result<Self, JournalError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Delete)
-            .synchronous(SqliteSynchronous::Full)
-            .busy_timeout(Duration::from_secs(1));
+        let options = configure_new_database_options(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Delete)
+                .synchronous(SqliteSynchronous::Full)
+                .busy_timeout(Duration::from_secs(1)),
+            path,
+        )?;
         let mut connection = SqliteConnection::connect_with(&options).await?;
+        prepare_existing_database(&mut connection, path).await?;
         let journal_id =
             crate::journal_migrations::initialize(&mut connection, new_identity).await?;
         Ok(Self {
@@ -53,6 +60,10 @@ impl ObservationJournal {
     #[must_use]
     pub fn journal_id(&self) -> &UuidIdentity {
         &self.journal_id
+    }
+    pub(crate) async fn incremental_vacuum_step(&mut self) -> Result<(), JournalError> {
+        sqlite_storage_maintenance::incremental_vacuum_step(&mut self.connection).await?;
+        Ok(())
     }
     pub async fn append(
         &mut self,

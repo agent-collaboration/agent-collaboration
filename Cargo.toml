@@ -14,6 +14,7 @@ members = [
     "crates/agent-automation",
     "crates/automation-storage",
     "crates/interaction-storage",
+    "crates/sqlite-storage-maintenance",
     "crates/codex-acp-adapter",
     "crates/lifecycle-observation",
     "crates/collaboration-client",

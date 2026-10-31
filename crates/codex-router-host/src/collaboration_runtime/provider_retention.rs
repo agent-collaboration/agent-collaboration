@@ -17,12 +17,18 @@ impl CollaborationRuntime {
         let Some(store) = &self.provider_store else {
             return Ok(0);
         };
-        let pruned = store
-            .lock()
-            .await
-            .prune_terminal_before(cutoff_ms, &protected)
-            .await
-            .map_err(io::Error::other)?;
+        let pruned = {
+            let mut store = store.lock().await;
+            let pruned = store
+                .prune_terminal_before(cutoff_ms, &protected)
+                .await
+                .map_err(io::Error::other)?;
+            store
+                .incremental_vacuum_step()
+                .await
+                .map_err(io::Error::other)?;
+            pruned
+        };
         let store = std::sync::Arc::clone(store);
         let supervisor = self.external_provider_supervisor.clone();
         let shutdown = self.shutdown.clone();
@@ -39,7 +45,10 @@ impl CollaborationRuntime {
                             i64::from(retention_days.get()).saturating_mul(24 * 60 * 60 * 1_000),
                         );
                         let protected = supervisor.as_ref().map(|value| value.live_operation_ids()).unwrap_or_default();
-                        let _ = store.lock().await.prune_terminal_before(cutoff_ms, &protected).await;
+                        let mut store = store.lock().await;
+                        if store.prune_terminal_before(cutoff_ms, &protected).await.is_ok() {
+                            let _ = store.incremental_vacuum_step().await;
+                        }
                     }
                 }
             }

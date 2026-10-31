@@ -73,6 +73,7 @@ use rusqlite::OptionalExtension;
 #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
 use rusqlite::params;
 use sqlx::Row;
+use sqlx::SqliteConnection;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqliteJournalMode;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -283,10 +284,13 @@ pub struct AsyncWeeklyQuotaFloorMutationStore {
 impl AsyncSqliteStateStore {
     /// Opens a SQLite state database through SQLx and applies supported migrations.
     pub async fn open(database_path: &Path) -> Result<Self, StateStoreError> {
-        let options = SqliteConnectOptions::new()
-            .filename(database_path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal);
+        let options = configure_writable_sqlite_options(
+            database_path,
+            SqliteConnectOptions::new()
+                .filename(database_path)
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal),
+        )?;
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(options)
@@ -297,6 +301,15 @@ impl AsyncSqliteStateStore {
             pool,
             read_only: false,
         };
+        let preparation = async {
+            let mut connection = store.pool.acquire().await.map_err(sqlx_error)?;
+            prepare_writable_sqlite_database(&mut connection, database_path).await
+        }
+        .await;
+        if let Err(error) = preparation {
+            store.pool.close().await;
+            return Err(error);
+        }
         if let Err(error) = crate::account_migrations::migrate(&store.pool).await {
             store.pool.close().await;
             return Err(error);
@@ -386,12 +399,46 @@ impl AsyncSqliteStateStore {
             .map_err(sqlx_error)
     }
 
+    /// Releases one bounded batch of free pages after a retention maintenance pass.
+    pub async fn incremental_vacuum_step(&self) -> Result<(), StateStoreError> {
+        let mut connection = self.pool.acquire().await.map_err(sqlx_error)?;
+        sqlite_storage_maintenance::incremental_vacuum_step(&mut connection)
+            .await
+            .map_err(sqlx_error)
+    }
+
     /// Acquires and holds one connection from this store's pool for isolation tests.
     #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
     pub async fn acquire_connection_for_test(
         &self,
     ) -> Result<sqlx::pool::PoolConnection<sqlx::Sqlite>, StateStoreError> {
         self.pool.acquire().await.map_err(sqlx_error)
+    }
+}
+
+pub(crate) fn configure_writable_sqlite_options(
+    database_path: &Path,
+    options: SqliteConnectOptions,
+) -> Result<SqliteConnectOptions, StateStoreError> {
+    sqlite_storage_maintenance::configure_new_database_options(options, database_path)
+        .map_err(sqlite_storage_maintenance_error)
+}
+
+pub(crate) async fn prepare_writable_sqlite_database(
+    connection: &mut SqliteConnection,
+    database_path: &Path,
+) -> Result<(), StateStoreError> {
+    sqlite_storage_maintenance::prepare_existing_database(connection, database_path)
+        .await
+        .map(|_preparation| ())
+        .map_err(sqlite_storage_maintenance_error)
+}
+
+fn sqlite_storage_maintenance_error(
+    error: sqlite_storage_maintenance::SqliteStorageMaintenanceError,
+) -> StateStoreError {
+    StateStoreError::Sqlite {
+        message: error.to_string(),
     }
 }
 

@@ -15,6 +15,10 @@ use sqlx::{
 };
 use std::{collections::HashSet, path::Path, time::Duration};
 
+use sqlite_storage_maintenance::{
+    configure_new_database_options, incremental_vacuum_step, prepare_existing_database,
+};
+
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 const RETENTION_BATCH_LIMIT: i64 = 1_000;
 const EXPECTED_COLUMNS: [&str; 14] = [
@@ -40,6 +44,8 @@ pub enum ProviderOperationStoreError {
     Database(#[from] sqlx::Error),
     #[error("provider operation migration failed")]
     Migration(#[from] MigrateError),
+    #[error("provider operation storage maintenance failed")]
+    StorageMaintenance(#[from] sqlite_storage_maintenance::SqliteStorageMaintenanceError),
     #[error("provider operation identity is invalid")]
     InvalidIdentity,
     #[error("provider operation record is invalid")]
@@ -103,19 +109,29 @@ struct StoredProviderOperationRow {
 
 impl ProviderOperationStore {
     pub async fn open(path: &Path) -> Result<Self, ProviderOperationStoreError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full)
-            .busy_timeout(Duration::from_secs(1));
+        let options = configure_new_database_options(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .foreign_keys(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Full)
+                .busy_timeout(Duration::from_secs(1)),
+            path,
+        )?;
         let mut connection = SqliteConnection::connect_with(&options).await?;
+        prepare_existing_database(&mut connection, path).await?;
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         MIGRATOR.run_direct(None, &mut *transaction, false).await?;
         transaction.commit().await?;
         validate_schema(&mut connection).await?;
         Ok(Self { connection })
+    }
+
+    /// Releases one bounded batch of free pages after provider-operation retention.
+    pub async fn incremental_vacuum_step(&mut self) -> Result<(), ProviderOperationStoreError> {
+        incremental_vacuum_step(&mut self.connection).await?;
+        Ok(())
     }
 
     pub async fn close(self) -> Result<(), ProviderOperationStoreError> {
@@ -547,3 +563,7 @@ async fn validate_schema(
         Err(ProviderOperationStoreError::InvalidRecord)
     }
 }
+
+#[cfg(test)]
+#[path = "provider_operation_store_tests.rs"]
+mod tests;
