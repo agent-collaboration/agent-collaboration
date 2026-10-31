@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "TokenLifetimeSeconds": {
+      "maximum": 3600,
+      "minimum": 60,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "seconds": {
+      "$ref": "#/$defs/TokenLifetimeSeconds"
+    }
+  },
+  "required": [
+    "organizationId",
+    "seconds"
+  ],
+  "title": "SetTokenLifetime",
+  "type": "object"
+}

@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "UnixMillis": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "lastHeardAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "since": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "state": {
+          "const": "connected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "since",
+        "lastHeardAt"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "lastSeenAt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "const": "notConnected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ConnectionView"
+}

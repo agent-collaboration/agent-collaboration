@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "AdmissionId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "admissionId": {
+          "$ref": "#/$defs/AdmissionId"
+        },
+        "kind": {
+          "const": "admission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "admissionId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "kind": {
+          "const": "machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "installation"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "AdmissionRef"
+}

@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "Activity": {
+      "enum": [
+        "working",
+        "idle"
+      ],
+      "type": "string"
+    },
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activity": {
+      "$ref": "#/$defs/Activity"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionRef"
+    }
+  },
+  "required": [
+    "session",
+    "activity"
+  ],
+  "title": "SessionActivityEntry",
+  "type": "object"
+}

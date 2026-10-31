@@ -1,0 +1,16 @@
+[
+null,
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000001","subject":"person","unexpectedField":true},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000001","subject":"unrecognizedVariant"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","person_id":"019a3dce-2000-7000-8000-000000000001","subject":"person"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001","unexpectedField":true},"sessionId":"native/provider:conversation"},"subject":"session"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation","unexpectedField":true},"subject":"session"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"},"subject":"session","unexpectedField":true},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"},"subject":"unrecognizedVariant"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"session_id":"native/provider:conversation"},"subject":"session"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","service_id":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"},"subject":"session"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpoint_id":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"},"subject":"session"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","subject":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000001"}},
+{"organization_id":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000001","subject":"person"},
+{"organization_id":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"native/provider:conversation"},"subject":"session"}
+]

@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "DeviceLoginRequestId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollmentAuthorization": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "deviceCodeApproval",
+              "type": "string"
+            },
+            "personId": {
+              "$ref": "#/$defs/PersonId"
+            },
+            "requestId": {
+              "$ref": "#/$defs/DeviceLoginRequestId"
+            }
+          },
+          "required": [
+            "kind",
+            "personId",
+            "requestId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollmentRevocationReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "owner",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "superseded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authorizedBy": {
+          "$ref": "#/$defs/EnrollmentAuthorization"
+        },
+        "endsAt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnixSeconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        },
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "machineClientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "state": {
+          "const": "enrolled",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "enrollmentId",
+        "installation",
+        "authorizedBy",
+        "machineClientId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authorizedBy": {
+          "$ref": "#/$defs/EnrollmentAuthorization"
+        },
+        "endsAt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnixSeconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        },
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "machineClientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "reason": {
+          "$ref": "#/$defs/EnrollmentRevocationReason"
+        },
+        "state": {
+          "const": "revoked",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "enrollmentId",
+        "installation",
+        "authorizedBy",
+        "machineClientId",
+        "reason"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authorizedBy": {
+          "$ref": "#/$defs/EnrollmentAuthorization"
+        },
+        "endsAt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnixSeconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        },
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "machineClientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "state": {
+          "const": "expired",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "enrollmentId",
+        "installation",
+        "authorizedBy",
+        "machineClientId"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "MachineEnrollment"
+}

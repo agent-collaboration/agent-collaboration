@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "UnixMillis": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "approvedAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "approvedBy": {
+          "$ref": "#/$defs/PersonId"
+        },
+        "state": {
+          "const": "enrolled",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "approvedBy",
+        "approvedAt"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "approvedAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "approvedBy": {
+          "$ref": "#/$defs/PersonId"
+        },
+        "state": {
+          "const": "revoked",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "approvedBy",
+        "approvedAt"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "approvedAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "approvedBy": {
+          "$ref": "#/$defs/PersonId"
+        },
+        "state": {
+          "const": "expired",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "approvedBy",
+        "approvedAt"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "EnrollmentView"
+}

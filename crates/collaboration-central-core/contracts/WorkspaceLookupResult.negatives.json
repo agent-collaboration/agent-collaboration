@@ -1,0 +1,16 @@
+[
+null,
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","unexpectedField":true}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"unrecognizedVariant","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","unexpectedField":true,"workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","unexpectedField":true,"workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspace_id":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowed_machines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"reason":{"kind":"notOwner","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"notOwner"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"notOwner"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"secondFactorRequired","withinSeconds":900},"result":"refused"},
+{"reason":{"kind":"unrecognizedVariant"},"result":"refused"},
+{"result":"unknown","unexpectedField":true},
+{"result":"unrecognizedVariant"}
+]

@@ -1,6 +1,7 @@
 //! Public communication contracts without process, storage or transport ownership.
 mod wake_authority;
 pub use wake_authority::{WakeCreator, WakeRefusal};
+mod fleet_boundary_conversions;
 mod mail_boundary_conversions;
 pub use mail_boundary_conversions::MailBoundaryConversionError;
 mod thread_subscription_contract;
