@@ -45,9 +45,10 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
         tokio::sync::watch::channel(Vec::new()).1,
     ));
+    let server_context = Arc::clone(&context);
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept client");
-        serve_router_session_app_server_connection(stream, context)
+        serve_router_session_app_server_connection(stream, server_context)
             .await
             .expect("serve client");
     });
@@ -80,6 +81,7 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
         ))
         .await?;
     backend.steer_started.notified().await;
+    let mut queued_turns = context.turn_queue_observations.subscribe();
     client
         .send(Message::Text(
             json!({"id":3,"method":"turn/steer","params":{
@@ -98,10 +100,21 @@ async fn turn_commands_keep_steer_and_interrupt_arrival_order()
         ))
         .await?;
     receive_reply(&mut client, 4).await?;
+    timeout(Duration::from_millis(500), queued_turns.changed())
+        .await?
+        .map_err(|_| "turn queue observation ended")?;
+    let actual_queue = queued_turns
+        .borrow_and_update()
+        .as_ref()
+        .and_then(mpsc::WeakSender::upgrade)
+        .ok_or("actual turn queue ended")?;
+    let queued_count = actual_queue.max_capacity() - actual_queue.capacity();
+    assert_eq!(
+        queued_count, 1,
+        "second steer stays in the actual FIFO behind the held first steer"
+    );
     assert!(
-        timeout(Duration::from_millis(500), backend.steer_started.notified())
-            .await
-            .is_err(),
+        futures_util::poll!(std::pin::pin!(backend.steer_started.notified())).is_pending(),
         "second steer reached the port before the first settled"
     );
     first_gate.notify_one();

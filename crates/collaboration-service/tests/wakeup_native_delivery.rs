@@ -201,12 +201,9 @@ async fn exercise_delivery(
         Arc::new(SessionDeliveryRouter::new(vec![route]));
     let identity = identity.with_session_delivery(delivery);
     let shutdown = tokio_util::sync::CancellationToken::new();
-    let worker = tokio::spawn(
-        identity
-            .wake_timing_worker()
-            .ok_or("worker missing")?
-            .run(shutdown.clone()),
-    );
+    let timing_worker = identity.wake_timing_worker().ok_or("worker missing")?;
+    let mut worker_passes = timing_worker.observe_passes();
+    let worker = tokio::spawn(timing_worker.run(shutdown.clone()));
     let backend_database = database.clone();
     let backend_interaction_database = interaction_database.clone();
     let (queue_sender, queue_receiver) = tokio::sync::oneshot::channel();
@@ -396,11 +393,11 @@ async fn exercise_delivery(
     )
     .await?;
     let (status,receipt)=tokio::time::timeout(Duration::from_secs(4),async {
-        let mut poll=tokio::time::interval(Duration::from_millis(20));
         loop {
-            poll.tick().await;
+            worker_passes.borrow_and_update();
             let record:Option<(String,Option<String>)>=sqlx::query_as("SELECT delivery_status,outcome_receipt_json FROM mailbox_deliveries WHERE wakeup_id=? AND delivery_status IN ('accepted','uncertain')").bind(wake.definition.wakeup_id.as_str()).fetch_optional(&mut connection).await?;
             if let Some(record)=record{return Ok::<_,sqlx::Error>(record);}
+            worker_passes.changed().await.map_err(|_|sqlx::Error::Protocol("wake timing owner stopped before receipt".into()))?;
         }
     }).await??;
     let request = tokio::time::timeout(Duration::from_secs(2), queue_receiver).await??;

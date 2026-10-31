@@ -523,7 +523,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn response_write_deadline_starts_after_long_lifecycle_work()
     -> Result<(), Box<dyn std::error::Error>> {
         let (mut client, server) = UnixStream::pair()?;
@@ -549,7 +549,7 @@ mod tests {
             .await
             .ok_or("operator work was not admitted")?;
 
-        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+        tokio::time::advance(std::time::Duration::from_millis(60)).await;
         work.response
             .send(OperatorFrame::terminal(HostTerminalResponse::new(
                 OperatorRequest::RestartAppServer,

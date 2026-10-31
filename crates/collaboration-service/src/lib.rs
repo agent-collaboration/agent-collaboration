@@ -21,8 +21,9 @@ pub use application_fixture::ApplicationFixture;
 mod subscription_delivery;
 pub use subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
-    SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
+    SubscriptionDeliveryServiceProps, SubscriptionRuntimeClock, SubscriptionStartupRestoration,
+    SubscriptionWaitFilter, SubscriptionWaitResult, SubscriptionWindowStore,
+    SystemSubscriptionClock,
 };
 mod conversation_operation_projection;
 pub use codex_acp_adapter::ConversationOperationRecorder;

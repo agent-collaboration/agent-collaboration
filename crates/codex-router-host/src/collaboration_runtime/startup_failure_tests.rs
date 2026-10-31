@@ -61,6 +61,7 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
             relation,
             None,
             prepared,
+            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
         ),
     )
     .await;

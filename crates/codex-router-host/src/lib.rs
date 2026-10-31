@@ -7,7 +7,12 @@ pub use live_session_ownership_check::{LiveSessionOwnership, LiveSessionOwnershi
 mod app_server_shutdown;
 mod auth_file_reload;
 mod login_reload_outcome;
+mod native_file_events;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod runtime_test_operator_connection;
 pub use login_reload_outcome::LoginReloadOutcome;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+pub use runtime_test_operator_connection::runtime_test_connect_operator;
 mod child_diagnostics;
 mod claude_code_peer_delivery_route;
 mod claude_provider_launch_environment;

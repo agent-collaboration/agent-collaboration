@@ -154,6 +154,7 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
 
     // Act: one wait starts from the current state and one resumes from the cursor; both need
     // the held store before they can observe anything.
+    tokio::time::pause();
     let ended = tokio::time::timeout(Duration::from_secs(5), async {
         tokio::join!(
             api.call_tool(
@@ -167,6 +168,7 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
         )
     })
     .await;
+    tokio::time::resume();
     drop(held);
 
     // Assert: both ended at their bound while the store was still held. With no cursor yet

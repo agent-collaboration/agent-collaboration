@@ -304,18 +304,15 @@ impl ServedApi {
 
     /// Waits until the number of handlers in flight is `expected`, or fails at `deadline`.
     pub(crate) async fn await_active_calls(&self, expected: usize, deadline: Duration) {
-        tokio::time::timeout(deadline, async {
-            while self.active_calls() != expected {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "expected {expected} calls in flight, found {}",
-                self.active_calls()
-            )
-        });
+        tokio::time::timeout(deadline, self.tool_calls.await_running(expected))
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "expected {expected} calls in flight, found {}",
+                    self.active_calls()
+                )
+            })
+            .expect("registry observation remains alive");
     }
 
     pub(crate) async fn stop(self) {
@@ -344,17 +341,14 @@ async fn send_and_abandon<TStream>(
     stream.write_all(head).await.expect("write request head");
     stream.write_all(body).await.expect("write request body");
     stream.flush().await.expect("flush request");
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while tool_calls.running() == 0 {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the abandoned call starts");
+    tokio::time::timeout(Duration::from_secs(5), tool_calls.await_running(1))
+        .await
+        .expect("the abandoned call starts")
+        .expect("registry observation remains alive");
     let mut early = [0_u8; 1];
-    let answered = tokio::time::timeout(Duration::from_millis(200), stream.read(&mut early)).await;
+    let mut answer = std::pin::pin!(stream.read(&mut early));
     assert!(
-        answered.is_err(),
+        futures_util::poll!(&mut answer).is_pending(),
         "the call answered before it was abandoned"
     );
 }

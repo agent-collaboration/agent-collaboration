@@ -77,6 +77,12 @@ pub(super) async fn answer_server_call(
                 .upgrade()
                 .ok_or_else(|| io::Error::other("board admission has closed"))?;
             let (request, origin) = decode_forwarded_post(post)?;
+            #[cfg(test)]
+            tracing::trace!(
+                target: "codex_router_host::runtime_test_forwarded_post",
+                request_id = request.request_id.as_str(),
+                "forwarded-post-native-admission-entered"
+            );
             let reply = admission
                 .submit_forwarded_post(&request, origin)
                 .await

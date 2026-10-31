@@ -633,6 +633,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
+    tokio::time::pause();
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(32),
         client.set_setting(
@@ -642,6 +643,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
         ),
     )
     .await;
+    tokio::time::resume();
     if result.is_err() {
         client.shutdown().await;
         panic!("setting request remained busy beyond its deadline");

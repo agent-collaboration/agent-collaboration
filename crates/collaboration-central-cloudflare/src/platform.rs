@@ -23,8 +23,24 @@ pub(crate) struct CloudflareCentralPlatform {
 #[derive(Clone, Copy)]
 pub(crate) struct CloudflareClock;
 
+#[cfg(feature = "local-access-clock")]
+thread_local! {
+    static ACCESS_TIME: std::cell::Cell<Option<SyncTime>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(feature = "local-access-clock")]
+impl CloudflareClock {
+    pub(crate) fn set_local_time(now: SyncTime) {
+        ACCESS_TIME.set(Some(now));
+    }
+}
+
 impl Clock for CloudflareClock {
     fn now(&self) -> SyncTime {
+        #[cfg(feature = "local-access-clock")]
+        if let Some(now) = ACCESS_TIME.get() {
+            return now;
+        }
         SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
     }
 }

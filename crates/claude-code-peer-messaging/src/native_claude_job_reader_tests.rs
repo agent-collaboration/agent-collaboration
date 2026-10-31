@@ -301,6 +301,11 @@ async fn cancelling_or_timing_out_native_inventory_settles_only_its_owned_child(
             task.abort();
             assert!(task.await.unwrap_err().is_cancelled());
         } else {
+            // The child has acknowledged its real PID and is holding the read.
+            // Expire the unchanged budget explicitly, then resume before child IO.
+            tokio::time::pause();
+            tokio::time::advance(Duration::from_millis(2001)).await;
+            tokio::time::resume();
             assert_eq!(
                 tokio::time::timeout(Duration::from_secs(3), task)
                     .await

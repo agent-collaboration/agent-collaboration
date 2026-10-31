@@ -1,0 +1,5 @@
+🦁 Lead → W1: DECISIONS on the live-only schedule/timeout rows.
+1. Live native-Codex journeys against an external debug Host (worker_timeout_proof.rs and its kind, ignored/manual): EXEMPT from conversion. Their oracle is causal (exact native turn cessation/history, the captured 2000 ms budget as configuration), not elapsed time; the real 2 s timeout and After(5) are the product behaviour under proof. Keep them unchanged, including their Codex models (the Haiku rule can't apply to native Codex assertions). Do NOT add remote clock control to the Host. Mark each in the inventory as "live real-time journey, causal oracle — exempt by Lead decision 2026-10-29".
+2. In-process tests: if any non-live test exercises schedule_timing_worker.rs or scheduled_run_worker.rs (Utc::now at tick / :191) with real time, those owners may take the existing Clock abstraction by constructor injection, production passing the system clock. That is an internal crate API change only — no CLI/MCP/protocol/persisted change. If only the live rows reach them, leave them alone.
+Good progress on CI11/CI16. No reply needed until your batch handback.
+

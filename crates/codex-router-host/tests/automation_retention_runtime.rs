@@ -40,20 +40,18 @@ async fn owned_host_automatically_prunes_events_without_deleting_current_state()
             .foreign_keys(true),
     )
     .await?;
-    tokio::time::timeout(Duration::from_secs(5), async {
-        let mut interval = tokio::time::interval(Duration::from_millis(10));
-        loop {
-            interval.tick().await;
-            let remaining: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM automation_events WHERE recorded_at_ms=0")
-                    .fetch_one(&mut observer)
-                    .await?;
-            if remaining == 0 {
-                return Ok::<_, sqlx::Error>(());
-            }
-        }
-    })
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        runtime.runtime_test_await_automation_retention_pass(),
+    )
     .await??;
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM automation_events WHERE recorded_at_ms=0")
+            .fetch_one(&mut observer)
+            .await?;
+    if remaining != 0 {
+        return Err("Host event maintenance did not prune expired events".into());
+    }
     let mut store = automation_storage::AutomationStore::open(&database).await?;
     if store.read_instruction(&instruction.instruction_id).await? != instruction {
         return Err("Host event maintenance changed current instructions".into());

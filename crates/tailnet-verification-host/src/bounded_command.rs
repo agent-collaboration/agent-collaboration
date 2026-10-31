@@ -50,6 +50,50 @@ pub fn wait_for_child(child: &mut Child, bound: Duration) -> DriverResult<Option
     }
 }
 
+/// Own command completion; unlike graded Host observation, a missed bound kills it.
+pub fn wait_for_owned_command(
+    child: &mut Child,
+    bound: Duration,
+) -> DriverResult<Option<ExitStatus>> {
+    if let Some(status) = child.try_wait()? {
+        return Ok(Some(status));
+    }
+    let identity = rustix::process::Pid::from_child(child);
+    let (observed, received) = std::sync::mpsc::sync_channel(1);
+    std::thread::scope(|scope| {
+        let waiting = scope.spawn(move || {
+            let outcome = loop {
+                match rustix::process::waitid(
+                    rustix::process::WaitId::Pid(identity),
+                    rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::NOWAIT,
+                ) {
+                    Err(rustix::io::Errno::INTR) => continue,
+                    outcome => break outcome.map(|status| status.is_some()),
+                }
+            };
+            let _received = observed.send(outcome);
+        });
+        let outcome = received.recv_timeout(bound);
+        let completed = matches!(outcome, Ok(Ok(true)));
+        let killed = if completed { Ok(()) } else { child.kill() };
+        // NOWAIT keeps this exact child unreaped until the observer has joined,
+        // including a late observer after the parent requested termination.
+        let joined = waiting.join();
+        let status = child.wait();
+        killed?;
+        joined.map_err(|_| DriverError::Runtime("child exit observer failed"))?;
+        let status = status?;
+        match outcome {
+            Ok(Ok(true)) => Ok(Some(status)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Ok(None),
+            Ok(Err(error)) => Err(std::io::Error::from(error).into()),
+            Ok(Ok(false)) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                Err(DriverError::Runtime("child exit observation unavailable"))
+            }
+        }
+    })
+}
+
 pub fn output(arguments: &[String], timeout: Duration, check: bool) -> DriverResult<Output> {
     require_continuing()?;
     let (binary, arguments) = arguments
@@ -77,11 +121,7 @@ pub fn output(arguments: &[String], timeout: Duration, check: bool) -> DriverRes
             let mut bytes = Vec::new();
             stderr.read_to_end(&mut bytes).map(|_| bytes)
         });
-        let waited = wait_for_child(&mut child, timeout);
-        if !matches!(waited, Ok(Some(_))) {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        let waited = wait_for_owned_command(&mut child, timeout);
         let stdout = output
             .join()
             .map_err(|_| DriverError::Runtime("stdout reader failed"))??;
@@ -110,4 +150,59 @@ pub fn command(arguments: &[String]) -> DriverResult<Vec<u8>> {
         ));
     }
     Ok(result.stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn owned_command_completion_preserves_its_exit_status() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .expect("owned command");
+        let status = wait_for_owned_command(&mut child, Duration::from_secs(5))
+            .expect("observe command")
+            .expect("command finished");
+        assert_eq!(status.code(), Some(7));
+        assert_eq!(child.wait().expect("cached reaped status"), status);
+    }
+
+    fn held_command() -> Child {
+        Command::new("/bin/sh")
+            .args(["-c", "read fixture_input"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("owned held command")
+    }
+
+    #[test]
+    fn an_expired_owned_command_bound_kills_and_reaps_before_returning() {
+        let mut child = held_command();
+        assert!(
+            wait_for_owned_command(&mut child, Duration::ZERO)
+                .expect("bounded command")
+                .is_none()
+        );
+        let status = child
+            .try_wait()
+            .expect("reaped command")
+            .expect("owned command exited");
+        assert_eq!(status.signal(), Some(9));
+    }
+
+    #[test]
+    fn an_expired_graded_wait_keeps_the_child_for_its_owning_escalation() {
+        let mut child = held_command();
+        let observed = wait_for_child(&mut child, Duration::ZERO);
+        let still_alive = child.try_wait().expect("owned child status").is_none();
+        child.kill().expect("owning test releases child");
+        child.wait().expect("owning test reaps child");
+        assert!(observed.expect("graded observation").is_none());
+        assert!(
+            still_alive,
+            "graded wait killed the child before its owner's escalation"
+        );
+    }
 }

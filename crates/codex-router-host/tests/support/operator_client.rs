@@ -17,27 +17,7 @@ pub(crate) async fn send_operator_request(
     deadline: Duration,
 ) -> Result<Vec<OperatorFrame>, Box<dyn Error>> {
     let deadline_at = tokio::time::Instant::now() + deadline;
-    let mut stream = loop {
-        match tokio::time::timeout_at(deadline_at, UnixStream::connect(socket)).await {
-            Ok(Ok(stream)) => break stream,
-            Ok(Err(error))
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-                ) =>
-            {
-                if tokio::time::Instant::now() >= deadline_at {
-                    return Err(std::io::Error::other("operator request timed out").into());
-                }
-                tokio::time::sleep_until(
-                    deadline_at.min(tokio::time::Instant::now() + Duration::from_millis(20)),
-                )
-                .await;
-            }
-            Ok(Err(error)) => return Err(error.into()),
-            Err(elapsed) => return Err(elapsed.into()),
-        }
-    };
+    let mut stream = codex_router_host::runtime_test_connect_operator(socket, deadline_at).await?;
     tokio::time::timeout_at(
         deadline_at,
         stream.write_all(&encode_operator_request(&request)?),

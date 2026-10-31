@@ -10,6 +10,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[serde(deny_unknown_fields)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum ProjectQuery {
+    MachineProgress { after: Option<u64> },
+    MailProgress { after: Option<u64> },
     ReplicateProject { project: message_board::ProjectId },
     LocalCancelDelivery { cancel: ItemId },
     DrainProjectPublisher { project: message_board::ProjectId },
@@ -35,6 +37,24 @@ pub(super) async fn serve_until_shutdown(
         };
         let query: ProjectQuery = serde_json::from_str(&line).map_err(io::Error::other)?;
         let reply = match query {
+            ProjectQuery::MachineProgress { after } => {
+                let progress = runtime.runtime_test_observe_machine_progress()?;
+                let Some(completed) =
+                    await_progress(runtime, shutdown_signals, progress, after).await?
+                else {
+                    return Ok(());
+                };
+                serde_json::json!({"kind":"machineProgress", "completed":completed})
+            }
+            ProjectQuery::MailProgress { after } => {
+                let progress = runtime.runtime_test_observe_mail_progress()?;
+                let Some(completed) =
+                    await_progress(runtime, shutdown_signals, progress, after).await?
+                else {
+                    return Ok(());
+                };
+                serde_json::json!({"kind":"mailProgress", "completed":completed})
+            }
             ProjectQuery::ReplicateProject { project } => {
                 runtime.runtime_test_replicate_project(&project).await?;
                 serde_json::json!({"kind": "projectReplicated", "project": project})
@@ -85,5 +105,29 @@ pub(super) async fn serve_until_shutdown(
         reply.push(b'\n');
         output.write_all(&reply).await?;
         output.flush().await?;
+    }
+}
+
+async fn await_progress(
+    runtime: &mut CollaborationRuntime,
+    shutdown_signals: &mut ShutdownSignals,
+    mut progress: tokio::sync::watch::Receiver<u64>,
+    after: Option<u64>,
+) -> io::Result<Option<u64>> {
+    tokio::select! {
+        result = shutdown_signals.wait_for_signal() => {
+            result?;
+            Ok(None)
+        }
+        error = runtime.listener_failure() => Err(io::Error::other(error)),
+        result = async {
+            loop {
+                let current = *progress.borrow_and_update();
+                if after != Some(current) {
+                    return Ok(Some(current));
+                }
+                progress.changed().await.map_err(io::Error::other)?;
+            }
+        } => result,
     }
 }

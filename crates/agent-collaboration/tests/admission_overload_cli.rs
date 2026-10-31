@@ -111,36 +111,24 @@ async fn shed_commands_report_an_overload_to_retry() {
         .await
         .expect("wake send");
     let wakeup_id = wake["result"]["definition"]["wakeupId"].clone();
-    let held = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let holder = Arc::clone(&served);
-            let held_wakeup = wakeup_id.clone();
-            let held = tokio::spawn(async move {
-                let _answer = holder
-                    .call(
-                        "wake_wait_until_first_fire",
-                        json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                    )
-                    .await;
-            });
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            if held.is_finished() {
-                continue;
-            }
-            let probe = served
-                .call("automation_status", json!({}))
-                .await
-                .expect("probe");
-            if probe["error"]["data"]["kind"] == "overloaded" {
-                break Some(held);
-            }
-            held.abort();
-        }
-    })
-    .await
-    .ok()
-    .flatten()
-    .expect("the wake wait holds the only request slot");
+    let holder = Arc::clone(&served);
+    let held = tokio::spawn(async move {
+        holder
+            .call(
+                "wake_wait_until_first_fire",
+                json!({"wakeupId": wakeup_id, "timeoutSeconds": 60}),
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(10), served.await_running_calls(1))
+        .await
+        .expect("the wake wait holds the only request slot")
+        .expect("registry observation remains alive");
+    let probe = served
+        .call("automation_status", json!({}))
+        .await
+        .expect("probe");
+    assert_eq!(probe["error"]["data"]["kind"], "overloaded");
 
     // Act
     let (board_exit, board) = run_cli(

@@ -1,4 +1,6 @@
 use super::*;
+#[path = "explicit_retry_time.rs"]
+mod explicit_retry_time;
 
 #[tokio::test]
 async fn policy_bulk_read_is_independent_and_unknown_account_is_redacted() {
@@ -203,15 +205,40 @@ async fn weekly_floor_mutation_busy_retry_is_bounded_and_preserves_value() {
         .close()
         .await
         .expect("reader should close");
-    let started_at = std::time::Instant::now();
-    let error = mutation
-        .set_weekly_quota_floor_by_account_id(
+    let mut retry_deadlines = mutation.observe_busy_retry_deadlines();
+    let explicit_time =
+        explicit_retry_time::ExplicitRetryTime::new(std::time::Duration::from_secs(5));
+    tokio::time::pause();
+    let (error, elapsed) = {
+        let started_at = tokio::time::Instant::now();
+        let changing = mutation.set_weekly_quota_floor_by_account_id(
             &account_id,
             Some(WeeklyQuotaFloorBasisPoints::new(700).expect("valid new floor")),
-        )
+        );
+        tokio::pin!(changing);
+        let error = tokio::time::timeout(std::time::Duration::from_millis(250), async {
+            loop {
+                tokio::select! {
+                    result = &mut changing => break result.expect_err("held writer must exhaust retries"),
+                    changed = retry_deadlines.changed() => {
+                        changed.expect("mutation owner retains its retry clock");
+                        let deadline = (*retry_deadlines.borrow_and_update())
+                            .expect("actual busy retry announced its deadline");
+                        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                        eprintln!("busy retry observed: elapsed={:?}, delay={remaining:?}", started_at.elapsed());
+                        // Tokio rounds Sleep deadlines to its millisecond driver tick.
+                        // Cross that tick; the original 250-ms mutation budget still applies.
+                        tokio::time::advance(remaining + std::time::Duration::from_millis(1)).await;
+                    }
+                }
+            }
+        })
         .await
-        .expect_err("held writer must exhaust retries");
-    let elapsed = started_at.elapsed();
+        .expect("mutation finishes within its original deadline");
+        (error, started_at.elapsed())
+    };
+    tokio::time::resume();
+    explicit_time.finish().await;
     assert_eq!(error, StateStoreError::WeeklyQuotaFloorDatabaseBusy);
     assert!(elapsed >= std::time::Duration::from_millis(150));
     assert!(elapsed < std::time::Duration::from_millis(250));

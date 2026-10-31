@@ -104,6 +104,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
             fixture.backend.endpoint.service_id.clone(),
             Some("Policy fixture"),
         )?,
+        Arc::new(runtime_primitives::SystemClock),
     );
     let listener = tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock"))?;
     let mutation_broker = fixture.broker.clone();

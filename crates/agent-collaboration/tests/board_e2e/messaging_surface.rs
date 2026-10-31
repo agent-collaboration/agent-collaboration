@@ -52,6 +52,7 @@ impl MessagingCase<'_> {
         let mut last = Value::Null;
         let observed = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
+                let progress = mail_progress(self.sender.host()?, None).await?;
                 let shown = self
                     .sender
                     .host()?
@@ -73,7 +74,7 @@ impl MessagingCase<'_> {
                     assert_eq!(last.pointer("/mail/item"), Some(&json!(item)));
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(last.clone());
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                mail_progress(self.sender.host()?, Some(progress)).await?;
             }
         })
         .await;
@@ -84,4 +85,20 @@ impl MessagingCase<'_> {
             }
         }
     }
+}
+
+async fn mail_progress(
+    host: &super::owned_host::BoardHost,
+    after: Option<u64>,
+) -> FixtureResult<u64> {
+    let reply = host
+        .query_project(json!({"kind":"mailProgress", "after":after}))
+        .await?;
+    if reply.get("kind") != Some(&json!("mailProgress")) {
+        return Err("owned Host mail progress identity mismatch".into());
+    }
+    reply
+        .get("completed")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "owned Host omitted mail commit counter".into())
 }

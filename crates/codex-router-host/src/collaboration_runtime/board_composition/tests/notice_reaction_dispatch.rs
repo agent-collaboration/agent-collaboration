@@ -15,6 +15,8 @@ impl CallRouter for NoTransactionEffects {
 
 fn event_owners(harness: &MailHarness) -> MachineSessionEventOwners {
     MachineSessionEventOwners {
+        #[cfg(feature = "runtime-test-support")]
+        progress: Default::default(),
         projects: harness.projects.clone(),
         admission: harness.admission.clone(),
         fleet: harness.fleet.clone(),

@@ -9,24 +9,50 @@ use crate::{
 use collaboration_central_core::{AccessCaller, AccessRefusal};
 
 /// The same signed assertion must stop being valid at its own expiry.
-pub async fn run_access_expiry_conformance(client: &ConformanceClient) -> ConformanceResult<()> {
+pub async fn run_access_expiry_conformance<AdvanceClock, AdvanceFuture>(
+    client: &ConformanceClient,
+    now: chrono::DateTime<chrono::Utc>,
+    advance_clock: AdvanceClock,
+) -> ConformanceResult<()>
+where
+    AdvanceClock: FnOnce(chrono::DateTime<chrono::Utc>) -> AdvanceFuture,
+    AdvanceFuture: std::future::Future<Output = ConformanceResult<()>>,
+{
     let mut short = fixture_claims(
         AccessCaller::Machine {
             client_id: access_client_id("expiry-row-machine")?,
         },
         false,
     );
-    set_claim(
-        &mut short,
-        "exp",
-        (chrono::Utc::now().timestamp() + 3).into(),
+    let expires = now
+        .checked_add_signed(chrono::TimeDelta::seconds(3))
+        .ok_or("local assertion expiry is out of range")?;
+    set_claim(&mut short, "exp", expires.timestamp().into())?;
+    let assertion = sign_assertion(&short, FIXTURE_KID)?;
+    equal(
+        client
+            .verify_access_assertion(assertion.clone(), "/v1/session")
+            .await?,
+        AccessVerificationOutcome::Accepted(AccessCallerClass::Machine),
     )?;
-    crate::run_staging_expiry_row(
-        client,
-        sign_assertion(&short, FIXTURE_KID)?,
-        owner_assertion()?,
-    )
-    .await
+    let expired_at = crate::assertion_expiry(&assertion)?
+        .checked_add_signed(chrono::TimeDelta::seconds(5))
+        .ok_or("local assertion observation time is out of range")?;
+    advance_clock(expired_at).await?;
+    equal(
+        client
+            .verify_access_assertion(assertion, "/v1/session")
+            .await?,
+        AccessVerificationOutcome::Refused(AccessRefusal::Expired),
+    )?;
+    equal(
+        client
+            .verify_access_assertion(owner_assertion()?, "/admin/v1/machines/enroll")
+            .await?,
+        AccessVerificationOutcome::Accepted(AccessCallerClass::Owner),
+    )?;
+    println!("ACCESS same assertion refused after controlled expiry, live owner accepted: passed");
+    Ok(())
 }
 
 /// A successful verification cannot extend a key source's zero cache lifetime.

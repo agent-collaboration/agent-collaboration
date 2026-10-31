@@ -90,25 +90,23 @@ fn staged_credential_deletion_waits_for_the_store_lock() {
     let exclusive_lock =
         CredentialStoreLock::acquire(root.path(), CredentialStoreLockMode::Exclusive)
             .expect("exclusive store lock");
-    let (attempt_sender, attempt_receiver) = mpsc::channel();
+    let (contention_sender, contention_receiver) = mpsc::channel();
     let (result_sender, result_receiver) = mpsc::channel();
     let deletion_store = store.clone();
     let deletion_key = credential_key.clone();
     let deletion_thread = thread::spawn(move || {
-        attempt_sender
-            .send(())
-            .expect("deletion attempt should be announced");
+        crate::lock_contention_observation::observe_next_contention(contention_sender);
         result_sender
             .send(deletion_store.delete_staged(&deletion_key))
             .expect("deletion result should be sent");
     });
 
-    attempt_receiver
+    contention_receiver
         .recv_timeout(Duration::from_secs(2))
-        .expect("deletion attempt should start");
+        .expect("staged deletion reaches the real contended store lock");
     assert!(matches!(
-        result_receiver.recv_timeout(Duration::from_millis(100)),
-        Err(mpsc::RecvTimeoutError::Timeout)
+        result_receiver.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
     ));
 
     drop(exclusive_lock);

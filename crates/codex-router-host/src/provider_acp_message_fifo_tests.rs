@@ -205,6 +205,8 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         Arc::clone(&store),
         Arc::new(NoLivePeer),
         CancellationToken::new(),
+        #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+        tokio::sync::watch::channel(None).0,
     ));
     tokio::time::timeout(std::time::Duration::from_secs(2), worker)
         .await

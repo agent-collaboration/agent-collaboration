@@ -23,6 +23,8 @@ use delivery_matrix_support::{
 };
 #[path = "delivery_matrix/acp_target.rs"]
 mod delivery_matrix_acp_target;
+#[path = "delivery_matrix/disposable_host_stop.rs"]
+mod disposable_host_stop;
 use proof_context::{ProofContext, ProofResult};
 #[path = "delivery_matrix/subscription.rs"]
 mod subscription;

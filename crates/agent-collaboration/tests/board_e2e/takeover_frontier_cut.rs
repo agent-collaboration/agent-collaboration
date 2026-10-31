@@ -68,7 +68,7 @@ pub async fn establish(
     cut: FrontierCut,
 ) -> FixtureResult<FrontierCapture> {
     let project = fixture.project.clone();
-    let mut host = fixture.host.take().ok_or("predecessor Host absent")?;
+    let host = fixture.host.take().ok_or("predecessor Host absent")?;
     let result = tokio::time::timeout(BOUND, async {
         loop {
             let copying = host.replicate_project(&project);

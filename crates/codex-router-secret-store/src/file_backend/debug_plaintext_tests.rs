@@ -115,24 +115,20 @@ fn plaintext_migration_rechecks_declaration_after_exclusive_lock_wait() {
     let keychain = std::sync::Arc::new(CountingMigrationKeychain::default());
     let child_keychain = keychain.clone();
     let root = directory.path().to_path_buf();
-    let migration =
-        std::thread::spawn(move || migrate_pooled_credentials_at_startup(root, &*child_keychain));
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let passed_precheck = loop {
-        if fs::metadata(directory.path())
+    let (contended, contention) = std::sync::mpsc::channel();
+    let migration = std::thread::spawn(move || {
+        crate::lock_contention_observation::observe_next_contention(contended);
+        migrate_pooled_credentials_at_startup(root, &*child_keychain)
+    });
+    let passed_precheck = contention
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .is_ok()
+        && fs::metadata(directory.path())
             .expect("root metadata")
             .permissions()
             .mode()
             & 0o777
-            == 0o700
-        {
-            break true;
-        }
-        if std::time::Instant::now() >= deadline {
-            break false;
-        }
-        std::thread::yield_now();
-    };
+            == 0o700;
     // The existing open's 0700 transition proves the public migration passed
     // its initial check and is waiting behind this Exclusive lock.
     file_store
@@ -297,38 +293,25 @@ mod debug {
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o750))
             .expect("initializer event baseline");
         let (result_sender, result_receiver) = std::sync::mpsc::channel();
+        let (contended, contention) = std::sync::mpsc::channel();
         let root = directory.path().to_path_buf();
         let initializer = std::thread::spawn(move || {
+            crate::lock_contention_observation::observe_next_contention(contended);
             result_sender
                 .send(FileSecretStore::initialize_debug_plaintext(&root))
                 .expect("initializer result channel");
         });
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        let mut early_result = None;
-        let reached_lock_boundary = loop {
-            if let Ok(result) = result_receiver.try_recv() {
-                early_result = Some(result);
-                break false;
-            }
-            if fs::metadata(directory.path())
+        let reached_lock_boundary = contention
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .is_ok()
+            && fs::metadata(directory.path())
                 .expect("root mode")
                 .permissions()
                 .mode()
                 & 0o777
-                == 0o700
-            {
-                break true;
-            }
-            if std::time::Instant::now() >= deadline {
-                break false;
-            }
-            std::thread::yield_now();
-        };
-        if reached_lock_boundary {
-            early_result = result_receiver
-                .recv_timeout(std::time::Duration::from_millis(100))
-                .ok();
-        }
+                == 0o700;
+        // The actual Exclusive acquisition reported WouldBlock while Shared remains held.
+        let early_result = result_receiver.try_recv().ok();
         let active_temp_existed = active_temp.as_ref().is_some_and(|path| path.exists());
         drop(trace_guard);
         let write_result = writer.join().expect("writer joined");
@@ -399,23 +382,20 @@ mod debug {
         let keychain = std::sync::Arc::new(CountingKeychain::default());
         let child_keychain = keychain.clone();
         let root = directory.path().to_path_buf();
+        let (contended, contention) = std::sync::mpsc::channel();
         let child = std::thread::spawn(move || {
+            crate::lock_contention_observation::observe_next_contention(contended);
             EncryptedCredentialStore::open_for_process_with_keychain(root, &*child_keychain)
         });
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while fs::metadata(directory.path())
-            .expect("root mode")
-            .permissions()
-            .mode()
-            & 0o777
-            != 0o700
-        {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "opener did not pass its first declaration check"
-            );
-            std::thread::yield_now();
-        }
+        let passed_precheck = contention
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .is_ok()
+            && fs::metadata(directory.path())
+                .expect("root mode")
+                .permissions()
+                .mode()
+                & 0o777
+                == 0o700;
         file_store
             .write_atomically(
                 &directory.path().join(DECLARATION_FILE),
@@ -428,6 +408,10 @@ mod debug {
             child.join().expect("opener joined"),
             Err(SecretStoreError::DebugPlaintextUnavailable)
         ));
+        assert!(
+            passed_precheck,
+            "opener did not pass its first declaration check and reach real contention"
+        );
         assert_eq!(keychain.0.load(Ordering::SeqCst), 0);
         assert!(!directory.path().join("store-id").exists());
     }

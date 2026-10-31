@@ -127,17 +127,13 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
             return Err("push receipt disagrees with the selected crash boundary".into());
         }
         let stop = CancellationToken::new();
-        let worker = tokio::spawn(
-            identity
-                .wake_timing_worker()
-                .ok_or("wake worker missing")?
-                .run(stop.clone()),
-        );
+        let worker = identity.wake_timing_worker().ok_or("wake worker missing")?;
+        let mut passes = worker.observe_passes();
+        let worker = tokio::spawn(worker.run(stop.clone()));
         let application = (identity).build();
         let observed = tokio::time::timeout(Duration::from_secs(3), async {
-            let mut interval = tokio::time::interval(Duration::from_millis(10));
             loop {
-                interval.tick().await;
+                passes.borrow_and_update();
                 let current = application
                     .wakes()
                     .delivery_show(DeliveryShowRequest {
@@ -148,6 +144,10 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
                 if matches!(current.disposition, DeliveryDisposition::Uncertain) {
                     return Ok::<_, String>(current);
                 }
+                passes
+                    .changed()
+                    .await
+                    .map_err(|_| "wake worker stopped before recovery")?;
             }
         })
         .await??;
@@ -281,6 +281,7 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
             .ok_or("session delivery missing")?,
         identity.configuration.clone(),
         identity.machine_identity.clone(),
+        Arc::new(runtime_primitives::SystemClock),
     );
     tokio::time::timeout(
         Duration::from_secs(5),
@@ -504,6 +505,7 @@ async fn native_delivery_crash_child() -> TestResult<()> {
             .ok_or("session delivery missing")?,
         identity.configuration,
         identity.machine_identity,
+        Arc::new(runtime_primitives::SystemClock),
     );
     sender.dispatch(store, delivery_id).await?;
     Err("sender did not stop at selected checkpoint".into())

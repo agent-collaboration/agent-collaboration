@@ -453,7 +453,7 @@ jobs:
       # normal Worker session/holder equivalence and G18, stay in the removal map.
       - name: Prove current composed controls, transactions and physical restart
         run: |
-          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults,local-access-clock
           node verification/tooling/check-central-worker-bundle.ts faults
           for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"

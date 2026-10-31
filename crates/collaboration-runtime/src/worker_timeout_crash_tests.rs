@@ -319,13 +319,7 @@ async fn recover(root: &Path) -> TestResult<()> {
                 ))
                 .await?;
         }
-        if tokio::time::timeout(Duration::from_millis(100), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("recovery made an extra native call".into());
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(listener)
     });
     let worker = fixture_worker(store.clone(), root, WorkerEndpoint { socket, number: 2 }).await?;
     for stopped in [false, true] {
@@ -365,7 +359,13 @@ async fn recover(root: &Path) -> TestResult<()> {
             return Err("unrelated completion or acknowledgment released occupancy".into());
         }
     }
-    tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    let listener = tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    // Every recovery step has returned, and its scripted peer has joined.
+    // Retain the listener so any attempted extra connection remains observable.
+    if !matches!(listener.into_std()?.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+    {
+        return Err("recovery made an extra native call".into());
+    }
     drop(worker);
     drop(store);
     Ok(())

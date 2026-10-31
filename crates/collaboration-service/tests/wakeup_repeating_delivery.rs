@@ -10,7 +10,10 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
-use collaboration_service::ApplicationFixture;
+use collaboration_service::{ApplicationFixture, SubscriptionClock};
+#[path = "support/controlled_wake_clock.rs"]
+mod controlled_wake_clock;
+use controlled_wake_clock::{ControlledWakeClock, ExplicitTimeGuard, progress_worker};
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -29,7 +32,7 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 
-// U66 / MS-10: two real timer firings are separated by at least five minutes.
+// U66 / MS-10: two firings are separated by the unchanged five-minute policy gap.
 const REPEAT_INTERVAL_SECONDS: u32 = 300;
 const WAKE_BODY: &str = "Review the recurring report";
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
@@ -42,8 +45,11 @@ struct NativeQueueObservation {
     prompt_text: String,
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
+    let explicit_time =
+        ExplicitTimeGuard::new(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8));
+    let clock = Arc::new(ControlledWakeClock::new().expect("controlled wake clock"));
     let root = tempfile::tempdir_in("/tmp").expect("fixture temp directory");
     let database = root.path().join("automation.sqlite");
     let store = Arc::new(tokio::sync::Mutex::new(
@@ -124,8 +130,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         codex_home: root.path().to_owned(),
     };
 
-    let anchor =
-        chrono::Utc::now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
+    let anchor = clock.now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
     let expiry = anchor
         .checked_add_signed(chrono::Duration::seconds(
             i64::from(REPEAT_INTERVAL_SECONDS) * 2 + 3,
@@ -161,6 +166,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
 
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("create service identity")
+        .with_subscription_clock(clock.clone())
         .with_machine_identity(
             MachineIdentity::new(service_identity.clone(), Some("wake-repeating-fixture"))
                 .expect("create machine identity"),
@@ -192,6 +198,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     let wake_worker = identity
         .wake_timing_worker()
         .expect("wake timing worker is available");
+    let mut passes = wake_worker.observe_passes();
     let handoff_worker = tokio::spawn(
         identity
             .push_handoff_worker()
@@ -201,12 +208,50 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     let worker = tokio::spawn(wake_worker.run(shutdown.clone()));
     drop(identity);
 
-    let first_delivery = next_native_queue_delivery(&mut observation_receiver)
+    clock
+        .advance(Duration::from_secs(1))
+        .await
+        .expect("first clock advance");
+    let first_delivery = next_native_queue_delivery(&mut observation_receiver, &mut passes)
         .await
         .expect("first native queue delivery arrives");
-    let second_delivery = next_native_queue_delivery(&mut observation_receiver)
+    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes)
+        .await
+        .expect("first wake completion");
+    passes.borrow_and_update();
+    clock
+        .advance(Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) - 1))
+        .await
+        .expect("advance to before repeat deadline");
+    passes
+        .changed()
+        .await
+        .expect("owner evaluates the instant before the next firing");
+    assert!(
+        observation_receiver.try_recv().is_err(),
+        "wake repeated before its five-minute gap"
+    );
+    assert!(
+        store
+            .lock()
+            .await
+            .read_wakeup::<SavedMessage>(&wake.definition.wakeup_id)
+            .await
+            .unwrap()
+            .pending_delivery_id
+            .is_none(),
+        "an early second occurrence was allocated"
+    );
+    clock
+        .advance(Duration::from_secs(1))
+        .await
+        .expect("repeat clock advance");
+    let second_delivery = next_native_queue_delivery(&mut observation_receiver, &mut passes)
         .await
         .expect("second native queue delivery arrives");
+    await_wake_completion(&store, &wake.definition.wakeup_id, &mut passes)
+        .await
+        .expect("second wake completion");
     tokio::time::timeout(Duration::from_secs(2), native_server)
         .await
         .expect("native server exits")
@@ -301,17 +346,55 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .close()
         .await
         .expect("close automation store");
+    explicit_time
+        .finish()
+        .await
+        .expect("explicit time guard joined");
 }
 
 async fn next_native_queue_delivery(
     receiver: &mut mpsc::Receiver<NativeQueueObservation>,
+    passes: &mut tokio::sync::watch::Receiver<usize>,
 ) -> TestResult<NativeQueueObservation> {
     tokio::time::timeout(
         Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
-        receiver.recv(),
+        async {
+            loop {
+                tokio::select! {
+                    biased;
+                    observation = receiver.recv() => return TestResult::Ok(observation),
+                    progress = progress_worker(passes) => progress?,
+                }
+            }
+        },
     )
-    .await?
+    .await??
     .ok_or_else(|| "native server ended before both recurring deliveries arrived".into())
+}
+
+async fn await_wake_completion(
+    store: &Arc<tokio::sync::Mutex<AutomationStore>>,
+    wakeup: &WakeupId,
+    passes: &mut tokio::sync::watch::Receiver<usize>,
+) -> TestResult<()> {
+    tokio::time::timeout(
+        Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
+        async {
+            loop {
+                let record = store
+                    .lock()
+                    .await
+                    .read_wakeup::<SavedMessage>(wakeup)
+                    .await?;
+                if record.pending_delivery_id.is_none() && *passes.borrow() == 0 {
+                    return TestResult::Ok(());
+                }
+                progress_worker(passes).await?;
+            }
+        },
+    )
+    .await??;
+    Ok(())
 }
 
 async fn load_and_validate_stored_wake_push(

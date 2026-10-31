@@ -181,6 +181,12 @@ impl MailDeliveryRuntime {
         if let Some(state) = expired {
             return expired_wake_answer(state, previously_prepared);
         }
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        tracing::trace!(
+            target: "collaboration_service::runtime_test_remote_wake_commit",
+            item_id = %id.as_uuid(),
+            "remote-wake-outbox-admission-committed"
+        );
         self.host
             .wake_at(self.host.now())
             .await
@@ -254,7 +260,7 @@ impl MailConsumer {
         body: &WakeBody,
     ) -> LocalDelivery<RouterDeliveryTypes> {
         let response = match self.wakes.get() {
-            Some(owner) => owner.apply(item, body).await,
+            Some(owner) => owner.apply(item, body, self.clock.clone()).await,
             None => refused(
                 RemoteWakeRefusal::AutomationUnavailable,
                 RemoteWakeMutationState::None,
@@ -292,6 +298,7 @@ impl LocalWakeOwner {
         &self,
         item: &DeliveryItem<RouterDeliveryTypes>,
         body: &WakeBody,
+        clock: Arc<dyn crate::SubscriptionClock>,
     ) -> RemoteWakeResult {
         let fail = |reason| refused(reason, RemoteWakeMutationState::None);
         if body.validate_sender(item.sender()).is_err()
@@ -300,9 +307,12 @@ impl LocalWakeOwner {
         {
             return fail(RemoteWakeRefusal::InvalidRecord);
         }
-        let wakes =
-            crate::collaboration_application::WakeOperations::new(&self.service, Some(&self.store))
-                .with_wait_capacity(&self.permits);
+        let wakes = crate::collaboration_application::WakeOperations::new_with_clock(
+            &self.service,
+            Some(&self.store),
+            clock.clone(),
+        )
+        .with_wait_capacity(&self.permits);
         use collaboration_mail_protocol::RemoteWakeRequest as R;
         // Every control's frozen target must match the actual local wake before mutation.
         if let R::Show { wakeup_id }
@@ -394,7 +404,7 @@ impl LocalWakeOwner {
                     after,
                     deadline,
                 } => {
-                    let remaining = (deadline.as_datetime() - chrono::Utc::now())
+                    let remaining = (deadline.as_datetime() - clock.now())
                         .to_std()
                         .map_err(|_| invalid_wake())?;
                     let wait = collaboration_protocol::WakeWaitRequest {

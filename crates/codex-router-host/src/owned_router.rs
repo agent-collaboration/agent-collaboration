@@ -67,7 +67,13 @@ impl RouterChild {
         }
         self.term_sent = true;
         self.process.send_terminate()?;
-        match tokio::time::timeout(ROUTER_SHUTDOWN_TIMEOUT, self.process.wait()).await {
+        let deadline = tokio::time::Instant::now() + ROUTER_SHUTDOWN_TIMEOUT;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        tracing::trace!(
+            target: "codex_router_host::runtime_test_router_shutdown",
+            "router-shutdown-deadline-armed"
+        );
+        match tokio::time::timeout_at(deadline, self.process.wait()).await {
             Ok(result) => {
                 let _status = result?;
                 Ok(RouterShutdownOutcome::Graceful)

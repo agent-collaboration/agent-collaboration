@@ -182,10 +182,8 @@ async fn exercise_input_validation(
     if failed_native.target.is_some() != prepared {
         return Err("local validation lost earlier preparation evidence".into());
     }
-    if tokio::time::timeout(std::time::Duration::from_millis(50), listener.accept())
-        .await
-        .is_ok()
-    {
+    let listener = listener.into_std()?;
+    if !matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock) {
         return Err("invalid assembled input contacted native backend".into());
     }
     let next_instruction = store

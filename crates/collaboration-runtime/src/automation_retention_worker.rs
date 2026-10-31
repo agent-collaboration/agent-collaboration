@@ -8,6 +8,8 @@ pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    passes: tokio::sync::watch::Sender<()>,
 }
 impl AutomationRetentionWorker {
     pub fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
@@ -15,7 +17,14 @@ impl AutomationRetentionWorker {
             store,
             interaction_broker: None,
             native_push_store: None,
+            #[cfg(any(test, feature = "runtime-test-support"))]
+            passes: tokio::sync::watch::channel(()).0,
         }
+    }
+
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    pub fn observe_passes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.passes.subscribe()
     }
 
     pub fn with_native_push_store(
@@ -98,6 +107,8 @@ impl AutomationRetentionWorker {
                     }
                 }
             }
+            #[cfg(any(test, feature = "runtime-test-support"))]
+            self.passes.send_replace(());
         }
     }
 }
@@ -171,22 +182,21 @@ mod tests {
 
         let shared_store = Arc::new(Mutex::new(store));
         let shutdown = CancellationToken::new();
-        let task = tokio::spawn(
-            AutomationRetentionWorker::new(Arc::clone(&shared_store)).run(shutdown.clone()),
-        );
+        let worker = AutomationRetentionWorker::new(Arc::clone(&shared_store));
+        let mut completed_passes = worker.observe_passes();
+        let task = tokio::spawn(worker.run(shutdown.clone()));
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            loop {
-                let retained: Vec<i64> = sqlx::query_scalar(
-                    "SELECT recorded_at_ms FROM automation_events ORDER BY recorded_at_ms",
-                )
-                .fetch_all(&mut observer)
+            completed_passes
+                .changed()
                 .await
-                .unwrap_or_else(|error| panic!("worker result should query: {error}"));
-                if retained == vec![now] {
-                    return;
-                }
-                tokio::task::yield_now().await;
-            }
+                .expect("retention owner completes");
+            let retained: Vec<i64> = sqlx::query_scalar(
+                "SELECT recorded_at_ms FROM automation_events ORDER BY recorded_at_ms",
+            )
+            .fetch_all(&mut observer)
+            .await
+            .unwrap_or_else(|error| panic!("worker result should query: {error}"));
+            assert_eq!(retained, vec![now]);
         })
         .await
         .unwrap_or_else(|_elapsed| panic!("minute worker should prune the expired event"));

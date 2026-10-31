@@ -227,10 +227,19 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
         "status must compare the running child identity with the installed executable",
     )?;
     let router_probe_count = router.request_count();
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_millis(100)).await;
+    tokio::time::resume();
+    // Fence the Host's own loop; this explicit status observation contributes one probe.
+    send_operator_request(
+        coordination_paths.operator_socket(),
+        OperatorRequest::AwaitHostStart,
+        Duration::from_secs(20),
+    )
+    .await?;
     check_equal(
         router.request_count(),
-        router_probe_count,
+        router_probe_count + 1,
         "idle runtime must not poll router health",
     )?;
     router.finish().await?;

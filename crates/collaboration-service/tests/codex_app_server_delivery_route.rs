@@ -299,7 +299,7 @@ async fn exercise_held_empty_thread(
                 .ok_or("native connection closed")??;
             let request: Value = serde_json::from_str(frame.to_text()?)?;
             if request.get("method").and_then(Value::as_str) != Some(method) {
-                return Err::<(), Box<dyn std::error::Error + Send + Sync>>(
+                return Err::<tokio::net::UnixListener, Box<dyn std::error::Error + Send + Sync>>(
                     format!("unexpected native method: {:?}", request.get("method")).into(),
                 );
             }
@@ -348,13 +348,7 @@ async fn exercise_held_empty_thread(
             wire.send(Message::Text(response.to_string().into()))
                 .await?;
         }
-        if tokio::time::timeout(Duration::from_millis(25), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("scheduled run opened a second native connection".into());
-        }
-        Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(listener)
     });
     let (client, server) = tokio::net::UnixStream::pair()?;
     let serving = tokio::spawn(serve_acp_connection(
@@ -542,7 +536,7 @@ async fn exercise_held_empty_thread(
             use codex_acp_adapter::UnmaterializedBindingStore;
             holder.restore(*binding);
         }
-        backend.await??;
+        require_no_second_native_connection(backend.await??)?;
         std::fs::remove_file(socket_path)?;
         std::fs::remove_dir(scratch)?;
         std::fs::remove_dir(scratch_parent)?;
@@ -648,7 +642,7 @@ async fn exercise_held_empty_thread(
     served.stop().await?;
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
-    backend.await??;
+    require_no_second_native_connection(backend.await??)?;
     native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)
         .map_err(|_| std::io::Error::other("service retained automation store"))?
@@ -669,5 +663,16 @@ async fn exercise_held_empty_thread(
     std::fs::remove_dir(scratch)?;
     std::fs::remove_dir(scratch_parent)?;
     std::fs::remove_dir(root)?;
+    Ok(())
+}
+
+fn require_no_second_native_connection(
+    listener: tokio::net::UnixListener,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // The delivery/ACP producer has returned and its scripted backend joined.
+    if !matches!(listener.into_std()?.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+    {
+        return Err("scheduled run opened a second native connection".into());
+    }
     Ok(())
 }

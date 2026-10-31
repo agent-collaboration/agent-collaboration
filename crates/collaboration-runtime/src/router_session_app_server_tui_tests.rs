@@ -1,4 +1,5 @@
 use super::test_support::ScriptedSessionBackend;
+use super::tui_output::TuiOutput;
 use super::*;
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 use tokio_util::sync::CancellationToken;
@@ -24,7 +25,7 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
         io::AsyncWriteExt,
         net::UnixStream,
         process::Command,
-        time::{Duration, Instant, sleep, timeout},
+        time::{Duration, timeout},
     };
     use tokio_tungstenite::client_async;
 
@@ -198,24 +199,15 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
         .current_dir(&project)
         .env("CODEX_HOME", &codex_home)
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .kill_on_drop(true)
         .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(12);
-    let mut history_visible = false;
-    loop {
-        if std::fs::read_to_string(&terminal_log)
-            .is_ok_and(|terminal| terminal.contains("PR4_RESOLVED_HISTORY_MARKER"))
-        {
-            history_visible = true;
-            break;
-        }
-        if Instant::now() >= deadline {
-            break;
-        }
-        sleep(Duration::from_millis(50)).await;
-    }
-    sleep(Duration::from_millis(1_500)).await;
+    let mut output = TuiOutput::capture(tui.stdout.take().ok_or("TUI stdout")?);
+    let history_visible = output
+        .wait_for_text("PR4_RESOLVED_HISTORY_MARKER", Duration::from_secs(12))
+        .await
+        .is_ok();
     if let Some(mut stdin) = tui.stdin.take() {
         let _ = stdin.write_all(b"\x03\x03").await;
     }
@@ -224,6 +216,7 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
     }
     shutdown.cancel();
     running.await??;
+    let _drained = output.finish().await?;
     let terminal = std::fs::read_to_string(&terminal_log)?;
     let tail = terminal
         .chars()
@@ -261,7 +254,7 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
     use tokio::{
         io::AsyncWriteExt,
         process::Command,
-        time::{Duration, Instant, sleep, timeout},
+        time::{Duration, timeout},
     };
 
     let directory = tempfile::tempdir()?;
@@ -303,6 +296,7 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
         .arg("stty cols 100 rows 30; exec \"$@\"")
         .arg("sh")
         .arg("codex")
+        .arg("hello")
         .arg("--remote")
         .arg(format!("unix://{}", socket_path.display()))
         .arg("--no-alt-screen")
@@ -311,35 +305,19 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
         .current_dir(&project)
         .env("CODEX_HOME", &codex_home)
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .kill_on_drop(true)
         .spawn()?;
+    let mut output = TuiOutput::capture(tui.stdout.take().ok_or("TUI stdout")?);
     timeout(Duration::from_secs(20), backend.created.notified()).await?;
-    sleep(Duration::from_secs(2)).await;
-    if let Some(stdin) = tui.stdin.as_mut() {
-        stdin.write_all(b"hello").await?;
-    }
-    sleep(Duration::from_millis(500)).await;
-    if let Some(stdin) = tui.stdin.as_mut() {
-        stdin.write_all(b"\r").await?;
-    }
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while backend
-        .prompt_commands
-        .lock()
-        .expect("test lock")
-        .is_empty()
-        && Instant::now() < deadline
-    {
-        sleep(Duration::from_millis(50)).await;
-    }
+    timeout(Duration::from_secs(10), backend.prompt_submitted.notified()).await?;
     let submitted = !backend
         .prompt_commands
         .lock()
         .expect("test lock")
         .is_empty();
     if submitted {
-        sleep(Duration::from_millis(200)).await;
         let _sent = backend.events.send(HubEvent {
             sequence: 2,
             event: SessionEvent::ItemStarted {
@@ -367,7 +345,9 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
             },
         });
     }
-    sleep(Duration::from_secs(1)).await;
+    let rendered = output
+        .wait_for_text("PR4_TUI_REPLY_MARKER", Duration::from_secs(10))
+        .await;
     if let Some(mut stdin) = tui.stdin.take() {
         let _ = stdin.write_all(b"\x03\x03").await;
     }
@@ -376,6 +356,8 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
     }
     shutdown.cancel();
     running.await??;
+    let _drained = output.finish().await?;
+    rendered?;
     let terminal = std::fs::read_to_string(&terminal_log)?;
     assert!(
         submitted,

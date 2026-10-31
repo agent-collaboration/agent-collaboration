@@ -56,7 +56,6 @@ use std::fmt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
-use std::time::Instant;
 
 use codex_router_core::affinity::AffinityKeyHash;
 use codex_router_core::ids::AccountId;
@@ -275,6 +274,8 @@ pub enum WeeklyQuotaFloorMutationResult {
 #[derive(Debug)]
 pub struct AsyncWeeklyQuotaFloorMutationStore {
     pool: sqlx::SqlitePool,
+    #[cfg(test)]
+    busy_retry_deadlines: tokio::sync::watch::Sender<Option<tokio::time::Instant>>,
 }
 
 impl AsyncSqliteStateStore {

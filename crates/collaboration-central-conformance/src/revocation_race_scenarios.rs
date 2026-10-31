@@ -2,7 +2,7 @@
 
 use crate::{ConformanceClient, ConformanceResult, enroll_admitted_peer, owner_assertion};
 use collaboration_central_core::{
-    RevocationControl, RevocationControlInput, RevocationObservation,
+    RevocationControl, RevocationControlInput, RevocationObservation, RevocationWait,
 };
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
@@ -41,7 +41,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
                 .json(&json!({"kind":"revokeMachine","value":{"installation":SERVICE}}))
                 .send().await?.error_for_status()?.json().await?)
         });
-        let held = observed(client, |value| {
+        let held = observed(client, RevocationWait::DeliveryGateReached, |value| {
             value.gate_armed && value.gate_reached
                 && value.enrollment.as_ref().and_then(|row| row.last_revocation_operation)
                     .is_some_and(|operation| value.calls.iter().any(|call| call.operation == operation))
@@ -88,7 +88,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
         if answer != json!({"kind":"machineRevoked"}) || receive(&mut old.socket).await? != revoked_close() {
             return Err("released revocation did not close its actual old session".into());
         }
-        observed(client, |value| matches!(value.operation.as_ref().map(|operation| &operation.state), Some(durable_steps::OperationState::Completed { .. }))).await?;
+        observed(client, RevocationWait::OperationCompleted, |value| matches!(value.operation.as_ref().map(|operation| &operation.state), Some(durable_steps::OperationState::Completed { .. }))).await?;
         // Readmission may answer pending after admitting the mailbox Open.
         // Observe its owning journal without an admin retry driving it, then
         // repeat the exact active contents while opening the new session.
@@ -103,7 +103,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
             && answer.get("kind").and_then(Value::as_str) != Some("machineEnrolled") {
             return Err(format!("unexpected readmission answer: {answer}").into());
         }
-        observed(client, |value| {
+        observed(client, RevocationWait::ReadmissionCompleted, |value| {
             value.enrollment.as_ref().is_some_and(|row| !row.revoked)
                 && matches!(value.readmission_operation.as_ref().map(|operation| &operation.state),
                     Some(durable_steps::OperationState::Completed { .. }))
@@ -165,18 +165,20 @@ async fn control(
 }
 async fn observed(
     client: &ConformanceClient,
-    ready: impl Fn(&RevocationObservation) -> bool,
+    condition: RevocationWait,
+    ready: impl FnOnce(&RevocationObservation) -> bool,
 ) -> ConformanceResult<RevocationObservation> {
-    tokio::time::timeout(Duration::from_secs(8), async {
-        loop {
-            let value = control(client, RevocationControl::Observe).await?;
-            if ready(&value) {
-                return Ok(value);
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await?
+    let value = tokio::time::timeout(
+        Duration::from_secs(8),
+        control(client, RevocationControl::Await { condition }),
+    )
+    .await??;
+    if !ready(&value) {
+        return Err(
+            format!("revocation wait {condition:?} answered before its owning state").into(),
+        );
+    }
+    Ok(value)
 }
 fn revoked_close() -> Value {
     json!({"kind":"closed","value":{"reason":{"kind":"credentialRejected","value":"revoked"}}})

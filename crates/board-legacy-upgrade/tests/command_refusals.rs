@@ -392,11 +392,15 @@ async fn another_process_holding_the_legacy_file_refuses_the_run() -> TestResult
     let source_bytes = std::fs::read(&source)?;
     let source_modified = source.metadata()?.modified()?;
     let holder = SourceFileHolder {
-        child: tokio::process::Command::new("tail")
-            .arg("-f")
+        child: tokio::process::Command::new("/bin/sh")
+            .args([
+                "-c",
+                "exec 3<\"$1\"; printf 'SOURCE_OPEN\\n'; read fixture_release",
+                "source-holder",
+            ])
             .arg(&source)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()?,
@@ -406,7 +410,7 @@ async fn another_process_holding_the_legacy_file_refuses_the_run() -> TestResult
     codex_router_test_support::scenario_finalization::run_scenario(
         holder,
         async |holder| {
-            wait_until_lsof_reports(&holder.child, &holder.source).await?;
+            wait_until_lsof_reports(&mut holder.child, &holder.source).await?;
             let output = run(&holder.source, &root, &report, true)
                 .await
                 .map_err(promote_test_error)?;
@@ -456,30 +460,42 @@ struct SourceFileHolder {
 }
 
 async fn wait_until_lsof_reports(
-    holder: &tokio::process::Child,
+    holder: &mut tokio::process::Child,
     source: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let holder_pid = holder.id().ok_or("holder process id missing")?.to_string();
+    let stdout = holder
+        .stdout
+        .take()
+        .ok_or("source holder readiness missing")?;
     tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let output = tokio::process::Command::new("lsof")
-                .args(["-t", "--"])
-                .arg(source)
-                .output()
-                .await?;
-            if !output.status.success() && output.status.code() != Some(1) {
-                return Err(std::io::Error::other(
-                    String::from_utf8_lossy(&output.stderr).into_owned(),
-                )
-                .into());
-            }
-            if String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .any(|pid| pid == holder_pid)
-            {
-                return Ok::<(), Box<dyn std::error::Error + Send + Sync>>(());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        use tokio::io::AsyncBufReadExt;
+        let ready = tokio::io::BufReader::new(stdout)
+            .lines()
+            .next_line()
+            .await?;
+        if ready.as_deref() != Some("SOURCE_OPEN") {
+            return Err("source holder did not acknowledge its open descriptor".into());
+        }
+        let output = tokio::process::Command::new("lsof")
+            .args(["-t", "--"])
+            .arg(source)
+            .kill_on_drop(true)
+            .output()
+            .await?;
+        if !output.status.success() && output.status.code() != Some(1) {
+            return Err(std::io::Error::other(
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            )
+            .into());
+        }
+        if String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|pid| pid == holder_pid)
+        {
+            Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+        } else {
+            Err("acknowledged source descriptor absent from lsof".into())
         }
     })
     .await??;

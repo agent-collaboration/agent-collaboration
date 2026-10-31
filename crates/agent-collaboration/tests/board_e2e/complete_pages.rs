@@ -1,4 +1,5 @@
 //! BR09 / VD §5a U2,U26–31,U42,U47: continuations cross CLI/MCP without loss or duplication.
+use super::fixture::machine_progress;
 use super::fixture::{BoardFixture, accepted, at, fields, header, human};
 use codex_router_test_support::FixtureResult;
 use serde_json::{Value, json};
@@ -387,6 +388,7 @@ async fn archive_workspace(fixture: &BoardFixture) -> FixtureResult {
     // Unlike the old launcher stand-in, this Host has real writers that can acknowledge archive.
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
+            let progress = machine_progress::observe(fixture.host()?, None).await?;
             let workspace = fixture
                 .host()?
                 .mcp("workspace_show", json!({"workspaceId":fixture.workspace}))
@@ -394,7 +396,7 @@ async fn archive_workspace(fixture: &BoardFixture) -> FixtureResult {
             if workspace.pointer("/workspace/state") == Some(&json!("archived")) {
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            machine_progress::observe(fixture.host()?, Some(progress)).await?;
         }
     })
     .await??;

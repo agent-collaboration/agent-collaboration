@@ -30,6 +30,9 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+interaction-storage = { path = ".", features = ["runtime-test-support"] }
+tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber.workspace = true
 automation-storage = { path = "../automation-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.96" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }

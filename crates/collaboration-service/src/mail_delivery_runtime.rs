@@ -58,7 +58,7 @@ mod terminal_retirement;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;
 
-type MailHost = TokioHost<MailCallRouter, MailClock>;
+type MailHost = TokioHost<MailCallRouter, crate::SubscriptionRuntimeClock>;
 type MailStore = InteractionAtomicStore<MailHost>;
 type MailDatabase = <TursoScope<'static, MailHost> as TransactionScope>::Database;
 type LocalMailTask = DeliverLocally<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
@@ -87,14 +87,15 @@ pub struct MailDeliveryRuntime {
     session: Option<MailDeliverySession>,
 }
 
-struct MailClock(Arc<dyn SubscriptionClock>);
-impl Clock for MailClock {
-    fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.now().timestamp_millis())
-    }
-}
-
 impl MailDeliveryRuntime {
+    pub(crate) fn subscription_clock(&self) -> Arc<dyn SubscriptionClock> {
+        self.clock.clone()
+    }
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub fn runtime_test_observe_committed_writes(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.store.runtime_test_observe_committed_writes()
+    }
+
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub async fn runtime_test_has_local_cancel_delivery(
         &self,
@@ -214,7 +215,10 @@ impl MailDeliveryRuntime {
             config,
             session: session.clone(),
         });
-        let host = Arc::new(TokioHost::new(router.clone(), MailClock(clock.clone())));
+        let host = Arc::new(TokioHost::new(
+            router.clone(),
+            crate::SubscriptionRuntimeClock::new(clock.clone()),
+        ));
         let store = Arc::new(InteractionAtomicStore::new(owner.clone(), host.clone()));
         router
             .store

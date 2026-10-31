@@ -22,6 +22,18 @@ pub struct AccountCredentialLock {
 }
 
 impl AccountCredentialLock {
+    /// Arm on the calling blocking worker, observing this acquisition's actual OS result.
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    pub fn acquire_with_contention_observer(
+        database_path: &Path,
+        account_id: &AccountId,
+        contention_observer: std::sync::mpsc::Sender<()>,
+    ) -> Result<Self, AccountCredentialLockError> {
+        let _observer =
+            crate::lock_contention_observation::arm_contention_observer(contention_observer);
+        Self::acquire(database_path, account_id)
+    }
+
     pub fn acquire(
         database_path: &Path,
         account_id: &AccountId,
@@ -43,7 +55,15 @@ impl AccountCredentialLock {
         let lock_path = lock_dir.join(format!("{digest:x}.lock"));
         reject_symlink(&lock_path)?;
         let file = open_private_lock_file(&lock_path)?;
-        file.lock().map_err(|_| AccountCredentialLockError)?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => {
+                #[cfg(any(test, all(feature = "test-support", debug_assertions)))]
+                crate::lock_contention_observation::report_contention();
+                file.lock().map_err(|_| AccountCredentialLockError)?;
+            }
+            Err(fs::TryLockError::Error(_)) => return Err(AccountCredentialLockError),
+        }
         Ok(Self { _file: file })
     }
 }
@@ -100,6 +120,52 @@ mod tests {
 
     static TEST_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[test]
+    fn an_explicit_observer_is_armed_on_the_actual_blocking_lock_worker() {
+        let root = tempfile::tempdir().expect("lock fixture");
+        let database = root.path().join("state.sqlite");
+        fs::write(&database, b"fixture identity").expect("database identity");
+        let account = AccountId::new("observed-worker-account").expect("account");
+        let held = AccountCredentialLock::acquire(&database, &account).expect("held account lock");
+        let (contention, observed) = mpsc::channel();
+        let (acquired, completed) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let lock = AccountCredentialLock::acquire_with_contention_observer(
+                &database, &account, contention,
+            )
+            .expect("worker acquires the same lock after release");
+            acquired.send(()).expect("worker acquisition observed");
+            lock
+        });
+        let contention = observed.recv_timeout(Duration::from_secs(2));
+        let before_release = completed.try_recv();
+        drop(held);
+        let acquired = worker.join().expect("blocking worker joined");
+        drop(acquired);
+        contention.expect("the actual worker encountered OS contention");
+        assert!(matches!(before_release, Err(mpsc::TryRecvError::Empty)));
+    }
+
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[test]
+    fn an_uncontended_acquisition_consumes_its_explicit_observer() {
+        let root = tempfile::tempdir().expect("lock fixture");
+        let database = root.path().join("state.sqlite");
+        fs::write(&database, b"fixture identity").expect("database identity");
+        let account = AccountId::new("uncontended-worker-account").expect("account");
+        let (contention, observed) = mpsc::channel();
+        let held = AccountCredentialLock::acquire_with_contention_observer(
+            &database, &account, contention,
+        )
+        .expect("uncontended account lock");
+        assert!(matches!(
+            observed.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
+        drop(held);
+    }
+
     #[test]
     fn symlinked_state_path_waits_on_the_same_cross_process_account_lock() {
         let account_id = AccountId::new("shared-lock-account").expect("account id");
@@ -148,20 +214,20 @@ mod tests {
             assert!(Instant::now() < deadline, "child did not establish lock");
             thread::yield_now();
         }
-        let (attempt_sender, attempt_receiver) = mpsc::channel();
+        let (contention_sender, contention_receiver) = mpsc::channel();
         let (acquired_sender, acquired_receiver) = mpsc::channel();
         let lock_thread = thread::spawn(move || {
-            attempt_sender.send(()).expect("attempt should report");
+            crate::lock_contention_observation::observe_next_contention(contention_sender);
             let _lock = AccountCredentialLock::acquire(&alias_path, &account_id)
                 .expect("alias should acquire after child exits");
             acquired_sender.send(()).expect("acquisition should report");
         });
-        attempt_receiver
+        contention_receiver
             .recv_timeout(Duration::from_secs(2))
-            .expect("alias attempt should begin");
+            .expect("the alias reaches the same contended OS account lock");
         assert!(matches!(
-            acquired_receiver.recv_timeout(Duration::from_millis(100)),
-            Err(mpsc::RecvTimeoutError::Timeout)
+            acquired_receiver.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
         ));
         fs::write(&release_path, b"release").expect("child should release");
         assert!(child.wait().expect("child should exit").success());

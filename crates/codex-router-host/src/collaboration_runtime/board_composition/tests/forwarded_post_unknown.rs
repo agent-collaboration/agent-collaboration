@@ -1,5 +1,8 @@
 //! Uncertain holder completion keeps the original request as the retry identity.
 use super::*;
+use codex_router_test_support::FixtureResult;
+#[path = "forwarded_post_deadline.rs"]
+mod forwarded_post_deadline;
 
 #[tokio::test]
 #[expect(
@@ -47,16 +50,42 @@ async fn non_holder_sender_unknown_answer_retries_the_original_post_identity() -
         let read = store.snapshot().await?;
         let before = read.high_water();
         read.finish().await?;
-        // Hold the real native write gate through the production 30-second
-        // forward bound; no transport, response or timer is substituted.
+        let (subscriber, mut received) =
+            forwarded_post_deadline::observe_request(&request.request_id);
+        let _subscriber = tracing::subscriber::set_default(subscriber);
+        // Hold the same native write gate and drive the existing caller clock
+        // only after the holder receives this exact forwarded request.
         let held = store.begin_admission(origin()?).await?;
-        let outcome = timeout(
-            std::time::Duration::from_secs(35),
-            sender.application.board().project_write(request.clone()),
-        )
+        let outcome = async {
+            let board = sender.application.board();
+            let submitting = board.project_write(request.clone());
+            tokio::pin!(submitting);
+            timeout(std::time::Duration::from_secs(35), async {
+                tokio::select! {
+                    result = &mut submitting => {
+                        result?;
+                        FixtureResult::Err("forward completed before its real holder admission".into())
+                    }
+                    observed = received.wait_for(|received| *received) => {
+                        observed?;
+                        Ok(())
+                    }
+                }
+            })
+            .await??;
+            let pending_before_expiry = futures_util::poll!(submitting.as_mut()).is_pending();
+            tokio::time::pause();
+            tokio::time::advance(std::time::Duration::from_millis(30_001)).await;
+            tokio::time::resume();
+            let outcome = timeout(std::time::Duration::from_secs(35), submitting).await??;
+            if !pending_before_expiry {
+                return Err("forward did not remain pending before controlled expiry".into());
+            }
+            FixtureResult::Ok(outcome)
+        }
         .await;
         let released = held.rollback().await;
-        let outcome = outcome??;
+        let outcome = outcome?;
         released?;
         assert!(
             matches!(

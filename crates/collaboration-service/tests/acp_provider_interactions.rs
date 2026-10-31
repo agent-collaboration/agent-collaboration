@@ -9,6 +9,7 @@ use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
 use collaboration_runtime::TypedApprovalResolution;
 use collaboration_runtime::UnmaterializedThreadHolder;
+use futures_util::FutureExt;
 use message_board::{Identity, SessionEndpointRef};
 use serde_json::{Value, json};
 use session_event_model::{
@@ -96,12 +97,17 @@ fn approval(request_id: &str) -> Result<ApprovalRequest, Box<dyn std::error::Err
 #[path = "support/acp_provider_interactions_remediation.rs"]
 mod remediation;
 
+#[path = "support/acp_interaction_withheld.rs"]
+mod acp_interaction_withheld;
+
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn only_the_approver_receives_and_decides_exact_provider_options() -> TestResult {
+    let (subscriber, mut withheld) = acp_interaction_withheld::observe_request("approval-1");
+    let _observation = tracing::subscriber::set_default(subscriber);
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
@@ -206,11 +212,8 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
     let other_state = next_frame(&mut other_lines).await?;
     assert_eq!(other_state["method"], "_session/state");
     assert_eq!(other_state["params"]["state"], "requires_action");
-    assert!(
-        tokio::time::timeout(Duration::from_millis(100), other_lines.next_line())
-            .await
-            .is_err()
-    );
+    tokio::time::timeout(Duration::from_secs(2), withheld.wait_for(|seen| *seen)).await??;
+    assert!(other_lines.next_line().now_or_never().is_none());
     send_frame(
         &mut owner_writer,
         json!({"jsonrpc":"2.0","id":offered["id"],"result":{

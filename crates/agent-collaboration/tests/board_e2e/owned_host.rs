@@ -12,7 +12,8 @@ use std::{
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStdout, Command},
+    process::{Child, ChildStdin, ChildStdout, Command},
+    sync::Mutex,
 };
 
 const READY_BOUND: Duration = Duration::from_secs(45);
@@ -52,8 +53,13 @@ pub struct BoardHost {
     pub directory: PathBuf,
     pub mcp_url: String,
     child: Child,
-    output: BufReader<ChildStdout>,
+    control: Mutex<HostControl>,
     hold_before_serve: bool,
+}
+
+struct HostControl {
+    input: Option<ChildStdin>,
+    output: BufReader<ChildStdout>,
 }
 
 /// Evidence that this exact owned child was joined before native fixture readback.
@@ -214,12 +220,16 @@ impl BoardHost {
             .stderr(Stdio::from(stderr))
             .kill_on_drop(true);
         let mut child = command.spawn()?;
+        let input = child.stdin.take().ok_or("owned Host stdin is absent")?;
         let output = child.stdout.take().ok_or("owned Host stdout is absent")?;
         Ok(Self {
             directory: directory.to_owned(),
             mcp_url: String::new(),
             child,
-            output: BufReader::new(output),
+            control: Mutex::new(HostControl {
+                input: Some(input),
+                output: BufReader::new(output),
+            }),
             hold_before_serve: directory.join("fixture-hold-before-serve").is_file(),
         })
     }
@@ -229,7 +239,13 @@ impl BoardHost {
         report_port: &mut impl FnMut(u16) -> u16,
     ) -> FixtureResult<ReadyListener> {
         let mut line = String::new();
-        if tokio::time::timeout(READY_BOUND, self.output.read_line(&mut line)).await?? == 0 {
+        if tokio::time::timeout(
+            READY_BOUND,
+            self.control.get_mut().output.read_line(&mut line),
+        )
+        .await??
+            == 0
+        {
             return Err("owned Host exited before its ready record".into());
         }
         let ready: Ready = serde_json::from_str(&line)?;
@@ -269,7 +285,13 @@ impl BoardHost {
 
     async fn wait_before_serve_hold(&mut self) -> FixtureResult {
         let mut line = String::new();
-        if tokio::time::timeout(READY_BOUND, self.output.read_line(&mut line)).await?? == 0 {
+        if tokio::time::timeout(
+            READY_BOUND,
+            self.control.get_mut().output.read_line(&mut line),
+        )
+        .await??
+            == 0
+        {
             return Err("owned Host exited before its pre-serve hold acknowledgement".into());
         }
         let held: BeforeServeHeld = serde_json::from_str(&line)?;
@@ -283,7 +305,7 @@ impl BoardHost {
 
     // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
-        &mut self,
+        &self,
         cancel: fleet_sync_protocol::ItemId,
     ) -> FixtureResult<bool> {
         let reply = self
@@ -300,7 +322,7 @@ impl BoardHost {
             .ok_or_else(|| "owned Host omitted Local cancel observation".into())
     }
 
-    pub async fn replicate_project(&mut self, project: &str) -> FixtureResult {
+    pub async fn replicate_project(&self, project: &str) -> FixtureResult {
         let reply = self
             .query_project(json!({"kind":"replicateProject", "project":project}))
             .await?;
@@ -310,7 +332,7 @@ impl BoardHost {
         Ok(())
     }
 
-    pub async fn drain_project_publisher(&mut self, project: &str) -> FixtureResult {
+    pub async fn drain_project_publisher(&self, project: &str) -> FixtureResult {
         let reply = self
             .query_project(json!({"kind":"drainProjectPublisher","project":project}))
             .await?;
@@ -320,7 +342,7 @@ impl BoardHost {
         Ok(())
     }
 
-    pub async fn seeded_handoff_frontier(&mut self, project: &str) -> FixtureResult<Value> {
+    pub async fn seeded_handoff_frontier(&self, project: &str) -> FixtureResult<Value> {
         let reply = self
             .query_project(json!({"kind":"seededHandoffFrontier","project":project}))
             .await?;
@@ -335,17 +357,18 @@ impl BoardHost {
             .ok_or_else(|| "owned Host seed frontier is absent".into())
     }
 
-    async fn query_project(&mut self, query: Value) -> FixtureResult<Value> {
+    pub(super) async fn query_project(&self, query: Value) -> FixtureResult<Value> {
         let mut request = serde_json::to_vec(&query)?;
         request.push(b'\n');
-        self.child
-            .stdin
+        let mut control = self.control.lock().await;
+        control
+            .input
             .as_mut()
             .ok_or("owned Host observation input is absent")?
             .write_all(&request)
             .await?;
         let mut line = String::new();
-        if self.output.read_line(&mut line).await? == 0 {
+        if control.output.read_line(&mut line).await? == 0 {
             return Err("owned Host exited before Local cancel observation".into());
         }
         Ok(serde_json::from_str(&line)?)
@@ -470,7 +493,10 @@ impl BoardHost {
         let mut remaining = Vec::new();
         let (waited, drained) = tokio::join!(
             tokio::time::timeout(STOP_BOUND, self.child.wait()),
-            tokio::time::timeout(STOP_BOUND, self.output.read_to_end(&mut remaining)),
+            tokio::time::timeout(
+                STOP_BOUND,
+                self.control.get_mut().output.read_to_end(&mut remaining)
+            ),
         );
         let mut failures = Vec::new();
         if let Err(error) = killed {
@@ -514,7 +540,7 @@ impl BoardHost {
 
     pub async fn stop(mut self) -> FixtureResult {
         // Release the debug example's stdin reader before joining its runtime.
-        drop(self.child.stdin.take());
+        drop(self.control.get_mut().input.take());
         if self.child.try_wait()?.is_none() {
             let pid = self.child.id().ok_or("owned Host PID absent before stop")?;
             let mut signal = Command::new("kill");
@@ -526,8 +552,10 @@ impl BoardHost {
         }
         let mut remaining = Vec::new();
         let settled = tokio::time::timeout(STOP_BOUND, async {
-            let (status, _) =
-                tokio::try_join!(self.child.wait(), self.output.read_to_end(&mut remaining))?;
+            let (status, _) = tokio::try_join!(
+                self.child.wait(),
+                self.control.get_mut().output.read_to_end(&mut remaining)
+            )?;
             Ok::<_, std::io::Error>(status)
         })
         .await;

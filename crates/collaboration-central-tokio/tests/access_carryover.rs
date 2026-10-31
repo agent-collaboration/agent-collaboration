@@ -9,14 +9,14 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use std::time::Duration;
-#[path = "native_http/support.rs"]
-mod configuration;
+#[path = "support/clocked_server.rs"]
+mod clocked_server;
+use clocked_server::configuration;
 
 enum AccessCase {
     ZeroCacheAge,
     KeyProfile,
     VerifierControl,
-    AssertionExpiry,
     HttpSessions,
 }
 
@@ -29,7 +29,7 @@ async fn run_case(case: AccessCase) -> ConformanceResult<()> {
         AccessCase::KeyProfile => {
             JwksFixtureServer::start_with_keys(fixture_key_profile_jwks()?).await?
         }
-        AccessCase::VerifierControl | AccessCase::AssertionExpiry | AccessCase::HttpSessions => {
+        AccessCase::VerifierControl | AccessCase::HttpSessions => {
             JwksFixtureServer::start().await?
         }
     };
@@ -56,7 +56,6 @@ async fn run_case(case: AccessCase) -> ConformanceResult<()> {
             }
             AccessCase::KeyProfile => run_access_key_profile_conformance(&client).await,
             AccessCase::VerifierControl => run_access_verifier_control_conformance(&client).await,
-            AccessCase::AssertionExpiry => run_access_expiry_conformance(&client).await,
             AccessCase::HttpSessions => {
                 run_shared_access_conformance(&client, &keys.requests).await
             }
@@ -90,7 +89,25 @@ async fn verifier_control_runs_the_edge_verifier_on_submitted_assertions() -> Co
 
 #[tokio::test]
 async fn expiry_row_refuses_the_same_assertion_after_its_exp() -> ConformanceResult<()> {
-    run_case(AccessCase::AssertionExpiry).await
+    let keys = JwksFixtureServer::start().await?;
+    let directory = tempfile::tempdir()?;
+    let server = clocked_server::ClockedServer::start(directory.path(), &keys.url).await?;
+    let client = ConformanceClient::new(server.base_url())?;
+    let now = chrono::Utc::now();
+    server
+        .clock
+        .set_time(collaboration_central_core::RegistryTime(now));
+    let clock = server.clock.clone();
+    let result = run_access_expiry_conformance(&client, now, |at| async move {
+        clock.set_time(collaboration_central_core::RegistryTime(at));
+        Ok(())
+    })
+    .await;
+    let stopped = server.shutdown().await;
+    let fixture = keys.shutdown().await;
+    stopped?;
+    fixture?;
+    result
 }
 
 #[tokio::test]

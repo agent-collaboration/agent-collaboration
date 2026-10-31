@@ -19,6 +19,7 @@ async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline
         .await
         .unwrap();
     observer.close().await.unwrap();
+    tokio::time::pause();
     let response = tokio::time::timeout(
         std::time::Duration::from_secs(3),
         runtime.service.wait(
@@ -29,6 +30,7 @@ async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline
         ),
     )
     .await;
+    tokio::time::resume();
     tokio::time::timeout(std::time::Duration::from_secs(10), runtime.close())
         .await
         .unwrap();

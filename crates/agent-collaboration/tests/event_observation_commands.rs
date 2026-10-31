@@ -261,7 +261,20 @@ mod tests {
                         json!({"id":resume["id"],"result":{"thread":{"id":"observed-thread"}}}),
                     )
                     .await;
-                    tokio::time::sleep(Duration::from_millis(25)).await;
+                    // The reply precedes Ping on the wire. Pong requires the
+                    // real observer to resume reading after that reply.
+                    socket
+                        .send(Message::Ping(b"resume-observer-ready".to_vec().into()))
+                        .await
+                        .unwrap_or_else(|error| panic!("observation fence: {error}"));
+                    let observed = tokio::time::timeout(Duration::from_secs(2), socket.next())
+                        .await
+                        .expect("observer reads after resume")
+                        .expect("observer remains connected")
+                        .expect("observer pong");
+                    assert!(
+                        matches!(observed, Message::Pong(payload) if payload.as_ref() == b"resume-observer-ready")
+                    );
                     send_native(&mut socket, json!({"method":"item/agentMessage/delta","params":{"threadId":"observed-thread","turnId":"observed-turn","delta":"late-output"}})).await;
                     socket
                         .close(None)

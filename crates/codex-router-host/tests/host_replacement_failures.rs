@@ -34,6 +34,8 @@ use operator_client::send_operator_request;
 
 #[path = "support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
+#[path = "support/router_shutdown_clock.rs"]
+mod router_shutdown_clock;
 use host_replacement_cleanup::finish_fixture_proof;
 use host_replacement_cleanup::reap_fixture_host;
 use host_replacement_cleanup::terminate_logged_fixture_processes;
@@ -149,6 +151,11 @@ async fn retained_router_teardown_failure_keeps_restart_busy_and_never_executes(
             TerminalClassification::Busy,
             "retained teardown must continue owning mutation admission",
         )?;
+        // The exact router acknowledged TERM and the live Host answered Busy.
+        // Its unchanged ten-second shutdown timer is already armed.
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_millis(10_001)).await;
+        tokio::time::resume();
         let first_frames = tokio::time::timeout(Duration::from_secs(15), first_restart).await???;
         check_equal(
             terminal_classification(&first_frames)?,
@@ -308,6 +315,9 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
     if std::env::var_os("CODEX_HOST_SIGNAL_CHILD").is_none() {
         return Ok(());
     }
+    let (subscriber, shutdown_clock) = router_shutdown_clock::observe_armed_deadlines();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let current_executable = std::env::current_exe()?;
     let router_address =
         std::env::var("CODEX_HOST_SIGNAL_ROUTER_ADDRESS")?.parse::<SocketAddr>()?;
@@ -340,7 +350,7 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
         )
         .with_environment("CODEX_HOST_FAILURE_ROUTER_LOG", router_log)
         .with_output(ChildOutput::Null);
-    let result = Box::pin(HostRuntime::run(
+    let mut running = Box::pin(HostRuntime::run(
         HostConfig::new(HostConfigInputs {
             coordination_paths: HostCoordinationPaths::new(
                 required_path("CODEX_HOST_SIGNAL_OPERATOR_SOCKET")?,
@@ -356,8 +366,14 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
         ManagedUpdateInputs::production().with_replacement_command(ChildCommandSpec::new(
             PathBuf::from("/configured/old/codex-router"),
         )),
-    ))
-    .await;
+    ));
+    let result = tokio::select! {
+        result = &mut running => result,
+        signal = terminate.recv() => {
+            signal.ok_or("fixture Host termination observer closed")?;
+            shutdown_clock.drive_until(running).await
+        }
+    };
     check_equal(
         result?,
         HostExit::Signal,

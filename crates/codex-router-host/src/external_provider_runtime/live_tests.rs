@@ -613,15 +613,16 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
             return Err(error.into());
         }
     };
-    let (broker, approver_task) = match approval_broker_fixture(&root, &service_id, &approver).await
-    {
-        Ok(fixture) => fixture,
-        Err(error) => {
-            runtime.shutdown().await;
-            host_runtime.shutdown().await?;
-            return Err(error);
-        }
-    };
+    let (broker, mut approver_task) =
+        match approval_broker_fixture(&root, &service_id, &approver).await {
+            Ok(fixture) => fixture,
+            Err(error) => {
+                runtime.shutdown().await;
+                host_runtime.shutdown().await?;
+                return Err(error);
+            }
+        };
+    let mut approval_notice_consumed = false;
     runtime.install_approval_broker(Arc::clone(&broker)).await;
     let live_result: TestResult = async {
         let provider_session_id = runtime.create_session(cwd).await?;
@@ -646,19 +647,25 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
             loop {
                 tokio::select! {
                     result = &mut prompt => break result,
-                    () = tokio::time::sleep(Duration::from_millis(25)) => {
-                        if let Some(pending) = broker.list(true).await.approvals.into_iter().next() {
-                            broker.decide(ApprovalDecideParams {
-                                request_id: pending.request_id,
-                                decision: Some(ApprovalDecision::Allow),
-                                option_id: None,
-                                acknowledge_persistent: false,
-                                note: None,
-                                actor: approval_actor(&approver),
-                            }).await.map_err(|error| {
-                                ExternalProviderRuntimeError::Operation(error.to_string())
-                            })?;
-                        }
+                    notice = &mut approver_task, if !approval_notice_consumed => {
+                        approval_notice_consumed = true;
+                        let _offered_option = notice.map_err(|error| {
+                            ExternalProviderRuntimeError::Operation(error.to_string())
+                        })?.map_err(|error| {
+                            ExternalProviderRuntimeError::Operation(error.to_string())
+                        })?;
+                        let pending = broker.list(true).await.approvals.into_iter().next()
+                            .ok_or_else(|| ExternalProviderRuntimeError::Operation("delivered approval is not pending".to_owned()))?;
+                        broker.decide(ApprovalDecideParams {
+                            request_id: pending.request_id,
+                            decision: Some(ApprovalDecision::Allow),
+                            option_id: None,
+                            acknowledge_persistent: false,
+                            note: None,
+                            actor: approval_actor(&approver),
+                        }).await.map_err(|error| {
+                            ExternalProviderRuntimeError::Operation(error.to_string())
+                        })?;
                     }
                 }
             }
@@ -723,7 +730,9 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
     .await;
 
     runtime.shutdown().await;
-    let approver_result: TestResult = if approver_task.is_finished() {
+    let approver_result: TestResult = if approval_notice_consumed {
+        Ok(())
+    } else if approver_task.is_finished() {
         approver_task
             .await
             .map_err(|error| error.to_string())?

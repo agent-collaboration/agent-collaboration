@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
         ))
         .await
     }
@@ -68,6 +70,7 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
@@ -303,8 +306,6 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
-            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
@@ -406,6 +407,9 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 interactions.clone(),
+                std::sync::Arc::new(collaboration_service::SubscriptionRuntimeClock::new(
+                    subscription_clock.clone(),
+                )),
             )
         });
         let push_handoff_worker = automation_store.as_ref().map(|store| {
@@ -715,9 +719,15 @@ impl CollaborationRuntime {
             publisher.recover().await.map_err(io::Error::other)?;
         }
         // Binding above establishes this runtime owns the listeners before recovery can mutate state.
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let runtime_test_wake_progress = wake_worker.as_ref().map(|worker| worker.observe_passes());
         let automation_task = wake_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let schedule_task =
             schedule_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
+        #[cfg(feature = "runtime-test-support")]
+        let automation_maintenance_pass = retention_worker
+            .as_ref()
+            .map(|worker| worker.observe_passes());
         let automation_maintenance =
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let collaboration_api =
@@ -783,6 +793,8 @@ impl CollaborationRuntime {
             startup_test_display_names: display_names.clone(),
             #[cfg(feature = "runtime-test-support")]
             runtime_test_mail,
+            #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+            runtime_test_wake_progress,
             notification_publisher,
             installation_peer,
             board_session: None,
@@ -808,6 +820,8 @@ impl CollaborationRuntime {
             automation_task,
             schedule_task,
             automation_maintenance,
+            #[cfg(feature = "runtime-test-support")]
+            automation_maintenance_pass,
             current_generation: None,
             observer_task: None,
             collaboration_api,

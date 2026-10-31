@@ -15,6 +15,8 @@ pub mod file_backend;
 pub mod fleet_secret_key;
 pub mod keychain_data_key;
 pub mod local_router_token;
+#[cfg(any(test, all(feature = "test-support", debug_assertions)))]
+mod lock_contention_observation;
 pub mod model;
 pub mod refresh_lease;
 pub mod runtime_credential_store;

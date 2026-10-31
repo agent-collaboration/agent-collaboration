@@ -59,6 +59,8 @@ pub(crate) struct ProviderAcpMessageFifo {
     senders: StdMutex<HashMap<SessionRef, mpsc::Sender<ProviderQueuedPrompt>>>,
     workers: StdMutex<Vec<JoinHandle<()>>>,
     shutdown: CancellationToken,
+    #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+    busy_observations: tokio::sync::watch::Sender<Option<collaboration_protocol::OperationId>>,
 }
 
 impl ProviderAcpMessageFifo {
@@ -74,7 +76,16 @@ impl ProviderAcpMessageFifo {
             senders: StdMutex::new(HashMap::new()),
             workers: StdMutex::new(Vec::new()),
             shutdown: CancellationToken::new(),
+            #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+            busy_observations: tokio::sync::watch::channel(None).0,
         }
+    }
+
+    #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+    pub(crate) fn observe_busy_operations(
+        &self,
+    ) -> tokio::sync::watch::Receiver<Option<collaboration_protocol::OperationId>> {
+        self.busy_observations.subscribe()
     }
 
     pub(crate) fn reserve(
@@ -103,6 +114,8 @@ impl ProviderAcpMessageFifo {
                 Arc::clone(&self.store),
                 Arc::clone(&self.ownership),
                 self.shutdown.clone(),
+                #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+                self.busy_observations.clone(),
             ));
             self.workers
                 .lock()
@@ -157,6 +170,8 @@ async fn run_provider_message_fifo(
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
     shutdown: CancellationToken,
+    #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+    busy_observations: tokio::sync::watch::Sender<Option<collaboration_protocol::OperationId>>,
 ) {
     loop {
         let request = tokio::select! {
@@ -321,7 +336,10 @@ async fn run_provider_message_fifo(
                     operation_admitted = true;
                     break;
                 }
-                Err(failure) if failure.kind == ConversationOperationFailureKind::Busy => {}
+                Err(failure) if failure.kind == ConversationOperationFailureKind::Busy => {
+                    #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+                    busy_observations.send_replace(Some(operation_id.clone()));
+                }
                 Err(failure) => {
                     supervisor
                         .queued_operation_registry()

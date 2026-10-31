@@ -74,22 +74,19 @@ async fn owed_wake_process_loss_replays_before_admission_and_before_acknowledgem
                 .ok_or("handoff worker missing")?
                 .run(stop.clone()),
         );
-        let wake = tokio::spawn(
-            identity
-                .wake_timing_worker()
-                .ok_or("wake worker missing")?
-                .run(stop.clone()),
-        );
+        let wake = identity.wake_timing_worker().ok_or("wake worker missing")?;
+        let mut passes = wake.observe_passes();
+        let wake = tokio::spawn(wake.run(stop.clone()));
         let observed = tokio::time::timeout(Duration::from_secs(5), async {
-            let mut interval = tokio::time::interval(Duration::from_millis(10));
             loop {
-                interval.tick().await;
+                passes.borrow_and_update();
                 let delivery = automation.lock().await.read_delivery::<
                     SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
                 >(&delivery_id).await?;
                 if delivery.status == agent_automation::DeliveryStatus::Accepted {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(delivery);
                 }
+                passes.changed().await?;
             }
         }).await;
         stop.cancel();

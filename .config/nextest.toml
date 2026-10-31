@@ -34,12 +34,12 @@ threads-required = "num-test-threads"
 # Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
 # in the existing process-runtime window, apart from unrelated fixture load.
 [[profile.ci.overrides]]
-filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once))"
+filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=controlled_shutdown::app_server_force_escalation_signals_and_reaps_once))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
-# protocol proof observes both firings; its own receive deadlines remain bounded.
+# U66 / MS-10 keeps its five-minute policy minimum. The controlled-clock proof
+# observes both real native firings and retains its existing failure bounds.
 [[profile.ci.overrides]]
 filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
 slow-timeout = { period = "60s", terminate-after = 6 }

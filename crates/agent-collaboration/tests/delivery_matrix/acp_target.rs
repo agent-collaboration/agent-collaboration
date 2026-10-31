@@ -174,10 +174,9 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
         &busy_marker,
     )?;
 
-    // A negative assertion needs a bounded settling window. Two seconds covers
-    // the provider FIFO's one-second maximum retry delay after the held turn.
-    // It does not attest engine-level notSubmitted retry or reconciliation.
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // This is the final cell: join the disposable Host and its FIFO producer
+    // before proving exact accumulated delivery. No later cell may use this Host.
+    super::disposable_host_stop::stop(&mut proof).await?;
     assert_exactly_once(&receipt_path, &target, &markers)?;
     proof.record(
         "providerAcpDeliveryMatrix",

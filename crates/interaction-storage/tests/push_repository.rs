@@ -494,6 +494,8 @@ async fn insert_retries_native_busy_only_within_the_five_second_window() {
     let sender = session("claude-local", "sender-thread");
     let target = session("codex-local", "target-thread");
     let push_id = push_id();
+    let (subscriber, busy) = controlled_busy::observe_push(push_id.as_str());
+    let _observation = tracing::subscriber::set_default(subscriber);
     let draft = push_draft(
         push_id.clone(),
         target,
@@ -502,18 +504,15 @@ async fn insert_retries_native_busy_only_within_the_five_second_window() {
         Utc::now(),
     );
 
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(6),
-        store.insert_push_record(draft),
-    )
-    .await
-    .expect("busy retries finish within the specified bound");
-    assert!(matches!(result, Err(StorageError::Database(_))));
+    let result =
+        controlled_busy::complete_after_actual_busy(busy, store.insert_push_record(draft)).await;
     sqlx::query("ROLLBACK")
         .execute(&mut writer)
         .await
         .expect("release Turso writer lock");
     writer.close().await.expect("close lock holder");
+    let result = result.expect("busy retries finish within the specified bound");
+    assert!(matches!(result, Err(StorageError::Database(_))));
     assert!(
         store
             .get_push_record(&push_id)
@@ -523,6 +522,9 @@ async fn insert_retries_native_busy_only_within_the_five_second_window() {
     );
     store.close().await.expect("close interaction store");
 }
+
+#[path = "push_repository/controlled_busy.rs"]
+mod controlled_busy;
 
 #[path = "push_repository/reply_references.rs"]
 mod reply_references;

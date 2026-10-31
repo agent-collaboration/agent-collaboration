@@ -60,6 +60,14 @@ pub struct ProviderAcpDeliveryRoute {
 }
 
 impl ProviderAcpDeliveryRoute {
+    /// Observe actual Busy rejections while the queued operation remains owned by the FIFO.
+    #[cfg(all(feature = "runtime-test-support", debug_assertions))]
+    pub fn observe_queue_busy_operations(
+        &self,
+    ) -> tokio::sync::watch::Receiver<Option<OperationId>> {
+        self.queue.observe_busy_operations()
+    }
+
     #[must_use]
     pub fn queue_list(&self, session: &SessionRef) -> Vec<crate::ProviderQueuedInput> {
         self.supervisor.queued_operation_registry().list(session)

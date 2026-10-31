@@ -392,8 +392,11 @@ pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
         };
         let cancel = CancellationToken::new();
         let signal = cancel.clone();
+        let interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt());
         let signal_task = tokio::spawn(async move {
-            let _signal = tokio::signal::ctrl_c().await;
+            if let Ok(mut interrupt) = interrupt {
+                let _signal = interrupt.recv().await;
+            }
             signal.cancel();
         });
         let result = ConversationClient::create_and_prompt(
@@ -553,8 +556,11 @@ pub(super) fn run_existing_prompt(args: PromptArguments) -> i32 {
         };
         let cancel = CancellationToken::new();
         let signal = cancel.clone();
+        let interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt());
         let signal_task = tokio::spawn(async move {
-            let _signal = tokio::signal::ctrl_c().await;
+            if let Ok(mut interrupt) = interrupt {
+                let _signal = interrupt.recv().await;
+            }
             signal.cancel();
         });
         let result = client

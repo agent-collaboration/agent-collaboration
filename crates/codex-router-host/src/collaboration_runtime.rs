@@ -109,6 +109,8 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    runtime_test_wake_progress: Option<tokio::sync::watch::Receiver<usize>>,
     #[cfg(test)]
     startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     #[cfg(test)]
@@ -144,6 +146,8 @@ pub struct CollaborationRuntime {
     automation_task: Option<tokio::task::JoinHandle<()>>,
     schedule_task: Option<tokio::task::JoinHandle<()>>,
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(feature = "runtime-test-support")]
+    automation_maintenance_pass: Option<tokio::sync::watch::Receiver<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
@@ -151,6 +155,39 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub fn runtime_test_observe_machine_progress(
+        &self,
+    ) -> io::Result<tokio::sync::watch::Receiver<u64>> {
+        Ok(self
+            .board_session
+            .as_ref()
+            .ok_or_else(|| io::Error::other("test machine session is unavailable"))?
+            .observe_progress())
+    }
+
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub fn runtime_test_observe_mail_progress(
+        &self,
+    ) -> io::Result<tokio::sync::watch::Receiver<u64>> {
+        self.runtime_test_mail
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .map(|mail| mail.runtime_test_observe_committed_writes())
+            .ok_or_else(|| io::Error::other("test mail owner is unavailable"))
+    }
+
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_await_automation_retention_pass(&self) -> io::Result<()> {
+        self.automation_maintenance_pass
+            .as_ref()
+            .ok_or_else(|| io::Error::other("automation maintenance is unavailable"))?
+            .clone()
+            .changed()
+            .await
+            .map_err(io::Error::other)
+    }
+
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
     }
@@ -251,6 +288,9 @@ mod board_composition;
 mod lifecycle;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "collaboration_runtime/runtime_test_subscription_clock.rs"]
+mod runtime_test_subscription_clock;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
 #[cfg(test)]

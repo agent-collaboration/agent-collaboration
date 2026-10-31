@@ -1,4 +1,6 @@
 //! Per-scenario resources and literal board inputs shared by the process journeys.
+#[path = "machine_progress.rs"]
+pub(super) mod machine_progress;
 use super::owned_host::BoardHost;
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
 use serde_json::{Value, json};
@@ -190,12 +192,19 @@ impl BoardFixture {
     pub async fn write(&self, tool: &str, request: Value) -> FixtureResult<Value> {
         tokio::time::timeout(Duration::from_secs(30), async {
             loop {
+                let progress = machine_progress::observe(self.host()?, None).await?;
                 let reply = self.host()?.mcp(tool, request.clone()).await?;
                 if !pending(&reply) {
                     return Ok(reply);
                 }
                 // Preserve the exact request identity while its real seed/registration settles.
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                let project = reply
+                    .pointer("/result/decision/project")
+                    .or_else(|| reply.pointer("/result/project"))
+                    .or_else(|| request.get("projectId"))
+                    .or_else(|| request.pointer("/thread/project"))
+                    .and_then(Value::as_str);
+                self.await_pending_write(&reply, project, progress).await?;
             }
         })
         .await?
@@ -210,16 +219,50 @@ impl BoardFixture {
     pub async fn cli_write(&self, arguments: &[&str]) -> FixtureResult<Value> {
         tokio::time::timeout(Duration::from_secs(30), async {
             loop {
+                let progress = machine_progress::observe(self.host()?, None).await?;
                 let reply = self.cli(arguments).await?;
                 let record = at(&reply, "/record")?.clone();
                 if !pending(&record) {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(record);
                 }
                 // Retry exactly the original argv and request identity while registration settles.
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                let project = record
+                    .pointer("/result/decision/project")
+                    .or_else(|| record.pointer("/result/project"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        arguments.windows(2).find_map(|pair| match pair {
+                            ["--project-id", project] => Some(*project),
+                            _ => None,
+                        })
+                    });
+                self.await_pending_write(&record, project, progress).await?;
             }
         })
         .await?
+    }
+
+    pub async fn await_project_progress(&self, project: &str) -> FixtureResult {
+        let host = self.host()?;
+        host.replicate_project(project).await?;
+        host.drain_project_publisher(project).await
+    }
+
+    async fn await_pending_write(
+        &self,
+        reply: &Value,
+        project: Option<&str>,
+        progress: u64,
+    ) -> FixtureResult {
+        if reply.pointer("/result/kind") != Some(&json!("projectCreationPending"))
+            && let Some(project) = project
+        {
+            return self.await_project_progress(project).await;
+        }
+        // Fleet writes and accepted creation can precede a native project file.
+        // Their machine-session owner must settle before the exact request replays.
+        machine_progress::observe(self.host()?, Some(progress)).await?;
+        Ok(())
     }
 
     pub async fn paired_write(

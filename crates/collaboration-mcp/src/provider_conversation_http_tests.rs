@@ -618,10 +618,12 @@ async fn shutdown_aborts_a_call_that_ignores_cancellation_and_joins_it() {
     );
 
     // Act
+    tokio::time::pause();
     let stopped =
         tokio::time::timeout(std::time::Duration::from_secs(5), listener.stop_reporting())
             .await
             .expect("shutdown is bounded by the grace period");
+    tokio::time::resume();
 
     // Assert: the listener stopped cleanly only after dropping the call it aborted, and the
     // caller's request ended without a success. (rmcp, cancelled with the listener, may answer

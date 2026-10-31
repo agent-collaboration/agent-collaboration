@@ -379,7 +379,11 @@ async fn main() -> ConformanceResult<()> {
                     .await?;
                 collaboration_central_conformance::run_access_verifier_control_conformance(&shared)
                     .await?;
-                collaboration_central_conformance::run_access_expiry_conformance(&shared).await
+                let now = chrono::Utc::now();
+                shared.set_local_access_time(now).await?;
+                collaboration_central_conformance::run_access_expiry_conformance(
+                    &shared, now, |at| shared.set_local_access_time(at),
+                ).await
             }
             .await
         }
