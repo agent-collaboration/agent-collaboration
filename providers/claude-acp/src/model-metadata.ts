@@ -180,9 +180,17 @@ export class ModelMetadataDecorator {
   }
 }
 
+export type SessionCreationPreparationResult =
+  | { readonly kind: "prepared"; readonly params: unknown }
+  | {
+      readonly kind: "unsupported";
+      readonly reason: "MalformedMetadata" | "UnsupportedSdkOptions";
+    };
+
 export function decorateSessionMethods(
   agent: Record<string, unknown>,
   metadata: ModelMetadataDecorator,
+  prepareCreation: (params: unknown) => SessionCreationPreparationResult,
 ): void {
   const sessionAddressSchema = z.looseObject({ sessionId: z.string().check(z.minLength(1)) });
   for (const methodName of [
@@ -197,7 +205,14 @@ export function decorateSessionMethods(
     agent[methodName] = async (params: unknown): Promise<unknown> => {
       const address = sessionAddressSchema.safeParse(params);
       const before = address.success ? metadata.currentSession(address.data.sessionId) : undefined;
-      const result: unknown = await Reflect.apply(original, agent, [params]);
+      let delegatedParams = params;
+      if (methodName !== "setSessionConfigOption") {
+        const prepared = prepareCreation(params);
+        if (prepared.kind === "unsupported")
+          throw new Error(`Qualified Claude session creation is unsupported: ${prepared.reason}`);
+        delegatedParams = prepared.params;
+      }
+      const result: unknown = await Reflect.apply(original, agent, [delegatedParams]);
       const returned = sessionAddressSchema.safeParse(result);
       if (address.success && returned.success && address.data.sessionId !== returned.data.sessionId)
         return result;

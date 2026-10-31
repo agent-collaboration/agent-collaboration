@@ -22,7 +22,15 @@ for (const ending of ["eof", "SIGINT", "SIGTERM"]) {
         new URL("./fixtures/public-library.ts", import.meta.url).href,
         new URL("./fixtures/public-sdk.ts", import.meta.url).href,
       ],
-      { stdio: ["pipe", "pipe", "pipe"], signal: AbortSignal.timeout(5000) },
+      {
+        env: {
+          ...process.env,
+          ANTHROPIC_BASE_URL: "http://127.0.0.1:31415/anthropic",
+          ANTHROPIC_AUTH_TOKEN: "fixture-host-token",
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+        signal: AbortSignal.timeout(5000),
+      },
     );
     let stderr = "";
     child.stderr.setEncoding("utf8").on("data", (text: string): void => {

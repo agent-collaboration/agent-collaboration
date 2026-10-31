@@ -22,7 +22,15 @@ await test("embedded lifecycle decorators admit fresh replacements and reject re
       new URL("./fixtures/public-model-library.ts", import.meta.url).href,
       new URL("./fixtures/public-sdk.ts", import.meta.url).href,
     ],
-    { stdio: ["pipe", "pipe", "pipe"], signal: AbortSignal.timeout(5000) },
+    {
+      env: {
+        ...process.env,
+        ANTHROPIC_BASE_URL: "http://127.0.0.1:31415/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "fixture-host-token",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+      signal: AbortSignal.timeout(5000),
+    },
   );
   const exit = once(child, "exit");
   const rowSchema = z.object({

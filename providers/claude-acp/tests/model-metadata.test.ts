@@ -161,7 +161,7 @@ await test("all four result decorators delegate once and suppress facts across q
       };
     };
   }
-  decorateSessionMethods(agent, decorator);
+  decorateSessionMethods(agent, decorator, (params) => ({ kind: "prepared", params }));
   for (const method of ["newSession", "loadSession", "resumeSession", "setSessionConfigOption"]) {
     const invoke = agent[method];
     if (typeof invoke !== "function") throw new Error("decorated method missing");
@@ -180,7 +180,7 @@ await test("all four result decorators delegate once and suppress facts across q
       return {};
     },
   };
-  decorateSessionMethods(delayed, decorator);
+  decorateSessionMethods(delayed, decorator, (params) => ({ kind: "prepared", params }));
   const invoke = delayed.setSessionConfigOption;
   if (typeof invoke !== "function") throw new Error("setter missing");
   const pending: unknown = Reflect.apply(invoke, delayed, [{ sessionId: "owned" }]);
@@ -215,7 +215,7 @@ await test("fresh load replacement qualifies its returned public options while s
       return { sessionId: "owned", configOptions: current.configOptions };
     };
   }
-  decorateSessionMethods(agent, decorator);
+  decorateSessionMethods(agent, decorator, (params) => ({ kind: "prepared", params }));
   for (const name of ["loadSession", "resumeSession"]) {
     const invoke = agent[name];
     if (typeof invoke !== "function") throw new Error("lifecycle method missing");
