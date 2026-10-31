@@ -5,6 +5,9 @@ use super::{
     Row, SessionAccountAffinity, StateStoreError, i64_to_u64, i64_to_u64_account_generation,
     sqlx_error, u64_to_i64,
 };
+
+const PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE: i64 = 500;
+
 impl AsyncSqliteStateStore {
     /// Writes a previous-response owner record through the async state pool.
     pub async fn write_previous_response_owner(
@@ -34,6 +37,29 @@ impl AsyncSqliteStateStore {
         .map_err(sqlx_error)?;
 
         Ok(())
+    }
+
+    /// Deletes one bounded batch of previous-response owners older than the cutoff.
+    pub async fn prune_previous_response_owners_before(
+        &self,
+        cutoff_unix_seconds: u64,
+    ) -> Result<u64, StateStoreError> {
+        let result = sqlx::query(
+            "DELETE FROM previous_response_affinity_owners
+              WHERE rowid IN (
+                  SELECT rowid
+                    FROM previous_response_affinity_owners
+                   WHERE created_unix_seconds < ?1
+                   LIMIT ?2
+              )",
+        )
+        .bind(u64_to_i64(cutoff_unix_seconds)?)
+        .bind(PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+
+        Ok(result.rows_affected())
     }
 
     /// Inserts or replaces the account affinity for one provider session.

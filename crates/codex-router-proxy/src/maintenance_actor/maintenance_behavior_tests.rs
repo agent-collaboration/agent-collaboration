@@ -454,6 +454,7 @@ fn maintenance_actor_exposes_stale_cleanup_retention_and_compaction_hints() {
         "CleanupStaleActiveClients",
         "ApplyActiveSessionRetention",
         "CompactActiveSessionHistory",
+        "PrunePreviousResponseAffinityOwners",
     ] {
         assert!(
             hint_enum_source.contains(expected_hint_variant),

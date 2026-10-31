@@ -1,3 +1,5 @@
+use crate::maintenance_actor::previous_response_affinity_owner_retention_cutoff;
+
 #[cfg(debug_assertions)]
 use super::ClaudeUpstreamEndpoint;
 use super::{
@@ -715,6 +717,14 @@ impl LoopbackRouterRuntime {
                 },
             );
         }
+
+        let _affinity_owner_retention_result = self.maintenance_actor.try_enqueue(
+            MaintenanceHint::PrunePreviousResponseAffinityOwners {
+                created_before_unix_seconds: previous_response_affinity_owner_retention_cutoff(
+                    now_unix_seconds,
+                ),
+            },
+        );
 
         let interval_start_unix_seconds =
             now_unix_seconds.saturating_sub(now_unix_seconds % ROLLUP_BUCKET_SECONDS);
