@@ -25,7 +25,7 @@ This is the plan for proving the Specification's R obligations through V1–V17.
 | Once, never twice | a crash at each point, then restart | — |
 | Runs as today | frozen instruction, continuity, summary after a restart | — |
 | Migration | the owner-shaped fixture, normalization, kills at every step | the owner's real data, checked after upgrade |
-| Cost | the A slice measured: per-class requests, alarms, incoming WebSocket messages, SQL rows written and active time, for an idle baseline, one Firing, a 5-Firing grid burst, offline catch-up, and retries | anything beyond the measured workload |
+| Cost | not measured now (owner, 2026-10-31: "we don't need to do that now, let's get the design right"); the cost page stays a planning model | the real per-firing cost |
 | Published design | manifest, grep, public-safety scan | meaning, which is checked by review |
 
 ## Coverage rows
@@ -54,5 +54,4 @@ This is the plan for proving the Specification's R obligations through V1–V17.
 
 - `verify-codex-router`: **"central automations across two machines"** (lasting), driving V1, V3, V6, V7, V9–V12 and V14–V16 on the rig.
 - **Conformance:** catalog, clock, batch, status and limits cases on both runtimes (lasting): V2–V5, V8, V10 and V13.
-- **Cost measurement** (temporary, done once on the first A slice): per-object-class counts from the Durable Object analytics on staging, for the workloads in the table.
 - **Docs publication check** (temporary): V17.
