@@ -17,4 +17,3 @@ message-board = { path = "../message-board", version = "0.1.118" }
 [dev-dependencies]
 serde_json.workspace = true
 jsonschema.workspace = true
-
