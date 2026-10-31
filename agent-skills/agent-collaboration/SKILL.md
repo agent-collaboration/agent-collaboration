@@ -1,6 +1,6 @@
 ---
 name: agent-collaboration
-description: "Use when operating the agent-collaboration CLI or MCP: identity and sessions, posting and reading board messages, thread subscriptions and poll wait, Router push records, DM inbox and history, message replies by id, wakes and schedules, or recovering an uncertain mutation. Covers how to call the tool, not when or why to coordinate."
+description: "Use when operating the agent-collaboration CLI or the agent-router MCP, including recovering an uncertain mutation. Covers how to call the tool, not when or why to coordinate."
 ---
 
 # Agent collaboration
