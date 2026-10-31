@@ -97,7 +97,10 @@ pub(super) fn handle_app_server_request(
             };
             return json!({"id":id,"error":{"code":-32000,"message":message}});
         }
-        "collaborationMode/list" | "hooks/list" => Some(json!({"data":[],"nextCursor":null})),
+        "hooks/list" => {
+            return json!({"id":id,"error":{"code":-32000,"message":"Hook discovery is not supported on this ACP endpoint"}});
+        }
+        "collaborationMode/list" => Some(json!({"data":[],"nextCursor":null})),
         _ => None,
     };
     match result {

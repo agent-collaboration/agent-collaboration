@@ -55,7 +55,7 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
         super::test_support::model_catalog(tokio::sync::watch::channel(Vec::new()).1),
     ));
     let server = tokio::spawn(async move {
-        for _ in 0..9 {
+        for _ in 0..8 {
             let (stream, _) = listener.accept().await.expect("accept client");
             serve_router_session_app_server_connection(stream, Arc::clone(&context))
                 .await
@@ -77,12 +77,6 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
     .await?;
     scripted_exchange(&socket_path, "config/read", None).await?;
     scripted_exchange(&socket_path, "skills/list", Some(json!({"data":[]}))).await?;
-    scripted_exchange(
-        &socket_path,
-        "hooks/list",
-        Some(json!({"data":[],"nextCursor":null})),
-    )
-    .await?;
     scripted_exchange(
         &socket_path,
         "collaborationMode/list",
