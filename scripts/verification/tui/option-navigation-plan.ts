@@ -12,7 +12,7 @@ export const optionNavigationPlanSchema = z
 		productSourceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
 		driverSource: z.strictObject({ repository: z.string().min(1), source: sourceBindingSchema }),
 		driverSourceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-		requiredCrateHead: z.literal('bb32f10af31d27d9b35296d4ba7c6e472146d189'),
+		requiredCrateHead: z.literal('3396fe0d84c1acd233b14dcfa5a0b192e5df287c'),
 		driver: artifactBindingSchema,
 		product: artifactBindingSchema,
 		node: artifactBindingSchema,

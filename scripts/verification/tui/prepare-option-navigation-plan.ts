@@ -26,8 +26,8 @@ const targetSchema = z.object({
 	consumerDiffPath: z.string(),
 	consumerDiffSha256: z.string().length(64),
 	product: artifactBindingSchema,
-	requiredCoreHead: z.literal('bb32f10af31d27d9b35296d4ba7c6e472146d189'),
-	frameMarker: z.object({ wire: z.string().min(1) }),
+	requiredCoreHead: z.literal('3396fe0d84c1acd233b14dcfa5a0b192e5df287c'),
+	marker: z.object({ contract: z.string().min(1) }),
 	fixtureSurface: z.literal('sessions-filters'),
 });
 const driverSchema = z.object({

@@ -33,8 +33,8 @@ test('paired plan retains separate product and driver sources and rejects mismat
 		consumerDiffPath: diff,
 		consumerDiffSha256: fileDigest(diff),
 		product: captureArtifact(productPath),
-		requiredCoreHead: 'bb32f10af31d27d9b35296d4ba7c6e472146d189',
-		frameMarker: { wire: 'OSC7770' },
+		requiredCoreHead: '3396fe0d84c1acd233b14dcfa5a0b192e5df287c',
+		marker: { contract: 'OSC7770' },
 		fixtureSurface: 'sessions-filters',
 	};
 	// prepare resolves a product declaration's tmp/s6b location, as on S6b.
