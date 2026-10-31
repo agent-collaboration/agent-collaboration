@@ -62,7 +62,7 @@ sequenceDiagram
 <tr><td>a wake faster than 10 minutes, or a schedule faster than 5 (a 60-second one exists)</td><td>10 minutes; 5 minutes</td></tr>
 <tr><td>cron <code>9 * * * *</code></td><td><code>10 * * * *</code></td></tr>
 <tr><td>a cron minute of 56–59</td><td>minute 0 of the next hour (<code>58 * * * *</code> → <code>0 * * * *</code>; literal hours move up one)</td></tr>
-<tr><td>a cron that still can't be written that way (hour 23 wrapping into a restricted day; none in your data)</td><td><strong>suspended</strong>: kept with its original expression, fires nowhere, and listed in the report until someone fixes it. This is my migration policy, waiting for your OK</td></tr>
+<tr><td>a cron that still can't be written that way (hour 23 wrapping into a restricted day; none in your data)</td><td><strong>suspended</strong>: kept with its original expression, fires nowhere, and listed in the report until someone fixes it. You approved this on 31 October</td></tr>
 <tr><td>a wake whose next converted time would pass its end</td><td><strong>ended as expired</strong>, with an event; an end is never extended</td></tr>
 <tr><td>an ended wake</td><td>not moved; stays as history</td></tr>
 </tbody>
