@@ -100,7 +100,7 @@ The owner's eyes and one capture per step are the evidence. It runs once per del
 | U15 Screens built by declaration | The lint gate fails any screen that listens to the terminal itself. A's agreement tests catch a screen whose keys, menu and Help disagree. | A screen routing input by some other private means is caught only by its symptoms. |
 | 10-17 baseline kept | The existing Sessions and Quota journeys from 17 Oct and 23 Oct run again on the rebuilt screens and must pass unchanged, apart from the owner-decided changes. The real `agent-sessions` entry is driven through to Claude and Cursor actions on local and remote machines, and they still work. | Any case those routes haven't observed yet stays open, named, not waived. |
 | U16 Log in again from Details | From an account's Details, "Log in again" runs exactly that account's `account login` command after the quota screen has handed back the terminal, then quota returns on the same account. | The real OAuth login (browser or device code) is checked by you once. |
-| U18 Group lists by a facet | Both screens are driven through every grouping: headings never take the selection, a Router message session lands in Messages, and quitting and reopening keeps your choice. | Where the choice is stored waits on your A/B/C answer. |
+| U18 Group lists by a facet | Both screens are driven through every grouping: headings never take the selection, a Router message session lands in Messages, and quitting and reopening keeps your choice. | Two copies of the same screen open at once: the last change wins. |
 
 ## Coverage rows
 
@@ -369,7 +369,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
   - Quit and reopen opens with the last facet. A stored unknown value opens as None, with no error.
 - *Wrong build that fails:* a heading taking the selection; Started by derived from title words (a plain session titled "✉️ notes" lands in You); a lost selection on regroup; a grouping forgotten after reopen; a crash on a bad stored value; an ungrouped grid that changed.
 - *Reuses:* `collaboration_protocol` push-line parser tests for the kinds themselves.
-- *Unverified:* where the preference is stored, until the owner decides (A/B/C).
+- *Unverified:* concurrent writes from two copies of the same screen (the last write wins, and that's accepted).
 
 ## Journeys still needed
 

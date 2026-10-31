@@ -242,7 +242,10 @@ Nothing is retried. The owners' own guards stay in force: login re-resolves iden
 - **Consumers.** Each screen owns its facet enum (`SessionGroupFacet`: None, StartedBy, Day, Folder, Provider, Machine; `QuotaGroupFacet`: None, Provider, Status), computes groups from rows it already holds after filtering, and declares the Group by action and checked items.
   - The picker's StartedBy reads `collaboration_protocol::parse_push_line_header(...).kind` from the record's first-message title source; no push header means You.
   - Day uses the record's recency timestamp against local midnight.
-- **Remembering.** A `UiPreferenceStore` port in each consumer loads the facet at startup and saves it on change. Saving is fire-and-forget off the input path, and a failure keeps the run's value. An unknown stored value decodes as None. Its storage home is the owner's decision (brief 2026-10-31: A, a screen-owned `ui-preferences.sqlite` in the Router state root, recommended; B, a table in `state.sqlite`; C, behind the Host). Until it's decided, the port is built against an in-memory stand-in, recorded as a stand-in.
+- **Remembering.** A `UiPreferenceStore` port in each consumer loads the facet at startup and saves it on change. Saving is fire-and-forget off the input path, and a failure keeps the run's value. An unknown stored value decodes as None. Each service owns its own store, because the two screens are separate services (owner, 2026-10-31: "the two screens are separate services fyi" / "each will get their own you mean?"):
+  - the picker stores its preference in a `ui-preferences.sqlite` in its own service home;
+  - the quota screen stores its preference in a `ui-preferences.sqlite` in the codex-router root.
+  Both use one `ui_preferences` table shape (a UUIDv7 primary key, a unique (screen, setting) pair and a text value, with no CHECK constraints; Rust enums validate on read) and shared store code. Neither service reads the other's file, and no existing database changes.
 
 ## Trace table
 
