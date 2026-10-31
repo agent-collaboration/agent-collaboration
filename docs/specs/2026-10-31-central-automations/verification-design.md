@@ -50,7 +50,7 @@ This is the plan for proving the Specification's R obligations through V1–V17.
 | V15 | R13 | rig with B on the old release | a double Firing |
 | V16 | R14 | local reads before and after | missing history |
 | V18 | R16 | rig, **provider path** (`claude-local`, Haiku): from A, create on B with a first input; a spoofed origin; a session approver on A; B's own refusals (access, folder, model); no approver named, so B's Chief of Staff approves a real permission prompt raised by the new session and the session resumes on that decision; no Chief named on B, refused `approverRequired` before any effect; B offline, then back; kills at admission, acknowledgement, after native create, and after input accept; partial settings; input failing after create; caller timeout. **Codex path** (`codex-local`): the same create without a first input on the rig (no model turn, per the Haiku-only rule), plus the existing Codex create-operation recorder tests for replay and unknown | a duplicate session or input; a hidden created session; a misattributed creator; the old refusal |
-| V17 | R15 | docs: manifest, grep, scan over the tree and ancestry | any hit |
+| V17 | R15 | docs: manifest, grep, and a scan of S9's own commits against their routed base (M7), then of PR 2's squash commit and tree at merge | any hit; a non-squash merge |
 
 ## Journeys needed
 

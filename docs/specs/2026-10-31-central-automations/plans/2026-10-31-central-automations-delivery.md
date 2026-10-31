@@ -87,7 +87,7 @@ A milestone counts as done only when its gate below has been observed by the ðŸ›
 | M3b | the rig | V18: from A, a session created on B with a first input; its route records A's requester as creator; a permission prompt in it reaches B's Chief of Staff and the session resumes on the Chief's decision; `approverRequired` when B has none; offline, retry and refusal behave | a second session or input; a missing default accepted; a route refused after native creation |
 | M5 | the rig, with A on the old release first and an owner-shaped fixture | V14, V15, V16: the move with kills at every step; no loss, no double fire; every converted executable timing passes entry validation; the 10:02 one-shot is excluded on the imported definition's own first `due_ms`; an inexpressible cron arrives suspended with its `legacy_timing` and fires nowhere; old-release B keeps its own; history stays readable | a doubled fire at the handover; a definition lost |
 | M6 | the rig | V7: a burst of notifications to one session gives one now and one listing 10 minutes later, across a restart; approvals, questions and direct messages stay immediate | a second notification delivery inside the window; a delayed approval |
-| M7 | the docs manifest and the public-safety scan | V17 | any scan hit or contradiction |
+| M7 | the docs manifest and the public-safety scan | V17 part 1: S9's commits scanned against their routed base. Part 2, PR 2's squash commit and tree, is observed at the merge gate | any scan hit or contradiction |
 | M8 | the rig, every V row in one pass at the stack's head | all of the above together | any row |
 
 ## Workstreams
@@ -134,7 +134,7 @@ These run on Sunclaw, never on Sunbook.
   - PR 1 and PR 2 CI green;
   - an independent implementation review (Sol xhigh);
   - the version bumped to the next unused number, with `Cargo.lock` updated;
-  - both PRs merged together, then the tag, release and Homebrew steps per AGENTS.md.
+  - both PRs merged together, PR 2 as **one squash commit** (V17 part 2 scanned on it), then the tag, release and Homebrew steps per AGENTS.md.
   - The production Router is never restarted by the agent.
 
 ## Obligation-to-proof map
