@@ -53,6 +53,7 @@ function readback(
     resumedModel: "sonnet",
     models: null,
     information: null,
+    claudeRoute: null,
     providerAgentTexts: ["HI", `one, two, three\n${COMPLETION}`],
     providerToolItems: [],
     ...overrides,

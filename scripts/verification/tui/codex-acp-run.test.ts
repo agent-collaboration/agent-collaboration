@@ -4,6 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
+import {
+	captureClaudeRouteBaseline,
+	readClaudeRouteWindow,
+} from '../../../verification/observations/claude-route-window.ts';
+import type { ClaudeRouteBaseline } from '../../../verification/observations/claude-route-window.ts';
 import { informationJourney } from './codex-acp-information-scenes.ts';
 import { promptJourney } from './codex-acp-prompt-scenes.ts';
 import {
@@ -11,12 +16,19 @@ import {
 	codexAcpRunPlanSchema,
 	codexChild,
 	codexJourneyFor,
+	driveCodexJourney,
 	driveCodexStep,
 	exitCodex,
+	routeBaselineScene,
 } from './codex-acp-run.ts';
 import type { CodexAcpRunPlan } from './codex-acp-run.ts';
 import { renameJourney } from './codex-acp-scenes.ts';
-import { targetFixture } from './codex-acp-test-fixtures.ts';
+import {
+	ALIAS,
+	RAW_SESSION,
+	claudeRouteHostFixture,
+	targetFixture,
+} from './codex-acp-test-fixtures.ts';
 import { controlledExecutable, initializedSourceRepository } from './controlled-child-fixtures.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import { temporaryRoot } from './receipt-fixtures.ts';
@@ -229,15 +241,34 @@ test('a PTY child that is not the declared Codex, or is gone, is refused', async
 // buffered until the next frame is drawn, and an Enter that arrives first becomes a newline, so
 // the PTY never ends. Enter after the drawn rows dispatches the typed command and the PTY ends,
 // as /quit does, and as today's client does when a refused /rename takes the CodexOp fatal path.
-function composerStandInSource(typed: string, rows: readonly string[]): string {
-	const frame = Buffer.from(
-		`\u001b[?2026h\u001b[2J\u001b[H${rows.join('\r\n')}\u001b[?2026l`,
-	).toString('hex');
+// Optional Router side effects at the two moments that decide a route baseline's placement: one
+// audit row when the typed text arrives, one when the Enter after the drawn frame submits it,
+// which then draws the reply frame instead of ending the PTY.
+interface RouteStandInEffects {
+	readonly auditFile: string;
+	readonly onTyped: string;
+	readonly onEnter: string;
+	readonly replyRows: readonly string[];
+}
+
+function standInFrame(rows: readonly string[]): string {
+	return Buffer.from(`\u001b[?2026h\u001b[2J\u001b[H${rows.join('\r\n')}\u001b[?2026l`).toString(
+		'hex',
+	);
+}
+
+function composerStandInSource(
+	typed: string,
+	rows: readonly string[],
+	effects: RouteStandInEffects | null = null,
+): string {
+	const frame = standInFrame(rows);
 	return `
 const { appendFileSync } = require('node:fs');
 let state = 'idle';
 const typed = ${JSON.stringify(typed)};
 const frame = ${JSON.stringify(frame)};
+const effects = ${JSON.stringify(effects === null ? null : { ...effects, replyFrame: standInFrame(effects.replyRows) })};
 process.stdout.write('TUI_GRID READY 120 36\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
@@ -249,10 +280,15 @@ process.stdin.on('data', (chunk) => {
 		const [command, argument] = line.split(' ');
 		const bytes = command === 'write' ? Buffer.from(argument, 'hex').toString('utf8') : '';
 		let reply = 'OK';
-		if (command === 'write' && bytes === typed) state = 'buffered';
-		else if (command === 'write' && bytes === '\\r') state = state === 'drawn' ? 'exiting' : 'newline';
-		else if (command === 'read') {
+		if (command === 'write' && bytes === typed) {
+			state = 'buffered';
+			if (effects) appendFileSync(effects.auditFile, effects.onTyped);
+		} else if (command === 'write' && bytes === '\\r') {
+			if (state === 'drawn' && effects) { appendFileSync(effects.auditFile, effects.onEnter); state = 'replied'; }
+			else state = state === 'drawn' ? 'exiting' : 'newline';
+		} else if (command === 'read') {
 			if (state === 'buffered') { state = 'drawn'; reply = 'BYTES ' + frame; }
+			else if (state === 'replied') { state = 'answered'; reply = 'BYTES ' + effects.replyFrame; }
 			else if (state === 'exiting') reply = 'EOF';
 			else reply = 'READ_ERROR timed out waiting on channel';
 		} else if (command === 'finish' || command === 'stop') {
@@ -269,9 +305,14 @@ const QUIT_ROWS = ['› /quit', '  /quit     exit Codex'] as const;
 async function composerStandIn(
 	typed = '/quit',
 	rows: readonly string[] = QUIT_ROWS,
+	effects: RouteStandInEffects | null = null,
 ): Promise<{ driver: PtyGridDriver; log: () => string[] }> {
 	const root = temporaryRoot();
-	const script = controlledExecutable(root, 'drive-terminal', composerStandInSource(typed, rows));
+	const script = controlledExecutable(
+		root,
+		'drive-terminal',
+		composerStandInSource(typed, rows, effects),
+	);
 	writeFileSync(join(root, 'commands.log'), '');
 	const driver = await PtyGridDriver.start({
 		repository: root,
@@ -387,4 +428,135 @@ test('a client that exits on the refused /rename never reaches the recovery scen
 	} finally {
 		await driver.stop();
 	}
+});
+
+const CLAUDE_ROUTE = {
+	host_run_directory: '/tmp/cxr-run',
+	host_pid: 5446,
+	max_prefix_bytes: 65_536,
+	max_segment_bytes: 4096,
+};
+const CLAUDE_PROMPT = { ...PROMPT, provider: 'claude' };
+
+test('a Claude route proof is admitted only for a bounded Claude prompt or selected-skill plan', async () => {
+	const { plan } = await runPlan(CURSOR_SKILL);
+	const claudeTarget = { ...plan.target, endpoint_id: 'claude-local' };
+	const claudePlan = (journey: unknown, route: unknown = CLAUDE_ROUTE): CodexAcpRunPlan =>
+		codexAcpRunPlanSchema.parse({ ...plan, target: claudeTarget, journey, claude_route: route });
+	expect(routeBaselineScene(claudePlan(CLAUDE_PROMPT))).toBe('prompt-composed');
+	expect(routeBaselineScene(claudePlan({ ...CURSOR_SKILL, provider: 'claude' }))).toBe(
+		'skill-input-composed',
+	);
+	expect(routeBaselineScene(plan)).toBeNull();
+	for (const [journey, route] of [
+		// Another journey, or another provider.
+		[{ ...MODEL, provider: 'claude' }, CLAUDE_ROUTE],
+		[{ ...INFORMATION, provider: 'claude', command: 'hooks' }, CLAUDE_ROUTE],
+		[{ ...REFRESH, provider: 'claude' }, CLAUDE_ROUTE],
+		// Unbounded, relative, extra or missing binding fields.
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, max_prefix_bytes: 67_108_865 }],
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, max_segment_bytes: 1_048_577 }],
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, host_run_directory: 'run' }],
+		[CLAUDE_PROMPT, { ...CLAUDE_ROUTE, audit_file: '/tmp/other.jsonl' }],
+		[CLAUDE_PROMPT, { host_run_directory: '/tmp/cxr-run' }],
+	] as const)
+		expect(() => claudePlan(journey, route), JSON.stringify(journey)).toThrow();
+	// The Cursor target never takes a Claude route proof.
+	expect(() =>
+		codexAcpRunPlanSchema.parse({ ...plan, journey: PROMPT, claude_route: CLAUDE_ROUTE }),
+	).toThrow('admitted only for a Claude prompt or selected-skill plan');
+});
+
+// Literal Router audit rows (codex-router-core/src/audit.rs:83-98): Codex's own models traffic, a
+// rejected Claude local token (http_affinity.rs:110-125) and a forwarded Claude response
+// (http_affinity.rs:128-143).
+const MODELS_ROW = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"models","transport_kind":"http","local_auth_result":"valid","outcome":"allowed","decision_reason":"forwarded","response_commit_state":"committed","account_hash":"acct_openai_77"}\n`;
+const REJECTED_CLAUDE_ROW = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"claude_messages","transport_kind":"http","local_auth_result":"wrong","outcome":"rejected","decision_reason":"local_auth_wrong","response_commit_state":"not_committed","error_class":"local_auth"}\n`;
+const FORWARDED_CLAUDE_ROW = `{"event_type":"proxy_decision","request_id":"local_proxy_request","route_kind":"claude_messages","transport_kind":"http","local_auth_result":"valid","outcome":"allowed","decision_reason":"forwarded","response_commit_state":"committed","account_hash":"acct_5f3a9c0d"}\n`;
+const EMPTY_COMPOSER = `› Ask Codex to do anything${' '.repeat(94)}`;
+
+async function promptWithRouteEffects(afterScene: string): Promise<{
+	readonly observed: Promise<string[]>;
+	readonly baseline: () => ClaudeRouteBaseline | null;
+	readonly host: ReturnType<typeof claudeRouteHostFixture>;
+	readonly stop: () => Promise<void>;
+}> {
+	const host = claudeRouteHostFixture(MODELS_ROW);
+	const journey = promptJourney({
+		provider: 'claude',
+		prompt: PROMPT.prompt,
+		completion: PROMPT.completion,
+		replyDeadlineMs: 8_000,
+	});
+	const { driver } = await composerStandIn(PROMPT.prompt, [`› ${PROMPT.prompt}`], {
+		auditFile: host.auditFile,
+		onTyped: REJECTED_CLAUDE_ROW,
+		onEnter: FORWARDED_CLAUDE_ROW,
+		replyRows: [`• ${PROMPT.completion}`, '', EMPTY_COMPOSER],
+	});
+	let baseline: ClaudeRouteBaseline | null = null;
+	const observed = driveCodexJourney(driver, journey, 'legacy', async () => undefined, {
+		afterScene,
+		capture: () => {
+			baseline = captureClaudeRouteBaseline(host.binding, {
+				afterScene: 'prompt-composed',
+				providerSessionId: RAW_SESSION,
+				nativeThreadId: ALIAS,
+			});
+		},
+	});
+	return {
+		observed,
+		baseline: () => baseline,
+		host,
+		stop: async (): Promise<void> => {
+			await driver.stop();
+		},
+	};
+}
+
+test('the route baseline lands after the composed prompt is drawn and before its Enter', async () => {
+	const run = await promptWithRouteEffects('prompt-composed');
+	try {
+		expect(await run.observed).toEqual(['prompt-composed', 'prompt-replied']);
+	} finally {
+		await run.stop();
+	}
+	const baseline = run.baseline();
+	if (baseline === null) throw new Error('route baseline never captured');
+	// After composition: the typed-time row is in the prefix. Before Enter: the submission's
+	// forwarded row is not. A baseline moved earlier would carry the rejected row into the
+	// window; one moved after Enter would leave the window without the forwarded row.
+	expect(baseline.file).toMatchObject({
+		state: 'present',
+		byte_length: Buffer.byteLength(MODELS_ROW + REJECTED_CLAUDE_ROW),
+	});
+	const window = readClaudeRouteWindow(baseline, run.host.binding);
+	expect({ rows: window.rows, bytes: window.segment_bytes }).toEqual({
+		rows: 1,
+		bytes: Buffer.byteLength(FORWARDED_CLAUDE_ROW),
+	});
+	expect(window.categories).toEqual([
+		{
+			route_kind: 'claude_messages',
+			transport_kind: 'http',
+			local_auth_result: 'valid',
+			outcome: 'allowed',
+			decision_reason: 'forwarded',
+			response_commit_state: 'committed',
+			error_class: null,
+			account_hash_present: true,
+			count: 1,
+		},
+	]);
+});
+
+test('the route hook refuses a scene that the submission Enter does not directly follow', async () => {
+	const run = await promptWithRouteEffects('prompt-replied');
+	try {
+		await expect(run.observed).rejects.toThrow('must directly precede the submission Enter');
+	} finally {
+		await run.stop();
+	}
+	expect(run.baseline()).toBeNull();
 });

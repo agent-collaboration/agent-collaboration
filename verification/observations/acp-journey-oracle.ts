@@ -267,6 +267,50 @@ export function checkInformationRefused(
   };
 }
 
+/**
+ * The Claude route window passes only with at least one Claude-route HTTP row (the Claude edge
+ * appends HTTP decisions only, claude_edge/server_pipeline.rs:231-240) that was forwarded with a
+ * valid local token, committed and carrying an account hash, and no rejected Claude row. Other
+ * route kinds, such as models traffic, are another issuer and never count. A forwarded row is not
+ * HTTP success or stream completion; the genuine reply check in the same plan decides that.
+ */
+export function checkClaudeRoute(
+  readback: Pick<JourneyReadback, "claudeRoute">,
+): JourneyCheckResult {
+  const window = readback.claudeRoute;
+  if (window === null) throw new Error("claude-route needs the observer's audit window read");
+  const claude = window.categories.filter((category) => category.route_kind === "claude_messages");
+  const count = (rows: typeof claude): number => rows.reduce((sum, row) => sum + row.count, 0);
+  const forwarded = count(
+    claude.filter(
+      (row) =>
+        row.transport_kind === "http" &&
+        row.local_auth_result === "valid" &&
+        row.outcome === "allowed" &&
+        row.decision_reason === "forwarded" &&
+        row.response_commit_state === "committed" &&
+        row.account_hash_present,
+    ),
+  );
+  const rejected = count(claude.filter((row) => row.outcome === "rejected"));
+  if (rejected > 0) throw new Error(`the route window holds ${rejected} rejected Claude row(s)`);
+  if (forwarded === 0) throw new Error("the route window holds no forwarded Claude row");
+  return {
+    kind: "claude-route",
+    observed: {
+      baseline: window.baseline_state,
+      segment_bytes: window.segment_bytes,
+      segment_sha256: window.segment_sha256,
+      rows: window.rows,
+      forwarded_claude: forwarded,
+      rejected_claude: rejected,
+      other_claude: count(claude) - forwarded,
+      other_route_rows: window.rows - count(claude),
+      categories: window.categories,
+    },
+  };
+}
+
 function checkCompactedView(view: NativeThread): string {
   const turn = view.turns.at(-1);
   if (turn === undefined) throw new Error("no compaction turn in Codex history");
@@ -451,6 +495,8 @@ export function checkIdleJourney(
         return checkOrdinaryReply(readback, check);
       case "information-refused":
         return checkInformationRefused(readback, check);
+      case "claude-route":
+        return checkClaudeRoute(readback);
     }
   });
 }

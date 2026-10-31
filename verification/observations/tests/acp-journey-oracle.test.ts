@@ -80,6 +80,7 @@ function readback(overrides: Partial<JourneyReadback> = {}): JourneyReadback {
     resumedModel: "claude-haiku-5-5",
     models: null,
     information: null,
+    claudeRoute: null,
     providerAgentTexts: ["HI", `${MARKER} alpha beta`],
     providerToolItems: [],
     ...overrides,

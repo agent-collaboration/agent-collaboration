@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { metadataObservationPlanSchema } from "./acp-metadata-models.ts";
+import type { ClaudeRouteWindow } from "./claude-route-window.ts";
 
 /** Native Codex 0.165 `SkillScope` wire values (app-server-protocol v2/plugin.rs, snake_case). */
 export const nativeSkillScopeSchema = z.enum(["user", "repo", "system", "admin"]);
@@ -110,6 +111,9 @@ export const journeyCheckSchema = z.discriminatedUnion("kind", [
   // J2 information: the command's native request, sent once on the observer's own bound
   // connection, refused with this endpoint's declared code and message, then a supported read.
   z.strictObject({ kind: z.literal("information-refused"), command: informationCommandSchema }),
+  // The Claude route window: the runner's baseline record from right before the submission Enter
+  // (claude-route-window.ts), read once after this plan's own reply readback.
+  z.strictObject({ kind: z.literal("claude-route"), baseline: absolutePathSchema }),
   // J2 model: the bound native catalogue and the selected model's controls against the provider
   // Session's own settings catalogue from public session inspect, never the native list itself.
   z.strictObject({
@@ -167,7 +171,18 @@ export const journeyObservationPlanSchema = metadataObservationPlanSchema
       check.kind === "information-refused" ? [check.command] : [],
     );
     return new Set(commands).size === commands.length;
-  }, "each information command is requested once");
+  }, "each information command is requested once")
+  .refine((plan) => {
+    const routes = plan.checks.filter((check) => check.kind === "claude-route").length;
+    return (
+      routes === 0 ||
+      (routes === 1 &&
+        plan.endpoint_id === "claude-local" &&
+        plan.checks.some(
+          (check) => check.kind === "ordinary-reply" || check.kind === "skill-effect",
+        ))
+    );
+  }, "a Claude route window needs one Claude plan with its own genuine reply check");
 export type JourneyObservationPlan = z.infer<typeof journeyObservationPlanSchema>;
 
 /** Used fields of native `skills/list` entries; the raw response stays authoritative. */
@@ -279,6 +294,8 @@ export interface JourneyReadback {
   readonly models: ModelReadback | null;
   // Present only when a plan checks an information refusal.
   readonly information: InformationReadback | null;
+  // Present only when a plan checks the Claude route window.
+  readonly claudeRoute: ClaudeRouteWindow | null;
   readonly providerAgentTexts: readonly string[];
   readonly providerToolItems: readonly ProviderToolItem[];
 }

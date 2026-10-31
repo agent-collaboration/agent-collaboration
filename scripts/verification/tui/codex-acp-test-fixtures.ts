@@ -80,3 +80,70 @@ export async function targetFixture(alternateScreen = false): Promise<TargetFixt
 	});
 	return { root, target, observerPlan, server };
 }
+
+export interface ClaudeRouteHostFixture {
+	readonly runDirectory: string;
+	readonly serviceDirectory: string;
+	readonly auditFile: string;
+	readonly binding: {
+		readonly hostRunDirectory: string;
+		readonly hostPid: number;
+		readonly serviceDirectory: string;
+		readonly maxPrefixBytes: number;
+		readonly maxSegmentBytes: number;
+	};
+}
+
+/**
+ * A controlled normal-Host run directory for the Claude route window: the Host's own context
+ * marker (automation-debug-host.rs:32-47), the service's published Router listener and the Router
+ * audit file with a declared prefix. Never a real Host, Router or audit stream.
+ */
+export function claudeRouteHostFixture(auditPrefix: string): ClaudeRouteHostFixture {
+	const root = realpathSync(mkdtempSync('/tmp/cxr-'));
+	cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+	const runDirectory = join(root, 'run');
+	const serviceDirectory = join(root, 'router', 'agent-communication');
+	mkdirSync(runDirectory, { mode: 0o700 });
+	mkdirSync(serviceDirectory, { recursive: true, mode: 0o700 });
+	writeFileSync(
+		join(serviceDirectory, 'service.json'),
+		JSON.stringify({
+			serviceId: SERVICE,
+			serviceEpoch: EPOCH,
+			routerProxyEndpoint: '127.0.0.1:61613',
+		}),
+	);
+	writeFileSync(
+		join(runDirectory, 'debug-host-context.json'),
+		JSON.stringify({
+			kind: 'debugHostPrepared',
+			runDirectory,
+			serviceDirectory,
+			workspace: join(runDirectory, 'agent-workspace'),
+			profile: 'codex-router-debug',
+			model: 'gpt-5.6-luna',
+			port: 61613,
+			hostPid: 5446,
+			routerRoot: join(root, 'router'),
+			claudeProvider: { executable: '/bin/claude-agent-acp', arguments: [] },
+			cursorProvider: null,
+			peerRegistryDirectory: null,
+		}),
+		{ mode: 0o600 },
+	);
+	const auditFile = join(runDirectory, 'router-audit.jsonl');
+	writeFileSync(auditFile, auditPrefix, { mode: 0o600 });
+	return {
+		runDirectory,
+		serviceDirectory,
+		auditFile,
+		binding: {
+			hostRunDirectory: runDirectory,
+			hostPid: 5446,
+			serviceDirectory,
+			maxPrefixBytes: 65_536,
+			maxSegmentBytes: 4096,
+		},
+	};
+}

@@ -14,6 +14,13 @@ import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 import {
+	MAX_ROUTE_PREFIX_BYTES,
+	MAX_ROUTE_SEGMENT_BYTES,
+	captureClaudeRouteBaseline,
+	requireClaudeRouteBinding,
+} from '../../../verification/observations/claude-route-window.ts';
+import type { ClaudeRouteBinding } from '../../../verification/observations/claude-route-window.ts';
+import {
 	codexInformationCommandSchema,
 	informationJourney,
 } from './codex-acp-information-scenes.ts';
@@ -61,6 +68,17 @@ export const codexAcpRunPlanSchema = z
 		keys: z.enum(['legacy', 'kitty']),
 		output: absolutePathSchema,
 		target: codexAcpTargetSchema,
+		// A Claude prompt or selected-skill route proof only: the declared normal debug Host's run
+		// directory (its router-audit.jsonl and debug-host-context.json), the same Host process, and
+		// the byte bounds of the audit prefix hashed before Enter and of the segment read after it.
+		claude_route: z
+			.strictObject({
+				host_run_directory: absolutePathSchema,
+				host_pid: z.number().int().positive(),
+				max_prefix_bytes: z.number().int().positive().max(MAX_ROUTE_PREFIX_BYTES),
+				max_segment_bytes: z.number().int().positive().max(MAX_ROUTE_SEGMENT_BYTES),
+			})
+			.optional(),
 		journey: z.discriminatedUnion('kind', [
 			z.strictObject({
 				kind: z.literal('skill'),
@@ -153,8 +171,36 @@ export const codexAcpRunPlanSchema = z
 			}),
 		]),
 	})
+	.refine(
+		(plan) =>
+			plan.claude_route === undefined ||
+			((plan.journey.kind === 'prompt' || plan.journey.kind === 'skill') &&
+				plan.journey.provider === 'claude' &&
+				plan.target.endpoint_id === 'claude-local'),
+		'a Claude route proof is admitted only for a Claude prompt or selected-skill plan',
+	)
 	.readonly();
 export type CodexAcpRunPlan = z.infer<typeof codexAcpRunPlanSchema>;
+
+/** The composed-input checkpoint a route proof's baseline follows, or none without a proof. */
+export function routeBaselineScene(
+	plan: CodexAcpRunPlan,
+): 'prompt-composed' | 'skill-input-composed' | null {
+	if (plan.claude_route === undefined) return null;
+	return plan.journey.kind === 'skill' ? 'skill-input-composed' : 'prompt-composed';
+}
+
+function claudeRouteBinding(plan: CodexAcpRunPlan): ClaudeRouteBinding | null {
+	const route = plan.claude_route;
+	if (route === undefined) return null;
+	return {
+		hostRunDirectory: route.host_run_directory,
+		hostPid: route.host_pid,
+		serviceDirectory: plan.target.service_directory,
+		maxPrefixBytes: route.max_prefix_bytes,
+		maxSegmentBytes: route.max_segment_bytes,
+	};
+}
 
 export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 	const journey = plan.journey;
@@ -235,6 +281,15 @@ export async function checkCodexAcp(plan: CodexAcpRunPlan): Promise<CodexJourney
 		throw new Error('the run must use the declared Node v26.12.1');
 	await qualifyTerminal();
 	qualifyCodexAcpTarget(plan.target);
+	const binding = claudeRouteBinding(plan);
+	if (binding !== null) {
+		requireClaudeRouteBinding(binding);
+		const observer = z
+			.looseObject({ host_pid: z.number().int() })
+			.parse(JSON.parse(readFileSync(plan.target.observer_plan, 'utf8')));
+		if (observer.host_pid !== binding.hostPid)
+			throw new Error('the route proof names another Host than its observer plan');
+	}
 	return codexJourneyFor(plan);
 }
 
@@ -270,6 +325,40 @@ export async function driveCodexStep(
 		after,
 		checkpoint.deadline_ms,
 	);
+}
+
+/** The fixed route-proof hook: its composed-input scene and the record it takes there. */
+export interface RouteBaselineHook {
+	readonly afterScene: string;
+	readonly capture: () => void;
+}
+
+/**
+ * Drives every declared step in order and records each checkpoint as soon as it is drawn. A
+ * declared Claude route baseline is taken at one fixed point: right after the composed-input
+ * checkpoint's record (grid and original), while the next step, whose only action is the
+ * submission Enter, has not been sent.
+ */
+export async function driveCodexJourney(
+	driver: PtyGridDriver,
+	journey: CodexJourney,
+	keys: KeyProtocol,
+	record: (step: CodexJourney['steps'][number], grid: TerminalGrid) => Promise<void>,
+	routeBaseline: RouteBaselineHook | null,
+): Promise<string[]> {
+	const observed: string[] = [];
+	await journey.steps.reduce<Promise<void>>(async (previous, step, index) => {
+		await previous;
+		const grid = await driveCodexStep(driver, step, keys);
+		await record(step, grid);
+		observed.push(step.checkpoint.scene);
+		if (routeBaseline === null || step.checkpoint.scene !== routeBaseline.afterScene) return;
+		const submission = journey.steps[index + 1]?.actions;
+		if (JSON.stringify(submission) !== JSON.stringify([{ kind: 'key', key: 'Enter' }]))
+			throw new Error('a Claude route baseline must directly precede the submission Enter');
+		routeBaseline.capture();
+	}, Promise.resolve());
+	return observed;
 }
 
 /** Codex's own normal exit: `/quit` once its command row is ready, Enter, then PTY EOF. */
@@ -308,20 +397,40 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 		},
 	});
 	const { columns, rows } = plan.target.viewport;
-	const observed: string[] = [];
+	let observed: string[] = [];
 	const originals: unknown[] = [];
 	let child: ProcessIdentity | null = null;
+	const binding = claudeRouteBinding(plan);
+	const afterScene = routeBaselineScene(plan);
+	const routeBaseline =
+		binding === null || afterScene === null
+			? null
+			: {
+					afterScene,
+					capture: (): void => {
+						const baseline = captureClaudeRouteBaseline(binding, {
+							afterScene,
+							providerSessionId: plan.target.provider_session_id,
+							nativeThreadId: plan.target.native_thread_id,
+						});
+						writeFileSync(
+							join(plan.output, 'claude-route-baseline.json'),
+							JSON.stringify(baseline, null, 2),
+							{ mode: 0o600, flag: 'wx' },
+						);
+					},
+				};
 	try {
 		if (columns !== 120 || rows !== 36) await driver.resize(columns, rows);
-		await journey.steps.reduce<Promise<void>>(async (previous, step) => {
-			await previous;
-			const grid = await driveCodexStep(driver, step, plan.keys);
+		const record = async (
+			step: CodexJourney['steps'][number],
+			grid: TerminalGrid,
+		): Promise<void> => {
 			const { checkpoint } = step;
 			const current = codexChild(plan.output, plan.target);
 			if (child !== null && !sameIdentity(current, child))
 				throw new Error('Codex PTY child was replaced during the journey');
 			child = current;
-			observed.push(checkpoint.scene);
 			writeFileSync(join(plan.output, `${checkpoint.scene}.grid.json`), JSON.stringify(grid));
 			originals.push(
 				await renderOriginal({
@@ -337,7 +446,8 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 					binarySha256: plan.target.codex.sha256,
 				}),
 			);
-		}, Promise.resolve());
+		};
+		observed = await driveCodexJourney(driver, journey, plan.keys, record, routeBaseline);
 		requireCheckpointSequence(observed, journey);
 		await exitCodex(driver, plan.keys);
 		if ((await driver.finish()) !== 0) throw new Error('Codex ACP driver failed');

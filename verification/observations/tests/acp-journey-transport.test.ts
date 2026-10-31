@@ -492,6 +492,7 @@ function journeyReadback(native: Awaited<ReturnType<typeof readNativeJourney>>):
     resumedModel: native.resumedModel,
     models: null,
     information: native.information,
+    claudeRoute: null,
     providerAgentTexts: [],
     providerToolItems: [],
   };

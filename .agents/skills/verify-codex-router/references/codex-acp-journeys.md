@@ -16,6 +16,7 @@ Not yet qualified:
 - J2 `information` (`/hooks`, `/mcp`) on Cursor remains unobserved. On `c00692d8e`, the actual Haiku/low `prompt` control submitted one plain Text message with no skill or image, but no required reply appeared within 120 seconds; ACP returned `-32603/server_error` at about 186.6 seconds. Successful basic inference after model selection is unqualified; the cause and actual downstream route remain unknown. No Sonnet control was sent.
 - J3: `interrupt`, Cursor `reopen`, approval, `refresh` (scripted from source, with no real target or setup chosen yet), a Claude skill added mid-turn, and native and reverse control preservation.
 - `ordinary-reply` and `information-refused`: observer checks exercised only on literal history fixtures and the controlled transport.
+- `claude_route` and `claude-route`: the route window is exercised only on literal audit rows, real temporary files and the controlled shared-driver stand-in. It has never run against a real Host, so routed Claude inference (Q2) stays unqualified.
 - A next valid prompt after a Cursor compact refusal; only a controlled Host test covers it.
 - Model-specific effort defaults. Per-model default provenance for a model that isn't current isn't observable through public APIs: `session inspect` shows only the current model's effort option, and a live current value may be a saved setting rather than the vendor default. It stays a source and decoder integration obligation. The UI's `(default)` marker reflects only the native list.
 - Provider context capacity. The footer shows the model only and says nothing about capacity.
@@ -109,6 +110,21 @@ Declare these before any input:
      - the same whole line in the public provider events.
 
      A user item or composer echo never stands in for the reply. For `refresh`, pair it with `skills-listed` after the turn, and with an `active-read-only` `turn-in-progress` read during it.
+   - **Claude route window** (`claude-route`, idle-bind only, paired with that plan's own `ordinary-reply` or `skill-effect`). A reply alone never shows the Host route, because normal home can answer through another credential.
+     - **Run plan:** a Claude `prompt` or selected-skill plan may declare `claude_route`. It holds the normal debug Host's `host_run_directory`, its `host_pid`, `max_prefix_bytes` (at most 67108864) and `max_segment_bytes` (at most 1048576). No other journey, provider or file is admitted.
+     - **Binding:** `--check` and the baseline bind `<host_run_directory>/router-audit.jsonl` (automation_debug_host/launch_options.rs:257-273) to the declared Host:
+       - an owner-private canonical run directory;
+       - the Host's own `debug-host-context.json`, naming that run directory, Host PID, the target's service directory and a Claude provider;
+       - its port equal to `service.json` `routerProxyEndpoint`;
+       - the observer plan's `host_pid`.
+     - **Baseline:** the runner's fixed hook records the file's device, inode, byte length and prefix sha256 into `<run output>/claude-route-baseline.json`. It runs right after the `prompt-composed` or `skill-input-composed` checkpoint and its original capture, and refuses unless the next step's only action is the submission Enter. Model setup and readbacks must already be idle.
+       - The Router creates the file lazily on its first decision, so the baseline may record `absent`. The whole file is then the window.
+     - **Read:** declare the observer's `{kind: "claude-route", baseline: <that file>}`. After the reply readback, it requires the same identity and unchanged prefix, then reads only the bounded appended segment.
+       - Retained: categorical counts with `account_hash_present`, the segment's byte length and sha256, and the baseline record. Never an account hash, request ID, header, body or free text.
+     - **Pass:** at least one `claude_messages / valid / allowed / forwarded / committed` row with an account hash, and no rejected Claude row. Models/responses rows are another issuer and never count.
+     - **Fail:** missing, malformed, replaced, truncated, prefix-changed or over-bound evidence, no forwarded Claude row, or a rejected Claude row. A failure never triggers a prompt retry or an auth diagnosis.
+     - **Attribution:** it rests on one private normal Host and unshared listener, one fresh Claude Session and no other Claude generation input in the window, because the audit has no timestamp, Session or prompt field and a constant request ID. Other traffic invalidates it.
+     - **Not success:** an allowed committed row is written for a forwarded response head even on an upstream error, so it is neither HTTP success nor stream completion. A valid-token request that fails account selection writes no row. The genuine reply and normal CLI quit stay mandatory; there is no audit-only pass.
    - `active-read-only`, during a running turn, checks only `turn-in-progress`. It never resumes or lists skills.
 
 ## Evidence and failures
@@ -116,7 +132,7 @@ Declare these before any input:
 Keep the run output and the observer evidence in the task's evidence home.
 
 - **Run output:** `declared-plan.json`, `codex-target.json`, a `.grid.json` and an original PNG per checkpoint, `terminal.ansi`, `driver-commands.json`, `codex-acp-run.json` and `codex-acp-receipt.json`.
-- **Observer evidence:** raw `app-server-*.json`, `provider-observation.json` and `result.json`.
+- **Observer evidence:** raw `app-server-*.json`, `provider-observation.json` and `result.json`, plus `claude-route-baseline.json` and the categorical `claude-route-window.json` when the plan checks the route window. The run output holds the runner's `claude-route-baseline.json`.
 
 Each of these is a failure:
 

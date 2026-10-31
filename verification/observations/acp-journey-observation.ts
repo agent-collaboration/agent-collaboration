@@ -35,6 +35,11 @@ import {
   type ProviderToolItem,
 } from "./acp-journey-models.ts";
 import { checkActiveJourney, checkIdleJourney, nativeThreadAlias } from "./acp-journey-oracle.ts";
+import {
+  claudeRouteBaselineSchema,
+  readClaudeRouteWindow,
+  type ClaudeRouteWindow,
+} from "./claude-route-window.ts";
 
 interface NativeReadback {
   readonly unboundSkills: NativeSkillsList;
@@ -368,6 +373,42 @@ function modelReadback(
   };
 }
 
+/**
+ * The Claude route window, read once after this plan's own same-session reply readback. The
+ * runner's baseline must name this plan's Host, service, raw Session and native alias. Only the
+ * categorical summary and the baseline record are retained, never raw audit rows.
+ */
+export function readPlanClaudeRoute(plan: JourneyObservationPlan): ClaudeRouteWindow | null {
+  const check = plan.checks.find((candidate) => candidate.kind === "claude-route");
+  if (check === undefined) return null;
+  const baseline = claudeRouteBaselineSchema.parse(
+    JSON.parse(readFileSync(check.baseline, "utf8")),
+  );
+  if (
+    baseline.host_pid !== plan.host_pid ||
+    baseline.service_directory !== plan.service_directory ||
+    baseline.provider_session_id !== plan.session_id ||
+    baseline.native_thread_id !== plan.native_thread_id
+  )
+    throw new Error("the route baseline was recorded for another Host or Session");
+  saveRaw(
+    join(plan.evidence, "claude-route-baseline.json"),
+    prettyEvidenceJson(baseline, false, false),
+  );
+  const window = readClaudeRouteWindow(baseline, {
+    hostRunDirectory: baseline.host_run_directory,
+    hostPid: plan.host_pid,
+    serviceDirectory: plan.service_directory,
+    maxPrefixBytes: baseline.max_prefix_bytes,
+    maxSegmentBytes: baseline.max_segment_bytes,
+  });
+  saveRaw(
+    join(plan.evidence, "claude-route-window.json"),
+    prettyEvidenceJson(window, false, false),
+  );
+  return window;
+}
+
 /** A thread/read response an earlier run retained, as the before-state of a refused command. */
 export function retainedThreadRead(path: string): NativeThread {
   const response = readObservedJson(readFileSync(path));
@@ -402,6 +443,8 @@ export async function runJourneyObservation(
     results = checkActiveJourney(await readActiveJourney(plan, threadId), plan.checks);
   else {
     const native = await readNativeJourney(plan, threadId);
+    // After the reply readback has completed, never before.
+    const claudeRoute = readPlanClaudeRoute(plan);
     results = checkIdleJourney(
       {
         unboundSkills: native.unboundSkills,
@@ -411,6 +454,7 @@ export async function runJourneyObservation(
         resumedModel: native.resumedModel,
         models: modelReadback(plan, serviceId, native),
         information: native.information,
+        claudeRoute,
         providerAgentTexts: provider.agentTexts,
         providerToolItems: provider.toolItems,
       },
