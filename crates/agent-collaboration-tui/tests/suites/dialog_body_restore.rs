@@ -184,7 +184,8 @@ mod tests {
                 assert_eq!(
                     original.round_frame_text().lines().count(),
                     original_height,
-                    "initial form is content-sized"
+                    "initial form is content-sized\n{}",
+                    original.round_frame_text()
                 );
                 for _ in 0..2 {
                     driver

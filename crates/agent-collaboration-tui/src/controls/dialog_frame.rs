@@ -81,11 +81,6 @@ pub fn DialogFrame<'a>(
     hooks.use_hook(|| FrameMeasure(height)).0 = height;
     let footer_height = hooks.use_state(|| 0u16);
     let header_height = hooks.use_state(|| 1u16);
-    let frame_height = if content_height {
-        Size::Auto
-    } else {
-        Size::Percent(100.0)
-    };
     let children = std::mem::take(&mut props.children);
     let mut actions = std::mem::take(&mut props.actions);
     let action_hints = std::mem::take(&mut props.action_hints);
@@ -132,15 +127,23 @@ pub fn DialogFrame<'a>(
         height.get()
     };
     let padding = props.padding.unwrap_or(u16::from(padding_height >= 16));
-    // Width-dependent wrapping can outgrow the native auto-height basis.
-    // Reserve the current measured body and chrome, without borrowing a prior
-    // body viewport or forcing the configured maximum.
-    let minimum_height = if content_height {
+    // Size from the current body and measured chrome, never a previous body
+    // viewport or the native intrinsic height from an earlier width.
+    let measured_height = if content_height {
         content_extent
             .saturating_add(padding.saturating_mul(2))
             .min(sizing.map_or(u16::MAX, |sizing| sizing.max_height))
     } else {
         0
+    };
+    // Once the current body is measured, use its extent and current chrome.
+    // Native auto-height can retain an intrinsic basis from the previous body.
+    let frame_height = if content_height && props.scroll.position().natural_height > 0 {
+        Size::Length(u32::from(measured_height))
+    } else if content_height {
+        Size::Auto
+    } else {
+        Size::Percent(100.0)
     };
     let body_budget = sizing
         .map_or(u16::MAX, |sizing| sizing.max_height)
@@ -161,7 +164,7 @@ pub fn DialogFrame<'a>(
     let width_hint = sizing
         .map_or(0, |sizing| sizing.max_width)
         .saturating_sub(border_rows + padding.saturating_mul(2));
-    element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:minimum_height,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
+    element!(View(width:frame_width,height:frame_height,max_width,max_height,min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,padding,
         border_style,border_color:props.border_color.unwrap_or(theme.foreground(TextRole::Accent)),background_color:theme.background(SurfaceRole::Base)) {
         View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
             DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)

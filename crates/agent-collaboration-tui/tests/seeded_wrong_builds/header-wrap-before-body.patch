@@ -5,7 +5,7 @@ diff --git a/crates/agent-collaboration-tui/src/controls/dialog_frame.rs b/crate
  use super::dialog_footer::DialogFooter;
 -use super::dialog_header::DialogHeader;
  use super::{Button, PinnedContext, ScrollHandle, ScrollList};
-@@ -166,3 +165,8 @@ pub fn DialogFrame<'a>(
+@@ -169,3 +168,8 @@ pub fn DialogFrame<'a>(
          View(width:100pct,min_height:0,flex_grow:if content_height {0.0_f32}else{1.0_f32},flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,row_gap:context_gap) {
 -            DialogHeader(title:props.title.clone(),theme,context:identity,help,height:header_height,width_hint,content_width,available_rows)
 +            View(width:100pct,flex_shrink:0.0_f32,column_gap:1,flex_wrap:FlexWrap::Wrap) {
