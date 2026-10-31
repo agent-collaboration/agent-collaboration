@@ -26,6 +26,7 @@ This is the plan for proving the Specification's R obligations through V1–V17.
 | Runs as today | frozen instruction, continuity, summary after a restart | — |
 | Migration | the owner-shaped fixture, normalization, kills at every step | the owner's real data, checked after upgrade |
 | Cost | not measured now (owner, 2026-10-31: "we don't need to do that now, let's get the design right"); the cost page stays a planning model | the real per-firing cost |
+| Sessions on other machines | from A, create a session on B with a first input; offline, then back; a retry; a refusal | — |
 | Published design | manifest, grep, public-safety scan | meaning, which is checked by review |
 
 ## Coverage rows
@@ -48,6 +49,7 @@ This is the plan for proving the Specification's R obligations through V1–V17.
 | V14 | R11, R12 | rig: the owner-shaped fixture, including a 60-second interval schedule and 5-minute wakes; the 10:02 one-shot upgraded at 10:03; an uncertain fresh-each-run R0 at handover (no successor until `LocalRunSettled`); R0 settling while the import is in flight (the settlement is sent only after the import is acknowledged); a not-yet-started waiting run carried into central's slot; kills before and after the local freeze, the wait for local work to finish, the central commit and the local switch | a 10:05 re-fire; two owners; an extended end; a double or missing effect |
 | V15 | R13 | rig with B on the old release | a double Firing |
 | V16 | R14 | local reads before and after | missing history |
+| V18 | R16 | rig: from A, create a Codex session on B with a first input (Haiku); B offline, then back; a retry with the same operation ID; a folder refused by B; an old-release B | a duplicate session; a lost request; the old refusal |
 | V17 | R15 | docs: manifest, grep, scan over the tree and ancestry | any hit |
 
 ## Journeys needed

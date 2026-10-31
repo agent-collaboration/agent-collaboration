@@ -28,6 +28,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | E10 | **Effective due time** | a nominal due time (from the Automation's timing) rounded **up** to the next 5-minute boundary of UTC time, or kept as-is if it's already on a boundary | nominal 1..n → effective 1 | never earlier than the nominal time | — | U12 |
 | E11 | **Instruction** | its instruction ID, with numbered revisions (today's meaning) | used by 0..n Schedules | a Firing freezes the revision in force at admission | — | U1, U9 |
 | E12 | **Notification** | one board notification, thread-activity notice, or subscription-expiry notice item. **Not** a direct message, wake, schedule run, approval or question | addressed to one recipient session | — | today's item states | U14 |
+| E14 | **Machine work item** | its work item ID, minted once by central when it admits the request (a Firing's entry, or a remote session creation) | addressed to exactly one Machine; carried in a Batch (E5) | the same custody, acknowledgement and report rules as Firing entries (R6, R7, R10) | pending, held, received, then the kind's own outcome | U6, U20 |
 | E13 | **Limit** | one named product limit, with its value and step | lives in the published contract | the same value in the schema, the validators, and the CLI and MCP descriptions | — | U16 |
 
 ## Obligations
@@ -125,6 +126,16 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 - **R13, old machines keep working until they upgrade** (U9). A Machine on an earlier release keeps firing its own definitions; the Fleet never fires an Automation it hasn't received.
 - **R14, local history stays** (U10). Pre-move runs and deliveries stay readable on their Machine until the 2-month retention removes them.
 
+### remote-sessions
+
+- **R16, create a session on another machine** (U20).
+  - **The request.** A `conversation create` whose endpoint belongs to another enrolled Machine is sent to central with the caller's operation ID. It carries the endpoint, model, effort, access, folder and an optional first input.
+  - **Delivery.** Central admits it as a Machine work item and sends it at once, not on the grid, under the same custody as Firings: it's held until the Machine acknowledges, nothing is missed, and a repeat is safe.
+  - **The answer.** The target Machine carries it out with today's local session creation, plus the first input if one was given. It reports either **created**, with the new session's address, or **refused**, with the target's typed reason (for example: endpoint unknown, folder not allowed, model unavailable).
+  - **Waiting.** The requester's command returns that result, or **pending** with the operation ID if the target hasn't answered within the caller's wait. A later `operation show` or `wait` with that ID returns the result.
+  - **Retries.** Repeating the same operation returns the same session and never creates a second.
+  - **Who may.** Only enrolled Machines and their sessions may request. The target applies its own local policy, the same as for a local create.
+
 ### design-truth
 
 - **R15, `main` carries the owner-decided design** (U11).
@@ -171,6 +182,7 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | V14 | R11, R12 | The owner-shaped fixture (9 Schedules including a 60-second interval, Wakes with 5-minute repeats and near-end expiries) moves with IDs kept; timing is normalized per R11; adjustments are reported. A one-shot due at 10:02, admitted locally before an upgrade at 10:03, runs once and never again at 10:05. A fresh-each-run R0 accepted natively with its answer lost (uncertain) at handover: no successor run starts until R0 is reconciled and reported settled. A not-yet-started waiting run becomes central's waiting slot and runs once. Kill the move before and after the local cutoff, the central commit, and the local acknowledgement, with admitted, unsubmitted and uncertain local work outstanding: each due time ends with one effect | an ID changed, an end extended, two owners, or a double or missing effect |
 | V15 | R13 | An old-release Machine fires locally; the Fleet has none of its rows | a double Firing |
 | V16 | R14 | Pre-move history reads are identical | missing before retention |
+| V18 | R16 | From A, create a Codex session on B with a first input: A gets B's session address, and the session exists on B with that input. With B offline the result is pending, and once B returns it's created exactly once. A retry with the same operation ID returns the same session. A folder B refuses gives a typed refusal. An old-release B is refused as `targetNeedsUpgrade` | a second session; a lost request; a refusal without its reason; the old 'belongs to another service' refusal |
 | V17 | R15 | The manifest leaves newer docs untouched; no contradiction remains; the scan of the tree and the outgoing ancestry is clean | any hit |
 
 ## Coverage
@@ -195,3 +207,4 @@ Traces to [requirements.md](requirements.md): U1–U14 and U16–U18. U15 was re
 | U17 | R6a | V10 |
 | U18 | R7f, R6 | V8, V9 |
 | U19 | R6, R5 | V13, V5 |
+| U20 | R16 | V18 |
