@@ -24,5 +24,8 @@ or null on read; writers omit absent fields.
 
 Every schema validator must enforce `x-maxUtf8Bytes`. Rust tests register it
 with `jsonschema`; Zod consumers add a `TextEncoder` byte refinement.
+Schemas validate canonical values; Rust additionally accepts and normalizes
+surrounding whitespace on read. A padded label may exceed the raw schema bound
+while its trimmed value is within Rust's bound; full read equivalence is not claimed.
 Consumers copy files from a pinned producer commit and retain the type names.
 The later producer/consumer ticket owns the check against real output.

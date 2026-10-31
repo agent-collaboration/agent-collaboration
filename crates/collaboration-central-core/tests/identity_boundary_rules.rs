@@ -142,3 +142,28 @@ fn reviewed_scalar_claim_schema_rejects_invalid_installation() {
     invalid["principal"]["installation_id"] = json!("x".repeat(36));
     assert_refused::<collaboration_central_core::identity_contract::MachineTokenClaims>(invalid);
 }
+
+#[test]
+fn resource_name_schema_refuses_blank_and_noncanonical_text() {
+    let schema = serde_json::to_value(schemars::schema_for!(message_board::ResourceName)).unwrap();
+    let validator = schema_validation::contract_validator(&schema).unwrap();
+    for blank in [" ", "\t\n", "\u{0085}", "\u{2003}"] {
+        assert!(message_board::ResourceName::try_from(blank.to_owned()).is_err());
+        assert!(!validator.is_valid(&json!(blank)));
+    }
+    for padded in [
+        " a ".to_owned(),
+        "a\r".to_owned(),
+        "\ta".to_owned(),
+        format!(" {} ", "a".repeat(256)),
+    ] {
+        let parsed = message_board::ResourceName::try_from(padded.clone()).unwrap();
+        assert!(!validator.is_valid(&json!(padded)));
+        assert!(validator.is_valid(&serde_json::to_value(parsed).unwrap()));
+    }
+    for canonical in ["Workspace", "a\0b", "\u{feff}", "\u{feff}a", "line\n\ttwo"] {
+        let parsed = message_board::ResourceName::try_from(canonical.to_owned()).unwrap();
+        assert_eq!(parsed.as_str(), canonical);
+        assert!(validator.is_valid(&json!(canonical)));
+    }
+}

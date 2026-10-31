@@ -3,6 +3,26 @@ use collaboration_protocol::{EndpointId, SessionId, SessionRef, UuidIdentity};
 use proptest::prelude::*;
 use serde_json::{Value, json};
 
+#[test]
+fn exported_identity_patterns_reject_a_trailing_linefeed() {
+    let uuid = "00000000-0000-4000-8000-000000000001\n";
+    assert!(UuidIdentity::try_from(uuid.to_owned()).is_err());
+    let uuid_schema = serde_json::to_value(schemars::schema_for!(UuidIdentity)).unwrap();
+    assert!(
+        !jsonschema::validator_for(&uuid_schema)
+            .unwrap()
+            .is_valid(&json!(uuid))
+    );
+    let endpoint = "codex-local\n";
+    assert!(EndpointId::try_from(endpoint.to_owned()).is_err());
+    let endpoint_schema = serde_json::to_value(schemars::schema_for!(EndpointId)).unwrap();
+    assert!(
+        !jsonschema::validator_for(&endpoint_schema)
+            .unwrap()
+            .is_valid(&json!(endpoint))
+    );
+}
+
 #[cfg(test)]
 fn assert_lossless_session(wire: Value) {
     let router: SessionRef = serde_json::from_value(wire.clone()).unwrap();

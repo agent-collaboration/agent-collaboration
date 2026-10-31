@@ -120,11 +120,14 @@ fn borrowed_machine_labels_and_session_ids_keep_their_byte_limits() {
 #[test]
 fn reviewed_scalar_installation_schema_rejects_non_uuid_text() {
     assert_rejected::<fleet_identity_protocol::InstallationId>(json!("x".repeat(36)));
+    assert_rejected::<fleet_identity_protocol::InstallationId>(json!(
+        "00000000-0000-4000-8000-000000000001\n"
+    ));
 }
 
 #[test]
 fn reviewed_scalar_endpoint_schema_rejects_invalid_syntax() {
-    for invalid in ["Codex", "9"] {
+    for invalid in ["Codex", "9", "codex-local\n"] {
         assert_rejected::<message_board::EndpointId>(json!(invalid));
     }
 }
@@ -138,12 +141,54 @@ fn reviewed_scalar_session_schema_rejects_nul() {
 fn reviewed_scalar_machine_label_schema_rejects_controls_and_blank_text() {
     for invalid in [
         "a\0b",
+        "a\rb",
         "a\u{0008}b",
         "a\u{001f}b",
         " \t\n",
+        "\u{0085}",
         "\u{0085}\u{2003}",
     ] {
         assert_rejected::<message_board::MachineLabel>(json!(invalid));
+    }
+}
+
+#[test]
+fn machine_label_schema_agrees_with_canonical_constructor_values() {
+    let schema = serde_json::to_value(schemars::schema_for!(message_board::MachineLabel)).unwrap();
+    let validator = schema_validation::contract_validator(&schema).unwrap();
+    for character in (0..=0x9f).filter_map(char::from_u32).chain([
+        '\u{1680}', '\u{2000}', '\u{2003}', '\u{2028}', '\u{202f}', '\u{205f}', '\u{3000}',
+        '\u{feff}',
+    ]) {
+        for text in [
+            character.to_string(),
+            format!("a{character}b"),
+            format!("{character}a{character}"),
+        ] {
+            let parsed = message_board::MachineLabel::try_from(text.clone());
+            assert_eq!(
+                parsed.as_ref().is_ok_and(|label| label.as_str() == text),
+                validator.is_valid(&json!(text)),
+                "constructor and schema disagree for {text:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn canonical_label_schema_keeps_raw_bounds_while_rust_normalizes_reads() {
+    let padded = format!(" {} ", "a".repeat(256));
+    let label = message_board::MachineLabel::try_from(padded.clone()).unwrap();
+    assert_eq!(label.as_str(), "a".repeat(256));
+    let schema = serde_json::to_value(schemars::schema_for!(message_board::MachineLabel)).unwrap();
+    let validator = schema_validation::contract_validator(&schema).unwrap();
+    assert!(!validator.is_valid(&json!(padded)));
+    assert!(validator.is_valid(&serde_json::to_value(label).unwrap()));
+    for input in ["  a  ", "a\r", "\ta", "\u{0085}a\u{2003}", "a\u{0085}"] {
+        let parsed = message_board::MachineLabel::try_from(input.to_owned()).unwrap();
+        assert_eq!(parsed.as_str(), "a");
+        assert!(!validator.is_valid(&json!(input)));
+        assert!(validator.is_valid(&serde_json::to_value(parsed).unwrap()));
     }
 }
 
@@ -159,13 +204,7 @@ fn reviewed_scalar_schemas_preserve_valid_constructor_values() {
     }
     assert_accepted::<message_board::EndpointId>(json!("codex-local"));
     assert_accepted::<message_board::SessionId>(json!("provider\n\t:opaque"));
-    for label in [
-        "Machine",
-        "line\n\ttwo",
-        "a\u{007f}b",
-        "\r Machine \r",
-        "\u{0085}Machine\u{2003}",
-    ] {
+    for label in ["Machine", "line\n\ttwo", "a\u{007f}b"] {
         assert_accepted::<message_board::MachineLabel>(json!(label));
     }
 }

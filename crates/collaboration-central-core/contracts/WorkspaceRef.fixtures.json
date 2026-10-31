@@ -1,3 +1,5 @@
 [
-{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}
+{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"},
+{"name":"﻿","workspaceId":"019a3dce-2000-7000-8000-000000000001"},
+{"name":"a\u0000b","workspaceId":"019a3dce-2000-7000-8000-000000000001"}
 ]

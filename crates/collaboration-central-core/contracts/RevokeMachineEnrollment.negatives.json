@@ -1,5 +1,6 @@
 [
 null,
 {"installation":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","unexpectedField":true},
-{"installation":"019a3dce-2000-7000-8000-000000000002","organization_id":"019a3dce-2000-7000-8000-000000000001"}
+{"installation":"019a3dce-2000-7000-8000-000000000002","organization_id":"019a3dce-2000-7000-8000-000000000001"},
+{"installation":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","organizationId":"019a3dce-2000-7000-8000-000000000001"}
 ]

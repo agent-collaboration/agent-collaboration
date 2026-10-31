@@ -7,6 +7,12 @@ pub const MAX_NAME_BYTES: usize = 256;
 pub const MAX_DESCRIPTION_BYTES: usize = 16 * 1024;
 pub const MAX_MESSAGE_TEXT_BYTES: usize = 64 * 1024;
 
+// Rust str::trim uses Unicode White_Space, which differs from JavaScript's \s.
+// Keep the schema's trim/control rules beside the constructor that owns them.
+const TRIM_WHITESPACE_CLASS: &str =
+    r"\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000";
+const PERMITTED_CONTROL_TEXT: &str = r"[^\u0000-\u0008\u000b-\u001f]*";
+
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 #[error("{field} {requirement}")]
 pub struct TextValidationError {
@@ -22,7 +28,18 @@ macro_rules! bounded_text {
         impl JsonSchema for $name {
             fn schema_name() -> Cow<'static, str> { stringify!($name).into() }
             fn json_schema(_: &mut SchemaGenerator) -> Schema {
-                json_schema!({"type":"string","minLength":$min,"maxLength":$max,"x-maxUtf8Bytes":$max})
+                let mut schema = json_schema!({"type":"string","minLength":$min,"maxLength":$max,"x-maxUtf8Bytes":$max});
+                if $trim {
+                    schema.insert("pattern".into(), serde_json::json!(format!(
+                        "^(?:[^{TRIM_WHITESPACE_CLASS}](?:[\\s\\S]*[^{TRIM_WHITESPACE_CLASS}])?)?$(?![\\s\\S])"
+                    )));
+                }
+                if $reject_c0 {
+                    schema.insert("allOf".into(), serde_json::json!([
+                        {"pattern": format!("^{PERMITTED_CONTROL_TEXT}$(?![\\s\\S])")}
+                    ]));
+                }
+                schema
             }
         }
         impl TryFrom<String> for $name {

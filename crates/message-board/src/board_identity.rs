@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use uuid::{Uuid, Variant};
 
+/// Canonical UUID syntax accepts every version and variant already supported by ServiceId.
+pub const CANONICAL_UUID_PATTERN: &str =
+    "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])";
+/// Endpoint syntax shared with the Router's public identity schema.
+pub const ENDPOINT_ID_PATTERN: &str = "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])";
+/// Opaque session and human identities permit every character except NUL.
+pub const OPAQUE_ID_PATTERN: &str = "^[^\\u0000]+$";
+
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 #[error("{field} {requirement}")]
 pub struct IdentityValidationError {
@@ -107,14 +115,14 @@ record_identity!(WorkspaceId => Workspace, BoardId => Board, ProjectId => Projec
     OwnerGrantId => OwnerGrant);
 
 macro_rules! validated_identity_string {
-    ($name:ident, $field:literal, $min:expr, $max:expr, $validator:expr, $requirement:literal) => {
+    ($name:ident, $field:literal, $min:expr, $max:expr, $pattern:expr, $validator:expr, $requirement:literal) => {
         #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
         #[serde(try_from = "String", into = "String")]
         pub struct $name(String);
         impl JsonSchema for $name {
             fn schema_name() -> Cow<'static, str> { stringify!($name).into() }
             fn json_schema(_: &mut SchemaGenerator) -> Schema {
-                json_schema!({"type":"string","minLength":$min,"maxLength":$max,"x-maxUtf8Bytes":$max})
+                json_schema!({"type":"string","minLength":$min,"maxLength":$max,"pattern":$pattern,"x-maxUtf8Bytes":$max})
             }
         }
         impl TryFrom<String> for $name {
@@ -148,6 +156,7 @@ validated_identity_string!(
     "serviceId",
     36,
     36,
+    CANONICAL_UUID_PATTERN,
     |value: &str| {
         Uuid::parse_str(value).is_ok_and(|parsed| parsed.hyphenated().to_string() == value)
     },
@@ -158,6 +167,7 @@ validated_identity_string!(
     "endpointId",
     1,
     64,
+    ENDPOINT_ID_PATTERN,
     |value: &str| {
         value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
             && value
@@ -171,6 +181,7 @@ validated_identity_string!(
     "sessionId",
     1,
     4096,
+    OPAQUE_ID_PATTERN,
     |value: &str| !value.contains('\0'),
     "must contain 1 to 4096 UTF-8 bytes without NUL"
 );
@@ -179,6 +190,7 @@ validated_identity_string!(
     "humanId",
     1,
     4096,
+    OPAQUE_ID_PATTERN,
     |value: &str| !value.contains('\0'),
     "must contain 1 to 4096 UTF-8 bytes without NUL"
 );

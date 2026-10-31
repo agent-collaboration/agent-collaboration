@@ -86,6 +86,8 @@ fn workspace_ref_wire_contract() {
         "WorkspaceRef",
         vec![
             json!({"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}),
+            json!({"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"\u{feff}"}),
+            json!({"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"a\0b"}),
         ],
         false,
     );

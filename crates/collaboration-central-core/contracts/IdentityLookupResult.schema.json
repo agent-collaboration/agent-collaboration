@@ -33,12 +33,14 @@
     "EndpointId": {
       "maxLength": 64,
       "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])",
       "type": "string",
       "x-maxUtf8Bytes": 64
     },
     "InstallationId": {
       "maxLength": 36,
       "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "type": "string",
       "x-maxUtf8Bytes": 36
     },
@@ -260,12 +262,14 @@
     "ResourceName": {
       "maxLength": 256,
       "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
       "type": "string",
       "x-maxUtf8Bytes": 256
     },
     "ServiceId": {
       "maxLength": 36,
       "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "type": "string",
       "x-maxUtf8Bytes": 36
     },
@@ -288,6 +292,7 @@
     "SessionId": {
       "maxLength": 4096,
       "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
       "type": "string",
       "x-maxUtf8Bytes": 4096
     },

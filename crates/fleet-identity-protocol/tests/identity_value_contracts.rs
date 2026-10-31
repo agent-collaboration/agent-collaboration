@@ -12,7 +12,14 @@ mod contract_artifacts;
 fn borrowed_machine_label_wire_contract() {
     contract_artifacts::assert_contract::<message_board::MachineLabel>(
         "MachineLabel",
-        vec![json!("fixture machine"), json!("é".repeat(128))],
+        vec![
+            json!("fixture machine"),
+            json!("é".repeat(128)),
+            json!("\u{feff}"),
+            json!("\u{feff}a"),
+            json!("line\n\ttwo"),
+            json!("a\u{007f}b"),
+        ],
         false,
     );
 }
@@ -78,7 +85,12 @@ fn isolation_instance_id_wire_contract() {
 fn installation_id_wire_contract() {
     contract_artifacts::assert_contract::<InstallationId>(
         "InstallationId",
-        vec![json!("019a3dce-2000-7000-8000-000000000001")],
+        vec![
+            json!("019a3dce-2000-7000-8000-000000000001"),
+            json!("00000000-0000-4000-8000-000000000001"),
+            json!("00000000-0000-0000-0000-000000000000"),
+            json!("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+        ],
         false,
     );
 }

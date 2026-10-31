@@ -27,6 +27,9 @@ issuer's registered JWT claims alongside them. Writers omit absent optional
 fields, while readers accept omission or null. Every schema validator must
 enforce `x-maxUtf8Bytes`; Rust tests register the keyword, and Zod consumers
 add a `TextEncoder` byte refinement.
+Schemas validate canonical values; Rust additionally accepts and normalizes
+surrounding whitespace on read. A padded label may exceed the raw schema bound
+while its trimmed value is within Rust's bound; full read equivalence is not claimed.
 
 Reserved and approved enrollments remain internal to the authority. F1
 defines no Rust `Principal` union. The Switchboard actor-union parsing and

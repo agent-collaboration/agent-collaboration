@@ -1,12 +1,22 @@
 [
 null,
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":" \t\n"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"a\rb"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"a\u0000b"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","unexpectedField":true}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"unrecognizedVariant","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","unexpectedField":true,"workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":" ","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","unexpectedField":true,"workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspace_id":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"\t\n","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééa","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":" ","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":""}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":" "}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééa"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"allowedMachines":[{"installation":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"allowed_machines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
 {"reason":{"kind":"notOwner","unexpectedField":true},"result":"refused"},
 {"reason":{"kind":"notOwner"},"result":"refused","unexpectedField":true},
