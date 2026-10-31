@@ -51,6 +51,12 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 				checks: ['options-and-floor-captured-target'],
 			},
 			{ kind: 'press', key: 'Escape' },
+			{
+				kind: 'fixture',
+				operation: 'open-details-for-enabled-a-then-select-b-and-reload',
+				purpose:
+					'Options replaced Details; return to Browse, open A through real Enter, then move Browse to B and reload while A is captured.',
+			},
 			{ kind: 'click', target: 'Actions ▾' },
 			{ kind: 'click', target: 'Weekly floor…' },
 			{
@@ -59,6 +65,12 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 				checks: ['options-and-floor-captured-target'],
 			},
 			{ kind: 'press', key: 'Escape' },
+			{
+				kind: 'fixture',
+				operation: 'open-details-for-enabled-a-then-select-b-and-reload',
+				purpose:
+					'Floor replaced Details; reopen captured A through real Enter before the remaining actions, with Browse again on B.',
+			},
 			{ kind: 'click', target: 'Actions ▾' },
 			{ kind: 'click', target: 'Copy account ID' },
 			{ kind: 'readback', port: 'clipboard', checks: ['clipboard-full-account-id'] },
@@ -67,14 +79,8 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 			{
 				kind: 'readback',
 				port: 'account-command',
-				checks: [
-					'status-toggle',
-					'captured-account-target',
-					'command-after-terminal-restore',
-					'no-retry',
-				],
+				checks: ['status-toggle', 'captured-account-target', 'no-retry'],
 			},
-			{ kind: 'press', key: 'Enter' },
 			{ kind: 'click', target: 'Actions ▾' },
 			{
 				kind: 'capture',
@@ -146,7 +152,6 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 					port: 'account-command',
 					checks: [
 						'captured-account-target',
-						'command-after-terminal-restore',
 						'no-retry',
 						position === 'requires-disabled-refusal'
 							? 'disabled-first-refusal'

@@ -67,6 +67,7 @@ fn component_scenario(
     match (surface, name) {
         ("normal", None | Some("normal")) => Ok(("normal", "scenario=Normal")),
         ("normal", Some("save-failed")) => Ok(("save-failed", "scenario=SaveFailed")),
+        ("normal", Some("commit-pending")) => Ok(("commit-pending", "scenario=CommitPending")),
         ("hard", None | Some("visual-hard-cases")) => {
             Ok(("visual-hard-cases", "scenario=VisualHardCases"))
         }
@@ -153,8 +154,17 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let scenario = component
         .then(|| component_scenario(&surface, scenario_nomination.as_deref()))
         .transpose()?;
+    ensure(
+        release_path.is_some() == (scenario.map(|value| value.0) == Some("commit-pending")),
+        "component release requires the commit-pending scenario and vice versa",
+    )?;
+    let release_path = component_dispatch_receipt(&surface, release_path.as_deref())?;
     let dispatch_nomination = std::env::var_os("TUI_GRID_COMPONENT_DISPATCH_RECEIPT");
     let dispatch_receipt = component_dispatch_receipt(&surface, dispatch_nomination.as_deref())?;
+    ensure(
+        release_path.is_none() || release_path != dispatch_receipt,
+        "component release and dispatch receipt paths collide",
+    )?;
     let product_path = std::env::var_os("TUI_GRID_PRODUCT_BINARY");
     let product_digest = match std::env::var("TUI_GRID_PRODUCT_SHA256") {
         Ok(digest) => Some(digest),
@@ -211,7 +221,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
                 .ok_or("component receipt required")?,
         ));
         if let Some(release) = release_path.as_deref() {
-            environment.push(("QUOTA_COMPONENT_FIXTURE_RELEASE_FILE", release));
+            environment.push(("QUOTA_COMPONENT_FIXTURE_RELEASE_FILE", release.as_os_str()));
         }
     }
     let binary = if component {
@@ -310,6 +320,12 @@ fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {
             "wide-glyph-left-border",
             "source-qualified-outcome",
             "configured-source-new",
+            "stopped-native-claude",
+            "local-codex-new",
+            "new-machine-uncommitted",
+            "source-options-add",
+            "source-options-remove",
+            "source-options-replace",
         ]
         .iter()
         .any(|candidate| variant == OsStr::new(candidate))
@@ -321,6 +337,12 @@ fn storyboard_variants_are_explicit_and_sessions_only() {
         "wide-glyph-left-border",
         "source-qualified-outcome",
         "configured-source-new",
+        "stopped-native-claude",
+        "local-codex-new",
+        "new-machine-uncommitted",
+        "source-options-add",
+        "source-options-remove",
+        "source-options-replace",
     ] {
         assert!(valid_storyboard_variant(
             "sessions-filters",
@@ -520,6 +542,11 @@ fn component_receipt_and_scenario_nomination_are_confined_and_reach_the_real_pty
             component_scenario("hard", None)? == ("visual-hard-cases", "scenario=VisualHardCases"),
             "hard default changed",
         )?;
+        ensure(
+            component_scenario("normal", Some(OsStr::new("commit-pending")))?
+                == ("commit-pending", "scenario=CommitPending"),
+            "pending commit scenario/receipt changed",
+        )?;
         for surface in ["normal", "hard", "sessions"] {
             ensure(
                 component_scenario(surface, Some(OsStr::new("unknown"))).is_err(),
@@ -529,6 +556,10 @@ fn component_receipt_and_scenario_nomination_are_confined_and_reach_the_real_pty
         ensure(
             component_scenario("hard", Some(OsStr::new("save-failed"))).is_err(),
             "hard accepted normal scenario",
+        )?;
+        ensure(
+            component_scenario("hard", Some(OsStr::new("commit-pending"))).is_err(),
+            "hard accepted committing scenario",
         )?;
         let terminal = TerminalDriver::spawn_with_environment(
             Path::new("/usr/bin/env"),

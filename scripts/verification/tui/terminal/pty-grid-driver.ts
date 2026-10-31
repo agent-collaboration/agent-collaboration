@@ -41,51 +41,74 @@ export interface PtyGridTarget {
 	readonly evidence: string;
 	readonly componentBinary?: string;
 	readonly componentDispatchReceipt?: string;
-	readonly componentScenario?: 'normal' | 'save-failed' | 'visual-hard-cases';
+	readonly componentScenario?: 'normal' | 'save-failed' | 'visual-hard-cases' | 'commit-pending';
+	readonly componentReleaseFile?: string;
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly storyboardVariant?:
 		| 'wide-glyph-left-border'
 		| 'source-qualified-outcome'
-		| 'configured-source-new';
+		| 'configured-source-new'
+		| 'stopped-native-claude'
+		| 'local-codex-new'
+		| 'new-machine-uncommitted'
+		| 'source-options-add'
+		| 'source-options-remove'
+		| 'source-options-replace';
 }
 function componentEnvironment(target: PtyGridTarget): Readonly<Record<string, string>> {
-	if (target.componentDispatchReceipt === undefined && target.componentScenario === undefined)
+	if (
+		target.componentDispatchReceipt === undefined &&
+		target.componentScenario === undefined &&
+		target.componentReleaseFile === undefined
+	)
 		return {};
 	if (target.componentBinary === undefined || !['normal', 'hard'].includes(target.surface))
 		throw new Error('component receipt/scenario requires a component fixture');
 	const scenario = target.componentScenario;
 	if (
 		scenario !== undefined &&
-		!(target.surface === 'normal' ? ['normal', 'save-failed'] : ['visual-hard-cases']).includes(
-			scenario,
-		)
+		!(
+			target.surface === 'normal'
+				? ['normal', 'save-failed', 'commit-pending']
+				: ['visual-hard-cases']
+		).includes(scenario)
 	)
 		throw new Error('component scenario does not match its surface');
-	const receipt = target.componentDispatchReceipt;
-	if (receipt !== undefined) {
-		const metadata = lstatSync(target.evidence);
-		if (
-			!metadata.isDirectory() ||
-			metadata.isSymbolicLink() ||
-			metadata.uid !== process.getuid?.() ||
-			!isAbsolute(receipt) ||
-			realpathSync(dirname(receipt)) !== realpathSync(target.evidence) ||
-			receipt !== join(realpathSync(target.evidence), basename(receipt))
-		)
-			throw new Error('component receipt requires a fresh path directly inside owned output');
-		try {
-			lstatSync(receipt);
-		} catch (error) {
-			if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-			return {
-				TUI_GRID_COMPONENT_DISPATCH_RECEIPT: receipt,
-				...(scenario === undefined ? {} : { TUI_GRID_COMPONENT_SCENARIO: scenario }),
-			};
-		}
-		throw new Error('component receipt path already exists');
+	const release = target.componentReleaseFile;
+	if (release !== undefined && scenario !== 'commit-pending')
+		throw new Error('component release requires commit-pending');
+	if (scenario === 'commit-pending' && release === undefined)
+		throw new Error('commit-pending requires a fresh owned release path');
+	const paths = [target.componentDispatchReceipt, release].filter((path) => path !== undefined);
+	if (new Set(paths).size !== paths.length) throw new Error('component output paths collide');
+	for (const path of paths) validateFreshComponentPath(target.evidence, path);
+	return {
+		...(target.componentDispatchReceipt === undefined
+			? {}
+			: { TUI_GRID_COMPONENT_DISPATCH_RECEIPT: target.componentDispatchReceipt }),
+		...(scenario === undefined ? {} : { TUI_GRID_COMPONENT_SCENARIO: scenario }),
+		...(release === undefined ? {} : { TUI_GRID_COMPONENT_RELEASE: release }),
+	};
+}
+function validateFreshComponentPath(evidence: string, receipt: string): void {
+	const metadata = lstatSync(evidence);
+	if (
+		!metadata.isDirectory() ||
+		metadata.isSymbolicLink() ||
+		metadata.uid !== process.getuid?.() ||
+		!isAbsolute(receipt) ||
+		realpathSync(dirname(receipt)) !== realpathSync(evidence) ||
+		receipt !== join(realpathSync(evidence), basename(receipt))
+	)
+		throw new Error('component receipt requires a fresh path directly inside owned output');
+	try {
+		lstatSync(receipt);
+	} catch (error) {
+		if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+		return;
 	}
-	return scenario === undefined ? {} : { TUI_GRID_COMPONENT_SCENARIO: scenario };
+	throw new Error('component receipt path already exists');
 }
 
 export class PtyGridDriver {
@@ -138,7 +161,9 @@ export class PtyGridDriver {
 					...process.env,
 					TUI_GRID_COMPONENT_DISPATCH_RECEIPT: undefined,
 					TUI_GRID_COMPONENT_SCENARIO: undefined,
+					TUI_GRID_COMPONENT_RELEASE: undefined,
 					QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE: undefined,
+					QUOTA_COMPONENT_FIXTURE_RELEASE_FILE: undefined,
 					...componentOverrides,
 					TUI_GRID_PRODUCT_BINARY: target.product?.path,
 					TUI_GRID_PRODUCT_SHA256: target.product?.sha256,

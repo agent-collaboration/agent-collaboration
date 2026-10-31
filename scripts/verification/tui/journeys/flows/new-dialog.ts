@@ -90,7 +90,7 @@ const sourceCases = [
 	},
 	{
 		name: 'configured',
-		machine: 'configured:fixture',
+		machine: 'configured:Fixture remote',
 		port: 'preparation',
 		check: 'configured-start-once',
 	},

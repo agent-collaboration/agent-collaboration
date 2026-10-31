@@ -1,0 +1,132 @@
+import { InputConsumptionReadback } from '../sessions/input-consumption-readback.ts';
+/** Every injected input is acknowledged by the real owner and paired to its own flushed frame. */
+import type {
+	InputConsumptionExpectation,
+	InputDispatchReceipt,
+} from '../sessions/input-consumption-schema.ts';
+import type { GhosttyInputProfile } from './example-ghostty-keybinds.ts';
+import type { CellMouseEvent } from './ghostty-input-encoding.ts';
+import { GhosttyJourneyInput, requireDelivered } from './ghostty-journey-input.ts';
+import type { DispatchFrameObservation } from './input-dispatch-frames.ts';
+import type { PtyGridDriver } from './pty-grid-driver.ts';
+
+export interface MarkedInputEvidence {
+	readonly receipts: readonly InputDispatchReceipt[];
+	readonly frames: readonly DispatchFrameObservation[];
+	/** A burst never observes the state between its inputs. Send separately to assert it. */
+	readonly observation: { readonly kind: 'after-input' | 'after-burst'; readonly sequence: number };
+}
+export class MarkerInputSession {
+	private readonly driver: PtyGridDriver;
+	private readonly reader: InputConsumptionReadback;
+	readonly input: GhosttyJourneyInput;
+	constructor(options: {
+		readonly driver: PtyGridDriver;
+		readonly receipt: string;
+		readonly profile: GhosttyInputProfile;
+	}) {
+		this.driver = options.driver;
+		this.reader = InputConsumptionReadback.open(options.receipt);
+		this.input = new GhosttyJourneyInput(options.driver, options.profile);
+	}
+	async observe(options: {
+		readonly expected: readonly InputConsumptionExpectation[];
+		readonly inject: () => Promise<void>;
+	}): Promise<MarkedInputEvidence> {
+		const finalSequence = this.reader.sequence + options.expected.length;
+		const receipts = await this.reader.observeInput({
+			expected: options.expected,
+			timeoutMs: 8000,
+			inject: async () => {
+				await options.inject();
+				// The producer flushes its receipt before publishing this exact marker.
+				// Re-read after that causal fact even if file notifications coalesce.
+				await this.driver.waitForDispatchFrame(finalSequence);
+			},
+		});
+		const frames = await Promise.all(
+			receipts.map((receipt) => this.driver.waitForDispatchFrame(receipt.sequence)),
+		);
+		return {
+			receipts,
+			frames,
+			observation: {
+				kind: receipts.length === 1 ? 'after-input' : 'after-burst',
+				sequence: finalSequence,
+			},
+		};
+	}
+	press(
+		key: string,
+		expected: readonly InputConsumptionExpectation[],
+	): Promise<MarkedInputEvidence> {
+		return this.observe({
+			expected,
+			inject: async () => {
+				const delivered =
+					Array.from(key).length === 1 ? await this.input.text(key) : await this.input.key(key);
+				requireDelivered(delivered);
+			},
+		});
+	}
+	text(
+		text: string,
+		expected: readonly InputConsumptionExpectation[],
+	): Promise<MarkedInputEvidence> {
+		return this.observe({
+			expected,
+			inject: async () => {
+				requireDelivered(await this.input.text(text));
+			},
+		});
+	}
+	pointer(
+		event: CellMouseEvent,
+		expected: readonly InputConsumptionExpectation[],
+	): Promise<MarkedInputEvidence> {
+		return this.observe({
+			expected,
+			inject: async () => {
+				requireDelivered(await this.input.mouse(event));
+			},
+		});
+	}
+	resize(
+		columns: number,
+		rows: number,
+		expected: readonly InputConsumptionExpectation[],
+	): Promise<MarkedInputEvidence> {
+		return this.observe({ expected, inject: () => this.driver.resize(columns, rows) });
+	}
+	burst(
+		bytes: Uint8Array,
+		expected: readonly InputConsumptionExpectation[],
+	): Promise<MarkedInputEvidence> {
+		return this.observe({ expected, inject: () => this.driver.send(bytes) });
+	}
+	/** Loop-ending input has no promised marker: exact producer ACK, EOF and real exit settle it. */
+	async exit(options: {
+		readonly expected: readonly InputConsumptionExpectation[];
+		readonly inject: () => Promise<void>;
+	}): Promise<{
+		readonly receipts: readonly InputDispatchReceipt[];
+		readonly exitCode: number | null;
+	}> {
+		let exitCode: number | null = null;
+		const receipts = await this.reader.observeInput({
+			expected: options.expected,
+			timeoutMs: 8000,
+			inject: async () => {
+				await options.inject();
+				exitCode = await this.driver.drainUntilExit();
+			},
+		});
+		if (exitCode !== 0)
+			throw new Error('flow product or PTY bridge did not exit successfully: ' + String(exitCode));
+		this.reader.assertComplete();
+		return { receipts, exitCode };
+	}
+	assertComplete(): readonly InputDispatchReceipt[] {
+		return this.reader.assertComplete();
+	}
+}

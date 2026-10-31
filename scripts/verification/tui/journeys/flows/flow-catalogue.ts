@@ -13,6 +13,7 @@ import {
 	strictArguments,
 	usageFailure,
 } from '../../cli/cli-arguments.ts';
+import { journeyGridSizes } from '../journey-definition.ts';
 import { accountActionJourneys } from './account-actions.ts';
 import { accountLoginJourneys } from './account-login.ts';
 import { claudeDetailsJourneys } from './claude-details.ts';
@@ -33,6 +34,17 @@ export const authoredFlows: readonly FlowJourney[] = [
 	...quotaRefreshJourneys,
 	...optionNavigationJourneys,
 ];
+/** Named coverage placeholders, not admitted journeys or product passes. */
+export const pendingGroupingFlows = (['sessions', 'quota'] as const).map((surface) => ({
+	journeyId: surface + '-group-by-f6',
+	requirement: 'U18/R19',
+	surface,
+	state: 'awaiting-declared-grouping-target',
+	binding: 'F6',
+	grids: journeyGridSizes,
+	keys: ['legacy', 'kitty'],
+	source: 'Lead 01a19404; design f93aeebca',
+}));
 export function validateAuthoredFlows(): void {
 	const ids = new Set<string>();
 	for (const candidate of authoredFlows) {
@@ -87,6 +99,7 @@ export function s9PrestageMain(args: readonly string[]): void {
 				})),
 				admissionInputs: authoredFlows.flatMap((journey) => journey.admissionInputs),
 				productPasses: 0,
+				pendingGroupingFlows,
 				layerCHarness: {
 					state: 'authored-not-driven',
 					keyboardKeys: layerCKeyboardKeys,

@@ -25,16 +25,34 @@ for (const destination of ['first', 'one-row-wrong', 'last']) {
 		expect(gridLines(grid)[0]?.trim() === 'last').toBe(destination === 'last');
 	});
 }
-test('markers require a fresh completed frame and exact contiguous input sequence', () => {
+test('markers require a completed frame or adjacent cohort and exact contiguous input sequence', () => {
 	for (const bytes of [
 		marker(1),
 		frame('x') + marker(2),
-		frame('x') + marker(1) + marker(2),
+		frame('x') + marker(1) + 'unmarked output' + marker(2),
 		frame('x') + marker(1) + frame('y') + marker(1),
 		'\x1b[?2026h' + marker(1),
 		frame('x') + '\x1b]7770;dispatch=0\x1b\\',
 	]) {
 		expect(() => new DispatchFrameIndex().append(Buffer.from(bytes))).toThrow();
+	}
+});
+test('adjacent contiguous markers share only the state after the whole batch, never a later unmarked frame', async () => {
+	const bytes = Buffer.from(
+		frame('after both inputs') + marker(1) + marker(2) + frame('later unrelated'),
+	);
+	const index = new DispatchFrameIndex();
+	for (const byte of bytes) index.append(Buffer.from([byte]));
+	const first = index.get(1),
+		last = index.get(2);
+	if (first === null || last === null) throw new Error('batch marker absent');
+	expect(first.frameEndByteOffset).toBe(last.frameEndByteOffset);
+	expect(first.frameGeneration).toBe(last.frameGeneration);
+	for (const grid of await Promise.all(
+		[first, last].map((binding) => dispatchFrameGrid(bytes, [], binding)),
+	)) {
+		expect(gridLines(grid)[0]?.trim()).toBe('after both inputs');
+		expect(gridLines(grid).join('')).not.toContain('later unrelated');
 	}
 });
 test('marked replay retains UTF-8 byte boundaries and the kernel resize geometry', async () => {

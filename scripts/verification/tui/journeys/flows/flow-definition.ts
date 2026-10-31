@@ -5,6 +5,11 @@ import { journeyGridSizes } from '../journey-definition.ts';
 
 export const flowBaseHead = 'e23f28aff392d7c09905fe65ae64628ddaba81a4';
 export const flowDesignHead = '76803a480b21cad31dc32db1b6fbc86c31aab61b';
+/** Lead contract 01a19430: sequential steps observe their final input; a burst
+ * observes only its final state. Author separate steps for intermediate states.
+ */
+export const flowObservationRule =
+	'separate steps for per-input state; bursts prove only state after their final input';
 export const flowCheckSchema = z.enum([
 	'picker-toolbar',
 	'quota-toolbar',

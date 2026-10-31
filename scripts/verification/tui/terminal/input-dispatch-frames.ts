@@ -42,7 +42,12 @@ export class DispatchFrameIndex {
 					throw new Error('invalid dispatch marker sequence');
 				if (sequence !== this.bindings.length + 1)
 					throw new Error('dispatch marker sequence is not contiguous');
-				if (this.insideFrame || this.frameEnd <= this.markerEnd)
+				const previous = this.bindings.at(-1);
+				const adjacentCohort =
+					previous !== undefined &&
+					previous.frameEndByteOffset === this.frameEnd &&
+					previous.markerEndByteOffset === this.pendingOffset + token.index;
+				if (this.insideFrame || (this.frameEnd <= this.markerEnd && !adjacentCohort))
 					throw new Error('dispatch marker lacks its own complete frame');
 				this.bindings.push({
 					sequence,

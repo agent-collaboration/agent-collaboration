@@ -25,7 +25,7 @@ export const sourceQualifiedJourneys: readonly FlowJourney[] = (['resume', 'fork
 						'Unmet S6b binding: run selected rows across service/endpoint variants; preserve the full independently declared target.',
 				},
 				{ kind: 'press', key: 'Enter' },
-				{ kind: 'focus', target: action === 'resume' ? 'Open' : 'Fork', via: 'Tab' },
+				{ kind: 'focus', target: action === 'resume' ? 'Resume' : 'Fork', via: 'Tab' },
 				{ kind: 'press', key: 'Enter' },
 				...(action === 'fork'
 					? ([

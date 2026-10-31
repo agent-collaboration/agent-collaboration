@@ -188,3 +188,50 @@ test('component receipt rejects occupied and foreign paths before any controlled
 	).rejects.toThrow('requires a component fixture');
 	expect(existsSync(launched)).toBe(false);
 });
+
+test('held Committing nominates an owned absent release path and rejects collisions before launch', async () => {
+	const directory = temporaryRoot();
+	const observed = join(directory, 'nominated.json');
+	const receipt = join(directory, 'input-dispatch.jsonl');
+	const release = join(directory, 'commit.release');
+	const executable = controlledExecutable(
+		directory,
+		'commit-nomination-control',
+		`
+require('node:fs').writeFileSync(${JSON.stringify(observed)},JSON.stringify({release:process.env.TUI_GRID_COMPONENT_RELEASE,scenario:process.env.TUI_GRID_COMPONENT_SCENARIO}));
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});`,
+	);
+	const target = {
+		repository: directory,
+		driver: executable,
+		surface: 'normal',
+		keys: 'legacy',
+		evidence: directory,
+		componentBinary: '/declared/component',
+		componentDispatchReceipt: receipt,
+		componentScenario: 'commit-pending',
+	} as const;
+	await expect(PtyGridDriver.start(target)).rejects.toThrow('requires a fresh owned release');
+	await expect(PtyGridDriver.start({ ...target, componentReleaseFile: receipt })).rejects.toThrow(
+		'paths collide',
+	);
+	await expect(
+		PtyGridDriver.start({ ...target, componentReleaseFile: 'relative' }),
+	).rejects.toThrow('fresh path');
+	expect(existsSync(observed)).toBe(false);
+	const driver = await PtyGridDriver.start({ ...target, componentReleaseFile: release });
+	try {
+		expect(JSON.parse(readFileSync(observed, 'utf8'))).toEqual({
+			release,
+			scenario: 'commit-pending',
+		});
+		expect(existsSync(release)).toBe(false);
+	} finally {
+		await driver.stop();
+	}
+	writeFileSync(release, 'occupied');
+	await expect(PtyGridDriver.start({ ...target, componentReleaseFile: release })).rejects.toThrow(
+		'already exists',
+	);
+});

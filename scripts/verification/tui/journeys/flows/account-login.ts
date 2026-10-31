@@ -1,3 +1,4 @@
+import { journeyGridSizes } from '../journey-definition.ts';
 import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 export const accountLoginJourneys: readonly FlowJourney[] = (
@@ -11,7 +12,7 @@ export const accountLoginJourneys: readonly FlowJourney[] = (
 		'R17; Program Design Account actions from quota Details',
 		'U16: invocation, fresh data, failure, cancel, captured target',
 	),
-	grids: ['120x36'],
+	grids: [...journeyGridSizes],
 	keys: ['legacy', 'kitty'],
 	fixtures: [
 		'at least two distinct account IDs/providers/labels',
