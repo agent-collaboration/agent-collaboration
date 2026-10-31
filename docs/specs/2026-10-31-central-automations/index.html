@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+
+<h1>Central automations</h1>
+
+<p><strong>What broke:</strong> you meant automations to be definitions of scheduled messages, kept in one central place for every machine. That was never built. Each machine keeps its own schedules and wakes in its own <code>automation.sqlite</code>, fires them itself, and nothing about them is on central.</p>
+
+<p><strong>Why nobody caught it:</strong> the board design that holds your later decisions sits on a local branch, <code>design/board-orchestration</code>, 667 commits ahead of <code>main</code> and never published. On 25 Oct, #160 copied an <em>older</em> version of the requirements onto <code>main</code>. Agents read <code>main</code>, so they read rules you had already removed.</p>
+
+<p><strong>What we're doing:</strong> one stack of two PRs that merge together.</p>
+<ul>
+  <li><strong>PR 1</strong> (<code>fix/router-db-retention</code>): retention, vacuum and WAL.</li>
+  <li><strong>PR 2</strong> (<code>design/automations-central</code>): this design, then its implementation and migrations, plus a safe republish of the board design.</li>
+</ul>
+
+<ex-callout title="Decided, so you can correct it: central keeps the time" tone="decision" icon="clock">
+  <p>Recommended by the Lead and by the Advisor, and taken as the working decision: <strong>central decides when an automation is due and fires it.</strong> A machine that's asleep or off doesn't stop it.</p>
+  <p>It comes from your words "cross system in a central location" (31 Oct) and "should always work" (19 Oct). It also closes the timer-location question that was left open on 4 Oct (D2).</p>
+  <p>If you meant central to hold only the definitions while a machine keeps the timer, say so and this changes.</p>
+</ex-callout>
+
+<h2 id="today-vs-design">Today versus the design</h2>
+
+<ex-grid data-width="canvas">
+<div>
+<h3>Today (main)</h3>
+<ex-mermaid id="today" label="Today"><script type="text/plain">
+flowchart TD
+  def["automation.sqlite on machine A<br/>schedules + wakes + timer"] -->|fires| push["A's interaction.sqlite<br/>local push"]
+  push --> sess["session on A"]
+  def -. "only a wake for another machine" .-> mail["mail via central"]
+  mail --> remote["machine B keeps that wake<br/>and its timer"]
+</script></ex-mermaid>
+<p>The list exists only on the machine that made it. If A is off, nothing fires.</p>
+</div>
+<div>
+<h3>The design</h3>
+<ex-mermaid id="design" label="Design"><script type="text/plain">
+flowchart TD
+  cli["any machine<br/>CLI / MCP"] -->|create, change, pause, cancel| fleet["central: one list<br/>definitions + clock"]
+  fleet -->|due: one message| ledger["central ledger<br/>(the same path as all messages)"]
+  ledger --> inbox["target machine's inbox<br/>held while it's offline"]
+  inbox --> run["deliver the wake, or start the run<br/>in the bound or fresh session"]
+  run -. "outcome" .-> fleet
+</script></ex-mermaid>
+<p>One list, the same from every machine. Firing is a message on your outbox → central → inbox path.</p>
+</div>
+</ex-grid>
+
+<h2 id="rules">What the design promises</h2>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Promise</th><th>Your words it rests on</th></tr></thead>
+<tbody>
+<tr><td><strong>Definitions</strong></td><td>One central list. Create, list, change, pause and cancel from any machine, and see the same state everywhere. Not tied to any project. The wake limits stay as they are (24 h, 7 days, 5 min, one active wake per session).</td><td>"cross system in a central location" (31 Oct); "should not be associated with anything, should always work" (19 Oct); wake limits (15 Oct)</td></tr>
+<tr><td><strong>Firing</strong></td><td>Central fires on time. Each firing is one message on the normal path, held while the target machine is offline. Edits and cancels that land before the due time take effect; a firing already in flight is cancelled cleanly, never sent twice.</td><td>"routing messages" (31 Oct); "schedules, wakes … same message path … must actually work" (27 Sep); "nothing is missed" (U63)</td></tr>
+<tr><td><strong>Runs</strong></td><td>The receiving machine does exactly what it does today: delivers the wake, or starts the run in the bound session or a fresh one in its folder, with the same model, effort and timeout. The outcome is visible from every machine.</td><td>"must actually work" (27 Sep)</td></tr>
+<tr><td><strong>Migration</strong></td><td>Each machine moves its schedules and live wakes to central once, keeping their IDs and next due times. No double firing and no loss during the move. Old history stays readable until the 2-month retention removes it. A machine on an old release keeps firing its own schedules until it upgrades.</td><td>"we need migrations" (31 Oct); "two months" retention (31 Oct)</td></tr>
+<tr><td><strong>Published design</strong></td><td><code>main</code>'s board design says what you decided, U80 and no project pause, published as a hand-picked docs change. Newer docs on main are kept; the Cloudflare-cache history is never pushed.</td><td>"we need to fix it" (31 Oct)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="timeline">How it went wrong</h2>
+
+<p>From the Advisor's read of this Mac's transcripts, ledgers and git. Sunclaw's records are still being searched.</p>
+
+<ex-trace title="Timeline" data-width="reading">
+  <details tone="question" tag="4 Oct" icon="chat-circle">
+    <summary>You asked where automations live</summary>
+    <p>"what about automation? is that a global thing? is that a local thing? … where they live?" The Lead proposed definitions "global: on the fabric … one owner, one clock", but left the timer location open (D2). It was never closed, and the automation lane (P4) was never built.</p>
+  </details>
+  <details tone="risk" tag="9 Oct" icon="bug">
+    <summary>A Lead added "a project's wakes and schedules pause" to your lease rule</summary>
+    <p>Your words were about 4-hour leases. The pause clause was the Lead's own, marked as authorized. The same Lead admitted it on 18–19 Oct.</p>
+  </details>
+  <details tone="decision" tag="19 Oct" icon="chat-circle">
+    <summary>You asked "did we not put wakes and automations in central not in a project?" and removed the project link</summary>
+    <p>The Advisor answered yes, wrongly adding that a project controls firing. You said automation "should not be associated with anything, should always work". Commit <code>b8e63fedf</code> (U80) recorded it on the local design branch only.</p>
+  </details>
+  <details tone="risk" tag="22–25 Oct" icon="bug">
+    <summary>The published copy was the old one</summary>
+    <p>On 22 Oct a reviewer noticed the docs in the published tree were "an older copy", and it wasn't fixed. On 25 Oct, #160 put exactly the pre-U80 requirements onto <code>main</code>, where they still are.</p>
+  </details>
+  <details tone="note" tag="23 Oct" icon="code">
+    <summary>Only the cross-machine wake slice was built</summary>
+    <p>Remote wake creation and controls (the B3r slice) shipped. They give each target machine its own timer, not a central list.</p>
+  </details>
+</ex-trace>
+
+<ex-callout title="What was right" tone="done" icon="shield-check">
+  <p>Much of the code already follows your later decisions: central-first project creation, no offline writes, and the removed lost-write family. It's the published documents that contradict it. So the docs fix is mostly about the documents, not about code.</p>
+</ex-callout>
+
+<h2 id="fix-docs">Fixing the published design</h2>
+<ol>
+  <li>Inventory every decision on the design branch: settled, superseded, open, or planned but unbuilt. That includes fixing the two contradictions still on the branch: PD2's "activity gate" and an explainer showing the old U38.</li>
+  <li>Copy only the approved governing files onto this stack, without the branch's history. Newer docs on main stay as they are.</li>
+  <li>Public-safety scan of the exact files and commits: no cache, secrets, account IDs or emails, real hosts, or local paths.</li>
+  <li>An independent review checks it against your decisions, then it publishes with this stack.</li>
+</ol>
+
+<h2 id="status">Status</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Piece</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>PR 1: 30-day affinity pruning, read-cache leak fix</td><td>Built and accepted at code level; pushed</td></tr>
+<tr><td>PR 1: vacuum, WAL for every database, retention table, Turso vacuum research</td><td>In progress (implementer on Sunclaw)</td></tr>
+<tr><td>PR 2: Requirements and Specification</td><td>Written (<code>requirements.md</code>, <code>specification.md</code>)</td></tr>
+<tr><td>PR 2: Program Design and Verification Design</td><td>Next</td></tr>
+<tr><td>Advisor validation of the four documents</td><td>After those</td></tr>
+<tr><td>Sunclaw transcript search</td><td>Waiting on the Station Chief to create the helpers</td></tr>
+</tbody>
+</table>
+</div>
+
+<details>
+<summary>Sources for agents</summary>
+<p><a href="requirements.md">requirements.md</a> (U1–U11) and <a href="specification.md">specification.md</a> (E1–E10, R1–R15, V1–V14) are the governing documents. Program and verification design follow in the same folder.</p>
+</details>
+
+</ex-document>
+</body>
+</html>
