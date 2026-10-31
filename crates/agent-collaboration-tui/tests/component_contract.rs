@@ -87,6 +87,9 @@ mod menu_layout;
 #[path = "suites/popup_anchor.rs"]
 mod popup_anchor;
 #[cfg(test)]
+#[path = "suites/popup_text_fit.rs"]
+mod popup_text_fit;
+#[cfg(test)]
 #[path = "suites/scroll_geometry.rs"]
 mod scroll_geometry;
 #[cfg(test)]

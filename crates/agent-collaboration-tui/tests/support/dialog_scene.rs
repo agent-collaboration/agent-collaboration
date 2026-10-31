@@ -124,6 +124,7 @@ fn dialog_spec(
 ) -> OverlaySpec {
     let scroll = ScrollHandle::new(stack);
     let group = GroupId::new("dialog-fields").unwrap();
+    let parent_scroll = scroll.clone();
     let open = ActionDef {
         toolbar_label: None,
         id: action("client"),
@@ -138,6 +139,7 @@ fn dialog_spec(
                     stack,
                     surface: stack.snapshot().top_id(),
                 },
+                parent_scroll: Some(parent_scroll.clone()),
                 field: target("client"),
                 value: data.client,
                 on_pick: Handler::default(),

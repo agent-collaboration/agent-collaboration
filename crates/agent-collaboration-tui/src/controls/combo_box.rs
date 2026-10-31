@@ -38,6 +38,7 @@ pub fn ComboBox(props: &ComboBoxProps, mut hooks: Hooks) -> impl Into<AnyElement
             reason: "Unavailable".into(),
         });
     let focused = context.is_focused(&props.id);
+    super::scroll_list::use_scroll_reveal(&mut hooks, focused, Some(props.id.clone()));
     let state = props.value.read();
     let label = state
         .options()
@@ -73,7 +74,7 @@ pub(crate) fn ComboDropdown(
     element!(View(width:100pct,height:100pct,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
         HitRegion(target:props.field.child("filter"),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
             View(flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap)}
-            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true)}
+            View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {super::text_field::EditorLine(value:state.query().clone(),focused:true,available_width:Some(sizing.max_width.saturating_sub(10)))}
         }}
         ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))

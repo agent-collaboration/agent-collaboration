@@ -64,6 +64,7 @@ mod tests {
                     stack,
                     surface: SurfaceId::Screen,
                 },
+                parent_scroll: None,
                 field: field(),
                 value,
                 on_pick: Handler::default(),

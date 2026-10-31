@@ -114,7 +114,7 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
         && overlay.layout != layout
     {
         let id = overlay.id;
-        stack.update(|model| model.set_overlay_layout_for_test(id, layout));
+        stack.update(|model| model.set_overlay_layout_if_open(id, layout));
     }
     if stack.snapshot().overlays().is_empty() {
         system.exit();
