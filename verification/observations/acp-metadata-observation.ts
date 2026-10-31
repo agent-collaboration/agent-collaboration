@@ -76,7 +76,23 @@ function gitOutput(repository: string, arguments_: readonly string[]): string {
   return result.stdout.trim();
 }
 
-function qualifyMetadataSource(plan: MetadataObservationPlan): void {
+/** The committed normal build, installed Codex and owning Host every ACP observation binds. */
+export type ObservedTargetBinding = Pick<
+  MetadataObservationPlan,
+  | "repository"
+  | "source_head"
+  | "build_manifest"
+  | "host_pid"
+  | "host_binary"
+  | "host_sha256"
+  | "router_binary"
+  | "router_sha256"
+  | "codex_cli"
+  | "codex_sha256"
+  | "service_directory"
+>;
+
+export function qualifyMetadataSource(plan: ObservedTargetBinding): void {
   const service = canonicalPath(plan.service_directory);
   const production = join(homedir(), ".codex-router");
   if (service === production || service.startsWith(`${production}/`))

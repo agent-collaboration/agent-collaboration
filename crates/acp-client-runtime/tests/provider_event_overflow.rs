@@ -1,5 +1,7 @@
 //! Output byte limits and event-consumer shutdown have different outcomes.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{
@@ -91,6 +93,14 @@ struct CaptureEventSink {
     closed: AtomicBool,
 }
 impl SessionEventSink for CaptureEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -140,6 +150,7 @@ async fn run_fixture(
         },
         Arc::new(NoopInteractionPort),
         Arc::clone(&sink) as Arc<dyn SessionEventSink>,
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -149,10 +160,15 @@ async fn run_fixture(
         .expect("session opens");
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("Run".to_owned()).expect("text prompt")],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Run".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         ),

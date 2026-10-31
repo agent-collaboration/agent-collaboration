@@ -1,5 +1,7 @@
 //! Claude's connection auth update is private to the ACP back door.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{
@@ -64,6 +66,14 @@ impl InteractionPort for NoopInteractionPort {
 
 struct NoopEventSink;
 impl SessionEventSink for NoopEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -74,6 +84,14 @@ impl SessionEventSink for NoopEventSink {
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
 impl SessionEventSink for CaptureEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -96,6 +114,7 @@ async fn auth_update_before_first_session_is_shared_without_private_fields() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -131,6 +150,7 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -147,13 +167,15 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
         }
     };
     let (prompt_result, capabilities) = tokio::join!(
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             session_id.clone(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt")
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt")
+                ])
+            ),
             (),
             None
         ),

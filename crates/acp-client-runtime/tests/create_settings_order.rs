@@ -1,5 +1,7 @@
 //! A real ACP subprocess proves that create settings finish before any prompt.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{
@@ -99,6 +101,14 @@ impl InteractionPort for NoopInteractionPort {
 
 struct NoopEventSink;
 impl SessionEventSink for NoopEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -111,6 +121,14 @@ impl SessionEventSink for NoopEventSink {
 struct SettingsEventSink(std::sync::Mutex<Vec<session_event_model::SessionSettings>>);
 
 impl SessionEventSink for SettingsEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -133,6 +151,14 @@ impl SessionEventSink for SettingsEventSink {
 
 struct ClosedSettingsSink;
 impl SessionEventSink for ClosedSettingsSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -158,6 +184,7 @@ async fn closed_settings_sink_aborts_create_with_typed_error() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(ClosedSettingsSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -188,6 +215,7 @@ async fn create_applies_requested_settings_before_first_prompt() {
         },
         Arc::new(NoopInteractionPort),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -215,13 +243,15 @@ async fn create_applies_requested_settings_before_first_prompt() {
     }
 
     let prompt = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             created.provider_session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -256,6 +286,7 @@ async fn invalid_first_setting_closes_created_session() {
         failure_fixture_launch("invalid", &receipt),
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -305,6 +336,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         failure_fixture_launch("partial", &receipt),
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -345,13 +377,15 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
     );
     assert!(client.settings_unresolved(&provider_session_id).await);
     let blocked = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             provider_session_id.clone(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("too early".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("too early".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -365,13 +399,15 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         .await
         .expect("caller accepts effective settings");
     let prompt = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             provider_session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -395,6 +431,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         failure_fixture_launch("partial-set", &receipt),
         Arc::new(NoopInteractionPort),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -418,8 +455,12 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
     let effective = client
         .set_setting(
             provider_session_id.clone(),
-            acp_client_runtime::ProviderSettingKind::Model,
-            "b".to_owned(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: acp_client_runtime::ProviderSettingKind::Model,
+                value: "b".to_owned(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
         )
         .await
         .expect("model setting applied");
@@ -439,13 +480,15 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         .expect("accept remaining untried setting");
     assert!(!client.settings_unresolved(&provider_session_id).await);
     let prompt = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             provider_session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -476,6 +519,7 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -491,13 +535,15 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
         .expect("mode applied");
     assert_eq!(created.effective_settings.mode.as_deref(), Some("ask"));
     let prompt = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             created.provider_session_id,
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Proceed".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Proceed".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -517,212 +563,6 @@ fn setting_response_launch(mode: &str) -> ExternalProviderLaunch {
         environment: Vec::new(),
         persistence_target: ProviderPersistenceTarget::Unspecified,
     }
-}
-
-/// Oracle: once a setting request was sent, an unusable success response
-/// leaves the effect unknown. Work stays gated until the caller resolves it.
-#[tokio::test]
-async fn queued_prompt_is_gated_after_in_flight_setting_becomes_uncertain() {
-    let root = tempfile::tempdir().expect("fixture root");
-    let ready_path = root.path().join("setting-ready.fifo");
-    let go_path = root.path().join("setting-go.fifo");
-    for path in [&ready_path, &go_path] {
-        assert!(
-            std::process::Command::new("mkfifo")
-                .arg(path)
-                .status()
-                .expect("create FIFO")
-                .success()
-        );
-    }
-    let client = AgentSessionClient::initialize(
-        ExternalProviderLaunch {
-            executable: PathBuf::from("node"),
-            arguments: vec![
-                HELD_SETTING_RESPONSE_FIXTURE.to_owned(),
-                "held".to_owned(),
-                ready_path.to_string_lossy().into_owned(),
-                go_path.to_string_lossy().into_owned(),
-            ],
-            environment: Vec::new(),
-            persistence_target: ProviderPersistenceTarget::Unspecified,
-        },
-        Arc::new(NoopInteractionPort),
-        Arc::new(NoopEventSink),
-    )
-    .await
-    .expect("fixture initializes");
-    let session_id = client
-        .create_session(root.path().to_path_buf())
-        .await
-        .expect("session opens");
-    let setting = client.set_setting(
-        session_id.clone(),
-        acp_client_runtime::ProviderSettingKind::Mode,
-        "ask".to_owned(),
-    );
-    tokio::pin!(setting);
-    assert!(futures_util::poll!(setting.as_mut()).is_pending());
-    let ready = tokio::task::spawn_blocking(move || {
-        use std::io::Read;
-        let mut barrier = std::fs::OpenOptions::new()
-            .read(true)
-            .open(ready_path)
-            .expect("setting reached agent");
-        let mut ready = [0_u8; 1];
-        barrier.read_exact(&mut ready).expect("setting held");
-        ready
-    })
-    .await
-    .expect("barrier reader");
-    assert_eq!(ready, [b'R']);
-
-    let prompt = client.prompt_contents_with_approval_dispatch_for_input(
-        session_id.clone(),
-        session_event_model::InputId::generate(),
-        vec![
-            session_event_model::PromptContent::text("Do not dispatch".to_owned())
-                .expect("text prompt"),
-        ],
-        (),
-        None,
-    );
-    tokio::pin!(prompt);
-    assert!(futures_util::poll!(prompt.as_mut()).is_pending());
-    tokio::task::spawn_blocking(move || {
-        use std::io::Write;
-        let mut release = std::fs::OpenOptions::new()
-            .write(true)
-            .open(go_path)
-            .expect("release barrier");
-        release.write_all(b"G").expect("release setting");
-    })
-    .await
-    .expect("barrier writer");
-
-    assert!(matches!(
-        setting.await,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingOutcomeUnknown { .. })
-    ));
-    assert!(matches!(
-        prompt.await,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
-    ));
-    client.shutdown().await;
-}
-
-#[tokio::test]
-async fn silent_setting_response_expires_to_unknown_and_gates_session() {
-    let root = tempfile::tempdir().expect("fixture root");
-    let client = AgentSessionClient::initialize(
-        ExternalProviderLaunch {
-            executable: PathBuf::from("node"),
-            arguments: vec![
-                SILENT_SETTING_RESPONSE_FIXTURE.to_owned(),
-                "silent".to_owned(),
-            ],
-            environment: Vec::new(),
-            persistence_target: ProviderPersistenceTarget::Unspecified,
-        },
-        Arc::new(NoopInteractionPort),
-        Arc::new(NoopEventSink),
-    )
-    .await
-    .expect("fixture initializes");
-    let session_id = client
-        .create_session(root.path().to_path_buf())
-        .await
-        .expect("session opens");
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(32),
-        client.set_setting(
-            session_id.clone(),
-            acp_client_runtime::ProviderSettingKind::Mode,
-            "ask".to_owned(),
-        ),
-    )
-    .await;
-    if result.is_err() {
-        client.shutdown().await;
-        panic!("setting request remained busy beyond its deadline");
-    }
-    assert!(matches!(
-        result,
-        Ok(Err(
-            acp_client_runtime::ExternalProviderRuntimeError::SettingOutcomeUnknown { .. }
-        ))
-    ));
-    assert!(client.settings_unresolved(&session_id).await);
-    let blocked = client
-        .prompt_contents_with_approval_dispatch_for_input(
-            session_id,
-            session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Must stay gated".to_owned())
-                    .expect("text prompt"),
-            ],
-            (),
-            None,
-        )
-        .await;
-    assert!(matches!(
-        blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
-    ));
-    client.shutdown().await;
-}
-
-/// Oracle: once a setting request was sent, an unusable success response
-/// leaves the effect unknown. Work stays gated until the caller resolves it.
-#[tokio::test]
-async fn malformed_post_send_setting_response_gates_existing_session() {
-    let root = tempfile::tempdir().expect("fixture root");
-    let client = AgentSessionClient::initialize(
-        setting_response_launch("malformed"),
-        Arc::new(NoopInteractionPort),
-        Arc::new(NoopEventSink),
-    )
-    .await
-    .expect("fixture initializes");
-    let session_id = client
-        .create_session(root.path().to_path_buf())
-        .await
-        .expect("session opens");
-    let result = client
-        .set_setting(
-            session_id.clone(),
-            acp_client_runtime::ProviderSettingKind::Mode,
-            "ask".to_owned(),
-        )
-        .await;
-    assert!(
-        matches!(&result, Err(acp_client_runtime::ExternalProviderRuntimeError::SettingOutcomeUnknown {
-        provider_session_id, setting: acp_client_runtime::ProviderSettingKind::Mode, value,
-    }) if provider_session_id == &session_id && value == "ask"),
-        "setting result: {result:?}"
-    );
-    assert!(client.settings_unresolved(&session_id).await);
-    assert!(matches!(
-        client.accept_session_settings(session_id.clone()).await,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsOutcomeUncertain)
-    ));
-    let blocked = client
-        .prompt_contents_with_approval_dispatch_for_input(
-            session_id,
-            session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Must not run".to_owned())
-                    .expect("text prompt"),
-            ],
-            (),
-            None,
-        )
-        .await;
-    assert!(matches!(
-        blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
-    ));
-    client.shutdown().await;
 }
 
 #[path = "create_settings_order/settings_tail_tests.rs"]

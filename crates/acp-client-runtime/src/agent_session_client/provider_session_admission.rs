@@ -153,9 +153,9 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             let provider_session_id = session.session_id().to_string();
             let response = session.response();
             let mut settings_catalog =
-                crate::provider_settings_catalog_codec::catalog_from_session_response(&response);
+                crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
             let (applied, failure) =
-                apply_initial_settings(&session, &requested_settings, &mut settings_catalog).await;
+                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
             let setup_error = match failure {
                 None => None,
                 Some(SettingSetupFailure::Invalid {

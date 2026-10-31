@@ -1,0 +1,11 @@
+{
+  "ignorePatterns": ["node_modules/**"],
+  "rules": {
+    "max-lines": ["error", { "max": 600 }],
+    "max-lines-per-function": [
+      "error",
+      { "max": 100, "skipBlankLines": true, "skipComments": true, "IIFEs": true }
+    ],
+    "max-depth": ["error", { "max": 4 }]
+  }
+}

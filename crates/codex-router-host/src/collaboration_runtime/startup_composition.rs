@@ -612,9 +612,9 @@ impl CollaborationRuntime {
                 create_private_socket_directory(&socket_directory)?;
             }
             for description in provider_face_endpoints {
-                let Some(catalog) = supervisor.provider_model_catalog(&description.endpoint) else {
+                if supervisor.runtime_for(&description.endpoint).is_none() {
                     continue;
-                };
+                }
                 let endpoint = message_board::SessionEndpointRef {
                     service_id: message_board::ServiceId::try_from(String::from(
                         description.endpoint.service_id.clone(),
@@ -640,7 +640,11 @@ impl CollaborationRuntime {
                     },
                     std::sync::Arc::clone(&commands),
                     std::sync::Arc::clone(&events),
-                    catalog,
+                    std::sync::Arc::new(
+                        crate::provider_model_catalog::SupervisorModelCatalog::new(
+                            std::sync::Arc::clone(supervisor),
+                        ),
+                    ),
                 )
                 .with_interaction_broker(std::sync::Arc::clone(&approval_broker))
                 .with_project_trust(std::sync::Arc::new(

@@ -37,10 +37,12 @@ mod agent_session_client;
 mod approval_presentation;
 mod external_permission_options;
 mod interaction_port;
+mod provider_behavior;
 mod provider_capability_report;
 mod provider_connection_activity;
 mod provider_item_projection;
 mod provider_model_picker;
+mod provider_model_reasoning;
 mod provider_persistence_target;
 mod provider_prompt_content;
 mod provider_prompt_observation;
@@ -48,10 +50,17 @@ mod provider_prompt_result_codec;
 mod provider_session_actor;
 mod provider_session_setting_update;
 mod provider_session_settings;
+mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
 mod session_event_sink;
+
+#[cfg(test)]
+extern crate self as acp_client_runtime;
+#[cfg(test)]
+#[path = "../tests/support/provider_behavior.rs"]
+mod test_behavior;
 
 pub use acp_protocol_version::AcpProtocolVersion;
 pub use agent_session_client::*;
@@ -61,8 +70,10 @@ pub(crate) use external_permission_options::map_permission_options;
 pub use interaction_port::{
     ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
 };
+pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
 pub use provider_model_picker::ProviderModelPicker;
+pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
 pub use provider_session_actor::{
@@ -71,9 +82,10 @@ pub use provider_session_actor::{
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting,
     InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderSettingChoice, ProviderSettingKind, ProviderSettingsCatalog,
+    ProviderConfigValue, ProviderSettingKind, ProviderSettingRequest, ProviderSettingsCatalog,
     RequestedProviderSettings,
 };
+pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_event_sink::{
     EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
 };

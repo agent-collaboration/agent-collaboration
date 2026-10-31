@@ -1,4 +1,4 @@
-import { findDialog } from './grid-scene-matcher.ts';
+import { findDialog } from './journeys/scenes/grid-scene-matcher.ts';
 /** Grid and projection assertions for future entries; unit fixtures are not product proof. */
 import type { ActionProjection } from './s9-picker-action-inventory.ts';
 import {
@@ -9,8 +9,8 @@ import {
 	pickerSettingValues,
 } from './s9-picker-action-inventory.ts';
 import type { PickerSetting } from './s9-picker-action-inventory.ts';
-import { cellText, gridLines } from './terminal-grid.ts';
-import type { TerminalGrid } from './terminal-grid.ts';
+import { cellText, gridLines } from './terminal/terminal-grid.ts';
+import type { TerminalGrid } from './terminal/terminal-grid.ts';
 const text = (value: string): string => value.replace(/\s+/gu, ' ').trim();
 const actionSignature = (action: ActionProjection): string =>
 	JSON.stringify([text(action.name), [...action.keys].map(text).toSorted()]);

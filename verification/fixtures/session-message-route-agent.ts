@@ -18,6 +18,14 @@ export async function runFixture(): Promise<void> {
   for (;;) {
     const request = await agent.readRequest();
     if (request === undefined) break;
+    if (request.method === "cursor/list_available_models") {
+      agent.send({
+        jsonrpc: "2.0",
+        id: request.id,
+        error: { code: -32601, message: "Model discovery is unsupported by this routing fixture" },
+      });
+      continue;
+    }
     let result: unknown;
     if (request.method === "session/new") result = { sessionId };
     else if (request.method === "session/load") {

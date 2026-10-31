@@ -1,5 +1,7 @@
 //! Failed ACP turns keep their emitted items separate from explicit successors.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use acp_client_runtime::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
     ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
@@ -64,6 +66,14 @@ impl InteractionPort for NoopInteractionPort {
 struct CapturedEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
 
 impl SessionEventSink for CapturedEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -107,6 +117,7 @@ async fn failed_prompt_partial_item_is_not_a_successor_turn_item() {
                 },
                 Arc::new(NoopInteractionPort),
                 Arc::new(CapturedEventSink(event_sender)),
+                std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
             ),
         )
         .await
@@ -129,10 +140,14 @@ async fn failed_prompt_partial_item_is_not_a_successor_turn_item() {
     let sent_first_input = first_input.clone();
     let first = tokio::spawn(async move {
         first_client
-            .prompt_contents_with_approval_dispatch_for_input(
+            .submit_with_approval_dispatch_for_input(
                 first_session,
                 sent_first_input,
-                vec![text_prompt_content("FIRST_REQUEST")],
+                acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![text_prompt_content(
+                        "FIRST_REQUEST",
+                    )]),
+                ),
                 101,
                 None,
             )
@@ -183,10 +198,14 @@ async fn failed_prompt_partial_item_is_not_a_successor_turn_item() {
     let sent_second_input = second_input.clone();
     let second = tokio::spawn(async move {
         second_client
-            .prompt_contents_with_approval_dispatch_for_input(
+            .submit_with_approval_dispatch_for_input(
                 session_id,
                 sent_second_input,
-                vec![text_prompt_content("SECOND_REQUEST")],
+                acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![text_prompt_content(
+                        "SECOND_REQUEST",
+                    )]),
+                ),
                 202,
                 None,
             )

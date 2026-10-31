@@ -52,7 +52,7 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            backend.clone(),
         )
         .with_interaction_broker(Arc::clone(&broker)),
     );
@@ -71,6 +71,16 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
     let started: Value =
         serde_json::from_str(client.next().await.ok_or("thread start")??.to_text()?)?;
     assert_eq!(started["id"], 1);
+    let skill_invalidation: Value = serde_json::from_str(
+        tokio::time::timeout(Duration::from_secs(2), client.next())
+            .await?
+            .ok_or("initial skill invalidation")??
+            .to_text()?,
+    )?;
+    assert_eq!(
+        skill_invalidation,
+        json!({"method":"skills/changed","params":{}})
+    );
 
     let question: QuestionRequest = serde_json::from_value(json!({
         "requestId":"client-error","prompt":"Choose an option","fields":[
@@ -183,7 +193,7 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
             actor.clone(),
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-            tokio::sync::watch::channel(Vec::new()).1,
+            backend.clone(),
         )
         .with_interaction_broker(Arc::clone(&broker)),
     );
@@ -202,6 +212,16 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
     assert_eq!(
         serde_json::from_str::<Value>(client.next().await.ok_or("thread start")??.to_text()?)?["id"],
         1
+    );
+    let skill_invalidation: Value = serde_json::from_str(
+        tokio::time::timeout(Duration::from_secs(2), client.next())
+            .await?
+            .ok_or("initial skill invalidation")??
+            .to_text()?,
+    )?;
+    assert_eq!(
+        skill_invalidation,
+        json!({"method":"skills/changed","params":{}})
     );
     let question: QuestionRequest = serde_json::from_value(json!({
         "requestId":"stale-answer","prompt":"Ready?","fields":[

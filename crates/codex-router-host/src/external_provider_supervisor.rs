@@ -47,7 +47,7 @@ use std::{
     sync::{Arc, Mutex as StdMutex},
     time::Duration,
 };
-use tokio::sync::{Mutex, Notify, mpsc, watch};
+use tokio::sync::{Mutex, Notify, mpsc};
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
 
@@ -69,8 +69,6 @@ struct SupervisorInner {
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
-    model_catalogs:
-        HashMap<EndpointRef, watch::Sender<Vec<collaboration_runtime::ProviderModelEntry>>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     #[cfg(test)]
@@ -124,17 +122,6 @@ impl ExternalProviderSupervisor {
     }
 
     #[must_use]
-    pub fn provider_model_catalog(
-        &self,
-        endpoint: &EndpointRef,
-    ) -> Option<watch::Receiver<Vec<collaboration_runtime::ProviderModelEntry>>> {
-        self.inner
-            .model_catalogs
-            .get(endpoint)
-            .map(watch::Sender::subscribe)
-    }
-
-    #[must_use]
     pub fn live_operation_ids(&self) -> std::collections::HashSet<OperationId> {
         self.inner
             .live_operations
@@ -163,7 +150,6 @@ impl ExternalProviderSupervisor {
         hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     ) -> Result<Self, &'static str> {
         let mut runtimes = HashMap::with_capacity(bindings.len());
-        let mut model_catalogs = HashMap::with_capacity(bindings.len());
         let mut catalog_tasks = Vec::with_capacity(bindings.len());
         let settings_catalogs = Arc::new(Mutex::new(HashMap::new()));
         for binding in bindings {
@@ -172,15 +158,11 @@ impl ExternalProviderSupervisor {
                 return Err("external provider endpoint binding must be unique");
             }
             let runtime = Arc::new(binding.runtime);
-            let (catalog_sender, _) = watch::channel(vec![
-                crate::provider_model_catalog::provider_default_model()?,
-            ]);
             let (refresh_sender, mut refresh_receiver) = mpsc::unbounded_channel::<String>();
             runtime.install_catalog_refresh(refresh_sender);
             let task_runtime = Arc::clone(&runtime);
             let task_catalogs = Arc::clone(&settings_catalogs);
             let task_endpoint = endpoint.clone();
-            let task_sender = catalog_sender.clone();
             catalog_tasks.push(tokio::spawn(async move {
                 while let Some(session_id) = refresh_receiver.recv().await {
                     let Some(catalog) = task_runtime.settings_catalog(&session_id).await else {
@@ -194,11 +176,8 @@ impl ExternalProviderSupervisor {
                         session_id,
                     };
                     task_catalogs.lock().await.insert(target, catalog.clone());
-                    task_sender
-                        .send_replace(crate::provider_model_catalog::model_entries(&catalog));
                 }
             }));
-            model_catalogs.insert(endpoint.clone(), catalog_sender);
             runtimes.insert(
                 endpoint,
                 RuntimeBinding {
@@ -216,7 +195,6 @@ impl ExternalProviderSupervisor {
                 hub,
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
-                model_catalogs,
                 catalog_tasks: Mutex::new(catalog_tasks),
                 started_at_ms: now_ms(),
                 #[cfg(test)]
@@ -484,9 +462,6 @@ impl SupervisorInner {
         target: SessionRef,
         catalog: acp_client_runtime::ProviderSettingsCatalog,
     ) {
-        if let Some(sender) = self.model_catalogs.get(&target.endpoint) {
-            sender.send_replace(crate::provider_model_catalog::model_entries(&catalog));
-        }
         self.settings_catalogs.lock().await.insert(target, catalog);
     }
 
@@ -739,5 +714,6 @@ fn now_ms() -> i64 {
 
 mod provider_delivery_submission;
 #[cfg(test)]
+#[path = "external_provider_supervisor/supervisor_test.rs"]
 mod tests;
 pub(crate) use provider_delivery_submission::ProviderPromptDispatch;

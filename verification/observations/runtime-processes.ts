@@ -27,28 +27,22 @@ import {
 
 export type { CleanupResult, CleanupFailure, ProcessSignal } from "./evidence-models.ts";
 
-export function processTable(): Map<number, ProcessIdentity> {
-  const result = spawnSync("/bin/ps", ["-axo", "pid=,ppid=,uid=,pgid=,lstart=,comm="], {
-    encoding: "utf8",
-    timeout: 5000,
-    maxBuffer: Number.MAX_SAFE_INTEGER,
-  });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0)
-    throw Object.assign(new Error(result.stderr.trim()), { name: "CalledProcessError" });
+/** Rows of `ps -o pid=,ppid=,ruid=,uid=,pgid=,lstart=,comm=`: real, then effective UID. */
+export function parseProcessTable(stdout: string): Map<number, ProcessIdentity> {
   const records = new Map<number, ProcessIdentity>();
-  for (const line of result.stdout.split("\n")) {
+  for (const line of stdout.split("\n")) {
     const match =
-      /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/.exec(
+      /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/.exec(
         line.trim(),
       );
     if (match === null) continue;
-    const [pid, parent, uid, group, ...rest] = match.slice(1);
+    const [pid, parent, realUid, effectiveUid, group, ...rest] = match.slice(1);
     const executable = rest.pop();
     const identity = processIdentitySchema.parse({
       pid,
       parent,
-      uid,
+      realUid,
+      effectiveUid,
       group,
       birth: rest.join(" "),
       executable,
@@ -56,6 +50,18 @@ export function processTable(): Map<number, ProcessIdentity> {
     records.set(identity.pid, identity);
   }
   return records;
+}
+
+export function processTable(): Map<number, ProcessIdentity> {
+  const result = spawnSync("/bin/ps", ["-axo", "pid=,ppid=,ruid=,uid=,pgid=,lstart=,comm="], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: Number.MAX_SAFE_INTEGER,
+  });
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0)
+    throw Object.assign(new Error(result.stderr.trim()), { name: "CalledProcessError" });
+  return parseProcessTable(result.stdout);
 }
 
 export const processOperations = {
@@ -73,7 +79,8 @@ export function identityRecord(identity: ProcessIdentity): IdentityRecord {
   return {
     pid: identity.pid,
     parent: identity.parent,
-    uid: identity.uid,
+    realUid: identity.realUid,
+    effectiveUid: identity.effectiveUid,
     group: identity.group,
     birth: identity.birth,
     executable: identity.executable,
@@ -102,7 +109,8 @@ export function observeOwned(
   for (const pid of candidates) {
     const identity = observed.get(pid);
     if (identity === undefined) continue;
-    if (identity.uid !== process.getuid?.()) {
+    // Node's getuid() is the real UID, the same kind the table and lookup now collect.
+    if (identity.realUid !== process.getuid?.()) {
       if (operations.lookup(pid) === null) continue;
       throw new Error("owned process UID changed");
     }

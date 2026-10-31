@@ -18,13 +18,52 @@ pub(super) async fn set(
     supervisor: &ExternalProviderSupervisor,
     request: ProviderSettingsSetRequest,
 ) -> Result<ProviderSettingsResult, ProviderSettingsFailure> {
+    match apply(
+        supervisor,
+        request,
+        session_event_model::SettingApplicationIntent::ExplicitChange,
+        None,
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
+        Err(SettingControlFailure::Provider(error)) => Err(*error),
+        Err(
+            SettingControlFailure::ContextChanged(target)
+            | SettingControlFailure::Unresolved(target),
+        ) => Err(failure(
+            ProviderSettingsFailureKind::Unavailable,
+            &target,
+            "setting context unavailable",
+        )),
+    }
+}
+
+pub(super) enum SettingControlFailure {
+    Provider(Box<ProviderSettingsFailure>),
+    ContextChanged(SessionRef),
+    Unresolved(SessionRef),
+}
+impl From<ProviderSettingsFailure> for SettingControlFailure {
+    fn from(error: ProviderSettingsFailure) -> Self {
+        Self::Provider(Box::new(error))
+    }
+}
+
+pub(super) async fn apply(
+    supervisor: &ExternalProviderSupervisor,
+    request: ProviderSettingsSetRequest,
+    intent: session_event_model::SettingApplicationIntent,
+    expected_model: Option<String>,
+) -> Result<ProviderSettingsResult, SettingControlFailure> {
     let record = authorized_session(supervisor, &request.target, &request.actor).await?;
     if request.value.trim().is_empty() {
         return Err(failure(
             ProviderSettingsFailureKind::InvalidSetting,
             &request.target,
             "setting value must be nonempty",
-        ));
+        )
+        .into());
     }
     let runtime = supervisor
         .runtime_for(&request.target.endpoint)
@@ -43,11 +82,23 @@ pub(super) async fn set(
     let observed = runtime
         .set_setting(
             String::from(request.target.session_id.clone()),
-            kind,
-            request.value.clone(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind,
+                value: request.value.clone(),
+                intent,
+                expected_model,
+            },
         )
         .await
-        .map_err(|error| setting_error(&request, error))?;
+        .map_err(|error| match error {
+            ExternalProviderRuntimeError::SettingsContextChanged => {
+                SettingControlFailure::ContextChanged(request.target.clone())
+            }
+            ExternalProviderRuntimeError::SettingsUnresolved => {
+                SettingControlFailure::Unresolved(request.target.clone())
+            }
+            other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
+        })?;
     if let Some(catalog) = runtime
         .settings_catalog(&String::from(request.target.session_id.clone()))
         .await
@@ -230,31 +281,42 @@ fn failure(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
+impl ExternalProviderSupervisor {
+    pub(crate) async fn apply_setting_command(
+        &self,
+        request: ProviderSettingsSetRequest,
+        intent: session_event_model::SettingApplicationIntent,
+        expected_model: Option<String>,
+    ) -> Result<(), collaboration_contracts::CommandFailure> {
+        use collaboration_contracts::CommandFailure;
 
-    #[test]
-    fn post_send_transport_loss_names_unknown_setting_state() {
-        let request: ProviderSettingsSetRequest = serde_json::from_value(json!({
-            "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-session"},
-            "actor":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},
-            "setting":"mode","value":"ask"
-        })).expect("set request");
-        let failure = setting_error(&request, ExternalProviderRuntimeError::TransportFailure);
-        assert_eq!(failure.kind, ProviderSettingsFailureKind::OutcomeUnknown);
-        assert_eq!(failure.setting, Some(ProviderSettingName::Mode));
-        assert_eq!(failure.value.as_deref(), Some("ask"));
-        let precise = setting_error(
-            &request,
-            ExternalProviderRuntimeError::SettingOutcomeUnknown {
-                provider_session_id: "provider-session".into(),
-                setting: acp_client_runtime::ProviderSettingKind::Mode,
-                value: "ask".into(),
-            },
-        );
-        assert_eq!(precise.kind, ProviderSettingsFailureKind::OutcomeUnknown);
-        assert_eq!(precise.setting, Some(ProviderSettingName::Mode));
+        apply(self, request, intent, expected_model)
+            .await
+            .map(|_| ())
+            .map_err(|error| match error {
+                SettingControlFailure::ContextChanged(_) => CommandFailure::SettingsContextChanged,
+                SettingControlFailure::Unresolved(_) => CommandFailure::SettingsUnresolved,
+                SettingControlFailure::Provider(error) => match error.kind {
+                    collaboration_protocol::ProviderSettingsFailureKind::WrongActor => {
+                        CommandFailure::UnauthorizedActor
+                    }
+                    collaboration_protocol::ProviderSettingsFailureKind::NotFound => {
+                        CommandFailure::SessionNotFound
+                    }
+                    collaboration_protocol::ProviderSettingsFailureKind::Busy => {
+                        CommandFailure::Busy
+                    }
+                    collaboration_protocol::ProviderSettingsFailureKind::InvalidSetting => {
+                        CommandFailure::InvalidSetting {
+                            advertised: error.advertised,
+                        }
+                    }
+                    _ => CommandFailure::ProviderFailure,
+                },
+            })
     }
 }
+
+#[cfg(test)]
+#[path = "provider_settings_control_test.rs"]
+mod tests;

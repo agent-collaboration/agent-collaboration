@@ -42,6 +42,14 @@ fn compiled_public_sessions_grid_observation() -> TestResult<()> {
     public_sessions_capture::run_live_public_sessions()
 }
 
+#[path = "quota_reset_pty_test/codex_acp_capture.rs"]
+mod codex_acp_capture;
+#[test]
+#[ignore = "requires a declared installed Codex ACP target, fresh owned output and grid observer"]
+fn compiled_codex_acp_grid_observation() -> TestResult<()> {
+    codex_acp_capture::run_codex_acp_grid_observation()
+}
+
 #[path = "quota_storyboard_capture_test/public_grid_transport_test.rs"]
 mod public_grid_transport_test;
 

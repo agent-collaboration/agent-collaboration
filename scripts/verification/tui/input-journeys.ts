@@ -13,15 +13,15 @@ import {
 	focusedWords,
 	saveCheckpoint,
 	withTerminal,
-} from './baseline-journeys.ts';
-import { encodeJourneyKey } from './capture-run.ts';
-import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
-import { findDialog } from './grid-scene-matcher.ts';
+} from './capture/baseline-journeys.ts';
+import { isMain, planArgument, reportCliFailure, strictArguments } from './cli/cli-arguments.ts';
+import { canonicalJson, sourceBinding } from './evidence/source-binding.ts';
+import { encodeJourneyKey } from './journeys/journey-key.ts';
+import { findDialog } from './journeys/scenes/grid-scene-matcher.ts';
 import { preparationProofSchema, readPreparationReadback } from './preparation-readback.ts';
-import type { PtyGridDriver, KeyProtocol } from './pty-grid-driver.ts';
-import { canonicalJson, sourceBinding } from './source-binding.ts';
-import { cellText, gridLines } from './terminal-grid.ts';
-import type { TerminalGrid } from './terminal-grid.ts';
+import type { PtyGridDriver, KeyProtocol } from './terminal/pty-grid-driver.ts';
+import { cellText, gridLines } from './terminal/terminal-grid.ts';
+import type { TerminalGrid } from './terminal/terminal-grid.ts';
 export const inputJourneyPlanSchema = baselinePlanSchema.extend({
 	preparationProof: preparationProofSchema,
 });

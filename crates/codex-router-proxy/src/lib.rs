@@ -2,6 +2,7 @@
 
 pub mod account_selection;
 pub(crate) mod claude_edge;
+mod claude_route_diagnostics;
 mod credential_runtime;
 pub mod db_write_actor;
 pub mod headers;

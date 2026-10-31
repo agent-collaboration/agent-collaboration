@@ -48,9 +48,12 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
     let root = tempfile::tempdir().expect("provider root");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(no_load_fixture())
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        no_load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -121,10 +124,10 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(cursor_prompt_fixture(
-        &event_socket,
-        &captured_prepared_prompt,
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        cursor_prompt_fixture(&event_socket, &captured_prepared_prompt),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("fixture provider");
     runtime
@@ -384,9 +387,12 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let load_marker = root.path().join("load-method.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker, -32000))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        refusing_load_fixture(&load_marker, -32000),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -510,9 +516,12 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
     let root = tempfile::tempdir().expect("provider root");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(no_load_fixture())
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        no_load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -634,10 +643,12 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
         let load_marker = root.path().join("load-method.txt");
         let target = target();
         let binding = provider_binding(&target);
-        let runtime =
-            ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker, error_code))
-                .await
-                .expect("fixture provider");
+        let runtime = ExternalProviderRuntime::initialize(
+            refusing_load_fixture(&load_marker, error_code),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await
+        .expect("fixture provider");
         let store = Arc::new(tokio::sync::Mutex::new(
             ProviderOperationStore::open(&root.path().join("operations.sqlite"))
                 .await

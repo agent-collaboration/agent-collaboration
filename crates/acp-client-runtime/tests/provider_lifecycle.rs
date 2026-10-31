@@ -1,5 +1,7 @@
 //! ACP v1 list, resume, and close through one scripted agent subprocess.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{
@@ -76,6 +78,14 @@ impl InteractionPort for NoopInteractionPort {
 #[derive(Default)]
 struct CountingEventSink(AtomicUsize, Mutex<Vec<SessionEvent>>);
 impl SessionEventSink for CountingEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         self.0.fetch_add(1, Ordering::Relaxed);
         Box::pin(async { Ok(()) })
@@ -124,6 +134,7 @@ async fn advertised_list_resume_and_idle_close_keep_wire_order() {
         fixture_launch("idle-close", root.path(), &receipt),
         Arc::new(NoopInteractionPort),
         sink.clone(),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -143,12 +154,15 @@ async fn advertised_list_resume_and_idle_close_keep_wire_order() {
         [SessionEvent::SettingsChanged { settings }]
             if settings.mode.is_none() && settings.model.is_none()));
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Hello".to_owned()).expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Hello".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -172,6 +186,7 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
         fixture_launch("idle-close", root.path(), &receipt),
         Arc::new(NoopInteractionPort),
         Arc::new(CountingEventSink::default()),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -184,12 +199,15 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
         .await
         .expect("resume");
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("First".to_owned()).expect("first prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("First".to_owned())
+                        .expect("first prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -199,10 +217,15 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
     let close = client.close_session("fixture-session".to_owned());
     tokio::pin!(close);
     assert!(futures_util::poll!(close.as_mut()).is_pending());
-    let second_prompt = client.prompt_contents_with_approval_dispatch_for_input(
+    let second_prompt = client.submit_with_approval_dispatch_for_input(
         "fixture-session".to_owned(),
         session_event_model::InputId::generate(),
-        vec![session_event_model::PromptContent::text("Second".to_owned()).expect("second prompt")],
+        acp_client_runtime::ProviderTurnInput::Prompt(
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("Second".to_owned())
+                    .expect("second prompt"),
+            ]),
+        ),
         (),
         None,
     );
@@ -228,6 +251,7 @@ async fn dropped_close_before_command_submission_releases_admission_mark() {
         fixture_launch("aborted-close", root.path(), &receipt),
         Arc::new(NoopInteractionPort),
         Arc::new(CountingEventSink::default()),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -240,12 +264,15 @@ async fn dropped_close_before_command_submission_releases_admission_mark() {
         .await
         .expect("resume");
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("First".to_owned()).expect("first prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("First".to_owned())
+                        .expect("first prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -256,13 +283,15 @@ async fn dropped_close_before_command_submission_releases_admission_mark() {
     assert!(futures_util::poll!(close.as_mut()).is_pending());
     drop(close);
     let second_prompt = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Second".to_owned())
-                    .expect("second prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Second".to_owned())
+                        .expect("second prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -303,6 +332,7 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
             fixture_launch("held-close", root.path(), &receipt),
             Arc::new(NoopInteractionPort),
             Arc::new(CountingEventSink::default()),
+            std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
         )
         .await
         .expect("fixture initializes"),
@@ -316,12 +346,15 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
         .await
         .expect("resume");
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("First".to_owned()).expect("first prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("First".to_owned())
+                        .expect("first prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -349,13 +382,15 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
     close.abort();
     assert!(close.await.is_err(), "close waiter aborted");
     let blocked = client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Must not run".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Must not run".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -387,6 +422,7 @@ async fn close_cancels_running_turn_before_session_close() {
         fixture_launch("running-close", root.path(), &receipt),
         Arc::new(NoopInteractionPort),
         Arc::new(CountingEventSink::default()),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -399,10 +435,14 @@ async fn close_cancels_running_turn_before_session_close() {
         .await
         .expect("resume");
     let (dispatch_tx, dispatch_rx) = tokio::sync::oneshot::channel();
-    let prompt = client.prompt_contents_with_approval_dispatch_for_input(
+    let prompt = client.submit_with_approval_dispatch_for_input(
         "fixture-session".to_owned(),
         session_event_model::InputId::generate(),
-        vec![session_event_model::PromptContent::text("Hello".to_owned()).expect("text prompt")],
+        acp_client_runtime::ProviderTurnInput::Prompt(
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("Hello".to_owned()).expect("text prompt"),
+            ]),
+        ),
         (),
         Some(dispatch_tx),
     );
@@ -442,6 +482,7 @@ async fn unadvertised_lifecycle_methods_send_no_acp_request() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CountingEventSink::default()),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");

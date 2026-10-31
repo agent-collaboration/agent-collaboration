@@ -160,10 +160,12 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime =
-        ExternalProviderRuntime::initialize(close_and_load_fixture(&close_marker, &load_marker))
-            .await
-            .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        close_and_load_fixture(&close_marker, &load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     assert_eq!(
         runtime
             .create_session(root.path().to_owned())
@@ -253,9 +255,12 @@ async fn loaded_only_reports_non_retryable_unsupported_load_after_can_load_claim
     let root = tempfile::tempdir().expect("provider root");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(no_load_fixture())
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        no_load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = store_with_session_record(root.path(), &target).await;
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
@@ -303,9 +308,12 @@ async fn loaded_only_preserves_live_elsewhere_reason_after_can_load_claim() {
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        refusing_load_fixture(&load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = store_with_session_record(root.path(), &target).await;
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
@@ -391,9 +399,12 @@ async fn loaded_only_reports_non_retryable_missing_record_after_can_load_claim()
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        refusing_load_fixture(&load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = store_with_session_record(root.path(), &target).await;
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
@@ -453,10 +464,12 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime =
-        ExternalProviderRuntime::initialize(close_and_load_fixture(&close_marker, &load_marker))
-            .await
-            .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        close_and_load_fixture(&close_marker, &load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     assert_eq!(
         runtime
             .create_session(root.path().to_owned())
@@ -541,9 +554,12 @@ async fn provider_and_absent_peer_presence_aggregates_to_unreachable() {
     target.endpoint.endpoint_id =
         EndpointId::try_from("claude-local".to_owned()).expect("Claude endpoint");
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(no_load_fixture())
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        no_load_fixture(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await

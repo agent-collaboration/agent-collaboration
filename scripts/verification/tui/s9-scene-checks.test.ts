@@ -17,8 +17,8 @@ import {
 	checkPickerProjections,
 	checkPickerSettings,
 } from './s9-scene-checks.ts';
-import { createTerminalCore, snapshotGrid } from './terminal-grid.ts';
-import type { TerminalGrid } from './terminal-grid.ts';
+import { createTerminalCore, snapshotGrid } from './terminal/terminal-grid.ts';
+import type { TerminalGrid } from './terminal/terminal-grid.ts';
 async function screen(bytes: string): Promise<TerminalGrid> {
 	const core = await createTerminalCore(120, 36);
 	try {

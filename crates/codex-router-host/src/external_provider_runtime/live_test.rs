@@ -1,0 +1,750 @@
+use super::*;
+use collaboration_client::CollaborationClient;
+use collaboration_protocol::{
+    ApprovalDecideParams, ApprovalDecision, EndpointDescription, EndpointId, EndpointRef,
+    GenerationNumber, OperationId, RouterOriginRef, SessionId, UuidIdentity,
+};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use futures_util::{SinkExt as _, StreamExt as _};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, sync::Arc};
+use tokio_tungstenite::tungstenite::Message;
+
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+use super::approval_push_fixture;
+
+fn approval_actor(session: &collaboration_protocol::SessionRef) -> message_board::Identity {
+    message_board::Identity::Session {
+        session: serde_json::from_value(serde_json::to_value(session).expect("session JSON"))
+            .expect("board session"),
+    }
+}
+
+#[test]
+fn provider_output_classifier_reports_only_bounded_uuid_metadata() {
+    let expected = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())
+        .expect("expected service ID");
+    let different = "2ff962c5-7fa3-4c18-a5ca-1bbe8db09e81";
+    let cases = [
+        (
+            String::from(expected.clone()),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: true,
+                expected_identity_token_present: true,
+                returned_uuid_count: 1,
+                sole_uuid_matches_expected: true,
+                output_byte_count: 36,
+            },
+        ),
+        (
+            format!("`{}`", String::from(expected.clone())),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: false,
+                expected_identity_token_present: true,
+                returned_uuid_count: 1,
+                sole_uuid_matches_expected: true,
+                output_byte_count: 38,
+            },
+        ),
+        (
+            format!("service id: {}", String::from(expected.clone())),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: false,
+                expected_identity_token_present: true,
+                returned_uuid_count: 1,
+                sole_uuid_matches_expected: true,
+                output_byte_count: 48,
+            },
+        ),
+        (
+            different.to_owned(),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: false,
+                expected_identity_token_present: false,
+                returned_uuid_count: 1,
+                sole_uuid_matches_expected: false,
+                output_byte_count: 36,
+            },
+        ),
+        (
+            String::new(),
+            ProviderOutputClassification {
+                output_empty: true,
+                exact_identity_equal: false,
+                expected_identity_token_present: false,
+                returned_uuid_count: 0,
+                sole_uuid_matches_expected: false,
+                output_byte_count: 0,
+            },
+        ),
+        (
+            "no identity".to_owned(),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: false,
+                expected_identity_token_present: false,
+                returned_uuid_count: 0,
+                sole_uuid_matches_expected: false,
+                output_byte_count: 11,
+            },
+        ),
+        (
+            format!("{} {different}", String::from(expected.clone())),
+            ProviderOutputClassification {
+                output_empty: false,
+                exact_identity_equal: false,
+                expected_identity_token_present: true,
+                returned_uuid_count: 2,
+                sole_uuid_matches_expected: false,
+                output_byte_count: 73,
+            },
+        ),
+    ];
+    for (output, expected_classification) in cases {
+        assert_eq!(
+            classify_provider_output(&output, &expected),
+            expected_classification
+        );
+    }
+    let expected_text = String::from(expected.clone());
+    for embedded in [
+        format!("x{expected_text}"),
+        format!("{expected_text}x"),
+        format!("_{expected_text}"),
+        format!("{expected_text}_"),
+        format!("-{expected_text}"),
+        format!("{expected_text}-"),
+        format!("0{expected_text}0"),
+    ] {
+        let classification = classify_provider_output(&embedded, &expected);
+        assert_eq!(classification.returned_uuid_count, 0);
+        assert!(!classification.expected_identity_token_present);
+        assert!(!classification.sole_uuid_matches_expected);
+    }
+}
+
+fn owned_host_endpoint_fixture() -> ExternalProviderLaunch {
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["owned".to_owned()],
+    )
+}
+
+fn session_ref(
+    service_id: &UuidIdentity,
+    endpoint_id: &str,
+    session_id: &str,
+) -> TestResult<SessionRef> {
+    Ok(SessionRef {
+        endpoint: EndpointRef {
+            service_id: service_id.clone(),
+            endpoint_id: EndpointId::try_from(endpoint_id.to_owned())?,
+        },
+        session_id: SessionId::try_from(session_id.to_owned())?,
+    })
+}
+
+async fn approval_broker_fixture(
+    root: &tempfile::TempDir,
+    service_id: &UuidIdentity,
+    approver: &SessionRef,
+) -> TestResult<(
+    Arc<ServiceInteractionBroker>,
+    tokio::task::JoinHandle<Result<String, Box<dyn std::error::Error + Send + Sync>>>,
+)> {
+    let socket_path = root.path().join("native-approver.sock");
+    let listener = tokio::net::UnixListener::bind(&socket_path)?;
+    let native_generation = CodexGeneration {
+        service_epoch: service_id.clone(),
+        generation: GenerationNumber::try_from(1)?,
+    };
+    let mut definitions = serde_json::Map::new();
+    for operation in [
+        "ThreadRead",
+        "ThreadResume",
+        "ThreadStart",
+        "ThreadLoadedList",
+        "TurnStart",
+        "TurnSteer",
+        "TurnInterrupt",
+        "ThreadQueueAdd",
+    ] {
+        definitions.insert(format!("{operation}Params"), json!({"type":"object"}));
+        definitions.insert(format!("{operation}Response"), json!({"type":"object"}));
+    }
+    let bundle = codex_native_integration::NativeSchemaBundle::from_documents(BTreeMap::from([(
+        "codex_app_server_protocol.schemas.json".to_owned(),
+        serde_json::to_vec(&json!({"definitions":{"v2":definitions}}))?,
+    )]))?;
+    let schemas = Arc::new(codex_native_integration::NativePayloadSchemas::from_bundle(
+        &bundle,
+    )?);
+    let gate = NativeGenerationGate::default();
+    gate.activate(
+        native_generation.clone(),
+        socket_path,
+        Some(Arc::clone(&schemas)),
+    )?;
+    let endpoint_description: EndpointDescription = serde_json::from_value(json!({
+        "endpoint": approver.endpoint,
+        "label": "Fixture approver",
+        "availability": {"state":"available","observedAt":"2026-09-21T00:00:00Z"},
+        "channels": [{
+            "kind":"nativeCodex",
+            "transport":"unixWebSocket",
+            "path":"native-approver.sock",
+            "schemaDigest":schemas.schema_digest(),
+            "generation":native_generation
+        }]
+    }))?;
+    let endpoints = EndpointDirectory::new(service_id.clone());
+    endpoints.publish(endpoint_description)?;
+    let native_backend = NativeControlBackend {
+        codex_home: root.path().to_path_buf(),
+        endpoint: approver.endpoint.clone(),
+        gate,
+    };
+    let broker = ServiceInteractionBroker::load(
+        service_id.clone(),
+        native_backend.clone(),
+        root.path().join("approval-routes.json"),
+    )
+    .await?;
+    let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+        Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
+            service_id.clone(),
+            endpoints,
+            native_backend,
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
+        ));
+    broker.install_session_delivery(Arc::new(
+        collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
+    ))?;
+    let push_fixture =
+        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
+            .await?;
+    let captured_approver = approver.clone();
+    let captured_broker = Arc::clone(&broker);
+    let approver_task = tokio::spawn(async move {
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept())
+            .await
+            .map_err(|_| "native approval push did not connect")??;
+        let mut socket = tokio_tungstenite::accept_async(stream).await?;
+        let mut offered_option_id = None;
+        for expected_method in ["initialize", "initialized", "thread/read", "turn/start"] {
+            let frame = tokio::time::timeout(Duration::from_secs(5), socket.next())
+                .await?
+                .ok_or("native approver connection closed")??;
+            let request: Value = serde_json::from_str(frame.to_text()?)?;
+            if request.get("method").and_then(Value::as_str) != Some(expected_method) {
+                return Err(format!("unexpected native method: {expected_method}").into());
+            }
+            if expected_method == "turn/start" {
+                let delivered_text = request
+                    .pointer("/params/input/0/text")
+                    .and_then(Value::as_str)
+                    .ok_or("approval notice text missing")?;
+                let record = push_fixture
+                    .captured_approval(delivered_text, &captured_approver)
+                    .await?;
+                let RouterOriginRef::Interaction { interaction_id, .. } =
+                    RouterOriginRef::parse_canonical(
+                        record
+                            .origin_router_ref
+                            .as_deref()
+                            .ok_or("approval push omitted its interaction reference")?,
+                    )?
+                else {
+                    return Err("approval push reference does not identify an interaction".into());
+                };
+                let body = record.body.ok_or("stored approval push omitted its body")?;
+                let pending = captured_broker
+                    .list_typed_approvals(true)
+                    .await
+                    .into_iter()
+                    .find(|approval| approval.request_id == interaction_id.as_str())
+                    .ok_or("stored notice did not identify its pending approval")?;
+                if !body.contains(&format!("Approval request: {}\n", pending.title))
+                    || !body.contains(&format!("Request ID: {}\n", pending.request_id))
+                {
+                    return Err(
+                        "stored approval body omitted its reviewed title or request ID".into(),
+                    );
+                }
+                let option_id = pending
+                    .options
+                    .iter()
+                    .next()
+                    .ok_or("pending approval omitted offered option ID")?
+                    .option_id
+                    .as_str();
+                let command = body
+                    .lines()
+                    .find_map(|line| line.strip_prefix("To choose: "))
+                    .ok_or("stored approval body omitted decision command")?;
+                if !command.contains("agent-collaboration approval decide")
+                    || !command.contains(&format!("--option-id '{option_id}'"))
+                    || !body.contains(&format!("Option {option_id} — "))
+                {
+                    return Err("typed approval notice did not explain how to decide".into());
+                }
+                offered_option_id = Some(option_id.to_owned());
+            }
+            if expected_method == "initialized" {
+                continue;
+            }
+            let result = match expected_method {
+                "thread/read" => json!({"thread":{"id":"approver","status":{"type":"idle"}}}),
+                "turn/start" => json!({"turn":{"id":"approval-turn"}}),
+                _ => json!({}),
+            };
+            socket
+                .send(Message::Text(
+                    json!({"id":request.get("id").ok_or("native request ID missing")?,"result":result})
+                        .to_string()
+                        .into(),
+                ))
+                .await?;
+        }
+        offered_option_id.ok_or_else(|| "approval notice was not observed".into())
+    });
+    Ok((broker, approver_task))
+}
+
+fn fixture_acp_permission_request_agent(provider_name: &str) -> ExternalProviderLaunch {
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["approve".to_owned(), provider_name.to_owned()],
+    )
+}
+
+fn fixture_acp_permission_without_allow_agent() -> ExternalProviderLaunch {
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["reject".to_owned()],
+    )
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn fixture_acp_permission_notice_reaches_approver_and_allow_executes_command() -> TestResult {
+    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let approver = session_ref(&service_id, "codex-local", "approver")?;
+    let generation = CodexGeneration {
+        service_epoch: service_id.clone(),
+        generation: GenerationNumber::try_from(1)?,
+    };
+    for endpoint_id in ["cursor-local", "claude-local"] {
+        let root = tempfile::tempdir()?;
+        let runtime = ExternalProviderRuntime::initialize(
+            fixture_acp_permission_request_agent(endpoint_id),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await?;
+        let (broker, mut approver_task) =
+            approval_broker_fixture(&root, &service_id, &approver).await?;
+        runtime.install_approval_broker(Arc::clone(&broker)).await;
+
+        let provider_session_id = runtime.create_session(root.path().to_owned()).await?;
+        let target = session_ref(&service_id, endpoint_id, &provider_session_id)?;
+        let prompt = runtime.prompt_with_approval_context(
+            provider_session_id,
+            format!("Run `echo {endpoint_id}-ok` and report its output."),
+            ExternalProviderApprovalContext {
+                // The creator is also the prompt sender and default approver.
+                requester: (approver.clone()).into(),
+                approver: (approver.clone()).into(),
+                target,
+                operation_id: OperationId::generate(),
+                binding_generation: generation.clone(),
+                binding_retirement: CancellationToken::new(),
+            },
+        );
+        tokio::pin!(prompt);
+        let noticed_option_id = tokio::select! {
+            biased;
+            result = &mut prompt => return Err(format!("{endpoint_id} fixture prompt settled before approval notice: {result:?}").into()),
+            result = &mut approver_task => {
+                let option_id = result.map_err(|error| format!("approver fixture task: {error}"))??;
+                if option_id != "allow" {
+                    return Err(format!("notice offered unexpected option ID: {option_id}").into());
+                }
+                option_id
+            },
+            () = tokio::time::sleep(Duration::from_secs(8)) => {
+                return Err(format!("{endpoint_id} approval notice did not reach native approver within 8 seconds").into());
+            }
+        };
+        let pending = broker
+            .list_detailed(true)
+            .await
+            .map_err(|error| format!("typed approval list: {error}"))?
+            .approvals
+            .into_iter()
+            .next()
+            .ok_or("delivered approval missing from approval list")?;
+        if pending.approver != approval_actor(&approver) {
+            return Err("approval notice delivery did not reach the configured approver".into());
+        }
+        if !pending
+            .options
+            .iter()
+            .any(|option| option.option_id == noticed_option_id)
+        {
+            return Err("noticed option ID was absent from the typed pending request".into());
+        }
+        broker
+            .decide(ApprovalDecideParams {
+                request_id: pending.request_id.clone(),
+                decision: None,
+                option_id: Some(noticed_option_id),
+                acknowledge_persistent: false,
+                note: None,
+                actor: approval_actor(&approver),
+            })
+            .await
+            .map_err(|error| format!("approval decide: {error}"))?;
+        let outcome = tokio::time::timeout(Duration::from_secs(5), prompt)
+            .await
+            .map_err(|_| "fixture ACP permission prompt timed out")??;
+
+        if outcome.output != "cursor-ok" {
+            return Err(format!("fixture command output differed: {:?}", outcome.output).into());
+        }
+        if runtime.permission_observation().last_outcome
+            != Some(ExternalProviderPermissionOutcome::Selected)
+        {
+            return Err(format!("{endpoint_id} fixture ACP permission was not selected").into());
+        }
+        let history = broker
+            .list_detailed(false)
+            .await
+            .map_err(|error| format!("typed approval history: {error}"))?
+            .approvals;
+        if history.len() != 1 || history[0].state != collaboration_protocol::ApprovalState::Decided
+        {
+            return Err(format!(
+                "{endpoint_id} approval history did not record the decision: {history:?}"
+            )
+            .into());
+        }
+        runtime.shutdown().await;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn reject_only_offer_reaches_approver_and_returns_selected_id() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
+    let approver = session_ref(&service_id, "codex-local", "approver")?;
+    let generation = CodexGeneration {
+        service_epoch: service_id.clone(),
+        generation: GenerationNumber::try_from(1)?,
+    };
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture_acp_permission_without_allow_agent(),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await?;
+    let (broker, mut approver_task) =
+        approval_broker_fixture(&root, &service_id, &approver).await?;
+    runtime.install_approval_broker(Arc::clone(&broker)).await;
+
+    let provider_session_id = runtime.create_session(root.path().to_owned()).await?;
+    let target = session_ref(&service_id, "cursor-local", &provider_session_id)?;
+    let prompt = runtime.prompt_with_approval_context(
+        provider_session_id,
+        "Run a command requiring permission.".to_owned(),
+        ExternalProviderApprovalContext {
+            requester: (approver.clone()).into(),
+            approver: (approver.clone()).into(),
+            target,
+            operation_id: OperationId::generate(),
+            binding_generation: generation,
+            binding_retirement: CancellationToken::new(),
+        },
+    );
+    tokio::pin!(prompt);
+    let offered_option_id = tokio::select! {
+        result = &mut prompt => return Err(format!("reject-only prompt settled before notice: {result:?}").into()),
+        result = &mut approver_task => result.map_err(|error| format!("approver fixture task: {error}"))??,
+        () = tokio::time::sleep(Duration::from_secs(8)) => return Err("reject-only notice did not arrive within 8 seconds".into()),
+    };
+    if offered_option_id != "reject" {
+        return Err(format!("reject-only notice offered {offered_option_id}").into());
+    }
+    let pending = broker
+        .list_detailed(true)
+        .await
+        .map_err(|error| format!("typed approval list: {error}"))?
+        .approvals;
+    if pending.len() != 1
+        || pending[0].options.len() != 1
+        || pending[0].options[0].option_id != offered_option_id
+    {
+        return Err(format!("reject-only offer was not preserved: {pending:?}").into());
+    }
+    broker
+        .decide(ApprovalDecideParams {
+            request_id: pending[0].request_id.clone(),
+            decision: None,
+            option_id: Some(offered_option_id),
+            acknowledge_persistent: false,
+            note: None,
+            actor: approval_actor(&approver),
+        })
+        .await?;
+    let outcome = tokio::time::timeout(Duration::from_secs(5), prompt)
+        .await
+        .map_err(|_| "reject-only permission prompt did not settle")??;
+
+    let history = broker
+        .list_detailed(false)
+        .await
+        .map_err(|error| format!("typed approval history: {error}"))?
+        .approvals;
+    if history.len() != 1 || history[0].state != collaboration_protocol::ApprovalState::Decided {
+        return Err(format!("reject-only decision was not recorded: {history:?}").into());
+    }
+    if outcome.stop_reason != ProviderPromptStopReason::Cancelled {
+        return Err(
+            format!("provider did not observe permission cancellation: {outcome:?}").into(),
+        );
+    }
+    runtime.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires an explicitly selected authenticated Cursor runtime and live Router MCP"]
+async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result() -> TestResult {
+    let executable = std::env::var_os("CODEX_ROUTER_TEST_EXTERNAL_ACP_EXECUTABLE")
+        .map(PathBuf::from)
+        .ok_or("external ACP executable missing")?;
+    let arguments = std::env::var("CODEX_ROUTER_TEST_EXTERNAL_ACP_ARGUMENTS")
+        .ok()
+        .map(|encoded| serde_json::from_str::<Vec<String>>(&encoded))
+        .transpose()?
+        .unwrap_or_default();
+    let cwd = std::env::var_os("CODEX_ROUTER_TEST_EXTERNAL_ACP_CWD")
+        .map(PathBuf::from)
+        .unwrap_or(std::env::current_dir()?);
+    let root = tempfile::tempdir()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
+    }
+    let host_directory = root.path().join("router");
+    let codex_home = root.path().join("codex-home");
+    std::fs::create_dir_all(&host_directory)?;
+    std::fs::create_dir_all(&codex_home)?;
+    #[cfg(unix)]
+    for directory in [&host_directory, &codex_home] {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let host_runtime = crate::CollaborationRuntime::start_with_external_providers(
+        crate::CollaborationRuntimeInputs {
+            board_session: None,
+            directory: host_directory.clone(),
+            codex_home,
+            backend_socket: root.path().join("backend.sock"),
+            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            native_schema: None,
+            peer_registry_directory: None,
+            remote_control_server_name: None,
+            owner_human_id: None,
+        },
+        vec![crate::ExternalProviderStartup::Launch({
+            let mut binding = crate::ExternalProviderLaunchBinding::claude(
+                owned_host_endpoint_fixture().executable,
+                owned_host_endpoint_fixture().arguments,
+            )?;
+            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                root.path(),
+                &mut binding.launch.environment,
+            )?;
+            binding
+        })],
+    )
+    .await?;
+    let manifest: collaboration_protocol::ServiceManifest =
+        serde_json::from_slice(&std::fs::read(host_directory.join("service.json"))?)?;
+    let service_id = manifest.service_id.clone();
+    let control =
+        CollaborationClient::connect(&host_directory, "cursor-native-live-proof", "1").await?;
+    let actual_inventory = control.list_endpoints().await?;
+    let actual_result_has_owned_service = actual_inventory
+        .endpoints
+        .iter()
+        .any(|description| description.endpoint.service_id == service_id);
+    if !actual_result_has_owned_service {
+        host_runtime.shutdown().await?;
+        return Err("owned endpoints_list result omitted the selected Router identity".into());
+    }
+    let requester = session_ref(&service_id, "cursor-local", "requester")?;
+    let approver = session_ref(&service_id, "codex-local", "approver")?;
+    let generation = CodexGeneration {
+        service_epoch: service_id.clone(),
+        generation: GenerationNumber::try_from(1)?,
+    };
+    let runtime = ExternalProviderRuntime::initialize_with_mcp_http(
+        ExternalProviderLaunch {
+            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+            executable,
+            arguments,
+            environment: Vec::new(),
+        },
+        acp_client_runtime::ProviderModelPicker::CursorParameterized,
+        "router-collaboration",
+        manifest.mcp.url,
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await;
+    let runtime = match runtime {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            host_runtime.shutdown().await?;
+            return Err(error.into());
+        }
+    };
+    let (broker, approver_task) = match approval_broker_fixture(&root, &service_id, &approver).await
+    {
+        Ok(fixture) => fixture,
+        Err(error) => {
+            runtime.shutdown().await;
+            host_runtime.shutdown().await?;
+            return Err(error);
+        }
+    };
+    runtime.install_approval_broker(Arc::clone(&broker)).await;
+    let live_result: TestResult = async {
+        let provider_session_id = runtime.create_session(cwd).await?;
+        let target = session_ref(&service_id, "cursor-local", &provider_session_id)?;
+        let operation_id = OperationId::generate();
+        let retirement = CancellationToken::new();
+        let prompt = runtime.prompt_with_approval_context(
+            provider_session_id,
+            "Call router-collaboration-endpoints_list once. In its JSON result, select the endpoints item whose endpoint.endpointId is claude-local, then return only endpoint.serviceId, without backticks or explanation. Do not use serviceEpoch."
+                .to_owned(),
+            ExternalProviderApprovalContext {
+                requester: requester.into(),
+                approver: (approver.clone()).into(),
+                target,
+                operation_id,
+                binding_generation: generation,
+                binding_retirement: retirement,
+            },
+        );
+        tokio::pin!(prompt);
+        let prompt_result = tokio::time::timeout(Duration::from_secs(90), async {
+            loop {
+                tokio::select! {
+                    result = &mut prompt => break result,
+                    () = tokio::time::sleep(Duration::from_millis(25)) => {
+                        if let Some(pending) = broker.list(true).await.approvals.into_iter().next() {
+                            broker.decide(ApprovalDecideParams {
+                                request_id: pending.request_id,
+                                decision: Some(ApprovalDecision::Allow),
+                                option_id: None,
+                                acknowledge_persistent: false,
+                                note: None,
+                                actor: approval_actor(&approver),
+                            }).await.map_err(|error| {
+                                ExternalProviderRuntimeError::Operation(error.to_string())
+                            })?;
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+        let tool_calls = runtime.take_test_tool_calls();
+        let expected_service_id = String::from(service_id.clone());
+        let output_classification = prompt_result
+            .as_ref()
+            .ok()
+            .and_then(|result| result.as_ref().ok())
+            .map(|outcome| classify_provider_output(&outcome.output, &service_id));
+        let matching_tool = tool_calls.iter().find(|tool_call| {
+            tool_call.name.as_deref() == Some("router-collaboration-endpoints_list")
+                || tool_call.title == "router-collaboration: endpoints_list"
+        });
+        let stop_reason = prompt_result
+            .as_ref()
+            .ok()
+            .and_then(|result| result.as_ref().ok())
+            .map(|outcome| outcome.stop_reason.clone());
+        let identity_corroborated = prompt_result
+            .as_ref()
+            .ok()
+            .and_then(|result| result.as_ref().ok())
+            .is_some_and(|outcome| outcome.output.trim() == expected_service_id);
+        let permission = runtime.permission_observation();
+        eprintln!(
+            "native_mcp_receipt tool_observed={} tool_status={:?} tool_outcome={:?} identity_corroborated={} output_empty={:?} exact_identity_equal={:?} expected_identity_token_present={:?} returned_uuid_count={:?} sole_uuid_matches_expected={:?} output_byte_count={:?} permission_count={} permission_outcome={:?} stop_reason={stop_reason:?}",
+            matching_tool.is_some(),
+            matching_tool.map(|tool_call| tool_call.status),
+            matching_tool.map(|tool_call| tool_call.outcome),
+            identity_corroborated,
+            output_classification.as_ref().map(|output| output.output_empty),
+            output_classification.as_ref().map(|output| output.exact_identity_equal),
+            output_classification.as_ref().map(|output| output.expected_identity_token_present),
+            output_classification.as_ref().map(|output| output.returned_uuid_count),
+            output_classification.as_ref().map(|output| output.sole_uuid_matches_expected),
+            output_classification.as_ref().map(|output| output.output_byte_count),
+            permission.request_count,
+            permission.last_outcome,
+        );
+        match prompt_result {
+            Ok(Ok(outcome))
+                if accepts_native_router_result(
+                    &tool_calls,
+                    &outcome.output,
+                    &service_id,
+                ) =>
+            {
+                Ok(())
+            }
+            Ok(Ok(_)) if !has_completed_router_endpoints_call(&tool_calls) => Err(
+                "native MCP acceptance requires a completed exact kindOther tool call with successful rawOutput"
+                    .into(),
+            ),
+            Ok(Ok(_)) => Err("provider answer did not corroborate the owned service ID".into()),
+            Ok(Err(error)) => Err(error.into()),
+            Err(_) => Err("provider prompt timed out".into()),
+        }
+    }
+    .await;
+
+    runtime.shutdown().await;
+    let approver_result: TestResult = if approver_task.is_finished() {
+        approver_task
+            .await
+            .map_err(|error| error.to_string())?
+            .map(|_| ())
+    } else {
+        approver_task.abort();
+        let joined = approver_task.await;
+        if joined.is_err_and(|error| !error.is_cancelled()) {
+            Err("approver task failed during cleanup".into())
+        } else {
+            Ok(())
+        }
+    };
+    let host_result = host_runtime.shutdown().await.map_err(Into::into);
+    live_result?;
+    approver_result?;
+    host_result
+}

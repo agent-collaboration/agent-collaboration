@@ -1,7 +1,7 @@
 /** Checks over observations from real recording seams. Schema fixtures alone prove no effect. */
 import { z } from 'zod';
 
-import { canonicalJson } from './source-binding.ts';
+import { canonicalJson } from './evidence/source-binding.ts';
 export const accountTargetSchema = z.strictObject({
 	accountId: z.string().min(1),
 	label: z.string().min(1),

@@ -486,7 +486,7 @@ impl ProviderAcpDeliveryRoute {
                     Some(operation_id),
                 ))
             }
-            Ok(ProviderPromptDispatch::NotSubmitted) => {
+            Ok(ProviderPromptDispatch::NotSubmitted | ProviderPromptDispatch::Refused(_)) => {
                 self.finish_known_none(
                     &request,
                     sink,

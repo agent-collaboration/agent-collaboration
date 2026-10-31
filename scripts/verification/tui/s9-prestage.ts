@@ -2,7 +2,7 @@
  * node scripts/verification/tui/s9-prestage.ts --check | --list
  * Entries stay absent-at-base until their S6/S7 target and fixture seams are declared.
  */
-import { isMain, reportCliFailure, strictArguments, usageFailure } from './cli-arguments.ts';
+import { isMain, reportCliFailure, strictArguments, usageFailure } from './cli/cli-arguments.ts';
 import { s9JourneySchema, s9DesignHead } from './s9-journey-definition.ts';
 import type { S9Journey } from './s9-journey-definition.ts';
 import { accountActionJourneys } from './s9-journeys/account-actions.ts';

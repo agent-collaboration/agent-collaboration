@@ -56,8 +56,9 @@ pub use app_server_item_translation::{
 #[path = "app_server_interaction_translation_tests.rs"]
 mod app_server_interaction_translation_tests;
 #[cfg(test)]
-#[path = "app_server_item_translation_tests.rs"]
+#[path = "app_server_item_translation_test.rs"]
 mod app_server_item_translation_tests;
+mod native_skill_reference;
 mod provider_acp_content_translation;
 mod provider_acp_event_projection;
 mod provider_acp_interaction;
@@ -67,7 +68,8 @@ pub mod schedule_preparation_evidence_sink;
 mod scheduled_run_evidence_sink;
 mod scheduled_run_router;
 pub use app_server_model_catalog::{
-    InvalidProviderModelEntry, ProviderModelEntry, render_model_list,
+    InvalidProviderModelEntry, ProviderModelEntry, ProviderModelReasoning, ProviderReasoningChoice,
+    SessionModelCatalog, SessionModelCatalogError, render_model_list,
 };
 pub use router_session_app_server::{
     AppServerConnectionError, RouterSessionAppServerContext, RouterSessionAppServerListener,

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 import { z } from 'zod';
 
-import { canonicalJson } from './source-binding.ts';
+import { canonicalJson } from './evidence/source-binding.ts';
 export const preparationRequestSchema = z.strictObject({
 	client: z.string().min(1),
 	machine: z.string().min(1),

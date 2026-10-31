@@ -8,16 +8,16 @@ import { join } from 'node:path';
 import type { CellData } from '@wterm/core';
 import { z } from 'zod';
 
-import { baselinePlanSchema, checkBaselineTarget } from './baseline-journeys.ts';
-import { encodeJourneyKey } from './capture-run.ts';
-import { isMain, planArgument, reportCliFailure, strictArguments } from './cli-arguments.ts';
-import type { GridRectangle } from './grid-scene-matcher.ts';
-import { findDialog } from './grid-scene-matcher.ts';
-import { PtyGridDriver } from './pty-grid-driver.ts';
-import type { KeyProtocol } from './pty-grid-driver.ts';
-import { canonicalJson, sourceBinding } from './source-binding.ts';
-import { cellText, gridCell, gridLines } from './terminal-grid.ts';
-import { renderOriginal } from './terminal-original.ts';
+import { baselinePlanSchema, checkBaselineTarget } from './capture/baseline-journeys.ts';
+import { isMain, planArgument, reportCliFailure, strictArguments } from './cli/cli-arguments.ts';
+import { canonicalJson, sourceBinding } from './evidence/source-binding.ts';
+import { encodeJourneyKey } from './journeys/journey-key.ts';
+import type { GridRectangle } from './journeys/scenes/grid-scene-matcher.ts';
+import { findDialog } from './journeys/scenes/grid-scene-matcher.ts';
+import { PtyGridDriver } from './terminal/pty-grid-driver.ts';
+import type { KeyProtocol } from './terminal/pty-grid-driver.ts';
+import { cellText, gridCell, gridLines } from './terminal/terminal-grid.ts';
+import { renderOriginal } from './terminal/terminal-original.ts';
 export const wideGlyphPlanSchema = baselinePlanSchema.extend({ chrome: z.string().optional() });
 type WideGlyphPlan = z.infer<typeof wideGlyphPlanSchema>;
 interface BorderCellObservation {

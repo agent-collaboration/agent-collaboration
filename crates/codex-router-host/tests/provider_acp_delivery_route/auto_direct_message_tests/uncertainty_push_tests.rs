@@ -7,10 +7,10 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
     let capture = root.path().join("requests.jsonl");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(loadable_provider_fixture(
-        &capture,
-        &root.path().join("unused-prompt.sock"),
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        loadable_provider_fixture(&capture, &root.path().join("unused-prompt.sock")),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("actual initialized ACP process");
     let store = Arc::new(tokio::sync::Mutex::new(

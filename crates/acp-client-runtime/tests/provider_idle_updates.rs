@@ -1,5 +1,7 @@
 //! Session updates keep their identity and settings outside an active prompt.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{
@@ -64,6 +66,14 @@ impl InteractionPort for NoopInteractionPort {
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
 impl SessionEventSink for CaptureEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -87,6 +97,7 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
         },
         Arc::new(NoopInteractionPort),
         Arc::new(CaptureEventSink(sender)),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -149,10 +160,15 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     assert_eq!(catalog.effective_settings().model.as_deref(), Some("b"));
 
     client
-        .prompt_contents_with_approval_dispatch_for_input(
+        .submit_with_approval_dispatch_for_input(
             session_id.clone(),
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("Run".to_owned()).expect("text prompt")],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Run".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         )
@@ -162,10 +178,10 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
         .steer_contents_with_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![
+            session_event_model::ProviderSubmission::plain(vec![
                 session_event_model::PromptContent::text("Continue".to_owned())
                     .expect("text steer"),
-            ],
+            ]),
         )
         .await
         .expect("idle steer");

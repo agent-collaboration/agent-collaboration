@@ -223,10 +223,10 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         generation: generation.clone(),
         capabilities: capabilities.clone(),
     };
-    let runtime = ExternalProviderRuntime::initialize(fixture_launch(
-        &event_socket,
-        prepared_push.line.as_str(),
-    ))
+    let runtime = ExternalProviderRuntime::initialize(
+        fixture_launch(&event_socket, prepared_push.line.as_str()),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
     .await
     .expect("runtime");
     runtime

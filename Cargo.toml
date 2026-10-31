@@ -11,6 +11,7 @@ members = [
     "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
+    "crates/acp-provider-adapters",
     "crates/message-board-storage",
     "crates/agent-automation",
     "crates/automation-storage",
@@ -54,7 +55,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.119"
+version = "0.1.122"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false

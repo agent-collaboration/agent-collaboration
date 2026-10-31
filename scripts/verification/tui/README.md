@@ -6,6 +6,21 @@ wterm packages are pinned at 0.5.7. The separate original-image sink renders tho
 bytes with `@wterm/dom` in headless Chrome through DevTools. No reconstructed cell
 image counts as an original. A headless image is not physical-terminal evidence.
 
+The package is organized by responsibility. Tests sit beside the modules they
+exercise; fixture programs are kept separate from the test runner's discovery.
+
+| Directory    | Responsibility                                                    |
+| ------------ | ----------------------------------------------------------------- |
+| `capture/`   | Capture orchestration and baseline journeys                       |
+| `terminal/`  | PTY grid driver, wterm qualification and original images          |
+| `processes/` | Child lifecycle and process identity                              |
+| `evidence/`  | Evidence schemas, source binding and readback                     |
+| `journeys/`  | Journey definitions, catalogue, input encoding and scene matching |
+| `codex-acp/` | Codex CLI ACP targets and their journey scenes                    |
+| `sessions/`  | Public Sessions capture and settlement                            |
+| `fixtures/`  | Controlled child programs and shared test fixtures                |
+| `cli/`       | Command-line argument validation                                  |
+
 Use Node 26.12.1 and pnpm 12.14.0, from the repository root:
 
 ```sh
@@ -14,9 +29,9 @@ pnpm --dir scripts/verification/tui typecheck
 pnpm --dir scripts/verification/tui lint
 pnpm --dir scripts/verification/tui format:check
 pnpm --dir scripts/verification/tui test
-node scripts/verification/tui/terminal-qualification.ts OUTPUT.json
-node scripts/verification/tui/capture-run.ts PLAN.json --check
-node scripts/verification/tui/capture-run.ts PLAN.json
+node scripts/verification/tui/terminal/terminal-qualification.ts OUTPUT.json
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
 `gridCapturePlanSchema` in `capture-run.ts` declares the repository, exact source

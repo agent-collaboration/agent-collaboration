@@ -1,0 +1,297 @@
+//! ACP frames and command admission meet at the Session actor's idle boundary.
+
+use super::*;
+use crate::{
+    ApprovalPortOutcome, EventSinkClosed, HistoryReplayFuture, InteractionFuture,
+    RefusedApprovalOffer, SessionEventSink,
+};
+use session_event_model::PromptContent;
+use session_event_model::{ApprovalRequest, InputId, SessionEvent};
+use std::{
+    path::PathBuf,
+    sync::{
+        Condvar, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio_util::sync::CancellationToken;
+
+const CANCELLED_PROMPT_ORDER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-failed-turn-agent.ts"
+);
+
+pub(super) struct NoopInteractionPort;
+impl InteractionPort for NoopInteractionPort {
+    type Context = ();
+    type OperationId = u64;
+    fn operation_id(_context: &Self::Context) -> Self::OperationId {
+        1
+    }
+    fn binding_retirement(_context: &Self::Context) -> CancellationToken {
+        CancellationToken::new()
+    }
+    fn request_approval(
+        &self,
+        _context: (),
+        _request: ApprovalRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, ApprovalPortOutcome> {
+        Box::pin(async { ApprovalPortOutcome::Cancelled })
+    }
+    fn request_question(
+        &self,
+        _context: (),
+        _request: session_event_model::QuestionRequest,
+        _turn_cancellation: CancellationToken,
+        _agent_cancellation: CancellationToken,
+    ) -> InteractionFuture<'_, session_event_model::QuestionResponse> {
+        Box::pin(async { session_event_model::QuestionResponse::Cancelled })
+    }
+    fn record_refusal(
+        &self,
+        _context: (),
+        _refusal: RefusedApprovalOffer,
+    ) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
+        Box::pin(async {})
+    }
+}
+
+struct TurnEndGate {
+    entered: tokio::sync::Notify,
+    blocked_once: AtomicBool,
+    released: Mutex<bool>,
+    release_cv: Condvar,
+}
+impl TurnEndGate {
+    fn new() -> Self {
+        Self {
+            entered: tokio::sync::Notify::new(),
+            blocked_once: AtomicBool::new(false),
+            released: Mutex::new(false),
+            release_cv: Condvar::new(),
+        }
+    }
+    fn release(&self) {
+        *self.released.lock().expect("gate lock") = true;
+        self.release_cv.notify_one();
+    }
+}
+
+struct GatedEventSink {
+    events: tokio::sync::mpsc::UnboundedSender<SessionEvent>,
+    gate: Arc<TurnEndGate>,
+}
+
+impl SessionEventSink for GatedEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), crate::EventSinkClosed> {
+        Ok(())
+    }
+
+    fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
+        Box::pin(async { Ok(()) })
+    }
+
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
+    fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
+        if matches!(event, SessionEvent::TurnEnded { .. })
+            && !self.gate.blocked_once.swap(true, Ordering::SeqCst)
+        {
+            self.gate.entered.notify_one();
+            let released = self.gate.released.lock().expect("gate lock");
+            let (released, _) = self
+                .gate
+                .release_cv
+                .wait_timeout_while(released, std::time::Duration::from_secs(15), |released| {
+                    !*released
+                })
+                .expect("gate lock");
+            if !*released {
+                return Err(EventSinkClosed);
+            }
+        }
+        self.events.send(event).map_err(|_| EventSinkClosed)
+    }
+}
+
+/// An update after a cancelled response, but ready before the queued next
+/// Prompt is admitted, belongs to the old Turn. Updates arriving after the
+/// next Prompt is admitted remain outside this guarantee.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
+    let root = tempfile::tempdir_in("/tmp").expect("fixture root");
+    let control_path = root.path().join("control.sock");
+    let receipt_path = root.path().join("wire-prompts.json");
+    let control_listener = tokio::net::UnixListener::bind(&control_path).expect("control socket");
+    let (event_sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let gate = Arc::new(TurnEndGate::new());
+    let client = Arc::new(
+        AgentSessionClient::initialize(
+            ExternalProviderLaunch {
+                executable: PathBuf::from("node"),
+                arguments: vec![
+                    CANCELLED_PROMPT_ORDER_FIXTURE.into(),
+                    "cancel".into(),
+                    control_path.to_string_lossy().into_owned(),
+                    receipt_path.to_string_lossy().into_owned(),
+                ],
+                environment: Vec::new(),
+                persistence_target: crate::ProviderPersistenceTarget::Unspecified,
+            },
+            Arc::new(NoopInteractionPort),
+            Arc::new(GatedEventSink {
+                events: event_sender,
+                gate: Arc::clone(&gate),
+            }),
+            std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+        )
+        .await
+        .expect("fixture initializes"),
+    );
+    let (mut control, _) = control_listener.accept().await.expect("control connection");
+    let session_id = client
+        .create_session(root.path().to_path_buf())
+        .await
+        .expect("session opens");
+    let first_client = Arc::clone(&client);
+    let first_session = session_id.clone();
+    let first = tokio::spawn(async move {
+        first_client
+            .prompt_content(
+                first_session,
+                InputId::generate(),
+                None,
+                crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(
+                    vec![text_block("overflow")],
+                )),
+                None,
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(2), gate.entered.notified())
+        .await
+        .expect("first Turn reached terminal publication");
+    let (second_reply, second) = tokio::sync::oneshot::channel();
+    let second_prompt =
+        crate::ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
+            text_block("next"),
+        ]));
+    client
+        .commands
+        .send(ProviderCommand::Prompt {
+            provider_session_id: session_id,
+            input_id: InputId::generate(),
+            operation_id: None,
+            prompt: second_prompt,
+            dispatch: None,
+            reply: second_reply,
+        })
+        .await
+        .expect("successor command queued");
+    control.write_all(b"g").await.expect("release late update");
+    let mut acknowledged = [0u8; 1];
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        control.read_exact(&mut acknowledged),
+    )
+    .await
+    .expect("fixture sent late update")
+    .expect("control reply");
+    gate.release();
+    let first_result = first.await.expect("first task");
+    let next = second
+        .await
+        .expect("second reply")
+        .expect("successor prompt settles");
+    let observed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        let mut collected = Vec::new();
+        while collected
+            .iter()
+            .filter(|event| matches!(event, SessionEvent::TurnEnded { .. }))
+            .count()
+            < 2
+        {
+            collected.push(events.recv().await.expect("event sink remains open"));
+        }
+        collected
+    })
+    .await
+    .expect("both Turns settle");
+    tokio::time::timeout(std::time::Duration::from_secs(5), client.shutdown())
+        .await
+        .expect("owned cancellation fixture shutdown");
+    let wire: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(receipt_path).expect("wire prompt receipt"))
+            .expect("wire receipt JSON");
+    assert_eq!(acknowledged, *b"r");
+    assert!(matches!(
+        first_result,
+        Err(ExternalProviderRuntimeError::PromptOutputLimitExceeded)
+    ));
+    assert_eq!(next.output, "CURRENT_OUTPUT");
+    assert_eq!(
+        wire,
+        serde_json::json!({"promptCount":2,"promptTexts":["overflow","next"]})
+    );
+    let second_start = observed
+        .iter()
+        .rposition(|event| matches!(event, SessionEvent::TurnStarted { .. }))
+        .expect("successor Turn started");
+    let late_item = observed[..second_start]
+        .iter()
+        .find_map(|event| match event {
+            SessionEvent::ItemStarted { item } if item.text.as_deref() == Some("LATE_OUTPUT") => {
+                Some(item)
+            }
+            _ => None,
+        })
+        .expect("actual late item projected before successor admission");
+    let successor_items = &observed[second_start..];
+    let submitted = successor_items
+        .iter()
+        .find_map(|event| match event {
+            SessionEvent::ItemStarted { item }
+                if item.kind == session_event_model::SessionItemKind::UserMessage =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .expect("successor submitted task");
+    assert_eq!(submitted.text.as_deref(), Some("next"));
+    assert!(successor_items.iter().any(|event| matches!(event,
+        SessionEvent::ItemCompleted { item_id } if item_id == &submitted.item_id)));
+    assert!(successor_items.iter().any(|event| matches!(event,
+        SessionEvent::ItemStarted { item }
+            if item.text.as_deref() == Some("CURRENT_OUTPUT") && item.item_id != late_item.item_id)),
+        "successor must start a new CURRENT_OUTPUT item; actual events: {successor_items:?}");
+    assert!(!successor_items.iter().any(|event| matches!(event,
+        SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+            if item.item_id == late_item.item_id ||
+                (item.item_id != submitted.item_id && item.text.as_deref() != Some("CURRENT_OUTPUT")))),
+        "late item identity or prefix crossed successor admission: {successor_items:?}");
+    assert!(
+        !successor_items.iter().any(|event| matches!(event,
+        SessionEvent::ItemCompleted { item_id } if item_id == &late_item.item_id)),
+        "late item completion crossed successor admission: {successor_items:?}"
+    );
+}
+
+fn text_block(text: &str) -> PromptContent {
+    serde_json::from_value(serde_json::json!({"type":"text","text":text})).expect("text block")
+}

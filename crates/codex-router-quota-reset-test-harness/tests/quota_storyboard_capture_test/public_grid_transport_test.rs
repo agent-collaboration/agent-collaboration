@@ -14,7 +14,7 @@ fn public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child() -> 
     let configuration = output.join("fixture-command.json");
     fs::copy(fixture.root.join("configuration.json"), &configuration)?;
     let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/verification/tui/fixture-child.ts")
+        .join("../../scripts/verification/tui/fixtures/fixture-child.ts")
         .canonicalize()?;
     let mut terminal =
         TerminalDriver::spawn_public_wrapper(&fixture.node, &wrapper, &configuration, &output)?;
@@ -39,6 +39,31 @@ fn public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child() -> 
     require_process_absent(&wrapper_pid)?;
     fixture.cleanup()
 }
+/// TerminalDriver gives the wrapper LANG=C.UTF-8, so a parent whose LANG alone (no LC_TIME or
+/// LC_ALL) carries a day-before-month date order is the case that split the receipt writer from
+/// its signal reader. The guarded stop must still recognise its own wrapper there.
+#[test]
+fn public_wrapper_receipt_survives_a_non_c_parent_locale() -> TestResult<()> {
+    let result = std::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "public_grid_transport_test::public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child",
+            "--nocapture",
+        ])
+        .env_remove("LC_ALL")
+        .env_remove("LC_TIME")
+        .env("LANG", "en_CA.UTF-8")
+        .output()?;
+    if !result.status.success() {
+        return Err(format!(
+            "public wrapper stop failed under parent LANG=en_CA.UTF-8: {}{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        )
+        .into());
+    }
+    Ok(())
+}
 
 #[test]
 fn changed_public_wrapper_identity_refuses_signal_and_child_can_finish_normally() -> TestResult<()>
@@ -48,7 +73,7 @@ fn changed_public_wrapper_identity_refuses_signal_and_child_can_finish_normally(
     let configuration = output.join("fixture-command.json");
     fs::copy(fixture.root.join("configuration.json"), &configuration)?;
     let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/verification/tui/fixture-child.ts")
+        .join("../../scripts/verification/tui/fixtures/fixture-child.ts")
         .canonicalize()?;
     let mut terminal =
         TerminalDriver::spawn_public_wrapper(&fixture.node, &wrapper, &configuration, &output)?;

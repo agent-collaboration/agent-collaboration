@@ -2,7 +2,8 @@ import { spawnSync } from "node:child_process";
 import type { IdentityRecord, SignalResult } from "./evidence-models.ts";
 
 export type IdentityFields = Readonly<Record<string, unknown>>;
-const identityKeys = ["pid", "uid", "group", "birth", "executable"];
+// Effective UID is recorded as evidence but is not identity: setuid utilities change it in place.
+const identityKeys = ["pid", "realUid", "group", "birth", "executable"];
 
 export class ProcessIdentityError extends Error {
   readonly category: string;
@@ -13,11 +14,15 @@ export class ProcessIdentityError extends Error {
 }
 
 export function lookupProcessIdentity(pid: number): IdentityRecord | null {
-  const result = spawnSync("/bin/ps", ["-p", String(pid), "-o", "pid=,uid=,pgid=,lstart=,comm="], {
-    encoding: "utf8",
-    timeout: 5000,
-    maxBuffer: Number.MAX_SAFE_INTEGER,
-  });
+  const result = spawnSync(
+    "/bin/ps",
+    ["-p", String(pid), "-o", "pid=,ruid=,uid=,pgid=,lstart=,comm="],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+      maxBuffer: Number.MAX_SAFE_INTEGER,
+    },
+  );
   if (result.error !== undefined)
     throw new ProcessIdentityError(
       errorCode(result.error) === "ETIMEDOUT"
@@ -38,21 +43,29 @@ export function parseProcessIdentity(result: {
   if (result.status === 1 && !result.stdout.trim() && !result.stderr.trim()) return null;
   if (result.status !== 0)
     throw new ProcessIdentityError("CalledProcessError", result.stderr.trim());
-  const match = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/.exec(
-    result.stdout.trim(),
-  );
+  const match =
+    /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/.exec(
+      result.stdout.trim(),
+    );
   if (match === null)
     throw new ProcessIdentityError("ValueError", "incomplete current process identity");
-  const [pidText, uid, group, ...rest] = match.slice(1);
+  const [pidText, realUid, effectiveUid, group, ...rest] = match.slice(1);
   const executable = rest.pop();
-  if (pidText === undefined || uid === undefined || group === undefined || executable === undefined)
+  if (
+    pidText === undefined ||
+    realUid === undefined ||
+    effectiveUid === undefined ||
+    group === undefined ||
+    executable === undefined
+  )
     throw new ProcessIdentityError("ValueError", "incomplete current process identity");
-  const numbers = [pidText, uid, group].map((value) => Number(value));
+  const numbers = [pidText, realUid, effectiveUid, group].map((value) => Number(value));
   if (numbers.some((value) => !Number.isInteger(value)))
     throw new ProcessIdentityError("ValueError", "invalid current process identity integer");
   return {
     pid: Number(pidText),
-    uid: Number(uid),
+    realUid: Number(realUid),
+    effectiveUid: Number(effectiveUid),
     group: Number(group),
     birth: rest.join(" "),
     executable,

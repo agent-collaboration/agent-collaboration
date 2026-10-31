@@ -1,5 +1,7 @@
 //! A subprocess checks the ACP wire order around history replay admission.
 
+#[path = "support/provider_behavior.rs"]
+mod test_behavior;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -89,6 +91,14 @@ struct ReplaySink {
 }
 
 impl SessionEventSink for ReplaySink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async move {
             if self.fail {
@@ -147,6 +157,7 @@ async fn live_update_continues_replayed_item_projection() {
             fail: false,
             events: Some(Arc::clone(&events)),
         }),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -161,13 +172,15 @@ async fn live_update_continues_replayed_item_projection() {
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             "fixture-session".to_owned(),
             session_event_model::InputId::generate(),
-            vec![
-                session_event_model::PromptContent::text("Continue".to_owned())
-                    .expect("text prompt"),
-            ],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Continue".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         ),
@@ -214,6 +227,7 @@ async fn history_replay_reset_precedes_session_load() {
             fail: false,
             events: Some(Arc::clone(&events)),
         }),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -225,7 +239,6 @@ async fn history_replay_reset_precedes_session_load() {
         .settings_catalog("fixture-session")
         .await
         .expect("loaded session catalog");
-    let last_catalog = client.last_settings_catalog().await.expect("last catalog");
     client.shutdown().await;
 
     assert!(result.is_ok(), "load result: {result:?}");
@@ -234,7 +247,6 @@ async fn history_replay_reset_precedes_session_load() {
         catalog.effective_settings().model.as_deref(),
         Some("model-a")
     );
-    assert_eq!(last_catalog, catalog);
     let published = events.lock().expect("events");
     assert!(published.iter().any(|event| matches!(event,
         SessionEvent::SettingsChanged { settings }
@@ -265,6 +277,7 @@ async fn failed_history_replay_never_sends_session_load() {
             fail: true,
             events: None,
         }),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -301,6 +314,7 @@ async fn session_load_publishes_two_historical_turns_and_items() {
             fail: false,
             events: Some(Arc::clone(&events)),
         }),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");

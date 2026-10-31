@@ -29,7 +29,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         configured_mcp_servers: Vec<McpServer>,
         interaction_port: Arc<P>,
         event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
+        let initialize_deadline = tokio::time::Instant::now() + initialize_timeout;
         let agent = AcpAgent::new(launch.sdk_config());
         let persistence_target = launch.persistence_target;
         let (stdin, stdout, stderr, mut child) = agent
@@ -66,8 +68,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             crate::ProviderSettingsCatalog,
         >::new()));
         let task_session_settings = Arc::clone(&session_settings);
-        let last_settings_catalog = Arc::new(tokio::sync::RwLock::new(None));
-        let task_last_settings_catalog = Arc::clone(&last_settings_catalog);
         let settings_unresolved = Arc::new(tokio::sync::RwLock::new(HashMap::<
             String,
             HashMap<
@@ -87,13 +87,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
         let task_runtime_handles = ProviderSessionRuntimeHandles {
+            connection_model_reasoning: crate::ModelReasoningMetadata::default(),
+            behavior: Arc::clone(&behavior),
             event_sink: Arc::clone(&event_sink),
             sink_closed: sink_closed.clone(),
             tool_registry: Arc::clone(&tool_registry),
             todo_state: Arc::clone(&todo_state),
             session_settings: Arc::clone(&task_session_settings),
             session_capabilities: Arc::clone(&task_session_capabilities),
-            last_settings_catalog: Arc::clone(&task_last_settings_catalog),
             settings_unresolved: Arc::clone(&task_settings_unresolved),
         };
         let task_event_sink = Arc::clone(&event_sink);
@@ -305,6 +306,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         Vec::new()
                     };
                     let base_capabilities = admission.as_ref().ok().map(|(_, report)| report.clone());
+                    let mut task_runtime_handles = task_runtime_handles;
+                    if admitted {
+                        task_runtime_handles.connection_model_reasoning = super::provider_model_discovery::read_connection_models(
+                            &connection, task_runtime_handles.behavior.as_ref(), initialize_deadline, &task_shutdown,
+                        ).await;
+                    }
                     let _result = ready_tx.send(admission);
                     let _result = admission_settled_tx.send(());
                     if admitted {
@@ -356,7 +363,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         settings_sink_closed = true;
                                                     }
                                                     task_session_settings.write().await.insert(created.provider_session_id.clone(), catalog.clone());
-                                                    *task_last_settings_catalog.write().await = Some(catalog);
                                                 }
                                                 let unresolved_kind = match setup_error.as_ref() {
                                                     Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, crate::provider_session_settings::UnresolvedSettingCause::DefiniteFailure)),
@@ -430,7 +436,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                         result = Err(ExternalProviderRuntimeError::SinkClosed);
                                                     }
                                                     task_session_settings.write().await.insert(provider_session_id.clone(), catalog.clone());
-                                                    *task_last_settings_catalog.write().await = Some(catalog);
                                                 }
                                                 let _result = activation.send(());
                                             }
@@ -501,6 +506,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             } else {
                                                 known_sessions.track(provider_session_id.clone()).await;
                                                 let inputs = provider_session_restore::RestoreAdmissionInputs {
+                                                    connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
+                                                    behavior: Arc::clone(&task_runtime_handles.behavior),
                                                     connection: connection.clone(),
                                                     provider_session_id,
                                                     cwd,
@@ -550,14 +557,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
                                             if pending_closes.contains(&provider_session_id) || task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy));
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
                                             }
                                             if task_settings_unresolved.read().await.contains_key(&provider_session_id) {
                                                 if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved));
                                                 }
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                                                 continue;
@@ -619,7 +626,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             };
                                             let _result = session.send(ProviderSessionCommand::WaitIdle { reply }).await;
                                         }
-                                        ProviderCommand::SetSetting { provider_session_id, kind, value, reply } => {
+                                        ProviderCommand::SetSetting { provider_session_id, request, reply } => {
                                             if pending_closes.contains(&provider_session_id) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
@@ -628,7 +635,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
                                                 continue;
                                             };
-                                            let _result = session.send(ProviderSessionCommand::SetSetting { kind, value, reply }).await;
+                                            let _result = session.send(ProviderSessionCommand::SetSetting { request, reply }).await;
                                         }
                                     }
                                 }
@@ -731,7 +738,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_capabilities,
             auth_status,
             session_settings,
-            last_settings_catalog,
             settings_unresolved,
             pending_close_marks,
             shutdown,
