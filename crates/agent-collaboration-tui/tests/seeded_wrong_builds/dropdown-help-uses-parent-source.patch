@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/help_control.rs b/crates/agent-collaboration-tui/src/controls/help_control.rs
---- a/crates/agent-collaboration-tui/src/controls/help_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/help_control.rs
-@@ -90,3 +90,3 @@
-             | HelpPresentation::DropdownOnScreen { dropdown, .. } => {
--                stack.surface(SurfaceId::Overlay(dropdown))
-+                let _=dropdown; stack.surface(SurfaceId::Screen)
-             }

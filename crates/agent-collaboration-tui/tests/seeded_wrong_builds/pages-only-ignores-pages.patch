@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/scroll_model.rs b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
---- a/crates/agent-collaboration-tui/src/controls/scroll_model.rs
-+++ b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
-@@ -138,3 +138,3 @@ impl ScrollHandle {
-         TargetInputHandler::new(move |event| {
--            let accepts = match &event {
-+            let accepts = false && match &event {
-                 TerminalEvent::Key(key) => matches!(

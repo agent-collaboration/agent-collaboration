@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/scroll_model.rs b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
---- a/crates/agent-collaboration-tui/src/controls/scroll_model.rs
-+++ b/crates/agent-collaboration-tui/src/controls/scroll_model.rs
-@@ -153,3 +153,3 @@
-         (KeyCode::Up, KeyModifiers::ALT) => Some(KeyCode::PageUp),
--        (KeyCode::Down, KeyModifiers::ALT) => Some(KeyCode::PageDown),
-+        (KeyCode::Down, KeyModifiers::ALT) => Some(KeyCode::Down),
-         (KeyCode::Up, modifiers) if modifiers == KeyModifiers::ALT | KeyModifiers::SHIFT => {

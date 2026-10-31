@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
---- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
-@@ -111,3 +111,3 @@
-                 ScopeId::new("dropdown").map_err(ComboModelError::Identity)?,
--                self.help_actions(),
-+                Vec::new(),
-             )

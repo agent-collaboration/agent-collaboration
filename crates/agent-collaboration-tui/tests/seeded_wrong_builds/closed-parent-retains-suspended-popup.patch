@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/surface_stack.rs b/crates/agent-collaboration-tui/src/surface_stack.rs
---- a/crates/agent-collaboration-tui/src/surface_stack.rs
-+++ b/crates/agent-collaboration-tui/src/surface_stack.rs
-@@ -359,3 +359,3 @@
-         {
--            self.suspended_dropdown = None;
-+            self.suspended_dropdown = self.suspended_dropdown.clone();
-         }

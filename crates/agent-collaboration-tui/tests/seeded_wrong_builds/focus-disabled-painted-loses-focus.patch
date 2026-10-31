@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/focus_model.rs b/crates/agent-collaboration-tui/src/focus_model.rs
---- a/crates/agent-collaboration-tui/src/focus_model.rs
-+++ b/crates/agent-collaboration-tui/src/focus_model.rs
-@@ -266,3 +266,3 @@
-             .as_ref()
--            .is_some_and(|id| self.is_painted_focus(id))
-+            .is_some_and(|id| self.is_focus_eligible(id))
-         {

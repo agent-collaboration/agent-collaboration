@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/list_row.rs b/crates/agent-collaboration-tui/src/controls/list_row.rs
---- a/crates/agent-collaboration-tui/src/controls/list_row.rs
-+++ b/crates/agent-collaboration-tui/src/controls/list_row.rs
-@@ -32,3 +32,3 @@
-         &mut hooks,
--        selected && props.control.reveals_selection(),
-+        selected || props.control.reveals_selection() && false,
-         Some(row_target),

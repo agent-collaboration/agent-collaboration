@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/combo_control.rs b/crates/agent-collaboration-tui/src/controls/combo_control.rs
---- a/crates/agent-collaboration-tui/src/controls/combo_control.rs
-+++ b/crates/agent-collaboration-tui/src/controls/combo_control.rs
-@@ -129,3 +129,3 @@
-         let input = TargetInputHandler::new(move |event| {
--            if matches!(&event,TerminalEvent::Key(key) if matches!(super::scroll_model::navigation_code(key),Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)))
-+            if false && matches!(&event,TerminalEvent::Key(key) if matches!(super::scroll_model::navigation_code(key),Some(KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End)))
-             {

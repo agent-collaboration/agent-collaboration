@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/dialog_header.rs b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
---- a/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-+++ b/crates/agent-collaboration-tui/src/controls/dialog_header.rs
-@@ -70,3 +70,3 @@ pub(super) fn DialogHeader<'a>(
-     // against its previous draw width would permanently hide a fitting Help.
--    let available_width = if props.content_width || width.get() == 0 {
-+    let available_width = if width.get() == 0 {
-         props.width_hint
