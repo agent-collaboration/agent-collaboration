@@ -282,4 +282,76 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn dropdown_focus_keeps_the_checked_row_and_style_without_a_right_edge_glyph() {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            let handle = Arc::new(Mutex::new(None));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui =
+                element!(FilterScene(journal,width:76u16,height:30u16,handle:handle.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let event = |code| TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code));
+                driver
+                    .drive(&mut frames, mode, vec![(event(KeyCode::Enter), true)], true)
+                    .await;
+                for label in ["ab Alpha", "ab Beta"] {
+                    let grid = driver.frames.last().unwrap();
+                    let panel = grid.round_frame_text();
+                    assert!(
+                        !panel.contains('❯'),
+                        "dropdown has no right-edge focus glyph\n{panel}"
+                    );
+                    assert!(
+                        panel
+                            .lines()
+                            .any(|line| line.contains('●') && line.contains("ab Alpha")),
+                        "checked marker remains\n{panel}"
+                    );
+                    let top = grid
+                        .cells
+                        .iter()
+                        .position(|row| row.iter().any(|cell| cell.text == "╭"))
+                        .unwrap();
+                    let bottom = grid
+                        .cells
+                        .iter()
+                        .rposition(|row| row.iter().any(|cell| cell.text == "╰"))
+                        .unwrap();
+                    let (row, line) = (top..=bottom)
+                        .map(|row| (row, grid.row_text(row)))
+                        .find(|(_, line)| line.contains(label))
+                        .unwrap();
+                    let column = line.get(..line.find(label).unwrap()).unwrap().width();
+                    assert_eq!(
+                        grid.cell(column, row).unwrap().style.foreground,
+                        Some(Color::AnsiValue(11)),
+                        "highlight style remains"
+                    );
+                    if label != "ab Beta" {
+                        driver
+                            .drive(&mut frames, mode, vec![(event(KeyCode::Down), true)], true)
+                            .await;
+                    }
+                }
+                assert_eq!(
+                    handle
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .unwrap()
+                        .value
+                        .read()
+                        .highlight()
+                        .unwrap()
+                        .as_str(),
+                    "beta"
+                );
+            })
+            .await
+            .unwrap();
+        }
+    }
 }

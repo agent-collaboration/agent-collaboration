@@ -463,4 +463,57 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn list_focus_uses_the_left_marker_without_a_right_edge_glyph_and_keeps_real_scrollbars()
+    {
+        for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+            for viewport_rows in [2u16, 6u16] {
+                let handle = ListHandle::default();
+                let (mut driver, config, journal) = EventDriver::new();
+                let mut ui = element!(ListScene(journal,viewport_rows:Some(viewport_rows),handle:handle.clone()));
+                let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    driver.initial(&mut frames).await;
+                    let fixture = handle.get();
+                    let frame = driver.frames.last().unwrap();
+                    assert_eq!(
+                        frame.cell(0, 1).unwrap().text,
+                        "❯",
+                        "left focus marker remains"
+                    );
+                    assert_eq!(
+                        frame.cell(0, 1).unwrap().style.foreground,
+                        Some(Color::AnsiValue(11))
+                    );
+                    assert_ne!(
+                        frame.cell(75, 1).unwrap().text,
+                        "❯",
+                        "right edge is reserved for real overflow, not duplicate focus"
+                    );
+                    if fixture.control.scroll().position().maximum() > 0 {
+                        assert!(
+                            matches!(frame.cell(75, 1).unwrap().text.as_str(), "█" | "│"),
+                            "real thumb or track remains"
+                        );
+                    } else {
+                        assert_eq!(frame.cell(75, 1).unwrap().text, " ");
+                    }
+                    driver
+                        .drive(&mut frames, mode, vec![(key(KeyCode::Down), true)], true)
+                        .await;
+                    assert_eq!(fixture.control.selected().unwrap().as_str(), "bravo");
+                    let frame = driver.frames.last().unwrap();
+                    assert_eq!(frame.cell(0, 2).unwrap().text, "❯");
+                    assert_eq!(
+                        frame.cell(0, 2).unwrap().style.foreground,
+                        Some(Color::AnsiValue(11))
+                    );
+                    assert_ne!(frame.cell(75, 1).unwrap().text, "❯");
+                })
+                .await
+                .unwrap();
+            }
+        }
+    }
 }
