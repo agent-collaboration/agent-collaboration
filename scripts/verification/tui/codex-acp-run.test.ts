@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
 import { informationJourney } from './codex-acp-information-scenes.ts';
+import { promptJourney } from './codex-acp-prompt-scenes.ts';
 import {
 	checkCodexAcp,
 	codexAcpRunPlanSchema,
@@ -71,6 +72,13 @@ const REFRESH = {
 	completion: 'REFRESH_DONE_4K7Q',
 	reply_deadline_ms: 120_000,
 };
+const PROMPT = {
+	kind: 'prompt',
+	provider: 'cursor',
+	prompt: 'Reply with only the product of 4321 and 5678, digits only',
+	completion: '24534638',
+	reply_deadline_ms: 120_000,
+};
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
@@ -126,6 +134,13 @@ test('each declared journey kind builds its scenes for the target provider only'
 		'mcp-command-ready',
 		'mcp-refused',
 	]);
+	const prompt = await runPlan(PROMPT);
+	expect(codexJourneyFor(prompt.plan).steps.map((step) => step.checkpoint.scene)).toEqual([
+		'prompt-composed',
+		'prompt-replied',
+	]);
+	const typedAnswer = await runPlan({ ...PROMPT, completion: '4321 and 5678' });
+	expect(() => codexJourneyFor(typedAnswer.plan)).toThrow('an echo could satisfy it');
 	const refresh = await runPlan(REFRESH);
 	expect(codexJourneyFor(refresh.plan).name).toBe('codex-acp-j3-cursor-refresh');
 	// The plan shape admits a completion the prompt already holds; the journey refuses it.
@@ -177,6 +192,14 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 		{ ...REFRESH, completion: 'DONE' },
 		{ ...REFRESH, reply_deadline_ms: 3_600_000 },
 		{ ...REFRESH, toggle: { kind: 'key', key: 'Enter' } },
+		// Plain text only: no slash, shell, popup or image input, no extra keys and a bounded reply.
+		{ ...PROMPT, prompt: '/model' },
+		{ ...PROMPT, prompt: '!echo 24534638' },
+		{ ...PROMPT, prompt: 'see @probe.png' },
+		{ ...PROMPT, image_path: '/task/probe.png' },
+		{ ...PROMPT, actions: [{ kind: 'key', key: 'Enter' }] },
+		{ ...PROMPT, completion: '2453' },
+		{ ...PROMPT, reply_deadline_ms: 3_600_000 },
 	])
 		expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey })).toThrow();
 });
@@ -287,6 +310,33 @@ test('an Enter sent with the still-buffered /quit never ends the PTY', async () 
 		await driver.send(Buffer.from('/quit'));
 		await driver.send(Buffer.from('\r'));
 		await expect(driver.waitForEof('codex /quit')).rejects.toThrow('timed out waiting on channel');
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('a client that exits after the prompt Enter never reaches the reply scene', async () => {
+	const [composed, replied] = promptJourney({
+		provider: 'cursor',
+		prompt: PROMPT.prompt,
+		completion: PROMPT.completion,
+		replyDeadlineMs: 8_000,
+	}).steps;
+	if (composed === undefined || replied === undefined) throw new Error('prompt scene missing');
+	const { driver, log } = await composerStandIn(PROMPT.prompt, [`› ${PROMPT.prompt}`]);
+	try {
+		await driveCodexStep(driver, composed, 'legacy');
+		await expect(driveCodexStep(driver, replied, 'legacy')).rejects.toThrow(
+			'grid checkpoint unreachable: prompt-replied',
+		);
+		// The prompt went out as one write and its Enter only after a drawn frame.
+		const commands = log();
+		const typed = commands.indexOf(`write ${Buffer.from(PROMPT.prompt).toString('hex')}`);
+		const enter = commands.indexOf('write 0d');
+		expect(commands.slice(typed + 1, enter).some((command) => command.startsWith('read '))).toBe(
+			true,
+		);
+		expect(commands.filter((command) => command.startsWith('write ')).length).toBe(2);
 	} finally {
 		await driver.stop();
 	}

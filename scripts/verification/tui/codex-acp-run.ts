@@ -18,7 +18,8 @@ import {
 	informationJourney,
 } from './codex-acp-information-scenes.ts';
 import { codexMenuKeySchema, modelJourney } from './codex-acp-model-scenes.ts';
-import { codexOrdinaryPromptSchema, refreshJourney } from './codex-acp-refresh-scenes.ts';
+import { codexOrdinaryPromptSchema, promptJourney } from './codex-acp-prompt-scenes.ts';
+import { refreshJourney } from './codex-acp-refresh-scenes.ts';
 import {
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
@@ -133,6 +134,14 @@ export const codexAcpRunPlanSchema = z
 				provider: providerSchema,
 				command: codexInformationCommandSchema,
 			}),
+			// One ordinary prompt and the completion line only its reply produces, within that bound.
+			z.strictObject({
+				kind: z.literal('prompt'),
+				provider: providerSchema,
+				prompt: codexOrdinaryPromptSchema,
+				completion: z.string().min(8),
+				reply_deadline_ms: z.number().int().positive().max(600_000),
+			}),
 			// One ordinary prompt kept running through /skills, the manage view and Esc, the completion
 			// line only its own reply produces, and the bound for that reply.
 			z.strictObject({
@@ -169,6 +178,13 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 	if (journey.kind === 'rename')
 		return renameJourney(journey.provider, journey.title, journey.expected_refusal);
 	if (journey.kind === 'information') return informationJourney(journey.provider, journey.command);
+	if (journey.kind === 'prompt')
+		return promptJourney({
+			provider: journey.provider,
+			prompt: journey.prompt,
+			completion: journey.completion,
+			replyDeadlineMs: journey.reply_deadline_ms,
+		});
 	if (journey.kind === 'refresh')
 		return refreshJourney({
 			provider: journey.provider,

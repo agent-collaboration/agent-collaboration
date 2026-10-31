@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
-import { codexOrdinaryPromptSchema, refreshJourney } from './codex-acp-refresh-scenes.ts';
+import { codexOrdinaryPromptSchema } from './codex-acp-prompt-scenes.ts';
+import { refreshJourney } from './codex-acp-refresh-scenes.ts';
 import type { RefreshJourneyInput } from './codex-acp-refresh-scenes.ts';
 import { gridShowsCheckpoint } from './codex-acp-scenes.ts';
 import type { CodexCheckpoint } from './codex-acp-scenes.ts';

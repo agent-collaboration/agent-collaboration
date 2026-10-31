@@ -8,27 +8,9 @@
  * its result, so nothing here claims a disk reload or a new provider skill; the same-session
  * observer decides the reply. Expected text comes from Codex source at 360319d8.
  */
-import { z } from 'zod';
-
+import { requireOrdinaryReply } from './codex-acp-prompt-scenes.ts';
 import { CODEX_0_165_TEXT, UI_CHECKPOINT_MS, codexJourneySchema } from './codex-acp-scenes.ts';
 import type { CodexJourney } from './codex-acp-scenes.ts';
-
-/**
- * One ordinary prompt typed as plain text: 1-100 characters on one composer row, with no leading
- * or trailing space because the composer trims what it submits (chat_composer.rs:3035), no control
- * character, and none of the composer's entry characters: `/` or `!` first (slash commands and
- * shell, :3099 and :3209), `$` or `@` anywhere (skill and file popups, sync_popups :3854).
- */
-export const codexOrdinaryPromptSchema = z
-	.string()
-	.min(1)
-	.max(100)
-	.refine((text) => text === text.trim(), 'the composer trims a submitted prompt')
-	.refine((text) => !/\p{Cc}/u.test(text), 'prompt carries a control character')
-	.refine(
-		(text) => !/^[/!]/u.test(text) && !/[$@]/u.test(text),
-		'prompt opens a composer popup or mode',
-	);
 
 export interface RefreshJourneyInput {
 	readonly provider: 'claude' | 'cursor';
@@ -36,20 +18,6 @@ export interface RefreshJourneyInput {
 	// One line only the provider's reply produces; it is never typed or drawn by Codex itself.
 	readonly completion: string;
 	readonly replyDeadlineMs: number;
-}
-
-function requireRefreshInput(input: RefreshJourneyInput): void {
-	codexOrdinaryPromptSchema.parse(input.prompt);
-	if (input.completion.length < 8 || /\p{Cc}/u.test(input.completion))
-		throw new Error('the completion is one distinctive line of at least 8 characters');
-	if (
-		[input.prompt, '/skills', ...Object.values(CODEX_0_165_TEXT)].some((text) =>
-			text.includes(input.completion),
-		)
-	)
-		throw new Error(
-			'the completion appears in typed or Codex-drawn text; an echo could satisfy it',
-		);
 }
 
 /**
@@ -63,7 +31,7 @@ function requireRefreshInput(input: RefreshJourneyInput): void {
  * on close (chatwidget/skills.rs:134).
  */
 export function refreshJourney(input: RefreshJourneyInput): CodexJourney {
-	requireRefreshInput(input);
+	requireOrdinaryReply(input.prompt, input.completion, ['/skills']);
 	const ended = [input.completion, CODEX_0_165_TEXT.interrupted];
 	return codexJourneySchema.parse({
 		name: `codex-acp-j3-${input.provider}-refresh`,

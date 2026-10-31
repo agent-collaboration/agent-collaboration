@@ -1,18 +1,18 @@
 # Codex CLI over ACP: skills, commands and preservation (J1–J3)
 
-**Status: partially qualified; the journey set as a whole is still a draft.** These are qualified on an isolated Host with unchanged installed Codex 0.165 at 120×36 and legacy keys, each at the scope stated:
+**Status: partially qualified; the journey set as a whole is still a draft.** These observations used an isolated Host with unchanged installed Codex 0.165 at 120×36 and legacy keys. Historical passes do not qualify a newer candidate when their producer or runtime dependencies changed:
 
-- **J1 `skill`:** Cursor with two selected skills and Claude with one, each with an argument and an image. Covers picker rows, selection, composed input, the provider-owned effect, normal exit and the same-Session readback (`skills-listed`, `skill-effect`).
+- **J1 `skill`:** earlier Cursor `cd9668cd5` with two selected skills and Claude `828378c81` with one, each with an argument and an image. Covers picker rows, selection, composed input, the provider-owned effect, normal exit and the same-Session readback (`skills-listed`, `skill-effect`). These are not successful skill/image replies on the later model-metadata candidate.
 - **J1 `picker`:** Claude and Cursor, with no model input. Covers the selected row, the cleared draft and normal exit.
 - **J3 `reopen`:** Claude, with no new prompt. The existing reply is replayed and Codex exits normally.
-- **J2 `model` with `apply: default`:** Claude, on the earlier free-navigation journey against the bridge's hardcoded catalogue. The popup changed the model, the honest default-save refusal was shown, and `effective-model` read back the chosen model. The typed catalogue journey and `model-catalogue` are not yet qualified.
+- **J2 `model` with `apply: default`:** the earlier Claude free-navigation journey changed the model against the hardcoded catalogue. On `6b9d2c20f`, the typed refreshed-catalogue journey and same-session `model-catalogue` readback separately passed for Sonnet/low and Haiku/low, preserving all five advertised model IDs and showing the honest default-save refusal. Each had six original terminal captures and normal quit. This qualifies selection/current-value readback only: both subsequent skill/image prompts failed to produce their required replies, later returning ACP `-32603/server_error`. The cause and the complete model-plus-prompt gate remain open.
 - **J2 `compact` on Cursor:** an explicit unsupported error, with no compaction effect, unchanged history, a usable empty composer and normal exit. This needs a Router build that reports unsupported compaction without closing Codex; on an older build the refusal ends the CLI.
 - **Readback route:** the Claude J1 and J2 `model` readbacks, both picker readbacks and the Cursor compact readbacks ran through the observer's CLI entry (`acp-journey-observation.ts PLAN.json`).
 
 Not yet qualified:
 
 - J2: Claude `compact` (`Context compacted`), `model` with `apply: session`, and `model` on Cursor.
-- J2 `information` (`/hooks`, `/mcp`): scripted from Codex source and controlled tests only, never run on a real target.
+- J2 `information` (`/hooks`, `/mcp`) and `prompt`: scripted from Codex source and controlled tests only, never run on a real target. Basic inference after a model selection is still unobserved.
 - J3: `interrupt`, Cursor `reopen`, approval, `refresh` (scripted from source, with no real target or setup chosen yet), a Claude skill added mid-turn, and native and reverse control preservation.
 - `ordinary-reply` and `information-refused`: observer checks exercised only on literal history fixtures and the controlled transport.
 - A next valid prompt after a Cursor compact refusal; only a controlled Host test covers it.
@@ -70,6 +70,13 @@ Declare these before any input:
      - `mcpServerStatus/list` with `{cursor: null, limit: 100, detail: "toolsAndAuthOnly", threadId: <alias>, serverName: null}`, as Codex 0.165 sends it (`app/background_requests.rs:780-803`).
 
      It requires the response for that request ID to be a well-formed error: `-32000` `Hook discovery is not supported on this ACP endpoint`, or `-32601` `Method not found` (`router_session_app_server_methods.rs:100-108`). A following `thread/read` on the same connection must still return this thread and cwd. The raw error is kept as that request's `app-server-<id>.json`. Declare both layers for each command. Neither alone is the outcome, and controlled transport tests are not live J2 proof.
+   - **J2 `prompt`:** the next ordinary prompt, such as the one after a `/model` selection. The plan declares only `provider`, `prompt`, `completion` and `reply_deadline_ms`.
+     - **Prompt and completion:** the same rules as `refresh`. Prefer an arithmetic control, so the expected integer (at least 8 digits) is never typed.
+     - **Frames:**
+       1. `prompt-composed`: the exact prompt drawn as `› <prompt>`, with no completion, `■ ` cell, `Working` or `Resuming session…` on screen.
+       2. Enter to `prompt-replied`: the completion and an empty composer, with no `Working` and no `■ ` cell. The composed frame showed none, so any error or interruption here is new.
+     - **No Working frame is required:** a fast reply can skip it.
+     - **Reply:** pair it with the observer's `ordinary-reply` for the same prompt and completion. Its whole-line native and public readback decides the reply; the screen alone never does.
    - **J3 `refresh`:** one ordinary prompt and one `completion` line that only its reply produces.
      - **Prompt:** 1-100 characters, no padding or control character, no leading `/` or `!`, and no `$` or `@`.
      - **Completion:** at least 8 characters, and absent from the prompt, from `/skills` and from Codex's own text.
