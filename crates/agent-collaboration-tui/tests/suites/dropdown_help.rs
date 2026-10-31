@@ -216,6 +216,7 @@ mod tests {
                     stack,
                     surface: SurfaceId::Screen,
                 },
+                parent_scroll: None,
                 field: field.clone(),
                 value,
                 on_pick: Handler::default(),

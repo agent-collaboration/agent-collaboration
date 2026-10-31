@@ -137,6 +137,7 @@ pub(crate) struct EditorLineProps {
     pub focused: bool,
     pub disabled: bool,
     pub placeholder: String,
+    pub available_width: Option<u16>,
 }
 #[component]
 pub(crate) fn EditorLine(
@@ -160,8 +161,12 @@ pub(crate) fn EditorLine(
         .skip(props.value.cursor + 1)
         .collect::<String>();
     let offset = if props.focused {
-        UnicodeWidthStr::width(before.as_str())
-            .saturating_sub(usize::from(width.get().saturating_sub(1)))
+        UnicodeWidthStr::width(before.as_str()).saturating_sub(usize::from(
+            props
+                .available_width
+                .unwrap_or(width.get())
+                .saturating_sub(1),
+        ))
     } else {
         0
     };
