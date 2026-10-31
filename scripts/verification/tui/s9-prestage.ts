@@ -14,6 +14,7 @@ import { accountActionJourneys } from './s9-journeys/account-actions.ts';
 import { accountLoginJourneys } from './s9-journeys/account-login.ts';
 import { claudeDetailsJourneys } from './s9-journeys/claude-details.ts';
 import { newDialogJourneys } from './s9-journeys/new-dialog.ts';
+import { optionNavigationJourneys } from './s9-journeys/option-navigation.ts';
 import { quotaRefreshJourneys } from './s9-journeys/quota-refresh.ts';
 import { sourceQualifiedJourneys } from './s9-journeys/source-qualified-selection.ts';
 import { toolbarMenuJourneys } from './s9-journeys/toolbar-menus.ts';
@@ -25,6 +26,7 @@ export const s9AuthoredJourneys: readonly S9Journey[] = [
 	...accountLoginJourneys,
 	...accountActionJourneys,
 	...quotaRefreshJourneys,
+	...optionNavigationJourneys,
 ];
 export function validateS9Journeys(): void {
 	const ids = new Set<string>();
@@ -75,6 +77,7 @@ export function s9PrestageMain(args: readonly string[]): void {
 					availability: journey.availability,
 					grids: journey.grids,
 					keys: journey.keys,
+					...(journey.inputProfile === undefined ? {} : { inputProfile: journey.inputProfile }),
 					fixtures: journey.fixtures,
 				})),
 				admissionInputs: s9AuthoredJourneys.flatMap((journey) => journey.admissionInputs),

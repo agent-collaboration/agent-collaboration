@@ -159,3 +159,49 @@ else if(command==='stop'||command==='finish'){process.stdout.write('TUI_GRID FIN
 		expect(await driver.stop()).toBe(0);
 	}
 });
+
+test.each([0, 1, 3, 31])(
+	'example Ghostty consumes original paging keys while four Option aliases encode at flags %i',
+	async (flags) => {
+		const writes: string[] = [];
+		const input = new GhosttyJourneyInput(
+			{
+				inputModes: () => ({ ...modes, kittyFlags: flags, cursorKeysApplication: true }),
+				send: async (bytes: Uint8Array): Promise<void> => {
+					writes.push(Buffer.from(bytes).toString('latin1'));
+				},
+			},
+			'example-ghostty-keybinds',
+		);
+		await ['PageUp', 'PageDown', 'Home', 'End'].reduce<Promise<void>>(async (previous, key) => {
+			await previous;
+			expect((await input.key(key)).delivery.kind).toBe('consumed');
+		}, Promise.resolve());
+		expect(writes).toEqual([]);
+		await ['Alt+Up', 'Alt+Down', 'Alt+Shift+Up', 'Alt+Shift+Down'].reduce<Promise<void>>(
+			async (previous, key) => {
+				await previous;
+				requireDelivered(await input.key(key));
+			},
+			Promise.resolve(),
+		);
+		const phase = flags === 3 || flags === 31 ? ':1' : '';
+		expect(writes).toEqual([
+			`\x1b[1;3${phase}A`,
+			`\x1b[1;3${phase}B`,
+			`\x1b[1;4${phase}A`,
+			`\x1b[1;4${phase}B`,
+		]);
+		expect(
+			input
+				.history()
+				.slice(4)
+				.every(
+					(record) =>
+						record.profile === 'example-ghostty-keybinds' &&
+						record.delivery.kind === 'sent' &&
+						record.delivery.route === 'encoder',
+				),
+		).toBe(true);
+	},
+);

@@ -73,3 +73,24 @@ test('pinned VT core tracks real keyboard stack, mouse modes and resized dimensi
 		core.dispose();
 	}
 });
+
+test('macOS Option arrows keep physical modifiers without option-as-alt, including application cursor mode', () => {
+	// Ghostty v1.3.1 function_keys.zig:49-55,78-79,277-288;
+	// key_encode.zig:334-340,232-236,896-913,1056-1077.
+	for (const [key, suffix, modifier] of [
+		['Alt+Up', 'A', 3],
+		['Alt+Down', 'B', 3],
+		['Alt+Shift+Up', 'A', 4],
+		['Alt+Shift+Down', 'B', 4],
+	] as const)
+		for (const flags of [0, 1, 3, 31])
+			for (const cursorKeysApplication of [false, true]) {
+				const expected =
+					flags === 3 || flags === 31
+						? `\x1b[1;${modifier}:1${suffix}`
+						: `\x1b[1;${modifier}${suffix}`;
+				expect(
+					encodeGhosttyKey(key, { ...legacy, kittyFlags: flags, cursorKeysApplication }).toString(),
+				).toBe(expected);
+			}
+});

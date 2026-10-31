@@ -64,6 +64,37 @@ They must not earn a passing picker-navigation observation. Keep the binding
 finding for the Lead; do not remove the model or change the picker oracle to
 manufacture a pass. Wheel/arrows remain separately observable paths.
 
+**Owner update, 2026-10-31:** Option+Up/Down page and Option+Shift+Up/Down
+jump first/last as aliases beside those original keys. The supplied profile still
+consumes the originals; it passes `Alt+Up`, `Alt+Down`, `Alt+Shift+Up` and
+`Alt+Shift+Down` through the encoder. On macOS Option is Alt for these function
+keys even without `macos-option-as-alt`: the pinned
+[NSEvent bridge](https://github.com/ghostty-org/ghostty/blob/v1.3.1/macos/Sources/Ghostty/NSEvent%2BExtension.swift#L26)
+keeps physical modifiers and excludes function-key text; the legacy encoder uses
+[all modifiers before text handling](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/input/key_encode.zig#L334).
+The setting's unset value is layout-dependent, and
+[nonprintable sequences retain Alt regardless](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/config/Config.zig#L3260).
+
+The four press encodings are `ESC[1;3A`, `ESC[1;3B`, `ESC[1;4A`,
+`ESC[1;4B`, with `:1` after the modifier when kitty event reporting is active.
+[Ghostty's modifier table](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/input/function_keys.zig#L49)
+and [special-key encoder](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/input/key_encode.zig#L1056)
+are the independent byte oracle. Modified arrows retain CSI in application-cursor
+mode. Crossterm 0.29 parses modifier3 as Alt and4 as Shift+Alt, including the
+kitty phase suffix; decoder qualification does not prove paging effects.
+
+`s9-journeys/option-navigation.ts`, indexed by `s9-prestage.ts`, contains four
+**authored-not-driven** journeys: picker RowPaging, quota ContentScroll, and Help
+on each screen, across both modes and all six grids. Each requires an independently
+declared ordered fixture and per-grid first/last/page destinations. Drive through
+`GhosttyJourneyInput` with `example-ghostty-keybinds`, retain delivery hex and exact
+normalized dispatch ACKs, and observe completed visible movement. Picker pages
+selection; quota and Help scroll content while keeping selected identity. Help
+must not navigate the covered list and must restore its original state on close.
+Repeat after same-child resize. A missing alias-enabled product head, fixture or
+bound journey runner remains an admission gap; the drafts, byte qualification and
+decoder ACKs are never a product pass. Physical Option delivery remains unverified.
+
 ## Run and retain
 
 From the repository root:

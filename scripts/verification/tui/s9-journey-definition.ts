@@ -40,6 +40,10 @@ export const s9CheckSchema = z.enum([
 	'refresh-values-and-details',
 	'typed-refresh-result',
 	'no-retry',
+	'option-alias-delivery',
+	'picker-option-page-and-ends',
+	'content-scroll-option-page-and-ends',
+	'help-option-page-and-ends',
 ]);
 export type S9Check = z.infer<typeof s9CheckSchema>;
 export const s9StepSchema = z.discriminatedUnion('kind', [
@@ -89,6 +93,7 @@ export const s9JourneySchema = z.strictObject({
 	}),
 	grids: z.array(z.enum(s9GridSizes)).min(1),
 	keys: z.array(z.enum(['legacy', 'kitty'])).min(1),
+	inputProfile: z.enum(['terminal-only', 'example-ghostty-keybinds']).optional(),
 	fixtures: z.array(z.string().min(1)),
 	steps: z.array(s9StepSchema).min(1),
 	wrongOutcomes: z.array(z.string().min(1)).min(1),
