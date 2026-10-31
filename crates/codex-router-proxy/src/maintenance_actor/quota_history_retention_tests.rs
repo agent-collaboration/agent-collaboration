@@ -4,13 +4,12 @@ use codex_router_state::account::{AccountRecord, AccountStatus};
 use codex_router_state::quota_snapshot::PersistedQuotaHistoryObservation;
 use codex_router_state::sqlite::{AsyncQuotaHistoryRepository, AsyncSqliteStateStore};
 
-use super::{MaintenanceHint, MaintenanceRepository};
+use super::{MaintenanceHint, MaintenanceRepository, SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS};
 
 #[tokio::test]
 async fn maintenance_prunes_quota_history_before_cutoff_and_keeps_boundary_rows() {
     const NOW_UNIX_SECONDS: u64 = 8 * 86_400 + 17;
-    let cutoff =
-        NOW_UNIX_SECONDS - codex_router_state::sqlite::QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS;
+    let cutoff = NOW_UNIX_SECONDS - SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS;
     let directory = tempfile::tempdir().expect("quota history fixture directory");
     let database_path = directory.path().join("state.sqlite");
     let store = AsyncSqliteStateStore::open(&database_path)

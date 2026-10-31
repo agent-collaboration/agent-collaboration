@@ -11,7 +11,6 @@ use std::sync::mpsc::Sender as TestCompletionSender;
 use codex_router_core::routes::RouteBand;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
 use codex_router_state::sqlite::PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE;
-use codex_router_state::sqlite::QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE;
 use codex_router_state::sqlite::StateStoreError;
 use futures_util::future::BoxFuture;
 use thiserror::Error;
@@ -27,16 +26,15 @@ use crate::telemetry::record_maintenance_lag_observed;
 pub const MAINTENANCE_QUEUE_CAPACITY: usize = 32;
 
 const PREVIOUS_RESPONSE_AFFINITY_OWNER_MAX_BATCHES_PER_PASS: usize = 4_096;
-const QUOTA_HISTORY_OBSERVATION_MAX_BATCHES_PER_PASS: usize = 128;
 
 /// Retains previous-response affinity owners for 30 days.
 const PREVIOUS_RESPONSE_AFFINITY_OWNER_RETENTION_SECONDS: u64 = 30 * 86_400;
 
 /// Retains session-account pins for one week after their last observation.
-pub const SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS: u64 = 7 * 86_400;
+pub(crate) const SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS: u64 = 7 * 86_400;
 
 /// Retains active-session rollup buckets for one week.
-pub const ACTIVE_SESSION_ROLLUP_RETENTION_SECONDS: u64 = 7 * 86_400;
+pub(crate) const ACTIVE_SESSION_ROLLUP_RETENTION_SECONDS: u64 = 7 * 86_400;
 
 pub(crate) const fn previous_response_affinity_owner_retention_cutoff(
     now_unix_seconds: u64,
@@ -181,30 +179,8 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                 } => {
                     self.purge_session_account_affinities_before(stale_before_unix_seconds)
                         .await?;
-                    let mut rows_deleted = 0_u64;
-                    let mut batch_count = 0_u64;
-                    for _batch_index in 0..QUOTA_HISTORY_OBSERVATION_MAX_BATCHES_PER_PASS {
-                        let deleted_in_batch = self
-                            .prune_quota_history_observations_before(
-                                stale_before_unix_seconds,
-                                QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE,
-                            )
-                            .await?;
-                        rows_deleted = rows_deleted.saturating_add(deleted_in_batch);
-                        batch_count = batch_count.saturating_add(1);
-                        if deleted_in_batch < u64::from(QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE)
-                        {
-                            break;
-                        }
-                        tokio::task::yield_now().await;
-                    }
-                    tracing::info!(
-                        maintenance.class = "quota_history_retention",
-                        route_band = "all",
-                        maintenance.rows_deleted = rows_deleted,
-                        maintenance.batch_count = batch_count,
-                        "codex_router.maintenance_completed"
-                    );
+                    self.purge_quota_history_before(stale_before_unix_seconds)
+                        .await?;
                     should_vacuum = true;
                 }
                 MaintenanceHint::CleanupStaleActiveClients {

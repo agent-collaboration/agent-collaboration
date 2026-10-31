@@ -45,7 +45,7 @@ fn state_history_retention_cutoffs_use_injected_clock_and_exact_week_windows() {
         86_417
     );
     assert_eq!(
-        NOW_UNIX_SECONDS - codex_router_state::sqlite::QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS,
+        NOW_UNIX_SECONDS - super::SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS,
         86_417
     );
 }
