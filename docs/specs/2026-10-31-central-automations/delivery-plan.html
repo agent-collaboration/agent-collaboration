@@ -101,10 +101,10 @@ flowchart LR
 <thead><tr><th>Milestone</th><th>Where</th><th>What is seen</th></tr></thead>
 <tbody>
 <tr><td>M0 database</td><td>a debug Router on Sunclaw over seeded copies of each store</td><td>WAL everywhere; old rows gone, newer kept; space reclaimed; approval routes in <code>interaction.sqlite</code> after a restart; both approval JSON files gone</td></tr>
-<tr><td>M1 contracts</td><td>the debug Router's CLI and MCP</td><td>every limit matches between schema and acceptance; 10:05 accepted, 10:02 refused with the nearest marks</td></tr>
-<tr><td>M2 central</td><td>conformance on Tokio and Cloudflare; a local central on Sunclaw</td><td>fires on the mark, one batch per machine, held until confirmed</td></tr>
+<tr><td>M1 contracts</td><td>the contracts code and the published schemas</td><td>every limit matches between schema, validator and the CLI and MCP descriptions; 10:05 accepted, 10:02 refused with the nearest marks. Real calls through central are checked at M2 and M4</td></tr>
+<tr><td>M2 central</td><td>conformance on Tokio and Cloudflare with a controlled clock; a local central on Sunclaw</td><td>each automation fires once per mark even when the alarm repeats; 250 entries for one machine arrive as 3 batches of at most 100, identical on every resend, held until confirmed</td></tr>
 <tr><td>M3 receiving Router</td><td>two debug Routers plus the local central, Haiku sessions</td><td>wakes and runs arrive on B; kills lose and double nothing; reports arrive in order</td></tr>
-<tr><td>M4 cutover</td><td>the same rig</td><td><code>wake</code> and <code>schedule</code> go to central; the old path is refused</td></tr>
+<tr><td>M4 cutover</td><td>the same rig</td><td><code>wake</code> and <code>schedule</code> go to central; limits and off-grid refusals hold through the real commands; the old path is refused</td></tr>
 <tr><td>M3b remote sessions</td><td>the same rig</td><td>a session created on B from A; B's Chief of Staff approves; refused when B has none</td></tr>
 <tr><td>M5 move to central</td><td>the rig, with an old-release machine</td><td>no loss and no double fire under kills; history stays readable</td></tr>
 <tr><td>M6 notifications</td><td>the rig</td><td>one delivery now, one listing 10 minutes later; approvals stay immediate</td></tr>
