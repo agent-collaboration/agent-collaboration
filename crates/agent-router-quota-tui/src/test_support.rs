@@ -28,6 +28,8 @@ pub struct QuotaFixtureOptions {
 pub struct QuotaControlFixture {
     pub element: AnyElement<'static>,
     pub outcome: Arc<Mutex<Option<QuotaOutcome>>>,
+    #[cfg(test)]
+    pub(crate) popup: crate::quota_test_support::PublishedQuotaPopup,
 }
 
 pub fn quota_control_fixture(inputs: QuotaFixtureOptions) -> QuotaControlFixture {
@@ -37,12 +39,25 @@ pub fn quota_control_fixture(inputs: QuotaFixtureOptions) -> QuotaControlFixture
         .reset_session_ports
         .map(|ports| (Some(ports.intent_sender), Some(ports.snapshot_receiver)))
         .unwrap_or((None, None));
-    let element=element!(QuotaStatusComponent(
+    let element = element!(QuotaStatusComponent(
         view_model:inputs.view_model,width:usize::from(inputs.width),height:usize::from(inputs.height),fixture_control:Some(inputs.control),outcome_sink:Some(outcome.clone()),
         reload_view_model:options.reload_view_model,reset_intent_sender,reset_snapshot_receiver,weekly_floor_saver:options.weekly_floor_saver,credit_policy_saver:options.credit_policy_saver,credit_usage_refresher:options.credit_usage_refresher,
         quota_refresher:options.quota_refresher,account_commands:options.account_commands,initial_focused_account_id:options.focused_account_id,notice:options.notice,
-    )).into_any();
-    QuotaControlFixture { element, outcome }
+    ));
+    #[cfg(test)]
+    let popup = crate::quota_test_support::PublishedQuotaPopup::default();
+    #[cfg(test)]
+    let element = {
+        let mut element = element;
+        element.props.surface_stack_observer = Some(popup.observer());
+        element
+    };
+    QuotaControlFixture {
+        element: element.into_any(),
+        outcome,
+        #[cfg(test)]
+        popup,
+    }
 }
 
 pub(crate) fn open_fixture_control(

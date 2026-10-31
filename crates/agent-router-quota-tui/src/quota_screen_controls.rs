@@ -1,7 +1,7 @@
 //! Browse bindings, toolbar and menu all project this one action scope.
 use super::quota_control_context::{
-    QuotaControlContext, QuotaControlResult, QuotaDialogKind, QuotaRefreshState, control_model,
-    quota_action, quota_quit_action, show_control_result, unavailable,
+    QuotaControlContext, QuotaControlResult, QuotaDialogKind, QuotaRefreshState, action_id,
+    control_model, quota_action, quota_quit_action, show_control_result, unavailable,
 };
 use agent_collaboration_tui::{
     actions::{ActionTitle, Availability, AvailabilityFn, Placement},
@@ -10,7 +10,7 @@ use agent_collaboration_tui::{
     },
     focus_model::TargetId,
     surface_handle::SurfaceStackHandle,
-    surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+    surface_stack::{SurfaceId, SurfaceModel},
 };
 use iocraft::prelude::*;
 
@@ -45,27 +45,18 @@ pub(crate) fn quota_screen_model(
     list: &agent_collaboration_tui::controls::ListSelectionControl,
 ) -> QuotaControlResult<SurfaceModel> {
     let menu_context = context.clone();
+    let menu_anchor = TargetId::for_action(&action_id("menu")?);
     let menu = quota_action("menu", "Menu", &["F10"], Placement::Hidden, move |()| {
         let snapshot = stack.snapshot();
         if let Some(screen) = snapshot.surface(SurfaceId::Screen) {
-            let (width, height) = stack.viewport();
-            let result = menu_overlay(
-                stack,
-                &screen.actions,
-                OverlayLayout::AtCells {
-                    left: 1,
-                    top: 2,
-                    width: width.saturating_sub(2).min(66),
-                    height: height.saturating_sub(3).min(24),
-                },
-            )
-            .map_err(|error| error.to_string())
-            .and_then(|spec| {
-                stack
-                    .open_overlay(spec)
-                    .map(|_| ())
-                    .map_err(|error| error.to_string())
-            });
+            let result = menu_overlay(stack, &screen.actions, menu_anchor.clone())
+                .map_err(|error| error.to_string())
+                .and_then(|spec| {
+                    stack
+                        .open_overlay(spec)
+                        .map(|_| ())
+                        .map_err(|error| error.to_string())
+                });
             show_control_result(&menu_context, result);
         }
     })?;

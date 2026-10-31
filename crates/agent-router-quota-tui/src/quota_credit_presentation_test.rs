@@ -24,15 +24,16 @@ async fn credit_policy_options_render_in_keyboard_selection_order() {
         assert_eq!(editor.draft_policy, policy);
         let mut fixture_model = model.clone();
         fixture_model.rows[0].credit_usage.policy = policy;
-        let mut fixture =
+        let fixture =
             crate::test_support::quota_control_fixture(crate::test_support::QuotaFixtureOptions {
                 view_model: fixture_model,
                 ports: Default::default(),
                 width: 100,
                 height: 30,
                 control: crate::test_support::QuotaFixtureControl::CreditChoices,
-            })
-            .element;
+            });
+        let popup = fixture.popup;
+        let mut fixture = fixture.element;
         let frames = fixture.mock_terminal_render_loop(MockTerminalConfig::with_events(
             futures_util::stream::pending(),
         ));
@@ -40,11 +41,11 @@ async fn credit_policy_options_render_in_keyboard_selection_order() {
         let frame = super::super::super::quota_frame_observation::next_matching_frame(
             frames.as_mut(),
             Duration::from_secs(2),
-            |canvas| canvas.to_string().contains("Allow"),
+            |canvas| canvas.to_string().contains("Filter:"),
         )
         .await
-        .unwrap()
-        .to_string();
+        .unwrap();
+        let frame = popup.frame(&frame);
         let disallow = frame
             .lines()
             .position(|line| line.contains("Disallow"))

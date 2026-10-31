@@ -33,7 +33,8 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
             receiver.recv().await.map(|event| (event, receiver))
         });
         let outcome = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver),outcome_sink:Some(outcome.clone())));
+        let popup = crate::quota_test_support::PublishedQuotaPopup::default();
+        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver),outcome_sink:Some(outcome.clone()),surface_stack_observer:Some(popup.observer())));
         let frames = crate::quota_test_support::recording_backend::recording_terminal_render_loop(
             &mut component,
             MockTerminalConfig::with_events(events),
@@ -109,7 +110,7 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                         && frame.contains("zzhelp")
                         && frame.contains("No match") =>
                     {
-                        dropdown_before = actual_dialog_text(&frame, "Filter:");
+                        dropdown_before = actual_dialog_text(&popup.frame(&canvas), "Filter:");
                         sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
                         phase = 6;
                     }
@@ -174,6 +175,7 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
                         && frame.contains("zzhelp")
                         && frame.contains("No match") =>
                     {
+                        let frame = popup.frame(&canvas);
                         assert_eq!(
                             actual_dialog_text(&frame, "Filter:"),
                             dropdown_before,

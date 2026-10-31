@@ -28,7 +28,8 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
             receiver.recv().await.map(|event| (event, receiver))
         });
         let outcome = Arc::new(std::sync::Mutex::new(None));
-        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver),outcome_sink:Some(outcome.clone())));
+        let popup = crate::quota_test_support::PublishedQuotaPopup::default();
+        let mut component = element!(QuotaStatusComponent(view_model:model,width,height,credit_policy_saver:Some(saver),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver),outcome_sink:Some(outcome.clone()),surface_stack_observer:Some(popup.observer())));
         let frames = crate::quota_test_support::recording_backend::recording_terminal_render_loop(
             &mut component,
             MockTerminalConfig::with_events(events),
@@ -91,7 +92,7 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
                         phase = 4;
                     }
                     4 if frame.contains("Filter:") && frame.contains("Allow") => {
-                        let dropdown = actual_dialog_text(&frame, "Filter:");
+                        let dropdown = actual_dialog_text(&popup.frame(&canvas), "Filter:");
                         assert!(
                             dropdown.contains("● Disallow") && !dropdown.contains("Select"),
                             "the saved policy stays checked while Allow is highlighted: {dropdown}"
@@ -121,7 +122,7 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
                         phase = 5;
                     }
                     5 if frame.contains("No match") => {
-                        let dropdown = actual_dialog_text(&frame, "Filter:");
+                        let dropdown = actual_dialog_text(&popup.frame(&canvas), "Filter:");
                         assert!(
                             dropdown.contains("Filter: zznomatchzz")
                                 && dropdown.contains("No match")

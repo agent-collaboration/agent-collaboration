@@ -11,7 +11,6 @@ use agent_collaboration_tui::{
     controls::{button_target, menu_overlay},
     focus_model::TargetId,
     surface_handle::SurfaceStackHandle,
-    surface_stack::OverlayLayout,
 };
 use codex_router_quota_service::quota_display_model::QuotaLoginState;
 
@@ -61,6 +60,7 @@ pub(crate) fn account_dialog_controls(
     let mut actions = account_actions(stack, context.clone(), target.clone())?;
     let menu_context = context.clone();
     let menu_target = target.clone();
+    let menu_anchor = TargetId::for_action(&action_id("account-actions")?);
     let menu = quota_action(
         "account-actions",
         "Actions ▾",
@@ -74,24 +74,14 @@ pub(crate) fn account_dialog_controls(
                         actions,
                     )
                     .map_err(|error| error.to_string())?;
-                    let (width, height) = stack.viewport();
-                    menu_overlay(
-                        stack,
-                        &registry,
-                        OverlayLayout::AtCells {
-                            left: width.saturating_sub(width.min(64)) / 2,
-                            top: 3,
-                            width: width.saturating_sub(4).min(64),
-                            height: height.saturating_sub(5).min(17),
-                        },
-                    )
-                    .map_err(|error| error.to_string())
-                    .and_then(|spec| {
-                        stack
-                            .open_overlay(spec)
-                            .map(|_| ())
-                            .map_err(|error| error.to_string())
-                    })
+                    menu_overlay(stack, &registry, menu_anchor.clone())
+                        .map_err(|error| error.to_string())
+                        .and_then(|spec| {
+                            stack
+                                .open_overlay(spec)
+                                .map(|_| ())
+                                .map_err(|error| error.to_string())
+                        })
                 });
             show_control_result(&menu_context, result);
         },

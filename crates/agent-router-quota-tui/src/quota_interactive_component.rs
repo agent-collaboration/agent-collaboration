@@ -147,6 +147,10 @@ pub(crate) fn render_interactive_quota_status(
             }
         }
     });
+    #[cfg(test)]
+    if let Some(observer) = &props.surface_stack_observer {
+        observer(stack);
+    }
     let Some((list, _help)) = screen_controls.read().clone() else {
         return element!(Text(content:"Quota controls could not start",color:Color::Red))
             .into_any();

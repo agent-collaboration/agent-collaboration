@@ -10,7 +10,6 @@ use agent_collaboration_tui::{
     controls::{ComboBoxBinding, ComboBoxControl, ComboBoxState, OptionKey, SelectOption},
     focus_model::TargetId,
     surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::OverlayLayout,
 };
 use codex_router_core::{credit_usage::CreditUsagePolicy, provider::Provider};
 use iocraft::prelude::*;
@@ -161,14 +160,8 @@ pub(crate) fn open_choice(
             }
         }),
     });
-    let (width, height) = stack.viewport();
     control
-        .open(OverlayLayout::AtCells {
-            left: width.saturating_sub(width.min(64)) / 2,
-            top: height.saturating_sub(9) / 2,
-            width: width.saturating_sub(4).min(64),
-            height: height.saturating_sub(4).min(9),
-        })
+        .open()
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
