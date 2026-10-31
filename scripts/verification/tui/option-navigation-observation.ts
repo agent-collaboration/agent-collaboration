@@ -38,7 +38,7 @@ export interface HelpViewport {
 	readonly rows: readonly string[];
 	readonly atEnd: boolean;
 }
-export function helpViewport(grid: TerminalGrid): HelpViewport {
+function trackedHelpViewport(grid: TerminalGrid): HelpViewport | null {
 	const rectangle = findDialog(grid, 'Help');
 	if (rectangle === null) throw new Error('Help frame missing');
 	// The focused public ScrollList paints a thumb and a contiguous track.
@@ -64,7 +64,7 @@ export function helpViewport(grid: TerminalGrid): HelpViewport {
 			break;
 		}
 	}
-	if (track === null) throw new Error('Help scroll track is not independently observable');
+	if (track === null) return null;
 	const rows = track.rows.map((row) =>
 		(grid.cells[row] ?? [])
 			.slice(rectangle.left + 1, track.column)
@@ -75,6 +75,59 @@ export function helpViewport(grid: TerminalGrid): HelpViewport {
 	const last = track.rows.at(-1);
 	const lastCell = last === undefined ? undefined : grid.cells[last]?.[track.column];
 	return { rectangle, rows, atEnd: lastCell !== undefined && cellText(lastCell) === '█' };
+}
+export function helpViewport(grid: TerminalGrid): HelpViewport {
+	const viewport = trackedHelpViewport(grid);
+	if (viewport === null) throw new Error('Help scroll track is not independently observable');
+	return viewport;
+}
+const compactHelpText = (text: string): string => text.replace(/\s/gu, '');
+export function requireFullHelpCensus(rows: readonly string[], census: readonly string[]): void {
+	if (census.length === 0) throw new Error('independent full Help census required');
+	const actual = compactHelpText(rows.join(''));
+	const expected = compactHelpText(census.join(''));
+	if (actual !== expected) {
+		const missing = census.filter((row) => !actual.includes(compactHelpText(row)));
+		throw new Error(
+			'full Help census not visible: ' +
+				(missing.length > 0 ? missing.join(' | ') : 'row order or unexpected content differs'),
+		);
+	}
+}
+export type HelpLayout =
+	| { readonly kind: 'overflow'; readonly viewport: HelpViewport }
+	| { readonly kind: 'fit'; readonly rectangle: GridRectangle; readonly rows: readonly string[] }
+	| {
+			readonly kind: 'incomplete';
+			readonly rectangle: GridRectangle;
+			readonly rows: readonly string[];
+			readonly reason: string;
+	  };
+export function helpLayout(grid: TerminalGrid, census: readonly string[]): HelpLayout {
+	const tracked = trackedHelpViewport(grid);
+	if (tracked !== null) return { kind: 'overflow', viewport: tracked };
+	const rectangle = findDialog(grid, 'Help');
+	if (rectangle === null) throw new Error('Help frame missing');
+	const lines = grid.cells.slice(rectangle.top + 2, rectangle.bottom).map((row) =>
+		row
+			.slice(rectangle.left + 1, rectangle.right)
+			.map(cellText)
+			.join('')
+			.trimEnd(),
+	);
+	const footer = lines.findLastIndex((line) => line.includes('Close Help'));
+	if (footer < 0) throw new Error('Help footer missing');
+	const rows = lines.slice(0, footer);
+	try {
+		requireFullHelpCensus(rows, census);
+		return { kind: 'fit', rectangle, rows };
+	} catch (error) {
+		return { kind: 'incomplete', rectangle, rows, reason: String(error) };
+	}
+}
+export function requireHelpNoop(before: TerminalGrid, after: TerminalGrid): void {
+	if (JSON.stringify(before) !== JSON.stringify(after))
+		throw new Error('fitting Help alias changed its marked frame');
 }
 export function appendOneHelpRow(previous: readonly string[], next: readonly string[]): string {
 	if (

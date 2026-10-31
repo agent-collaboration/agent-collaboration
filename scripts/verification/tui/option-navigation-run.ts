@@ -15,9 +15,13 @@ import type {
 	InputConsumptionExpectation,
 	InputDispatchReceipt,
 } from './input-consumption-schema.ts';
+import { optionPickerHelpCensus } from './option-help-census.ts';
 import {
 	appendOneHelpRow,
 	helpViewport,
+	helpLayout,
+	requireFullHelpCensus,
+	requireHelpNoop,
 	pickerPageRows,
 	requireHelpRows,
 	selectedFixtureRow,
@@ -117,7 +121,7 @@ async function observeCase(
 	plan: OptionNavigationPlan,
 	keys: KeyProtocol,
 	dimensions: string,
-): Promise<void> {
+): Promise<'fit' | 'overflow'> {
 	const directory = join(plan.output, `${keys}-${dimensions}`);
 	mkdirSync(directory);
 	const receiptsDirectory = join(directory, 'session-receipts');
@@ -137,6 +141,7 @@ async function observeCase(
 	let ownedIdentity: ProcessIdentity | null = null;
 	let failure: { kind: 'none' } | { kind: 'failed'; error: unknown } = { kind: 'none' };
 	let aliveAfterStop = false;
+	let observedHelpLayout: 'fit' | 'overflow' | null = null;
 	const actions: unknown[] = [];
 	try {
 		await driver.waitForGrid(
@@ -273,59 +278,84 @@ async function observeCase(
 			requireDelivered(await input.key('F1'));
 		});
 		await mark(openAck);
-		const initial = helpViewport(current.grid);
-		if (!initial.rows.join(' ').includes('Context'))
-			throw new Error('Help did not start at its first content');
-		const full = [...initial.rows];
-		const collectRows = async (remaining: number): Promise<void> => {
-			const before = helpViewport(current.grid);
-			if (before.atEnd) return;
-			if (remaining === 0) throw new Error('bounded Help row qualification exhausted');
-			const ack = await observeInput(expectedKey('Down', true), async () => {
-				requireDelivered(await input.key('Down'));
-			});
-			await mark(ack);
-			full.push(appendOneHelpRow(before.rows, helpViewport(current.grid).rows));
-			await collectRows(remaining - 1);
-		};
-		await collectRows(2048);
-		if (!full.join(' ').replace(/\s+/gu, ' ').includes('never quit'))
-			throw new Error('Help terminal convention absent from full physical content');
-		writeFileSync(
-			join(directory, 'help-physical-row-oracle.json'),
-			JSON.stringify(
-				{
-					basis:
-						'observed physical one-row Down transitions; independently checked overlap, not app scroll counters',
-					viewportRows: initial.rows.length,
-					full,
-				},
-				null,
-				2,
-			),
-		);
-		const maximum = full.length - initial.rows.length;
-		if (maximum <= 0) throw new Error('Help fixture cannot demonstrate paging');
-		const helpStep = async (key: GhosttyKey, offset: number, name: string): Promise<void> => {
-			const expected = full.slice(offset, offset + initial.rows.length);
-			const ack = await observeInput(expectedKey(key, true), async () => {
-				requireDelivered(await input.key(key));
-			});
-			await mark(ack);
-			try {
-				requireHelpRows(helpViewport(current.grid).rows, expected);
-			} catch (error) {
-				throw new NavigationMismatch(`${name}: ${String(error)}`);
-			}
-			actions.push({ name, offset, viewportRows: initial.rows.length });
-			await capture(name);
-		};
-		await helpStep('Alt+Shift+Up', 0, 'help-first');
-		await helpStep('Alt+Shift+Up', 0, 'help-first-noop');
-		await helpStep('Alt+Down', Math.min(maximum, initial.rows.length), 'help-page-down');
-		await helpStep('Alt+Shift+Down', maximum, 'help-last');
-		await helpStep('Alt+Down', maximum, 'help-end-page-noop');
-		await helpStep('Alt+Up', Math.max(0, maximum - initial.rows.length), 'help-page-up');
+		const layout = helpLayout(current.grid, optionPickerHelpCensus);
+		if (layout.kind === 'incomplete') throw new Error(layout.reason);
+		observedHelpLayout = layout.kind;
+		actions.push({ name: 'help-layout', kind: layout.kind });
+		if (layout.kind === 'fit') {
+			await (['Alt+Up', 'Alt+Down', 'Alt+Shift+Up', 'Alt+Shift+Down'] as const).reduce<
+				Promise<void>
+			>(async (previous, key) => {
+				await previous;
+				const before = await driver.waitForGrid('complete fitting Help before input', () => true);
+				if (helpLayout(before, optionPickerHelpCensus).kind !== 'fit')
+					throw new Error('Help no longer fits before no-op input');
+				const ack = await observeInput(expectedKey(key, true), async () => {
+					requireDelivered(await input.key(key));
+				});
+				await mark(ack);
+				try {
+					requireHelpNoop(before, current.grid);
+				} catch (error) {
+					throw new NavigationMismatch(String(error));
+				}
+				actions.push({ name: 'help-fit-noop', key });
+				await capture('help-fit-' + key.replaceAll('+', '-'));
+			}, Promise.resolve());
+		} else {
+			const initial = helpViewport(current.grid);
+			if (!initial.rows.join(' ').includes('Context'))
+				throw new Error('Help did not start at its first content');
+			const full = [...initial.rows];
+			const collectRows = async (remaining: number): Promise<void> => {
+				const before = helpViewport(current.grid);
+				if (before.atEnd) return;
+				if (remaining === 0) throw new Error('bounded Help row qualification exhausted');
+				const ack = await observeInput(expectedKey('Down', true), async () => {
+					requireDelivered(await input.key('Down'));
+				});
+				await mark(ack);
+				full.push(appendOneHelpRow(before.rows, helpViewport(current.grid).rows));
+				await collectRows(remaining - 1);
+			};
+			await collectRows(2048);
+			requireFullHelpCensus(full, optionPickerHelpCensus);
+			writeFileSync(
+				join(directory, 'help-physical-row-oracle.json'),
+				JSON.stringify(
+					{
+						basis:
+							'observed physical one-row Down transitions; independently checked overlap, not app scroll counters',
+						viewportRows: initial.rows.length,
+						full,
+					},
+					null,
+					2,
+				),
+			);
+			const maximum = full.length - initial.rows.length;
+			if (maximum <= 0) throw new Error('Help fixture cannot demonstrate paging');
+			const helpStep = async (key: GhosttyKey, offset: number, name: string): Promise<void> => {
+				const expected = full.slice(offset, offset + initial.rows.length);
+				const ack = await observeInput(expectedKey(key, true), async () => {
+					requireDelivered(await input.key(key));
+				});
+				await mark(ack);
+				try {
+					requireHelpRows(helpViewport(current.grid).rows, expected);
+				} catch (error) {
+					throw new NavigationMismatch(`${name}: ${String(error)}`);
+				}
+				actions.push({ name, offset, viewportRows: initial.rows.length });
+				await capture(name);
+			};
+			await helpStep('Alt+Shift+Up', 0, 'help-first');
+			await helpStep('Alt+Shift+Up', 0, 'help-first-noop');
+			await helpStep('Alt+Down', Math.min(maximum, initial.rows.length), 'help-page-down');
+			await helpStep('Alt+Shift+Down', maximum, 'help-last');
+			await helpStep('Alt+Down', maximum, 'help-end-page-noop');
+			await helpStep('Alt+Up', Math.max(0, maximum - initial.rows.length), 'help-page-up');
+		}
 		const closeAck = await observeInput(expectedKey('Escape', true), async () => {
 			requireDelivered(await input.key('Escape'));
 		});
@@ -367,6 +397,8 @@ async function observeCase(
 			`owned picker remains alive; stop allocating cases; primary outcome: ${failure.kind === 'failed' ? String(failure.error) : 'completed'}`,
 		);
 	if (failure.kind === 'failed') throw failure.error;
+	if (observedHelpLayout === null) throw new Error('Help layout was not observed');
+	return observedHelpLayout;
 }
 export async function runOptionNavigation(value: unknown, checkOnly = false): Promise<void> {
 	const plan = optionNavigationPlanSchema.parse(value);
@@ -379,6 +411,7 @@ export async function runOptionNavigation(value: unknown, checkOnly = false): Pr
 		grid: string;
 		status: 'pass' | 'fail' | 'unobserved';
 		reason: string | null;
+		helpLayout: 'fit' | 'overflow' | null;
 	}[] = [];
 	await plan.keys.reduce<Promise<void>>(async (previous, keys) => {
 		await previous;
@@ -387,8 +420,9 @@ export async function runOptionNavigation(value: unknown, checkOnly = false): Pr
 			await checkOptionNavigationTarget(plan);
 			let status: 'pass' | 'fail' | 'unobserved' = 'pass';
 			let reason: string | null = null;
+			let observedHelpLayout: 'fit' | 'overflow' | null = null;
 			try {
-				await observeCase(plan, keys, grid);
+				observedHelpLayout = await observeCase(plan, keys, grid);
 			} catch (error) {
 				if (error instanceof CleanupUnsettled) throw error;
 				status =
@@ -398,7 +432,7 @@ export async function runOptionNavigation(value: unknown, checkOnly = false): Pr
 						: 'unobserved';
 				reason = String(error);
 			}
-			results.push({ keys, grid, status, reason });
+			results.push({ keys, grid, status, reason, helpLayout: observedHelpLayout });
 			writeFileSync(
 				join(plan.output, 'results.json'),
 				JSON.stringify({ source: plan.source.head, results }, null, 2),
@@ -407,8 +441,16 @@ export async function runOptionNavigation(value: unknown, checkOnly = false): Pr
 		}, Promise.resolve());
 	}, Promise.resolve());
 	await checkOptionNavigationTarget(plan);
+	const helpCoverage = {
+		overflowingCases: results.filter((row) => row.helpLayout === 'overflow').length,
+		fittingCases: results.filter((row) => row.helpLayout === 'fit').length,
+		unobservedCases: results.filter((row) => row.helpLayout === null).length,
+	};
+	writeFileSync(join(plan.output, 'help-coverage.json'), JSON.stringify(helpCoverage, null, 2));
 	if (results.some((row) => row.status !== 'pass'))
 		throw new Error('Option navigation includes contrary or unobserved cases');
+	if (helpCoverage.overflowingCases === 0)
+		throw new Error('No overflowing Help observed; paging coverage remains unproven');
 }
 if (isMain(import.meta.url)) {
 	try {
