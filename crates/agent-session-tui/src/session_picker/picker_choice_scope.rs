@@ -16,7 +16,6 @@ use agent_collaboration_tui::{
     controls::{ComboBoxBinding, ComboBoxControl, OptionKey, SelectOption},
     focus_model::{GroupId, TargetSpec},
     surface_handle::SurfaceContext,
-    surface_stack::OverlayLayout,
 };
 use iocraft::prelude::*;
 
@@ -364,7 +363,7 @@ pub(super) fn declare_combo(
         Placement::Hidden,
         move |()| {
             match control(&open_context, stack, stack.snapshot().top_id(), field)
-                .and_then(|control| Ok(control.open(dropdown_layout(stack, field)?)?))
+                .and_then(|control| Ok(control.open()?))
             {
                 Ok(_) => {}
                 Err(error) => open_context.report(error),
@@ -401,6 +400,13 @@ fn control(
     parent: SurfaceId,
     field: ChoiceField,
 ) -> SurfaceResult<ComboBoxControl> {
+    let parent_scroll = context
+        .active_dialog
+        .read()
+        .as_ref()
+        .filter(|dialog| SurfaceId::Overlay(dialog.id) == parent)
+        .map(|dialog| dialog.scroll.clone())
+        .ok_or("missing scroll for the active picker dialog")?;
     let effect = context.clone();
     Ok(ComboBoxControl::new(ComboBoxBinding {
         parent: SurfaceContext {
@@ -408,6 +414,7 @@ fn control(
             surface: parent,
         },
         field: target(field.name())?,
+        parent_scroll: Some(parent_scroll),
         value: combo_state(context, field)?,
         on_pick: Handler::from(move |key| {
             let choice = values(&effect, field)
@@ -460,52 +467,6 @@ fn choose(context: &PickerSurfaceContext, choice: PickerChoiceValue) {
             )
         }
     }
-}
-
-fn dropdown_layout(stack: SurfaceStackHandle, field: ChoiceField) -> SurfaceResult<OverlayLayout> {
-    let id = target(field.name())?;
-    let viewport = stack.viewport();
-    let surface = stack.snapshot().top_id();
-    let cells = stack
-        .hit_regions()
-        .published()
-        .and_then(|map| {
-            map.targets
-                .into_iter()
-                .find(|region| region.surface == surface && region.target == id)
-                .map(|region| region.cells)
-        })
-        .unwrap_or_default();
-    let width = 50.min(viewport.0.saturating_sub(4));
-    let left = cells
-        .iter()
-        .map(|point| point.0)
-        .min()
-        .unwrap_or(viewport.0.saturating_sub(width) / 2)
-        .min(viewport.0.saturating_sub(width + 2));
-    let field_top = cells
-        .iter()
-        .map(|point| point.1)
-        .min()
-        .unwrap_or(viewport.1 / 2);
-    let below = cells
-        .iter()
-        .map(|point| point.1)
-        .max()
-        .map(|row| row.saturating_add(1))
-        .unwrap_or(viewport.1 / 2);
-    let height = 10.min(viewport.1.saturating_sub(2));
-    let top = if viewport.1.saturating_sub(below) >= height {
-        below
-    } else {
-        field_top.saturating_sub(height)
-    };
-    Ok(OverlayLayout::AtCells {
-        left,
-        top,
-        width,
-        height,
-    })
 }
 
 pub(super) fn declare_choices(

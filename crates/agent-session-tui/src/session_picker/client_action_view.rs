@@ -130,25 +130,28 @@ fn observation_lines(
 }
 
 pub(super) fn render_client_body(model: &SessionsPickerModel) -> AnyElement<'static> {
-    let (request, result) = match &model.client_action {
+    let request = match &model.client_action {
         PickerClientAction::Terminal(request, _)
         | PickerClientAction::Queued(request)
-        | PickerClientAction::Running(request) => (request, None),
-        PickerClientAction::Finished {
-            request, result, ..
-        } => (request, Some(result)),
+        | PickerClientAction::Running(request)
+        | PickerClientAction::Finished { request, .. } => request,
         PickerClientAction::Idle => return element!(View).into_any(),
     };
-    let mut lines = vec![format!("Source: {}", request.source_label())];
-    if let Some(result) = result {
-        lines.extend(observation_lines(request, result));
-    } else {
-        lines.push(
-            "Waiting for the selected source result. The action will not be resubmitted."
-                .to_owned(),
-        );
-    }
-    element!(View(width:100pct,flex_direction:FlexDirection::Column) {
-        #(lines.into_iter().map(|content|element!(agent_collaboration_tui::UiText(content,role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap))))
-    }).into_any()
+    element!(agent_collaboration_tui::UiText(content:format!("Source: {}",request.source_label()),role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)).into_any()
+}
+
+pub(super) fn render_client_status(model: &SessionsPickerModel) -> Option<AnyElement<'static>> {
+    let content = match &model.client_action {
+        PickerClientAction::Idle => return None,
+        PickerClientAction::Terminal(..)
+        | PickerClientAction::Queued(_)
+        | PickerClientAction::Running(_) => {
+            "Waiting for the selected source result. The action will not be resubmitted.".to_owned()
+        }
+        // Supplemental diagnostics belong to the same current result paragraph.
+        PickerClientAction::Finished { request, result } => {
+            observation_lines(request, result).join(" ")
+        }
+    };
+    Some(element!(agent_collaboration_tui::UiText(content,role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)).into_any())
 }

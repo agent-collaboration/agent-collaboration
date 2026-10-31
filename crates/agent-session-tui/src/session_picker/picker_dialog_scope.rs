@@ -420,5 +420,8 @@ fn PickerDialogSurface(
             .unwrap_or_else(|| props.help.scroll_target())
     };
     let scroll_focus = showing_help.then(|| props.help.body_target());
-    element!(DialogFrame(title:if showing_help {"Help".to_owned()}else {title.to_owned()},scroll,scroll_target,scroll_focus,context:identity,help_action) {#(Some(body))})
+    let pinned_status = (!showing_help)
+        .then(|| super::picker_surface_view::dialog_status(context, props.kind, surface))
+        .flatten();
+    element!(DialogFrame(title:if showing_help {"Help".to_owned()}else {title.to_owned()},scroll,scroll_target,scroll_focus,context:identity,help_action,pinned_status) {#(Some(body))})
 }

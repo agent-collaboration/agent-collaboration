@@ -5,6 +5,7 @@ use super::{
     SurfaceResult, target,
 };
 use agent_collaboration_tui::{
+    actions::ActionRegistry,
     controls::{ComboBox, FormField, FormFields, ListRow, ScrollList},
     hit_regions::{HitRegion, HitRegionKind},
     surface_handle::SurfaceContext,
@@ -55,7 +56,16 @@ fn render_screen(
     let (width, height) = surface.stack.viewport();
     let control = super::picker_screen_scope::list_control(context, surface.stack)?;
     let toolbar = super::picker_toolbar::render_toolbar(context, surface)?;
-    let notices = inventory_notices(&model);
+    let mut notices = inventory_notices(&model);
+    let snapshot = surface.stack.snapshot();
+    let can_reload =
+        context.can_load_source && !context.is_closing() && snapshot.top_id() == surface.surface;
+    if let Some(hint) = snapshot
+        .surface(surface.surface)
+        .and_then(|source| inventory_retry_hint(&model, &source.actions, can_reload))
+    {
+        notices.push(hint);
+    }
     let notices = notices
         .into_iter()
         .map(|content| {
@@ -130,6 +140,45 @@ fn render_screen(
         }
 
     }).into_any())
+}
+
+fn inventory_retry_hint(
+    model: &SessionsPickerModel,
+    actions: &ActionRegistry,
+    can_reload: bool,
+) -> Option<String> {
+    use crate::session_picker::source_reload_progress::SourceReadState;
+    use agent_session_inventory::{
+        picker_runtime_status::NativeLiveReadState,
+        source_inventory_request::SourceInventoryRejection,
+    };
+
+    let unreachable = model.source_progress.iter().any(|progress| {
+        matches!(
+            progress.read_state,
+            SourceReadState::Rejected {
+                reason: SourceInventoryRejection::SourceUnavailable
+            }
+        )
+    }) || model
+        .native_live_coverage
+        .iter()
+        .any(|part| matches!(part.state, NativeLiveReadState::Unavailable(_)));
+    if !can_reload || !unreachable {
+        return None;
+    }
+    let refresh = actions.presentations().into_iter().find(|action| {
+        action.id.as_str() == "refresh"
+            && action.availability.is_available()
+            && !action.keys.is_empty()
+    })?;
+    let keys = refresh
+        .keys
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(format!("Retry: {keys} {}", refresh.title))
 }
 
 fn inventory_notices(model: &SessionsPickerModel) -> Vec<String> {
@@ -241,6 +290,71 @@ pub(super) fn dialog_body(
         Err(error) => element!(Text(content:error.to_string())).into_any(),
     }
 }
+
+pub(super) fn dialog_status(
+    context: &PickerSurfaceContext,
+    kind: PickerDialogKind,
+    surface: SurfaceContext,
+) -> Option<AnyElement<'static>> {
+    use crate::session_picker::details_dialog_state::ClipboardRequestStatus;
+    use crate::session_picker::picker_machine_controls::PickerMachineStage;
+
+    let model = context.model.read();
+    // Each dialog has one current state. A new result replaces its progress;
+    // an explicit Fork error takes precedence over destination availability.
+    let (content, role) = match kind {
+        PickerDialogKind::Details => match model.details_dialog.as_ref()?.clipboard_status {
+            ClipboardRequestStatus::Idle => return None,
+            ClipboardRequestStatus::Sent => ("Copy requested".to_owned(), TextRole::Muted),
+            ClipboardRequestStatus::Failed => ("Could not copy".to_owned(), TextRole::Error),
+        },
+        PickerDialogKind::Fork => {
+            let confirmation = model.fork_confirmation.as_ref()?;
+            let notice = confirmation.notice.or_else(|| {
+                confirmation
+                    .destinations
+                    .get(confirmation.focused_destination)
+                    .and_then(|destination| destination.availability.explanation())
+            })?;
+            (notice.to_owned(), TextRole::Warning)
+        }
+        PickerDialogKind::Machine => match &model.machine_controls.stage {
+            PickerMachineStage::Choosing {
+                notice: Some(notice),
+                ..
+            } => (notice.message(), TextRole::Warning),
+            PickerMachineStage::Loading { source, .. } => {
+                let name = match source.as_ref() {
+                    crate::session_picker::PickerSourceContext::ConfiguredHosted(profile) => {
+                        profile.name.as_str()
+                    }
+                    _ => "selected machine",
+                };
+                (format!("Loading machine: {name}…"), TextRole::Muted)
+            }
+            _ => return None,
+        },
+        PickerDialogKind::Source => {
+            let pending = model.source_action.pending.as_ref()?;
+            (
+                format!(
+                    "{} · Verifying the selected source before handoff",
+                    pending.profile.name.as_str()
+                ),
+                TextRole::Text,
+            )
+        }
+        PickerDialogKind::Client => {
+            return crate::session_picker::client_action_view::render_client_status(&model);
+        }
+        PickerDialogKind::New | PickerDialogKind::Filters => return None,
+    };
+    Some(
+        element!(Text(content,color:surface.theme().foreground(role),wrap:TextWrap::Wrap))
+            .into_any(),
+    )
+}
+
 fn render_dialog_body(
     context: &PickerSurfaceContext,
     kind: PickerDialogKind,
@@ -254,17 +368,20 @@ fn render_dialog_body(
         .overlays()
         .iter()
         .find(|overlay| SurfaceId::Overlay(overlay.id) == surface.surface)
-        .map(|overlay| match overlay.layout.resolve(viewport) {
+        .and_then(|overlay| match overlay.layout.clone().resolve(viewport) {
             agent_collaboration_tui::surface_stack::OverlayPlacement::Centered {
                 max_width,
                 max_height,
                 ..
-            } => (max_width, max_height),
+            } => Some((max_width, max_height)),
             agent_collaboration_tui::surface_stack::OverlayPlacement::Fixed {
                 width,
                 height,
                 ..
-            } => (width, height),
+            } => Some((width, height)),
+            // Only the parent dialog owns this body; anchored child controls
+            // receive their dimensions from the host instead.
+            agent_collaboration_tui::surface_stack::OverlayPlacement::Anchored { .. } => None,
         })
         .unwrap_or(viewport);
     let padding = u16::from(frame_height >= 16);
@@ -281,7 +398,6 @@ fn render_dialog_body(
             .select_record(dialog.record())
             .preview;
         return Ok(element!(View(width:100pct,flex_direction:FlexDirection::Column) {
-            #(match dialog.clipboard_status {crate::session_picker::details_dialog_state::ClipboardRequestStatus::Idle=>None,crate::session_picker::details_dialog_state::ClipboardRequestStatus::Sent=>Some(element!(Text(content:"Copy requested",color:theme.foreground(TextRole::Muted)))),crate::session_picker::details_dialog_state::ClipboardRequestStatus::Failed=>Some(element!(Text(content:"Could not copy",color:theme.foreground(TextRole::Error))))})
             #(dialog.inspection_notice().map(|notice|element!(Text(content:notice.to_owned(),color:theme.foreground(TextRole::Muted)))))
             #(super::super::render_details(dialog.record(),width,Some(&preview),Size::Auto))
         }).into_any());
@@ -321,49 +437,6 @@ fn render_dialog_body(
     {
         rows.insert(0,element!(FormField(label:"Source".to_owned()) {Text(content:confirmation.source_label.clone(),color:theme.foreground(TextRole::Muted))}).into());
         rows.insert(1,element!(FormField(label:"Directory".to_owned()) {Text(content:confirmation.directory_label.clone(),color:theme.foreground(TextRole::Text)) Text(content:format!("Directory origin: {}",confirmation.directory_origin),color:theme.foreground(TextRole::Muted))}).into());
-        if let Some(notice) = confirmation.notice.or_else(|| {
-            confirmation
-                .destinations
-                .get(confirmation.focused_destination)
-                .and_then(|destination| destination.availability.explanation())
-        }) {
-            rows.push(
-                element!(Text(content:notice,color:theme.foreground(TextRole::Warning)))
-                    .into_any()
-                    .into(),
-            );
-        }
-    }
-    if kind == PickerDialogKind::Machine {
-        use crate::session_picker::picker_machine_controls::PickerMachineStage;
-        match &model.machine_controls.stage {
-            PickerMachineStage::Choosing {
-                notice: Some(notice),
-                ..
-            } => rows.push(
-                element!(Text(content:notice.message(),color:theme.foreground(TextRole::Warning)))
-                    .into_any()
-                    .into(),
-            ),
-            PickerMachineStage::Loading { source, .. } => {
-                let name = match source.as_ref() {
-                    crate::session_picker::PickerSourceContext::ConfiguredHosted(profile) => {
-                        profile.name.as_str()
-                    }
-                    _ => "selected machine",
-                };
-                rows.push(element!(Text(content:format!("Loading machine: {name}…"),color:theme.foreground(TextRole::Muted))).into_any().into());
-            }
-            _ => {}
-        }
-    }
-    if let Some(pending) = model
-        .source_action
-        .pending
-        .as_ref()
-        .filter(|_| kind == PickerDialogKind::Source)
-    {
-        rows.push(element!(Text(content:format!("{} · Verifying the selected source before handoff",pending.profile.name.as_str()),color:theme.foreground(TextRole::Text))).into_any().into());
     }
     if kind == PickerDialogKind::Client {
         rows.push(crate::session_picker::client_action_view::render_client_body(&model).into());
@@ -372,4 +445,66 @@ fn render_dialog_body(
         element!(FormFields(stacked:width<38,minimum_label_width:Some(label_width),children:rows))
             .into_any(),
     )
+}
+
+#[cfg(test)]
+mod retry_hint_tests {
+    use super::*;
+    use crate::session_picker::{
+        source_reload_progress::{SourceReadProgress, SourceReadState},
+        test_support::picker_request,
+    };
+    use agent_collaboration_tui::actions::{
+        ActionDef, ActionId, Availability, AvailabilityFn, Placement, ScopeId,
+    };
+    use agent_session_inventory::source_inventory_request::{
+        PickerSourceContext, SourceInventoryRejection,
+    };
+
+    fn refresh_registry(keys: &[&str], availability: Availability) -> ActionRegistry {
+        ActionRegistry::new(
+            ScopeId::new("retry-fixture").unwrap(),
+            vec![ActionDef {
+                id: ActionId::new("refresh").unwrap(),
+                title: "Reload fixture".into(),
+                toolbar_label: None,
+                keys: keys.iter().map(|key| key.parse().unwrap()).collect(),
+                availability: AvailabilityFn::new(move || availability.clone()),
+                choice: None,
+                placement: Placement::Hidden,
+                run: Handler::from(|()| {}),
+            }],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn retry_hint_projects_registry_keys_and_requires_an_available_binding() {
+        let mut model = SessionsPickerModel::new(picker_request(), 120);
+        model.source_progress = vec![SourceReadProgress {
+            source_context: PickerSourceContext::DefaultHosted,
+            read_state: SourceReadState::Rejected {
+                reason: SourceInventoryRejection::SourceUnavailable,
+            },
+        }];
+        let available = refresh_registry(&["F8"], Availability::Available);
+        assert_eq!(
+            inventory_retry_hint(&model, &available, true).as_deref(),
+            Some("Retry: F8 Reload fixture")
+        );
+        assert!(inventory_retry_hint(&model, &available, false).is_none());
+        let missing = ActionRegistry::new(ScopeId::new("missing").unwrap(), Vec::new()).unwrap();
+        assert!(inventory_retry_hint(&model, &missing, true).is_none());
+        let disabled = refresh_registry(
+            &["F8"],
+            Availability::Unavailable {
+                reason: "Fixture unavailable".into(),
+            },
+        );
+        assert!(inventory_retry_hint(&model, &disabled, true).is_none());
+        let unbound = refresh_registry(&[], Availability::Available);
+        assert!(inventory_retry_hint(&model, &unbound, true).is_none());
+        model.source_progress.clear();
+        assert!(inventory_retry_hint(&model, &available, true).is_none());
+    }
 }

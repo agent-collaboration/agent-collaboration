@@ -420,9 +420,25 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
         } else {
             events.extend((0..6).map(|_| key(KeyCode::Tab)));
         }
-        events.push(ctrl_key('d'));
-        let canvases=element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize))
-            .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).collect::<Vec<_>>().await;
+        let canvases = if choices_open {
+            render_anchored_picker_canvases(
+                picker_request(),
+                120,
+                36,
+                events,
+                None,
+                agent_collaboration_tui::surface_stack::OverlayKind::Dropdown {
+                    field: agent_collaboration_tui::focus_model::TargetId::new("filter-provider")
+                        .unwrap(),
+                },
+            )
+            .await
+            .0
+        } else {
+            events.push(ctrl_key('d'));
+            element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize))
+                .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).collect::<Vec<_>>().await
+        };
         let canvas = canvases.last().unwrap();
         let text = canvas.to_string();
         // T7 exposes the covered closed field above its open dropdown. Inspect

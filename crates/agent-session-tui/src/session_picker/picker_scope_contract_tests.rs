@@ -1,6 +1,154 @@
 //! S6 consumer obligations, with expectations from R4, R9 and R13.
 use super::*;
 
+#[tokio::test]
+async fn details_copy_status_stays_below_the_scrolling_body() {
+    use agent_collaboration_tui::{hit_regions::HitRegionKind, surface_handle::SurfaceStackHandle};
+
+    for (width, height, failure) in [(76usize, 30usize, false), (48, 24, true), (32, 24, false)] {
+        let mut request = picker_request();
+        request.records[0].conversation.snippets = (0..40)
+            .map(|index| format!("PINNED_BODY {index}"))
+            .collect();
+        let copier: crate::session_picker::session_id_clipboard::SessionClipboardWriter =
+            Arc::new(move |_| {
+                if failure {
+                    Err(std::io::ErrorKind::BrokenPipe.into())
+                } else {
+                    Ok(())
+                }
+            });
+        let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
+        let sink = observed.clone();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        sender.send(key(KeyCode::F(4))).unwrap();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async move {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut component = element!(SessionsPickerComponent(request,width,height,
+            session_clipboard_writer:Some(copier),
+            surface_observer:move |(stack,_)|*sink.lock().unwrap()=Some(stack)));
+        let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let expected = if failure {
+            "Could not copy"
+        } else {
+            "Copy requested"
+        };
+        let mut phase = 0;
+        let mut last = String::new();
+        let journey = async {
+            while let Some(canvas) = frames.next().await {
+                let frame = canvas.to_string();
+                if phase == 0 && frame.contains("Copy session ID") {
+                    for code in [KeyCode::Tab, KeyCode::Tab, KeyCode::Enter] {
+                        sender.send(key(code)).unwrap();
+                    }
+                    phase = 1;
+                } else if phase == 1 && frame.contains(expected) {
+                    let stack = observed.lock().unwrap().as_ref().copied().unwrap();
+                    let map = stack.hit_regions().published().unwrap();
+                    let body_bottom = map
+                        .targets
+                        .iter()
+                        .find(|region| {
+                            region.surface == stack.snapshot().top_id()
+                                && region.kind == HitRegionKind::ScrollArea
+                        })
+                        .unwrap()
+                        .cells
+                        .iter()
+                        .map(|(_, row)| usize::from(*row))
+                        .max()
+                        .unwrap();
+                    let status_row = frame
+                        .lines()
+                        .position(|line| line.contains(expected))
+                        .unwrap();
+                    assert!(
+                        status_row > body_bottom,
+                        "action feedback must be outside the scrolling body: {frame}"
+                    );
+                    assert_eq!(
+                        frame.matches(expected).count(),
+                        1,
+                        "one current status: {frame}"
+                    );
+                    sender.send(key(KeyCode::End)).unwrap();
+                    phase = 2;
+                } else if phase == 2 && frame.contains("PINNED_BODY 39") {
+                    assert!(
+                        frame.contains(expected),
+                        "scrolling must retain status: {frame}"
+                    );
+                    sender.send(ctrl_key('d')).unwrap();
+                    phase = 3;
+                }
+                last = frame;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(2), journey)
+            .await
+            .unwrap_or_else(|_| panic!("copy status {width}x{height},phase{phase}: {last}"));
+        assert_eq!(phase, 3);
+    }
+}
+
+#[tokio::test]
+async fn unreachable_source_hint_requires_a_live_record_loader() {
+    use agent_collaboration_tui::surface_handle::SurfaceStackHandle;
+    use agent_session_inventory::source_inventory_request::{
+        PickerSourceContext, SourceInventoryRejection, SourceInventoryResult,
+    };
+    use std::sync::atomic::AtomicBool;
+
+    for has_loader in [true, false] {
+        let loader: SessionsPickerRecordLoader = Arc::new(|request| {
+            Box::pin(async move {
+                SourceInventoryResult::Rejected {
+                    request,
+                    reason: SourceInventoryRejection::SourceUnavailable,
+                }
+            })
+        });
+        let record_loader = has_loader.then_some(loader);
+        let configured = Arc::new(AtomicBool::new(false));
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut ui = element!(SessionsPickerComponent(request:picker_request(),record_loader,width:120usize,height:36usize,
+        surface_observer:move |(_,mut model):(SurfaceStackHandle,State<SessionsPickerModel>)| {
+            if configured.swap(true,Ordering::SeqCst) || has_loader {return;}
+            model.write().source_progress=vec![crate::session_picker::source_reload_progress::SourceReadProgress {
+                source_context:PickerSourceContext::DefaultHosted,
+                read_state:crate::session_picker::source_reload_progress::SourceReadState::Rejected {reason:SourceInventoryRejection::SourceUnavailable},
+            }];
+        }));
+        let frames = ui.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let mut captured = None;
+        let journey = async {
+            while let Some(canvas) = frames.next().await {
+                let text = canvas.to_string();
+                if captured.is_none() && text.contains("not reachable") {
+                    captured = Some(text);
+                    sender.send(ctrl_key('d')).unwrap();
+                }
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(2), journey)
+            .await
+            .expect("the real source failure and command projection must render");
+        let text = captured.expect("the unreachable source notice was reached");
+        assert_eq!(
+            text.contains("Retry: Ctrl+R Refresh"),
+            has_loader,
+            "a retry hint requires a real bound loader: {text}"
+        );
+    }
+}
+
 fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
@@ -38,13 +186,16 @@ async fn toolbar_exposes_menu_new_filter_and_folder_scope() {
 
 #[tokio::test]
 async fn menu_is_a_surface_and_never_lists_itself_or_input_conventions() {
-    let frame = render_picker_capture_at(
+    let (canvases, bounds) = render_anchored_picker_canvases(
         picker_request(),
         120,
         36,
-        vec![key(KeyCode::F(10)), ctrl_key('d')],
+        vec![key(KeyCode::F(10))],
+        None,
+        agent_collaboration_tui::surface_stack::OverlayKind::Menu,
     )
     .await;
+    let frame = dialog_text(&canvases.last().unwrap().to_string(), bounds);
     for label in [
         "New session",
         "Details",
@@ -73,23 +224,18 @@ async fn menu_is_a_surface_and_never_lists_itself_or_input_conventions() {
 #[tokio::test]
 async fn new_dialog_down_moves_to_machine_instead_of_starting() {
     let mut outcome: Option<SessionsPickerOutcome> = None;
-    let mut component = element!(SessionsPickerComponent(
-        request: picker_request(), width: 120usize, height: 36usize,
-        selected_outcome_out: &mut outcome,
-    ));
-    let frames = component
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            [
-                ctrl_key('n'),
-                key(KeyCode::Down),
-                key(KeyCode::Enter),
-                ctrl_key('d'),
-            ],
-        )))
-        .map(|canvas| canvas.to_string())
-        .collect::<Vec<_>>()
-        .await;
-    drop(component);
+    let (canvases, _) = render_anchored_picker_canvases(
+        picker_request(),
+        120,
+        36,
+        vec![ctrl_key('n'), key(KeyCode::Down), key(KeyCode::Enter)],
+        Some(&mut outcome),
+        agent_collaboration_tui::surface_stack::OverlayKind::Dropdown {
+            field: agent_collaboration_tui::focus_model::TargetId::new("new-machine").unwrap(),
+        },
+    )
+    .await;
+    let frames = canvases.iter().map(ToString::to_string).collect::<Vec<_>>();
     assert!(
         outcome.is_none(),
         "Down then Enter must open Machine, never Start: {outcome:?}"

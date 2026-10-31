@@ -55,15 +55,19 @@ fn render_picker(
     };
     #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
     {
-        component.props.dispatch_receipt = support.dispatch_receipt;
+        component.props.dispatch_receipt = support.dispatch_receipt.clone();
     }
-    runtime.block_on(
-        component
-            .render_loop()
-            .enable_bracketed_paste()
-            .fullscreen()
-            .ignore_ctrl_c(),
-    )?;
+    let render_loop = component
+        .render_loop()
+        .enable_bracketed_paste()
+        .fullscreen()
+        .ignore_ctrl_c();
+    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+    let render_loop = match support.dispatch_receipt {
+        Some(sink) => render_loop.stdout(sink.frame_writer(io::stdout())?),
+        None => render_loop,
+    };
+    runtime.block_on(render_loop)?;
     drop(component);
     Ok(selected_outcome)
 }

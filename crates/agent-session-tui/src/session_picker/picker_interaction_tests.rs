@@ -15,6 +15,10 @@ async fn narrow_provider_details_keep_the_complete_inspection_notice() {
 }
 
 async fn assert_provider_details_notice(width: usize, height: usize) {
+    use agent_collaboration_tui::{
+        focus_model::TargetId, hit_regions::HitRegionKind, surface_handle::SurfaceStackHandle,
+    };
+
     let summary: collaboration_client::protocol::ProviderSessionSummary =
         serde_json::from_value(serde_json::json!({
             "origin":"hostedProvider",
@@ -30,12 +34,15 @@ async fn assert_provider_details_notice(width: usize, height: usize) {
         "Claude fixture",
     )];
     let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
+    let observed_stack = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
+    let observer_sink = observed_stack.clone();
     {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         let events = futures_util::stream::unfold(receiver, |mut receiver| async {
             receiver.recv().await.map(|event| (event, receiver))
         });
-        let mut ui = element!(SessionsPickerComponent(request,width,height,selected_outcome_out:&mut selected_outcome));
+        let mut ui = element!(SessionsPickerComponent(request,width,height,selected_outcome_out:&mut selected_outcome,
+            surface_observer:move |(stack,_)|*observer_sink.lock().unwrap()=Some(stack)));
         let frames = ui.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
         let mut phase = 0;
@@ -55,7 +62,47 @@ async fn assert_provider_details_notice(width: usize, height: usize) {
                     && frame.contains("Session details")
                     && frame.contains("Client actions have not")
                 {
-                    let body = dialog_text(&frame, dialog_bounds(&frame, "Session details"));
+                    let bounds = dialog_bounds(&frame, "Session details");
+                    let stack = observed_stack.lock().unwrap().as_ref().cloned().unwrap();
+                    let hit_map = stack.hit_regions().published().unwrap();
+                    let scroll_area = hit_map
+                        .targets
+                        .iter()
+                        .find(|region| {
+                            region.surface == stack.snapshot().top_id()
+                                && region.target == TargetId::new("dialog-scroll").unwrap()
+                                && region.kind == HitRegionKind::ScrollArea
+                        })
+                        .expect("the active Details ScrollList publishes its drawn cells");
+                    let gutter_column = scroll_area
+                        .cells
+                        .iter()
+                        .map(|(column, _)| usize::from(*column))
+                        .max()
+                        .expect("the drawn Details ScrollList has a rightmost column");
+                    if width <= 48 {
+                        let gutter = scroll_area
+                            .cells
+                            .iter()
+                            .filter(|(column, _)| usize::from(*column) == gutter_column)
+                            .filter_map(|(column, row)| {
+                                canvas
+                                    .cell(usize::from(*column), usize::from(*row))
+                                    .and_then(|cell| cell.text())
+                            })
+                            .collect::<String>();
+                        assert!(
+                            gutter.contains('█'),
+                            "the first overflowing Details frame must paint its gutter thumb: {frame}"
+                        );
+                    }
+                    let body = dialog_text(
+                        &frame,
+                        DialogBounds {
+                            right: gutter_column,
+                            ..bounds
+                        },
+                    );
                     let text = body
                         .chars()
                         .filter(|character| {
@@ -166,24 +213,21 @@ async fn sessions_picker_control_shift_enter_forks_the_focused_existing_session(
 
 #[tokio::test]
 async fn sessions_picker_iocraft_mock_terminal_ctrl_shortcuts_drive_filters() {
-    let actual = element! {
-        SessionsPickerComponent(
-            request: picker_request(),
-            width: 100usize,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
+    let (canvases, _) = render_anchored_picker_canvases(
+        picker_request(),
+        100,
+        MIN_RENDER_HEIGHT,
         vec![
             ctrl_key('s'),
             ctrl_key('t'),
             ctrl_key('o'),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(10))),
-            ctrl_key('d'),
         ],
-    )))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
+        None,
+        agent_collaboration_tui::surface_stack::OverlayKind::Menu,
+    )
     .await;
+    let actual = canvases.iter().map(ToString::to_string).collect::<Vec<_>>();
 
     // R13: the same changed values are checked in Menu instead of an idle status row.
     assert!(

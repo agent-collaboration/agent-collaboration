@@ -13,7 +13,6 @@ use agent_collaboration_tui::{
     },
     focus_model::{GroupId, TargetInputHandler, TargetSpec, TargetVisibility},
     surface_handle::SurfaceContext,
-    surface_stack::OverlayLayout,
 };
 use agent_session_inventory::sessions::{SessionPickerIdentity, SessionsSort};
 use iocraft::prelude::*;
@@ -147,18 +146,10 @@ pub fn build_screen(
     help_state.set(Some(help.clone()));
     let mut actions = Vec::new();
     let menu_context = context.clone();
+    let menu_anchor = TargetId::for_action(&ActionId::new("menu")?);
     let menu = action("menu", "Menu", &["F10"], Placement::Hidden, move |()| {
         if let Some(screen) = stack.snapshot().surface(SurfaceId::Screen) {
-            match menu_overlay(
-                stack,
-                &screen.actions,
-                OverlayLayout::AtCells {
-                    left: 1,
-                    top: 1,
-                    width: 64,
-                    height: 28,
-                },
-            ) {
+            match menu_overlay(stack, &screen.actions, menu_anchor.clone()) {
                 Ok(spec) => {
                     if let Err(error) = stack.open_overlay(spec) {
                         menu_context.report(error);

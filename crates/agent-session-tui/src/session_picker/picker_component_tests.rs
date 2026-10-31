@@ -385,6 +385,99 @@ struct DialogBounds {
     bottom: usize,
 }
 
+async fn render_anchored_picker_canvases(
+    request: SessionsPickerRequest,
+    width: usize,
+    height: usize,
+    events_before_quit: Vec<TerminalEvent>,
+    outcome: Option<&mut Option<SessionsPickerOutcome>>,
+    expected_kind: agent_collaboration_tui::surface_stack::OverlayKind,
+) -> (Vec<iocraft::Canvas>, DialogBounds) {
+    use agent_collaboration_tui::{
+        hit_regions::HitRegionKind,
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{OverlayLayout, SurfaceId},
+    };
+
+    let expected_inputs = events_before_quit.len();
+    let processed = Arc::new(AtomicUsize::new(0));
+    let processed_sink = processed.clone();
+    let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
+    let sink = observed.clone();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    for event in events_before_quit {
+        sender.send(event).unwrap();
+    }
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async move {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(SessionsPickerComponent(request,width,height,
+        selected_outcome_out:outcome,
+        surface_observer:move |(stack,_)|*sink.lock().unwrap()=Some(stack),
+        input_observer:move |()| {processed_sink.fetch_add(1,Ordering::SeqCst);}));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut captured = Vec::new();
+    let mut popup_bounds = None;
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            if popup_bounds.is_none() && processed.load(Ordering::SeqCst) >= expected_inputs {
+                let stack = observed.lock().unwrap().as_ref().copied().unwrap();
+                let snapshot = stack.snapshot();
+                if let Some(overlay) = snapshot.overlays().last()
+                    && overlay.kind == expected_kind
+                    && let OverlayLayout::Anchored { target, .. } = &overlay.layout
+                    && let Some(map) = stack.hit_regions().published()
+                    && map.targets.iter().any(|region| {
+                        region.surface == overlay.parent
+                            && region.target == *target
+                            && region.kind == HitRegionKind::Target
+                            && !region.cells.is_empty()
+                    })
+                    && let Some(region) = map.surfaces.iter().find(|region| {
+                        region.surface == SurfaceId::Overlay(overlay.id) && !region.cells.is_empty()
+                    })
+                {
+                    // Both geometries come from the published draw after the open
+                    // acknowledgement. No frame count or timing wait stands in for it.
+                    popup_bounds = Some(DialogBounds {
+                        top: region
+                            .cells
+                            .iter()
+                            .map(|(_, row)| usize::from(*row))
+                            .min()
+                            .unwrap(),
+                        bottom: region
+                            .cells
+                            .iter()
+                            .map(|(_, row)| usize::from(*row))
+                            .max()
+                            .unwrap(),
+                        left: region
+                            .cells
+                            .iter()
+                            .map(|(column, _)| usize::from(*column))
+                            .min()
+                            .unwrap(),
+                        right: region
+                            .cells
+                            .iter()
+                            .map(|(column, _)| usize::from(*column))
+                            .max()
+                            .unwrap(),
+                    });
+                    sender.send(ctrl_key('d')).unwrap();
+                }
+            }
+            captured.push(canvas);
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(2), journey)
+        .await
+        .expect("the open input must publish its anchor and active popup before quitting");
+    (captured, popup_bounds.expect("published anchored popup"))
+}
+
 fn dialog_bounds(frame: &str, title: &str) -> DialogBounds {
     let lines = frame.lines().collect::<Vec<_>>();
     let title_row = lines
