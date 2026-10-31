@@ -6,6 +6,9 @@ pub mod backend;
 #[cfg(test)]
 mod central_credential_tests;
 pub mod central_credentials;
+pub mod classified_store_open;
+#[cfg(test)]
+mod classified_store_open_tests;
 pub mod credential_bundle;
 pub mod credential_key;
 pub mod credential_migration;
