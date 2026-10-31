@@ -1,0 +1,8 @@
+diff --git a/crates/agent-collaboration-tui/src/controls/help_dialog.rs b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+--- a/crates/agent-collaboration-tui/src/controls/help_dialog.rs
++++ b/crates/agent-collaboration-tui/src/controls/help_dialog.rs
+@@ -34,3 +34,3 @@ fn HelpTextValue(props: &HelpTextValueProps, mut hooks: Hooks) -> impl Into<AnyE
+             #(line.split_inclusive(char::is_whitespace).map(|token| {
+-                let wrap=if token.trim_end().width()>usize::from(width.get()) {TextWrap::Wrap}else{TextWrap::NoWrap};
++                let wrap=TextWrap::NoWrap;
+                 element!(View(max_width:100pct,flex_shrink:0.0_f32) {Text(content:token.to_owned(),wrap,color:props.color)})

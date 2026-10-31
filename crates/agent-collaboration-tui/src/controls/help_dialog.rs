@@ -7,8 +7,37 @@ use crate::{
     surface_handle::SurfaceContext,
     theme::TextRole,
 };
-use iocraft::prelude::*;
+use iocraft::{ComponentDrawer, Hook, prelude::*};
 use unicode_width::UnicodeWidthStr;
+
+struct HelpTextMeasure(State<u16>);
+impl Hook for HelpTextMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        if self.0.get() != drawer.size().width {
+            self.0.set(drawer.size().width);
+        }
+    }
+}
+#[derive(Props)]
+struct HelpTextValueProps {
+    content: String,
+    color: Option<Color>,
+}
+/// Native flex lines keep whitespace-delimited values intact; only a token
+/// longer than the whole line uses Text's native hard wrapping.
+#[component]
+fn HelpTextValue(props: &HelpTextValueProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let width = hooks.use_state(|| 0u16);
+    hooks.use_hook(|| HelpTextMeasure(width)).0 = width;
+    element!(View(max_width:100pct,min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column) {
+        #(props.content.split('\n').map(|line|element!(View(max_width:100pct,min_height:1,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
+            #(line.split_inclusive(char::is_whitespace).map(|token| {
+                let wrap=if token.trim_end().width()>usize::from(width.get()) {TextWrap::Wrap}else{TextWrap::NoWrap};
+                element!(View(max_width:100pct,flex_shrink:0.0_f32) {Text(content:token.to_owned(),wrap,color:props.color)})
+            }))
+        }).into_any()))
+    })
+}
 
 #[derive(Props)]
 pub struct HelpDialogProps {
@@ -66,26 +95,28 @@ pub fn HelpDialog(props: &HelpDialogProps, hooks: Hooks) -> impl Into<AnyElement
     .unwrap_or(u32::MAX);
     let context_block=(!content.context.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
         Text(content:"Context",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
-        #(content.context.into_iter().map(|line|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
-            View(width:context_width,flex_shrink:0.0_f32) {Text(content:line.label,color:theme.foreground(TextRole::Muted))}
-            View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32) {Text(content:line.value,color:theme.foreground(TextRole::Text))}
+        #(content.context.into_iter().map(|line|element!(View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
+            View(width:context_width,max_width:100pct,flex_shrink:0.0_f32) {Text(content:line.label,color:theme.foreground(TextRole::Muted))}
+            View(min_width:0,max_width:100pct,flex_grow:1.0_f32,flex_shrink:1.0_f32) {HelpTextValue(content:line.value,color:theme.foreground(TextRole::Text))}
         }).into_any()))
     }).into_any());
     let conventions_block=(!content.conventions.is_empty()).then(||element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
         Text(content:"Input conventions",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
-        #(content.conventions.into_iter().map(|row|element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
-            View(width:convention_width,flex_shrink:0.0_f32) {Text(content:row.key,color:theme.foreground(TextRole::Muted))}
-            View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32) {Text(content:row.description,color:theme.foreground(TextRole::Text))}
+        #(content.conventions.into_iter().map(|row|element!(View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
+            View(width:convention_width,max_width:100pct,flex_shrink:0.0_f32) {Text(content:row.key,color:theme.foreground(TextRole::Muted))}
+            View(min_width:0,max_width:100pct,flex_grow:1.0_f32,flex_shrink:1.0_f32) {HelpTextValue(content:row.description,color:theme.foreground(TextRole::Text))}
         }).into_any()))
     }).into_any());
     element!(HitRegion(target:props.control.body_target(),kind:HitRegionKind::Target) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:1) {
         #(context_block)
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
         Text(content:"Actions",color:theme.foreground(TextRole::Primary),weight:Weight::Bold)
-        #(entries.into_iter().map(|(action,keys)| {let available=action.availability.is_available();let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};element!(View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {
-            View(width:key_width,flex_shrink:0.0_f32) {Text(content:if keys.is_empty(){"—".to_owned()}else{keys},color:theme.foreground(TextRole::Muted))}
-            Text(content:action.title,color:theme.foreground(if available {TextRole::Text}else{TextRole::Disabled}))
-            #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
+        #(entries.into_iter().map(|(action,keys)| {let available=action.availability.is_available();let reason=match action.availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(reason)};element!(View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
+            View(width:key_width,max_width:100pct,flex_shrink:0.0_f32) {Text(content:if keys.is_empty(){"—".to_owned()}else{keys},color:theme.foreground(TextRole::Muted))}
+            View(min_width:0,max_width:100pct,flex_grow:1.0_f32,flex_shrink:1.0_f32,flex_wrap:FlexWrap::Wrap,column_gap:2) {
+                Text(content:action.title,color:theme.foreground(if available {TextRole::Text}else{TextRole::Disabled}))
+                #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
+            }
         }).into_any()}))
         }
         #(conventions_block)

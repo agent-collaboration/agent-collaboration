@@ -119,3 +119,7 @@ mod filter_switch_layout;
 #[cfg(test)]
 #[path = "suites/responsive_fields.rs"]
 mod responsive_fields;
+
+#[cfg(test)]
+#[path = "suites/help_narrow_layout.rs"]
+mod help_narrow_layout;
