@@ -87,7 +87,12 @@ fn installation_id_wire_contract() {
 fn absolute_path_wire_contract() {
     contract_artifacts::assert_contract::<AbsolutePath>(
         "AbsolutePath",
-        vec![json!("/"), json!("/work/item-two")],
+        vec![
+            json!("/"),
+            json!("/work/item-two"),
+            json!(format!("/{}", "a".repeat(4095))),
+            json!(format!("/{}a", "é".repeat(2047))),
+        ],
         false,
     );
 }
@@ -96,7 +101,11 @@ fn absolute_path_wire_contract() {
 fn repository_locator_wire_contract() {
     contract_artifacts::assert_contract::<RepositoryLocator>(
         "RepositoryLocator",
-        vec![json!("https://example.invalid/repository.git")],
+        vec![
+            json!("https://example.invalid/repository.git"),
+            json!("r".repeat(2048)),
+            json!("é".repeat(1024)),
+        ],
         false,
     );
 }
@@ -117,7 +126,11 @@ fn commit_id_wire_contract() {
 fn model_name_wire_contract() {
     contract_artifacts::assert_contract::<ModelName>(
         "ModelName",
-        vec![json!("configured-model")],
+        vec![
+            json!("configured-model"),
+            json!("m".repeat(256)),
+            json!("é".repeat(128)),
+        ],
         false,
     );
 }

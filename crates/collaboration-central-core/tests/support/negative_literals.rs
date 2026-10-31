@@ -79,5 +79,42 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         }
         _ => {}
     }
+    invalid.extend(composed_byte_overflows(name, literals));
     invalid
+}
+
+// These inputs exceed the byte bound while staying below JSON Schema's character
+// bound. Each owning contract must reject them through its registered keyword.
+fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
+    let fields: &[(&str, usize)] = match name {
+        "DecideDeviceLogin" | "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
+        "CreateWorkspace" | "ProjectRef" | "WorkspaceRef" => &[("/name", 256)],
+        "IdentityLookup" | "RemoveSession" | "SessionRow" => &[("/session/sessionId", 4096)],
+        "MachineRow" => &[("/label", 256), ("/sessions/0/session/sessionId", 4096)],
+        "WhoIsLoggedInResult" => &[
+            ("/machines/0/label", 256),
+            ("/machines/0/sessions/0/session/sessionId", 4096),
+        ],
+        "IdentityLookupResult" => &[("/launchContext/workingDirectory", 4096)],
+        "WorkspaceLookupResult" => &[("/workspace/name", 256), ("/allowedMachines/0/label", 256)],
+        _ => &[],
+    };
+    fields
+        .iter()
+        .map(|(pointer, maximum_bytes)| {
+            let mut invalid = literals
+                .iter()
+                .find(|literal| literal.pointer(pointer).is_some())
+                .unwrap_or_else(|| panic!("{name} has no literal with {pointer}"))
+                .clone();
+            let overflow = if *pointer == "/launchContext/workingDirectory" {
+                format!("/{}", "é".repeat(maximum_bytes / 2))
+            } else {
+                format!("{}a", "é".repeat(maximum_bytes / 2))
+            };
+            assert_eq!(overflow.len(), maximum_bytes + 1);
+            *invalid.pointer_mut(pointer).unwrap() = json!(overflow);
+            invalid
+        })
+        .collect()
 }

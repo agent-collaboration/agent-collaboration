@@ -83,7 +83,11 @@ fn both_domains_reject_invalid_identity_boundaries_without_normalizing() {
 
 proptest! {
     #[test]
-    fn service_identity_acceptance_agrees(input in any::<String>()) {
+    fn service_identity_acceptance_agrees(input in prop_oneof![
+        any::<String>(),
+        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+    ]) {
         prop_assert_eq!(UuidIdentity::try_from(input.clone()).is_ok(), message_board::ServiceId::try_from(input).is_ok());
     }
 
