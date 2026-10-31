@@ -1,0 +1,120 @@
+{
+  "mainBaseline": "072f4d6c1a012c609bf7c9f0b075f135b4a723a4",
+  "sourceExport": "361b7e25374ed5554c443fadfb888da5f44a778f",
+  "selectedFiles": [
+    "docs/specs/2026-10-04-board-orchestration-design/program-design-1-board.md",
+    "docs/specs/2026-10-04-board-orchestration-design/program-design-2-project-storage.md",
+    "docs/specs/2026-10-04-board-orchestration-design/program-design-3-central-fleet.md",
+    "docs/specs/2026-10-04-board-orchestration-design/program-design-4-messaging.md",
+    "docs/specs/2026-10-04-board-orchestration-design/publication-inventory.md",
+    "docs/specs/2026-10-04-board-orchestration-design/publication-manifest.json",
+    "docs/specs/2026-10-04-board-orchestration-design/requirements.md",
+    "docs/specs/2026-10-04-board-orchestration-design/spec-1-board-and-contracts.md",
+    "docs/specs/2026-10-04-board-orchestration-design/spec-2-project-storage.md",
+    "docs/specs/2026-10-04-board-orchestration-design/spec-3-central-fleet.md",
+    "docs/specs/2026-10-04-board-orchestration-design/verification-design.md",
+    "docs/specs/2026-10-16-central-one-core/explainer/requirements-full.html",
+    "docs/specs/2026-10-16-central-one-core/explainer/requirements-full.source.html",
+    "docs/specs/2026-10-16-central-one-core/program-design.md"
+  ],
+  "protectedDocs": {
+    "docs/specs/2026-10-17-tui-component-system/design.html": "7f7cd8b664254416b68daf2b6763d7b142c5656d",
+    "docs/specs/2026-10-17-tui-component-system/program-design.md": "1718db3c676eea2114612dce7285690d64183d77",
+    "docs/specs/2026-10-17-tui-component-system/requirements.md": "53dc669445e22eae828ad80b9b18484f4b751a39",
+    "docs/specs/2026-10-17-tui-component-system/specification.md": "428d58cdb45744ff51ee2c453984ef0be154bbf9",
+    "docs/specs/2026-10-17-tui-component-system/verification-design.md": "ee4f799f9bca88d3a9ab8bbc834b0d7e55c61944",
+    "docs/specs/2026-10-23-quota-dialog-visuals/index.md": "bfb51daa15a50eb45ab2693c7722444b138141db",
+    "docs/specs/2026-10-23-quota-dialog-visuals/program-design.md": "a16fdaed36d088cb3ef09f3c77f9a53786c5251f",
+    "docs/specs/2026-10-23-quota-dialog-visuals/requirements.md": "42f351d375d6d93256089a9d8036ac8ba92306a9",
+    "docs/specs/2026-10-23-quota-dialog-visuals/specification.md": "0e2658fdc4ab4156a47959c66d41a9168415d14e",
+    "docs/specs/2026-10-23-quota-dialog-visuals/verification-design.md": "407776014c31e9bc59a918b6fa897bae36218023",
+    "docs/specs/2026-10-26-rust-crate-dag/baseline-reconciliation.md": "8a45b0b91612920e663d43febf134efd79212c83",
+    "docs/specs/2026-10-26-rust-crate-dag/module-placement.md": "d12c710d43eaf21d3f39a7a31f9f572c76456831",
+    "docs/specs/2026-10-26-rust-crate-dag/pr2-cli-and-picker-split.md": "de0b492120abf40cd9ef7273b41dd97e1da9e9a3",
+    "docs/specs/2026-10-26-rust-crate-dag/program-design.md": "07d299d19b48a2e52f869417b5059063ab6f3301"
+  },
+  "baselineDocsTree": "32a11f266ee468afbb3dd3181d59c822d0de7e68",
+  "preservationRule": "Every baseline docs blob outside selectedFiles must exist unchanged; reconstruct from mainBaseline. The explicit newer-doc subset is listed below.",
+  "stackBaseline": "266db4cb062a1affafd7931fa8795d2b37993bda",
+  "selectedChanges": [
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/program-design-1-board.md",
+      "beforeMain": "f23a1f7785c7fca838faddaf418cc56564d1863c",
+      "beforeStack": "f23a1f7785c7fca838faddaf418cc56564d1863c",
+      "after": "ec7c68fe6ffed4de9eaec53541999de528c5a679"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/program-design-2-project-storage.md",
+      "beforeMain": "2091fb533a847e696d2098ab4022a8f7ec2f9d59",
+      "beforeStack": "2091fb533a847e696d2098ab4022a8f7ec2f9d59",
+      "after": "b8d49e779ca043cf805d1f181a1100d0533ba4ff"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/program-design-3-central-fleet.md",
+      "beforeMain": "f6f700665d783e5f8b6c18e42ad7efff1b6e6293",
+      "beforeStack": "f6f700665d783e5f8b6c18e42ad7efff1b6e6293",
+      "after": "adaf377491f8968c721cbdfe8073cdbf6a1d3902"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/program-design-4-messaging.md",
+      "beforeMain": "10b8cfdf42a15922063ce69db915ca8bacd145da",
+      "beforeStack": "10b8cfdf42a15922063ce69db915ca8bacd145da",
+      "after": "e5694c459c25ed206a4b725f727f994285b7c5ce"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/publication-inventory.md",
+      "beforeMain": null,
+      "beforeStack": null,
+      "after": "4d3ed7674f367e5dab96b16bc67874678138ca4a"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/requirements.md",
+      "beforeMain": "8695eec4101b91da921a6f2f8140044ff9f7d05a",
+      "beforeStack": "8695eec4101b91da921a6f2f8140044ff9f7d05a",
+      "after": "a59d1978fdb13017e10b44e1bdd5739dea735d3d"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/spec-1-board-and-contracts.md",
+      "beforeMain": "5f95d58ec2e84495d087e850bc7b06ce7fcb5e8c",
+      "beforeStack": "5f95d58ec2e84495d087e850bc7b06ce7fcb5e8c",
+      "after": "97202437890bcb69a3bc090c1ffb3d6e09eb202e"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/spec-2-project-storage.md",
+      "beforeMain": "08819829466412cd6583597d85c52a03221d0b03",
+      "beforeStack": "08819829466412cd6583597d85c52a03221d0b03",
+      "after": "0ede5c29bd33b2d90f9d72d1eb590c615de9f70d"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/spec-3-central-fleet.md",
+      "beforeMain": "afd7a1800a8d44b915a6f96ae3010ce5f8e003d4",
+      "beforeStack": "afd7a1800a8d44b915a6f96ae3010ce5f8e003d4",
+      "after": "99b2758784bbf926618fc32b3da501d89ced7f81"
+    },
+    {
+      "path": "docs/specs/2026-10-04-board-orchestration-design/verification-design.md",
+      "beforeMain": "b97f91648b4f63c7f3d59c01eefbd45bfb11f037",
+      "beforeStack": "b97f91648b4f63c7f3d59c01eefbd45bfb11f037",
+      "after": "00f12ab40ce7f7b1a005140adf987a714ba141e1"
+    },
+    {
+      "path": "docs/specs/2026-10-16-central-one-core/explainer/requirements-full.html",
+      "beforeMain": null,
+      "beforeStack": null,
+      "after": "fc0d3e9f1ca673ab178bb6c427567e02d94e1a09"
+    },
+    {
+      "path": "docs/specs/2026-10-16-central-one-core/explainer/requirements-full.source.html",
+      "beforeMain": null,
+      "beforeStack": null,
+      "after": "22dfb95f0c71eafd4c6d11da9ced51c962983ee1"
+    },
+    {
+      "path": "docs/specs/2026-10-16-central-one-core/program-design.md",
+      "beforeMain": "22c30b3890c8bd7f036be97719bba3a7e551ec44",
+      "beforeStack": "22c30b3890c8bd7f036be97719bba3a7e551ec44",
+      "after": "eaa38fa973f03439c8668b22c6a9d5a8a2cf279f"
+    }
+  ],
+  "selfIntegrity": "This manifest cannot contain its own content hash. Its exact blob and the selected before/after hashes are independently supplied by the enclosing commit tree and private gate evidence."
+}

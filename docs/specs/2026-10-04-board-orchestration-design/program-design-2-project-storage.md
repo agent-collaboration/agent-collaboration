@@ -46,12 +46,10 @@ flowchart LR
   LH["LeaseHolder (agent-fleet-sync)<br/>+ BoardLeasePolicy"] --> SP
   PA --> LH
   INST["InstallCoordinator<br/>(agent-fleet-sync: seed, claim, snapshot)"] --> REG
-  SND -. "rejected tail event" .-> TAIL["board_tail_handler"]
-  TAIL --> PA
+  SND -. "superseded event" .-> REG
   CAP["BoardCaptureBookkeeping<br/>(capture_feed_marks)"] -.-> SND
   ANN["BoardPieceAnnotation<br/>(ProjectSummary)"] -.-> SND
   FC["fleet_client (PD1)"] --> SP
-  GATE["project activity gate"] --> LH
 ```
 
 | Component | Job | Reason to change | Owns |
@@ -60,11 +58,9 @@ flowchart LR
 | `BoardProjectSchema` (board, new) | Implements `ReplicatedSchema`. Its migrations are the §3a replicated tables, its local migrations are the §3a holder-local tables, and `replicated_tables()` names exactly §3a.1 | the schema | the board's migration sets |
 | `BoardCaptureBookkeeping` (board, new) | Implements `CaptureBookkeeping::record`, which the library calls **after** commit (P2-2). Maps each captured transaction to the board feed positions and handoff marks it carried, and maps copy acknowledgements back (details below) | the feed-to-capture mapping | `capture_feed_marks` |
 | `BoardPieceAnnotation` (board, new) | Implements the library's synchronous `PieceAnnotation::annotate(&[CapturedTransaction]) -> Option<BoardAnnotation>` (`sender_contract.rs:37–47`), using **only the rows in the captured transaction it's given** (details below) | the summary shape | nothing durable |
-| `BoardConsumerProtocol` (board, new; lives in `board-sync-protocol`) | Implements agent-fleet-sync's `ConsumerProtocol`. It's in a runtime-neutral crate because central's portable core consumes it too (P2-1, OC-13). Its payload families are forwarded posts (WA-13, FL-14), fleet requests and reads (WA-1), rejected-tail reports (FL-8), board notices (FL-6), and the delivery body, sender, address and acceptance (MS) | the board's wire payloads | the payload types |
+| `BoardConsumerProtocol` (board, new; lives in `board-sync-protocol`) | Implements agent-fleet-sync's `ConsumerProtocol`. It's in a runtime-neutral crate because central's portable core consumes it too (P2-1, OC-13). Its payload families are forwarded posts (WA-13, FL-14), fleet requests and reads (WA-1), board notices (FL-6), and the delivery body, sender, address and acceptance (MS) | the board's wire payloads | the payload types |
 | `ReqwestSessionTransport` (board, new) | Implements `SessionTransport` and `TransportConnection` with reqwest-websocket. It carries the Access service token plus the machine credential on every upgrade (C16, X6) | transport and auth | nothing durable |
 | `BoardLeasePolicy` (board config) | `LeasePolicy` with a 14,400 s lease and 900 s renewal (U38). The registry-side `move_needs_renewal_within = 1800 s` is central's configuration (FL-10, U45) | policy values | — |
-| project activity gate (existing port, `agent-automation`) | The wake and schedule runner asks it before firing a project-scoped occurrence. The Host answers from `ReplicatedDatabase::writer_state`, so expiry pauses wakes and schedules and renewal resumes them (WA-11) | lease semantics | — |
-| `board_tail_handler` (board, modified) | Has two halves, on two machines (P2-4): the old holder keeps its superseded file read-only and reports the tail; the current holder records the facts (details below) | takeover rules | the facts it writes |
 | agent-fleet-sync runtime (used, not owned) | `ReplicationSender`, `SessionPump`, `WriterSessionCalls`, the writer's lease holder, `InstallCoordinator`, `fleet-sync-tokio-runner`'s native store and timers | — | its reserved `_fleet_sync_*` tables |
 
 **`BoardCaptureBookkeeping` in detail.**
@@ -80,28 +76,17 @@ flowchart LR
 - **A transaction with no feed row** (reader-only writes, such as read marks) returns `None`, and central keeps the summary it last applied.
 - **It's correct anywhere:** it's pure, it survives a restart, and it's right for every copy position, because it never reads a previous mark, a cache or the live head (P2-2). Central's directory is fed without reading project tables (FL-1).
 
-**`board_tail_handler` in detail.**
-- **On the old holder:**
-  - The library's rejected-tail event arrives, and its writer refuses every later `begin_write` (`write_transaction.rs:26–44`).
-  - The handler stops and joins that project's runtime and **leaves the superseded file where it is, read-only**. Its records stay readable for the owner (WA-5); the library's `move_aside` is only for rejected registration.
-  - Read-only, it inspects the tail past the cutoff: request IDs and a record digest.
-  - It reports them through `BoardConsumerProtocol` to central (FL-8).
-- **On the current holder:** admission records the takeover and rejected-tail facts naming those request IDs. The voided state is that fact (RC-4). A retry from the old epoch that the current ledger doesn't know follows RC-4's branch (review F2):
-  - before the old epoch's tail is reported, it answers `unresolved{takeover}` and executes nothing;
-  - once the report is recorded, an ID the tail holds answers `voided`, naming the takeover;
-  - an ID the reported tail doesn't hold is admitted fresh.
-  - Admission consults the recorded `RejectedTail` fact before its unknown-old-epoch gate; no second ledger is kept.
-- **If this machine later holds the project again,** it's seeded into a **new** file named by its start epoch (`projects/<project-id>/e<epoch>.sqlite`). The superseded file is never reopened for writing.
+**Takeover (owner-settled, U80).** The existing project registry stops and closes the superseded writer. Its old file stays on disk, read-only, and is never opened for board views or reported. A new holder starts from central's acknowledged copy; central's transfer record is the only takeover record. A request absent from that surviving history is evaluated fresh (spec 1 RC-4). If this machine holds the project again, it seeds a new file for the granted epoch. The prior tail handler, tail reports and derived request outcomes are superseded.
 
 **Crates.**
 
 | Crate | New or changed | Holds |
 |---|---|---|
 | `board-sync-protocol` | **new** (runtime-neutral: native and `wasm32-unknown-unknown`, no Tokio) | `BoardConsumerProtocol` and its payload families, `BoardAnnotation`, and the board-name to wire-name mapping types (spec 3 §4.2). It's consumed by both `board-fleet-sync` and central's portable core. `message-board` stays domain-only, because wire and domain have different reasons to change |
-| `board-fleet-sync` | **new** (native) | `BoardProjectSchema`, `BoardCaptureBookkeeping`, `BoardPieceAnnotation`, `ReqwestSessionTransport`, `BoardLeasePolicy`, `board_tail_handler`. Depends on agent-fleet-sync at its pinned tag, `board-sync-protocol` and `message-board`. Never on `collaboration-service` |
+| `board-fleet-sync` | **new** (native) | `BoardProjectSchema`, `BoardCaptureBookkeeping`, `BoardPieceAnnotation`, `ReqwestSessionTransport`, `BoardLeasePolicy`. Depends on agent-fleet-sync at its pinned tag, `board-sync-protocol` and `message-board`. Never on `collaboration-service` |
 | `message-board-storage` | changed | the §3a typed record SQL (checked queries) over the library's write and read scopes; read views; the importer's import mode |
 | `collaboration-service` | changed | `project_admission`, `project_store_registry`, `fleet_client`; consumes `board-fleet-sync` |
-| `codex-router-host` | changed | composition: builds the agent-fleet-sync runtime and `board-fleet-sync`, hands admission its ports, and implements the activity gate |
+| `codex-router-host` | changed | composition: builds the agent-fleet-sync runtime and `board-fleet-sync`, hands admission its ports |
 | `project-replication`, `collaboration-replication-protocol` | **removed** | superseded by agent-fleet-sync and `BoardConsumerProtocol` |
 | M2's `LocalLeaseAuthority`, raw writer pool and `_replication_*` bookkeeping | **removed** | leases come only from central (OC-3); the writer is the library's |
 
@@ -121,15 +106,15 @@ Edges only point down. `board-fleet-sync` depends on agent-fleet-sync and `messa
 | E10 Actor | caller declares; Router adds provenance (PD1 §3) | `message-board-storage` **modified** | `RecordedActor` (PD1 §3); tables `actors` (C19) and `thread_participation` | API: `RecordedActor`. Store: `actor_id` → `actors` row holding the full provenance, unique on `canonical_identity`. Piece: captured rows. Forwarded: `origin` comes only from central's routing (§3c) | persisted, replicated | board types |
 | E11 Role assignment | `project_admission` (roles rules, PD1) | `message-board-storage` **modified** | PD1 §3 role types; `role_assignments`, `owner_grants`, `stand_down_acknowledgements` | API: `role_*`. Store: append-only rows, ending as a field. Piece: captured rows | persisted, replicated | board types |
 | E12 Move | `project_admission`; `move_rules` | `message-board-storage` **modified** | `MoveRecord` (PD1 §3); `moves` | API: `move/*`. Store: append-only row, accepted or rejected. Piece: captured row | persisted, replicated | board types |
-| E13 Fact | `project_admission` | `message-board-storage` **modified** | `LifecycleFact` and the fact types (PD1 §3); `facts` | API: facts in views. Store: append-only row, including takeover and rejected-tail facts (E22). Piece: captured row | persisted, replicated | board types |
+| E13 Fact | `project_admission` | `message-board-storage` **modified** | `LifecycleFact` and the fact types (PD1 §3); `facts` | API: facts in views. Store: append-only row. Piece: captured row | persisted, replicated | board types |
 | E15 Plan revision | `project_admission` | `message-board-storage` **modified** | PD1 §3; `plan_revisions`, unique on `content_hash` | API: `plan_*`. Store: row. Piece: captured row | persisted, replicated | board types |
 | E17 Read mark (and watches, subscription membership) | `project_admission`, reader state (RC-5) | `message-board-storage` **modified** | PD1 §3; `read_marks`, `thread_watches`, `project_watches`, `subscription_memberships` | API: `read`/`watch`/`subscribe`. Store: rows with no feed position, except a membership change. Piece: captured rows. Delivery progress is never here; it's Router-local (§3a.3) | persisted, replicated | board types |
 | E18 Notify intent | `project_admission`; PD4 for handoffs | `message-board-storage` **modified** | PD1 §3 and PD4; `notify_intents` (unique on `(cause, recipient)`), `mail_handoffs`, `handoff_frontier` | Store: rows. Piece: captured rows. Handoffs and the frontier map to acknowledged positions through `capture_feed_marks` (§3a.2) | persisted, replicated | board types |
 | E19 Feed position | the project store | `message-board-storage` **modified** | `FeedPosition`, `FeedCursor` (PD1 §3); `project_feed`, unique on `(epoch, position)`, dense across epochs | API: `FeedCursor{epoch, position}`. Store: a `project_feed` row with `project_status`, `router_time` and `time_basis`. Piece: captured row. Acknowledgement: replication positions → feed positions through `BoardCaptureBookkeeping` | persisted, replicated; `capture_feed_marks` local | board types |
 | E20 Writer epoch | agent-fleet-sync's registry grants it (central); the writer reports it on the holder through `writer_state`; the board records the line boundary | library (lease); `message-board-storage` **modified** (`epoch_lines`) | `EpochLine{line_id, epoch, inherited_through}` (PD1 §3); `epoch_lines`, unique on `epoch` | Library → board: `LeaseStatus` epoch. Store: the accepting epoch on every envelope and feed row, and the line boundary in board feed positions. Wire: library `Epoch` | persisted, replicated | board types; library `Epoch` |
-| E21 Request | `project_admission`; `request_canonical` | `message-board-storage` **modified** | `RequestLedgerEntry` (PD1 §3); `request_decisions`, keyed by the requester-minted UUIDv7 | API: the caller's `request_id` and the decision. Store: row, insert-once; `voided` is derived from a fact, never written (§6). Piece: captured row. Rejected-tail report: request IDs (E22) | persisted, replicated | board types |
-| E22 Rejected tail | `board_tail_handler` (old holder: the file; current holder: the facts) | `board-fleet-sync` **new** | the superseded file `projects/<project-id>/e<epoch>.sqlite`, read-only in place; `LifecycleFact::{Takeover, RejectedTail}` in `facts` | Old holder → central: `BoardConsumerProtocol::RejectedTailReport{project, epoch, requests, digest}`. Central → current holder: the same report. Store: facts | persisted: the file on the old holder; facts replicated | board types; wire is serde camelCase |
-| E23 Lease (holder view) | agent-fleet-sync's writer (its lease holder is private to the writer) | library, used **existing**: `ReplicatedDatabase::writer_state` (`fleet-sync-writer` `replicated_database.rs:426`) | `fleet_sync_lease::WriterState`; `BoardLeasePolicy{lease_duration: 14_400 s, renew_interval: 900 s}` | Library → admission: `begin_write`'s `WriteRefusal`, mapped per variant, and `WriteTransaction::admitted_epoch()` for the accepting epoch (PD1 §3b). Library → status reads outside a write (views, the activity gate): `WriterState` through the `LeaseAuthority` port. No deadline crosses; the lease clock stays the library's | cached on the holder; authoritative at central | library |
+| E21 Request | `project_admission`; `request_canonical` | `message-board-storage` **modified** | `RequestLedgerEntry` (PD1 §3); `request_decisions`, keyed by the requester-minted UUIDv7 | API: the caller's `request_id` and the decision. Store: row, insert-once. Piece: captured row | persisted, replicated | board types |
+| E22 *(removed, U80)* | — | — | the old holder's file stays on its disk, read-only, never served or reported; central's transfer record is the one record of the takeover | — | — | — |
+| E23 Lease (holder view) | agent-fleet-sync's writer (its lease holder is private to the writer) | library, used **existing**: `ReplicatedDatabase::writer_state` (`fleet-sync-writer` `replicated_database.rs:426`) | `fleet_sync_lease::WriterState`; `BoardLeasePolicy{lease_duration: 14_400 s, renew_interval: 900 s}` | Library → admission: `begin_write`'s `WriteRefusal`, mapped per variant, and `WriteTransaction::admitted_epoch()` for the accepting epoch (PD1 §3b). Library → status reads outside a write (views): `WriterState` through the `LeaseAuthority` port. No deadline crosses; the lease clock stays the library's | cached on the holder; authoritative at central | library |
 | E24 Central copy (holder view) | central (agent-fleet-sync receiver) | library, used **existing** | library acknowledgement positions; `capture_feed_marks` | Central → holder: `Applied{through}` or a typed refusal, mapped to board names (spec 3 §4.2). Holder: acknowledged feed position through `BoardCaptureBookkeeping` | derived on the holder | library |
 | E25 Replication piece | agent-fleet-sync `ReplicationSender` | library, used **existing**; `BoardPieceAnnotation` **new** in `board-fleet-sync`; `BoardAnnotation` **new** in `board-sync-protocol` | `Piece<BoardAnnotation>` | Holder → central: one commit per piece, split into parts only by size (`replication_sender.rs:213–223`). Annotation: `ProjectSummary` or none | transient; held in sender retention until acknowledged | library; annotation serde camelCase |
 | E26 Machine session | agent-fleet-sync `SessionPump` | library, used **existing**; `ReqwestSessionTransport` **new** in `board-fleet-sync` | library session frames; `BoardConsumerProtocol` payload families | Router → central: WebSocket upgrade carrying Access plus the machine credential (C16, FL-12); then library frames with board payloads | the client's session ID locally; the session record at central | library; board payloads serde camelCase |
@@ -273,13 +258,13 @@ sequenceDiagram
 ## 5. State
 
 **A project on its holder.** These states come from `ReplicatedDatabase::writer_state` (`WriterState`):
-- `Provisional` (created offline; writes allowed until registration decides, WA-10);
+- `Provisional` (a new project while central's registration completes; no writes are admitted, WA-10);
 - `Seeding{epoch}` (granted, building the store from the copy; not open for admission, §3b);
 - `Writing{epoch}` (writes allowed);
-- `Paused{epoch, expired_at}` (writes refused `leaseExpired`, and wakes and schedules paused through the activity gate; reads continue; renewal on the same epoch resumes them);
+- `Paused{epoch, expired_at}` (writes refused `leaseExpired`; reads continue; renewal on the same epoch resumes writes; wakes and schedules aren't affected, U38);
 - `Draining{epoch, transfer}` (a move is releasing; writes refused `transferInProgress`);
 - `Released{epoch, final_position}` (after a completed move; writes refused `notWriter`);
-- `Superseded{current}` (writes refused `notWriter{current}`; the board tail handler runs).
+- `Superseded{current}` (writes refused `notWriter{current}`; the registry stops and closes the writer, §2).
 
 The library owns transitions; the board observes them.
 
@@ -291,12 +276,12 @@ The library owns transitions; the board observes them.
 **Cursor validity across epochs** (spec 1 E17, E19, RC-5; A2 finding). A cursor, read mark or anchor `(epoch, position)` names the record that `epoch` assigned at `position`:
 - **Valid:** position 0 (the start of the feed, valid under any epoch), or a `project_feed` row at `position` whose assigning epoch is `epoch`. An accepted prefix keeps its rows' assigning epochs across later epoch lines, so cursors into it stay usable. Validity is never "the cursor's epoch is the current epoch".
 - **Invalid:** a cursor whose epoch has no later epoch line and no row at its position, such as a future position, one past the head, or an unknown epoch. It's answered `cursorInvalid`, never superseded, because there's no authoritative boundary to resume from, and none is invented.
-- **Superseded:** a cursor whose epoch is an older line with a later inherited boundary, whose row at that position no longer carries its epoch. It fell in a voided suffix, so the record now at that number isn't the one it named. The answer is `cursorSuperseded`, naming where to resume:
+- **Superseded:** a cursor whose epoch is an older line with a later inherited boundary, whose row at that position no longer carries its epoch. It fell in a suffix a forced takeover discarded, so the record now at that number isn't the one it named. The answer is `cursorSuperseded`, naming where to resume:
   - the position: the boundary where the cursor epoch's accepted prefix ends, the `inherited_through` of the first later epoch line;
   - the epoch: the assigning epoch of the row actually at that position, or the start-of-feed cursor when the boundary is 0.
 - **Every cursor a producer emits** names a real row's own `(epoch, position)`: the high-water mark, covered-through marks, watch starts and anchors. The high-water mark is the last feed row's assigning epoch, not the current writer epoch. Right after a takeover, before the new epoch writes a feed row, it names an inherited row from an earlier epoch. The current writer's authority is a separate fact, and a valid lease accepts covered cursors from older-prefix epochs.
 - **Read marks** (E17, VW-6):
-  - A stored mark that's now in a voided suffix is first normalized to its resume cursor, before unread counting or any comparison.
+  - A stored mark that's now in a discarded suffix is first normalized to its resume cursor, before unread counting or any comparison.
   - A read then advances the mark to the greater valid covered position on the accepted line, keeping that row's epoch. A read over an older prefix never moves a later valid mark back.
   - A read that covers no new feed position changes nothing beyond that normalization.
   - A filtered read advances through every position it scanned, including filtered-out ones (WT-4), even when it returns nothing.
@@ -307,14 +292,19 @@ The library owns transitions; the board observes them.
 **Feed and time.** `project_feed` is dense along the accepted line, and each epoch continues from its `epoch_lines` boundary. `router_time` is set for every live record, and imported records carry `legacy_unknown` (§3d). Views order by feed position, and a time filter never matches an unknown-time record (spec 1 RC-9).
 
 ## 6. Failure, recovery and concurrency
-- **Creating a project (WA-10):**
-  - The creating machine opens the database with provisional writes enabled. Registration goes through central's lifecycle gate (directory acceptance).
-  - `databaseRejected` maps to `projectRejected`. The library persists the rejection before the board sees it and refuses every later write, so the board writes nothing. It moves the database aside through the library. Every request the file had accepted then reads as `voided`, naming the rejected creation and central's reason. That's derived from the retained file's ledger plus the library's persisted `DatabaseRejected` reason, which the read-only retained opener returns (agent-fleet-sync W-C16), and it holds after a restart. Nothing is deleted or rewritten, and the board keeps no second copy of the outcome (A3c finding).
+- **Creating a project (WA-10; central-first, U80).**
+  - Creation is a fleet request first. `fleet_client` sends the directory request to central, and the project doesn't exist until central accepts it. While central can't be reached, the request waits in the fleet outbox as `Pending`, and no project store is created.
+  - **After central accepts,** the Host's per-project writer runtime creates the database with the library's provisional holder and `WriterOptions { allow_provisional_writes: false }`, so the library admits no write before registration completes. It then starts registration through central's lifecycle gate:
+    - through a narrow `ProjectRegistration` port, implemented by the Host's per-project writer runtime, which owns `NativeWriterRuntime`: `start(project) → Pending | Outcome(WriterRegistrationOutcome)`, called by `fleet_client` when the directory request settles Accepted;
+    - on startup, `fleet_client` calls it again for every accepted directory request whose project has no terminal registration outcome yet. That includes the library's typed `Pending` outcome for an existing registration record, not only a missing record (Advisor). The library's `register` is idempotent per database, so a crash can't strand a project;
+    - the registry stays database-only, and nothing owns a second runtime.
+  - **Once registration completes,** admission writes `ProjectCreated` and the initial `ProjectState` in the project's first transaction (PD1). A retry of the creating request returns its recorded decision.
+  - **If central refuses** the directory request or the registration, the caller gets `projectRejected` with central's reason. The library persists a registration refusal and refuses every write, and the board moves the empty database aside through the library. Nothing the board wrote exists, so there's nothing to void (U80).
 - **A move (WA-4):**
   - The library drives release, waiting for the copy, then fence and grant.
   - Admission stops at release.
   - A refusal for a migration the holder hasn't applied names the migration and the state the holder reports (SO52).
-- **A takeover (WA-5):** the library supersedes the epoch and refuses the old holder's later pieces and writes. `board_tail_handler` on the old holder stops the runtime, keeps the file read-only in place and reports the tail. The voided records in that file keep their original `project_feed` rows, `origin` included (PD1 §3); the report itself still carries only its epoch, request IDs and digest. The current holder records the takeover and rejected-tail facts (FL-8, RC-4).
+- **A takeover (WA-5):** the library refuses the superseded writer's later pieces and writes. The registry stops and closes it, retaining the old file unread on disk. The new holder starts from central's copy; central's transfer record is the one record. Nothing unsent at the cutoff is carried over or reported (U80).
 - **Interruptions.** Every library operation resumes from durable state under its original identity. A lost answer is re-sent, and the copy answers `AlreadyApplied` (X7's control). The board never treats `AnswerLost` as "no effect".
 - **Concurrency:**
   - One writer per database, through the library's write transaction.
@@ -330,7 +320,7 @@ The library owns transitions; the board observes them.
   - Forwarded-post origin comes only from central's routing.
 - **Exact values:** the library's exact SQL transport keeps INTEGER, REAL, TEXT, BLOB and NULL distinct (OC-10).
 - **No `unsafe`,** and each repository has its own lint table (OC-14, OC-15).
-- **Observability:** replication status per project (provisional, replicated or voided) is visible in views (WA-3), and the copy's state comes from the welcome and the operations view (PD3).
+- **Observability:** replication status per project (provisional or replicated) is visible in views (WA-3), and the copy's state comes from the welcome and the operations view (PD3).
 
 ## 8. Proof seams
 
@@ -354,21 +344,20 @@ Board failure names are spec 1's. Proof names are the specs' V rows; the seams a
 | U | R | E | Owner | Interface | Shape and home | State | Failure | Proof |
 |---|---|---|---|---|---|---|---|---|
 | U16, U21, U23 | WA-2 | E20, E3 | library writer fencing; `project_store_registry`; `project_admission` | `ReplicatedDatabase::begin_write` and its `WriteRefusal` (PD1 §3b) | the library's write transaction over §3a; one database per project (§3) | writer state (§5) | `notWriter{current}`, `leaseExpired` | V3: a real write on a non-holder |
-| U21, U33 | WA-3 | E19, E20, E24 | `project_admission` (the epoch on every record); `BoardCaptureBookkeeping` (replicated or provisional) | `CaptureBookkeeping::record`; `ProjectReplication::replicated_through` | `project_feed.epoch`; `capture_feed_marks` (§3a.2) | provisional → replicated; accepted → voided (RC-4) | — | V3: bookkeeping over real captured transactions |
+| U21, U33 | WA-3 | E19, E20, E24 | `project_admission` (the epoch on every record); `BoardCaptureBookkeeping` (replicated or provisional) | `CaptureBookkeeping::record`; `ProjectReplication::replicated_through` | `project_feed.epoch`; `capture_feed_marks` (§3a.2) | provisional → replicated; unsent records excluded by a forced takeover (U80) | — | V3: bookkeeping over real captured transactions |
 | U33 | WA-3a | E25 | library `ReplicationSender` | `send_piece` | `Piece<BoardAnnotation>`: one commit per piece, parts only by size (§3) | sent → applied, refused or unknown | the copy's typed refusal | V3, V3d: a transaction larger than one piece |
 | U33, U38 | WA-3b | E25, E24 | library continuation, replay and retention | the copy's apply answer | library positions; the board name `positionGap` | — | `positionGap`, `pieceConflict`, `centralCopyFull` | V3, V3d: a repeated piece; a refused gap |
 | U21, U39 | WA-4 | E27, E23, E24 | library holder-change workflow; admission stops at release | `ReleaseRequest`, answered by the writer's lease holder at the final captured position | `HolderChangeAnswer` → board names; `MigrationPending{migration, state}` (SO52) | Requested → Releasing → Released (waiting for the copy's acknowledgement) → Fencing → Ended. A move has no reservation step; only a claim does (FL-16) | `migrationPending`, `holderUnreachable`, `transferInProgress` | V3: a clean move with no gap and no duplicate, and one with a migration pending |
-| U11, U21, U39 | WA-5 | E22, E21, E13 | library takeover; `board_tail_handler` | the rejected-tail event; `RejectedTailReport` | the superseded file, read-only in place; `LifecycleFact::{Takeover, RejectedTail}` in `facts` | epoch superseded; request accepted → voided | `unresolved{takeover}` until the tail is reported, then `voided` for a listed ID; an unlisted ID is admitted fresh | V3: a takeover with a tail, before and after its report |
+| U11, U21, U39, U80 | WA-5 | E21, E13 | library takeover; `project_store_registry` | the superseded event; the takeover grant | the old file, read-only on disk and unread; central's transfer record | epoch superseded | `notWriter{current}` on the old holder; an unknown request admitted fresh on the new holder | V3: a takeover before expiry |
 | U21 | WA-6 | E20 | library superseded-writer refusal; `project_store_registry` | `begin_write`; reads | library `NotWriter{current}` → `notWriter{current}`; the read copy marked with its feed position | superseded | `notWriter{current}` | V3 |
 | U9, U21, U33 | WA-7 | E24 | library fingerprints and migration order; `BoardProjectSchema`'s expected catalog | `ReplicatedSchema` | schema identity `{version, fingerprint}`; the catalog per version (§5) | a migration pending, applied or failed | `schemaMismatch`, `schemaTooNew` | V3: a schema change that replicates; a too-new store |
 | U25 | WA-8 | E3, E24 | `project_store_registry` | open by project | `projects/<project-id>/e<epoch>.sqlite`; one authoritative copy per project | — | — | V3 |
 | U22, U32 | WA-9 | E24 | library drivers: sqlx-turso on machines; sqlx-durable-object at central | — | Turso files; Durable Object storage | — | — | V3; the drivers' own suites |
-| U20, U21, U40 | WA-10 | E3, E20 | library provisional writes and registration; voiding derived from the retained file and its persisted rejection | `LifecycleGate`; `move_aside` | `databaseRejected` → `projectRejected`; the database moved aside, never deleted | provisional → registered or rejected | `projectRejected` | V3: a project created offline, then rejected |
-| U38 | WA-11 | E23 | the library writer's lease state (`writer_state`); the project activity gate | the activity gate port (`agent-automation`) | `WriterState::Paused{expired_at}`; wakes and schedules paused | writing ⇄ paused | `leaseExpired` | V3: expiry, then renewal on the same epoch |
+| U20, U21, U40, U80 | WA-10 | E3, E20 | the fleet directory request; library registration with provisional writes off | `LifecycleGate`; `move_aside` | `databaseRejected` → `projectRejected`; the empty database moved aside | directory pending → accepted → registered, or refused | `projectRejected` | V3: a project created through central, and one central refuses |
+| U38 | WA-11 | E23 | the library writer's lease state (`writer_state`) | — | `WriterState::Paused{expired_at}` | writing ⇄ paused | `leaseExpired` | V3: expiry, then renewal on the same epoch |
 | U35, U36 | WA-12 | E26 | library `SessionPump`; `ReqwestSessionTransport` | `SessionTransport`, `TransportConnection` | library frames; every project resumes from its acknowledged position | connected ⇄ disconnected → ended | — | V3, V3d: a dropped connection and a central restart mid-replication |
 | U56 | WA-13 | E9, E8, E10, E26 | the `BoardConsumerProtocol` forward family; the holder's `project_admission` | `ForwardedPost{kind, body}` → `WriteReply` | §3c; `origin` only from central's routing | — | `holderUnreachable`, `unanswered` | V7, V9: an online and an offline holder |
 | U63 | WA-14 | E30, E18 | PD4, over agent-fleet-sync delivery | PD4 | `mail_handoffs`, `handoff_frontier` (§3a.1); custody stores (§3a.3) | PD4 | PD4 | V10 |
-| U11, U21 | FL-8 (holder side) | E22 | `board_tail_handler` | `RejectedTailReport{project, epoch, requests, digest}` | facts in the current holder's store | — | `tailConflict` | V9 |
 | U34, U35, U36, U55 | FL-12, FL-13 (Router side) | E26 | `ReqwestSessionTransport` | the upgrade, carrying Access plus the machine credential | typed credential refusals | connection refused; the session survives | `credentialRejected` | X6 locally; V9d |
 | U54, U57 | FL-15, FL-16 (holder side) | E27, E24 | the claim tool; `InstallCoordinator`; `project_store_registry` | `project_claim{project}` | `Granted{epoch, expires_at, start}`; the store seeded at `start` (§3b) | unheld → held | `alreadyHeld{holder}`, `schemaTooNew{store, supported}`, `notFound` | V4, V9 |
 | U54, U60, U62 | spec 1 §5; FL-17 (upload side) | E1–E3, E8–E10, E17, E19, E21 | `board-legacy-upgrade` | `codex-router-board-upgrade`; central's admin import | §3a in import mode; derived keys; dense positions; `time_basis = legacy_unknown` (§3d) | reserved → published → complete (central's workflow) | `importConflict`, `alreadyImported` | V4, on X2's harness extended |
