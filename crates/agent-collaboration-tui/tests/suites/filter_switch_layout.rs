@@ -231,6 +231,7 @@ mod tests {
                                 && !row.contains("Local"),
                             "live narrow resize preserves query and hides whole group\n{row}"
                         );
+                        assert_eq!(fixture.stack.snapshot().top().focus.current(),Some(&field()),"resize repairs hidden segment focus before any Tab");
                         driver
                             .drive_checked(
                                 &mut frames,
@@ -240,14 +241,14 @@ mod tests {
                                         KeyEventKind::Press,
                                         KeyCode::Tab,
                                     )),
-                                    true,
+                                    false,
                                 )],
-                                true,
+                                false,
                                 |_| {
                                     assert_eq!(
                                         fixture.stack.snapshot().top().focus.current(),
                                         Some(&field()),
-                                        "Tab leaves a newly hidden segment"
+                                        "Tab stays on the eligible filter after automatic resize repair"
                                     )
                                 },
                             )

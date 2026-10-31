@@ -1,8 +1,8 @@
 diff --git a/crates/agent-collaboration-tui/src/surface_handle.rs b/crates/agent-collaboration-tui/src/surface_handle.rs
 --- a/crates/agent-collaboration-tui/src/surface_handle.rs
 +++ b/crates/agent-collaboration-tui/src/surface_handle.rs
-@@ -75,3 +75,3 @@ impl SurfaceStackHandle {
+@@ -76,3 +76,3 @@ impl SurfaceStackHandle {
          update(model);
--        model.focus.restore(focused.as_ref());
-+        let _=focused;
-         self.regions.invalidate();
+-        model.focus.inherit_focus_intent(&previous_focus);
++        let _=previous_focus;
+         next.top_mut().focus.reconcile_eligibility();

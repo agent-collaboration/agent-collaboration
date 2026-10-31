@@ -123,3 +123,11 @@ mod responsive_fields;
 #[cfg(test)]
 #[path = "suites/help_narrow_layout.rs"]
 mod help_narrow_layout;
+
+#[cfg(test)]
+#[path = "suites/focus_return.rs"]
+mod focus_return;
+
+#[cfg(test)]
+#[path = "suites/focus_replacement.rs"]
+mod focus_replacement;

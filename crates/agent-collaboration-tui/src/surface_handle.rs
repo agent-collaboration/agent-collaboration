@@ -61,7 +61,8 @@ impl SurfaceStackHandle {
     }
     /// Update the continuing model without remounting its view, scroll or draft state.
     /// While Help replaces a dialog, the update applies to its suspended base model.
-    /// Focus follows the prior TargetId, falling back only when it is no longer enabled.
+    /// Current and displaced focus intent survive replacement; only the active
+    /// surface reconciles eligibility while covered models keep their intent.
     pub fn update_overlay_if_open(
         mut self,
         overlay: OverlayId,
@@ -71,12 +72,19 @@ impl SurfaceStackHandle {
         let Some(model) = next.overlay_base_model_mut(overlay) else {
             return false;
         };
-        let focused = model.focus.current().cloned();
+        let previous_focus = model.focus.clone();
         update(model);
-        model.focus.restore(focused.as_ref());
+        model.focus.inherit_focus_intent(&previous_focus);
+        next.top_mut().focus.reconcile_eligibility();
         self.regions.invalidate();
         self.stack.set(next);
         true
+    }
+    pub(crate) fn reconcile_active_focus(mut self) {
+        let mut next = self.snapshot();
+        if next.top_mut().focus.reconcile_eligibility() {
+            self.stack.set(next);
+        }
     }
     pub fn focus(self, surface: SurfaceId, target: &TargetId) -> bool {
         self.update(|stack| {

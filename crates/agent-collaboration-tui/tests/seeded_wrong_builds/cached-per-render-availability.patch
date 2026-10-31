@@ -1,9 +1,9 @@
 diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collaboration-tui/src/actions.rs
 --- a/crates/agent-collaboration-tui/src/actions.rs
 +++ b/crates/agent-collaboration-tui/src/actions.rs
-@@ -211,2 +211,7 @@ impl ActionRegistry {
+@@ -224,2 +224,7 @@ impl ActionRegistry {
      }
-+    pub(crate) fn freeze_availability(&self) -> Self {
++    pub(crate) fn freeze_availability(&self)->Self {
 +        let mut frozen=self.clone();
 +        for action in &mut frozen.actions {let availability=action.availability.get();action.availability=AvailabilityFn::new(move||availability.clone());}
 +        frozen
@@ -12,12 +12,12 @@ diff --git a/crates/agent-collaboration-tui/src/actions.rs b/crates/agent-collab
 diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
 --- a/crates/agent-collaboration-tui/src/input_owner.rs
 +++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -51,2 +51,3 @@ pub fn InputOwner<'a>(
+@@ -52,2 +52,3 @@ pub fn InputOwner<'a>(
      let dispatch_receipt = props.dispatch_receipt.clone();
 +    let cached_availability={let snapshot=stack.snapshot();let mut scopes=vec![(SurfaceId::Screen,snapshot.surface(SurfaceId::Screen).unwrap().actions.freeze_availability())];for overlay in snapshot.overlays() {scopes.push((SurfaceId::Overlay(overlay.id),overlay.model.actions.freeze_availability()));}scopes};
      hooks.use_terminal_events(move |event| {
-@@ -54,3 +55,4 @@ pub fn InputOwner<'a>(
-         let receipt_event = crate::input_dispatch_receipt::InputEventReadback::from(&event);
+@@ -56,3 +57,4 @@ pub fn InputOwner<'a>(
+         stack.reconcile_active_focus();
 -        let snapshot = stack.snapshot();
 +        let mut snapshot = stack.snapshot();
 +        for (surface,actions) in &cached_availability {if let Some(model)=snapshot.surface_mut(*surface) {model.actions=actions.clone();}}
