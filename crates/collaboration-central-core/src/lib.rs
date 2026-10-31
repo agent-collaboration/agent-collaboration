@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod identity_contract;
+pub mod organization_authority;
 
 mod admin_import_contract;
 mod admin_import_copy;
