@@ -42,9 +42,10 @@ sequenceDiagram
   B->>Fleet: pull ALL my unconfirmed batches in one call (also on every connect, and if notices were missed)
   B->>Fleet: fetch every missing instruction or message in one call
   B->>B: store every entry locally: receipt + queued work, in one transaction
-  B->>Fleet: confirm batches + reports, in one frame (flushed every 500 ms or 100 items)
+  B->>Fleet: confirm batches (one call for many)
+  B->>Fleet: reports (one call for many; flushed 500 ms after the first, or at 100)
 </script></ex-mermaid>
-<p><strong>Few, larger messages:</strong> following Cloudflare's WebSocket guidance, the machine packs many items into each frame, so pulls, confirms and reports cost one frame and one central call each instead of one per item. Every arrow is a call central already allows, in its one-way order. If B is off for a week or more and its notices have aged out, nothing is lost: on reconnect it asks for its unconfirmed batches, and central still has them.</p>
+<p><strong>Few, larger messages:</strong> following Cloudflare's WebSocket guidance, the machine packs many items into each frame, so a pull, a confirm or a report call carries many items, instead of one call per item. Every arrow is a call central already allows, in its one-way order. If B is off for a week or more and its notices have aged out, nothing is lost: on reconnect it asks for its unconfirmed batches, and central still has them.</p>
 <p>Every arrow is an object-to-object call central already allows, in its one-way order. Nothing new is added to the call graph.</p>
 
 <h2 id="grid">The grid</h2>
@@ -117,8 +118,9 @@ flowchart TD
 <ex-callout title="The scheduler can't stay stopped" tone="risk" icon="clock">
   <p>Cloudflare retries a failed alarm up to 6 times, then gives up. If that ever happened, every automation would stop. So:</p>
   <ul>
-    <li>one automation's error is recorded on that firing and never stops the others;</li>
-    <li>the handler always sets the next alarm;</li>
+    <li>a <strong>broken definition</strong> is reported on that automation and never stops the others;</li>
+    <li>a <strong>temporary failure</strong> (storage, platform) changes nothing, so every owed firing stays owed and goes out on the retry;</li>
+    <li>after each successful pass the handler sets the next alarm;</li>
     <li>every request to central (create, list, a machine pulling) checks the alarm is set for the earliest pending time, and restores it if needed. Overdue firings are then sent once.</li>
   </ul>
 </ex-callout>
