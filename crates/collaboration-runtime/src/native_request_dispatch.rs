@@ -192,6 +192,16 @@ pub(super) async fn handle_app_server_rpc(
             .get_mut("result")
             .and_then(Value::as_object_mut)
             .ok_or(AppServerConnectionError::RequestWorkerUnavailable)?;
+        let current_model = current_settings.and_then(|settings| settings.model.as_deref());
+        result.insert(
+            "model".into(),
+            json!(current_model.unwrap_or("provider-default")),
+        );
+        result
+            .get_mut("thread")
+            .and_then(Value::as_object_mut)
+            .ok_or(AppServerConnectionError::RequestWorkerUnavailable)?
+            .insert("model".into(), json!(current_model));
         result.insert(
             "reasoningEffort".into(),
             json!(current_settings.and_then(|settings| settings.effort.as_deref())),

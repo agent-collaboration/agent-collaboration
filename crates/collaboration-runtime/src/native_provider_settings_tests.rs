@@ -9,6 +9,142 @@ struct SettingsFixture {
     thread: String,
 }
 
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Resume reply fields and binding must reflect the same confirmed attachment; fixture errors propagate."
+)]
+async fn resume_overrides_project_model_and_effort_from_one_fresh_attachment_and_failures_do_not_bind()
+-> Result<(), Box<dyn std::error::Error>> {
+    let SettingsFixture {
+        backend,
+        context,
+        thread,
+    } = setup().await?;
+    handle_app_server_rpc(context.clone(), json!({"id":1,"method":"thread/settings/update","params":{"threadId":thread,"model":"old","effort":"low"}})).await?;
+    backend.setting_commands.lock().expect("settings").clear();
+    let resumed = handle_app_server_rpc(context.clone(), json!({"id":2,"method":"thread/resume","params":{"threadId":thread,"model":"new","effort":"high","excludeTurns":false}})).await?;
+    let attachment = &resumed
+        .session_attachment
+        .as_ref()
+        .ok_or("successful resume attachment")?
+        .1;
+    let confirmed = attachment
+        .snapshot
+        .iter()
+        .rev()
+        .find_map(|event| match &event.event {
+            session_event_model::SessionEvent::SettingsChanged { settings } => Some(settings),
+            _ => None,
+        })
+        .ok_or("confirmed settings")?;
+    assert_eq!(confirmed.model.as_deref(), Some("new"));
+    assert_eq!(confirmed.effort.as_deref(), Some("high"));
+    assert_eq!(
+        backend
+            .setting_commands
+            .lock()
+            .expect("settings")
+            .iter()
+            .map(|command| (command.setting_id.clone(), command.value.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("model".into(), "new".into()),
+            ("effort".into(), "high".into())
+        ]
+    );
+    assert_eq!(
+        backend
+            .attachment_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+    assert_eq!(
+        resumed.response["result"]["model"], "new",
+        "{}",
+        resumed.response
+    );
+    assert_eq!(resumed.response["result"]["thread"]["model"], "new");
+    assert_eq!(resumed.response["result"]["reasoningEffort"], "high");
+    assert!(resumed.response["result"]["thread"]["turns"].is_array());
+
+    // An unknown latest value must not borrow a model from an older summary.
+    {
+        let mut history = backend.history.lock().expect("history");
+        let sequence = u64::try_from(history.len())? + 1;
+        history.push(collaboration_contracts::HubEvent {
+            sequence,
+            event: session_event_model::SessionEvent::SettingsChanged {
+                settings: session_event_model::SessionSettings::default(),
+            },
+        });
+    }
+    let unknown = handle_app_server_rpc(
+        context.clone(),
+        json!({"id":3,"method":"thread/resume","params":{"threadId":thread,"excludeTurns":true}}),
+    )
+    .await?;
+    assert_eq!(unknown.response["result"]["model"], "provider-default");
+    assert_eq!(unknown.response["result"]["thread"]["model"], Value::Null);
+    assert_eq!(unknown.response["result"]["reasoningEffort"], Value::Null);
+
+    let mut bindings = super::skill_binding::NativeSkillBindings::default();
+    let successful = bindings.begin();
+    bindings.complete(
+        successful,
+        super::skill_binding::bound_response(
+            &resumed.response,
+            backend.as_ref(),
+            &backend.endpoint,
+        )
+        .await,
+    );
+    assert_eq!(bindings.model_session(), Some(&backend.session));
+    let mut other = backend.session.clone();
+    other.session_id = message_board::SessionId::try_from("failed-resume-target".to_owned())?;
+    backend
+        .create_sessions
+        .lock()
+        .expect("sessions")
+        .push_back(other.clone());
+    handle_app_server_thread_request(
+        "thread/start",
+        json!({"cwd":"/tmp"}),
+        backend.clone(),
+        backend.clone(),
+        backend.endpoint.clone(),
+        ScriptedSessionBackend::actor()?,
+        &[],
+    )
+    .await?;
+    backend.setting_failures.lock().expect("failures").insert(
+        "model".into(),
+        CommandFailure::InvalidSetting {
+            advertised: vec!["new".into()],
+        },
+    );
+    let before_failure = backend
+        .attachment_count
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let failed = handle_app_server_rpc(context.clone(), json!({"id":4,"method":"thread/resume","params":{"threadId":thread_alias(&other),"model":"old","effort":"low"}})).await?;
+    assert_eq!(failed.response["error"]["code"], -32602);
+    assert!(failed.session_attachment.is_none());
+    assert_eq!(
+        backend
+            .attachment_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        before_failure
+    );
+    let attempt = bindings.begin();
+    bindings.complete(
+        attempt,
+        super::skill_binding::bound_response(&failed.response, backend.as_ref(), &backend.endpoint)
+            .await,
+    );
+    assert_eq!(bindings.model_session(), Some(&backend.session));
+    Ok(())
+}
+
 async fn setup() -> Result<SettingsFixture, Box<dyn std::error::Error>> {
     let catalog = vec![
         super::test_support::qualified_model("old", "Old", &["low", "high"], "low")?,
