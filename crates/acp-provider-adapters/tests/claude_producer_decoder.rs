@@ -6,7 +6,7 @@ use session_event_model::{ProviderSkillScope, SkillView};
 fn actual_typescript_model_response_enters_real_rust_decoder() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = std::process::Command::new("node")
-        .arg(root.join("providers/claude-acp/tests/model-metadata-producer.ts"))
+        .arg(root.join("providers/claude-acp/src/model-metadata-producer.ts"))
         .current_dir(&root)
         .output()
         .expect("actual TS producer");
@@ -47,7 +47,7 @@ fn actual_typescript_model_response_enters_real_rust_decoder() {
 fn actual_typescript_metadata_output_enters_real_rust_decoder() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = std::process::Command::new("node")
-        .arg(root.join("providers/claude-acp/tests/metadata-producer.ts"))
+        .arg(root.join("providers/claude-acp/src/metadata-producer.ts"))
         .current_dir(&root)
         .output()
         .expect("run installed Node on actual TS metadata producer");

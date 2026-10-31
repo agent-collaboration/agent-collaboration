@@ -49,9 +49,9 @@ Declare these before any input:
 
 ## Drive
 
-1. Write the run plan (`codexAcpRunPlanSchema` in `scripts/verification/tui/codex-acp-run.ts`) and the observer plan (`journeyObservationPlanSchema` in `verification/observations/acp-journey-models.ts`).
+1. Write the run plan (`codexAcpRunPlanSchema` in `scripts/verification/tui/codex-acp/codex-acp-run.ts`) and the observer plan (`journeyObservationPlanSchema` in `verification/observations/acp-journey-models.ts`).
 2. Qualify without launching Codex:
-   `node scripts/verification/tui/capture-run.ts --codex-acp-only --codex-acp-plan PLAN.json --check`.
+   `node scripts/verification/tui/capture/capture-run.ts --codex-acp-only --codex-acp-plan PLAN.json --check`.
    This checks the source head, artifacts, the driver signature and test entry, the emulator (including DSR, DA1 and OSC replies), and the target. The target check covers the binary hash and `--version`, Host service/epoch, endpoint socket, trusted cwd, raw→alias and observer correlation.
 3. Run without `--check`. The plan declares one journey `kind`. The scenes wait on grid frames: shared matchers and most journeys in `codex-acp-scenes.ts`, and `model`, `information` and `refresh` in `codex-acp-model-scenes.ts`, `codex-acp-information-scenes.ts` and `codex-acp-refresh-scenes.ts`. Typed text arrives as one PTY write, which Codex buffers as a paste burst; an Enter sent before the next frame becomes a newline. So no Enter follows typed text until a frame shows that text taking effect: a command's slash-popup row, or the prompt in the composer.
    - **J1 `skill`:** for each selected skill, `skill-picker-open-N` (the selected `› <name>  [Skill]` row and `enter insert · esc close`), then Tab to `skill-selected-N` (`$skill`). Then `skill-input-composed`: the exact composed text, and `[Image #1]` after a bracketed paste of the image path. Then Enter to `skill-effect`: every expected effect, and no `■ `. Claude takes exactly one selection; Cursor takes one or more distinct ones.

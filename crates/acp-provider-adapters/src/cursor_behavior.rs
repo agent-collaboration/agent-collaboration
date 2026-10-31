@@ -172,3 +172,7 @@ fn classify_command(
     }
     Err(SkillRowErrorReason::UnrecognizedMetadata)
 }
+
+#[cfg(test)]
+#[path = "cursor_behavior_test.rs"]
+mod tests;

@@ -455,5 +455,5 @@ fn mark_remaining_not_submitted(
 }
 
 #[cfg(test)]
-#[path = "provider_acp_message_fifo_tests.rs"]
+#[path = "provider_acp_message_fifo_test.rs"]
 mod loaded_only_tests;

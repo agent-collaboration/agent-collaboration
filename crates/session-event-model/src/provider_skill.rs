@@ -98,3 +98,7 @@ impl SkillView {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "provider_skill_test.rs"]
+mod tests;

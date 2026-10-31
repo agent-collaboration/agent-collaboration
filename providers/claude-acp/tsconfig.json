@@ -1,4 +1,5 @@
 {
+  "include": ["src/**/*.ts", "build.ts"],
   "compilerOptions": {
     "target": "ES2024",
     "module": "NodeNext",
@@ -9,6 +10,5 @@
     "noEmit": true,
     "types": ["node"],
     "skipLibCheck": true
-  },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "build.ts"]
+  }
 }

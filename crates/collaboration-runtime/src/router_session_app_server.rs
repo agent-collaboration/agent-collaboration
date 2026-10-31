@@ -517,7 +517,7 @@ mod methods;
 #[path = "native_skill_binding.rs"]
 mod skill_binding;
 #[cfg(test)]
-#[path = "native_skill_binding_tests.rs"]
+#[path = "native_skill_binding_wire_test.rs"]
 mod skill_binding_tests;
 pub(crate) use methods::thread_alias;
 use methods::{
@@ -525,41 +525,41 @@ use methods::{
 };
 
 #[cfg(test)]
-#[path = "router_session_app_server_blocking_tests.rs"]
+#[path = "router_session_app_server_blocking_test.rs"]
 mod blocking_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_compact_tests.rs"]
+#[path = "router_session_app_server_compact_test.rs"]
 mod compact_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_cwd_filter_tests.rs"]
+#[path = "router_session_app_server_cwd_filter_test.rs"]
 mod cwd_filter_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_cwd_tests.rs"]
+#[path = "router_session_app_server_cwd_test.rs"]
 mod cwd_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_hooks_tests.rs"]
+#[path = "router_session_app_server_hooks_test.rs"]
 mod hooks_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_model_tests.rs"]
+#[path = "router_session_app_server_model_test.rs"]
 mod model_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_multichoice_tui_tests.rs"]
+#[path = "router_session_app_server_multichoice_tui_test.rs"]
 mod multichoice_tui_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_order_tests.rs"]
+#[path = "router_session_app_server_order_test.rs"]
 mod order_tests;
 #[cfg(test)]
-#[path = "native_provider_settings_tests.rs"]
+#[path = "native_provider_settings_test.rs"]
 mod provider_settings_tests;
 #[cfg(test)]
-#[path = "router_session_app_server_reattach_tests.rs"]
+#[path = "router_session_app_server_reattach_test.rs"]
 mod reattach_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-#[path = "router_session_app_server_tests.rs"]
+#[path = "router_session_app_server_test.rs"]
 mod tests;
 #[cfg(test)]
-#[path = "router_session_app_server_tui_tests.rs"]
+#[path = "router_session_app_server_tui_test.rs"]
 mod tui_tests;

@@ -235,3 +235,7 @@ fn router_annotation(
         Some(_) => Err(()),
     }
 }
+
+#[cfg(test)]
+#[path = "claude_behavior_test.rs"]
+mod tests;

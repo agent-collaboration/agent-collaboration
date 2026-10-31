@@ -612,5 +612,5 @@ pub async fn receive_hub_event(
 }
 
 #[cfg(test)]
-#[path = "provider_session_event_hub_tests.rs"]
+#[path = "provider_session_event_hub_test.rs"]
 mod tests;

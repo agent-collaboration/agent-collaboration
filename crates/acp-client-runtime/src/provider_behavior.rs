@@ -84,3 +84,7 @@ pub enum ProviderError {
     #[error("provider metadata is malformed")]
     MalformedMetadata,
 }
+
+#[cfg(test)]
+#[path = "provider_behavior_test.rs"]
+mod tests;

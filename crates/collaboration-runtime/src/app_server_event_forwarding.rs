@@ -730,9 +730,9 @@ impl AppServerEventForwarding {
 }
 
 #[cfg(test)]
-#[path = "app_server_event_forwarding_tests.rs"]
+#[path = "app_server_event_forwarding_test.rs"]
 mod notification_wire_tests;
 
 #[cfg(test)]
-#[path = "app_server_metadata_projection_tests.rs"]
+#[path = "app_server_metadata_projection_test.rs"]
 mod metadata_projection_tests;

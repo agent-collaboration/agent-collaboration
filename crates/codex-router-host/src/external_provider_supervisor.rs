@@ -714,5 +714,6 @@ fn now_ms() -> i64 {
 
 mod provider_delivery_submission;
 #[cfg(test)]
+#[path = "external_provider_supervisor/supervisor_test.rs"]
 mod tests;
 pub(crate) use provider_delivery_submission::ProviderPromptDispatch;

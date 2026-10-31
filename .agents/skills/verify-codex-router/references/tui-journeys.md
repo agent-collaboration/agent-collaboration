@@ -22,13 +22,13 @@ production processes. Preserve the allocation's disk floor.
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
-node scripts/verification/tui/terminal-qualification.ts QUALIFICATION.json
-node scripts/verification/tui/evidence-readback.ts --source REPOSITORY
-node scripts/verification/tui/capture-run.ts PLAN.json --check
-node scripts/verification/tui/capture-run.ts PLAN.json
+node scripts/verification/tui/terminal/terminal-qualification.ts QUALIFICATION.json
+node scripts/verification/tui/evidence/evidence-readback.ts --source REPOSITORY
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
-Read `gridCapturePlanSchema` in `scripts/verification/tui/capture-run.ts`.
+Read `gridCapturePlanSchema` in `scripts/verification/tui/capture/capture-run.ts`.
 A plan names `repository`, exact `sourceHead`, `driver` and `product`
 `{path, sha256}` bindings, fresh nonexistent `output`, `journey`, and `keys`
 (`legacy` or `kitty`). Normal/hard require `component`; optional `chrome` names the

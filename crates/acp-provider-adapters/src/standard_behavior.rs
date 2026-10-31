@@ -49,3 +49,7 @@ impl ProviderBehavior for StandardAcpBehavior {
         Err(ProviderError::Unsupported)
     }
 }
+
+#[cfg(test)]
+#[path = "standard_behavior_test.rs"]
+mod tests;

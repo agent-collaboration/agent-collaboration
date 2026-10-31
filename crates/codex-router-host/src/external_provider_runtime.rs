@@ -84,36 +84,8 @@ fn host_prompt_outcome(
 }
 
 #[cfg(test)]
-mod prompt_projection_tests {
-    use super::*;
-
-    #[test]
-    fn unknown_stop_reason_keeps_output_and_safe_value() {
-        let outcome = acp_client_runtime::ExternalProviderPromptOutcome {
-            output: "known output".to_owned(),
-            stop_reason: session_event_model::StopReason::Unknown("future_stop".to_owned()),
-            permission_refusal_reason: None,
-        };
-        let projected = host_prompt_outcome(outcome).expect("unknown reason is a terminal outcome");
-        assert_eq!(projected.output, "known output");
-        assert_eq!(
-            projected.stop_reason,
-            ProviderPromptStopReason::Unknown("future_stop".into())
-        );
-
-        let untrusted = acp_client_runtime::ExternalProviderPromptOutcome {
-            output: String::new(),
-            stop_reason: session_event_model::StopReason::Unknown("../token=value".to_owned()),
-            permission_refusal_reason: None,
-        };
-        assert_eq!(
-            host_prompt_outcome(untrusted)
-                .expect("terminal outcome")
-                .stop_reason,
-            ProviderPromptStopReason::Unknown("unrecognized".into())
-        );
-    }
-}
+#[path = "external_provider_prompt_projection_test.rs"]
+mod prompt_projection_tests;
 
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
@@ -668,20 +640,20 @@ mod fixture_tests;
 use fixture_tests::*;
 
 #[cfg(test)]
-#[path = "external_provider_runtime/live_tests.rs"]
+#[path = "external_provider_runtime/live_test.rs"]
 mod live_tests;
 #[cfg(test)]
-#[path = "external_provider_runtime/robustness_tests.rs"]
+#[path = "external_provider_runtime/robustness_test.rs"]
 mod robustness_tests;
 #[cfg(test)]
-#[path = "external_provider_runtime/tests.rs"]
+#[path = "external_provider_runtime/runtime_test.rs"]
 mod tests;
 
 #[cfg(test)]
 #[path = "external_provider_runtime/acp_scripted_fixture.rs"]
 pub(crate) mod acp_scripted_fixture;
 #[cfg(test)]
-#[path = "external_provider_runtime/approval_dispatch_tests.rs"]
+#[path = "external_provider_runtime/approval_dispatch_test.rs"]
 mod approval_dispatch_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_push_fixture.rs"]
