@@ -55,13 +55,24 @@ test('configured source keeps its committed remote while highlighting the defaul
 	).toContain('committed Machine mark changed before Start');
 });
 
-test('New hints require the separate adopted wording and reject absent, repeated or inline keys', async () => {
-	expect(await inspectNewHints(['Cancel       Start', 'Ctrl+Enter start · Esc close'])).toEqual([]);
-	expect(await inspectNewHints(['Cancel Esc   Start Ctrl+Enter'])).not.toEqual([]);
-	expect(await inspectNewHints(['Cancel       Start'])).not.toEqual([]);
-	expect(await inspectNewHints(['Cancel Esc   Start', 'Ctrl+Enter start · Esc close'])).not.toEqual(
+test('New hints use whole action-title groups and reject absent, repeated or inline keys', async () => {
+	expect(await inspectNewHints(['Cancel       Start', 'Ctrl+Enter Start · Esc Cancel'])).toEqual(
 		[],
 	);
+	expect(await inspectNewHints(['Cancel       Start', 'Ctrl+Enter Start', 'Esc Cancel'])).toEqual(
+		[],
+	);
+	expect(await inspectNewHints(['Cancel       Start', 'Ctrl+Enter start · Esc close'])).not.toEqual(
+		[],
+	);
+	expect(
+		await inspectNewHints(['Cancel       Start', 'Ctrl+Enter', 'Start · Esc Cancel']),
+	).not.toEqual([]);
+	expect(await inspectNewHints(['Cancel Esc   Start Ctrl+Enter'])).not.toEqual([]);
+	expect(await inspectNewHints(['Cancel       Start'])).not.toEqual([]);
+	expect(
+		await inspectNewHints(['Cancel Esc   Start', 'Ctrl+Enter Start · Esc Cancel']),
+	).not.toEqual([]);
 });
 
 async function inspectNewHints(rows: readonly string[]): Promise<readonly string[]> {

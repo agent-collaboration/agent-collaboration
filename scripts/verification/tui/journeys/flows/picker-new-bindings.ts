@@ -31,19 +31,28 @@ import {
 } from './picker-flow-inputs.ts';
 
 type NewSource = 'default' | 'local' | 'configured';
-/** Owner mock / Lead01a1962f: one hints projection, with plain Cancel and Start labels. */
+/** Lead01a196a0: one action-title hints projection, with plain Cancel and Start buttons. */
 export function checkNewKeyHints(grid: TerminalGrid): readonly string[] {
 	const body = pickerDialogText(grid, 'New session');
-	const compact = body.replace(/\s+/gu, '');
+	const rows = body.split('\n');
+	const start = rows.findIndex((row) => /Ctrl\+Enter\s+Start/u.test(row));
+	const cancel = rows.findIndex((row) => /Esc\s+Cancel/u.test(row));
 	const failures: string[] = [];
 	if (
-		!compact.includes('Ctrl+Enterstart·Escclose') ||
-		(compact.match(/Ctrl\+Enter/gu) ?? []).length !== 1 ||
-		(compact.match(/Esc/gu) ?? []).length !== 1
+		start < 0 ||
+		cancel < start ||
+		cancel > start + 1 ||
+		(start === cancel && !/Ctrl\+Enter\s+Start\s+·\s+Esc\s+Cancel/u.test(rows[start] ?? '')) ||
+		(body.match(/Ctrl\+Enter/gu) ?? []).length !== 1 ||
+		(body.match(/Esc/gu) ?? []).length !== 1
 	)
-		failures.push('New must show exactly one Ctrl+Enter start · Esc close hints projection');
-	if (body.split('\n').some((line) => /Cancel.*Esc|Start.*Ctrl\+Enter/u.test(line)))
+		failures.push(
+			'New must show one Ctrl+Enter Start · Esc Cancel projection with whole key/title groups',
+		);
+	if (rows.some((line) => /Cancel.*Esc|Start.*Ctrl\+Enter/u.test(line)))
 		failures.push('New Cancel or Start retained inline key spans');
+	if (!rows.slice(0, start).some((row) => /Cancel/u.test(row) && /Start/u.test(row)))
+		failures.push('New plain Cancel and Start buttons must precede their hint projection');
 	return failures;
 }
 function newSource(journey: string): NewSource | null {
@@ -212,23 +221,27 @@ export function pickerNewBindings(
 			[
 				'select-New-source:' + expectedRequest.machine,
 				async (context) => {
-					const hintFailures = checkNewKeyHints(context.frame.grid);
+					// Preserve Ctrl+N's first frame; owner-deferred first paint is not this assertion.
+					const settled = await context.input.press('F12', [pickerExpectedKey('F12', dialog)]);
+					const settledFrame = settled.frames.at(-1);
+					if (settledFrame === undefined) throw new Error('New F12 supplied no marked frame');
+					const hintFailures = checkNewKeyHints(settledFrame.grid);
 					if (hintFailures.length > 0) throw new Error(hintFailures.join('; '));
 					if (
 						!gridFieldPair(
-							context.frame.grid,
+							settledFrame.grid,
 							'New session',
 							'Machine',
 							source === 'local' ? 'Local Codex' : 'This machine',
 						)
 					)
 						throw new Error('New initial Machine differs from its independent fixture');
-					if (source !== 'configured') return null;
-					await context.input.press('Tab', [pickerExpectedKey('Tab', dialog)]);
-					await context.input.press('Enter', [
+					if (source !== 'configured') return settled;
+					const tab = await context.input.press('Tab', [pickerExpectedKey('Tab', dialog)]);
+					const opened = await context.input.press('Enter', [
 						pickerExpectedKey('Enter', dialog, 'new-machine', 'new-machine'),
 					]);
-					await context.input.press('Down', [
+					const moved = await context.input.press('Down', [
 						pickerExpectedKey('Down', pickerOverlay(2), '11:new-machine:filter'),
 					]);
 					const picked = await context.input.press('Enter', [
@@ -240,7 +253,12 @@ export function pickerNewBindings(
 						!gridFieldPair(frame.grid, 'New session', 'Machine', 'Fixture remote')
 					)
 						throw new Error('configured Machine setup did not commit the remote source');
-					return picked;
+					const observations = [settled, tab, opened, moved, picked];
+					return {
+						...picked,
+						receipts: observations.flatMap((item) => item.receipts),
+						frames: observations.flatMap((item) => item.frames),
+					};
 				},
 			],
 		]),
