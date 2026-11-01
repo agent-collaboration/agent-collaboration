@@ -331,7 +331,7 @@ async fn main() -> ConformanceResult<()> {
         Scenario::MailboxCancel => mailbox_cancel_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::DeliveryConfigRefusals => Err("config refusal scenario owns its process lifetimes".into()),
         Scenario::ForwardReopen => Err("reopen scenario must own its two process lifetimes".into()),
-        Scenario::ForwardPost(case) => forwarded_post_scenarios::run(&format!("http://127.0.0.1:{port}"), case).await,
+        Scenario::ForwardPost(case) => forwarded_post_scenarios::run(&format!("http://127.0.0.1:{port}"), case, normal_session_support::reconnect_forwarding_peer).await,
         Scenario::ClaimRetiring => retirement_claim_scenarios::run(&format!("http://127.0.0.1:{port}"),retirement_claim_scenarios::ExpectedRetirement::Retiring).await,
         Scenario::ClaimRetired => retirement_claim_scenarios::run(&format!("http://127.0.0.1:{port}"),retirement_claim_scenarios::ExpectedRetirement::Retired).await,
         Scenario::ClaimArchived => imported_claim_scenarios::run_archived(&format!("http://127.0.0.1:{port}")).await,

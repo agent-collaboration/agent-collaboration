@@ -10,6 +10,7 @@ use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
 use fleet_sync_protocol::{DatabaseId, PeerId, RequestId};
 use message_board::{ActorOrigin, BoardId, Description, ResourceName, ServiceId, WorkspaceId};
+use std::future::Future;
 
 pub(super) const SENDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440476";
 pub(super) const SENDER_PEER: &str = "019f0000-0000-7000-8000-000000000476";
@@ -130,7 +131,20 @@ async fn register_database(
     Ok(database)
 }
 
-pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> {
+pub(super) async fn run<'base, Reconnect, Reconnected>(
+    base: &'base str,
+    case: ForwardCase,
+    mut reconnect: Reconnect,
+) -> ConformanceResult<()>
+where
+    Reconnect: FnMut(
+        &'base str,
+        &'static str,
+        &'static str,
+        collaboration_central_core::RegistryTime,
+    ) -> Reconnected,
+    Reconnected: Future<Output = ConformanceResult<reqwest_websocket::WebSocket>>,
+{
     let now = if matches!(case, ForwardCase::RealTimer) {
         // This case observes the actual platform alarm event, not elapsed time.
         None
@@ -191,7 +205,8 @@ pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> 
             ForwardCase::Reconnected => {
                 let outstanding = oracle::begin_reconnect(&mut sender, socket, database).await?;
                 wire::close(holder.take().ok_or("holder socket already closed")?).await?;
-                holder = Some(wire::connect(base, HOLDER_CREDENTIAL).await?);
+                holder = Some(reconnect(base, HOLDER_SERVICE, HOLDER_CREDENTIAL,
+                    now.ok_or("reconnect fixture has no pinned clock")?).await?);
                 oracle::finish_reconnect(&mut sender, holder.as_mut().ok_or("replacement holder socket absent")?, outstanding).await?;
                 println!("FORWARD_SESSION_CASE reconnected_verified_holder_answers_original_identity passed");
             }

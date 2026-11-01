@@ -29,6 +29,9 @@ pub(super) async fn run(case: ForwardCase) -> ConformanceResult<()> {
         forwarded_post_scenarios::run(
             server.as_ref().ok_or("native server absent")?.base_url(),
             case,
+            |base, _service, credential, _now| {
+                super::forwarded_post_wire::connect(base, credential)
+            },
         )
         .await
     }

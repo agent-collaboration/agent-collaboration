@@ -3,8 +3,8 @@
 use super::{
     forwarded_post_lifecycle_oracles as lifecycle,
     forwarded_post_scenarios::{
-        HOLDER_CREDENTIAL, RegisteredForwardingPeers, SENDER_CREDENTIAL, control,
-        registered_forwarding_peers,
+        HOLDER_CREDENTIAL, HOLDER_SERVICE, RegisteredForwardingPeers, SENDER_CREDENTIAL,
+        SENDER_SERVICE, control, registered_forwarding_peers,
     },
     forwarded_post_wire as wire,
     workerd_process::{WorkerdProcess, WorkerdSettings},
@@ -135,11 +135,26 @@ fn inspect_stopped_storage(root: &Path, requests: &[FrameId]) -> ConformanceResu
 }
 
 async fn after_restart(base: &str, pending: PendingBeforeRestart) -> ConformanceResult<()> {
-    let mut sender = wire::connect(base, SENDER_CREDENTIAL).await?;
-    let mut holder = wire::connect(base, HOLDER_CREDENTIAL).await?;
+    let restored_sender_time = RegistryTime(pending.started + chrono::TimeDelta::seconds(10));
+    let mut sender = super::normal_session_support::reconnect_forwarding_peer(
+        base,
+        SENDER_SERVICE,
+        SENDER_CREDENTIAL,
+        restored_sender_time,
+    )
+    .await
+    .map_err(|error| format!("reopened sender Welcome was not observed: {error}"))?;
+    let mut holder = super::normal_session_support::reconnect_forwarding_peer(
+        base,
+        HOLDER_SERVICE,
+        HOLDER_CREDENTIAL,
+        RegistryTime(pending.started),
+    )
+    .await
+    .map_err(|error| format!("reopened holder Welcome was not observed: {error}"))?;
     let proof = async {
         control(base, RuntimeControl::SetTime {
-            now: RegistryTime(pending.started + chrono::TimeDelta::seconds(10)),
+            now: restored_sender_time,
         }).await?;
         let overflow = lifecycle::post(&mut sender, pending.database).await?;
         if lifecycle::outcome(&mut sender, overflow).await? != ForwardOutcome::Overloaded {
