@@ -74,13 +74,19 @@ where
         );
         client.set_object_time(collaboration_central_core::ObjectAddress::Registry, expires_at).await?;
         client.set_object_time(connection.clone(), expires_at).await?;
+        // The caller records its failed attempt before a later retry is due.
+        // Complete that real response, then cross the Engine's positive retry
+        // backoff with fixture input; no wall interval establishes readiness.
+        pending_reply(&mut tasks).await?;
+        let retry_at = collaboration_central_core::RegistryTime(expires_at.0 + chrono::TimeDelta::seconds(1));
+        client.set_object_time(connection.clone(), retry_at).await?;
+        client.set_object_time(collaboration_central_core::ObjectAddress::Registry, retry_at).await?;
         let (retry_frame, retry) = received_within(&mut peer.socket, Duration::from_secs(30)).await
             .map_err(|error| format!("full-wait retry after the actual armed deadline was not observed: {error}"))?;
         let ServerCall::Release { call, request } = retry else { return Err("full-wait retry did not send Release".into()); };
         if call != original_call || request != original_request || retry_frame == original_frame { return Err("full-wait retry changed its durable call or reused a frame".into()); }
         let frames = observe().await?;
         if frames != vec![retry_frame] { return Err(format!("full-wait retry retained an obsolete/overlapping waiter: {frames:?}").into()); }
-        pending_reply(&mut tasks).await?;
         // This is a clock-delimited interleaving, not a readiness delay: the
         // replacement call deliberately remains unanswered past the old lease.
         let past_original_drive = collaboration_central_core::RegistryTime(started.0 + chrono::TimeDelta::seconds(31));

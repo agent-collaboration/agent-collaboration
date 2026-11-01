@@ -130,10 +130,14 @@ where
         for address in [ObjectAddress::Registry, connection.clone(), ObjectAddress::Copy(database)] {
             clock.set_object_time(address, expires_at).await?;
         }
-        // The HTTP response follows recording this attempt's outcome. Only
-        // then wake the durable caller again at the same controlled instant.
+        // The HTTP response follows recording this attempt's outcome. Its
+        // retry has a positive Engine backoff, so cross that with logical
+        // fixture input before waking the durable caller again.
         callers.join_next().await.ok_or("Copy caller task disappeared")???;
-        clock.set_object_time(ObjectAddress::Registry, expires_at).await?;
+        let retry_at = RegistryTime(expires_at.0 + chrono::TimeDelta::seconds(1));
+        for address in [ObjectAddress::Copy(database), connection.clone(), ObjectAddress::Registry] {
+            clock.set_object_time(address, retry_at).await?;
+        }
         let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await
             .map_err(|error| format!("retried Copy waiter after expiry and caller completion was not observed: {error}"))?;
         let elapsed = armed.deadline.0 - started.0.timestamp_millis();
