@@ -198,6 +198,7 @@ impl SourceApiFixture {
         let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let api = collaboration_mcp::collaboration_api_router(
             &collaboration_mcp::CollaborationApiConfig {
+                session_registrar: None,
                 application: (identity).build(),
                 service_directory: directory,
                 native_definitions: None,

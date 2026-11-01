@@ -51,7 +51,6 @@ pub fn session_command_help() -> String {
     agent_session_inventory::sessions::command_help("agent-sessions")
 }
 
-mod current_session_identity;
 mod endpoint_commands;
 mod permission_diagnostic_reporting;
 pub use endpoint_commands::run_endpoint_command;

@@ -145,8 +145,15 @@ impl CollaborationClient {
         let service_version = String::from(manifest.service_version);
         crate::warn_on_router_version_mismatch(name, version, &service_version);
         crate::record_service_version(&service_version);
+        let mut connection = ApiConnection::new(socket);
+        if let Some(session) = crate::current_session_identity::read_harness_session_identity()
+            .ok()
+            .and_then(|harness| harness.session_ref(&manifest.service_id).ok())
+        {
+            connection = connection.with_session_context(session)?;
+        }
         Ok(Self {
-            connection: ApiConnection::new(socket),
+            connection,
             identity: RouterIdentity {
                 service_id: manifest.service_id,
                 service_epoch: manifest.service_epoch,
@@ -156,6 +163,16 @@ impl CollaborationClient {
             },
             directory: root,
         })
+    }
+
+    /// Supplies the SDK caller's current session independently of each request's
+    /// declared actor. The owner-only Host resolves it; no capability is exported.
+    pub fn with_session_context(
+        mut self,
+        session: collaboration_protocol::SessionRef,
+    ) -> Result<Self, ClientError> {
+        self.connection = self.connection.with_session_context(session)?;
+        Ok(self)
     }
 
     #[must_use]

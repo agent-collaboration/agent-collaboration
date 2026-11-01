@@ -26,6 +26,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ApprovalDecideParams>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.actor_claim_refusal(&request.actor) {
+            return refusal;
+        }
         match self
             .application
             .interactions()
@@ -53,6 +56,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<collaboration_protocol::QuestionAnswerParams>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.actor_claim_refusal(&request.actor) {
+            return refusal;
+        }
         match self
             .application
             .interactions()
@@ -69,6 +75,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ProviderSettingsSetRequest>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.provider_actor_claim_refusal(&request.actor) {
+            return refusal;
+        }
         typed_failure_result::<ProviderSettingsFailure, _, _>(
             self.application.conversations().settings_set(request).await,
             OperationEffect::Unknown,
@@ -80,6 +89,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ProviderSettingsAcceptRequest>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.provider_actor_claim_refusal(&request.actor) {
+            return refusal;
+        }
         typed_failure_result::<ProviderSettingsFailure, _, _>(
             self.application
                 .conversations()
@@ -94,6 +106,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationResumeRequest>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.provider_actor_claim_refusal(&request.requested_by) {
+            return refusal;
+        }
         application_result(
             self.application
                 .conversations()
@@ -108,6 +123,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationCloseRequest>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.provider_actor_claim_refusal(&request.requested_by) {
+            return refusal;
+        }
         application_result(
             self.application
                 .conversations()

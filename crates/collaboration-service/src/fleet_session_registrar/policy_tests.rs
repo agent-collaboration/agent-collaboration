@@ -124,11 +124,23 @@ async fn fleet_session_registrar_persists_actual_identity_before_registration_an
         fixture.registrar.resolve_binding(&address).await,
         Err(RegistrarFailure::InactiveBinding)
     ));
+    assert!(matches!(
+        fixture.registrar.resolve_session_context(&session).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
     fixture.grant();
     let RegistrationCompletion::Registered(bound) = registering.await.unwrap() else {
         panic!("confirmed registration missing");
     };
     assert_eq!(bound.session(), &session);
+    assert_eq!(
+        fixture
+            .registrar
+            .resolve_session_context(&session)
+            .await
+            .unwrap(),
+        bound
+    );
     bound.require_sender(&session).unwrap();
     let mut forged = session.clone();
     forged.session_id = "different-conversation".to_owned().try_into().unwrap();
@@ -155,6 +167,10 @@ async fn fleet_session_registrar_persists_actual_identity_before_registration_an
     ));
     assert!(matches!(
         fixture.registrar.binding_for_restore(&session).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    assert!(matches!(
+        fixture.registrar.resolve_session_context(&session).await,
         Err(RegistrarFailure::InactiveBinding)
     ));
     assert_eq!(

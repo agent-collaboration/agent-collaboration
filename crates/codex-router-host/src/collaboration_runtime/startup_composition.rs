@@ -722,6 +722,7 @@ impl CollaborationRuntime {
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
+                session_registrar: None,
                 application,
                 service_directory: inputs.directory.clone(),
                 native_definitions,

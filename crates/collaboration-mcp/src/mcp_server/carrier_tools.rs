@@ -24,6 +24,9 @@ impl CollaborationMcpServer {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
         request.create.default_approver();
+        if let Some(refusal) = self.creator_claim_refusal(&request.create.created_by) {
+            return refusal;
+        }
         let operation_id = request.create.operation_id.clone();
         let endpoint = request.create.endpoint.clone();
         let timeout_seconds = request.timeout_seconds.map_or(300, u32::from);
@@ -67,6 +70,9 @@ impl CollaborationMcpServer {
         Parameters(request): Parameters<ConversationLoadToolRequest>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.provider_actor_claim_refusal(&request.load.requested_by) {
+            return refusal;
+        }
         let operation_id = request.load.operation_id.clone();
         let endpoint = request.load.target.endpoint.clone();
         let timeout =
@@ -108,6 +114,12 @@ impl CollaborationMcpServer {
         Parameters(request): Parameters<ConversationPromptToolRequest>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
+        if let Some(refusal) = self
+            .sender_claim_refusal(&request.prompt.requested_by)
+            .or_else(|| self.prompt_author_claim_refusal(&request.prompt.message))
+        {
+            return refusal;
+        }
         let operation_id = request.prompt.operation_id.clone();
         let endpoint = request.prompt.target.endpoint.clone();
         let timeout =
@@ -156,6 +168,9 @@ impl CollaborationMcpServer {
         Parameters(request): Parameters<ConversationCancelInput>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.sender_claim_refusal(&request.requested_by) {
+            return refusal;
+        }
         let operation_id = request.operation_id.clone();
         let endpoint = request.target.endpoint.clone();
         let connected = tokio::select! {
@@ -189,6 +204,12 @@ impl CollaborationMcpServer {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
         request.input.create.default_approver();
+        if let Some(refusal) = self
+            .creator_claim_refusal(&request.input.create.created_by)
+            .or_else(|| self.prompt_author_claim_refusal(&request.input.message))
+        {
+            return refusal;
+        }
         let operation_id = request.input.create.operation_id.clone();
         let timeout =
             Duration::from_secs(u64::from(request.timeout_seconds.map_or(300, u32::from)));

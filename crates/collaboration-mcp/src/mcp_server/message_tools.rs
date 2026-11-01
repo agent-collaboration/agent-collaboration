@@ -42,6 +42,17 @@ impl CollaborationMcpServer {
                 ));
             }
         };
+        let refusal = match &request.message {
+            collaboration_client::PublicMessageContent::Agent { sender, .. } => {
+                self.sender_claim_refusal(sender)
+            }
+            collaboration_client::PublicMessageContent::HumanUser { .. } => {
+                self.operator_claim_refusal()
+            }
+        };
+        if let Some(refusal) = refusal {
+            return refusal;
+        }
         let target = request.target.clone();
         let params = SessionMessageSendParams {
             item_id: request.item_id,
@@ -94,6 +105,9 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<MessageReplyRequest>,
     ) -> CallToolResult {
+        if let Some(refusal) = self.sender_claim_refusal(&request.caller) {
+            return refusal;
+        }
         let caller = request.caller.clone();
         let params = SessionMessageReplyParams {
             caller: request.caller,

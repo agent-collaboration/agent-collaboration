@@ -32,6 +32,9 @@ impl CollaborationMcpServer {
             Ok(request) => request,
             Err(rejection) => return domain_result::<(), _>(Err(rejection), true),
         };
+        if let Some(refusal) = self.actor_claim_refusal(&request.actor) {
+            return refusal;
+        }
         let Ok(maximum_root_notice_bytes) = thread_wait_root_notice_limit(API_RESULT_BUDGET) else {
             return validation_failure(
                 "The tool result budget leaves no room for one subscription root.",

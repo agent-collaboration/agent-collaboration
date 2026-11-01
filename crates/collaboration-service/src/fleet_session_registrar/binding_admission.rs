@@ -61,6 +61,37 @@ impl BoundFleetSession {
 }
 
 impl FleetSessionRegistrar {
+    /// Resolves the URI's private path segment against this installation's fixed origin.
+    pub async fn resolve_binding_capability(
+        &self,
+        capability: &str,
+    ) -> Result<BoundFleetSession, RegistrarFailure> {
+        if capability.len() != 32 {
+            return Err(RegistrarFailure::InactiveBinding);
+        }
+        let address = format!(
+            "{}/mcp/session/{capability}",
+            self.stable_origin()?.as_str()
+        )
+        .try_into()
+        .map_err(|_| RegistrarFailure::InactiveBinding)?;
+        self.resolve_binding(&address).await
+    }
+
+    /// Owner-only Unix calls carry a session claim, never a capability lookup result.
+    pub async fn resolve_session_context(
+        &self,
+        session: &SessionRef,
+    ) -> Result<BoundFleetSession, RegistrarFailure> {
+        let record = self
+            .repository
+            .conversation(session)
+            .await?
+            .ok_or(RegistrarFailure::InactiveBinding)?;
+        self.require_record_context(&record)?;
+        BoundFleetSession::from_active(&record)
+    }
+
     pub async fn resolve_binding(
         &self,
         address: &SessionBindingAddress,

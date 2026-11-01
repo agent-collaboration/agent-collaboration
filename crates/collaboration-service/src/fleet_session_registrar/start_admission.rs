@@ -222,11 +222,16 @@ impl FleetSessionRegistrar {
         }
         Ok(())
     }
-    fn stable_origin(&self) -> Result<&SessionBindingOrigin, RegistrarFailure> {
+    pub(super) fn stable_origin(&self) -> Result<&SessionBindingOrigin, RegistrarFailure> {
         match &self.listener {
             SessionBindingListener::Stable(origin) => Ok(origin),
             SessionBindingListener::Ephemeral => Err(RegistrarFailure::EphemeralListener),
         }
+    }
+
+    #[must_use]
+    pub fn registration_mode(&self) -> SessionRegistrationMode {
+        self.mode.mode()
     }
 }
 

@@ -55,6 +55,7 @@ mod message_tools;
 mod project_tool_schemas;
 mod result_converters;
 mod schema_binding;
+mod session_binding;
 mod session_tools;
 mod tool_output_contract;
 mod wait_tools;
@@ -130,6 +131,9 @@ pub(crate) struct CollaborationMcpServer {
     router_executable_relation: tokio::sync::watch::Receiver<RouterExecutableRelation>,
     /// The listener's running calls, which its shutdown aborts and joins.
     tool_calls: crate::tool_call_registry::ToolCallRegistry,
+    session_registrar:
+        Option<Arc<collaboration_service::fleet_session_registrar::FleetSessionRegistrar>>,
+    call_session: session_binding::CallSessionAdmission,
 }
 
 impl CollaborationMcpServer {
@@ -144,6 +148,8 @@ impl CollaborationMcpServer {
             carrier_access: carrier_access(&config.application, &config.service_directory),
             router_executable_relation: config.router_executable_relation.clone(),
             tool_calls,
+            session_registrar: config.session_registrar.clone(),
+            call_session: session_binding::CallSessionAdmission::AccessEnrollment,
         }
     }
 
@@ -161,6 +167,8 @@ impl CollaborationMcpServer {
             tool_calls: crate::tool_call_registry::ToolCallRegistry::new(
                 tokio_util::sync::CancellationToken::new(),
             ),
+            session_registrar: None,
+            call_session: session_binding::CallSessionAdmission::AccessEnrollment,
         }
     }
 
@@ -326,14 +334,17 @@ impl ServerHandler for CollaborationMcpServer {
             .get::<http::request::Parts>()
             .and_then(|parts| parts.extensions.get::<CallAdmission>())
             .cloned();
-        let routed = self
-            .surface
-            .router
-            .call(ToolCallContext::new(self, request, context));
         let routed = async move {
             // The listener's request slot belongs to the call until the call ends.
             let _admitted = admission;
-            routed.await
+            let call_server = match self.admit_call_session(&context).await {
+                Ok(server) => server,
+                Err(refusal) => return Ok(CallToolResponse::Complete(*refusal)),
+            };
+            self.surface
+                .router
+                .call(ToolCallContext::new(&call_server, request, context))
+                .await
         };
         self.tool_calls
             .run(routed, caller, |ended| {

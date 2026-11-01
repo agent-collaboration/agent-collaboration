@@ -28,6 +28,7 @@ use tokio_util::sync::CancellationToken;
 
 /// The path every listener serves the collaboration API on.
 pub const COLLABORATION_API_PATH: &str = "/mcp";
+const SESSION_COLLABORATION_API_PATH: &str = "/mcp/session/{capability}";
 /// How many requests one listener runs at once before shedding the rest.
 pub const DEFAULT_CONCURRENT_REQUESTS: usize = 64;
 /// How long shutdown lets running tool calls finish on their own after it cancels them.
@@ -45,6 +46,8 @@ const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 #[derive(Clone)]
 pub struct CollaborationApiConfig {
     pub application: CollaborationApplication,
+    pub session_registrar:
+        Option<Arc<collaboration_service::fleet_session_registrar::FleetSessionRegistrar>>,
     /// The service directory, where the carrier sockets the conversation and observation
     /// tools open live.
     pub service_directory: PathBuf,
@@ -67,6 +70,12 @@ pub enum CollaborationApiListener {
     },
     /// The owner-only Unix socket, for the CLIs; no browser origin is accepted.
     UnixSocket,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum CallTransport {
+    OwnerUnix,
+    Http,
 }
 
 /// One listener's copy of the collaboration API, ready to serve.
@@ -97,6 +106,10 @@ pub fn collaboration_api_router(
     config: &CollaborationApiConfig,
     listener: CollaborationApiListener,
 ) -> CollaborationApiRouter {
+    let call_transport = match &listener {
+        CollaborationApiListener::UnixSocket => CallTransport::OwnerUnix,
+        CollaborationApiListener::LoopbackTcp { .. } => CallTransport::Http,
+    };
     let mut service_config = StreamableHttpServerConfig::default()
         .with_legacy_session_mode(false)
         .with_json_response(true)
@@ -145,7 +158,9 @@ pub fn collaboration_api_router(
         );
     let admission = Arc::new(Semaphore::new(config.concurrent_requests));
     let mut router = Router::new()
-        .route_service(COLLABORATION_API_PATH, service)
+        .route_service(COLLABORATION_API_PATH, service.clone())
+        .route_service(SESSION_COLLABORATION_API_PATH, service)
+        .layer(axum::Extension(call_transport))
         .layer(middleware::from_fn_with_state(
             admission,
             shed_past_capacity,

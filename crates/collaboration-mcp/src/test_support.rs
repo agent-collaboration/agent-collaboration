@@ -90,6 +90,7 @@ impl ServedCollaborationApi {
         let shutdown = CancellationToken::new();
         let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let config = CollaborationApiConfig {
+            session_registrar: None,
             application,
             service_directory: directory.to_owned(),
             native_definitions: None,
