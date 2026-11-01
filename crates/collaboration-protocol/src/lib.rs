@@ -26,6 +26,8 @@ pub use operation_failure_contract::{
 };
 mod conversation_create_outcome;
 mod provider_conversation_contract;
+mod provider_setting_name;
+pub use provider_setting_name::ProviderSettingName;
 mod provider_identity;
 mod provider_settings_contract;
 pub use conversation_create_outcome::ConversationCreateOutcome;
@@ -46,8 +48,7 @@ pub use provider_conversation_contract::{
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
     ProviderPermissionOutcome, ProviderPromptStopReason, ProviderReconciliationState,
     ProviderRequestedPolicy, ProviderRequestedSettings, ProviderRuntimeIdentity,
-    ProviderSettingName, ProviderSettingsMappingStatus, ProviderTransport,
-    ProviderWorkingDirectory,
+    ProviderSettingsMappingStatus, ProviderTransport, ProviderWorkingDirectory,
 };
 pub use provider_identity::ProviderIdentity;
 pub use provider_settings_contract::{

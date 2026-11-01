@@ -1,7 +1,7 @@
 //! Provider-neutral external ACP conversation and operation contracts.
 use crate::{
     CodexGeneration, EndpointRef, MessageContent, MessageText, NonEmptyText, ObservationTimestamp,
-    PositiveSeconds, ProviderIdentity, RouterAccess, SessionRef,
+    PositiveSeconds, ProviderIdentity, ProviderSettingName, RouterAccess, SessionRef,
 };
 use agent_automation::OperationId;
 use fleet_identity_protocol::{RemoteLaunchAccess, RemoteLaunchPolicy};
@@ -321,14 +321,6 @@ pub struct ProviderRequestedSettings {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ProviderSettingName {
-    Mode,
-    Model,
-    Effort,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

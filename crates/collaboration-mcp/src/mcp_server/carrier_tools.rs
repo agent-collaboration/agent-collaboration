@@ -227,7 +227,7 @@ impl CollaborationMcpServer {
             super::session_binding::CallSessionAdmission::BoundHttp(_)
         ) {
             if request.input.create.fork.is_some() {
-                return conversation_tool_result(
+                return conversation_tool_result::<ConversationCreatePromptOutcome>(
                     Err(ConversationClientError::InvalidInput(
                         "create-and-prompt requires a fresh destination",
                     )),
@@ -237,7 +237,10 @@ impl CollaborationMcpServer {
             if let Err(error) =
                 ConversationClient::validate_create_input(&request.input.create, timeout)
             {
-                return conversation_tool_result(Err(error), Some(operation_id));
+                return conversation_tool_result::<ConversationCreatePromptOutcome>(
+                    Err(error),
+                    Some(operation_id),
+                );
             }
             tokio::select! {
                 _ = context.ct.cancelled() => return conversation_call_cancelled(OperationEffect::None, Some(&operation_id)),
