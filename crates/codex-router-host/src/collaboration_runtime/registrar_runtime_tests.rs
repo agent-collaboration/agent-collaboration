@@ -78,10 +78,16 @@ async fn f4a_registrar_runtime_project_and_authority_refusals_never_dispatch_pro
         fixture.create(SECOND, "cursor-local", Some(PROJECT)),
     )
     .await;
-    assert!(
-        refused.to_string().contains("machineNotAllowed"),
+    assert_eq!(refused["isError"], true, "{refused}");
+    assert_eq!(
+        refused["structuredContent"]["kind"], "permissionRejected",
         "{refused}"
     );
+    assert_eq!(
+        refused["structuredContent"]["stage"], "admission",
+        "{refused}"
+    );
+    assert_eq!(refused["structuredContent"]["effect"], "none", "{refused}");
     assert_eq!(fixture.authority.checks.lock().unwrap().len(), 1);
     assert!(fixture.repository.records.lock().unwrap().is_empty());
     runtime.shutdown().await.unwrap();
@@ -183,7 +189,7 @@ async fn f4a_registrar_runtime_public_create_registers_actual_provider_and_bound
     }
 }
 
-// R8 and the bound native config use the real public client/ACP/native wire;
+// R8 and the bound native config use the real public client/ACP bridge/native wire;
 // only the app-server answer and central/store are stand-ins. No pre-fix red.
 #[tokio::test]
 async fn f4a_registrar_runtime_native_create_uses_the_same_owner_before_thread_start() {
@@ -213,6 +219,8 @@ async fn f4a_registrar_runtime_native_create_uses_the_same_owner_before_thread_s
     let mut missing = fixture.create(FIRST, "codex-local", None);
     missing["createdBy"] = permission_actor.clone();
     missing["approver"] = permission_actor.clone();
+    missing["model"] = json!("gpt-6-sol");
+    missing["effort"] = json!("medium");
     let refused = call(
         &fixture.manifest().mcp.url,
         "conversation_create",
@@ -223,8 +231,6 @@ async fn f4a_registrar_runtime_native_create_uses_the_same_owner_before_thread_s
     assert!(native.creates.lock().unwrap().is_empty());
     missing["operationId"] = json!(SECOND);
     missing["projectId"] = json!(PROJECT);
-    missing["model"] = json!("gpt-6-sol");
-    missing["effort"] = json!("medium");
     let created = call(&fixture.manifest().mcp.url, "conversation_create", missing).await;
     assert_eq!(created["isError"], false, "{created}");
     assert_eq!(created["structuredContent"]["kind"], "created", "{created}");
