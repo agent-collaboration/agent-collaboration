@@ -144,6 +144,8 @@ impl<'de> Deserialize<'de> for FiringEntry {
 pub struct SessionCreateEntry {
     pub work_item_id: WorkItemId,
     pub operation_id: OperationId,
+    /// Central records the authenticated caller's installation, including for a human creator.
+    pub source_installation: message_board::ServiceId,
     pub request: RemoteSessionCreateDefinition,
 }
 
