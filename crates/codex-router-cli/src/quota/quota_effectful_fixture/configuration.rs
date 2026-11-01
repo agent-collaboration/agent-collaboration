@@ -1,4 +1,5 @@
 //! Opt-in scenarios and private artifact paths belong only to the ignored fixture entry.
+use super::event_fence::FixtureEventKind;
 use serde::{Deserialize, Serialize};
 use std::{
     fs, io,
@@ -174,6 +175,13 @@ impl FixtureConfiguration {
     deny_unknown_fields
 )]
 pub(super) enum FixtureControlRequest {
+    #[serde(rename = "await_event")]
+    AwaitEvent {
+        request_id: u64,
+        #[serde(rename = "after_ordinal")]
+        after_ordinal: u64,
+        kind: FixtureEventKind,
+    },
     Readback {
         request_id: u64,
     },

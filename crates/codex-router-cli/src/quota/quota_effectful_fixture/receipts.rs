@@ -1,4 +1,5 @@
 //! Project actual owner facts; fixture setup and native dispatch have separate writers.
+use super::event_fence::{FixtureEventCompletions, FixtureEventFenceResult, FixtureEventKind};
 use crate::quota::quota_refresh_adapter::observation::{RefreshObservation, ServiceReturn};
 use agent_router_quota_tui::{
     QuotaAccountAction, QuotaAccountCommand, QuotaAccountCommandResult, QuotaRefreshResult,
@@ -14,25 +15,57 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+struct FixtureJournalWriter {
+    ordinal: u64,
+    output: Box<dyn Write + Send>,
+}
+
 #[derive(Clone)]
-pub(super) struct FixtureEvents(Arc<Mutex<(u64, File)>>);
+pub(super) struct FixtureEvents {
+    writer: Arc<Mutex<FixtureJournalWriter>>,
+    completions: FixtureEventCompletions,
+}
 impl FixtureEvents {
     pub(super) fn new(file: File) -> Self {
-        Self(Arc::new(Mutex::new((0, file))))
+        Self::with_writer(file)
+    }
+    pub(super) fn with_writer(writer: impl Write + Send + 'static) -> Self {
+        Self {
+            writer: Arc::new(Mutex::new(FixtureJournalWriter {
+                ordinal: 0,
+                output: Box::new(writer),
+            })),
+            completions: FixtureEventCompletions::new(),
+        }
     }
     pub(super) fn write(&self, event: Value) -> io::Result<()> {
         let mut writer = self
-            .0
+            .writer
             .lock()
             .map_err(|_| io::Error::other("fixture event writer poisoned"))?;
-        writer.0 = writer
-            .0
+        writer.ordinal = writer
+            .ordinal
             .checked_add(1)
             .ok_or_else(|| io::Error::other("fixture event IDs exhausted"))?;
-        let record = json!({"sequence":writer.0,"event":event});
-        serde_json::to_writer(&mut writer.1, &record).map_err(io::Error::other)?;
-        writeln!(&mut writer.1)?;
-        writer.1.flush()
+        let kind = serde_json::from_value::<FixtureEventKind>(event["kind"].clone()).ok();
+        let record = json!({"sequence":writer.ordinal,"event":event});
+        serde_json::to_writer(&mut writer.output, &record).map_err(io::Error::other)?;
+        writeln!(&mut writer.output)?;
+        writer.output.flush()?;
+        if let Some(kind) = kind {
+            self.completions.flushed(writer.ordinal, kind);
+        }
+        Ok(())
+    }
+    pub(super) async fn await_event(
+        &self,
+        after_ordinal: u64,
+        kind: FixtureEventKind,
+    ) -> FixtureEventFenceResult {
+        self.completions.await_event(after_ordinal, kind).await
+    }
+    pub(super) fn finish(&self) {
+        self.completions.finish();
     }
 }
 

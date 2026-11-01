@@ -35,7 +35,7 @@ The CLI implements the typed preference port with the shared ui-preference-store
 
 T2 keeps the existing leading Details/Filters/Pool/Options/Floor toolbar block and adds menu-only View, Account, Refresh and Screen sections. Existing menu-order assertions are preserved. Phone and compact Help use actual InputOwner receipts and frame markers with causal bounds; keys, assertions, sizes and existing iteration limits remain intact.
 
-## Five test-only seams
+## Six test-only seams
 
 | Seam | Observation or capability | Owner |
 | --- | --- | --- |
@@ -44,6 +44,7 @@ T2 keeps the existing leading Details/Filters/Pool/Options/Floor toolbar block a
 | 3. Exact-owned-root factory | Existing account command owner, typed completion and private clipboard across the CLI/login loop; rejects any other root | CLI quota_account_factory_test_support |
 | 4. Parent wait | Actual child PID and raw wait code/signal/error before mapping, equal mapper input/result and parent-exit receipt | CLI quota_login_child and observation helper |
 | 5. Preference save, observation only | Scope captured at actual adapter open; facet/ordinal and actual shared-store result after await, carried into the retained writer | CLI quota_group_preferences and observation helper |
+| 6. Read-only event fence | Existing private control socket completes only after a matching journal event is written and flushed, with a strictly newer ordinal; typed ended result after graceful completion | CLI effectful fixture event_fence, receipts and control_server |
 
 These seams introduce no normal fixture callback or production environment switch. Parent/save/factory fixture paths require test, debug assertions and the existing harness feature; debug component support is gated from shipping builds. Release graph, symbol and raw-product exclusion is a separate required gate.
 
@@ -96,3 +97,13 @@ Final compiled inventory preserves all 57 exact case names and the same 5 ignore
 The first current architecture run `b8ef0368-ab06-4ffb-bea5-86a41330dfe0` timed out at the unchanged 300-second guard without a verdict. Lead01a19721 authorized one quiet run after S6b released Cargo. On the same 206 source hashes, `70e203a0-05d2-4b0a-a70d-0cc98e7a328d` passes **1/1**, with 22 skipped (exit 0, 236.798s): 50 packages, 50 targets, default 4 workers. Its baseline and guard are unchanged and successful per-package output is retained. The earlier timeout remains evidence; timing causation is not claimed. The quiet window has been released.
 
 This source checkpoint is ready for the authorized lane commit/push. Next are the four raw shipping-common release controls, signed artifact qualification, actual CLI login-remount and F6 grouping-reopen profiles, and the protected Host diagnostic. No current native body, signed product declaration, PR merge, release or delivery acceptance is claimed.
+
+## Sixth-seam extension, 2026-11-01
+
+Lead01a1985d authorizes a read-only fence on the existing private setup socket. Request: `{ "operation": "await_event", "requestId": 1, "after_ordinal": 0, "kind": "grouping-invocation-settled" }`. The kind must be one of the existing journal kinds in `event_fence::FixtureEventKind`; unknown kinds return `fixture-control-error` without writing a journal record. Existing request IDs still increase without replay.
+
+Reply: `{ "kind": "fixture-event-fence", "requestId": 1, "result": { "kind": "observed", "ordinal": 8, "eventKind": "grouping-invocation-settled" } }`, or `result: { "kind": "ended-before-event" }`. An observed ordinal is strictly greater than after_ordinal. Completion is published after the real writer flush, including already-flushed matching facts. The server has no timer. Fence replies never enter the journal and never claim a native dispatch/frame ACK; the Verifier parses the journal independently.
+
+For graceful fixture completion, the control server releases its controller on stop, the fixture drains view observations and its final journal write, then finishes completion notification and drains any pending fence reply. Abrupt process death supplies transport EOF/actual process completion to the caller; an exited process cannot itself send a reply. No product state, configuration, provider, credential or persisted format changes. All sixth-seam code remains inside the existing cfg(test), debug-assertions, quota-reset-test-harness gate.
+
+Current focused proof is five permanent colocated contracts (4c9f66ff,5/5,exit0), including an actual private Unix socket and a held real-file flush. The original missing-operation admission red51f02966 and the intended early-publication assertion red616e8f49 are retained; the intervening field-rename compile failure is not sensitivity proof. All broader gates, current release exclusion and the new signed declaration remain open.
