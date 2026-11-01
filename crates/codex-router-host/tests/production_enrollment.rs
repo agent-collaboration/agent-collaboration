@@ -377,7 +377,7 @@ impl OwnedHost {
             .iter()
             .find_map(|frame| match frame {
                 OperatorFrame::Terminal(response) => Some(response.snapshot()),
-                OperatorFrame::Progress(_) => None,
+                OperatorFrame::Progress(_) | OperatorFrame::FleetLogin(_) => None,
             })
             .ok_or("Host startup did not publish a terminal snapshot")?;
         if snapshot.hosted_readiness() != HostedReadiness::Ready {

@@ -26,6 +26,7 @@ pub const MAX_OPERATOR_FRAME_BYTES: usize = 64 * 1024;
 pub enum OperatorRequest {
     /// Ask this running Host to approve and keep its own machine login.
     FleetLogin {
+        #[serde(rename = "organizationId")]
         organization_id: fleet_identity_protocol::OrganizationId,
         label: message_board::MachineLabel,
     },

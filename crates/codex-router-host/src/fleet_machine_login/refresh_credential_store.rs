@@ -70,9 +70,14 @@ impl RefreshCredentialStore {
                 installation,
             } => {
                 let key = credential_key(installation, enrollment)?;
-                let secret = store
-                    .read_secret(&key)
-                    .map_err(|_| RefreshCredentialError::DamagedCredential)?;
+                let secret = match store.read_secret(&key) {
+                    Ok(secret) => secret,
+                    Err(codex_router_secret_store::model::SecretStoreError::Filesystem {
+                        source,
+                        ..
+                    }) if source.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                    Err(_) => return Err(RefreshCredentialError::DamagedCredential),
+                };
                 let wire: StoredRefreshCredential = serde_json::from_str(secret.expose_secret())
                     .map_err(|_| RefreshCredentialError::DamagedCredential)?;
                 if wire.machine_client_id != *enrollment || wire.refresh_credential.is_empty() {
@@ -160,3 +165,7 @@ struct StoredRefreshCredential {
     machine_client_id: EnrollmentId,
     refresh_credential: String,
 }
+
+#[cfg(test)]
+#[path = "refresh_credential_store_tests.rs"]
+mod tests;

@@ -430,7 +430,11 @@ impl HostRuntime {
                 };
                 if let Err(error) = result {
                     tracing::error!("collaboration lifecycle synchronization failed");
-                    let cleanup = owner.shutdown_runtime().await;
+                    let cleanup = if config.remote_access().is_some() {
+                        owner.shutdown().await
+                    } else {
+                        owner.shutdown_runtime().await
+                    };
                     if config.remote_access().is_some() {
                         let error = match cleanup {
                             Ok(()) => error,

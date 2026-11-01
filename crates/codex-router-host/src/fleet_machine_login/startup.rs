@@ -124,6 +124,12 @@ pub(crate) fn start_machine_login(
             HostMachineLogin::NotConfigured { source }
         }));
     };
+    use std::os::unix::fs::DirBuilderExt;
+    match std::fs::DirBuilder::new().mode(0o700).create(directory) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
     let installation: fleet_identity_protocol::InstallationId =
         String::from(collaboration_runtime::load_service_identity(directory)?)
             .try_into()

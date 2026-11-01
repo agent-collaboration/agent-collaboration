@@ -16,7 +16,7 @@ pub use login_contract::{
     FleetLoginEvent, FleetLoginRefusal, FleetLoginUnknown, RefreshCredentialKeeping, UserCode,
     VerificationUri,
 };
-pub(crate) use login_owner::{MachineLoginHandle, RunningMachineLogin};
+pub(crate) use login_owner::MachineLoginHandle;
 pub(crate) use machine_token_transport::{HostMachineSessionTransport, MachineTokenSource};
 pub use startup::FleetLoginDependencies;
 pub(crate) use startup::{HostMachineLogin, MachineLoginBinding, start_machine_login};

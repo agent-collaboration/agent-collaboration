@@ -417,7 +417,7 @@ fn terminal_snapshot(
         .iter()
         .find_map(|frame| match frame {
             OperatorFrame::Terminal(response) => Some(response.snapshot()),
-            OperatorFrame::Progress(_) => None,
+            OperatorFrame::Progress(_) | OperatorFrame::FleetLogin(_) => None,
         })
         .ok_or_else(|| std::io::Error::other("operator response omitted its terminal frame").into())
 }
@@ -429,7 +429,7 @@ fn terminal_classification(
         .iter()
         .find_map(|frame| match frame {
             OperatorFrame::Terminal(response) => Some(response.classification()),
-            OperatorFrame::Progress(_) => None,
+            OperatorFrame::Progress(_) | OperatorFrame::FleetLogin(_) => None,
         })
         .ok_or_else(|| std::io::Error::other("operator response omitted its terminal frame").into())
 }

@@ -48,6 +48,8 @@ pub enum EncryptedCredentialStoreStatus {
 pub struct EncryptedCredentialStore {
     file_store: FileSecretStore,
     state: CredentialStoreState,
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) retirement_sync: Option<fn(&std::path::Path) -> std::io::Result<()>>,
 }
 
 #[derive(Clone, Debug)]
@@ -67,6 +69,10 @@ impl EncryptedCredentialStore {
         &self,
         active: &FleetSecretKey,
     ) -> Result<(), SecretStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if let Some(sync) = self.retirement_sync {
+            return self.remove_retired_machine_credentials_with_sync(active, sync);
+        }
         self.remove_retired_machine_credentials_with_sync(active, |directory| {
             std::fs::File::open(directory)?.sync_all()
         })
@@ -275,6 +281,8 @@ impl EncryptedCredentialStore {
         Self {
             file_store,
             state: CredentialStoreState::Ready(data_key),
+            #[cfg(any(test, feature = "test-support"))]
+            retirement_sync: None,
         }
     }
 
@@ -284,6 +292,8 @@ impl EncryptedCredentialStore {
         Self {
             file_store,
             state: CredentialStoreState::KeyUnavailable,
+            #[cfg(any(test, feature = "test-support"))]
+            retirement_sync: None,
         }
     }
 
@@ -299,6 +309,8 @@ impl EncryptedCredentialStore {
         Self {
             file_store,
             state: CredentialStoreState::MigrationIncomplete { accounts, failure },
+            #[cfg(any(test, feature = "test-support"))]
+            retirement_sync: None,
         }
     }
 

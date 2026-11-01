@@ -136,7 +136,9 @@ fn render_display(stdout: &mut impl Write, event: &FleetLoginEvent) -> std::io::
         } => {
             writeln!(
                 stdout,
-                "Logged in to organization {organization_id} (enrollment {enrollment_id})."
+                "Logged in to organization {} (enrollment {}).",
+                organization_id.as_str(),
+                enrollment_id.as_str()
             )?;
             writeln!(stdout, "{}", keeping_message(*keeping))?;
         }
@@ -168,7 +170,10 @@ fn refusal_message(reason: &FleetLoginRefusal) -> String {
             format!("fleet login refused: encrypted credential store is unusable ({cause:?})")
         }
         FleetLoginRefusal::AlreadyInOrganization { organization_id } => {
-            format!("this installation is already saved in organization {organization_id}")
+            format!(
+                "this installation is already saved in organization {}",
+                organization_id.as_str()
+            )
         }
         FleetLoginRefusal::AccessDenied {} => "fleet login was denied".to_owned(),
         FleetLoginRefusal::CodeExpired {} => {
@@ -188,3 +193,7 @@ fn refusal_message(reason: &FleetLoginRefusal) -> String {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "login_command_tests.rs"]
+mod tests;

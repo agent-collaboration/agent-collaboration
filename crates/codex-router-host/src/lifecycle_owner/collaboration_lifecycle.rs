@@ -41,12 +41,6 @@ impl CollaborationLifecycle {
         };
         let preparation_started_at = std::time::Instant::now();
         let router_secret_root = config.coordination_paths().router_secret_root();
-        use std::os::unix::fs::DirBuilderExt;
-        match std::fs::DirBuilder::new().mode(0o700).create(directory) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
         let router_root = config
             .coordination_paths()
             .router_root()

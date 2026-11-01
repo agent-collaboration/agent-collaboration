@@ -26,6 +26,12 @@ fn inventory(root: &Path) -> BTreeMap<String, Vec<u8>> {
 }
 
 fn ready_store(root: &Path) -> EncryptedCredentialStore {
+    fs::write(
+        root.join("store-id"),
+        "019f0000-0000-7000-8000-000000000021",
+    )
+    .unwrap();
+    fs::write(root.join("format-v2.marker"), b"2\n").unwrap();
     EncryptedCredentialStore::open_for_process_with_keychain(
         root,
         &crate::test_support::DeterministicTestKeychainAccess,

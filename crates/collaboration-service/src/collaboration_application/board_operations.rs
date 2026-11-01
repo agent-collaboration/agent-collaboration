@@ -31,6 +31,9 @@ mod board_forwarded_posts;
 mod board_inbox_events;
 #[path = "board_inbox_reads.rs"]
 mod board_inbox_reads;
+#[cfg(test)]
+#[path = "board_machine_login_tests.rs"]
+mod board_machine_login_tests;
 #[path = "board_non_post_refusals.rs"]
 mod board_non_post_refusals;
 #[path = "board_paging.rs"]

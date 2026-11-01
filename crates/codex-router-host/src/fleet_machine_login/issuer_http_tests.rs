@@ -58,6 +58,14 @@ struct StandIn {
     grant: Mutex<GrantState>,
     requests: Mutex<Vec<HashMap<String, String>>>,
     poll_times: Mutex<Vec<i64>>,
+    redemption_reply: RedemptionReply,
+}
+
+#[derive(Clone, Copy)]
+enum RedemptionReply {
+    Complete,
+    LoseAfterConsume,
+    MalformedAfterConsume,
 }
 
 fn response(status: StatusCode, body: Value) -> Response {
@@ -161,7 +169,21 @@ async fn token(
                 refresh,
                 generation: 0,
             };
-            response(StatusCode::OK, body)
+            match state.redemption_reply {
+                RedemptionReply::Complete => response(StatusCode::OK, body),
+                RedemptionReply::MalformedAfterConsume => response(
+                    StatusCode::OK,
+                    json!({"access_token":"malformed-success-secret-canary"}),
+                ),
+                RedemptionReply::LoseAfterConsume => {
+                    // The grant has already been consumed above. The body
+                    // stream fails by an event, with no timeout or real clock.
+                    let stream = futures_util::stream::once(async {
+                        Err::<String, _>(std::io::Error::other("injected lost reply after consume"))
+                    });
+                    Response::new(axum::body::Body::from_stream(stream))
+                }
+            }
         }
         Some("refresh_token") => {
             if form.get("client_id").map(String::as_str) != Some(MACHINE_CLIENT) {
@@ -200,6 +222,7 @@ async fn fleet_machine_login_http_flow_keeps_machine_fields_client_rotation_and_
         grant: Mutex::new(GrantState::Unrequested),
         requests: Mutex::new(Vec::new()),
         poll_times: Mutex::new(Vec::new()),
+        redemption_reply: RedemptionReply::Complete,
     });
     let router = Router::new()
         .route("/device", post(authorize))
@@ -284,4 +307,86 @@ async fn fleet_machine_login_http_flow_keeps_machine_fields_client_rotation_and_
     assert!(issuer.refresh(&wrong).await.is_err());
     stop.cancel();
     server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn fleet_machine_login_http_consume_then_lost_or_malformed_success_is_unknown_without_replay()
+{
+    use super::super::{device_code_flow::DeviceCodeFailure, login_contract::FleetLoginUnknown};
+    for redemption_reply in [
+        RedemptionReply::LoseAfterConsume,
+        RedemptionReply::MalformedAfterConsume,
+    ] {
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let clock = Arc::new(ControlledClock(AtomicI64::new(0)));
+        let state = Arc::new(StandIn {
+            clock: clock.clone(),
+            verification_uri: format!("http://{address}/activate"),
+            grant: Mutex::new(GrantState::Unrequested),
+            requests: Mutex::new(Vec::new()),
+            poll_times: Mutex::new(Vec::new()),
+            redemption_reply,
+        });
+        let router = Router::new()
+            .route("/device", post(authorize))
+            .route("/token", post(token))
+            .with_state(state.clone());
+        let stop = CancellationToken::new();
+        let shutdown = stop.clone();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown.cancelled_owned())
+                .await
+        });
+        let issuer = HttpMachineTokenIssuer::new(
+            format!("http://{address}/device").try_into().unwrap(),
+            format!("http://{address}/token").try_into().unwrap(),
+            "fixture-device-client".to_owned().try_into().unwrap(),
+            "https://central.example.invalid/machine"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            clock.clone(),
+        )
+        .unwrap();
+        let request = DeviceLoginRequest {
+            organization_id: "019f0000-0000-7000-8000-000000000001"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            installation: "019f0000-0000-7000-8000-000000000002"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            peer: serde_json::from_value(json!("019f0000-0000-7000-8000-000000000003")).unwrap(),
+            label: "Fixture machine".to_owned().try_into().unwrap(),
+        };
+
+        let result = run_device_code_login(
+            &issuer,
+            clock.as_ref(),
+            &request,
+            RefreshCredentialKeeping::MemoryOnly,
+            |_| {},
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(DeviceCodeFailure::OutcomeUnknown(FleetLoginUnknown::DeviceRedemption { organization_id, installation })) if organization_id == request.organization_id && installation == request.installation)
+        );
+        assert!(
+            matches!(*state.grant.lock().unwrap(), GrantState::Issued { .. }),
+            "the server consumed before losing its response"
+        );
+        assert_eq!(
+            *state.poll_times.lock().unwrap(),
+            vec![5_000, 10_000, 20_000],
+            "no automatic replay after the consumed code"
+        );
+        stop.cancel();
+        server.await.unwrap().unwrap();
+    }
 }

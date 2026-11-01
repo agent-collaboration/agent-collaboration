@@ -30,6 +30,28 @@ use codex_router_host::encode_operator_request;
 const EXPECTED_PROTOCOL_VERSION: u16 = 1;
 
 #[test]
+fn fleet_machine_login_operator_request_keeps_v1_envelope_and_adopted_camel_case_fields() {
+    let request = OperatorRequest::FleetLogin {
+        organization_id: "019f0000-0000-7000-8000-000000000001"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+        label: "Fixture machine".to_owned().try_into().unwrap(),
+    };
+    let bytes = encode_operator_request(&request).unwrap();
+    let wire: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        wire,
+        serde_json::json!({"protocol_version":1,"request":{"fleet_login":{"organizationId":"019f0000-0000-7000-8000-000000000001","label":"Fixture machine"}}})
+    );
+    assert_eq!(decode_operator_request(&bytes).unwrap(), request);
+    assert!(
+        !request.is_mutating(),
+        "login never takes lifecycle replacement ownership"
+    );
+}
+
+#[test]
 fn protocol_is_versioned_bounded_and_accepts_exactly_one_request()
 -> Result<(), Box<dyn std::error::Error>> {
     let encoded = encode_operator_request(&OperatorRequest::Status)?;

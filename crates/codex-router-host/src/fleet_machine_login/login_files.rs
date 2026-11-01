@@ -241,6 +241,7 @@ fn validate_private_file(
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn persist_metadata(
     root: &Path,
     metadata: &MachineLoginMetadata,

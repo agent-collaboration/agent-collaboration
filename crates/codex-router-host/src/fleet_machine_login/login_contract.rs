@@ -167,6 +167,44 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn fleet_machine_login_unknown_endings_are_closed_public_contexts_and_terminal() {
+        for context in [
+            FleetLoginUnknown::DeviceRedemption {
+                organization_id: "019f0000-0000-7000-8000-000000000001"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                installation: "019f0000-0000-7000-8000-000000000002"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+            },
+            FleetLoginUnknown::CredentialPublication {
+                organization_id: "019f0000-0000-7000-8000-000000000001"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                enrollment_id: "019f0000-0000-7000-8000-000000000010"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                keeping: RefreshCredentialKeeping::EncryptedStore,
+            },
+        ] {
+            let event = FleetLoginEvent::OutcomeUnknown { context };
+            let mut wire = serde_json::to_value(&event).unwrap();
+            assert_eq!(wire["state"], "outcomeUnknown");
+            assert!(event.is_terminal());
+            assert_eq!(
+                serde_json::from_value::<FleetLoginEvent>(wire.clone()).unwrap(),
+                event
+            );
+            wire["context"]["unexpected"] = json!(true);
+            assert!(serde_json::from_value::<FleetLoginEvent>(wire).is_err());
+        }
+    }
+
+    #[test]
     fn fleet_machine_login_frames_have_only_adopted_display_fields() {
         let event = FleetLoginEvent::Code {
             user_code: "ABCD-EFGH".to_owned().try_into().unwrap(),

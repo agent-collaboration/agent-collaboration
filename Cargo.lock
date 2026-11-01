@@ -1302,6 +1302,7 @@ dependencies = [
 name = "codex-router-cli"
 version = "0.1.119"
 dependencies = [
+ "axum",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",

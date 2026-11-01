@@ -67,3 +67,7 @@ pub(super) async fn renew_machine_token(
     }
     Err(())
 }
+
+#[cfg(test)]
+#[path = "token_renewal_tests.rs"]
+mod tests;

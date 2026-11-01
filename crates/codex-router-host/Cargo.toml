@@ -89,7 +89,7 @@ collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-writer = { workspace = true, features = ["test-support"] }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-axum = { workspace = true, features = ["ws"] }
+axum = { workspace = true, features = ["ws", "form", "json", "http1", "tokio"] }
 fleet-sync-service.workspace = true
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40", features = ["test-observation"] }

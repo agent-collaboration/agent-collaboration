@@ -21,6 +21,20 @@ use crate::model::SecretStoreError;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DeterministicTestKeychainAccess;
 
+/// Fails the final retirement sync after the real encrypted-file deletions.
+/// The hook exists only in fixture builds and leaves the normal publication path intact.
+#[must_use]
+pub fn with_machine_retirement_sync_failure(
+    mut store: EncryptedCredentialStore,
+) -> EncryptedCredentialStore {
+    store.retirement_sync = Some(|_| {
+        Err(std::io::Error::other(
+            "injected retirement directory sync failure",
+        ))
+    });
+    store
+}
+
 impl KeychainAccess for DeterministicTestKeychainAccess {
     fn read_secret(
         &self,

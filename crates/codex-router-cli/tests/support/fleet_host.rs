@@ -19,6 +19,32 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const BOUND: Duration = Duration::from_secs(20);
 const ROOT_ENV: &str = "CODEX_FLEET_PRODUCER_HOST_ROOT";
 const ROUTER_ENV: &str = "CODEX_FLEET_PRODUCER_ROUTER_ADDRESS";
+pub const MACHINE_LOGIN_FIXTURE_MARKER: &str = "machine-login-fixture";
+
+/// Advances the first device poll by an event; renewal remains parked until shutdown.
+/// No fixture wait or expiry depends on the wall clock.
+struct MachineLoginPollingClock(std::sync::atomic::AtomicI64);
+impl codex_router_host::fleet_machine_login::FleetLoginClock for MachineLoginPollingClock {
+    fn now(&self) -> fleet_sync_protocol::SyncTime {
+        fleet_sync_protocol::SyncTime::from_unix_millis(
+            self.0.load(std::sync::atomic::Ordering::SeqCst),
+        )
+    }
+    fn wait_until(
+        &self,
+        deadline: fleet_sync_protocol::SyncTime,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ()>> + Send + '_>> {
+        Box::pin(async move {
+            if deadline.unix_millis() <= 5_000 {
+                self.0
+                    .store(deadline.unix_millis(), std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            } else {
+                std::future::pending().await
+            }
+        })
+    }
+}
 pub fn fixture_root() -> TestResult<tempfile::TempDir> {
     let root = tempfile::Builder::new()
         .prefix("fleet-producer-debug-")
@@ -116,7 +142,7 @@ impl OwnedHost {
             .iter()
             .find_map(|frame| match frame {
                 OperatorFrame::Terminal(response) => Some(response.snapshot()),
-                OperatorFrame::Progress(_) => None,
+                OperatorFrame::Progress(_) | OperatorFrame::FleetLogin(_) => None,
             })
             .ok_or("Host startup did not publish a terminal snapshot")?;
         if snapshot.hosted_readiness() != HostedReadiness::Ready {
@@ -193,15 +219,36 @@ async fn host_child() -> TestResult {
     )
     .with_collaboration_peer_registry_directory(root.join("no-peer-registry"))
     .with_owner_human_id("enrollment-test-owner".to_owned().try_into()?);
-    Box::pin(HostRuntime::run(
-        config,
-        ManagedChildLaunchPlans::new(
-            None,
-            AppServerLaunchPlan::new(command, identity, "1.2.3".to_owned()),
-        ),
-        ManagedUpdateInputs::production(),
-    ))
-    .await?;
+    let plans = ManagedChildLaunchPlans::new(
+        None,
+        AppServerLaunchPlan::new(command, identity, "1.2.3".to_owned()),
+    );
+    if root.join(MACHINE_LOGIN_FIXTURE_MARKER).is_file() {
+        let instance =
+            codex_router_host::HostInstance::acquire(config.coordination_paths().clone())?;
+        Box::pin(HostRuntime::run_acquired_with_fleet_login_dependencies(
+            config,
+            plans,
+            ManagedUpdateInputs::production(),
+            instance,
+            codex_router_host::fleet_machine_login::FleetLoginDependencies {
+                clock: std::sync::Arc::new(MachineLoginPollingClock(
+                    std::sync::atomic::AtomicI64::new(0),
+                )),
+                keychain: std::sync::Arc::new(
+                    codex_router_secret_store::test_support::DeterministicTestKeychainAccess,
+                ),
+            },
+        ))
+        .await?;
+    } else {
+        Box::pin(HostRuntime::run(
+            config,
+            plans,
+            ManagedUpdateInputs::production(),
+        ))
+        .await?;
+    }
     Ok(())
 }
 
