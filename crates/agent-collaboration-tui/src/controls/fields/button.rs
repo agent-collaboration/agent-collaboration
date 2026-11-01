@@ -93,6 +93,11 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
     let natural_width = action_button_width(&action, props.show_key.unwrap_or(true))
         + props.glyph.map_or(0, |glyph| glyph.text().width() + 1)
         + usize::from(primary) * 2;
+    // Reasons yield to siblings; the intact label row keeps its marks, key and padding.
+    let minimum_label_width = natural_width.saturating_sub(match &action.availability {
+        Availability::Available => 0,
+        Availability::Unavailable { reason } => reason.width() + 1,
+    });
     let measurement = hooks.use_hook(|| ButtonWidth {
         measured: width,
         requested: natural_width,
@@ -117,7 +122,7 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         Availability::Available => None,
         Availability::Unavailable { reason } => Some(reason),
     };
-    element! {View(padding_left:1,padding_right:1,width:if stacked {Size::Percent(100.0)}else{Size::Auto},max_width:100pct,min_width:0,flex_shrink:0.0_f32,column_gap:1,flex_direction:if stacked {FlexDirection::Column}else{FlexDirection::Row},background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+    element! {View(padding_left:1,padding_right:1,width:if stacked {Size::Percent(100.0)}else{Size::Auto},max_width:100pct,min_width:if available {0}else{u32::try_from(minimum_label_width).unwrap_or(u32::MAX)},flex_shrink:if available {0.0_f32}else{1.0_f32},column_gap:1,flex_direction:if stacked {FlexDirection::Column}else{FlexDirection::Row},background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
         View(flex_shrink:0.0_f32,column_gap:1) {
         #((action.checked==Some(true)).then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Accent)))))
         #(props.glyph.map(|glyph|element!(Text(content:glyph.text(),color:theme.foreground(role)))))

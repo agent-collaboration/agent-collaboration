@@ -268,7 +268,7 @@ mod tests {
             tokio::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
-                    "dispatch_frames::tests::dispatch_frame_child",
+                    "component_contract::dispatch_frames::tests::dispatch_frame_child",
                     "--ignored",
                     "--nocapture",
                 ])
