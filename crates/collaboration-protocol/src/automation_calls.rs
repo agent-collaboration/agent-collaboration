@@ -39,6 +39,7 @@ pub enum AutomationCall {
     LocalRunSettled(crate::LocalRunSettled),
     RemoteSessionCreate(crate::RemoteSessionCreateRequest),
     RemoteSessionCreateStatus {
+        #[serde(rename = "operationId")]
         operation_id: crate::OperationId,
     },
 }
