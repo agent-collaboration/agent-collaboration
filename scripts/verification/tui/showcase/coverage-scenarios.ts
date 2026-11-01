@@ -1,6 +1,7 @@
 import type { CellData } from '@wterm/core';
 
 import { cellText } from '../terminal/terminal-grid.ts';
+import type { TerminalGrid } from '../terminal/terminal-grid.ts';
 import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
 import { pointForTarget } from './hit-map-points.ts';
 import { expectedInput, expectedKey } from './input-expectations.ts';
@@ -244,7 +245,7 @@ export async function coveredSurfaces(rig: ShowcaseRig): Promise<void> {
 	await runCovered('nested');
 	await escapeOverlay(rig);
 }
-function inspectBorder(rig: ShowcaseRig): void {
+function inspectBorder(rig: Pick<ShowcaseRig, 'drawState' | 'grid'>): void {
 	const bounds = surfaceBounds(rig.drawState());
 	for (let row = bounds.top; row <= bounds.bottom; row += 1) {
 		const cell = rig.grid().cells[row]?.[bounds.left];
@@ -291,27 +292,67 @@ export async function wideGlyphCoverage(
 			label: 'declared wide-fixture shortcut supplement',
 		});
 	};
+	const requireParentGlyph = (
+		bounds: ReturnType<typeof surfaceBounds>,
+		parent: TerminalGrid,
+	): void => {
+		const column = Math.max(0, bounds.left - 1);
+		for (let row = bounds.top; row <= bounds.bottom; row += 1) {
+			const cell = parent.cells[row]?.[column];
+			if (cell === undefined || cellText(cell) !== glyph || cell.width !== 2)
+				throw new PrerequisiteGap(
+					'wide fixture does not place ' + glyph + ' at actual overlay-left−1 on row ' + row,
+				);
+		}
+	};
+	const qualifyPose = async (label: string): Promise<void> => {
+		await rig.rawKey({
+			bytes: Buffer.from('\x1b[115;7u'),
+			event: {
+				kind: 'key',
+				code: { kind: 'shortcut', key: 's' },
+				modifiers: ['control', 'alt'],
+				phase: 'press',
+			},
+			route: rig.route('seed-wide-glyph'),
+			label: 'measure actual painted overlay edge for parent glyph setup',
+		});
+		const coveredDraw = rig.drawState(),
+			coveredGrid = rig.grid();
+		const bounds = surfaceBounds(coveredDraw);
+		await rig.capture('wide-' + label + '-covered');
+		await escapeOverlay(rig);
+		const parent = rig.grid();
+		requireParentGlyph(bounds, parent);
+		await rig.capture('wide-' + label + '-qualified-parent');
+		// Judge the continuing overlay's retained physical cells only after its parent qualifies.
+		inspectBorder({ drawState: () => coveredDraw, grid: () => coveredGrid });
+		await open();
+		// Reopening a viewport-sized menu can change its height after resize.
+		// Its actual footprint must independently qualify against the uncovered parent too.
+		requireParentGlyph(surfaceBounds(rig.drawState()), parent);
+		inspectBorder(rig);
+		await rig.capture('wide-' + label + '-reopened');
+	};
 	await open();
-	const bounds = surfaceBounds(rig.drawState());
-	await escapeOverlay(rig);
-	const column = Math.max(0, bounds.left - 1);
-	for (let row = bounds.top; row <= bounds.bottom; row += 1) {
-		const cell = rig.grid().cells[row]?.[column];
-		if (cell === undefined || cellText(cell) !== glyph || cell.width !== 2)
-			throw new PrerequisiteGap(
-				'wide fixture does not place ' + glyph + ' at actual overlay-left−1 on row ' + row,
-			);
-	}
-	await rig.capture('qualified-wide-fixture');
-	await open();
-	inspectBorder(rig);
-	await rig.capture('wide-open');
+	await qualifyPose('initial');
 	const columns = rig.grid().columns,
 		rows = rig.grid().rows;
+	const surfaceBeforeResize = rig.drawState().surface;
 	await rig.resize(columns === 120 ? 76 : 120, rows === 36 ? 30 : 36);
-	inspectBorder(rig);
+	requireObservation(
+		rig.drawState().surface === surfaceBeforeResize,
+		'wide overlay identity survives real resize',
+		rig.drawState(),
+	);
+	await qualifyPose('resized');
+	const surfaceBeforeRestore = rig.drawState().surface;
 	await rig.resize(columns, rows);
-	inspectBorder(rig);
-	await rig.capture('wide-reopened-resized');
+	requireObservation(
+		rig.drawState().surface === surfaceBeforeRestore,
+		'wide overlay identity survives restored viewport',
+		rig.drawState(),
+	);
+	await qualifyPose('restored');
 	await escapeOverlay(rig);
 }

@@ -96,6 +96,17 @@ paired-marker cases and authored flows use that same list. A wired definition is
 | S9 authored flows | [Authored journeys and native bindings](s9-new-entry-journeys.md), `journeys/flows/flow-catalogue.ts --check`: 31 B flows, 212 grid/protocol variants. `authored-flow-run.ts` drives admitted fixture adapters; unsupported bindings fail before startup. Catalogue checks launch no product and report zero product passes. |
 | component showcase | `showcase/run.ts PLAN.json [--check]`: SC01–SC27 through the lane's canonical transport and readers against the separately bound ordinary example. Defaults are four grids and both modes, with independent Quit, glyph, clipping and lifecycle cases. Run `showcase/qualify-transport.ts` before a window request. A valid plan or handshake is not a scenario pass. |
 
+SC25's anchored-overlay reseed is draft until driven on a newly declared example.
+Its private `seed-wide-glyph` action (Ctrl+Alt+S) places ordinary `UiText` at
+the published overlay edge minus one, clamped to zero. This is fixture setup,
+not proof: close the overlay and independently require the actual width-two
+glyph on every covered row in the original PTY grid. Only then judge the saved
+covered frame's left border and gutter. Reopen and independently qualify that
+actual footprint against the retained uncovered parent grid too.
+Repeat that parent qualification after the same-overlay resize and after
+restoring the viewport; a seed from another viewport is invalid. A predicted
+centered width never qualifies an anchored dropdown.
+
 The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
 `baselinePlanSchema` with explicit `preparationProof`. It observes New's five
 base Tab targets and reverse wrap, Start through Tab/Enter and a click, one safe
@@ -176,8 +187,12 @@ cleanup prevents success. Fixture runs permit sealed GETs only, unchanged
 state/secrets, and component receipts with zero external requests/persisted writes.
 
 Use the retained driver's `stop` command and exact owned processes, never process
-names or another checkout's children. Chrome uses isolated profiles and closes on
-exit. Delete profiles only under exact-path authority, with no open handles and
+names or another checkout's children. Chrome uses isolated profiles and its own
+process group. Shutdown first awaits browser exit, stops its remaining owned
+group and awaits inherited-pipe closure. A controlled final-error subprocess
+regression requires natural exit 1 and absent browser/helper processes; this
+is apparatus coverage, not a product observation. Independently check owned
+processes after native runs. Delete profiles only under exact-path authority, with no open handles and
 all evidence outside them. Keep failed runs unchanged; later passes are separate.
 
 ## Public entry, effects and jobs
