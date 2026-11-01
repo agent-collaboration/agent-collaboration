@@ -213,7 +213,11 @@ async fn list_reload_preserves_keys_then_uses_the_removed_rows_position_and_last
             "bravo",
             "removed last row chooses new last"
         );
-        assert!(control.replace_rows(Vec::new()).unwrap());
+        assert!(
+            control
+                .replace_rows(crate::controls::list::ListRows::Ungrouped(Vec::new()))
+                .unwrap()
+        );
         assert_eq!(control.selected(), None);
         driver.initial(&mut frames).await;
         driver
@@ -447,7 +451,9 @@ async fn closed_list_parent_ignores_a_retained_controls_late_row_update() {
                     FocusModel::new(control.targets()).unwrap())
         );
         assert!(
-            control.replace_rows(control.rows()).unwrap(),
+            control
+                .replace_rows(crate::controls::list::ListRows::Ungrouped(control.rows()))
+                .unwrap(),
             "live parent accepts the control"
         );
         assert_eq!(fixture.stack.close_top(), Some(overlay));

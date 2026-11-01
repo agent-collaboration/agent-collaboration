@@ -17,7 +17,7 @@ mod initial_frame {
         let rows = (1..=count)
             .map(|number| ListRowKey::new(format!("Session {number:02}")).unwrap())
             .collect();
-        let mut ui = element!(ListScene(journal,width:Some(width),height:Some(height),viewport_rows:Some(height-4),initial_rows:Some(rows)));
+        let mut ui = element!(ListScene(journal,width:Some(width),height:Some(height),viewport_rows:Some(height-4),initial_rows:Some(crate::controls::list::ListRows::Ungrouped(rows))));
         let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config).inspect(
             move |canvas| {
                 captured
@@ -78,7 +78,7 @@ mod tests {
         let rows = (1..=40)
             .map(|number| ListRowKey::new(format!("Session {number:02}")).unwrap())
             .collect();
-        let mut ui = element!(ListScene(journal,handle:handle.clone(),width:Some(width),height:Some(height),initial_rows:Some(rows),viewport_rows:Some(height-4),marker_offset:2u16,sink:Some(sink.clone())));
+        let mut ui = element!(ListScene(journal,handle:handle.clone(),width:Some(width),height:Some(height),initial_rows:Some(crate::controls::list::ListRows::Ungrouped(rows)),viewport_rows:Some(height-4),marker_offset:2u16,sink:Some(sink.clone())));
         let output = SharedFrameOutput::default();
         let writer = Box::new(sink.frame_writer(output.clone()).unwrap());
         let observed = Arc::new(Mutex::new(Vec::new()));

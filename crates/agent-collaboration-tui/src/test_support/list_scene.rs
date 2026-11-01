@@ -6,8 +6,8 @@ use agent_collaboration_tui::{
     controls::{
         fields::{Button, button_target},
         list::{
-            ListNavigationPolicy, ListRow, ListRowKey, ListSelectionBinding, ListSelectionControl,
-            ListSelectionState, ScrollList,
+            ListNavigationPolicy, ListRow, ListRowKey, ListRows, ListSelectionBinding,
+            ListSelectionControl, ListSelectionState, ScrollList,
         },
     },
     input::input_owner::InputOwner,
@@ -32,10 +32,12 @@ fn action(name: &str) -> ActionId {
 pub fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
-pub fn rows(keys: &[&str]) -> Vec<ListRowKey> {
-    keys.iter()
-        .map(|key| ListRowKey::new(*key).unwrap())
-        .collect()
+pub fn rows(keys: &[&str]) -> ListRows {
+    ListRows::Ungrouped(
+        keys.iter()
+            .map(|key| ListRowKey::new(*key).unwrap())
+            .collect(),
+    )
 }
 #[derive(Clone, Default)]
 pub struct ListHandle(Arc<Mutex<Option<ListFixture>>>);
@@ -59,11 +61,13 @@ pub struct ListSceneProps {
     pub handle: ListHandle,
     pub navigation_policy: ListNavigationPolicy,
     pub marker_offset: u16,
+    pub row_heights: Option<Vec<u16>>,
+    pub regroup_rows: Option<ListRows>,
     pub viewport_rows: Option<u16>,
     pub hover_selection: bool,
     pub width: Option<u16>,
     pub height: Option<u16>,
-    pub initial_rows: Option<Vec<ListRowKey>>,
+    pub initial_rows: Option<ListRows>,
     #[cfg(all(feature = "test-support", debug_assertions))]
     pub sink:
         Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
@@ -74,10 +78,12 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let value = hooks.use_state(|| {
         ListSelectionState::new(
             props.initial_rows.clone().unwrap_or_else(|| {
-                ["alpha", "bravo", "charlie", "delta", "echo"]
-                    .into_iter()
-                    .map(|key| ListRowKey::new(key).unwrap())
-                    .collect()
+                ListRows::Ungrouped({
+                    ["alpha", "bravo", "charlie", "delta", "echo"]
+                        .into_iter()
+                        .map(|key| ListRowKey::new(key).unwrap())
+                        .collect()
+                })
             }),
             None,
         )
@@ -111,6 +117,8 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         } else {
             control
         };
+        let regroup_control = control.clone();
+        let regroup_rows = props.regroup_rows.clone();
         let mut targets = control.targets();
         let toolbar = ActionDef {
             risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
@@ -168,6 +176,21 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                     ActionDef {
                         risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                         toolbar_label: None,
+                        id: action("regroup"),
+                        title: "Regroup".into(),
+                        keys: vec!["F6".parse().unwrap()],
+                        availability: AvailabilityFn::default(),
+                        choice: None,
+                        placement: Placement::Hidden,
+                        run: Handler::from(move |()| {
+                            if let Some(rows) = &regroup_rows {
+                                regroup_control.replace_rows(rows.clone()).unwrap();
+                            }
+                        }),
+                    },
+                    ActionDef {
+                        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
+                        toolbar_label: None,
                         id: action("cover"),
                         title: "Cover list".into(),
                         keys: vec!["F10".parse().unwrap()],
@@ -213,7 +236,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
             Text(content:format!("Details calls {}",calls.get()))
             View(height:props.viewport_rows.unwrap_or(2)) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("list")),scroll:control.scroll(),grow:true) {
-                #(control.rows().into_iter().map(|row|element!(ListRow(key:row.as_str().to_owned(),control:control.clone(),row:row.clone(),marker_offset:props.marker_offset) {Text(content:row.as_str().to_owned())}).into_any()))
+                #(control.rows().into_iter().enumerate().map(|(index,row)|element!(ListRow(key:row.as_str().to_owned(),control:control.clone(),row:row.clone(),marker_offset:props.marker_offset) {#(if let Some(height)=props.row_heights.as_ref().and_then(|heights|heights.get(index)) {element!(View(height:*height) {Text(content:row.as_str().to_owned())}).into_any()}else{element!(Text(content:row.as_str().to_owned())).into_any()})}).into_any()))
             }}
             Button(id:target("toolbar"),action:action("toolbar"))
         }}

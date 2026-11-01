@@ -8,7 +8,9 @@ pub use list_row::{ListRow, ListRowProps};
 pub use list_selection_control::{
     ListControlError, ListNavigationPolicy, ListSelectionBinding, ListSelectionControl,
 };
-pub use list_selection_state::{ListRowKey, ListSelectionError, ListSelectionState};
+pub use list_selection_state::{
+    ListGroup, ListGroupHeading, ListRowKey, ListRows, ListSelectionError, ListSelectionState,
+};
 pub use option_list::{DuplicateOptionKey, OptionKey, SelectOption};
 pub use scroll_list::{ScrollList, ScrollListProps, ScrollReveal, ScrollRevealProps};
 pub use scroll_model::{ScrollHandle, ScrollPosition};

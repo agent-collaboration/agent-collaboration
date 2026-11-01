@@ -51,6 +51,56 @@ impl ScrollHandle {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+    pub(crate) fn invalidate_target_geometry(&self) {
+        self.measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+        *self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+    /// A keyed destination one drawn viewport away, counting intervening layout.
+    pub(crate) fn page_destination(
+        &self,
+        targets: &[TargetId],
+        current: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        let height = self.position().viewport_height;
+        if height == 0 {
+            return None;
+        }
+        let measured = self
+            .measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tops = targets
+            .iter()
+            .map(|id| {
+                measured
+                    .get(id)
+                    .filter(|target| target.height > 0)
+                    .map(|target| target.logical_top)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let start = *tops.get(current)?;
+        let last = tops.len().saturating_sub(1);
+        Some(if forward {
+            let end = start.saturating_add(i32::from(height));
+            tops.iter()
+                .rposition(|top| *top <= end)
+                .unwrap_or(current)
+                .max(current.saturating_add(1).min(last))
+        } else {
+            let end = start.saturating_sub(i32::from(height));
+            tops.iter()
+                .position(|top| *top >= end)
+                .unwrap_or(current)
+                .min(current.saturating_sub(1))
+        })
+    }
     pub fn reset(&self) {
         *self
             .pending_reveal

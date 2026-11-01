@@ -1,5 +1,7 @@
 //! A list is one keyboard target; keyed pointer rows share its scoped selection.
-use crate::controls::list::{ListRowKey, ListSelectionError, ListSelectionState, ScrollHandle};
+use crate::controls::list::{
+    ListGroupHeading, ListRowKey, ListRows, ListSelectionError, ListSelectionState, ScrollHandle,
+};
 use crate::{
     actions::ActionId,
     surfaces::{
@@ -114,6 +116,9 @@ impl ListSelectionControl {
     pub fn rows(&self) -> Vec<ListRowKey> {
         self.binding.value.read().rows().to_vec()
     }
+    pub(crate) fn heading_before(&self, row: &ListRowKey) -> Option<ListGroupHeading> {
+        self.binding.value.read().heading_before(row).cloned()
+    }
     /// Install these targets in the parent model before its first event.
     pub fn targets(&self) -> Vec<TargetSpec> {
         let mut targets = vec![
@@ -130,7 +135,7 @@ impl ListSelectionControl {
         targets
     }
     /// Update only this control's row targets; retain the other parent controls.
-    pub fn replace_rows(&self, rows: Vec<ListRowKey>) -> Result<bool, ListControlError> {
+    pub fn replace_rows(&self, rows: ListRows) -> Result<bool, ListControlError> {
         let snapshot = self.binding.parent.stack.snapshot();
         let model = base_model(&snapshot, self.binding.parent.surface);
         if !model.is_some_and(|model| {
@@ -183,8 +188,16 @@ impl ListSelectionControl {
             Ok(true)
         })?;
         if replaced {
+            let regrouped = previous.is_grouped() || next.is_grouped();
             let changed = previous.selected() != next.selected();
             let selected = next.selected().cloned();
+            if regrouped {
+                self.scroll.invalidate_target_geometry();
+                self.set_selection_reveal(SelectionReveal::FollowSelection);
+                if let Some(selected) = &selected {
+                    self.scroll.reveal_measured(&self.row_target(selected));
+                }
+            }
             let mut value = self.binding.value;
             value.set(next);
             self.binding.parent.stack.hit_regions().invalidate();
@@ -260,7 +273,7 @@ impl ListSelectionControl {
                 return control.scroll.handle_event(&event);
             }
             let mut next = control.binding.value.read().clone();
-            let changed = next.navigate(code, (control.binding.page_rows)());
+            let changed = control.navigate(&mut next, code);
             if changed {
                 control.publish_selection(next, SelectionReveal::FollowSelection);
             }
@@ -270,6 +283,28 @@ impl ListSelectionControl {
                 InputUse::Used
             }
         })
+    }
+    fn navigate(&self, next: &mut ListSelectionState, code: KeyCode) -> bool {
+        if next.is_grouped() && matches!(code, KeyCode::PageUp | KeyCode::PageDown) {
+            let current = next
+                .rows()
+                .iter()
+                .position(|key| Some(key) == next.selected())
+                .unwrap_or(0);
+            let targets = next
+                .rows()
+                .iter()
+                .map(|key| self.row_target(key))
+                .collect::<Vec<_>>();
+            if let Some(index) =
+                self.scroll
+                    .page_destination(&targets, current, code == KeyCode::PageDown)
+                && let Some(key) = next.rows().get(index).cloned()
+            {
+                return next.select(&key);
+            }
+        }
+        next.navigate(code, (self.binding.page_rows)())
     }
     fn publish_selection(&self, next: ListSelectionState, reveal: SelectionReveal) {
         self.set_selection_reveal(reveal);
@@ -337,6 +372,9 @@ fn base_model_mut(stack: &mut SurfaceStack, surface: SurfaceId) -> Option<&mut S
 #[path = "list_first_frame_test.rs"]
 mod first_frame_test;
 #[cfg(test)]
+#[path = "list_grouping_test.rs"]
+mod grouping_test;
+#[cfg(test)]
 #[path = "list_hover_test.rs"]
 mod hover_test;
 #[cfg(test)]
@@ -348,3 +386,6 @@ mod tests;
 #[cfg(test)]
 #[path = "list_typeahead_test.rs"]
 mod typeahead_test;
+#[cfg(test)]
+#[path = "list_ungrouped_layout_test.rs"]
+mod ungrouped_layout_test;
