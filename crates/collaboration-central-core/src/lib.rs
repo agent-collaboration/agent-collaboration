@@ -32,10 +32,12 @@ pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
 mod platform_capabilities;
+mod remote_call_outcome;
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
 };
+pub use remote_call_outcome::CallOutcome;
 mod caller_context;
 pub use caller_context::CallerContext;
 mod core_host;
