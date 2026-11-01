@@ -3,10 +3,17 @@ CREATE TABLE automations (
     kind TEXT NOT NULL,
     revision TEXT NOT NULL,
     definition_json TEXT NOT NULL,
+    anchor_at_ms INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    imported_continuity_json TEXT,
+    execution_mode TEXT,
     legacy_timing_json TEXT,
     state TEXT NOT NULL,
     creator_json TEXT NOT NULL,
-    slot_session_key TEXT UNIQUE
+    slot_session_key TEXT UNIQUE,
+    fault_json TEXT,
+    faulted_at_ms INTEGER
 );
 
 CREATE TABLE content_revisions (
@@ -45,13 +52,17 @@ CREATE TABLE automation_firings (
     state TEXT NOT NULL,
     batch_id TEXT REFERENCES automation_batches(batch_id) ON DELETE SET NULL,
     report_seq INTEGER NOT NULL,
+    report_service_id TEXT,
     outcome_json TEXT,
+    folded_through_ms INTEGER,
+    pending_entry_json TEXT,
     UNIQUE(automation_id, due_ms)
 );
 
 CREATE TABLE automation_timing (
     automation_id TEXT NOT NULL PRIMARY KEY REFERENCES automations(automation_id),
     next_due_ms INTEGER,
+    expires_at_ms INTEGER,
     admitted_through_ms INTEGER,
     imported_watermark_local_ms INTEGER,
     occupying_firing_id TEXT REFERENCES automation_firings(firing_id),

@@ -1,8 +1,9 @@
 //! Stored definitions own configuration; their separate row owns timing progress.
+use crate::automation_record_header::AutomationRecordHeader;
 use crate::automation_store_error::{AutomationStoreError, AutomationStoreResult};
 use collaboration_protocol::{
     AutomationId, AutomationKind, AutomationTiming, ChangeId, CodexGeneration, ContentReference,
-    FiringMessageOrigin, GridTime, ImportedContinuity, MessageDelivery, ObservationTimestamp,
+    FiringId, FiringMessageOrigin, GridTime, MessageDelivery, ObservationTimestamp,
     ScheduleDefinition, SessionRef, TimingRequest, WakeCreator,
 };
 use message_board::ServiceId;
@@ -32,10 +33,6 @@ pub(crate) enum StoredAutomationDefinition {
 pub(crate) struct StoredScheduleDefinition {
     pub definition: ScheduleDefinition,
     pub timing: AutomationTiming,
-    pub imported_continuity: ImportedContinuity,
-    pub anchor_at: ObservationTimestamp,
-    pub created_at: ObservationTimestamp,
-    pub updated_at: ObservationTimestamp,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,9 +46,6 @@ pub(crate) struct StoredWakeDefinition {
     pub content: ContentReference,
     pub timing_request: TimingRequest,
     pub timing: AutomationTiming,
-    pub anchor_at: ObservationTimestamp,
-    pub expires_at: ObservationTimestamp,
-    pub created_at: ObservationTimestamp,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -65,6 +59,7 @@ pub(crate) enum CatalogState {
     Cancelled,
     Expired,
     Finished,
+    Replaced,
 }
 impl CatalogState {
     pub fn as_str(self) -> &'static str {
@@ -77,6 +72,7 @@ impl CatalogState {
             Self::Cancelled => "cancelled",
             Self::Expired => "expired",
             Self::Finished => "finished",
+            Self::Replaced => "replaced",
         }
     }
     pub fn owns_wake_slot(self) -> bool {
@@ -91,13 +87,29 @@ pub(crate) struct AutomationRecord {
     pub state: CatalogState,
     pub creator: BoundAutomationCreator,
     pub next_due: Option<GridTime>,
+    pub header: AutomationRecordHeader,
+    pub expires_at: Option<ObservationTimestamp>,
+    pub progress: AutomationProgress,
+}
+
+#[derive(Default)]
+pub(crate) struct AutomationProgress {
+    pub admitted_through: Option<GridTime>,
+    pub occupying: Option<FiringId>,
+    pub waiting: Option<FiringId>,
+    pub external: Option<collaboration_protocol::RunId>,
+}
+
+impl AutomationRecord {
+    pub fn wake_expiry(&self) -> AutomationStoreResult<&ObservationTimestamp> {
+        self.expires_at
+            .as_ref()
+            .ok_or(AutomationStoreError::InvalidRecord("expires_at_ms"))
+    }
 }
 
 pub(crate) fn timestamp_millis(value: &ObservationTimestamp) -> AutomationStoreResult<i64> {
-    String::from(value.clone())
-        .parse::<chrono::DateTime<chrono::Utc>>()
-        .map(|time| time.timestamp_millis())
-        .map_err(|_| AutomationStoreError::InvalidRecord("timestamp"))
+    crate::automation_store_error::observation_millis(value)
 }
 
 pub(crate) fn validate_timing(

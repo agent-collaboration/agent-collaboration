@@ -43,23 +43,9 @@ pub(crate) fn definition(definition: &ScheduleDefinition) -> AutomationStoreResu
     }
 }
 
-pub(crate) fn unchanged_mode(
-    before: &ExecutionDestination,
-    after: &ExecutionDestination,
-) -> AutomationStoreResult<()> {
-    if is_fresh(before) != is_fresh(after) {
-        return Err(invalid(
-            "destination",
-            AutomationRequestConstraint::ExecutionModeFixed,
-        ));
-    }
-    Ok(())
-}
 fn is_fresh(destination: &ExecutionDestination) -> bool {
-    matches!(
-        destination,
-        ExecutionDestination::FreshEachRunUnprepared | ExecutionDestination::FreshEachRun { .. }
-    )
+    crate::automation_record_header::ScheduleExecutionMode::for_destination(destination)
+        == crate::automation_record_header::ScheduleExecutionMode::FreshEachRun
 }
 fn invalid(field: &'static str, reason: AutomationRequestConstraint) -> AutomationStoreError {
     AutomationStoreError::InvalidRequest { field, reason }

@@ -53,6 +53,7 @@ pub enum AutomationCall {
 pub enum CatalogAutomation {
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
+    Faulted(crate::FaultedAutomationSnapshot),
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -96,59 +97,6 @@ pub struct FiringSnapshot {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum AutomationRefusal {
-    Validation {
-        error: crate::AutomationValidationError,
-    },
-    OperationConflict {
-        operation_id: crate::OperationId,
-    },
-    InstructionRevisionConflict {
-        current_revision_id: crate::RevisionId,
-    },
-    ScheduleChangeConflict {
-        current_change_id: crate::ChangeId,
-    },
-    InvalidRecord {
-        field: String,
-    },
-    InvalidRequest {
-        field: String,
-        reason: AutomationRequestConstraint,
-    },
-    WakeExpiryRequired,
-    WakeLifecycleConflict {
-        state: crate::WakeState,
-    },
-    WakeExists {
-        creator: crate::WakeCreator,
-    },
-    TargetNeedsUpgrade {
-        service_id: crate::UuidIdentity,
-    },
-    NotFound,
-    OriginMismatch,
-    DigestMismatch,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AutomationRequestConstraint {
-    MalformedShape,
-    InvalidCursor,
-    RequiredToken,
-    AbsolutePathRequired,
-    ExecutionModeFixed,
-    UnpreparedDestination,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
     content = "value",
     rename_all = "camelCase",
     rename_all_fields = "camelCase",
@@ -161,6 +109,7 @@ pub enum AutomationAnswer {
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
+    Faulted(crate::FaultedAutomationSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {
         automations: Vec<CatalogAutomation>,

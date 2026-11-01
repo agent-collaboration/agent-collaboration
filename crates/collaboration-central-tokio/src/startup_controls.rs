@@ -58,6 +58,12 @@ impl PreparedRuntimeControls {
                         "native conformance startup controls must only arm faults",
                     ));
                 }
+                #[cfg(debug_assertions)]
+                RuntimeControl::AutomationStoreFailures { .. } => {
+                    return Err(StoreError::backend(
+                        "automation storage failures require a live initialized Fleet",
+                    ));
+                }
             }
         }
         let mut prepared = Self::default();

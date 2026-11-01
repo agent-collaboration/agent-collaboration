@@ -20,6 +20,7 @@ pub(crate) struct StoredAutomationFiring {
     pub batch_id: Option<String>,
     pub report_seq: Option<String>,
     pub outcome_json: Option<String>,
+    pub report_service_id: Option<String>,
 }
 pub(crate) fn read_automation_firing<S>(
     scope: &mut S,
@@ -53,6 +54,7 @@ where
                     batch_id: row.try_get("batch_id")?,
                     report_seq: row.try_get("report_seq")?,
                     outcome_json: row.try_get("outcome_json")?,
+                    report_service_id: row.try_get("report_service_id")?,
                 })
             })
             .transpose()
@@ -90,6 +92,7 @@ where
                     batch_id: row.try_get("batch_id")?,
                     report_seq: row.try_get("report_seq")?,
                     outcome_json: row.try_get("outcome_json")?,
+                    report_service_id: row.try_get("report_service_id")?,
                 })
             })
             .transpose()
@@ -122,6 +125,48 @@ where
             .map(|row| {
                 Ok(StoredSentFiring {
                     firing_id: row.try_get("firing_id")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn list_automation_firings<S>(
+    scope: &mut S,
+    automation_id: String,
+    after_firing_id: String,
+    limit: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredAutomationFiring>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/list_automation_firings.sql"
+        )))
+        .bind(automation_id)
+        .bind(after_firing_id)
+        .bind(limit);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAutomationFiring {
+                    firing_id: row.try_get("firing_id")?,
+                    automation_id: row.try_get("automation_id")?,
+                    due_ms: row.try_get("due_ms")?,
+                    revision: row.try_get("revision")?,
+                    content_id: row.try_get("content_id")?,
+                    content_revision_id: row.try_get("content_revision_id")?,
+                    content_digest: row.try_get("content_digest")?,
+                    state: row.try_get("state")?,
+                    batch_id: row.try_get("batch_id")?,
+                    report_seq: row.try_get("report_seq")?,
+                    outcome_json: row.try_get("outcome_json")?,
+                    report_service_id: row.try_get("report_service_id")?,
                 })
             })
             .collect()

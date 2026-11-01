@@ -30,14 +30,6 @@ pub async fn run_automation_catalog_conformance(
         }
     };
     let proof = async {
-        crate::composed_client::control(
-            client,
-            collaboration_central_core::ObjectAddress::Fleet,
-            crate::RuntimeControl::SetTime {
-                now: collaboration_central_core::RegistryTime("2026-10-31T10:00:00Z".parse()?),
-            },
-        )
-        .await?;
         let request = InstructionCreateParams {
             operation_id: durable_steps::Uuid::now_v7().to_string().try_into()?,
             text: "One organization instruction".to_owned().try_into()?,
@@ -238,21 +230,26 @@ async fn instruction_pages(
     Ok(())
 }
 
-fn require_instruction(answer: AutomationAnswer) -> ConformanceResult<InstructionSnapshot> {
+pub(crate) fn require_instruction(
+    answer: AutomationAnswer,
+) -> ConformanceResult<InstructionSnapshot> {
     match answer {
         AutomationAnswer::Instruction(snapshot) => Ok(snapshot),
         other => Err(format!("expected central instruction, got {other:?}").into()),
     }
 }
 
-fn same_answer(actual: AutomationAnswer, expected: AutomationAnswer) -> ConformanceResult<()> {
+pub(crate) fn same_answer(
+    actual: AutomationAnswer,
+    expected: AutomationAnswer,
+) -> ConformanceResult<()> {
     if serde_json::to_value(actual)? != serde_json::to_value(expected)? {
         return Err("catalog answer did not preserve the exact snapshot".into());
     }
     Ok(())
 }
 
-async fn open_machine(
+pub(crate) async fn open_machine(
     client: &ConformanceClient,
     service: &str,
 ) -> ConformanceResult<NativeBoardSession> {
@@ -268,14 +265,14 @@ async fn open_machine(
     ))
 }
 
-async fn call(
+pub(crate) async fn call(
     machine: &mut NativeBoardSession,
     request: AutomationCall,
 ) -> ConformanceResult<AutomationAnswer> {
     raw_call(machine, serde_json::to_value(request)?).await
 }
 
-async fn raw_call(
+pub(crate) async fn raw_call(
     machine: &mut NativeBoardSession,
     request: serde_json::Value,
 ) -> ConformanceResult<AutomationAnswer> {

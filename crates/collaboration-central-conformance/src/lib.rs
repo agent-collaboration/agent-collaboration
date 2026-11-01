@@ -1,5 +1,15 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
+#[cfg(all(feature = "client", debug_assertions))]
+mod automation_clock_scenarios;
+#[cfg(all(feature = "client", debug_assertions))]
+pub use automation_clock_scenarios::{
+    AutomationClockPlatform, AutomationRestartCase, prepare_automation_restart,
+    resume_automation_restart, run_automation_clock_conformance,
+    run_automation_expired_lease_conformance, run_automation_expiry_conformance,
+    run_automation_external_conformance, run_automation_limit_conformance,
+    run_automation_retention_conformance, run_automation_wake_delivery_conformance,
+};
 #[cfg(debug_assertions)]
 mod automation_clock_controls;
 #[cfg(debug_assertions)]

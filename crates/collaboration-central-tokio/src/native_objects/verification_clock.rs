@@ -31,6 +31,7 @@ impl super::NativeObjects {
             .await?;
         // Finish callbacks that already started before changing their clock.
         self.drain_alarm_owners().await?;
+        let before_control = fleet.io.wake.deadline().await;
         match command {
             AutomationClockControl::Start { .. } => {
                 return Err(StoreError::backend("Start is a startup setting"));
@@ -51,7 +52,7 @@ impl super::NativeObjects {
         let now = clock.observation_time()?;
         let mut observed = fleet.io.faults.observe().map_err(StoreError::backend)?;
         observed.clock = collaboration_central_conformance::ClockObservation::Pinned { now };
-        observed.automation_clock = Some(fleet.io.wake.observe(now).await?);
+        observed.automation_clock = Some(fleet.io.wake.observe(now, before_control).await?);
         Ok(observed)
     }
 
@@ -172,7 +173,11 @@ impl NativeWake {
             Self::Controlled(wake) => wake.wait().await,
         }
     }
-    pub(super) async fn completed(&self, failed: bool) {
+    pub(super) async fn completed(
+        &self,
+        failure: Option<String>,
+        after_handler_alarm_ms: Option<i64>,
+    ) {
         if let Self::Controlled(wake) = self {
             let mut state = wake.state.lock().await;
             state.flight = CallbackFlight::Idle;
@@ -180,12 +185,11 @@ impl NativeWake {
             if state.receipts.len() < MAXIMUM_CALLBACK_RECEIPTS {
                 state.receipts.push(AutomationAlarmReceipt {
                     at_ms: wake.clock.now().unix_millis(),
-                    result: if failed {
-                        AutomationAlarmResult::Failed
-                    } else {
-                        AutomationAlarmResult::Completed
-                    },
+                    result: failure
+                        .map(|message| AutomationAlarmResult::Failed { message })
+                        .unwrap_or(AutomationAlarmResult::Completed),
                     next_alarm_ms,
+                    after_handler_alarm_ms,
                 });
             }
             if state.receipts.len() >= MAXIMUM_CALLBACK_RECEIPTS {
@@ -237,6 +241,7 @@ impl NativeWake {
     pub(super) async fn observe(
         &self,
         now: RegistryTime,
+        platform_alarm_before_control_ms: Option<i64>,
     ) -> Result<AutomationClockObservation, StoreError> {
         let Self::Controlled(wake) = self else {
             return Err(StoreError::backend("controlled timer not configured"));
@@ -246,7 +251,14 @@ impl NativeWake {
             now,
             next_alarm_ms: state.deadline.map(SyncTime::unix_millis),
             callbacks: state.receipts.clone(),
+            platform_alarm_before_control_ms,
         })
+    }
+    pub(super) async fn deadline(&self) -> Option<i64> {
+        match self {
+            Self::Controlled(wake) => wake.state.lock().await.deadline.map(SyncTime::unix_millis),
+            Self::Wall(_) => None,
+        }
     }
 }
 impl WakeScheduler for NativeWake {

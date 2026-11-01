@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-firing-queries.json": "d29593e8ad84e2a2d33fe227248e7dcb89cc136ef54ffd2d2847b5633d7cc2c7",
+    "automation-firing-queries.json": "af6a974b3e73e27c46f3b13f5c3e5853d3de42b07623851c6716729a6cf3db8b",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -12,7 +12,7 @@
     "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
     "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "core_migrations/0011_automations.sql": "5921cb47767d907e5194f3e3e0be8257582db7a31cc7f9e135c72acd5e7b7a25",
+    "core_migrations/0011_automations.sql": "7203cc3a71b4d043c62d29febd55feea97090b80cd52fde54708176b85884b9c",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -66,11 +66,12 @@
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/automations/automation_sent_firings.sql": "212b8249da3b6abb6a7dd8e313fcfba882fabc37c1cac50a0ec10d13f314fa56",
-    "sql/automations/first_automation_firing.sql": "fb97547c859c905135c3f7cac007ae45aa811b91b04e985013e84a2b8bc86a35",
-    "sql/automations/read_automation_firing.sql": "35ecea5f1792f7dacef87b4c330591f1117473d7a9dba42fb3f1fbf4f6b2d608",
-    "src/generated_automation_firing.rs": "1b547b44339432df4f5848a64aa1a586d313cb300477c8ef0459696f429abd1d"
+    "sql/automations/first_automation_firing.sql": "a7d9800cd43a6f2e68f67ee94cce02f6a9ba968a646fc319b470e0815cff2810",
+    "sql/automations/list_automation_firings.sql": "9e486e2e3aa0642a61bd205bab247102c193ab3d22c2f9c3844e0971ade941e3",
+    "sql/automations/read_automation_firing.sql": "87b0974b84a9edcfa89607ad9c95d1a2335ba18e1ba11cc4548c377a0d5a46c2",
+    "src/generated_automation_firing.rs": "095dc66079ef090dc46c567aeec1afb5ec7927e2413df4adb115bf7295a5389a"
   },
-  "queries_digest": "fc09bfa43510bdf7bb53c51c1a7efeb3ff4ee4fcc702db6715c238e3c90d9ade",
+  "queries_digest": "ee4f8e08674f48dc26fe91bdd7fc79bc658bfbd47afc3142e96f3eaa6190eafd",
   "queries": [
     {
       "name": "read_automation_firing",
@@ -148,6 +149,13 @@
         },
         {
           "name": "outcome_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "report_service_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -235,6 +243,13 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
+        },
+        {
+          "name": "report_service_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
         }
       ]
     },
@@ -244,6 +259,96 @@
       "columns": [
         {
           "name": "firing_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "list_automation_firings",
+      "bind_slots": 3,
+      "columns": [
+        {
+          "name": "firing_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "automation_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "due_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "revision",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "content_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "content_revision_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "content_digest",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "state",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "batch_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "report_seq",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "outcome_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "report_service_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,

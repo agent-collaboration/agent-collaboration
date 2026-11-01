@@ -14,11 +14,19 @@ pub(crate) struct StoredAutomation {
     pub kind: Option<String>,
     pub revision: Option<String>,
     pub definition_json: Option<String>,
+    pub anchor_at_ms: Option<String>,
+    pub created_at_ms: Option<String>,
+    pub updated_at_ms: Option<String>,
+    pub imported_continuity_json: Option<String>,
+    pub execution_mode: Option<String>,
+    pub fault_json: Option<String>,
+    pub faulted_at_ms: Option<String>,
     pub legacy_timing_json: Option<String>,
     pub state: Option<String>,
     pub creator_json: Option<String>,
     pub slot_session_key: Option<String>,
     pub next_due_ms: Option<String>,
+    pub expires_at_ms: Option<String>,
     pub admitted_through_ms: Option<String>,
     pub imported_watermark_local_ms: Option<String>,
     pub occupying_firing_id: Option<String>,
@@ -51,11 +59,19 @@ where
                     kind: row.try_get("kind")?,
                     revision: row.try_get("revision")?,
                     definition_json: row.try_get("definition_json")?,
+                    anchor_at_ms: row.try_get("anchor_at_ms")?,
+                    created_at_ms: row.try_get("created_at_ms")?,
+                    updated_at_ms: row.try_get("updated_at_ms")?,
+                    imported_continuity_json: row.try_get("imported_continuity_json")?,
+                    execution_mode: row.try_get("execution_mode")?,
+                    fault_json: row.try_get("fault_json")?,
+                    faulted_at_ms: row.try_get("faulted_at_ms")?,
                     legacy_timing_json: row.try_get("legacy_timing_json")?,
                     state: row.try_get("state")?,
                     creator_json: row.try_get("creator_json")?,
                     slot_session_key: row.try_get("slot_session_key")?,
                     next_due_ms: row.try_get("next_due_ms")?,
+                    expires_at_ms: row.try_get("expires_at_ms")?,
                     admitted_through_ms: row.try_get("admitted_through_ms")?,
                     imported_watermark_local_ms: row.try_get("imported_watermark_local_ms")?,
                     occupying_firing_id: row.try_get("occupying_firing_id")?,
@@ -92,11 +108,19 @@ where
                     kind: row.try_get("kind")?,
                     revision: row.try_get("revision")?,
                     definition_json: row.try_get("definition_json")?,
+                    anchor_at_ms: row.try_get("anchor_at_ms")?,
+                    created_at_ms: row.try_get("created_at_ms")?,
+                    updated_at_ms: row.try_get("updated_at_ms")?,
+                    imported_continuity_json: row.try_get("imported_continuity_json")?,
+                    execution_mode: row.try_get("execution_mode")?,
+                    fault_json: row.try_get("fault_json")?,
+                    faulted_at_ms: row.try_get("faulted_at_ms")?,
                     legacy_timing_json: row.try_get("legacy_timing_json")?,
                     state: row.try_get("state")?,
                     creator_json: row.try_get("creator_json")?,
                     slot_session_key: row.try_get("slot_session_key")?,
                     next_due_ms: row.try_get("next_due_ms")?,
+                    expires_at_ms: row.try_get("expires_at_ms")?,
                     admitted_through_ms: row.try_get("admitted_through_ms")?,
                     imported_watermark_local_ms: row.try_get("imported_watermark_local_ms")?,
                     occupying_firing_id: row.try_get("occupying_firing_id")?,
@@ -135,11 +159,19 @@ where
                     kind: row.try_get("kind")?,
                     revision: row.try_get("revision")?,
                     definition_json: row.try_get("definition_json")?,
+                    anchor_at_ms: row.try_get("anchor_at_ms")?,
+                    created_at_ms: row.try_get("created_at_ms")?,
+                    updated_at_ms: row.try_get("updated_at_ms")?,
+                    imported_continuity_json: row.try_get("imported_continuity_json")?,
+                    execution_mode: row.try_get("execution_mode")?,
+                    fault_json: row.try_get("fault_json")?,
+                    faulted_at_ms: row.try_get("faulted_at_ms")?,
                     legacy_timing_json: row.try_get("legacy_timing_json")?,
                     state: row.try_get("state")?,
                     creator_json: row.try_get("creator_json")?,
                     slot_session_key: row.try_get("slot_session_key")?,
                     next_due_ms: row.try_get("next_due_ms")?,
+                    expires_at_ms: row.try_get("expires_at_ms")?,
                     admitted_through_ms: row.try_get("admitted_through_ms")?,
                     imported_watermark_local_ms: row.try_get("imported_watermark_local_ms")?,
                     occupying_firing_id: row.try_get("occupying_firing_id")?,
@@ -150,13 +182,9 @@ where
             .collect()
     }
 }
-pub(crate) fn insert_schedule_automation<S>(
+pub(crate) fn insert_automation<S>(
     scope: &mut S,
-    automation_id: String,
-    revision: String,
-    definition_json: String,
-    state: String,
-    creator_json: String,
+    record_json: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -166,43 +194,9 @@ where
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/automations/insert_schedule_automation.sql"
+            "/sql/automations/insert_automation.sql"
         )))
-        .bind(automation_id)
-        .bind(revision)
-        .bind(definition_json)
-        .bind(state)
-        .bind(creator_json);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
-pub(crate) fn insert_wake_automation<S>(
-    scope: &mut S,
-    automation_id: String,
-    revision: String,
-    definition_json: String,
-    state: String,
-    creator_json: String,
-    slot_session_key: Option<String>,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/automations/insert_wake_automation.sql"
-        )))
-        .bind(automation_id)
-        .bind(revision)
-        .bind(definition_json)
-        .bind(state)
-        .bind(creator_json)
-        .bind(slot_session_key);
+        .bind(record_json);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -211,6 +205,7 @@ pub(crate) fn insert_automation_timing<S>(
     scope: &mut S,
     automation_id: String,
     next_due_ms: Option<String>,
+    expires_at_ms: Option<String>,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -224,7 +219,8 @@ where
             "/sql/automations/insert_automation_timing.sql"
         )))
         .bind(automation_id)
-        .bind(next_due_ms);
+        .bind(next_due_ms)
+        .bind(expires_at_ms);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -235,6 +231,7 @@ pub(crate) fn update_automation<S>(
     definition_json: String,
     state: String,
     slot_session_key: Option<String>,
+    updated_at_ms: String,
     automation_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -252,6 +249,7 @@ where
         .bind(definition_json)
         .bind(state)
         .bind(slot_session_key)
+        .bind(updated_at_ms)
         .bind(automation_id);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -260,6 +258,7 @@ where
 pub(crate) fn update_automation_deadline<S>(
     scope: &mut S,
     next_due_ms: Option<String>,
+    expires_at_ms: Option<String>,
     automation_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -274,8 +273,38 @@ where
             "/sql/automations/update_automation_deadline.sql"
         )))
         .bind(next_due_ms)
+        .bind(expires_at_ms)
         .bind(automation_id);
         statement.execute(scope.executor()).await?;
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredAutomationDeadline {
+    pub deadline_ms: Option<String>,
+}
+pub(crate) fn list_automation_deadlines<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredAutomationDeadline>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/list_automation_deadlines.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAutomationDeadline {
+                    deadline_ms: row.try_get("deadline_ms")?,
+                })
+            })
+            .collect()
     }
 }

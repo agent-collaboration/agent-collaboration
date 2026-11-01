@@ -6,6 +6,7 @@ use crate::{
         StoredWakeDefinition, timestamp_millis, wake_slot,
     },
     automation_catalog_store as catalog, automation_content_store as contents,
+    automation_record_header::AutomationRecordHeader,
     automation_store_error::{AutomationStoreError, AutomationStoreResult, row_id, timestamp},
     automation_wake_validation as validation,
     fleet_row_ids::FleetRowIds,
@@ -14,7 +15,7 @@ use crate::{
 use collaboration_protocol::{
     AutomationAnswer, AutomationId, AutomationKind, AutomationRefusal, AutomationTiming,
     CatalogAutomation, CentralWakeSnapshot, FiringMessageOrigin, MessageContent, SavedMessage,
-    WakeCreator, WakeDefinition, WakeMutationRequest, WakeSendRequest, WakeShowRequest, WakeState,
+    WakeDefinition, WakeMutationRequest, WakeSendRequest, WakeShowRequest, WakeState,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
 use message_board::ServiceId;
@@ -58,12 +59,14 @@ where
         ));
     }
     let slot = wake_slot(&request.message.target)?;
-    let previous = queries::find_wake_slot(scope, slot)
-        .await?
-        .map(catalog::decode)
-        .transpose()?;
-    let previous = authorize_replacement(previous, request, &installation, now_ms, row_ids)?;
-    let now = timestamp(now_ms)?;
+    let previous = queries::find_wake_slot(scope, slot).await?;
+    let previous = crate::automation_wake_replacement::prepare(
+        previous,
+        request,
+        &installation,
+        now_ms,
+        row_ids,
+    )?;
     let id: AutomationId = row_ids
         .next()?
         .to_string()
@@ -98,6 +101,9 @@ where
         },
         next_due: Some(timing.first_due())
             .filter(|due| expires_ms > now_ms && due.unix_millis() < expires_ms),
+        header: AutomationRecordHeader::wake(now_ms)?,
+        expires_at: Some(timestamp(expires_ms)?),
+        progress: Default::default(),
         definition: StoredAutomationDefinition::Wake(StoredWakeDefinition {
             target: request.message.target.clone(),
             origin,
@@ -106,9 +112,6 @@ where
             content: content.clone(),
             timing_request: request.timing.clone(),
             timing,
-            anchor_at: now.clone(),
-            expires_at: timestamp(expires_ms)?,
-            created_at: now,
         }),
     };
     let answer = AutomationAnswer::Wake(project(&record, request.message.clone(), None)?);
@@ -116,56 +119,10 @@ where
     // Every ID, domain value and answer is prepared before the first write.
     contents::insert_prepared(scope, owner, &content, &text, now_ms).await?;
     if let Some(previous) = previous {
-        catalog::update(scope, &previous).await.map_err(rollback)?;
+        crate::automation_wake_replacement::commit(scope, previous).await?;
     }
     catalog::insert(scope, &record).await.map_err(rollback)?;
     Ok(answer)
-}
-
-fn authorize_replacement(
-    previous: Option<AutomationRecord>,
-    request: &WakeSendRequest,
-    installation: &ServiceId,
-    now_ms: i64,
-    row_ids: &mut FleetRowIds,
-) -> AutomationStoreResult<Option<AutomationRecord>> {
-    let Some(mut previous) = previous else {
-        return Ok(None);
-    };
-    let StoredAutomationDefinition::Wake(wake) = &previous.definition else {
-        return Err(AutomationStoreError::InvalidRecord("slot_session_key"));
-    };
-    if timestamp_millis(&wake.expires_at)? <= now_ms {
-        previous.state = CatalogState::Expired;
-    } else {
-        let is_target =
-            matches!(&request.requested_by,WakeCreator::Session(session) if *session==wake.target);
-        let is_creator = match &previous.creator.declared {
-            WakeCreator::Unrecorded {} => false,
-            WakeCreator::Router {} => {
-                previous.creator.installation == *installation
-                    && previous.creator.declared == request.requested_by
-            }
-            creator => *creator == request.requested_by,
-        };
-        if !request.replace
-            || !(is_target || is_creator || matches!(request.requested_by, WakeCreator::Owner {}))
-        {
-            return Err(AutomationStoreError::Refused(
-                AutomationRefusal::WakeExists {
-                    creator: previous.creator.declared,
-                },
-            ));
-        }
-        previous.state = CatalogState::Cancelled;
-    }
-    previous.next_due = None;
-    previous.revision = row_ids
-        .next()?
-        .to_string()
-        .try_into()
-        .map_err(|_| AutomationStoreError::InvalidRecord("revision"))?;
-    Ok(Some(previous))
 }
 
 pub(crate) async fn show<Scope: TransactionScope>(
@@ -184,9 +141,16 @@ where
         .to_owned()
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("automation_id"))?;
-    let Some(record) = catalog::read(scope, &id).await? else {
+    let Some(row) = queries::read_automation(scope, id.as_str().into()).await? else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
+    if row.kind.as_deref() != Some("wake") {
+        return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
+    }
+    if let Some(faulted) = crate::automation_fault_projection::projection(&row)? {
+        return Ok(AutomationAnswer::Faulted(faulted));
+    }
+    let record = catalog::decode(row)?;
     if !matches!(record.definition, StoredAutomationDefinition::Wake(_)) {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     }
@@ -220,7 +184,7 @@ where
     let StoredAutomationDefinition::Wake(wake) = &record.definition else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
-    let expiry = timestamp_millis(&wake.expires_at)?;
+    let expiry = timestamp_millis(record.wake_expiry()?)?;
     let before = record.state;
     if before.owns_wake_slot() && expiry <= now_ms {
         record.state = CatalogState::Expired;
@@ -257,6 +221,7 @@ where
         }
     }
     if before != record.state {
+        record.header.set_updated(now_ms)?;
         record.revision = row_ids
             .next()?
             .to_string()
@@ -267,7 +232,9 @@ where
         already_sent: crate::automation_firing_store::sent_firings(scope, &record.id).await?,
         automation: CatalogAutomation::Wake(snapshot(scope, &record).await?),
     };
+    let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
     catalog::update(scope, &record).await?;
+    crate::automation_pending_mutation::commit(scope, pending).await?;
     Ok(answer)
 }
 
@@ -319,6 +286,9 @@ fn project(
     let StoredAutomationDefinition::Wake(wake) = &record.definition else {
         return Err(AutomationStoreError::InvalidRecord("wake.kind"));
     };
+    let AutomationRecordHeader::Wake { times } = &record.header else {
+        return Err(AutomationStoreError::InvalidRecord("wake.record_header"));
+    };
     Ok(CentralWakeSnapshot {
         definition: WakeDefinition {
             wakeup_id: record
@@ -331,9 +301,9 @@ fn project(
             created_by: record.creator.declared.clone(),
             message,
             timing: wake.timing_request.clone(),
-            anchor_at: wake.anchor_at.clone(),
-            expires_at: Some(wake.expires_at.clone()),
-            created_at: wake.created_at.clone(),
+            anchor_at: times.anchor_at.clone(),
+            expires_at: Some(record.wake_expiry()?.clone()),
+            created_at: times.created_at.clone(),
         },
         state: state(record.state)?,
         next_due_at: record

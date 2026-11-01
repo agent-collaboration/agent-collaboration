@@ -100,7 +100,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         (EngineSchema::Copy, 3),
         (EngineSchema::Session, 4),
         (EngineSchema::Mailbox, 3),
-        (EngineSchema::Fleet, 10),
+        (EngineSchema::Fleet, 11),
     ] {
         let directory = tempfile::tempdir()?;
         let fixture = Fixture::open(directory.path()).await?;

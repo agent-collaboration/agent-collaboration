@@ -60,6 +60,9 @@ pub(super) async fn run(
                     }
                     snapshot.schedule_id.as_str().to_owned()
                 }
+                CatalogAutomation::Faulted(fault) => {
+                    return Err(format!("healthy catalog fixture became faulted: {fault:?}").into());
+                }
             };
             if !ids.insert(id) {
                 return Err("organization list repeated a definition".into());

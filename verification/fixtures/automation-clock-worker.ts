@@ -25,9 +25,10 @@ const receiptSchema = z.object({
   atMs: millisecondsSchema,
   result: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("completed") }),
-    z.object({ kind: z.literal("failed") }),
+    z.object({ kind: z.literal("failed"), message: z.string() }),
   ]),
   nextAlarmMs: millisecondsSchema.nullable(),
+  afterHandlerAlarmMs: millisecondsSchema.nullable(),
 });
 type AlarmReceipt = z.infer<typeof receiptSchema>;
 const receiptsSchema = z.array(receiptSchema).max(maximumCallbacks);
@@ -113,6 +114,7 @@ export class FleetObject extends RustFleetObject {
   }
 
   private async controlledFetch(request: Request, action: ClockAction): Promise<Response> {
+    const beforeControl = await readDeadline(this.controlledStorage);
     const response = await super.fetch(request);
     if (!response.ok) return response;
     if (response.headers.get("x-central-debug-automation-clock") !== "v1") {
@@ -143,6 +145,7 @@ export class FleetObject extends RustFleetObject {
       automationClock: {
         now,
         nextAlarmMs: await readDeadline(this.controlledStorage),
+        platformAlarmBeforeControlMs: beforeControl,
         callbacks: await this.receipts(),
       },
     };
@@ -159,9 +162,13 @@ export class FleetObject extends RustFleetObject {
     try {
       // This is the generated Rust FleetObject.alarm -> ShellActor -> on_alarm.
       await super.alarm();
+    } catch (error: unknown) {
+      result = { kind: "failed", message: String(error) };
+    }
+    const afterHandlerAlarmMs = await readDeadline(this.controlledStorage);
+    if (result.kind === "completed") {
       await this.controlledStorage.put(failuresKey, 0);
-    } catch {
-      result = { kind: "failed" };
+    } else {
       const raw: unknown = await this.controlledStorage.get(failuresKey);
       const failed = raw === undefined ? 1 : z.number().int().min(0).max(6).parse(raw) + 1;
       await this.controlledStorage.put(failuresKey, failed);
@@ -181,6 +188,7 @@ export class FleetObject extends RustFleetObject {
       atMs: nowMs,
       result,
       nextAlarmMs: await readDeadline(this.controlledStorage),
+      afterHandlerAlarmMs,
     });
     await this.controlledStorage.put(receiptsKey, callbacks);
   }

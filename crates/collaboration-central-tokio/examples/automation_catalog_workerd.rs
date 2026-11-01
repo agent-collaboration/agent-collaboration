@@ -1,13 +1,24 @@
 //! The same catalog scenario enters through real workerd machine sessions.
 #![forbid(unsafe_code)]
 
+#[cfg(debug_assertions)]
 use collaboration_central_conformance::{
-    ConformanceClient, ConformanceResult, JwksFixtureServer, run_automation_catalog_conformance,
+    AutomationClockControl, ConformanceClient, ConformanceResult, JwksFixtureServer,
+    run_automation_catalog_conformance,
 };
+#[cfg(debug_assertions)]
+use collaboration_central_core::RegistryTime;
+#[cfg(debug_assertions)]
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
+#[expect(
+    dead_code,
+    reason = "This example uses configured startup; the shared harness also serves normal and invalid-relay startup in other examples."
+)]
 mod workerd_harness;
+#[cfg(debug_assertions)]
 use workerd_harness::{WorkerdProcess, WorkerdSettings};
 
+#[cfg(debug_assertions)]
 #[tokio::main]
 async fn main() -> ConformanceResult<()> {
     let mut arguments = std::env::args().skip(1);
@@ -21,6 +32,7 @@ async fn main() -> ConformanceResult<()> {
         .ok_or("fresh persistence directory")?
         .into();
     let port = arguments.next().ok_or("loopback port")?.parse::<u16>()?;
+    let bundle = std::path::PathBuf::from(arguments.next().ok_or("debug alarm adapter bundle")?);
     if arguments.next().is_some() {
         return Err("unexpected workerd catalog argument".into());
     }
@@ -38,7 +50,13 @@ async fn main() -> ConformanceResult<()> {
         holder_answer_timeout: std::time::Duration::from_secs(2),
         copy_ack_wait: std::time::Duration::from_secs(2),
     };
-    let server = match WorkerdProcess::start(&settings).await {
+    let server = match WorkerdProcess::start_configured(
+        &settings,
+        &settings.relay_peer.to_string(),
+        Some(&bundle),
+    )
+    .await
+    {
         Ok(server) => server,
         Err(error) => {
             keys.shutdown().await?;
@@ -46,7 +64,16 @@ async fn main() -> ConformanceResult<()> {
         }
     };
     let base = format!("http://127.0.0.1:{port}");
-    let proof = run_automation_catalog_conformance(&ConformanceClient::new(&base)?).await;
+    let proof = async {
+        let client = ConformanceClient::new(&base)?;
+        client
+            .automation_clock(AutomationClockControl::Start {
+                now: RegistryTime("2026-10-31T10:00:00Z".parse()?),
+            })
+            .await?;
+        run_automation_catalog_conformance(&client).await
+    }
+    .await;
     let stopped = server.stop().await;
     let keys = keys.shutdown().await;
     proof?;
@@ -54,4 +81,9 @@ async fn main() -> ConformanceResult<()> {
     keys?;
     println!("AUTOMATION_CATALOG_RESULT shared catalog scenario passed; 0 failed; 0 ignored");
     Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn main() {
+    eprintln!("automation catalog verification uses the debug-only controlled clock");
 }

@@ -36,6 +36,20 @@ pub(crate) fn decode(
     let sequence = required(row.report_seq, "report_seq")?
         .parse::<u64>()
         .map_err(|_| AutomationStoreError::InvalidRecord("report_seq"))?;
+    let report_owner = row
+        .report_service_id
+        .map(|value| {
+            message_board::ServiceId::try_from(value)
+                .map_err(|_| AutomationStoreError::InvalidRecord("report_service_id"))
+        })
+        .transpose()?;
+    if report_owner.is_none()
+        && (row.batch_id.is_some()
+            || sequence > 0
+            || !matches!(outcome, FiringOutcome::Pending | FiringOutcome::Cancelled))
+    {
+        return Err(AutomationStoreError::InvalidRecord("report_service_id"));
+    }
     Ok(FiringSnapshot {
         firing_id: required(row.firing_id, "firing_id")?
             .try_into()
@@ -139,4 +153,70 @@ where
                 .map_err(|_| AutomationStoreError::InvalidRecord("firing_id"))
         })
         .collect()
+}
+
+pub(crate) async fn list<Scope: TransactionScope>(
+    scope: &mut Scope,
+    request: &collaboration_protocol::FiringListRequest,
+) -> AutomationStoreResult<collaboration_protocol::AutomationAnswer>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let invalid_cursor = || AutomationStoreError::InvalidRequest {
+        field: "cursor",
+        reason: collaboration_protocol::AutomationRequestConstraint::InvalidCursor,
+    };
+    let after = request
+        .cursor
+        .as_ref()
+        .map(|value| FiringId::try_from(value.clone()))
+        .transpose()
+        .map_err(|_| invalid_cursor())?;
+    if let Some(id) = &after {
+        let snapshot = read(scope, id).await?.ok_or_else(invalid_cursor)?;
+        if snapshot.automation_id != request.automation_id {
+            return Err(invalid_cursor());
+        }
+    }
+    let limit = u32::from(request.limit) as usize;
+    let rows = queries::list_automation_firings(
+        scope,
+        request.automation_id.as_str().into(),
+        after.map(String::from).unwrap_or_default(),
+        (limit + 1).to_string(),
+    )
+    .await?;
+    let more = rows.len() > limit;
+    let records = rows
+        .into_iter()
+        .take(limit)
+        .map(decode)
+        .collect::<AutomationStoreResult<Vec<_>>>()?;
+    if records
+        .iter()
+        .any(|row| row.automation_id != request.automation_id)
+    {
+        return Err(AutomationStoreError::InvalidRecord("automation_id"));
+    }
+    let next_cursor = if more {
+        Some(
+            records
+                .last()
+                .ok_or(AutomationStoreError::InvalidRecord("firing.page"))?
+                .firing_id
+                .as_str()
+                .into(),
+        )
+    } else {
+        None
+    };
+    Ok(collaboration_protocol::AutomationAnswer::Firings(
+        collaboration_protocol::AutomationPage {
+            records,
+            next_cursor,
+        },
+    ))
 }

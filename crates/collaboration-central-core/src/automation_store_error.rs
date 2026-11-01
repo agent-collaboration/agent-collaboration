@@ -36,6 +36,9 @@ impl From<LimitExceeded> for AutomationStoreError {
 
 impl AutomationStoreError {
     pub fn into_answer(self) -> Result<AutomationAnswer, StoreError> {
+        self.into_refusal().map(AutomationAnswer::Refused)
+    }
+    pub fn into_refusal(self) -> Result<AutomationRefusal, StoreError> {
         let refusal = match self {
             Self::Refused(refusal) => refusal,
             Self::Storage(error) => return Err(error),
@@ -48,7 +51,7 @@ impl AutomationStoreError {
                 reason,
             },
         };
-        Ok(AutomationAnswer::Refused(refusal))
+        Ok(refusal)
     }
 }
 
@@ -78,6 +81,13 @@ pub(crate) fn timestamp(millis: i64) -> AutomationStoreResult<ObservationTimesta
         .ok_or(AutomationStoreError::InvalidRecord("timestamp"))?;
     time.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
         .try_into()
+        .map_err(|_| AutomationStoreError::InvalidRecord("timestamp"))
+}
+
+pub(crate) fn observation_millis(value: &ObservationTimestamp) -> AutomationStoreResult<i64> {
+    String::from(value.clone())
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .map(|time| time.timestamp_millis())
         .map_err(|_| AutomationStoreError::InvalidRecord("timestamp"))
 }
 

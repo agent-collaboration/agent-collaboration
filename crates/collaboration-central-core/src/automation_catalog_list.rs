@@ -46,6 +46,11 @@ where
     let mut automations = Vec::new();
     let mut last = None;
     for row in rows.into_iter().take(limit) {
+        if let Some(faulted) = crate::automation_fault_projection::projection(&row)? {
+            last = Some(faulted.automation_id.as_str().into());
+            automations.push(CatalogAutomation::Faulted(faulted));
+            continue;
+        }
         let record = catalog::decode(row)?;
         let snapshot = match &record.definition {
             StoredAutomationDefinition::Schedule(_) => {

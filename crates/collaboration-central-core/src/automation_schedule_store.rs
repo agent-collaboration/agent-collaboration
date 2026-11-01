@@ -6,6 +6,7 @@ use crate::{
         StoredScheduleDefinition,
     },
     automation_catalog_store as catalog, automation_instruction_store as instructions,
+    automation_record_header::AutomationRecordHeader,
     automation_schedule_validation as validation,
     automation_store_error::{AutomationStoreError, AutomationStoreResult, timestamp},
     fleet_row_ids::FleetRowIds,
@@ -45,7 +46,6 @@ where
     validation::definition(&request.definition)?;
     let timing =
         AutomationTiming::resolve(&request.definition.timing, AutomationKind::Schedule, now_ms)?;
-    let now = timestamp(now_ms)?;
     if instructions::read(scope, &request.definition.instruction_id)
         .await?
         .is_none()
@@ -76,13 +76,12 @@ where
             declared: WakeCreator::Router {},
         },
         next_due: request.definition.enabled.then(|| timing.first_due()),
+        header: AutomationRecordHeader::schedule(&request.definition.destination, now_ms)?,
+        expires_at: None,
+        progress: Default::default(),
         definition: StoredAutomationDefinition::Schedule(StoredScheduleDefinition {
             definition: request.definition.clone(),
             timing,
-            imported_continuity: ImportedContinuity::None,
-            anchor_at: now.clone(),
-            created_at: now.clone(),
-            updated_at: now,
         }),
     };
     let answer = AutomationAnswer::Schedule(snapshot(&record)?);
@@ -105,9 +104,18 @@ where
         .to_owned()
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("automation_id"))?;
-    let Some(record) = catalog::read(scope, &id).await? else {
+    let Some(row) =
+        crate::generated_automation_catalog::read_automation(scope, id.as_str().into()).await?
+    else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
+    if row.kind.as_deref() != Some("schedule") {
+        return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
+    }
+    if let Some(faulted) = crate::automation_fault_projection::projection(&row)? {
+        return Ok(AutomationAnswer::Faulted(faulted));
+    }
+    let record = catalog::decode(row)?;
     if !matches!(record.definition, StoredAutomationDefinition::Schedule(_)) {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     }
@@ -133,12 +141,27 @@ where
         .to_owned()
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("automation_id"))?;
-    let Some(mut record) = catalog::read(scope, &id).await? else {
+    let Some(row) =
+        crate::generated_automation_catalog::read_automation(scope, id.as_str().into()).await?
+    else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
+    if crate::automation_fault_projection::projection(&row)?.is_some() {
+        return match edit {
+            ScheduleEdit::Replace(request) => repair(scope, row, request, now_ms, row_ids).await,
+            _ => Err(AutomationStoreError::InvalidRecord("faulted_automation")),
+        };
+    }
+    let mut record = catalog::decode(row)?;
     if record.state == CatalogState::Deleted {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     }
+    let AutomationRecordHeader::Schedule { execution_mode, .. } = &record.header else {
+        return Err(AutomationStoreError::InvalidRecord(
+            "schedule.record_header",
+        ));
+    };
+    let execution_mode = *execution_mode;
     let StoredAutomationDefinition::Schedule(schedule) = &mut record.definition else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
@@ -152,7 +175,7 @@ where
                     },
                 ));
             }
-            validation::unchanged_mode(&before.destination, &request.definition.destination)?;
+            execution_mode.require_destination(&request.definition.destination)?;
             validation::definition(&request.definition)?;
             require_target(scope, &request.definition).await?;
             if instructions::read(scope, &request.definition.instruction_id)
@@ -186,7 +209,7 @@ where
             record.state = CatalogState::Deleted;
         }
     }
-    schedule.updated_at = timestamp(now_ms)?;
+    record.header.set_updated(now_ms)?;
     if record.state != CatalogState::Deleted {
         record.state = if schedule.definition.enabled {
             CatalogState::Enabled
@@ -218,7 +241,91 @@ where
         automation: CatalogAutomation::Schedule(snapshot(&record)?),
         already_sent,
     };
+    let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
     catalog::update(scope, &record).await?;
+    crate::automation_pending_mutation::commit(scope, pending).await?;
+    Ok(answer)
+}
+
+async fn repair<Scope: TransactionScope>(
+    scope: &mut Scope,
+    mut row: crate::generated_automation_catalog::StoredAutomation,
+    request: &ScheduleUpdateRequest,
+    now_ms: i64,
+    row_ids: &mut FleetRowIds,
+) -> AutomationStoreResult<AutomationAnswer>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let faulted = crate::automation_fault_projection::projection(&row)?
+        .ok_or(AutomationStoreError::InvalidRecord("fault_json"))?;
+    if faulted.kind != AutomationKind::Schedule {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    }
+    if faulted.revision != request.expected_change_id {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::ScheduleChangeConflict {
+                current_change_id: faulted.revision,
+            },
+        ));
+    }
+    let AutomationRecordHeader::Schedule { execution_mode, .. } =
+        catalog::decode_header(&row, AutomationKind::Schedule)?
+    else {
+        return Err(AutomationStoreError::InvalidRecord("record_header"));
+    };
+    execution_mode.require_destination(&request.definition.destination)?;
+    validation::definition(&request.definition)?;
+    require_target(scope, &request.definition).await?;
+    if instructions::read(scope, &request.definition.instruction_id)
+        .await?
+        .is_none()
+    {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    }
+    let timing =
+        AutomationTiming::resolve(&request.definition.timing, AutomationKind::Schedule, now_ms)?;
+    row.next_due_ms = if request.definition.enabled {
+        timing
+            .next_after(now_ms)?
+            .map(|due| due.unix_millis().to_string())
+    } else {
+        None
+    };
+    row.definition_json = Some(
+        serde_json::to_string(&StoredAutomationDefinition::Schedule(
+            StoredScheduleDefinition {
+                definition: request.definition.clone(),
+                timing,
+            },
+        ))
+        .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?,
+    );
+    row.state = Some(
+        if request.definition.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+        .into(),
+    );
+    row.revision = Some(row_ids.next()?.to_string());
+    row.fault_json = None;
+    row.faulted_at_ms = None;
+    // The validated replacement changes only executable fields and revision.
+    // The original independent header, including updated_at, is retained.
+    let record = catalog::decode(row)?;
+    let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
+    let answer = AutomationAnswer::Mutation {
+        automation: CatalogAutomation::Schedule(snapshot(&record)?),
+        already_sent: crate::automation_firing_store::sent_firings(scope, &record.id).await?,
+    };
+    catalog::update(scope, &record).await?;
+    crate::automation_pending_mutation::commit(scope, pending).await?;
     Ok(answer)
 }
 
@@ -253,6 +360,16 @@ pub(crate) fn snapshot(record: &AutomationRecord) -> AutomationStoreResult<Sched
     let StoredAutomationDefinition::Schedule(schedule) = &record.definition else {
         return Err(AutomationStoreError::InvalidRecord("schedule.kind"));
     };
+    let AutomationRecordHeader::Schedule {
+        times,
+        imported_continuity,
+        ..
+    } = &record.header
+    else {
+        return Err(AutomationStoreError::InvalidRecord(
+            "schedule.record_header",
+        ));
+    };
     Ok(ScheduleSnapshot {
         schedule_id: record
             .id
@@ -262,10 +379,12 @@ pub(crate) fn snapshot(record: &AutomationRecord) -> AutomationStoreResult<Sched
             .map_err(|_| AutomationStoreError::InvalidRecord("schedule_id"))?,
         change_id: record.revision.clone(),
         definition: schedule.definition.clone(),
-        imported_continuity: schedule.imported_continuity.clone(),
-        anchor_at: schedule.anchor_at.clone(),
-        created_at: schedule.created_at.clone(),
-        updated_at: schedule.updated_at.clone(),
+        imported_continuity: imported_continuity
+            .clone()
+            .unwrap_or(ImportedContinuity::None),
+        anchor_at: times.anchor_at.clone(),
+        created_at: times.created_at.clone(),
+        updated_at: times.updated_at.clone(),
         next_due_at: record
             .next_due
             .map(|due| timestamp(due.unix_millis()))

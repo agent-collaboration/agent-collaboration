@@ -50,73 +50,15 @@
       ]
     },
     {
-      "name": "insert_schedule_automation",
-      "sql": "sql/automations/insert_schedule_automation.sql",
+      "name": "insert_automation",
+      "sql": "sql/automations/insert_automation.sql",
       "row": null,
       "result": "execute",
       "parameters": [
         {
-          "name": "automation_id",
+          "name": "record_json",
           "kind": "text",
           "nullable": false
-        },
-        {
-          "name": "revision",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "definition_json",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "state",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "creator_json",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "insert_wake_automation",
-      "sql": "sql/automations/insert_wake_automation.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "automation_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "revision",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "definition_json",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "state",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "creator_json",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "slot_session_key",
-          "kind": "text",
-          "nullable": true
         }
       ]
     },
@@ -133,6 +75,11 @@
         },
         {
           "name": "next_due_ms",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "expires_at_ms",
           "kind": "text",
           "nullable": true
         }
@@ -165,6 +112,11 @@
           "nullable": true
         },
         {
+          "name": "updated_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
           "name": "automation_id",
           "kind": "text",
           "nullable": false
@@ -183,11 +135,23 @@
           "nullable": true
         },
         {
+          "name": "expires_at_ms",
+          "kind": "text",
+          "nullable": true
+        },
+        {
           "name": "automation_id",
           "kind": "text",
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "list_automation_deadlines",
+      "sql": "sql/automations/list_automation_deadlines.sql",
+      "row": "StoredAutomationDeadline",
+      "result": "many",
+      "parameters": []
     }
   ]
 }

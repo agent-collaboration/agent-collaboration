@@ -7,6 +7,8 @@ pub use automation_cron::GridCron;
 pub use automation_grid::{AutomationValidationError, GRID_STEP_MS, GridPeriod, GridTime};
 pub use central_timing::{AutomationKind, AutomationTiming};
 mod automation_calls;
+mod automation_fault_contract;
+pub use automation_fault_contract::*;
 mod automation_custody;
 pub use agent_automation::{
     AutomationId, BatchId, ContentId, FiringId, ImportId, ReportId, WorkItemId,

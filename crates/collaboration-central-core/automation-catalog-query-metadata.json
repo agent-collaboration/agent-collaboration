@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-catalog-queries.json": "336fb5943234f9ecdece4b3e46860f962d0b890a7ee976499cc1d34fb32c1f46",
+    "automation-catalog-queries.json": "13ee8975159dc494eceb70b2e90e8b1b2ff6b5a3253844a124d03e29a5ca4ad5",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -12,7 +12,7 @@
     "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
     "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "core_migrations/0011_automations.sql": "5921cb47767d907e5194f3e3e0be8257582db7a31cc7f9e135c72acd5e7b7a25",
+    "core_migrations/0011_automations.sql": "7203cc3a71b4d043c62d29febd55feea97090b80cd52fde54708176b85884b9c",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -65,17 +65,17 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/automations/find_wake_slot.sql": "f5f576a94a2d5bc330f0f3df966323eac7859749c8ed6ab85955733deca2e7d9",
-    "sql/automations/insert_automation_timing.sql": "6cd85b16e954e1371fac33bfb4bb8f2746a56c0806f5daf69711c14e79240afd",
-    "sql/automations/insert_schedule_automation.sql": "f7ad4d69dcecbab6fb9b671a050e851f6dbcdb8585a274187a904cb6ec28983e",
-    "sql/automations/insert_wake_automation.sql": "efdac40875cae4661d1d771aecdd1f3b39e3ae8555a418e2c96c13e20694fc88",
-    "sql/automations/list_automations.sql": "b61d391d38219852149b33dd9d07fda14bed96c5dd051ec1e8af880ff0e621d9",
-    "sql/automations/read_automation.sql": "d828d9b74c1776a9fc1121056f81780e7e5a4dac9eb9e72b587dde10c0a68a79",
-    "sql/automations/update_automation.sql": "ceb1ede28b2ee5c62e67d7c1a57516a856a2cef7128c375a66a0f904d21e16a7",
-    "sql/automations/update_automation_deadline.sql": "9f81b567d8b5cc283c62c0d9582f4745ce112858c676b793a20eda56907b19c2",
-    "src/generated_automation_catalog.rs": "ecb44789d8e51c69081a51cb14ab29f2235f1da32c9711f63b24f066c58b9c80"
+    "sql/automations/find_wake_slot.sql": "7e4b176cad256b9de8ac89523560be2d51005d1c5965086b18d582d1fd2a3a8c",
+    "sql/automations/insert_automation.sql": "c8454f1b967d965b30cad499bdc962244a87a55ae9d3f42c4b3af275b140e54b",
+    "sql/automations/insert_automation_timing.sql": "208e47207b09d8036866709bf445305c921e2c3fc88aff4f7356180970bf8c18",
+    "sql/automations/list_automation_deadlines.sql": "90e3a0f97ae89fc34e68013d92fa4fa212e144efd9f4a4383ba55866723fa28d",
+    "sql/automations/list_automations.sql": "a2b901a99862581e15d5412bd63ea6d91dc557db614c4d38081ece435e06db75",
+    "sql/automations/read_automation.sql": "8916925e47c1c1c761899b91d8a10cdc5813141ebffea094b3ca701cabd692ed",
+    "sql/automations/update_automation.sql": "62b8543bb274d80ee39cffa0468430214d9ad609124032287bfafc9ccfba6fe0",
+    "sql/automations/update_automation_deadline.sql": "17772c6ed6767af9ca6da19f087c18130121d4addbe48b66116c8a68869f42fc",
+    "src/generated_automation_catalog.rs": "410a5cce177de1b048ba76f46a5e9b1faf7bc85520c81ebcdf2266a9e98aefe5"
   },
-  "queries_digest": "154cdb8187d308abd5294c3c0872ccb93480bbb826a402155c7fac6560809d57",
+  "queries_digest": "ed98f0e8ce6bf9f909a2bdaf72777164f231c52aaa1ffea4f4ee5a6121b1e0f6",
   "queries": [
     {
       "name": "read_automation",
@@ -117,6 +117,55 @@
           "type_source": "driver"
         },
         {
+          "name": "anchor_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "imported_continuity_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "execution_mode",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "fault_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "faulted_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
           "name": "legacy_timing_json",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -146,6 +195,13 @@
         },
         {
           "name": "next_due_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "expires_at_ms",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -228,6 +284,55 @@
           "type_source": "driver"
         },
         {
+          "name": "anchor_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "imported_continuity_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "execution_mode",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "fault_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "faulted_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
           "name": "legacy_timing_json",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -257,6 +362,13 @@
         },
         {
           "name": "next_due_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "expires_at_ms",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -339,6 +451,55 @@
           "type_source": "driver"
         },
         {
+          "name": "anchor_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "imported_continuity_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "execution_mode",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "fault_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "faulted_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
           "name": "legacy_timing_json",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -368,6 +529,13 @@
         },
         {
           "name": "next_due_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "expires_at_ms",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -411,29 +579,37 @@
       ]
     },
     {
-      "name": "insert_schedule_automation",
-      "bind_slots": 5,
-      "columns": []
-    },
-    {
-      "name": "insert_wake_automation",
-      "bind_slots": 6,
+      "name": "insert_automation",
+      "bind_slots": 1,
       "columns": []
     },
     {
       "name": "insert_automation_timing",
-      "bind_slots": 2,
+      "bind_slots": 3,
       "columns": []
     },
     {
       "name": "update_automation",
-      "bind_slots": 5,
+      "bind_slots": 6,
       "columns": []
     },
     {
       "name": "update_automation_deadline",
-      "bind_slots": 2,
+      "bind_slots": 3,
       "columns": []
+    },
+    {
+      "name": "list_automation_deadlines",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "deadline_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
     }
   ]
 }

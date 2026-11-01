@@ -14,7 +14,7 @@ fn settings(root: &std::path::Path, jwks: &str) -> ConformanceResult<TokioSettin
     Ok(TokioSettings {
         root: root.into(),
         delivery: DeliveryConfig {
-            relay_peer: "019f0000-0000-7000-8000-000000005241"
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
                 .to_owned()
                 .try_into()?,
         },
@@ -33,6 +33,224 @@ fn startup(now: RegistryTime) -> Vec<RuntimeControlRequest> {
 }
 
 #[tokio::test]
+async fn catalog_clock_batches_and_custody_survive_faults() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_clock_conformance(
+            &ConformanceClient::new(server.base_url())?,
+            collaboration_central_conformance::AutomationClockPlatform::Tokio,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn report_owner_survives_acknowledged_batch_retention() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_retention_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn registered_expired_project_lease_does_not_gate_automation() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2030-01-01T00:00:00Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_expired_lease_conformance(
+            &ConformanceClient::new(server.base_url())?,
+            collaboration_central_conformance::AutomationClockPlatform::Tokio,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn paused_and_faulted_wakes_keep_independent_expiry() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_expiry_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn armed_restart_then_drain_and_create_uses_actual_callbacks() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let prepared = collaboration_central_conformance::prepare_automation_restart(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        let prepared = prepared?;
+        stopped?;
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::resume_automation_restart(
+            &ConformanceClient::new(server.base_url())?,
+            prepared,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn external_settlement_releases_the_validated_pending_edit_after_body_fault()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_external_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn central_entry_and_stored_rows_enforce_the_limit_inventory() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:00:00Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_limit_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn undelivered_wake_folds_without_changing_its_frozen_header() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let outcome: ConformanceResult<()> = async {
+        let initial = RegistryTime("2026-10-31T10:04:59.999Z".parse()?);
+        let server =
+            TokioServer::start_with_controls(settings(root.path(), &jwks.url)?, startup(initial))
+                .await?;
+        let proof = collaboration_central_conformance::run_automation_wake_delivery_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+        let stopped = server.shutdown().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
+    let keys = jwks.shutdown().await;
+    outcome?;
+    keys?;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions are the native clock conformance oracle; server and fixture failures propagate as errors."
+)]
 async fn advance_drains_real_callbacks_and_restart_retains_time() -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;

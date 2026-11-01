@@ -173,7 +173,7 @@ where
         ) {
             return self.receive_forward_call(invocation).await;
         }
-        if invocation.kind == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
+        if invocation.kind == crate::machine_notice_calls::DeliverMachineNotice::KIND {
             return self.receive_machine_notice(invocation).await;
         }
         if invocation.kind

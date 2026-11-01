@@ -5,6 +5,28 @@ use collaboration_protocol::{
 use serde_json::json;
 
 #[test]
+fn published_endpoint_pattern_length_bound_matches_inventory() {
+    // Test the emitted pattern by itself: maxLength must not hide a wider regex.
+    let schema = serde_json::to_value(schemars::schema_for!(EndpointId)).unwrap();
+    let pattern = schema
+        .get("pattern")
+        .and_then(serde_json::Value::as_str)
+        .expect("published endpoint pattern");
+    let pattern_only = json!({"type":"string", "pattern":pattern});
+    let validator = jsonschema::validator_for(&pattern_only).unwrap();
+    let maximum = limits::ENDPOINT_ID_MAX_BYTES;
+
+    assert!(
+        validator.is_valid(&json!("a".repeat(maximum))),
+        "published EndpointId pattern must accept ENDPOINT_ID_MAX_BYTES"
+    );
+    assert!(
+        !validator.is_valid(&json!("a".repeat(maximum + 1))),
+        "published EndpointId pattern allows bytes beyond ENDPOINT_ID_MAX_BYTES"
+    );
+}
+
+#[test]
 fn every_product_limit_has_its_reviewed_bounds_in_schema_validator_and_description() {
     // R5 plus the existing identity bounds. Literals are independent of the production inventory.
     let expected = [

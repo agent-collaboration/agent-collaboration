@@ -39,6 +39,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
+            crate::automation_batch_retention::prune(scope, self.now_ms).await?;
             let mutation = mutation_id(&self.call)
                 .map(|operation_id| {
                     operations::request_digest(&self.call).map(|digest| (operation_id, digest))
@@ -192,21 +193,52 @@ where
                             None => AutomationAnswer::Refused(AutomationRefusal::NotFound),
                         },
                     ),
+                    AutomationCall::FiringList(request) => {
+                        crate::automation_firing_store::list(scope, request).await
+                    }
                     AutomationCall::PullAutomationBatches(request) => {
                         crate::automation_capability_store::write(
                             scope,
-                            self.installation,
+                            self.installation.clone(),
                             &request.work_protocols,
                             self.now_ms,
                         )
                         .await?;
-                        // Custody reading is the S4 frontier, before any S3 batch producer exists.
-                        Ok(AutomationAnswer::Batches(
-                            collaboration_protocol::AutomationBatches {
-                                batches: Vec::new(),
-                                next: None,
-                            },
-                        ))
+                        crate::automation_batch_custody::pull(scope, &self.installation, request)
+                            .await
+                    }
+                    AutomationCall::AckAutomationBatches(request) => {
+                        crate::automation_batch_custody::acknowledge(
+                            scope,
+                            &self.installation,
+                            request,
+                            self.now_ms,
+                        )
+                        .await
+                    }
+                    AutomationCall::FetchContents(request) => {
+                        crate::automation_content_fetch::fetch(scope, &self.installation, request)
+                            .await
+                    }
+                    AutomationCall::ReportWorkItems(request) => {
+                        crate::automation_custody_reports::report::<Store, Driver>(
+                            scope,
+                            &self.installation,
+                            request,
+                            self.now_ms,
+                            &mut self.row_ids,
+                        )
+                        .await
+                    }
+                    AutomationCall::LocalRunSettled(request) => {
+                        crate::automation_custody_reports::settle_external::<Store, Driver>(
+                            scope,
+                            &self.installation,
+                            request,
+                            self.now_ms,
+                            &mut self.row_ids,
+                        )
+                        .await
                     }
                     _ => Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound)),
                 }
@@ -222,6 +254,7 @@ where
                     .await
                     .map_err(StoreError::backend)?;
             }
+            crate::automation_clock_deadline::request_next(scope).await?;
             Ok((answer, Vec::new()))
         })
     }

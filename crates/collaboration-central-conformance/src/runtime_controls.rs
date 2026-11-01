@@ -16,6 +16,8 @@ impl RuntimeControlRequest {
         match (&self.command, &self.address) {
             #[cfg(debug_assertions)]
             (RuntimeControl::AutomationClock(_), ObjectAddress::Fleet) => Ok(()),
+            #[cfg(debug_assertions)]
+            (RuntimeControl::AutomationStoreFailures { .. }, ObjectAddress::Fleet) => Ok(()),
             (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
             | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
             | (
@@ -53,6 +55,11 @@ impl RuntimeControlRequest {
 pub enum RuntimeControl {
     #[cfg(debug_assertions)]
     AutomationClock(crate::AutomationClockControl),
+    #[cfg(debug_assertions)]
+    AutomationStoreFailures {
+        after_writes: NonZeroU64,
+        failures: std::num::NonZeroU8,
+    },
     SmallMailboxCapacity,
     SetTime {
         now: RegistryTime,

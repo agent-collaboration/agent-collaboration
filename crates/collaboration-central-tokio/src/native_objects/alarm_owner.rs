@@ -36,11 +36,16 @@ async fn drive(
     clock: &SharedClock,
     retry_delay: &mut Duration,
 ) {
-    let failed = runtime.on_alarm().await.is_err();
+    let result = runtime.on_alarm().await;
+    let failed = result.is_err();
+    #[cfg(all(feature = "conformance", debug_assertions))]
+    let after_handler_alarm_ms = wake.deadline().await;
+    #[cfg(all(feature = "conformance", debug_assertions))]
+    let failure = result.err().map(|error| error.to_string());
     if !failed {
         *retry_delay = INITIAL_RETRY_DELAY;
         #[cfg(all(feature = "conformance", debug_assertions))]
-        wake.completed(false).await;
+        wake.completed(None, after_handler_alarm_ms).await;
         return;
     }
     eprintln!("central alarm drive failed");
@@ -53,5 +58,5 @@ async fn drive(
     }
     *retry_delay = retry_delay.saturating_mul(2).min(MAXIMUM_RETRY_DELAY);
     #[cfg(all(feature = "conformance", debug_assertions))]
-    wake.completed(true).await;
+    wake.completed(failure, after_handler_alarm_ms).await;
 }
