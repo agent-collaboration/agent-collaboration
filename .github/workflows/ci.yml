@@ -139,6 +139,8 @@ jobs:
       - name: Lint Rust workspace
         id: rust_lint
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Challenge TUI terminal input ownership
+        run: node verification/tooling/check-tui-input-ownership.ts
       - name: Check SQLx query metadata against native migrations
         id: sqlite_metadata
         run: |

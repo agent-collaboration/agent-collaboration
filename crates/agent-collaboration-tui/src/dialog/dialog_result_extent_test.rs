@@ -4,10 +4,10 @@ use crate::test_support::{
     recording_backend::recording_terminal_render_loop,
 };
 use agent_collaboration_tui::{
-    DialogAxisSize, DialogMargins, DialogPresentation, FormFields,
+    DialogAxisSize, DialogMargins, DialogPresentation,
     actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Checked, Placement, ScopeId},
     controls::{
-        fields::{Button, SegmentedSwitch, button_target},
+        fields::{Button, FormFields, SegmentedSwitch, button_target},
         list::{ScrollHandle, ScrollReveal},
     },
     dialog::{DialogFrame, PinnedContext},

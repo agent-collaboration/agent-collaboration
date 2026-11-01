@@ -12,5 +12,3 @@ pub use form_fields::{
 pub use segmented_switch::{SegmentedSwitch, SegmentedSwitchProps, segmented_targets};
 pub use status_value::{StatusKind, StatusValue, StatusValueProps};
 pub use text_field::{FilterField, TextField, TextFieldProps, TextFieldState};
-
-pub(crate) mod legacy_form_field;
