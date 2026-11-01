@@ -60,18 +60,19 @@ test('duplicate conflicting values for one dialog field are rejected', async () 
 	expect(observeGridScene(grid, 'compact-sessions-chooser').passed).toBe(false);
 });
 
+const stackedMachineFrame = (value: string): string =>
+	[
+		'╭──────────────────────────╮',
+		'│New session               │',
+		'│Machine                   │',
+		`│❯ ${value.padEnd(23)} │`,
+		'╰──────────────────────────╯',
+	].join('\r\n');
+
 test('a stacked committed Machine accepts its focus arrow and rejects an uncommitted value', async () => {
-	const machine = (value: string): string =>
-		[
-			'╭──────────────────────────╮',
-			'│New session               │',
-			'│Machine                   │',
-			`│❯ ${value.padEnd(23)} │`,
-			'╰──────────────────────────╯',
-		].join('\r\n');
 	expect(
 		gridFieldPair(
-			await screen(machine('Fixture remote ▾')),
+			await screen(stackedMachineFrame('Fixture remote ▾')),
 			'New session',
 			'Machine',
 			'Fixture remote',
@@ -79,7 +80,7 @@ test('a stacked committed Machine accepts its focus arrow and rejects an uncommi
 	).toBe(true);
 	expect(
 		gridFieldPair(
-			await screen(machine('This machine ▾')),
+			await screen(stackedMachineFrame('This machine ▾')),
 			'New session',
 			'Machine',
 			'Fixture remote',
