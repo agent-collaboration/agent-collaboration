@@ -30,10 +30,6 @@ impl NativeSessionRegistration {
             Self::MachineTokensUnavailable => return Err(HarnessLaunchFailure::Unavailable),
             Self::MachineTokens { port } => port,
         };
-        if matches!(destination, DestinationPreparation::Existing { .. }) {
-            return Ok(None);
-        }
-        let operation = operation.ok_or(HarnessLaunchFailure::InvalidInput)?;
         let (endpoint, working_directory, project_id) = match destination {
             DestinationPreparation::Fresh {
                 endpoint,
@@ -46,8 +42,9 @@ impl NativeSessionRegistration {
                 project_id,
                 ..
             } => (&source.endpoint, cwd, project_id.clone()),
-            DestinationPreparation::Existing { .. } => unreachable!(),
+            DestinationPreparation::Existing { .. } => return Ok(None),
         };
+        let operation = operation.ok_or(HarnessLaunchFailure::InvalidInput)?;
         let fork = match destination {
             DestinationPreparation::Fork {
                 source,
