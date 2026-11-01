@@ -7,3 +7,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+fleet-sync-protocol.workspace = true
+schemars.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

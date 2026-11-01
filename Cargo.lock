@@ -1374,6 +1374,13 @@ dependencies = [
 [[package]]
 name = "codex-router-fleet-state"
 version = "0.1.119"
+dependencies = [
+ "fleet-identity-protocol",
+ "fleet-sync-protocol",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "codex-router-host"
@@ -2789,6 +2796,8 @@ dependencies = [
  "chrono",
  "jsonschema",
  "message-board",
+ "proptest",
+ "regex",
  "schemars 1.2.2",
  "serde",
  "serde_json",
