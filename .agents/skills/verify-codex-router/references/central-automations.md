@@ -73,6 +73,15 @@ client and fixtures. Read the offered tests against each wrong build in the
 Verification Design. Retain the deciding business effects, not only calls or
 receipts. Use these boundaries:
 
+V12's scheduled fresh runs and their summaries use Codex `codex-local` with
+Luna, at a small budget of a few short turns (owner decision in Verification
+Design V12, 2026-10-31). Wake targets and every other rig session use
+`claude-haiku-5-5`. Before any input, confirm the selected model in the
+session's settings, and retain the model actually used. Stop on a mismatch or
+unavailable model; do not fall back. Provider fresh preparation and provider
+summary provenance are outside this journey. The model-free bootstrap above
+continues to send no input.
+
 | Gate | Required deciding observation |
 | --- | --- |
 | M0 | Fresh migrated synthetic stores: per-store WAL, old/new retention rows, reclaim, route import and owning restart; valid and corrupt JSON fixtures. Never read live account data. |
