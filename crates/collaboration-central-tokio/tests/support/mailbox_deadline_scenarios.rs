@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 async fn latest(socket: &mut WebSocket, item: ItemId, expected: Value) -> ConformanceResult<Value> {
+    let mut last_observed = None;
     tokio::time::timeout(Duration::from_secs(8), async {
         loop {
             let answer = operation(
@@ -17,6 +18,7 @@ async fn latest(socket: &mut WebSocket, item: ItemId, expected: Value) -> Confor
                 relay_request("statusFetch", json!({"after":0,"limit":10})),
             )
             .await?;
+            last_observed = Some(answer.clone());
             if let Some(event) = answer
                 .pointer("/value/value/events")
                 .and_then(Value::as_array)
@@ -32,7 +34,12 @@ async fn latest(socket: &mut WebSocket, item: ItemId, expected: Value) -> Confor
             }
         }
     })
-    .await?
+    .await
+    .map_err(|error| {
+        format!(
+            "mailbox status {expected} was not observed before the existing bound: {error}; last reply: {last_observed:?}"
+        )
+    })?
 }
 pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let client = ConformanceClient::new(base)?;
