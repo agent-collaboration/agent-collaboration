@@ -34,6 +34,28 @@ fn central_record_literal() -> Value {
     })
 }
 
+// Wrong behavior: requiring or accepting deployment addresses when creating an
+// organization. Oracle: two-service PD cbda512d and the rewritten F2c card.
+// Exercise the actual serde boundary before changing the retired contract.
+#[test]
+fn organization_registry_creation_has_no_address_contract() {
+    // Arrange
+    let request = json!({
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "ownerVerifiedEmail": "owner@example.invalid"
+    });
+
+    // Act
+    let parsed = serde_json::from_value::<CreateOrganization>(request.clone());
+
+    // Assert
+    let parsed = parsed.expect("creation needs no central deployment addresses");
+    assert_eq!(serde_json::to_value(parsed).unwrap(), request);
+    let mut retired_address_input = request;
+    retired_address_input["central"] = central_record_literal();
+    assert!(serde_json::from_value::<CreateOrganization>(retired_address_input).is_err());
+}
+
 // Wrong behavior: the operator cannot supply the central that must initialize
 // this organization. Oracle: Program Design "The new requests, exactly" and
 // the by-hand runbook's step 3. This keeps the real serde boundary.
