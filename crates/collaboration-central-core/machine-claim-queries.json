@@ -1,0 +1,55 @@
+{
+  "migrations": [
+    "organization_registry_migrations"
+  ],
+  "output": "src/generated_machine_claims.rs",
+  "metadata": "machine-claim-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_registry_machine_claims",
+      "sql": "sql/organization_registry/read_registry_machine_claims.sql",
+      "row": "StoredRegistryMachineClaim",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_registry_machine_claim",
+      "sql": "sql/organization_registry/insert_registry_machine_claim.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "peer_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "claimed_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

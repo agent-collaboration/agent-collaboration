@@ -1,5 +1,5 @@
 //! Organization commands share one refusal vocabulary and keep reads separate.
-use super::CommandId;
+use super::{CommandId, VerifiedEmail};
 use fleet_identity_protocol::{InstallationId, OrganizationId};
 use message_board::{IdentityValidationError, ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateOrganization {
     pub organization_id: OrganizationId,
-    pub owner_verified_email: String,
+    pub owner_verified_email: VerifiedEmail,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

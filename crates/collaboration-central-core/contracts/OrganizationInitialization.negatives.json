@@ -1,0 +1,7 @@
+[
+null,
+{"result":"alreadyInitialized","unexpectedField":true},
+{"result":"initialized","unexpectedField":true},
+{"result":"notThisCentral","unexpectedField":true},
+{"result":"unrecognizedVariant"}
+]

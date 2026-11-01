@@ -1749,6 +1749,8 @@ dependencies = [
  "http",
  "jsonschema",
  "message-board",
+ "proptest",
+ "regex",
  "runtime-primitives",
  "schemars 1.2.2",
  "serde",

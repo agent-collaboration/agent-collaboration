@@ -29,12 +29,6 @@ pub enum VerifyFailure {
     Crypto,
 }
 
-#[derive(Debug)]
-pub enum CallOutcome<Reply> {
-    Answered(Reply),
-    Failed(durable_steps::CallFailure),
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UpgradeFailure {
