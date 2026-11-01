@@ -61,6 +61,8 @@ pub async fn run_automation_catalog_conformance(
         timing_cases::run(&mut first, &mut second, &second_service).await?;
         preparation_cases::run(client, &mut first, &mut second, &second_service, &prepared).await?;
         package_cases::run(client, &mut first, &mut second, &second_service).await?;
+        #[cfg(debug_assertions)]
+        collection_pages::cursor_scopes(client, &mut first, &mut second, &second_service).await?;
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;
