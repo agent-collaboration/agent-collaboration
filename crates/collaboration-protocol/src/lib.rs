@@ -331,7 +331,10 @@ pub use schedule_failure::{
 
 mod schedule_preparation_contract;
 pub use schedule_failure::ScheduleEffects;
-pub use schedule_preparation_contract::{DestinationPreparation, SchedulePrepareRequest};
+pub use schedule_preparation_contract::{
+    BoundScheduleThread, DestinationPreparation, ScheduleBindPreparedRequest,
+    SchedulePrepareRequest,
+};
 
 mod run_evidence_validation;
 mod run_execution_contract;

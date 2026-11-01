@@ -12,9 +12,10 @@ use crate::{
     fleet_row_ids::FleetRowIds,
 };
 use collaboration_protocol::{
-    AutomationAnswer, AutomationId, AutomationKind, AutomationRefusal, AutomationTiming,
-    CatalogAutomation, ExecutionDestination, ImportedContinuity, ScheduleCreateRequest,
-    ScheduleDefinition, ScheduleId, ScheduleSnapshot, ScheduleUpdateRequest, WakeCreator,
+    AutomationAnswer, AutomationId, AutomationKind, AutomationRefusal, AutomationRequestConstraint,
+    AutomationTiming, CatalogAutomation, ExecutionDestination, ImportedContinuity,
+    ScheduleBindPreparedRequest, ScheduleCreateRequest, ScheduleDefinition, ScheduleId,
+    ScheduleSnapshot, ScheduleUpdateRequest, WakeCreator,
 };
 use durable_steps::storage::TransactionScope;
 use message_board::ServiceId;
@@ -244,6 +245,82 @@ where
     let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
     catalog::update(scope, &record).await?;
     crate::automation_pending_mutation::commit(scope, pending).await?;
+    Ok(answer)
+}
+
+pub(crate) async fn bind_prepared<Scope: TransactionScope>(
+    scope: &mut Scope,
+    request: &ScheduleBindPreparedRequest,
+    installation: &ServiceId,
+    row_ids: &mut FleetRowIds,
+) -> AutomationStoreResult<AutomationAnswer>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let Some(row) = crate::generated_automation_catalog::read_automation(
+        scope,
+        request.automation_id.as_str().into(),
+    )
+    .await?
+    else {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    };
+    if crate::automation_fault_projection::projection(&row)?.is_some() {
+        return Err(AutomationStoreError::InvalidRecord("faulted_automation"));
+    }
+    let mut record = catalog::decode(row)?;
+    if record.state == CatalogState::Deleted {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    }
+    let StoredAutomationDefinition::Schedule(schedule) = &mut record.definition else {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    };
+    if record.revision != request.expected_revision {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::ScheduleChangeConflict {
+                current_change_id: record.revision,
+            },
+        ));
+    }
+    if !matches!(
+        schedule.definition.destination,
+        ExecutionDestination::Unprepared
+    ) {
+        return Err(AutomationStoreError::InvalidRequest {
+            field: "destination",
+            reason: AutomationRequestConstraint::UnpreparedDestination,
+        });
+    }
+    if String::from(request.bound_thread.target.endpoint.service_id.clone())
+        != installation.as_str()
+    {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::OriginMismatch,
+        ));
+    }
+    let mut definition = schedule.definition.clone();
+    definition.destination = ExecutionDestination::OwnedThread {
+        target: request.bound_thread.target.clone(),
+        cwd: request.bound_thread.cwd.clone(),
+    };
+    validation::definition(&definition)?;
+    require_target(scope, &definition).await?;
+    schedule.definition = definition;
+    record.revision = row_ids
+        .next()?
+        .to_string()
+        .try_into()
+        .map_err(|_| AutomationStoreError::InvalidRecord("revision"))?;
+    // Preparation preserves the independent header, timing and custody progress.
+    let answer = AutomationAnswer::Mutation {
+        automation: CatalogAutomation::Schedule(snapshot(&record)?),
+        already_sent: crate::automation_firing_store::sent_firings(scope, &record.id).await?,
+    };
+    catalog::update(scope, &record).await?;
     Ok(answer)
 }
 
