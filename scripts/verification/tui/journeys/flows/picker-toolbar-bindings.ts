@@ -175,7 +175,8 @@ export function pickerToolbarBindings(
 			} else if (step.target === 'Foreground') {
 				downTarget = '7:new-run:option:run:ClaudeNativeForeground';
 				active = pickerOverlay(6);
-			} else if (step.target !== 'Filter') throw new Error('toolbar click not source-declared');
+			} else if (step.target === 'Filter') downTarget = 'session-filter';
+			else throw new Error('toolbar click not source-declared');
 			const after = active;
 			inputs.set(index, {
 				kind: 'click',

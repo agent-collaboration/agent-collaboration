@@ -179,7 +179,7 @@ test('static_deadline_reports_unsettled_child_without_signalling_it', async () =
 	const root = rootDirectory();
 	const child = protocolDriver(
 		root,
-		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'fixture-release'))){watcher.close();process.disconnect();process.exitCode=7;}});process.send('ready');`,
+		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];process.on('message',()=>{if(fs.readFileSync(path.join(root,'fixture-release'),'utf8')==='release\\n'){process.disconnect();process.exitCode=7;}});process.send('ready');`,
 	);
 	await once(child.process, 'message');
 	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -200,6 +200,7 @@ test('static_deadline_reports_unsettled_child_without_signalling_it', async () =
 	});
 	expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n');
 	writeFileSync(join(root, 'fixture-release'), 'release\n');
+	child.process.send('release');
 	expect(await child.completion).toBe(7);
 });
 test.each([0, 7])(
@@ -257,7 +258,7 @@ test.each([false, true])(
 		const executable = controlledExecutable(
 			root,
 			'inherited-output-parent',
-			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];process.once('exit',()=>fs.writeFileSync(path.join(root,'descendant-exited'),'ready\n'));const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'descendant-release'))){watcher.close();}});fs.writeFileSync(path.join(root,'descendant-ready'),'ready\n');`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
+			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];const publish=(name)=>{const marker=path.join(root,name);fs.writeFileSync(marker+'.pending','ready\n');fs.renameSync(marker+'.pending',marker);};process.once('exit',()=>publish('descendant-exited'));const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'descendant-release'))){watcher.close();}});publish('descendant-ready');`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
 		);
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		const task = oracle
@@ -300,7 +301,7 @@ const releaseIfPresent=()=>{
 };
 if(!releaseIfPresent()){
  watcher=fs.watch(root,releaseIfPresent);
- if(!releaseIfPresent())fs.writeFileSync(path.join(root,'oracle-ready'),'ready\n');
+ if(!releaseIfPresent()){const marker=path.join(root,'oracle-ready');fs.writeFileSync(marker+'.pending','ready\n');fs.renameSync(marker+'.pending',marker);}
 }
 `;
 }

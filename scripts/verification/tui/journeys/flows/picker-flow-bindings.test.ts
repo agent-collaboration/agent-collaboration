@@ -225,5 +225,31 @@ test('the toolbar binds every real menu, Help, Run dropdown and filter interacti
 		);
 		expect(pickerFlowAdmission(invocation, binding)).toEqual([]);
 		expect(binding?.target.storyboardVariant).toBe('claude-new-success');
+		const filterIndex = invocation.journey.steps.findIndex(
+			(step) => step.kind === 'click' && step.target === 'Filter',
+		);
+		const filterInput = binding?.inputs.get(filterIndex);
+		if (filterInput?.kind !== 'click' || filterInput.ending !== 'continue')
+			throw new Error('Filter needs a continuing pointer binding');
+		const location = { column: 18, row: 1 };
+		expect(filterInput.expected({ ...location, width: 1 })).toEqual([
+			{
+				event: {
+					kind: 'mouse',
+					mouse: { kind: 'down', button: 'left' },
+					...location,
+					modifiers: [],
+				},
+				surface: { kind: 'screen' },
+				target: 'session-filter',
+				action: null,
+			},
+			{
+				event: { kind: 'mouse', mouse: { kind: 'up', button: 'left' }, ...location, modifiers: [] },
+				surface: { kind: 'screen' },
+				target: null,
+				action: null,
+			},
+		]);
 	}
 });
