@@ -101,7 +101,7 @@ const runtime = new Miniflare(
           const response = await fetch(fixture);
           return new Response(await response.arrayBuffer(), {
             status: response.status,
-            headers: response.headers,
+            headers: Array.from(response.headers.entries()),
           });
         },
       },
