@@ -24,6 +24,18 @@ pub enum ControlKind {
     FormField,
     DialogKeyHints,
 }
+impl ControlKind {
+    pub const ALL: [Self; 8] = [
+        Self::Button,
+        Self::TextField,
+        Self::FilterField,
+        Self::ComboBox,
+        Self::SegmentedSwitch,
+        Self::ScrollingList,
+        Self::FormField,
+        Self::DialogKeyHints,
+    ];
+}
 
 /// Filled by the consumer's existing stack observer after its real root mounts.
 #[derive(Clone, Default)]
@@ -36,6 +48,31 @@ impl ObservedControlStack {
     pub fn observer(&self) -> Handler<SurfaceStackHandle> {
         let observed = self.clone();
         Handler::from(move |stack| observed.record(stack))
+    }
+
+    fn target_cells(&self, target: &TargetId) -> Vec<(u16, u16)> {
+        let stack = self
+            .0
+            .lock()
+            .unwrap()
+            .expect("real consumer stack observed");
+        let published = stack
+            .hit_regions()
+            .published()
+            .expect("target style requires a published real frame");
+        let surface = stack.snapshot().top_id();
+        let cells: Vec<_> = published
+            .targets
+            .iter()
+            .filter(|region| region.surface == surface && region.target == *target)
+            .flat_map(|region| region.cells.iter().copied())
+            .collect();
+        assert!(
+            !cells.is_empty(),
+            "styled target has no visible published cells: {}",
+            target.as_str()
+        );
+        cells
     }
 
     fn pointer_event(&self, target: &TargetId, kind: MouseEventKind) -> TerminalEvent {
@@ -72,7 +109,15 @@ pub enum ControlInput {
 pub enum ControlPaint {
     Contains(String),
     Absent(String),
-    Styled { text: String, style: FrameStyle },
+    Styled {
+        text: String,
+        style: FrameStyle,
+    },
+    StyledInTarget {
+        target: TargetId,
+        text: String,
+        style: FrameStyle,
+    },
 }
 
 pub struct ControlStep {
@@ -93,6 +138,43 @@ pub struct ControlKindContract {
     pub steps: Vec<ControlStep>,
 }
 
+/// A kind is declared once for a screen; real instances retain their case data.
+pub enum ControlKindDeclaration {
+    OnScreen {
+        kind: ControlKind,
+        contracts: Vec<ControlKindContract>,
+    },
+    NotOnScreen {
+        kind: ControlKind,
+        reason: &'static str,
+    },
+}
+impl ControlKindDeclaration {
+    fn kind(&self) -> ControlKind {
+        match self {
+            Self::OnScreen { kind, .. } | Self::NotOnScreen { kind, .. } => *kind,
+        }
+    }
+}
+
+pub struct ScreenControlContracts {
+    pub screen: &'static str,
+    pub kinds: Vec<ControlKindDeclaration>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NotOnScreenControl {
+    pub screen: &'static str,
+    pub kind: ControlKind,
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct ControlMatrixSummary {
+    pub passed_contracts: usize,
+    pub not_on_screen: Vec<NotOnScreenControl>,
+}
+
 #[derive(Clone, Copy)]
 pub struct ControlInstanceRequest {
     pub screen: &'static str,
@@ -100,62 +182,123 @@ pub struct ControlInstanceRequest {
     pub viewport: (u16, u16),
 }
 
-/// Consumer entry point: every screen/viewport must supply all eight real kinds.
-/// Multiple states of a kind are welcome; omitting a kind cannot earn R15.
+/// Every screen declares all eight kinds once. Real kinds require all four grids;
+/// absent kinds require a reason and never count as a passed runtime contract.
 pub async fn assert_control_kind_matrix<TElement: ElementExt + Send>(
-    contracts: Vec<ControlKindContract>,
+    screens: Vec<ScreenControlContracts>,
     build: impl Fn(ControlInstanceRequest, EventJournal, ObservedControlStack) -> TElement,
-) {
-    assert!(!contracts.is_empty(), "empty R15 matrix");
-    for contract in &contracts {
-        for required in [
-            ControlKind::Button,
-            ControlKind::TextField,
-            ControlKind::FilterField,
-            ControlKind::ComboBox,
-            ControlKind::SegmentedSwitch,
-            ControlKind::ScrollingList,
-            ControlKind::FormField,
-            ControlKind::DialogKeyHints,
-        ] {
+) -> ControlMatrixSummary {
+    assert!(!screens.is_empty(), "empty R15 matrix");
+    let mut summary = ControlMatrixSummary::default();
+    for (index, screen) in screens.iter().enumerate() {
+        assert!(
+            screens[..index]
+                .iter()
+                .all(|previous| previous.screen != screen.screen),
+            "R15 matrix declares screen {} more than once",
+            screen.screen
+        );
+        for required in ControlKind::ALL {
+            let count = screen
+                .kinds
+                .iter()
+                .filter(|declaration| declaration.kind() == required)
+                .count();
             assert!(
-                contracts
-                    .iter()
-                    .any(|candidate| candidate.screen == contract.screen
-                        && candidate.viewport == contract.viewport
-                        && candidate.kind == required),
-                "R15 matrix missing {required:?} for {} {:?}",
-                contract.screen,
-                contract.viewport
+                count > 0,
+                "R15 matrix missing {required:?} for {}",
+                screen.screen
+            );
+            assert_eq!(
+                count, 1,
+                "R15 matrix duplicates {required:?} for {}",
+                screen.screen
             );
         }
-    }
-    for contract in &contracts {
-        for viewport in STANDARD_GRIDS {
-            assert!(
-                contracts
-                    .iter()
-                    .any(|candidate| candidate.screen == contract.screen
-                        && candidate.viewport == viewport),
-                "R15 matrix missing standard grid {viewport:?} for {}",
-                contract.screen
-            );
+        for declaration in &screen.kinds {
+            match declaration {
+                ControlKindDeclaration::NotOnScreen { kind, reason } => {
+                    assert!(
+                        !reason.trim().is_empty(),
+                        "R15 NotOnScreen needs a reason for {} {kind:?}",
+                        screen.screen
+                    );
+                    summary.not_on_screen.push(NotOnScreenControl {
+                        screen: screen.screen,
+                        kind: *kind,
+                        reason,
+                    });
+                }
+                ControlKindDeclaration::OnScreen { kind, contracts } => {
+                    assert!(
+                        !contracts.is_empty(),
+                        "R15 real kind {kind:?} has no contracts for {}",
+                        screen.screen
+                    );
+                    for contract in contracts {
+                        assert_eq!(
+                            contract.screen, screen.screen,
+                            "R15 real contract belongs to a different screen"
+                        );
+                        assert_eq!(
+                            contract.kind, *kind,
+                            "R15 real contract belongs to a different kind"
+                        );
+                    }
+                    for viewport in STANDARD_GRIDS {
+                        assert!(
+                            contracts
+                                .iter()
+                                .any(|contract| contract.viewport == viewport),
+                            "R15 matrix missing standard grid {viewport:?} for {} {kind:?}",
+                            screen.screen
+                        );
+                    }
+                }
+            }
         }
     }
-    for contract in contracts {
-        let request = ControlInstanceRequest {
-            screen: contract.screen,
-            kind: contract.kind,
-            viewport: contract.viewport,
-        };
-        assert_control_kind_contract(contract, |journal, observed| {
-            build(request, journal, observed)
-        })
-        .await;
+    for absent in &summary.not_on_screen {
+        eprintln!(
+            "R15 NotOnScreen: {} {:?}: {}",
+            absent.screen, absent.kind, absent.reason
+        );
     }
+    for screen in screens {
+        for declaration in screen.kinds {
+            match declaration {
+                ControlKindDeclaration::OnScreen { contracts, .. } => {
+                    for contract in contracts {
+                        let request = ControlInstanceRequest {
+                            screen: contract.screen,
+                            kind: contract.kind,
+                            viewport: contract.viewport,
+                        };
+                        assert_control_kind_contract(contract, |journal, observed| {
+                            build(request, journal, observed)
+                        })
+                        .await;
+                        summary.passed_contracts += 1;
+                    }
+                }
+                ControlKindDeclaration::NotOnScreen { .. } => {}
+            }
+        }
+    }
+    eprintln!(
+        "R15 matrix: {} real contracts passed; {} NotOnScreen declarations",
+        summary.passed_contracts,
+        summary.not_on_screen.len()
+    );
+    summary
 }
 
-fn assert_paint(frame: &FrameGrid, assertions: &[ControlPaint], context: &str) {
+fn assert_paint(
+    frame: &FrameGrid,
+    observed: &ObservedControlStack,
+    assertions: &[ControlPaint],
+    context: &str,
+) {
     for assertion in assertions {
         match assertion {
             ControlPaint::Contains(text) | ControlPaint::Absent(text) => {
@@ -191,6 +334,48 @@ fn assert_paint(frame: &FrameGrid, assertions: &[ControlPaint], context: &str) {
                     }
                 }
                 assert!(occurrences > 0, "missing styled text {text:?}: {context}");
+            }
+            ControlPaint::StyledInTarget {
+                target,
+                text,
+                style,
+            } => {
+                assert!(!text.is_empty(), "empty target style oracle: {context}");
+                let cells = observed.target_cells(target);
+                let width = text.width();
+                let mut occurrences = 0;
+                for (row_index, row) in frame.cells.iter().enumerate() {
+                    for column in 0..row.len() {
+                        if row[column].continuation || column + width > row.len() {
+                            continue;
+                        }
+                        if !(column..column + width).all(|cell| {
+                            u16::try_from(cell)
+                                .ok()
+                                .zip(u16::try_from(row_index).ok())
+                                .is_some_and(|point| cells.contains(&point))
+                        }) {
+                            continue;
+                        }
+                        let suffix: String = row[column..]
+                            .iter()
+                            .filter(|cell| !cell.continuation)
+                            .map(|cell| cell.text.as_str())
+                            .collect();
+                        if !suffix.starts_with(text) {
+                            continue;
+                        }
+                        occurrences += 1;
+                        for cell in row.iter().skip(column).take(width) {
+                            assert_eq!(&cell.style, style, "target style for {text:?}: {context}");
+                        }
+                    }
+                }
+                assert!(
+                    occurrences > 0,
+                    "missing styled text {text:?} inside target {}: {context}",
+                    target.as_str()
+                );
             }
         }
     }
@@ -230,7 +415,7 @@ pub async fn assert_control_kind_contract<TElement: ElementExt + Send>(
             ),
             "real viewport: {context}"
         );
-        assert_paint(frame, &contract.initial_paint, &context);
+        assert_paint(frame, &observed, &contract.initial_paint, &context);
         for (index, step) in contract.steps.into_iter().enumerate() {
             let event = match step.input {
                 ControlInput::Event(event) => event,
@@ -260,7 +445,12 @@ pub async fn assert_control_kind_contract<TElement: ElementExt + Send>(
                 1,
                 "exactly one real input: {context} step {index}"
             );
-            assert_paint(driver.frames.last().unwrap(), &step.paint, &context);
+            assert_paint(
+                driver.frames.last().unwrap(),
+                &observed,
+                &step.paint,
+                &context,
+            );
         }
     };
     tokio::time::timeout(std::time::Duration::from_secs(5), scenario)

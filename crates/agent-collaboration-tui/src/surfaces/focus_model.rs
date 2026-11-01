@@ -177,6 +177,13 @@ pub struct FocusModel {
     initial: Option<TargetId>,
     displaced: Option<TargetId>,
     focus_origin: FocusOrigin,
+    input_cause: FocusInputCause,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FocusInputCause {
+    Keyboard,
+    Pointer,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -192,6 +199,7 @@ impl FocusModel {
             initial: None,
             displaced: None,
             focus_origin: FocusOrigin::Intent,
+            input_cause: FocusInputCause::Keyboard,
         }
     }
     pub fn new(targets: Vec<TargetSpec>) -> Result<Self, FocusError> {
@@ -206,6 +214,7 @@ impl FocusModel {
             current,
             displaced: None,
             focus_origin: FocusOrigin::Intent,
+            input_cause: FocusInputCause::Keyboard,
         };
         model.reconcile_eligibility();
         Ok(model)
@@ -230,10 +239,21 @@ impl FocusModel {
             self.current = Some(id.clone());
             self.displaced = None;
             self.focus_origin = FocusOrigin::Intent;
+            self.input_cause = FocusInputCause::Keyboard;
             true
         } else {
             false
         }
+    }
+    pub(crate) fn focus_from_pointer(&mut self, id: &TargetId) -> bool {
+        let focused = self.focus(id);
+        if focused {
+            self.input_cause = FocusInputCause::Pointer;
+        }
+        focused
+    }
+    pub(crate) fn reveals_focus(&self) -> bool {
+        self.input_cause == FocusInputCause::Keyboard
     }
     fn is_focus_eligible(&self, id: &TargetId) -> bool {
         self.targets
@@ -289,6 +309,7 @@ impl FocusModel {
         {
             self.current = self.displaced.take();
             self.focus_origin = FocusOrigin::Intent;
+            self.input_cause = FocusInputCause::Keyboard;
         } else if !self
             .current
             .as_ref()
@@ -304,6 +325,7 @@ impl FocusModel {
             }
             self.current = self.automatic_fallback(&is_deferred);
             self.focus_origin = FocusOrigin::AutomaticFallback;
+            self.input_cause = FocusInputCause::Keyboard;
         }
         (
             self.current.clone(),
@@ -317,10 +339,12 @@ impl FocusModel {
         self.initial = previous.initial.clone();
         self.displaced = previous.displaced.clone();
         self.focus_origin = previous.focus_origin;
+        self.input_cause = previous.input_cause;
     }
     pub fn restore(&mut self, id: Option<&TargetId>) {
         if self.current.as_ref() != id {
             self.focus_origin = FocusOrigin::Intent;
+            self.input_cause = FocusInputCause::Keyboard;
         }
         self.current = id.cloned();
         self.reconcile_eligibility();
@@ -368,6 +392,7 @@ impl FocusModel {
         self.current = next.map(|(_, target)| target.id.clone());
         self.displaced = None;
         self.focus_origin = FocusOrigin::Intent;
+        self.input_cause = FocusInputCause::Keyboard;
     }
 }
 

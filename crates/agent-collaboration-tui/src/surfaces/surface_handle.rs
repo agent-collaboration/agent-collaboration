@@ -143,6 +143,13 @@ impl SurfaceStackHandle {
                 .is_some_and(|surface| surface.focus.focus(target))
         })
     }
+    pub(crate) fn focus_from_pointer(self, surface: SurfaceId, target: &TargetId) -> bool {
+        self.update(|stack| {
+            stack
+                .surface_mut(surface)
+                .is_some_and(|surface| surface.focus.focus_from_pointer(target))
+        })
+    }
     pub fn replace_targets_if_open(
         self,
         surface: SurfaceId,
@@ -210,6 +217,9 @@ impl SurfaceContext {
     pub fn is_focused(self, target: &TargetId) -> bool {
         let stack = self.stack.snapshot();
         stack.top_id() == self.surface && stack.top().focus.current() == Some(target)
+    }
+    pub(crate) fn reveals_focus(self, target: &TargetId) -> bool {
+        self.is_focused(target) && self.stack.snapshot().top().focus.reveals_focus()
     }
     pub fn is_hovered(self, target: &TargetId) -> bool {
         self.stack
