@@ -227,11 +227,8 @@ fn matches_intent(record: &FleetSessionRegistrationRecord, intent: &FleetSession
         && launch.machine_environment == intent.machine_environment
 }
 fn capability_text(bytes: [u8; 16]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut text = String::with_capacity(32);
-    for byte in bytes {
-        text.push(char::from(HEX[usize::from(byte >> 4)]));
-        text.push(char::from(HEX[usize::from(byte & 15)]));
-    }
-    text
+    bytes
+        .into_iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
