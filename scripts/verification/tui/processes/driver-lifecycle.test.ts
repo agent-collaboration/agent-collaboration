@@ -258,7 +258,7 @@ test.each([false, true])(
 		const executable = controlledExecutable(
 			root,
 			'inherited-output-parent',
-			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];const publish=(name)=>{const marker=path.join(root,name);fs.writeFileSync(marker+'.pending','ready\n');fs.renameSync(marker+'.pending',marker);};process.once('exit',()=>publish('descendant-exited'));const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'descendant-release'))){watcher.close();}});publish('descendant-ready');`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
+			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];const publish=(name)=>{const marker=path.join(root,name);fs.writeFileSync(marker+'.pending','ready\n');fs.renameSync(marker+'.pending',marker);};process.once('exit',()=>publish('descendant-exited'));let watcher;const releaseIfPresent=()=>{if(!fs.existsSync(path.join(root,'descendant-release')))return false;watcher?.close();return true;};if(!releaseIfPresent()){watcher=fs.watch(root,releaseIfPresent);if(!releaseIfPresent())publish('descendant-ready');}`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
 		);
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		const task = oracle
@@ -269,8 +269,12 @@ test.each([false, true])(
 			(error: unknown) => String(error),
 		);
 		try {
-			await ready.wait();
-			await vi.advanceTimersByTimeAsync(200);
+			try {
+				await ready.wait();
+			} finally {
+				// Cleanup must trigger the real parent's deadline even if readiness fails.
+				await vi.advanceTimersByTimeAsync(200);
+			}
 			const failure = await observed;
 			expect(failure).toContain(oracle ? 'command reap deadline' : 'capture discovery failed');
 			expect(failure).toContain('"timeout":true');

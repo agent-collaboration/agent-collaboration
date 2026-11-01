@@ -22,7 +22,11 @@ node scripts/verification/tui/capture/capture-run.ts PLAN.json
 `gridCapturePlanSchema` in `capture/capture-run.ts` declares the repository, exact source
 head, signed driver/product/component artifact paths and SHA-256s, fresh output,
 journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
-is the prebuilt `e2e` libtest (entry `quota_storyboard::compiled_grid_terminal_observation`), not Cargo. Component
+uses a prebuilt signed libtest, not Cargo. Quota and component routes use the
+`e2e` entry `quota_storyboard::compiled_grid_terminal_observation`. During the
+Lead-authorized S8 transition, picker/public-entry and standalone showcase routes
+retain their historical flat entries and retained driver artifacts. Discovery and
+launch share `ptyGridDriverEntry`; no alternate entry is tried. Component
 journeys require the exact fixture-bearing Quota library test executable; the
 runner checks its test entry before launching it. Source files and artifact hashes
 are recorded and checked for drift. Build provenance remains the producer's duty.

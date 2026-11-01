@@ -9,34 +9,55 @@ import type { NativeFlowContext } from './native-flow-runtime.ts';
 import { pickerExpectedKey } from './picker-flow-inputs.ts';
 import { pickerMarkedFrame } from './picker-help-observation.ts';
 
-export const currentPickerMenu = [
-	['New session…', 'Ctrl+N'],
-	['Filter', '/'],
-	['This folder', ''],
-	['Repo', ''],
-	['All', ''],
-	['Runtime: All', ''],
-	['Runtime: Active', ''],
-	['Runtime: Idle', ''],
-	['Runtime: Blocked', ''],
-	['Sort: Updated', ''],
-	['Sort: Created', ''],
-	['Group by: None', ''],
-	['Group by: Started by', ''],
-	['Group by: Day', ''],
-	['Group by: Folder', ''],
-	['Group by: Provider', ''],
-	['Group by: Machine', ''],
-	['New background session…', ''],
-	['Details', 'Enter'],
-	['Open', 'Ctrl+Enter'],
-	['Fork', 'Ctrl+Shift+Enter'],
-	['Refresh', 'Ctrl+R'],
-	['Filters…', 'Ctrl+F'],
-	['Machine…', 'Ctrl+G'],
-	['Help', 'F1'],
-	['Quit', 'Ctrl+C'],
+const pickerMenuActions = [
+	['new', 'New session…', 'Ctrl+N'],
+	['focus-filter', 'Filter', '/'],
+	['scope-folder', 'This folder', ''],
+	['scope-repo', 'Repo', ''],
+	['scope-all', 'All', ''],
+	['runtime-all', 'Runtime: All', ''],
+	['runtime-active', 'Runtime: Active', ''],
+	['runtime-idle', 'Runtime: Idle', ''],
+	['runtime-blocked', 'Runtime: Blocked', ''],
+	['sort-updated', 'Sort: Updated', ''],
+	['sort-created', 'Sort: Created', ''],
+	['group-none', 'Group by: None', ''],
+	['group-started-by', 'Group by: Started by', ''],
+	['group-day', 'Group by: Day', ''],
+	['group-folder', 'Group by: Folder', ''],
+	['group-provider', 'Group by: Provider', ''],
+	['group-machine', 'Group by: Machine', ''],
+	['new-background', 'New background session…', ''],
+	['details', 'Details', 'Enter'],
+	['open', 'Open', 'Ctrl+Enter'],
+	['fork', 'Fork', 'Ctrl+Shift+Enter'],
+	['refresh', 'Refresh', 'Ctrl+R'],
+	['filters', 'Filters…', 'Ctrl+F'],
+	['machine', 'Machine…', 'Ctrl+G'],
+	['help', 'Help', 'F1'],
+	['quit', 'Quit', 'Ctrl+C'],
 ] as const;
+export const currentPickerMenu: readonly (readonly [string, string])[] = pickerMenuActions.map(
+	([, title, key]): readonly [string, string] => [title, key],
+);
+
+export function pickerMenuNavigationExpectation(options: {
+	readonly key: string;
+	readonly focusedIndex: number;
+	readonly surface: InputConsumptionExpectation['surface'];
+}): InputConsumptionExpectation {
+	if (
+		!Number.isSafeInteger(options.focusedIndex) ||
+		options.focusedIndex < 0 ||
+		!['Down', 'Up', 'Left', 'Right', 'Tab', 'Shift+Tab'].includes(options.key)
+	)
+		throw new Error('menu navigation needs a declared key and previous focus index');
+	// The fixed fixture has all 26 actions eligible. A fresh menu starts at New;
+	// FocusModel wraps through this closed order. Used reports the pre-key target.
+	const action = pickerMenuActions[options.focusedIndex % pickerMenuActions.length];
+	if (action === undefined) throw new Error('menu action outside the closed inventory');
+	return pickerExpectedKey(options.key, options.surface, 'action:' + action[0]);
+}
 const sections = [
 	['Scope', 'Ctrl+S'],
 	['Runtime', 'Ctrl+T'],
@@ -115,11 +136,16 @@ export async function collectPickerMenu(options: {
 		finalChoiceAtContentEnd ||= view.quitAtEnd;
 	};
 	inspect();
-	await Array.from({ length: 64 }).reduce(async (previous) => {
-		await previous;
-		marked = await context.input.press('Down', [pickerExpectedKey('Down', surface)]);
-		inspect();
-	}, Promise.resolve());
+	await Array.from({ length: 64 }, (_, focusedIndex) => focusedIndex).reduce(
+		async (previous, focusedIndex) => {
+			await previous;
+			marked = await context.input.press('Down', [
+				pickerMenuNavigationExpectation({ key: 'Down', focusedIndex, surface }),
+			]);
+			inspect();
+		},
+		Promise.resolve(),
+	);
 	const actual = [...items.values()];
 	const failures: string[] = [];
 	if (

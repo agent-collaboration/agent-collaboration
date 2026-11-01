@@ -37,6 +37,7 @@ async function forceFinalError(): Promise<void> {
 	try {
 		const receipt = await chrome.send('Fixture.ready');
 		writeFileSync(join(evidence, 'browser-ready.json'), JSON.stringify(receipt));
+		process.send?.(receipt);
 	} finally {
 		await chrome.close();
 	}

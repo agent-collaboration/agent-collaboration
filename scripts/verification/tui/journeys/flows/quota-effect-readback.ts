@@ -13,6 +13,10 @@ import {
 	quotaLoginExit,
 } from './quota-fixture-contract.ts';
 import type { QuotaEffectScenario } from './quota-fixture-contract.ts';
+import {
+	checkQuotaPreferences,
+	quotaPreferenceReceiptSchema,
+} from './quota-preference-readback.ts';
 
 const accountFactSchema = z.strictObject({
 	accountId: z.string(),
@@ -48,6 +52,7 @@ const poseSchema = z.object({
 	listSelection: z.string().nullable(),
 	captured: capturedSchema.nullable(),
 	rows: z.array(z.object({ accountId: z.string(), loginState: z.string() })),
+	actions: z.array(z.object({ ['id']: z.string(), checked: z.boolean().nullable() })).optional(),
 });
 const serviceSourceSchema = z.strictObject({
 	kind: z.enum(['ok', 'all-failed', 'service-error']),
@@ -121,6 +126,7 @@ const policyFactsSchema = z.strictObject({
 	credits: z.array(z.strictObject({ accountId: z.string(), policy: z.string() })),
 });
 export const quotaEffectReceiptSchema = z.strictObject({
+	...quotaPreferenceReceiptSchema.shape,
 	scenario: quotaEffectScenarioSchema,
 	outcomes: z.array(
 		z.discriminatedUnion('kind', [
@@ -274,7 +280,8 @@ export function checkQuotaEffectReceipt(options: {
 	if (receipt.scenario !== scenario) failures.push('receipt scenario differs from declaration');
 	const before = Array.from({ length: quotaAccountCount(scenario) }, (_, index) => ({
 		accountId: `effect-account-${index}`,
-		provider: loginExit !== null && index === 1 ? 'claude' : 'openai',
+		provider:
+			(loginExit !== null || scenario === 'grouping-reopen') && index === 1 ? 'claude' : 'openai',
 		label: `effect-${['alpha', 'beta', 'gamma'][index]}`,
 		status: scenario.startsWith('remove-') && index === position ? 'disabled' : 'enabled',
 		credentialGeneration: 7,
@@ -359,17 +366,19 @@ export function checkQuotaEffectReceipt(options: {
 	)
 		failures.push('unrelated policy, reset or effect-port mutation');
 	const expectedOutcomes =
-		loginExit === null
-			? [{ kind: 'quit' }]
-			: [
-					{
-						kind: 'login-again',
-						accountId: target.accountId,
-						provider: target.provider,
-						label: target.label,
-					},
-					{ kind: 'quit' },
-				];
+		scenario === 'grouping-reopen'
+			? [{ kind: 'quit' }, { kind: 'quit' }]
+			: loginExit === null
+				? [{ kind: 'quit' }]
+				: [
+						{
+							kind: 'login-again',
+							accountId: target.accountId,
+							provider: target.provider,
+							label: target.label,
+						},
+						{ kind: 'quit' },
+					];
 	if (canonicalJson(receipt.outcomes) !== canonicalJson(expectedOutcomes))
 		failures.push('fixture did not produce exact captured login/guarded Quit outcomes');
 	if (loginExit === null ? receipt.loginChild !== null : receipt.loginChild === null)
@@ -444,6 +453,20 @@ export function checkQuotaEffectReceipt(options: {
 	const nativeActions = receipt.nativeDispatch
 		.map((dispatch) => dispatch.action)
 		.filter((action) => action !== null);
+	failures.push(
+		...checkQuotaPreferences({
+			scenario,
+			routerRoot: options.routerRoot,
+			facts: receipt,
+			nativeActions,
+			poses: receipt.publishedPoses.map((pose) => ({
+				mount: pose.mount,
+				checkedGroups: (pose.actions ?? [])
+					.filter((action) => action.checked === true && action.id.startsWith('quota:group-'))
+					.map((action) => action.id),
+			})),
+		}),
+	);
 	if (
 		nativeActions.some((action) =>
 			[

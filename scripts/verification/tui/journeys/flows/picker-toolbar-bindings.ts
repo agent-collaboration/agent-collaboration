@@ -36,7 +36,7 @@ import {
 	resizePickerWhenChanged,
 } from './picker-flow-inputs.ts';
 import { pickerMarkedFrame, qualifyPickerHelp } from './picker-help-observation.ts';
-import { collectPickerMenu } from './picker-menu-observation.ts';
+import { collectPickerMenu, pickerMenuNavigationExpectation } from './picker-menu-observation.ts';
 import type { PickerMenuObservation } from './picker-menu-observation.ts';
 import { checkNewKeyHints } from './picker-new-bindings.ts';
 import {
@@ -229,13 +229,15 @@ export function pickerToolbarBindings(
 	fixtures.set('new-client-native-claude-with-both-run-modes', async () => null);
 	fixtures.set('reveal-picker-background-new', async (context) => {
 		let marked = await context.input.press('F12', [pickerExpectedKey('F12', pickerOverlay(5))]);
-		const reveal = async (remaining: number): Promise<void> => {
+		const reveal = async (remaining: number, focusedIndex: number): Promise<void> => {
 			if (menuChoiceFocused(pickerMarkedFrame(marked).grid, 'New background session…')) return;
 			if (remaining === 0) throw new Error('New background menu action was not revealed');
-			marked = await context.input.press('Down', [pickerExpectedKey('Down', pickerOverlay(5))]);
-			await reveal(remaining - 1);
+			marked = await context.input.press('Down', [
+				pickerMenuNavigationExpectation({ key: 'Down', focusedIndex, surface: pickerOverlay(5) }),
+			]);
+			await reveal(remaining - 1, focusedIndex + 1);
 		};
-		await reveal(32);
+		await reveal(32, 0);
 		return marked;
 	});
 	fixtures.set('resize-same-child-to-each-declared-grid', async (context) => {

@@ -23,6 +23,15 @@ function inspect(facet: PickerGroupingFacet, checkpoint: string): FlowStep[] {
 		},
 	];
 }
+
+function cycleGrouping(): FlowStep[] {
+	// Each press retains its own ACK and marked frame. The first regroup frame is
+	// owner-deferred measurement evidence; assertions use the separately marked F12.
+	return [
+		{ kind: 'press', key: 'F6' },
+		{ kind: 'press', key: 'F12' },
+	];
+}
 function groupingJourney(journeyId: string, steps: FlowStep[]): FlowJourney {
 	return {
 		journeyId,
@@ -59,13 +68,12 @@ export const pickerGroupingJourney = groupingJourney('sessions-group-by-f6', [
 	...inspect('none', 'grouping-none-initial'),
 	...(['started-by', 'day', 'folder', 'provider', 'machine'] as const).flatMap(
 		(facet): FlowStep[] => {
-			const steps: FlowStep[] = [{ kind: 'press', key: 'F6' }];
-			return steps.concat(inspect(facet, 'grouping-' + facet));
+			return cycleGrouping().concat(inspect(facet, 'grouping-' + facet));
 		},
 	),
-	{ kind: 'press', key: 'F6' },
+	...cycleGrouping(),
 	...inspect('none', 'grouping-none-restored'),
-	...Array.from({ length: 4 }, (): FlowStep => ({ kind: 'press', key: 'F6' })),
+	...Array.from({ length: 4 }, cycleGrouping).flat(),
 	...inspect('provider', 'grouping-provider-before-close'),
 ]);
 // These phases are internal to the aggregate runner, never independently admitted as fresh-empty passes.

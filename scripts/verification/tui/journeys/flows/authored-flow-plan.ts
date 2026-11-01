@@ -29,6 +29,7 @@ export const authoredFlowPlanSchema = z
 		driver: artifactBindingSchema,
 		product: artifactBindingSchema,
 		node: artifactBindingSchema,
+		quota: z.strictObject({ loginStandin: artifactBindingSchema }).optional(),
 		chrome: z.string().min(1),
 		output: z.string().min(1),
 		journey: z.string().min(1),

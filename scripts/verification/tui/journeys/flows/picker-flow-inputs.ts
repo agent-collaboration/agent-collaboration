@@ -71,7 +71,7 @@ export function pickerExpectedKey(
 						kind: 'fixed',
 						name:
 							name === 'Tab' && parts.includes('Shift')
-								? 'BackTab'
+								? 'Back Tab'
 								: name === 'Enter' && process.platform === 'darwin'
 									? 'Return'
 									: name === 'Escape'

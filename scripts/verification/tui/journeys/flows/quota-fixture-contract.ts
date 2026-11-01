@@ -12,6 +12,7 @@ export const quotaEffectArguments = [
 ] as const;
 export const quotaEffectScenarioSchema = z.enum([
 	'captured-actions',
+	'grouping-reopen',
 	'remove-cancel',
 	'remove-middle',
 	'remove-last',
@@ -38,12 +39,12 @@ const commonConfiguration = z.strictObject({
 });
 export const quotaEffectConfigurationSchema = z.union([
 	commonConfiguration.extend({
-		scenario: z.enum(['login-succeeded', 'login-cancelled130', 'login-failed7']),
+		scenario: z.enum(['login-succeeded', 'login-cancelled130', 'login-failed7', 'grouping-reopen']),
 		loginReceipt: z.string().startsWith('/'),
 		loginGateSocket: z.string().startsWith('/'),
 		loginStandin: z.string().startsWith('/'),
 	}),
-	commonConfiguration.refine((value) => !value.scenario.startsWith('login-')),
+	commonConfiguration.refine((value) => !quotaRequiresPrivateGuard(value.scenario)),
 ]);
 export type QuotaEffectConfiguration = z.infer<typeof quotaEffectConfigurationSchema>;
 
@@ -56,6 +57,7 @@ export function quotaLoginExit(scenario: QuotaEffectScenario): 0 | 130 | 7 | nul
 		case 'login-failed7':
 			return 7;
 		case 'captured-actions':
+		case 'grouping-reopen':
 		case 'remove-cancel':
 		case 'remove-middle':
 		case 'remove-last':
@@ -70,6 +72,9 @@ export function quotaLoginExit(scenario: QuotaEffectScenario): 0 | 130 | 7 | nul
 	}
 	const exhaustive: never = scenario;
 	throw new Error('unknown quota scenario: ' + String(exhaustive));
+}
+export function quotaRequiresPrivateGuard(scenario: QuotaEffectScenario): boolean {
+	return quotaLoginExit(scenario) !== null || scenario === 'grouping-reopen';
 }
 export function quotaCapturedPosition(scenario: QuotaEffectScenario): number {
 	return scenario === 'remove-middle' || scenario === 'remove-held'
@@ -89,6 +94,7 @@ export function quotaAccountCount(scenario: QuotaEffectScenario): number {
 export function quotaJourneyScenarios(journey: string): readonly QuotaEffectScenario[] {
 	const fixed: Readonly<Record<string, QuotaEffectScenario>> = {
 		'quota-actions-every-command': 'captured-actions',
+		'quota-group-by-f6': 'grouping-reopen',
 		'quota-remove-cancel-primary': 'remove-cancel',
 		'quota-remove-middle': 'remove-middle',
 		'quota-remove-last': 'remove-last',

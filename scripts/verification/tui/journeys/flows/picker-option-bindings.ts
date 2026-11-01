@@ -20,6 +20,8 @@ import {
 	pickerPageRows,
 	requireHelpNoop,
 	requireHelpRows,
+	paintedHelpContentRows,
+	requireHelpContentRange,
 	selectedFixtureRow,
 } from '../scenes/option-navigation-observation.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
@@ -155,17 +157,21 @@ export function pickerOptionBindings(
 			requireHelpNoop(qualified.grid, grid);
 			return;
 		}
-		const maximum = qualified.full.length - qualified.height;
+		const content = paintedHelpContentRows(qualified.full);
+		const maximum = Math.max(0, content.length - qualified.height);
 		const offset =
 			checkpoint === 'alias-last'
 				? maximum
 				: checkpoint === 'alias-page-down'
 					? Math.min(maximum, qualified.height)
 					: 0;
-		requireHelpRows(
-			helpViewport(grid).rows,
-			qualified.full.slice(offset, offset + qualified.height),
-		);
+		const viewport = helpViewport(grid);
+		requireHelpRows(viewport.rows, content.slice(offset, offset + qualified.height));
+		requireHelpContentRange(qualified.full);
+		if (checkpoint === 'alias-last' && !viewport.atEnd)
+			throw new Error(
+				'Help Last reaches painted content but its scrollbar thumb is not at the end',
+			);
 	};
 	return {
 		...base,

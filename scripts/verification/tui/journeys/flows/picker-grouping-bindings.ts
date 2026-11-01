@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { lookupProcessIdentity } from '../../processes/process-identity.ts';
 import type { DispatchFrameObservation } from '../../terminal/input-dispatch-frames.ts';
 import type { MarkedInputEvidence } from '../../terminal/marker-input-session.ts';
-import { cellText, gridLines } from '../../terminal/terminal-grid.ts';
+import { cellText } from '../../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import { renderOriginal } from '../../terminal/terminal-original.ts';
 import { findDialog } from '../scenes/grid-scene-matcher.ts';
@@ -28,6 +28,10 @@ import {
 	pickerUngroupedOrder,
 } from './picker-grouping-oracle.ts';
 import type { PickerGroupingFacet } from './picker-grouping-oracle.ts';
+import {
+	pickerMenuNavigationExpectation,
+	readPickerMenuViewport,
+} from './picker-menu-observation.ts';
 
 const facets: readonly PickerGroupingFacet[] = [
 	'none',
@@ -38,6 +42,34 @@ const facets: readonly PickerGroupingFacet[] = [
 	'machine',
 ];
 const facetLabels = ['None', 'Started by', 'Day', 'Folder', 'Provider', 'Machine'];
+
+export function readPickerGroupingMenu(grid: TerminalGrid): {
+	readonly choices: ReadonlyMap<string, boolean>;
+	readonly groupKeyShown: boolean;
+} {
+	const choices = new Map<string, boolean>();
+	const viewport = readPickerMenuViewport(grid);
+	for (const item of viewport.items)
+		if (item.title.startsWith('Group by:'))
+			choices.set(item.title.slice('Group by:'.length).trim(), item.checked);
+	return { choices, groupKeyShown: viewport.headings.includes('Group by') };
+}
+
+export function pickerGroupingMenuFailures(
+	observation: ReturnType<typeof readPickerGroupingMenu>,
+	facet: PickerGroupingFacet,
+): readonly string[] {
+	const failures: string[] = [];
+	if (
+		JSON.stringify([...observation.choices.keys()]) !== JSON.stringify(facetLabels) ||
+		!observation.groupKeyShown
+	)
+		failures.push('Group by menu lost its closed ordered choices or section F6 key');
+	const checked = [...observation.choices].filter(([, value]) => value).map(([label]) => label);
+	if (JSON.stringify(checked) !== JSON.stringify([facetLabels[facets.indexOf(facet)]]))
+		failures.push('real menu checked choice differs from expected grouping facet');
+	return failures;
+}
 interface HeadingFact {
 	readonly name: string;
 	readonly count: number;
@@ -112,10 +144,12 @@ export function pickerGroupingBindings(
 	const inputs = new Map<number, NativeFlowInputBinding>();
 	for (const [index, step] of invocation.journey.steps.entries())
 		if (step.kind === 'press') {
-			if (step.key !== 'F6') throw new Error('undeclared grouping key');
+			if (step.key !== 'F6' && step.key !== 'F12') throw new Error('undeclared grouping key');
 			inputs.set(index, {
 				kind: 'continuing',
-				expected: [pickerExpectedKey('F6', pickerScreen, null, 'cycle-group')],
+				expected: [
+					pickerExpectedKey(step.key, pickerScreen, null, step.key === 'F6' ? 'cycle-group' : null),
+				],
 			});
 		}
 	const fixtures = new Map<
@@ -194,28 +228,18 @@ export function pickerGroupingBindings(
 			]);
 			const choices = new Map<string, boolean>();
 			let groupKeyShown = false;
-			const collectChoices = async (remaining: number): Promise<void> => {
-				for (const line of gridLines(latestFrame(marked).grid)) {
-					const offset = line.indexOf('Group by:');
-					if (offset >= 0) {
-						const label = (line.slice(offset + 'Group by:'.length).split(/[│┃]/u)[0] ?? '').trim();
-						choices.set(label, line.slice(Math.max(0, offset - 3), offset).includes('✓'));
-					} else if (line.includes('Group by') && line.includes('F6')) {
-						if (line.includes('❯')) throw new Error('Group by menu heading became a focus target');
-						groupKeyShown = true;
-					}
-				}
+			const collectChoices = async (remaining: number, focusedIndex: number): Promise<void> => {
+				const observed = readPickerGroupingMenu(latestFrame(marked).grid);
+				for (const [label, checked] of observed.choices) choices.set(label, checked);
+				groupKeyShown ||= observed.groupKeyShown;
 				if (choices.size >= facetLabels.length || remaining === 1) return;
-				marked = await context.input.press('Down', [pickerExpectedKey('Down', menu)]);
-				await collectChoices(remaining - 1);
+				marked = await context.input.press('Down', [
+					pickerMenuNavigationExpectation({ key: 'Down', focusedIndex, surface: menu }),
+				]);
+				await collectChoices(remaining - 1, focusedIndex + 1);
 			};
-			await collectChoices(32);
-			checkedFailures = [];
-			if (JSON.stringify([...choices.keys()]) !== JSON.stringify(facetLabels) || !groupKeyShown)
-				checkedFailures.push('Group by menu lost its closed ordered choices or section F6 key');
-			const checked = [...choices].filter(([, value]) => value).map(([label]) => label);
-			if (JSON.stringify(checked) !== JSON.stringify([facetLabels[facets.indexOf(facet)]]))
-				checkedFailures.push('real menu checked choice differs from expected grouping facet');
+			await collectChoices(32, 0);
+			checkedFailures = [...pickerGroupingMenuFailures({ choices, groupKeyShown }, facet)];
 			await context.input.press('Escape', [pickerExpectedKey('Escape', menu)]);
 			marked = await context.input.press('F12', [pickerExpectedKey('F12', pickerScreen)]);
 			if (groupingSelectedRow(latestFrame(marked).grid) !== selection)

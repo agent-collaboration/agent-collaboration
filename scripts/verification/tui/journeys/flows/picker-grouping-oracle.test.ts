@@ -2,7 +2,12 @@
 import { expect, test } from 'vitest';
 
 import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
-import { groupingSelectedRow, groupingVisibleHeadings } from './picker-grouping-bindings.ts';
+import {
+	groupingSelectedRow,
+	groupingVisibleHeadings,
+	readPickerGroupingMenu,
+	pickerGroupingMenuFailures,
+} from './picker-grouping-bindings.ts';
 import {
 	checkPickerGroupingObservation,
 	pickerGroupingBuckets,
@@ -62,6 +67,37 @@ test('None restores the complete original sorted order and contains no group hea
 	expect(
 		checkPickerGroupingObservation('none', pickerUngroupedOrder, [{ name: 'Codex', count: 5 }]),
 	).not.toEqual([]);
+});
+
+test('group menu ignores scrollbar cells while preserving a wrong checked facet as a failure', async () => {
+	const core = await createTerminalCore(40, 12);
+	const paint = (checked: string): void => {
+		const labels = ['None', 'Started by', 'Day', 'Folder', 'Provider', 'Machine'];
+		core.writeString(
+			'\x1b[2J\x1b[H' +
+				[
+					'╭' + '─'.repeat(38) + '╮',
+					'│' + 'Group by F6'.padEnd(37) + '█│',
+					...labels.map(
+						(label) =>
+							'│' + ((label === checked ? '✓ ' : '  ') + 'Group by: ' + label).padEnd(37) + '█│',
+					),
+					'╰' + '─'.repeat(38) + '╯',
+				].join('\r\n'),
+		);
+	};
+	try {
+		paint('None');
+		expect(pickerGroupingMenuFailures(readPickerGroupingMenu(snapshotGrid(core)), 'none')).toEqual(
+			[],
+		);
+		paint('Provider');
+		expect(
+			pickerGroupingMenuFailures(readPickerGroupingMenu(snapshotGrid(core)), 'none'),
+		).toContain('real menu checked choice differs from expected grouping facet');
+	} finally {
+		core.dispose();
+	}
 });
 
 test('the cell reader joins a wrapped heading and rejects a selected machine heading that resembles its row', async () => {
