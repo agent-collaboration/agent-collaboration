@@ -50,8 +50,8 @@ impl Scenario {
             Scenario::ForwardPost(ForwardCase::OwnState) => println!(
                 "FORWARD_STATE_RESULT 1 passed; 0 failed; 0 ignored (normal sockets and terminal reply, owner-only raw own forwarding tables contain no content/correlation; no global database scan or restart claim)"
             ),
-            Scenario::ForwardPost(ForwardCase::RealTimer) => println!(
-                "FORWARD_REAL_TIMER_RESULT 1 passed; 0 failed; 0 ignored (literal production30s, actual unpinned alarm, exact Unanswered, sixteen reusable fresh slots and late-reply isolation; no physical restart or full row19 claim)"
+            Scenario::ForwardPost(ForwardCase::AlarmEvent) => println!(
+                "FORWARD_REAL_TIMER_RESULT 1 passed; 0 failed; 0 ignored (literal production30s, controlled clock and actual alarm, exact Unanswered, sixteen reusable fresh slots and late-reply isolation; no physical restart or full row19 claim)"
             ),
             Scenario::ForwardPost(_) => println!(
                 "FORWARD_SESSION_RESULT 1 passed; 0 failed; 0 ignored (selected retained Native oracle through actual normal Worker enrollment/Fleet-create/Register/session/Registry/holder; no capacity, deadline, physical restart or full row19 claim)"

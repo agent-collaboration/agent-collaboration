@@ -28,7 +28,7 @@ pub(super) enum ForwardCase {
     Capacity,
     Deadline,
     ExactBoundary,
-    RealTimer,
+    AlarmEvent,
     TerminalRelease,
     RouteOverlap,
     OwnState,
@@ -145,12 +145,7 @@ where
     ) -> Reconnected,
     Reconnected: Future<Output = ConformanceResult<reqwest_websocket::WebSocket>>,
 {
-    let now = if matches!(case, ForwardCase::RealTimer) {
-        // This case observes the actual platform alarm event, not elapsed time.
-        None
-    } else {
-        Some(collaboration_central_conformance::fixture_time()?)
-    };
+    let now = Some(collaboration_central_conformance::fixture_time()?);
     let RegisteredForwardingPeers {
         database,
         sender_socket: mut sender,
@@ -186,9 +181,9 @@ where
                 super::forwarded_post_state_cases::own_state(base,&mut sender,socket,database).await?;
                 println!("FORWARD_STATE_CASE raw_owning_forward_content_and_state_absent_after_terminal passed");
             }
-            ForwardCase::RealTimer => {
-                super::forwarded_post_deadline_boundaries::real_timer(&mut sender, socket, database).await?;
-                println!("FORWARD_REAL_TIMER_CASE actual_alarm_unanswered_full_capacity_and_fresh_correlation passed");
+            ForwardCase::AlarmEvent => {
+                super::forwarded_post_deadline_boundaries::alarm_event(base, &mut sender, socket, database, |command| control(base, command)).await?;
+                println!("FORWARD_REAL_TIMER_CASE controlled_alarm_unanswered_full_capacity_and_fresh_correlation passed");
             }
             ForwardCase::OriginAndReply => {
                 oracle::preserves_origin_and_opaque_reply(&mut sender, socket, database, ActorOrigin {

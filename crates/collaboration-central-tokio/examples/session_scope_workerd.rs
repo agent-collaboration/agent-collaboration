@@ -193,7 +193,7 @@ async fn main() -> ConformanceResult<()> {
             Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::TerminalRelease)
         }
         Some("forward-real-timer") => {
-            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::RealTimer)
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::AlarmEvent)
         }
         Some("claim-retiring") => Scenario::ClaimRetiring,
         Some("claim-retired") => Scenario::ClaimRetired,
