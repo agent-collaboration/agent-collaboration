@@ -29,12 +29,12 @@
 <ex-document id="content">
 <h1 id="heading-how-it-s-proven">How it's proven</h1>
 
-<p><strong>Two real debug Routers, machine A and machine B, enrolled with a local central, on Sunclaw.</strong> Real agent sessions run on Haiku. The same central behaviour also runs through the conformance suite on both Cloudflare and Tokio. Nothing below has run yet; this is the plan.</p>
+<p><strong>Two real debug Routers, machine A and machine B, enrolled with a local central, on Sunclaw.</strong> Real agent sessions run on Codex Luna (a Claude-provider check uses Haiku only after the owner is asked). The same central behaviour also runs through the conformance suite on both Cloudflare and Tokio. Nothing below has run yet; this is the plan.</p>
 
 <ex-mermaid id="rig" label="Test rig"><script type="text/plain">
 flowchart LR
-  A["debug Router A<br/>+ Haiku sessions"] <-->|"machine session"| C["local Tokio central<br/>Fleet face"]
-  B["debug Router B<br/>+ Haiku sessions"] <-->|"machine session"| C
+  A["debug Router A<br/>+ Luna sessions"] <-->|"machine session"| C["local Tokio central<br/>Fleet face"]
+  B["debug Router B<br/>+ Luna sessions"] <-->|"machine session"| C
   CF["Cloudflare runtime"] -.->|"same core, conformance suite"| C
 </script></ex-mermaid>
 
