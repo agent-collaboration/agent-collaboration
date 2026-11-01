@@ -94,31 +94,39 @@ fn source_and_full_request_are_in_the_literal_digest() {
 
 #[test]
 fn row_identity_kind_state_and_digest_never_coerce() {
+    #[derive(Debug)]
+    enum CorruptField {
+        WorkItemId,
+        OperationId,
+        TargetService,
+        Kind,
+        CustodyState,
+        RequestDigest,
+    }
     for field in [
-        "work_item_id",
-        "operation_id",
-        "service_id",
-        "kind",
-        "state",
-        "request_digest",
+        CorruptField::WorkItemId,
+        CorruptField::OperationId,
+        CorruptField::TargetService,
+        CorruptField::Kind,
+        CorruptField::CustodyState,
+        CorruptField::RequestDigest,
     ] {
         let mut stored = row();
         match field {
-            "work_item_id" => {
+            CorruptField::WorkItemId => {
                 stored.work_item_id = Some("019f0000-0000-7000-8000-000000000009".into())
             }
-            "operation_id" => {
+            CorruptField::OperationId => {
                 stored.operation_id = Some("019f0000-0000-7000-8000-000000000009".into())
             }
-            "service_id" => stored.service_id = Some(SOURCE.into()),
-            "kind" => stored.kind = Some("futureKind".into()),
-            "state" => stored.state = Some("unknown".into()),
-            "request_digest" => stored.request_digest = Some("0".repeat(64)),
-            _ => unreachable!(),
+            CorruptField::TargetService => stored.service_id = Some(SOURCE.into()),
+            CorruptField::Kind => stored.kind = Some("futureKind".into()),
+            CorruptField::CustodyState => stored.state = Some("unknown".into()),
+            CorruptField::RequestDigest => stored.request_digest = Some("0".repeat(64)),
         }
         assert!(
             matches!(decode(stored), Err(AutomationStoreError::InvalidRecord(_))),
-            "stored {field} was coerced"
+            "stored {field:?} was coerced"
         );
     }
     for pointer in [
