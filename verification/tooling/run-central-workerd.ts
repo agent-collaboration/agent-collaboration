@@ -22,7 +22,8 @@ const templateModuleSchema = z.object({
 });
 const { default: publicTemplate } = templateModuleSchema.parse(
   await import(
-    new URL("../../crates/collaboration-central-cloudflare/cloudflare.config.ts", import.meta.url).href
+    new URL("../../crates/collaboration-central-cloudflare/cloudflare.config.ts", import.meta.url)
+      .href
   ),
 );
 
@@ -63,19 +64,17 @@ const replacements: Readonly<Record<string, string>> = {
   CENTRAL_DELIVERY_CONFIG: relayPeer.startsWith("{") ? relayPeer : JSON.stringify({ relayPeer }),
 };
 const templateBindings = Object.fromEntries(
-  Object.entries(publicTemplate.worker.env)
-    .flatMap(([name, binding]): Array<[string, string]> => {
-      if (binding.type !== "text") return [];
-      return [[name, replacements[name] ?? binding.value]];
-    }),
+  Object.entries(publicTemplate.worker.env).flatMap(([name, binding]): Array<[string, string]> => {
+    if (binding.type !== "text") return [];
+    return [[name, replacements[name] ?? binding.value]];
+  }),
 );
 for (const name of Object.keys(replacements)) {
   if (!(name in templateBindings))
     throw new Error(`public central template missing required ${name}`);
 }
-const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: typeof MiniflareTypes = await import(
-  pathToFileURL(miniflareEntrypoint).href
-);
+const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: typeof MiniflareTypes =
+  await import(pathToFileURL(miniflareEntrypoint).href);
 const runtime = new Miniflare(
   convertV4MiniflareOptions({
     host: "127.0.0.1",
@@ -108,7 +107,9 @@ const runtime = new Miniflare(
         },
         bindings: { ...templateBindings, _cf_composed_clock: "1900000000000" },
         cacheAPI: true,
-        outboundService: async (request: MiniflareTypes.Request): Promise<MiniflareTypes.Response> => {
+        outboundService: async (
+          request: MiniflareTypes.Request,
+        ): Promise<MiniflareTypes.Response> => {
           if (
             request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
           ) {
