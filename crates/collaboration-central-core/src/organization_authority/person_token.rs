@@ -124,6 +124,23 @@ struct TokenHeader {
     typ: String,
     alg: String,
     kid: String,
+    #[serde(rename = "crit", default)]
+    _critical_extensions: NoCriticalExtensions,
+}
+
+// This profile supports no critical JOSE extensions (RFC 7515 section 4.1.11).
+// Missing is valid; any present value, including null or an empty list, refuses.
+#[derive(Default)]
+struct NoCriticalExtensions;
+
+impl<'de> Deserialize<'de> for NoCriticalExtensions {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        _decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        Err(serde::de::Error::custom(
+            "critical JOSE extensions are unsupported",
+        ))
+    }
 }
 
 #[derive(Deserialize)]

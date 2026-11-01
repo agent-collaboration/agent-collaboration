@@ -196,10 +196,41 @@ fn organization_authority_token_parser_refuses_wrong_headers_and_extra_segments(
         &json!({"typ":"at+jwt","alg":"EdDSA","kid":"key"}),
         &claims(),
     )?;
+    assert!(ParsedPersonToken::parse(encoded.clone()).is_ok());
     assert!(matches!(
         ParsedPersonToken::parse(format!("{encoded}.extra")),
         Err(PersonTokenRefusal::Malformed)
     ));
+    let mut accepted_critical_headers = Vec::new();
+    for (label, extra) in [
+        (
+            "unknown-critical-extension",
+            json!({"crit":["unknown-extension"],"unknown-extension":true}),
+        ),
+        ("empty-critical-list", json!({"crit":[]})),
+        (
+            "unsupported-unencoded-payload",
+            json!({"crit":["b64"],"b64":false}),
+        ),
+        ("null-critical-list", json!({"crit":null})),
+        (
+            "non-array-critical-list",
+            json!({"crit":"unknown-extension"}),
+        ),
+    ] {
+        let mut header = json!({"typ":"at+jwt","alg":"EdDSA","kid":"key"});
+        header
+            .as_object_mut()
+            .ok_or("controlled JOSE header must be an object")?
+            .extend(extra.as_object().ok_or("critical header fixture")?.clone());
+        if ParsedPersonToken::parse(token(&header, &claims())?).is_ok() {
+            accepted_critical_headers.push(label);
+        }
+    }
+    assert!(
+        accepted_critical_headers.is_empty(),
+        "unsupported critical JOSE headers were accepted: {accepted_critical_headers:?}"
+    );
     Ok(())
 }
 
