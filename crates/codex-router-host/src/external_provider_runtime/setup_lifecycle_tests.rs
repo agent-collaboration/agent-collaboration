@@ -117,3 +117,73 @@ async fn provider_setup_retains_the_returned_id_before_any_initial_setting() {
     assert!(settings_marker.exists());
     runtime.shutdown().await;
 }
+
+#[tokio::test]
+async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_registrar() {
+    use collaboration_service::fleet_session_registrar::{
+        FleetSessionStorageFailure, SessionRegistrationMode, test_support::PendingSetupWriteControl,
+    };
+    let directory = tempfile::tempdir_in("/tmp").unwrap();
+    let rig = super::setup_registrar_fixture::RegistrarFixture::new(
+        SessionRegistrationMode::MachineTokens,
+    )
+    .unwrap();
+    let settings = RequestedProviderSettings {
+        mode: Some("ask".to_owned()),
+        ..Default::default()
+    };
+    let managed = rig.create_setup(directory.path(), &settings).await.unwrap();
+    let (entered, pending_save) = tokio::sync::oneshot::channel();
+    let (decide, outcome) = tokio::sync::oneshot::channel();
+    *rig.repository.pending_setup.lock().unwrap() =
+        Some(PendingSetupWriteControl { entered, outcome });
+    let marker = directory.path().join("setting-observed");
+    let fixture = AcpFixtureScript::new()
+        .expect_request("initialize", "initialize", json!({"protocolVersion":1}))
+        .respond("initialize", json!({"protocolVersion":1,"agentCapabilities":{"mcpCapabilities":{"http":true},"sessionCapabilities":{"close":{}}}}))
+        .expect_request("create", "session/new", json!({"mcpServers":[{"type":"http","name":"router-collaboration","url":"http://127.0.0.1:43210/mcp/session/35353535353535353535353535353535"}]}))
+        .respond("create", json!({"sessionId":"actual-provider-conversation","modes":{"currentModeId":"ask","availableModes":[{"id":"ask","name":"Ask"}]}}))
+        .expect_request("mode", "session/set_mode", json!({"sessionId":"actual-provider-conversation","modeId":"ask"}))
+        .write_marker(&marker)
+        .respond("mode", json!({}))
+        .launch();
+    let runtime = Arc::new(ExternalProviderRuntime::initialize(fixture).await.unwrap());
+    let running = Arc::clone(&runtime);
+    let cwd = directory.path().to_owned();
+    let mut creating = tokio::spawn(async move {
+        running
+            .create_session_with_settings(cwd, settings, managed)
+            .await
+    });
+
+    tokio::select! {
+        entered = pending_save => entered.unwrap(),
+        result = &mut creating => panic!("create settled without awaiting pending-setup persistence: {result:?}"),
+    }
+    assert!(
+        !marker.exists(),
+        "a setting arrived while the created-ID save was held"
+    );
+    decide
+        .send(Err(FleetSessionStorageFailure::Unavailable))
+        .unwrap();
+    assert!(creating.await.unwrap().is_err());
+
+    assert!(
+        !marker.exists(),
+        "a setting arrived after the created-ID save failed"
+    );
+    assert!(rig.authority.registrations.lock().unwrap().is_empty());
+    assert!(matches!(
+        rig.registrar
+            .resolve_binding_capability("35353535353535353535353535353535")
+            .await,
+        Err(collaboration_service::fleet_session_registrar::RegistrarFailure::InactiveBinding)
+    ));
+    {
+        let records = rig.repository.records.lock().unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].lifecycle().session().is_none());
+    }
+    runtime.shutdown().await;
+}

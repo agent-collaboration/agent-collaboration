@@ -16,9 +16,25 @@ use message_board::SessionRef;
 use std::sync::Arc;
 
 const NATIVE_COLLABORATION_MCP_SERVER_NAME: &str = "agent-router";
+pub(super) const PROVIDER_COLLABORATION_MCP_SERVER_NAME: &str = "router-collaboration";
+
+#[derive(Clone, Copy)]
+pub enum HostHarnessMcpServer {
+    Native,
+    Provider,
+}
+impl HostHarnessMcpServer {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Native => NATIVE_COLLABORATION_MCP_SERVER_NAME,
+            Self::Provider => PROVIDER_COLLABORATION_MCP_SERVER_NAME,
+        }
+    }
+}
 
 pub struct HostHarnessSessionLaunchPort {
     registrar: Arc<FleetSessionRegistrar>,
+    mcp_server: HostHarnessMcpServer,
     confirmed_machine_environment: fleet_identity_protocol::MachineEnvironment,
     ids: Arc<dyn runtime_primitives::IdSource + Send + Sync>,
 }
@@ -28,9 +44,11 @@ impl HostHarnessSessionLaunchPort {
         registrar: Arc<FleetSessionRegistrar>,
         confirmed_machine_environment: fleet_identity_protocol::MachineEnvironment,
         ids: Arc<dyn runtime_primitives::IdSource + Send + Sync>,
+        mcp_server: HostHarnessMcpServer,
     ) -> Self {
         Self {
             registrar,
+            mcp_server,
             confirmed_machine_environment,
             ids,
         }
@@ -47,13 +65,15 @@ impl HostHarnessSessionLaunchPort {
     }
 }
 
-fn binding(address: &str) -> Result<HarnessSessionBinding, HarnessLaunchFailure> {
-    let name = NonEmptyText::try_from(NATIVE_COLLABORATION_MCP_SERVER_NAME.to_owned())
-        .map_err(|_| HarnessLaunchFailure::Unavailable)?;
-    Ok(HarnessSessionBinding::from_host_record(
-        name,
-        address.to_owned(),
-    ))
+impl HostHarnessSessionLaunchPort {
+    fn binding(&self, address: &str) -> Result<HarnessSessionBinding, HarnessLaunchFailure> {
+        let name = NonEmptyText::try_from(self.mcp_server.name().to_owned())
+            .map_err(|_| HarnessLaunchFailure::Unavailable)?;
+        Ok(HarnessSessionBinding::from_host_record(
+            name,
+            address.to_owned(),
+        ))
+    }
 }
 
 impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
@@ -86,7 +106,7 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
                     Ok(HarnessStartAdmission::AccessEnrollment)
                 }
                 PrepareSessionStart::Prepared(record) => Ok(HarnessStartAdmission::Prepared(
-                    binding(record.preparation().binding_address.expose_address())?,
+                    self.binding(record.preparation().binding_address.expose_address())?,
                 )),
                 PrepareSessionStart::Existing(record) => {
                     if !matches!(
@@ -98,7 +118,7 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
                         return Err(HarnessLaunchFailure::AlreadyPrepared);
                     }
                     // mark_dispatched persists consumption before create and refuses a second consumer.
-                    Ok(HarnessStartAdmission::Prepared(binding(
+                    Ok(HarnessStartAdmission::Prepared(self.binding(
                         record.preparation().binding_address.expose_address(),
                     )?))
                 }
@@ -180,9 +200,9 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
                 .binding_for_restore(session)
                 .await
                 .map_err(launch_failure)?;
-            Ok(HarnessRestoreAdmission::Bound(binding(
-                address.expose_address(),
-            )?))
+            Ok(HarnessRestoreAdmission::Bound(
+                self.binding(address.expose_address())?,
+            ))
         })
     }
 }

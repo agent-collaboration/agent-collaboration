@@ -119,7 +119,7 @@ pub(crate) async fn compose_provider_startup(
                 let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
                     launch,
                     provider_model_picker(binding.provider),
-                    "router-collaboration",
+                    crate::harness_launch_composition::PROVIDER_COLLABORATION_MCP_SERVER_NAME,
                     mcp_url.to_owned(),
                     Arc::clone(hub.as_ref().ok_or_else(|| {
                         io::Error::other("provider Session hub unavailable for configured launch")

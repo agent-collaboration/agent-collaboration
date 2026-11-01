@@ -6,6 +6,10 @@ mod setup_lifecycle;
 mod start_admission;
 mod storage_port;
 
+#[cfg(any(test, feature = "test-support"))]
+#[path = "fleet_session_registrar/test_support.rs"]
+pub mod test_support;
+
 pub use binding_admission::BoundFleetSession;
 pub use connection_port::{
     FleetSessionConnection, FleetSessionConnectionFailure, FleetSessionRequest,

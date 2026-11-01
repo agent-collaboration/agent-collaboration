@@ -14,7 +14,9 @@ mod claude_provider_launch_environment;
 mod codex_conversation_recording_composition;
 mod harness_launch_composition;
 mod harness_launch_facts;
-pub use harness_launch_composition::HostHarnessSessionLaunchPort;
+pub use harness_launch_composition::{HostHarnessMcpServer, HostHarnessSessionLaunchPort};
+mod provider_session_setup_composition;
+pub use provider_session_setup_composition::prepare_provider_session_setup;
 #[cfg(test)]
 mod host_manifest_publication_tests;
 pub use claude_code_peer_delivery_route::ClaudeCodePeerDeliveryRoute;
