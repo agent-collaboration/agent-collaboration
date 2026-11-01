@@ -61,6 +61,9 @@ struct DirectRuntime {
     native: NativeFixture,
     endpoint: EndpointRef,
     route: Arc<collaboration_runtime::SessionDeliveryRouter>,
+    // The actual Runtime retains this owner in its listeners. Delivery borrows
+    // it weakly to avoid the broker -> delivery -> broker cycle.
+    _approval_broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
 }
 impl DirectRuntime {
     async fn new(mode: SessionRegistrationMode, unavailable: bool) -> Self {
@@ -127,7 +130,7 @@ impl DirectRuntime {
                 ),
                 native_backend: backend,
                 native_session_registration: registration,
-                approval_broker: broker,
+                approval_broker: broker.clone(),
                 unmaterialized_threads: Arc::new(
                     collaboration_runtime::UnmaterializedThreadHolder::new(),
                 ),
@@ -142,6 +145,7 @@ impl DirectRuntime {
             native,
             endpoint,
             route: routes.router,
+            _approval_broker: broker,
         }
     }
     fn request(&self, fork: bool, operation: &str) -> SchedulePreparationRequest {
