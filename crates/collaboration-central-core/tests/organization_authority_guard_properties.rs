@@ -20,6 +20,7 @@ use person_token_fixture::{
 use proptest::prelude::*;
 use serde_json::json;
 
+#[cfg(test)]
 fn confirmed_at(received_at: UnixMillis, factor_at: Option<i64>) -> ConfirmedPersonToken {
     let issued_at = received_at.0.div_euclid(1_000);
     let expires_at = issued_at + 300;
