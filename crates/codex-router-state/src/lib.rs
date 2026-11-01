@@ -1,4 +1,8 @@
-//! SQLite-backed metadata boundary for codex-router.
+//! Proxy account and routing state, stored in `state.sqlite`.
+//!
+//! Owns accounts, credential metadata, quota and credit, routing policy,
+//! session-account affinity, and client leases. Fleet records belong in
+//! `codex-router-fleet-state` and its separate `fleet.sqlite` database.
 
 pub mod account;
 mod account_migrations;
