@@ -1,6 +1,7 @@
 //! The adopted renewal reply has one schema and one closed refusal vocabulary.
 use fleet_identity_protocol::{MachineTokenRenewal, MachineTokenRenewalRefusal};
 use serde_json::json;
+#[cfg(test)]
 #[path = "support/contract_artifacts.rs"]
 mod contract_artifacts;
 

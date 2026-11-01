@@ -1,0 +1,8 @@
+[
+{"result":"renewed"},
+{"reason":{"kind":"tokenInvalid"},"result":"refused"},
+{"reason":{"kind":"tokenExpired"},"result":"refused"},
+{"reason":{"kind":"wrongClient"},"result":"refused"},
+{"reason":{"kind":"wrongInstallation"},"result":"refused"},
+{"reason":{"kind":"enrollmentNotActive"},"result":"refused"}
+]

@@ -1,0 +1,7 @@
+[
+{"kind":"tokenInvalid"},
+{"kind":"tokenExpired"},
+{"kind":"wrongClient"},
+{"kind":"wrongInstallation"},
+{"kind":"enrollmentNotActive"}
+]
