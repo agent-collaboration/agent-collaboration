@@ -74,7 +74,7 @@ Authority:
 
 **Out of scope:**
 - **Interactions storage.** `interaction.sqlite` stays local on each machine (owner, 2026-10-31: "interactions.sqlite should be local").
-- **Routed approvals across machines.** A separate, later design (owner, 2026-10-31: "step 3 can be fully fleshed out then with separate design"): central owns approval routes, approval and question prompts are routed through central to the approver's machine, and the default approver of a remote create becomes the requester. Until then the U20 interim approver applies. The removal of `approval-routes.json` and the old approval-history JSON code is in the database PR below this one.
+- **Routed approvals across machines: PR 3, the next PR after this stack** (owner, 2026-10-31: "the next pr 3 must be about approval and not in the source machine through central"). It gets its own design cycle (owner: "step 3 can be fully fleshed out then with separate design"): central owns approval routes, approval and question prompts are routed through central to the approver's machine, and the default approver of a remote create becomes the requester. Until then the U20 interim approver applies. The removal of `approval-routes.json` and the old approval-history JSON code is in the database PR below this one.
 - **Project binding of automations** (U3).
 - **Changes to the wake limits** (U4).
 - **Database retention, vacuum and WAL.** These are the stacked PR below this one. This set relies on them and doesn't change them.

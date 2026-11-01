@@ -1,0 +1,6 @@
+[
+null,
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","unexpectedField":true,"verifiedEmail":"member@example.invalid"},
+{"organizationId":"019a3dce-2000-7000-8000-000000000001","verified_email":"member@example.invalid"},
+{"organization_id":"019a3dce-2000-7000-8000-000000000001","verifiedEmail":"member@example.invalid"}
+]
