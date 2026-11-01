@@ -9,7 +9,9 @@ use agent_collaboration_tui::{
     actions::Checked,
     controls::{
         fields::{button_target, segmented_targets},
-        list::{ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl},
+        list::{
+            ListNavigationPolicy, ListRowKey, ListRows, ListSelectionBinding, ListSelectionControl,
+        },
         menu_overlay,
     },
     surfaces::{
@@ -37,11 +39,12 @@ pub(super) fn row_key(identity: &SessionPickerIdentity) -> SurfaceResult<ListRow
     Ok(ListRowKey::new(key)?)
 }
 
-pub fn selection_rows(model: &SessionsPickerModel) -> SurfaceResult<Vec<ListRowKey>> {
-    (0..model.visible_record_len())
+pub fn selection_rows(model: &SessionsPickerModel) -> SurfaceResult<ListRows> {
+    let keys = (0..model.visible_record_len())
         .filter_map(|index| model.visible_record_at(index))
         .map(|record| row_key(&record.identity))
-        .collect()
+        .collect::<SurfaceResult<Vec<_>>>()?;
+    Ok(ListRows::Ungrouped(keys))
 }
 
 pub(super) fn list_control(

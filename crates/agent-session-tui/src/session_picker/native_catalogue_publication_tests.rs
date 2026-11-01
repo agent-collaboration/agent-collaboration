@@ -7,6 +7,9 @@ use agent_session_inventory::{
     source_inventory_request::SourceInventoryResult,
 };
 
+#[path = "native_warning_waits.rs"]
+mod native_warning_waits;
+
 fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
@@ -57,8 +60,10 @@ async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_w
         request.records.clear();
         request.router_registry = RouterRegistryRead::Ready(agent_session_inventory::sessions::router_connection_registry::RouterConnectionRegistry { routers: vec![profile] });
         let actual = source.loader();
+        let (page_sender, mut page_settlements) = tokio::sync::mpsc::unbounded_channel();
         let loader: SessionsPickerRecordLoader = Arc::new(move |request| {
             let actual = actual.clone();
+            let page_sender = page_sender.clone();
             Box::pin(async move {
                 if request.source_context == PickerSourceContext::DefaultHosted {
                     SourceInventoryResult::Ready {
@@ -68,7 +73,11 @@ async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_w
                         snapshot: observed_records(Vec::new()),
                     }
                 } else {
-                    actual(request).await
+                    let result = actual(request).await;
+                    let _ = page_sender.send(
+                        native_warning_waits::SourcePageSettlement::from_result(&result),
+                    );
+                    result
                 }
             })
         });
@@ -82,64 +91,77 @@ async fn actual_native_conflicts_and_invalid_jobs_reach_source_specific_picker_w
         let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),width:132usize,height:60usize));
         let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
-        let journey = async {
-            while let Some(canvas) = frames.next().await {
-                let frame = canvas.to_string();
-                if phase == 0 && frame.contains("Choose machine") {
-                    sender.send(key(KeyCode::Enter)).unwrap();
-                    sender.send(key(KeyCode::Down)).unwrap();
-                    sender.send(key(KeyCode::Enter)).unwrap();
-                    phase = 1;
-                } else if phase == 1
-                    && matches!(warning_case, NativeWarningCase::ConflictingPeers)
-                    && frame.contains("multiple live peers claim this session")
-                {
-                    assert!(
-                        frame.contains(SERVICE)
-                            && frame.contains(SESSION)
-                            && frame.contains("claude-local"),
-                        "source and session must accompany the reason: {frame}"
-                    );
-                    assert!(
-                        frame.contains("Known native job"),
-                        "independent job facts remain visible: {frame}"
-                    );
-                    sender.send(ctrl_key('c')).unwrap();
-                    phase = 2;
-                } else if phase == 1
-                    && matches!(warning_case, NativeWarningCase::InvalidJobs)
-                    && frame.contains("native Claude background jobs inventory: invalid output")
-                {
-                    assert!(
-                        frame.contains("Observed source: Unavailable"),
-                        "failure must name the configured source: {frame}"
-                    );
-                    assert!(!frame.contains("session inventory does not match its source"));
-                    sender.send(ctrl_key('c')).unwrap();
-                    phase = 2;
-                } else if phase == 1
-                    && matches!(warning_case, NativeWarningCase::UnavailableJobs)
-                    && frame.contains("Observed source")
-                    && frame.contains("Native Claude inventory incomplete")
-                {
-                    assert!(
-                        frame.contains("Native Claude background jobs: read unavailable"),
-                        "partial native read must identify its source and reason: {frame}"
-                    );
-                    assert!(frame.contains(SERVICE) && frame.contains("claude-local"));
-                    assert!(frame.contains("Known native job"));
-                    sender.send(ctrl_key('c')).unwrap();
-                    phase = 2;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "machine chooser published",
+            Duration::from_secs(5),
+            |frame| frame.contains("Choose machine"),
+        )
+        .await;
+        sender.send(key(KeyCode::Enter)).unwrap();
+        sender.send(key(KeyCode::Down)).unwrap();
+        sender.send(key(KeyCode::Enter)).unwrap();
+        phase += 1;
+        native_warning_waits::native_inventory_settled(
+            &mut frames,
+            &mut page_settlements,
+            &mut last,
+        )
+        .await;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "source-specific native warning published",
+            Duration::from_secs(5),
+            |frame| match warning_case {
+                NativeWarningCase::ConflictingPeers => {
+                    frame.contains("multiple live peers claim this session")
                 }
-                last = frame;
+                NativeWarningCase::InvalidJobs => {
+                    frame.contains("native Claude background jobs inventory: invalid output")
+                }
+                NativeWarningCase::UnavailableJobs => {
+                    frame.contains("Observed source")
+                        && frame.contains("Native Claude inventory incomplete")
+                }
+            },
+        )
+        .await;
+        let frame = &last;
+        match warning_case {
+            NativeWarningCase::ConflictingPeers => {
+                assert!(
+                    frame.contains(SERVICE)
+                        && frame.contains(SESSION)
+                        && frame.contains("claude-local"),
+                    "source and session must accompany the reason: {frame}"
+                );
+                assert!(
+                    frame.contains("Known native job"),
+                    "independent job facts remain visible: {frame}"
+                );
             }
-        };
-        assert!(
-            tokio::time::timeout(Duration::from_secs(5), journey)
-                .await
-                .is_ok(),
-            "missing native warning, case={warning_case:?}, phase={phase}: {last}"
-        );
+            NativeWarningCase::InvalidJobs => {
+                assert!(
+                    frame.contains("Observed source: Unavailable"),
+                    "failure must name the configured source: {frame}"
+                );
+                assert!(!frame.contains("session inventory does not match its source"));
+            }
+            NativeWarningCase::UnavailableJobs => {
+                assert!(
+                    frame.contains("Native Claude background jobs: read unavailable"),
+                    "partial native read must identify its source and reason: {frame}"
+                );
+                assert!(frame.contains(SERVICE) && frame.contains("claude-local"));
+                assert!(frame.contains("Known native job"));
+            }
+        }
+        sender.send(ctrl_key('c')).unwrap();
+        phase += 1;
+        native_warning_waits::render_loop_ended(&mut frames, &mut last, Duration::from_secs(5))
+            .await;
         assert_eq!(phase, 2);
         live_claim.kill().await.unwrap();
         source.finish().await;
@@ -431,8 +453,10 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
         },
     );
     let actual = source.loader();
+    let (page_sender, mut page_settlements) = tokio::sync::mpsc::unbounded_channel();
     let loader: SessionsPickerRecordLoader = Arc::new(move |request| {
         let actual = actual.clone();
+        let page_sender = page_sender.clone();
         Box::pin(async move {
             if request.source_context == PickerSourceContext::DefaultHosted {
                 SourceInventoryResult::Ready {
@@ -442,7 +466,11 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
                     snapshot: observed_records(Vec::new()),
                 }
             } else {
-                actual(request).await
+                let result = actual(request).await;
+                let _ = page_sender.send(native_warning_waits::SourcePageSettlement::from_result(
+                    &result,
+                ));
+                result
             }
         })
     });
@@ -466,67 +494,97 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
         let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),session_clipboard_writer:Some(copier),width:180usize,height:60usize,selected_outcome_out:&mut outcome));
         let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
-        let journey = async {
-            while let Some(canvas) = frames.next().await {
-                let frame = canvas.to_string();
-                if phase == 0 && frame.contains("Choose machine") {
-                    sender.send(key(KeyCode::Enter)).unwrap();
-                    sender.send(key(KeyCode::Down)).unwrap();
-                    sender.send(key(KeyCode::Enter)).unwrap();
-                    phase = 1;
-                } else if phase == 1
-                    && frame.contains("Observed source: 3 sessions")
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "machine chooser published",
+            Duration::from_secs(4),
+            |frame| frame.contains("Choose machine"),
+        )
+        .await;
+        sender.send(key(KeyCode::Enter)).unwrap();
+        sender.send(key(KeyCode::Down)).unwrap();
+        sender.send(key(KeyCode::Enter)).unwrap();
+        phase += 1;
+        native_warning_waits::native_inventory_settled(
+            &mut frames,
+            &mut page_settlements,
+            &mut last,
+        )
+        .await;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "complete native catalogue published",
+            Duration::from_secs(4),
+            |frame| {
+                frame.contains("Observed source: 3 sessions")
                     && frame.contains("Before prompt native")
-                {
-                    assert!(frame.contains("Source provider"));
-                    let (row, line) = frame
-                        .lines()
-                        .enumerate()
-                        .find(|(_, line)| line.contains("Before prompt native"))
-                        .unwrap();
-                    let column = unicode_width::UnicodeWidthStr::width(
-                        line.get(..line.find("Before prompt native").unwrap())
-                            .unwrap(),
-                    );
-                    sender
-                        .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                            MouseEventKind::Moved,
-                            u16::try_from(column)
-                                .expect("captured fixture coordinates fit terminal cells"),
-                            u16::try_from(row)
-                                .expect("captured fixture coordinates fit terminal cells"),
-                        )))
-                        .unwrap();
-                    phase = 2;
-                } else if phase == 2 && frame.contains("❯ Before prompt native") {
-                    sender.send(key(KeyCode::F(4))).unwrap();
-                    phase = 3;
-                } else if phase == 3 && frame.contains("Session details") {
-                    assert!(frame.contains(SESSION), "native UUID retained: {frame}");
-                    assert!(
-                        frame.contains("Job handle: distinct-job-handle"),
-                        "handle must remain a separately labeled fact: {frame}"
-                    );
-                    assert!(frame.contains("Machine: Observed source"), "{frame}");
-                    assert!(
-                        frame.contains("Job state: Blocked"),
-                        "job lifecycle remains separately visible: {frame}"
-                    );
-                    sender.send(key(KeyCode::Enter)).unwrap();
-                    phase = 4;
-                } else if phase == 4 && frame.contains("Copy requested") {
-                    sender.send(ctrl_key('d')).unwrap();
-                    phase = 5;
-                }
-                last = frame;
-            }
-        };
-        assert!(
-            tokio::time::timeout(Duration::from_secs(4), journey)
-                .await
-                .is_ok(),
-            "native publication phase={phase}: {last}"
+            },
+        )
+        .await;
+        let frame = &last;
+        assert!(frame.contains("Source provider"));
+        let (row, line) = frame
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains("Before prompt native"))
+            .unwrap();
+        let column = unicode_width::UnicodeWidthStr::width(
+            line.get(..line.find("Before prompt native").unwrap())
+                .unwrap(),
         );
+        sender
+            .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                MouseEventKind::Moved,
+                u16::try_from(column).expect("captured fixture coordinates fit terminal cells"),
+                u16::try_from(row).expect("captured fixture coordinates fit terminal cells"),
+            )))
+            .unwrap();
+        phase += 1;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "native row hover selected",
+            Duration::from_secs(4),
+            |frame| frame.contains("❯ Before prompt native"),
+        )
+        .await;
+        sender.send(key(KeyCode::F(4))).unwrap();
+        phase += 1;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "captured native Details published",
+            Duration::from_secs(4),
+            |frame| frame.contains("Session details"),
+        )
+        .await;
+        let frame = &last;
+        assert!(frame.contains(SESSION), "native UUID retained: {frame}");
+        assert!(
+            frame.contains("Job handle: distinct-job-handle"),
+            "handle must remain a separately labeled fact: {frame}"
+        );
+        assert!(frame.contains("Machine: Observed source"), "{frame}");
+        assert!(
+            frame.contains("Job state: Blocked"),
+            "job lifecycle remains separately visible: {frame}"
+        );
+        sender.send(key(KeyCode::Enter)).unwrap();
+        phase += 1;
+        native_warning_waits::frame_until(
+            &mut frames,
+            &mut last,
+            "native UUID copy acknowledgement published",
+            Duration::from_secs(4),
+            |frame| frame.contains("Copy requested"),
+        )
+        .await;
+        sender.send(ctrl_key('d')).unwrap();
+        phase += 1;
+        native_warning_waits::render_loop_ended(&mut frames, &mut last, Duration::from_secs(4))
+            .await;
     }
     assert_eq!(phase, 5);
     assert_eq!(copied.lock().unwrap().as_slice(), [SESSION]);

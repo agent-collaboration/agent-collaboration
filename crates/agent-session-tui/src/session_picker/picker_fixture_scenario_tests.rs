@@ -19,7 +19,10 @@ use futures_util::StreamExt;
 use iocraft::{Canvas, prelude::*};
 use std::{
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -60,6 +63,7 @@ async fn exercise(
     let loader =
         picker_fixture_scenarios::source_updates::record_loader(scenario, Some(directory)).unwrap();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let mut submitted_inputs = initial.len();
     for event in initial {
         sender.send(event).unwrap();
     }
@@ -68,6 +72,8 @@ async fn exercise(
     });
     let observed = Arc::new(Mutex::new(None));
     let observer = observed.clone();
+    let processed_inputs = Arc::new(AtomicUsize::new(0));
+    let input_observer = processed_inputs.clone();
     let mut outcome = None;
     {
         let mut component = element!(SessionsPickerComponent(
@@ -77,13 +83,19 @@ async fn exercise(
             client_inventory_loader:ports.as_ref().map(|ports|ports.inventory_loader.clone()),
             client_executor:ports.as_ref().map(|ports|ports.executor.clone()),
             width:76usize,height:30usize,selected_outcome_out:&mut outcome,
-            surface_observer:move |value|{*observer.lock().unwrap()=Some(value)}
+            surface_observer:move |value|{*observer.lock().unwrap()=Some(value)},
+            input_observer:move |_| { input_observer.fetch_add(1,Ordering::Release); }
         ));
         let mut frames =
             Box::pin(component.mock_terminal_render_loop(MockTerminalConfig::with_events(events)));
         let mut releases = tokio::task::JoinSet::new();
         let journey = async {
             while let Some(canvas) = frames.next().await {
+                // Layout and source publication can paint before queued input.
+                // Only the real routing callback establishes the next input pose.
+                if processed_inputs.load(Ordering::Acquire) < submitted_inputs {
+                    continue;
+                }
                 let (stack, model) = observed.lock().unwrap().unwrap();
                 let step = next(&canvas, stack, model);
                 if step.release_source {
@@ -98,6 +110,7 @@ async fn exercise(
                     });
                 }
                 for event in step.events {
+                    submitted_inputs += 1;
                     sender.send(event).unwrap();
                 }
             }
