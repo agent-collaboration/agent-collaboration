@@ -15,7 +15,8 @@ impl ApprovalBroker for ServiceInteractionBroker {
         Box<dyn std::future::Future<Output = Result<(), ApprovalBrokerError>> + Send + '_>,
     > {
         Box::pin(async move {
-            if route.created_by.endpoint.service_id != self.service_id
+            if route.source_installation.is_some()
+                || route.created_by.endpoint.service_id != self.service_id
                 || route.approver.endpoint.service_id != self.service_id
             {
                 return Err(ApprovalBrokerError::RouteUnavailable);

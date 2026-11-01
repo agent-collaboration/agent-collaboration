@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 
 #[path = "remote_create_native_tests.rs"]
 mod native_models;
+#[path = "remote_create_route_tests.rs"]
+mod routes;
 
 const SOURCE: &str = "019f0000-0000-7000-8000-0000000000a1";
 const LOCAL: &str = "019f0000-0000-7000-8000-0000000000b2";

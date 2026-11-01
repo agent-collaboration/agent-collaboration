@@ -140,6 +140,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                     if matches!(case, QueueProbeCase::GenericRegistersDuringNativeRead) {
                         mutation_broker
                             .register_route(ApprovalRoute {
+                                source_installation: None,
                                 thread_id: THREAD.into(),
                                 created_by: target(),
                                 approver: target(),

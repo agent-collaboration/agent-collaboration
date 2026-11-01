@@ -11,15 +11,15 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
-struct NativeModelsFixture {
+pub(super) struct NativeModelsFixture {
     _root: tempfile::TempDir,
-    backend: NativeControlBackend,
+    pub(super) backend: NativeControlBackend,
     stop: CancellationToken,
     server: tokio::task::JoinHandle<Vec<String>>,
 }
 
 impl NativeModelsFixture {
-    fn start() -> Self {
+    pub(super) fn start() -> Self {
         let root = tempfile::tempdir_in("/tmp").expect("short private fixture directory");
         let path = root.path().join("models.sock");
         let listener = tokio::net::UnixListener::bind(&path).expect("native model socket");
@@ -108,7 +108,7 @@ impl NativeModelsFixture {
         }
     }
 
-    async fn finish(self) -> Vec<String> {
+    pub(super) async fn finish(self) -> Vec<String> {
         self.stop.cancel();
         tokio::time::timeout(Duration::from_secs(10), self.server)
             .await

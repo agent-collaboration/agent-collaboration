@@ -398,6 +398,7 @@ impl AcpSessionBinding {
             .ok_or(SessionSetupError::OutcomeUnknown)?
             .to_owned();
         let access_route = crate::ApprovalRoute {
+            source_installation: None,
             thread_id: session_id.clone(),
             created_by: choice.created_by,
             approver: choice.approver,
