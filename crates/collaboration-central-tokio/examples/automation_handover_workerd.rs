@@ -6,9 +6,9 @@ use collaboration_central_conformance::{
     AutomationClockControl, AutomationHandoverRestartCase, ConformanceClient, ConformanceResult,
     JwksFixtureServer, prepare_automation_handover_restart, resume_automation_handover_restart,
     run_automation_handover_carried_conformance, run_automation_handover_conformance,
-    run_automation_handover_external_conformance, run_automation_handover_lifecycle_conformance,
-    run_automation_handover_repair_conformance, run_automation_handover_validation_conformance,
-    run_automation_handover_wake_conformance,
+    run_automation_handover_external_conformance, run_automation_handover_external_due_conformance,
+    run_automation_handover_lifecycle_conformance, run_automation_handover_repair_conformance,
+    run_automation_handover_validation_conformance, run_automation_handover_wake_conformance,
 };
 #[cfg(debug_assertions)]
 use collaboration_central_core::RegistryTime;
@@ -28,6 +28,7 @@ enum HandoverCase {
     Receipt,
     Carried,
     External,
+    ExternalLaterDue,
     Wake,
     Lifecycle,
     Validation,
@@ -43,6 +44,7 @@ impl HandoverCase {
             Self::Receipt => "receipt",
             Self::Carried => "carried",
             Self::External => "external",
+            Self::ExternalLaterDue => "external-later-due",
             Self::Wake => "wake",
             Self::Lifecycle => "lifecycle",
             Self::Validation => "validation",
@@ -73,6 +75,7 @@ async fn main() -> ConformanceResult<()> {
         HandoverCase::Receipt,
         HandoverCase::Carried,
         HandoverCase::External,
+        HandoverCase::ExternalLaterDue,
         HandoverCase::Wake,
         HandoverCase::Lifecycle,
         HandoverCase::Validation,
@@ -141,6 +144,9 @@ async fn run_case(
             HandoverCase::Receipt => run_automation_handover_conformance(&client).await?,
             HandoverCase::Carried => run_automation_handover_carried_conformance(&client).await?,
             HandoverCase::External => run_automation_handover_external_conformance(&client).await?,
+            HandoverCase::ExternalLaterDue => {
+                run_automation_handover_external_due_conformance(&client).await?
+            }
             HandoverCase::Wake => run_automation_handover_wake_conformance(&client).await?,
             HandoverCase::Lifecycle => {
                 run_automation_handover_lifecycle_conformance(&client).await?

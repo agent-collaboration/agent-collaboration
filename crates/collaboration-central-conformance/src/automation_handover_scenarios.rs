@@ -1,6 +1,7 @@
 //! Frozen handover bytes enter through ordinary authenticated machine sessions.
 use crate::{ConformanceClient, ConformanceResult, automation_catalog_scenarios::open_machine};
 mod carried_cases;
+mod external_due_case;
 mod fixtures;
 mod lifecycle_cases;
 mod occupancy_cases;
@@ -10,6 +11,7 @@ mod restart_cases;
 mod validation_cases;
 mod wake_cases;
 pub use carried_cases::run_automation_handover_carried_conformance;
+pub use external_due_case::run_automation_handover_external_due_conformance;
 pub use lifecycle_cases::run_automation_handover_lifecycle_conformance;
 pub use occupancy_cases::run_automation_handover_external_conformance;
 pub use repair_cases::run_automation_handover_repair_conformance;

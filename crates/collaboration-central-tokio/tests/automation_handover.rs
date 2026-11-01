@@ -113,6 +113,24 @@ async fn imported_external_occupants_release_retained_waiters_at_their_due() -> 
     proof
 }
 
+#[tokio::test]
+async fn imported_external_occupants_block_successors_across_later_dues() -> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = start(root.path(), &jwks.url).await?;
+    let proof =
+        collaboration_central_conformance::run_automation_handover_external_due_conformance(
+            &ConformanceClient::new(server.base_url())?,
+        )
+        .await;
+    let stopped = server.shutdown().await;
+    let keys = jwks.shutdown().await;
+    proof?;
+    stopped?;
+    keys?;
+    Ok(())
+}
+
 async fn restart_handover_case(waiting_due_now: bool) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
