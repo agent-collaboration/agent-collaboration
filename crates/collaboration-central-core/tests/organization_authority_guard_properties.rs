@@ -69,6 +69,7 @@ proptest! {
     #![proptest_config(proptest::test_runner::Config {
         cases: 128,
         rng_seed: proptest::test_runner::RngSeed::Fixed(0xf2a),
+        failure_persistence: None,
         ..proptest::test_runner::Config::default()
     })]
 
