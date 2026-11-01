@@ -227,7 +227,15 @@ async fn f4a_registrar_runtime_native_create_uses_the_same_owner_before_thread_s
         missing.clone(),
     )
     .await;
-    assert!(refused.to_string().contains("projectRequired"), "{refused}");
+    // The bridge's existing public error projection is generic; no launch,
+    // authority check or registrar row may occur for the missing project.
+    assert_eq!(refused["isError"], true, "{refused}");
+    assert_eq!(
+        refused["structuredContent"]["kind"], "rejected",
+        "{refused}"
+    );
+    assert!(fixture.authority.checks.lock().unwrap().is_empty());
+    assert!(fixture.repository.records.lock().unwrap().is_empty());
     assert!(native.creates.lock().unwrap().is_empty());
     missing["operationId"] = json!(SECOND);
     missing["projectId"] = json!(PROJECT);
@@ -244,7 +252,7 @@ async fn f4a_registrar_runtime_native_create_uses_the_same_owner_before_thread_s
     let creates = native.creates.lock().unwrap().clone();
     assert_eq!(creates.len(), 1);
     assert_eq!(
-        creates[0]["params"]["config"]["mcp_servers.agent-router.url"],
+        creates[0]["params"]["config"]["mcp_servers"]["agent-router"]["url"],
         record.preparation().binding_address.expose_address()
     );
     runtime.shutdown().await.unwrap();
