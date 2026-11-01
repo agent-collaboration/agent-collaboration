@@ -144,6 +144,7 @@ impl<'de> Deserialize<'de> for FiringEntry {
 pub struct SessionCreateEntry {
     pub work_item_id: WorkItemId,
     pub operation_id: OperationId,
+    pub source_installation: message_board::ServiceId,
     pub request: RemoteSessionCreateDefinition,
 }
 
