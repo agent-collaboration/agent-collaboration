@@ -6,9 +6,11 @@ mod machine_renewal;
 mod remote_start;
 mod session_activity;
 mod session_registration;
+mod session_start_check;
 
 pub use identity_values::*;
 pub use machine_renewal::*;
 pub use remote_start::*;
 pub use session_activity::*;
 pub use session_registration::*;
+pub use session_start_check::*;
