@@ -249,7 +249,7 @@ Field columns stay aligned with a reserved selector gutter, and dialogs keep the
 - The main list shows only the weekly window, on two lines: the bar and the percentage on the first line, then "week · <reset in>" on the second. A stale weekly reading says "week · stale" in the warning colour on that second line.
 - The 5-hour window and its staleness no longer appear in the main list. Account Details shows the 5-hour window when the provider reports one.
 - An account that reports no weekly window shows its 5-hour window in the same two-line form, so its row is never blank.
-The static geometry and JSON output follow from this; no other field moves. Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
+The list's static geometry changes to match; JSON output is unchanged and still carries every window, and no other field moves. Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
 
 **R17 — log in again from account Details** (U16).
 
