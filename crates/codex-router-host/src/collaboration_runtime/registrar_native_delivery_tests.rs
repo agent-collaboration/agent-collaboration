@@ -466,10 +466,17 @@ async fn f4a_native_delivery_ordinary_message_resumes_with_the_same_active_bindi
         panic!("native start should be prepared");
     };
     runtime.native.cold.store(true, Ordering::SeqCst);
+    let push_id: collaboration_protocol::PushId = FIRST.to_owned().try_into().unwrap();
+    let link = collaboration_protocol::RouterLink::new(
+        collaboration_protocol::MachineId::from(runtime.endpoint.service_id.clone()),
+        push_id.clone(),
+    );
     let request = collaboration_contracts::layer_zero::DeliveryRequest {
         payload: collaboration_contracts::layer_zero::PreparedPush {
-            push_id: FIRST.to_owned().try_into().unwrap(),
-            line: "Fixture message".to_owned().try_into().unwrap(),
+            push_id,
+            line: format!("✉️ Fixture · \"Fixture message\" · {link}")
+                .try_into()
+                .unwrap(),
             load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target: prepared.target,
@@ -488,7 +495,7 @@ async fn f4a_native_delivery_ordinary_message_resumes_with_the_same_active_bindi
         .unwrap();
     assert_eq!(
         delivered.receipt().outcome,
-        collaboration_protocol::DeliveryOutcome::Started,
+        collaboration_protocol::DeliveryOutcome::StartedOrSteered,
         "{:?}",
         delivered.receipt()
     );
@@ -510,7 +517,7 @@ async fn f4a_native_delivery_ordinary_message_resumes_with_the_same_active_bindi
         .unwrap();
     assert_ne!(
         refused.receipt().outcome,
-        collaboration_protocol::DeliveryOutcome::Started
+        collaboration_protocol::DeliveryOutcome::StartedOrSteered
     );
     assert_eq!(runtime.native.resumes.lock().unwrap().len(), 1);
     assert_eq!(
