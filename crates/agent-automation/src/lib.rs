@@ -3,8 +3,9 @@ mod run_lifecycle;
 pub use run_lifecycle::RunPhase;
 mod automation_identity;
 pub use automation_identity::{
-    AttemptId, AutomationIdentityError, ChangeId, DeliveryId, EventId, InstructionId, OccurrenceId,
-    OperationId, RevisionId, RunId, ScheduleId, SubscriptionId, ThreadBindingId, WakeupId,
+    AttemptId, AutomationId, AutomationIdentityError, BatchId, ChangeId, ContentId, DeliveryId,
+    EventId, FiringId, ImportId, InstructionId, OccurrenceId, OperationId, ReportId, RevisionId,
+    RunId, ScheduleId, SubscriptionId, ThreadBindingId, WakeupId, WorkItemId,
 };
 mod instruction_document;
 pub use instruction_document::{InstructionDocument, InstructionText, InstructionTextError};

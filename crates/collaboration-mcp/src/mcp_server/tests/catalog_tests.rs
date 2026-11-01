@@ -254,7 +254,7 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
         "operationId":"019f0000-0000-7000-8000-000000000202",
         "definition":{
             "instructionId":"019f0000-0000-7000-8000-000000000203",
-            "timing":{"kind":"after","seconds":60},"enabled":false,
+            "timing":{"kind":"at","at":"2026-10-31T10:05:00Z"},"enabled":false,
             "destination":{"kind":"freshEachRun","endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"cwd":"/tmp/project"},
             "effort":"medium"
         }
@@ -548,7 +548,7 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
             "wake_send",
             &[
                 "required operation identity",
-                "local scheduling",
+                "central scheduling",
                 "native input acceptance",
                 "agent reply",
             ][..],

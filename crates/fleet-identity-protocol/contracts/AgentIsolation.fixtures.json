@@ -1,0 +1,6 @@
+[
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"host"},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"processSandbox"},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"container"},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"vm"}
+]

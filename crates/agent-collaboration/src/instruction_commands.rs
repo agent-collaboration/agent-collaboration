@@ -15,7 +15,8 @@ use std::{
 #[derive(Parser)]
 #[command(
     name = "agent-collaboration instruction",
-    bin_name = "agent-collaboration instruction"
+    bin_name = "agent-collaboration instruction",
+    long_about = collaboration_client::protocol::limits::description()
 )]
 struct InstructionArguments {
     #[arg(long, global = true)]
@@ -35,6 +36,7 @@ enum InstructionCommand {
 #[derive(Subcommand)]
 enum InstructionAction {
     /// Create reusable instruction text. Reuse operation-id to replay a lost response safely.
+    #[command(long_about = collaboration_client::protocol::limits::description())]
     Create {
         #[arg(long)]
         operation_id: Option<String>,
@@ -42,6 +44,7 @@ enum InstructionAction {
         content: TextInput,
     },
     /// Edit only the expected current revision; historical instruction text is retained.
+    #[command(long_about = collaboration_client::protocol::limits::description())]
     Update {
         #[arg(long)]
         operation_id: Option<String>,
@@ -260,13 +263,16 @@ fn read_text(input: TextInput) -> Result<InstructionText, String> {
         } else {
             Box::new(std::fs::File::open(path).map_err(|_| "Instruction text file unavailable")?)
         };
-        let mut text = String::new();
+        let mut bytes = Vec::new();
         reader
             .by_ref()
-            .take(1_048_577)
-            .read_to_string(&mut text)
-            .map_err(|_| "Instruction content must be readable UTF-8")?;
-        text
+            .take(collaboration_client::protocol::limits::INSTRUCTION_MAX_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "Instruction content must be readable")?;
+        collaboration_client::protocol::limits::LimitName::InstructionMaxBytes
+            .validate(bytes.len() as u64)
+            .map_err(|error| error.to_string())?;
+        String::from_utf8(bytes).map_err(|_| "Instruction content must be readable UTF-8")?
     };
     InstructionText::try_from(text).map_err(|error| error.to_string())
 }

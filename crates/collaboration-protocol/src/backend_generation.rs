@@ -6,13 +6,10 @@ use serde::{Deserialize, Serialize};
 #[serde(try_from = "u64", into = "u64")]
 pub struct GenerationNumber(u64);
 impl TryFrom<u64> for GenerationNumber {
-    type Error = &'static str;
+    type Error = crate::limits::LimitExceeded;
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        if (1..=9_007_199_254_740_991).contains(&value) {
-            Ok(Self(value))
-        } else {
-            Err("generation must be a positive JSON-safe integer")
-        }
+        crate::limits::LimitName::JsonSafeInteger.validate(value)?;
+        Ok(Self(value))
     }
 }
 impl From<GenerationNumber> for u64 {

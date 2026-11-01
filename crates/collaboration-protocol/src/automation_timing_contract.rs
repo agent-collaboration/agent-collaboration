@@ -38,7 +38,12 @@ impl From<PositiveSeconds> for u32 {
     }
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum TimingRequest {
     At {
         at: ObservationTimestamp,
@@ -48,11 +53,34 @@ pub enum TimingRequest {
     },
     Interval {
         seconds: PositiveSeconds,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        first_due: Option<ObservationTimestamp>,
     },
     Cron {
         expression: String,
         timezone: String,
     },
+}
+
+pub(crate) fn central_timing_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let instant = schemars::json_schema!({"allOf":[generator.subschema_for::<ObservationTimestamp>()],
+        "pattern":"T[0-9]{2}:(00|05|10|15|20|25|30|35|40|45|50|55):00(\\.0+)?Z$"});
+    let period = generator.subschema_for::<crate::GridPeriod>();
+    schemars::json_schema!({"oneOf":[
+            {"type":"object","properties":{"kind":{"const":"at"},"at":instant},
+                "required":["kind","at"],"additionalProperties":false},
+            {"type":"object","properties":{"kind":{"const":"interval"},"seconds":period,"firstDue":instant},
+                "required":["kind","seconds"],"additionalProperties":false},
+            {"type":"object","properties":{"kind":{"const":"cron"},"expression":{"type":"string"},"timezone":{"type":"string"}},
+                "required":["kind","expression","timezone"],"additionalProperties":false}],
+            "description":crate::limits::description(),
+            "x-automationLimits":generator.subschema_for::<crate::limits::AutomationLimits>()})
+}
+
+pub(crate) fn wake_timing_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"allOf":[central_timing_schema(generator)],
+        "if":{"properties":{"kind":{"const":"interval"}}},
+        "then":{"properties":{"seconds":{"minimum":crate::limits::WAKE_MIN_PERIOD}}}})
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]

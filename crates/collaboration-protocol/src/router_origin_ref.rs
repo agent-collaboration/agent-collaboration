@@ -41,7 +41,7 @@ pub enum RouterOriginRef {
 pub struct InteractionId(String);
 
 impl TryFrom<String> for InteractionId {
-    type Error = &'static str;
+    type Error = crate::IdentityError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         NonEmptyText::try_from(value.clone())?;
@@ -68,7 +68,7 @@ impl JsonSchema for InteractionId {
     }
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        json_schema!({"type":"string","minLength":1,"maxLength":4096})
+        json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::TEXT_MAX_BYTES})
     }
 }
 

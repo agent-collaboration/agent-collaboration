@@ -1,0 +1,12 @@
+[
+null,
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"container","unexpectedField":true},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"host","unexpectedField":true},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"processSandbox","unexpectedField":true},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"unrecognizedVariant"},
+{"instanceId":"019a3dce-2000-7000-8000-000000000001","kind":"vm","unexpectedField":true},
+{"instance_id":"019a3dce-2000-7000-8000-000000000001","kind":"container"},
+{"instance_id":"019a3dce-2000-7000-8000-000000000001","kind":"host"},
+{"instance_id":"019a3dce-2000-7000-8000-000000000001","kind":"processSandbox"},
+{"instance_id":"019a3dce-2000-7000-8000-000000000001","kind":"vm"}
+]

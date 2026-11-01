@@ -15,7 +15,7 @@ fn wake_creation_preserves_message_modes_and_rejects_invalid_timing()
     let request = json!({
         "operationId":"019f0000-0000-7000-8000-000000000002",
         "message":{"target":target,"content":{"kind":"humanUser","text":"Check progress"},"delivery":"steer","generationGuard":null},
-        "timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}
+        "timing":{"kind":"at","at":"2026-10-31T10:05:00Z"},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}
     });
     if !validator.is_valid(&request) {
         return Err(format!(
@@ -42,7 +42,7 @@ fn wake_creation_preserves_message_modes_and_rejects_invalid_timing()
     }
     for seconds in [0, 31536001] {
         let mut invalid = request.clone();
-        invalid["timing"]["seconds"] = json!(seconds);
+        invalid["timing"] = json!({"kind":"interval","seconds":seconds});
         if validator.is_valid(&invalid) {
             return Err("wake timing bounds not enforced".into());
         }

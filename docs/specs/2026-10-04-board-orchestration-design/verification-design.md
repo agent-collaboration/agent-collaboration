@@ -1,5 +1,7 @@
 # Verification design: the board and central on agent-fleet-sync
 
+**Cadence supersession (owner-settled, 2026-10-31; planned-but-unbuilt here).** Central-automations [R6n, R6g and R3](../2026-10-31-central-automations/specification.md) govern notification timing and wake periods. Earlier immediate-notification and 5-minute-repeat statements below are historical and superseded; the [publication inventory](publication-inventory.md) records the current contract and source/proof limits.
+
 **What this is:** the plan for showing that the board's requirements hold now that the board and central consume agent-fleet-sync (U78) with a new board schema (U79).
 
 **It's a plan.** Nothing in it has been observed. Each row records what will be done, on which target, what will be seen, which wrong build fails it, and what stays open.
@@ -77,25 +79,25 @@ Each is described once. The rows below name the parts they decide.
   - a dropped connection, and a central restart, mid-replication;
   - a schema change that replicates;
   - a too-new store;
-  - a project created while central is unreachable, written, then registered; and another one rejected;
+  - a project created through central and written only after its registration completes; and one central refuses, leaving only its empty database moved aside;
   - `cursorSuperseded`;
   - the X3 cases for the feed-to-capture mapping: splits, gaps, lost acknowledgements and snapshots.
-- **Reads:** A's views (provisional, replicated, voided); A's `capture_feed_marks`; the copy's records and feed positions through the operations view and B's read copy; the directory summary.
+- **Reads:** A's views (provisional, replicated); A's `capture_feed_marks`; the copy's records and feed positions through the operations view and B's read copy; the directory summary.
 - **Fails for:**
   - a hole or a duplicate after the drop;
   - a reader that sees part of a large transaction;
   - an acknowledgement mapped to the wrong feed position;
   - a summary taken from a stale mark rather than from the captured rows;
-  - a rejected project that's deleted rather than moved aside.
+  - a refused project's empty database deleted rather than moved aside;
+  - a write admitted before central accepted and registered the project.
 
 **OB3: holder changes** (`holder-change`; T-local-tokio, then T-local-workerd).
 - **Does:**
   - a clean move A → B;
   - a move refused with a migration pending, through the real holder. A `failed` state is carried unchanged; that's proven by the library's registry test (consumer-fit VD SO52), because no writer produces it. That missing producer stays a named limit;
   - a move refused `holderUnreachable`, once with A's session closed and once with A's last renewal aged past 1800 s. The age rule runs through the registry's `Clock` capability at 1799 s, 1800 s and 1801 s, at the production value, and one short real-timer case checks the scheduling;
-  - a takeover with a preview and a confirm, after A wrote a tail past the cut;
-  - RC-4 on both sides of the tail report. Before A's report is admitted, a retry on B of a tail request from the old epoch answers `unresolved{takeover}` and executes nothing. After the report, a retry of a request the tail holds answers `voided`, naming the takeover. A retry of an old-epoch request the tail doesn't hold is admitted fresh. No retry repeats an effect: no new record, feed position, notify intent, read-mark change or unread notice;
-  - the report kept for later holders: after B has taken A's report, central restarts and a second takeover moves the project to C. C retrieves the same report and records the fact. A same-digest report replays the stored one, and a different digest answers `tailConflict`;
+  - a takeover with a preview and a confirm, after A wrote records central never stored (A's session held, so they can't send);
+  - RC-4 after the takeover: a retry on B of a request A accepted but central never stored is admitted fresh against B's state, and a retry of a request central has replays its decision. No retry repeats an effect: no new record, feed position, notify intent, read-mark change or unread notice;
   - `previewStale`;
   - a takeover that supersedes a move still draining;
   - a cancel;
@@ -114,7 +116,7 @@ Each is described once. The rows below name the parts they decide.
   - the transfer record; the copy's fence;
   - both Routers' writer state and views;
   - the facts in the current holder's store;
-  - A's superseded file, opened read-only, and its tail report.
+  - A's old file: still on disk with unchanged bytes, never opened, served or reported by the board.
 - **Fails for:**
   - a grant before the copy acknowledges the final position;
   - a move that shows a reservation step;
@@ -123,9 +125,9 @@ Each is described once. The rows below name the parts they decide.
   - `alreadyHeld` naming the current holder rather than the recorded one;
   - one global schema maximum;
   - a superseded file reopened for writing;
-  - a retry that stays `unresolved` after the report, or is `voided` before it;
+  - the board serving views from, or reporting, A's old file;
+  - a retry that's refused or kept waiting instead of admitted fresh;
   - archive finalization that ignores an active reservation;
-  - a tail report deleted after the first holder takes it.
 
 **OB4: across machines** (`cross-machine`, T-two-machines).
 - **Does:** runs spec 3's V7 and V10:
@@ -242,7 +244,7 @@ Each is described once. The rows below name the parts they decide.
 | U4, U5, U7, U8, U12, U13, U18, U40, U43, U44, U64, U65 | tasks, moves, roles, workstreams, ADRs and subjects behave as specified | Each rule's passing and refused cases run through the real API on the new schema (OB1) | — |
 | U6, U19, U52 | — | superseded (U40; U57); nothing to prove (§5f) | — |
 | U9, U10 | IDs and the feed are fabric-ready | Every stored key is canonical UUIDv7, and retries return the first decision, on one machine and then across two (OB1, OB2) | — |
-| U11 | decisions are server-first; facts ship as appends | A takeover keeps the old holder's tail readable and records it as facts. A retry from the old epoch waits as `unresolved` until the tail is reported, then is voided, or admitted fresh if the tail doesn't hold it (OB3) | — |
+| U11 | decisions are server-first; facts ship as appends | A takeover starts from central's copy, and central's transfer record is its one record. A's records central never stored aren't carried over, and a retry of one runs fresh (OB3, U80) | — |
 | U14 | the board hands notices to interactions | A notification reaches its recipient only through the interaction path. A local recipient gets it at once; a remote one gets it only after the cause replicates (OB1, OB4) | — |
 | U16, U23 | a project lives on one machine | A write on a machine that doesn't hold the project is refused, and a post is forwarded (OB2, OB4) | — |
 | U20 | fleet records are written only by central | Fleet changes from a machine wait as pending while central is down, then land once (OB4) | — |
@@ -253,7 +255,7 @@ Each is described once. The rows below name the parts they decide.
 | U26–U31 | one collaboration API | The same call over TCP and over the socket gives the same answer (OB1) | — |
 | U33, U78 | replication is generic and per project | The board's records replicate through agent-fleet-sync with the board's schema plugged in, and nothing in the library knows the board (OB2, OB8) | — |
 | U34, U35, U36, U49, U77 | one session per machine that survives its connections | Connections are dropped, central restarts and a deploy happens, and every project resumes from its acknowledged position (OB2, OB7) | a non-WebSocket transport (none exists yet) |
-| U37, U38 | leases fence writers; 4 hours, renewed every 15 minutes | Expiry pauses writes, wakes and schedules, and renewal resumes them on the same epoch (OB2, OB3) | — |
+| U37, U38 | leases fence writers; 4 hours, renewed every 15 minutes | Expiry pauses writes while reads continue and wakes and schedules keep running, and renewal resumes writes on the same epoch (OB2, OB3) | — |
 | U39, U45 | holder changes are explicit admin requests | Moves, takeovers and their refusals run through the admin routes, including the 30-minute unreachable bound (OB3, OB7) | — |
 | U41, U48 | decisions by level; ADR text in the workspace record | ADRs and the decision register behave as specified, and central shows them read-only (OB1, OB2) | — |
 | U42, U47 | the work trail | Rows are insert-only except redaction, and replicate (OB1, OB2) | — |
@@ -289,7 +291,7 @@ The rewritten product tests come from the plan, not from this document.
 | U3, U17 | ST-1, API-6 (V1, V4, V8) | PD1 §11 ST-1, API-6 | OB1, OB5 | T-local-tokio · `board-records` · lasting; T-legacy-copies · `board-upgrade` · temporary | every renamed tool and CLI name answers, and the old project, board and topic IDs become workspace, board and project IDs · an old name still accepted, or an ID minted anew | none | — |
 | U4, U5, U7, U8, U12, U13, U18, U40, U43, U44, U64, U65 | ST-1…ST-6, MV-1, MV-2, MV-4, MV-7, MV-8, RL-1…RL-8, WS-1…WS-3, TK-1…TK-7, TH-1…TH-4, VW-2, VW-5 (V1, V5) | PD1 §11's rows for each | OB1 | T-local-tokio · `board-records` · lasting; pure rules (`move_rules`, `work_rules`, `request_canonical`) by focused tests, with no app launch | each obligation's passing case gives spec 1's answer and stored rows. Each refused case gives the named failure with the subject's business state unchanged, plus exactly the durable outcome its obligation specifies: an admitted `move_request` refusal records the rejected move, its feed entry, its ledger decision and the lead's notify intent once (MV-3, RC-4, RC-12), and a retry adds nothing. `move/check` and refusals before scope writes nothing · a cycle accepted in `blockedBy`; a second lead granted; a status change without a move; a refused move that drops its record or notifies twice | M2's pure-rule tests in `crates/message-board/tests/` (`1e0b5529`), for the rules only, with the `RecordTime` fixture adapted | — |
 | U9, U10 | RC-1…RC-8, RC-10, RC-11, RL-2, RL-3, WA-7 (V2, V3) | PD1 §11 RC rows; PD2 §9 WA-7 | OB1, OB2 | T-local-tokio · `board-records`, `board-replication` · lasting | every stored key is canonical UUIDv7 text, and retries of an accepted post, an accepted move and a refused move each return the first decision · an integer or v4 key; a retry that writes again | none | — |
-| U11 | RC-4, RC-10, RC-11, WA-5 (V2, V3) | PD1 §11 RC-4; PD2 §9 WA-5 | OB3 | T-local-tokio · `holder-change` · lasting | before the tail report, an old-epoch retry answers `unresolved{takeover}` and executes nothing; after it, a held ID answers `voided` naming the takeover and an absent one is admitted fresh; no retry repeats an effect · a build that stays `unresolved` forever, voids before the report, refuses an absent ID, or replays `accepted` for a voided one | none | — |
+| U11 | RC-4, RC-10, RC-11, WA-5 (V2, V3) | PD1 §11 RC-4; PD2 §9 WA-5 | OB3 | T-local-tokio · `holder-change` · lasting | after a forced takeover, a retry of a request central never stored is admitted fresh against the new holder's state, and a retry of one central has replays its decision; no retry repeats an effect · a build that refuses or holds an unknown request, replays `accepted` for a request central never stored, or reads the old holder's file | none | — |
 | U14 | MV-3, NI-1…NI-4, RL-3, RC-12, VW-8 (V1, V5) | PD1 §11 NI rows; PD4 §11 | OB1, OB4 | T-local-tokio and T-two-machines · `board-records`, `cross-machine` · lasting | intents and handoffs are written with their cause; the recipient gets the notification only through the interaction path; a local recipient isn't held by the copy's acknowledgement, and a remote one is · a board that pushes directly; local delivery blocked on central | none | — |
 | U26–U31 | API-1…API-8 (V8) | PD1 §11 API rows | OB1 | T-local-tokio · `board-records` · lasting | the same tool call over TCP and over the Unix socket gives the same status and body · a listener that answers differently | none | — |
 | U41, U48 | ST-1, ST-5, WT-3; spec 3 WA-1 (V1) | PD1 §11; one-core §13 WA-1 | OB1, OB2 | T-local-tokio · `board-records` · lasting | an ADR's text never changes after creation, and the workspace record carries it · an edit accepted | none | — |
@@ -306,7 +308,7 @@ The rewritten product tests come from the plan, not from this document.
 | U25 | WA-8 (V3) | PD2 §9 WA-8 | OB2 | T-local-tokio · `board-replication` · lasting | each project has its own file and exactly one copy · two projects in one database | none | — |
 | U22, U32 | WA-9 (V3) | PD2 §9 WA-9 | OB2, OB7, OB8 | T-local-tokio, T-staging · lasting | the holder's file is Turso; the copy is Durable Object storage on staging; no libSQL or `sqld` in any graph (OB8) · a libSQL dependency | the drivers' own suites | — |
 | U20, U40 (WA-10) | WA-10 (V3) | PD2 §9 WA-10 | OB2 | T-local-tokio · `board-replication` · lasting | a project created while central is down is written, then replicates once accepted; a rejected one answers `projectRejected` and its file is moved aside, not deleted · a deleted file; a write lost at registration | none | — |
-| U37, U38 | WA-11, FL-9 (V3, V9) | PD2 §9 WA-11; one-core §13 FL-9 | OB2, OB3 | T-local-tokio · `board-replication`, `holder-change` · lasting | after expiry, writes answer `leaseExpired{expired_at}` and wakes and schedules pause, and renewal resumes them on the same epoch. The production values are consumed, not just configured: a lease issued under the default `BoardLeasePolicy` reads back `expires_at` as grant plus 14,400 s, and renewal is scheduled 900 s apart, checked through the `Clock` capability at those boundaries. One short configured lease exercises the real timer and pause path · a pause that also blocks reads; a default that's configured but unused | none | four hours of elapsed wall time: the controlled clock stands in for it, and the short real lease checks the timer integration |
+| U37, U38 | WA-11, FL-9 (V3, V9) | PD2 §9 WA-11; one-core §13 FL-9 | OB2, OB3 | T-local-tokio · `board-replication`, `holder-change` · lasting | after expiry, writes answer `leaseExpired{expired_at}` while reads continue and wakes and schedules keep running, and renewal resumes writes on the same epoch. The production values are consumed, not just configured: a lease issued under the default `BoardLeasePolicy` reads back `expires_at` as grant plus 14,400 s, and renewal is scheduled 900 s apart, checked through the `Clock` capability at those boundaries. One short configured lease exercises the real timer and pause path · a pause that also blocks reads or stops wakes and schedules; a default that's configured but unused | none | four hours of elapsed wall time: the controlled clock stands in for it, and the short real lease checks the timer integration |
 | U34, U35, U36, U49, U77 | WA-12, FL-11, FL-12 (V3, V3d, V9, V9d) | PD2 §9 WA-12; one-core §13 FL-11, FL-12 | OB2, OB7 | T-local-tokio · `board-replication` · lasting; T-staging · `central-staging` · lasting | after a dropped connection, a central restart and a deploy, the same session resumes, every project continues from its acknowledged position, and nothing is lost or repeated · a new session per connection; a reapplied piece | none | a non-WebSocket transport (U77 is structural until one exists: the session uses only `SessionTransport`, OB8) |
 | U63 (WA-14) | WA-14 (V10) | PD2 §9 WA-14; PD4 §11 | OB4 | T-two-machines · `cross-machine` · lasting | see U63, U66 below | none | as U63 |
 | U78, U79 (spec 2 §4.1) | §4.1's realizations (V3, V3d) | PD2 §9 U78 row | OB2, OB8 | as WA rows | as WA rows, plus OB8: no agent-fleet-sync crate depends on a board crate · a library crate that imports `message-board` | none | — |
@@ -320,7 +322,6 @@ The rewritten product tests come from the plan, not from this document.
 | U21, U25, U37 | FL-3, FL-4 (V9, V9d) | one-core §13 FL-3, FL-4 | OB2, OB3, OB7 | T-local-tokio, T-staging · lasting | a piece from an older epoch is refused `staleEpoch` whole, a new epoch takes effect only between pieces, and a full copy answers `centralCopyFull` · a fence that lands mid-piece | none | a real full Durable Object (injected by the test-only wrapper, not by filling 10 GB) |
 | U3 | FL-5 (V9) | one-core §13 FL-5 | OB3 | T-local-tokio · `holder-change` · lasting | a board reads `archiving` until no project accepts work writes, then `archived`; reader-state writes still replicate; a claim mid-archive is refused `archived`; an already reserved claim keeps the board `archiving` across a restart until it's granted or refused and settled · `archived` shown early; finalization that ignores `claim_reservations` | none | — |
 | U9 | FL-6, FL-7 (V9) | one-core §13 FL-6, FL-7 | OB2 | T-local-tokio · `board-replication` · lasting | missed notices are caught up from a cursor; a cursor older than seven days answers `cursorExpired`, checked through the `Clock` capability just before and after the seven-day boundary at the production value; one short configured retention exercises the real purge; a piece whose answer is lost stays unknown until the acknowledged position is read · a correctness decision that depends on a notice; a seven-day default that's never consumed | none | seven days of elapsed wall time (the controlled clock stands in) |
-| U11 | FL-8 (V9) | one-core §13 FL-8 | OB3 | T-local-tokio · `holder-change` · lasting | the old holder's report reaches the current holder, which records `RejectedTail`; after a restart and a second holder change, the next holder retrieves the same report; a same-digest report replays it and another digest answers `tailConflict` · holders talking directly; a report deleted after its first uptake | none | — |
 | U39, U45 | FL-10 (V7, V9, V9d) | one-core §13 FL-10 | OB3, OB7 | T-local-tokio, T-local-workerd · `holder-change` · lasting; T-staging · `central-staging` · lasting | each OB3 case answers as spec 3 FL-10 states, with the phases per kind, the takeover superseding a draining move (owner decision), `holderUnreachable` naming last-seen and last-renewed separately, and a repeat after a crash finishing on the same epoch · OB3's wrong builds | agent-fleet-sync's holder-change suites at the pinned tag, for the library's state machine only | — |
 | U55, U57, U58 | FL-13 (V9d) | one-core §13 FL-13 | OB7 | T-staging · `central-staging` · lasting | only Access-verified requests reach any route, no other address answers, a machine needs both its service token and its credential, and admin routes need the owner's sign-in · a decoded-only assertion accepted; `workers.dev` reachable | none | — |
 | U56, U61 | FL-14 (V7, V9) | one-core §13 FL-14 | OB4 | T-two-machines · `cross-machine` · lasting | a post for a project held elsewhere is forwarded with the sender's verified installation and answered; offline holder → `holderUnreachable`; unheld → `notHeld`; no answer in 30 s → `unanswered`; more than 16 in flight → `overloaded`; central keeps no post content · a forward stored at central | none | — |

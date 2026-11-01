@@ -1,5 +1,7 @@
 # Spec 1: shared contracts and the board model
 
+**Cadence supersession (owner-settled, 2026-10-31; planned-but-unbuilt here).** Central-automations [R6n, R6g and R3](../2026-10-31-central-automations/specification.md) govern notification timing and wake periods. Earlier immediate-notification and 5-minute-repeat statements below are historical and superseded; the [publication inventory](publication-inventory.md) records the current contract and source/proof limits.
+
 **What this is:** what must be observably true of the board itself, and the shared contracts every other part relies on: identities, requests and retries, feed order, writer epochs, the collaboration API. [Spec 2](spec-2-project-storage.md) (project storage and replication) and [spec 3](spec-3-central-fleet.md) (central fleet) depend on it. It traces to [requirements.md](requirements.md) (U rows), and [program-design-1-board.md](program-design-1-board.md) realizes it. It names no tables, types, files or transactions; those are design.
 
 ```text
@@ -86,7 +88,6 @@ erDiagram
   PROJECT ||--o| PROCESS_DEFINITION : pins
   PROJECT ||--o{ PLAN_REVISION : publishes
   PROJECT ||--o{ WRITER_EPOCH : "written under"
-  WRITER_EPOCH ||--o| REJECTED_TAIL : "may leave"
   ROLE_ASSIGNMENT }o--|| ACTOR : "held by"
   REQUEST ||--o| MOVE : "admitted as"
   MOVE }o--|| PROJECT : "changes status of"
@@ -117,10 +118,10 @@ erDiagram
 | E16 | **Process definition** (called "machine" in older docs) | `name@version` plus a hash of its exact source text | pinned by projects | the same `name@version` with different content is refused | registered | U8 |
 | E17 | **Read mark** | (reader, scope) | one actor; one thread or project | a read mark is a feed position **together with the writer epoch line that assigned it**; it only moves forward within the current line | — | U2, U9 |
 | E18 | **Notify intent** | same UUIDv7; dedup key (cause, recipient) | one causing record; one recipient, resolved at cause time, or at re-resolution for an intent added then (NI-2) | records the resolved holder and the assignment revision it read | emitted → handedOff \| superseded \| refused; superseded → emitted when re-resolution finds its actor back in the holder set before any handoff (NI-2) | U14 |
-| E19 | **Feed position** | (scope, number) | one per accepted record | a project's positions are dense and increasing along its current line of writer epochs. A position always travels with the epoch that assigned it, so a position from a voided suffix (E22) is never mistaken for the different record that later holds the same number. Fleet-level records have their own feed | — | U9 |
+| E19 | **Feed position** | (scope, number) | one per accepted record | a project's positions are dense and increasing along its current line of writer epochs. A position always travels with the epoch that assigned it, so a position from a discarded suffix (writes a forced takeover didn't carry over, U80) is never mistaken for the different record that later holds the same number. Fleet-level records have their own feed | — | U9 |
 | E20 | **Writer epoch** | (project, epoch number) | one project; one machine (the lease holder); issued with its lease (E23) by the lease registry (spec 3 FL-9) | at most one current epoch per project; numbers only increase; each epoch starts at a known feed position, the last replicated one | current (paused while its lease is expired, spec 2 WA-11) → ended (clean move) \| superseded (taken over) | U21 |
-| E21 | **Request** | its request ID (UUIDv7, minted by the requester), distinct from the IDs of the records it creates | one requester; one target (a project or the fleet); optionally `resubmits` one voided request | its canonical content is the complete *semantic* request: operation, actor, acting-for, subject or placement, references, payload, expected subject revision and protocol version. The writer epoch is **not** part of it: the epoch that accepts a request is recorded with its decision, and the writer's current authority is checked separately, so a retry after a clean switch matches its first decision instead of conflicting | pending → accepted (with the records it created) \| rejected (with reasons) \| voided (its epoch was superseded before replication, or its project's creation was rejected by central). A request also carries, outside its canonical content, the writer epoch its requester last observed. A retry whose ID the current holder doesn't know, but which names an older epoch than the current one, is **unresolved**: it's neither executed nor treated as new until its tail disposition is known (G8). Accepted, rejected and voided are terminal; `accepted → voided` happens only through WA-5 (a rejected tail) or WA-10 (a rejected project creation) | U9, U11, U21 |
-| E22 | **Rejected tail** | (project, epoch) of the stale writer | one superseded writer epoch | the records a holder accepted after the last replicated position, before losing its lease. Its own feed positions are void: they're never part of the project feed, and the new epoch reuses those numbers. Kept, never merged | — | U21 |
+| E21 | **Request** | its request ID (UUIDv7, minted by the requester), distinct from the IDs of the records it creates | one requester; one target (a project or the fleet) | its canonical content is the complete *semantic* request: operation, actor, acting-for, subject or placement, references, payload, expected subject revision and protocol version. The writer epoch is **not** part of it: the epoch that accepts a request is recorded with its decision, and the writer's current authority is checked separately, so a retry after a clean switch matches its first decision instead of conflicting | pending → accepted (with the records it created) \| rejected (with reasons); both are terminal. A request accepted only in a suffix that a forced takeover didn't carry over was never replicated, so the new holder doesn't know it: a retry is evaluated fresh against the surviving state (RC-4, U80) | U9, U11, U21 |
+| E22 | *Removed (U80, owner 2026-10-19).* A forced takeover starts from central's copy and doesn't carry over or report the old holder's unsent writes. The old file stays on disk, read-only, and is never served | — | — | — | — | U80 |
 | E28 | **Workstream** | same UUIDv7; renaming keeps it | exactly one project; carries tasks (E5); has an `implementer` and a `verifier` role (E11) | created only explicitly, by the project's `lead`; a project has none until then. Carries a name and a goal | open → closed (with a reason: done or dropped). Closing leaves its tasks as they are | U40 |
 | E29 | **Work-trail row** | same UUIDv7, minted by its writer | exactly one project; about one subject in it: the project, one workstream, or one task | the writer gives the **text** and, optionally, **tags** (free-form; `decision` puts the row in the decision register) and **links** (evidence: a commit, PR, path, URL or record ID, including another row). Router fills in when (RC-9), who (RC-8) and the subject (WT-2). The text, tags, links and subject never change, and no row is deleted. The one thing that changes is **redacted**: a filter flag any actor sets or clears explicitly, for rows that turned out to be wrong. It promises nothing more: a redacted row's text is still stored and replicated | shown ⇄ redacted | U42, U41, U47 |
 
@@ -155,7 +156,7 @@ Each obligation lists the U rows it serves. *MUST* means the board refuses or fa
 
 ### 4.3 Placement and writer authority: in specs 2 and 3
 
-Where records are written and who may write them is defined in [spec 2](spec-2-project-storage.md) (project databases and replication: WA-2…WA-13) and [spec 3](spec-3-central-fleet.md) (fleet records, central copies, leases, the admin endpoint and machine sessions: WA-1, FL-1…FL-12). This spec defines the shared nouns they use: writer epoch (E20), request (E21), rejected tail (E22), and the epoch-qualified feed cursor (E19, RC-5). Specs 2 and 3 add the lease (E23), the central copy (E24), the replication piece (E25), the machine session (E26) and the holder change (E27).
+Where records are written and who may write them is defined in [spec 2](spec-2-project-storage.md) (project databases and replication: WA-2…WA-13) and [spec 3](spec-3-central-fleet.md) (fleet records, central copies, leases, the admin endpoint and machine sessions: WA-1, FL-1…FL-12). This spec defines the shared nouns they use: writer epoch (E20), request (E21), and the epoch-qualified feed cursor (E19, RC-5). Specs 2 and 3 add the lease (E23), the central copy (E24), the replication piece (E25), the machine session (E26) and the holder change (E27).
 
 ### 4.4 Fabric-neutral record contract (RC)
 
@@ -165,21 +166,16 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 - **RC-2 Order.** Every accepted record in a project MUST receive the next position in that project's feed. Fleet-level records get positions in the fleet feed. No order across projects is promised. (U9)
 - **RC-3 Expected revision.** Every write that changes status (a project's, a workstream's or a task's), a role assignment, a task's title, body or workstream, or a plan MUST state the subject revision it expects. If the subject has moved on, the write is rejected as `staleRevision` and the current revision is returned. Posts, facts, work-trail rows and their redaction, task links and subtask changes don't carry one (TK-6). (U9, U21)
 - **RC-4 Retried requests.** Each request carries a request ID (E21), separate from the IDs of the records it creates.
-  - Resubmitting the same request ID with the same canonical content (E21) MUST return the current terminal decision, never a re-evaluation:
+  - Resubmitting the same request ID with the same canonical content (E21) MUST return its recorded terminal decision, never a re-evaluation:
     - accepted, with the same record IDs and feed positions;
-    - rejected, with the same reasons, even if the subject has changed since;
-    - voided, naming its cause: the takeover that voided it, or the rejected project creation.
-  - **A retry the current holder doesn't know:**
-    - if it names a writer epoch older than the current one, it MUST return `unresolved`, naming the takeover, and MUST NOT execute;
-    - it stays unresolved until the old epoch's rejected tail is reported. Then it's `voided` if the tail holds it. If the tail is reported and doesn't hold it, the request is admitted fresh.
-    - The requester MAY instead submit a new request that names it in `resubmits`.
-    - Only a request whose observed epoch is current, or absent, is treated as new. (F01)
+    - rejected, with the same reasons, even if the subject has changed since.
+  - **A retry the current holder doesn't know is evaluated as new,** against the project's current state. That includes a request whose first attempt was accepted only in a suffix that a forced takeover didn't carry over (U80): it never reached central, so it isn't part of the project's history, and the retry runs fresh. It may now be rejected, for example `staleRevision`. There's no voided outcome, no unresolved wait and no check across past holders (owner, 2026-10-19: "yes this is all overengineered slop").
   - A retry MUST NOT repeat any effect: no new record, feed position, notify intent, read-mark change or unread notice.
   - Fields specific to the reader (unread counts, watch state) are computed fresh for the caller. They aren't replayed.
   - The same request ID with different content MUST be rejected as `conflictingRequest`.
   - Decisions are retrievable for at least the life of the project. (U9, U11)
-  - A refusal that comes before a project scope exists isn't a decision. That covers a project or board that doesn't exist, and a project central rejected. Nothing records it, and the same request ID is evaluated again once the scope exists.
-- **RC-5 Complete feed.** Every record accepted under the current line of epochs MUST appear in its scope's feed exactly once, and a recorded rejection is such a record. That includes posts, moves (accepted, and recorded rejections), workstream, task and subtask changes, work-trail rows, role changes, facts, thread resolution, notify intents, and takeover and rejected-tail facts. **Reader state is not feed records:** a read mark, and a plain watch or unwatch choice, is one reader's own state. It's stored and replicated with its project, but it never takes a feed position, whether a read, an explicit acknowledgement or a watch request changed it. A mark isn't activity, and a read never creates a feed record; otherwise each read would cover the record the previous read created. Records voided into a rejected tail are not in the feed (E22). A reader MUST be able to fetch everything after a position, and to learn the high-water position. A fetch is a consistent snapshot: it never shows a later position while missing an earlier one. A redacted work-trail row keeps its position in the feed and is returned marked redacted, with its text, tags and links left out unless the reader explicitly asks for them (WT-4). **Positions are given with their epoch:** a cursor, read mark or anchor taken on a suffix that was later voided MUST be answered with `cursorSuperseded`, naming the last replicated position to resume from. It MUST NOT be read as the different record that now holds that number. (U2, U9, U42, F02)
+  - A refusal that comes before a project scope exists isn't a decision. That covers a project or board that doesn't exist. Nothing records it, and the same request ID is evaluated again once the scope exists.
+- **RC-5 Complete feed.** Every record accepted under the current line of epochs MUST appear in its scope's feed exactly once, and a recorded rejection is such a record. That includes posts, moves (accepted, and recorded rejections), workstream, task and subtask changes, work-trail rows, role changes, facts, thread resolution, and notify intents. A holder change isn't a project record: central's transfer record is its one record (spec 3 FL-10). **Reader state is not feed records:** a read mark, and a plain watch or unwatch choice, is one reader's own state. It's stored and replicated with its project, but it never takes a feed position, whether a read, an explicit acknowledgement or a watch request changed it. A mark isn't activity, and a read never creates a feed record; otherwise each read would cover the record the previous read created. Records in a suffix that a forced takeover didn't carry over are not in the feed (U80). A reader MUST be able to fetch everything after a position, and to learn the high-water position. A fetch is a consistent snapshot: it never shows a later position while missing an earlier one. A redacted work-trail row keeps its position in the feed and is returned marked redacted, with its text, tags and links left out unless the reader explicitly asks for them (WT-4). **Positions are given with their epoch:** a cursor, read mark or anchor taken on a suffix that a forced takeover later discarded MUST be answered with `cursorSuperseded`, naming the last replicated position to resume from. It MUST NOT be read as the different record that now holds that number. (U2, U9, U42, F02)
 - **RC-6 No silent merges.** A request whose preconditions fail is rejected, never merged or reordered. The requester re-reads and decides again. (U9)
 - **RC-7 Cross-project references** MUST be immutable IDs and MUST NOT be dependencies (ST-3). (U9)
 - **RC-8 Actor provenance.** Every record MUST name its actor (E10) and, separately, the Router installation and machine it was written from: its provenance. A session's identity includes its home installation, which can differ from where a record naming it was written. A human's identity is its human ID alone. Neither identity is inferred from provenance, and provenance is never inferred from an identity. (U9, U10)
@@ -188,11 +184,11 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
   - **Order isn't time.** Within one project, an unknown-time record keeps its place by its translated feed position. That position is never reported as a time.
   - A time condition (older than, newer than, between) never matches an unknown-time record.
   - A "latest" time reported for a project or view either leaves unknown-time records out or says the time is unknown, and says which. *(Added 2026-10-17: shipped stores have no general event time, X2.)*
-- **RC-10 Lifecycle facts are typed.** Closing a project, thread or workstream, dropping a task, completing a phase, a takeover, and a rejected tail MUST be typed facts with a reason, not free text. (U9, U11)
+- **RC-10 Lifecycle facts are typed.** Closing a project, thread or workstream, dropping a task, and completing a phase MUST be typed facts with a reason, not free text. (U9, U11)
 - **RC-11 After a close.** When a project closes, its closing feed position MUST be recorded. After that point:
   - moves, role changes, and new or changed workstreams, tasks, subtasks and work-trail rows are refused (`closed`);
   - thread posts, replies and thread resolution are still accepted: a close freezes the work, not the conversation;
-  - a fact is accepted only if its producer names the feed position, with its epoch, that it had seen when producing it (its causal anchor), and that position is on the current line (not voided) and is at or before the close. It's then marked **late**;
+  - a fact is accepted only if its producer names the feed position, with its epoch, that it had seen when producing it (its causal anchor), and that position is on the current line (not discarded by a forced takeover) and is at or before the close. It's then marked **late**;
   - late facts appear in the feed and in views marked as late, emit no notify intents, and may link to dropped tasks;
   - a fact without an anchor, or with one after the close, is refused `closed`.
 
@@ -225,7 +221,7 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
     - an actor in the set with no intent for that cause gets one new intent. An actor whose intent is `handedOff` or `refused` gets nothing more. E18's key (cause, recipient) keeps one intent identity per actor, so no actor is notified twice;
     - an empty set supersedes the claimed intent and records `noHolder` for the role, as at cause time. Nothing falls back to another actor, and a holder granted later isn't notified for that cause.
   - Re-resolution never touches an intent addressed by name, even when the same actor is also reached through the role. It never changes a `handedOff` intent either: that intent keeps its frozen recipient and is delivered to that recipient even after later role changes (spec 3 MS-5).
-  - **What this guarantees:** every handoff goes to an actor that, at that handoff, was addressed by name or held the role it was reached through. An actor that left the role before its intent was handed off isn't notified through it. **The one exception** is spec 3 MS-5a's same-machine takeover case: a local recipient told immediately before a takeover that discards its handoff, whether or not the cause itself survives. The owner accepted immediate local delivery with this exception (U63); its exact scope is the Lead's interpretation, pending owner confirmation. (U14, U63, U64)
+  - **What this guarantees:** every handoff goes to an actor that, at that handoff, was addressed by name or held the role it was reached through. An actor that left the role before its intent was handed off isn't notified through it. **The one exception** is spec 3 MS-5a's same-machine takeover case: a local recipient told immediately before a takeover that discards its handoff, whether or not the cause itself survives. The owner accepted immediate local delivery (U63), and a forced takeover dropping a cause the old holder hadn't stored in central is accepted (U80, owner 2026-10-19). (U14, U63, U64, U80)
 - **NI-3** Accepted moves, role grants, and posts that address roles or actors MUST emit intents to their addressees. A project's `lead` MUST receive intents for rejected moves and for posts addressed to it. Task, subtask and work-trail writes emit none by themselves. (U2, U14)
 - **NI-4** Each intent MUST show its state: emitted, handedOff, superseded or refused. `handedOff` means a recoverable delivery responsibility exists, with a frozen recipient and item identity (spec 3 MS-5). It doesn't mean any hop has received the item. Delivery stages after handoff follow the message path (U63, spec 3 MS) and are linked. (U14, U63)
 
@@ -247,7 +243,7 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
   - blocked tasks, naming their blockers, and tasks blocked by a dropped task;
   - open tasks in closed workstreams;
   - rejected requests since the project's last accepted move;
-  - the current writer epoch, and any rejected tails. (U2, U21, U40, U43)
+  - the current writer epoch. (U2, U21, U40, U43)
 - **VW-3 Owner view.** Across projects: everything waiting on the owner, with what it blocks. (U1)
 - **VW-4 Lead load.** Across a lead's projects: work owing that lead a close-out. (U2)
 - **VW-5 Session context.** For a session, across every worktree of its projects' repositories:
@@ -320,11 +316,10 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 | Reason | When |
 |---|---|
 | `staleRevision` | RC-3; returns the current revision |
-| `notWriter` | WA-2/WA-6: this machine doesn't hold the project's current writer epoch; names the current epoch if known. Also: a renewal or rejected-tail report for an epoch this installation never held (spec 3 FL-9, FL-12) |
+| `notWriter` | WA-2/WA-6: this machine doesn't hold the project's current writer epoch; names the current epoch if known. Also: a renewal for an epoch this installation never held (spec 3 FL-9, FL-12) |
 | `staleEpoch` | WA-5: a replication piece or lease renewal from a superseded epoch; names the current epoch |
 | `pendingUnreachable` | WA-1: a fleet request accepted as pending; the central server is unreachable (not a rejection) |
-| `unresolved` | RC-4: a retry from before a takeover, not executed until the old tail is reported |
-| `cursorSuperseded` | RC-5: a position taken on a voided suffix; names the position to resume from |
+| `cursorSuperseded` | RC-5: a position taken on a suffix a forced takeover discarded; names the position to resume from |
 | `moveNotAllowed` | MV-2: no such edge, or the requester lacks the role the edge requires |
 | `roleRequired` | WS-1, RL-5: the requester doesn't hold the role the operation needs; names the role |
 | `pairNotDistinct` | RL-5 and RL-6: the same actor would hold both a workstream's implementer and verifier roles, or a reviewer role there would go to its implementer or verifier |
@@ -355,7 +350,7 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 | `centralCopyFull` | spec 3 FL-4: the project's central copy can't store more |
 | `copyUnavailable` | spec 3 FL-12, U67: the project's central copy can't serve the request now. It names why: its own bookkeeping migration is pending or failed, or it's uninitialized or damaged. Nothing changed; repeat the request after the copy is migrated or repaired |
 | `cursorExpired` | spec 3 FL-6, FL-12: a notice or feed cursor older than retention; the Router re-reads in full |
-| `projectRejected` | spec 2 WA-10: central refused a new project's directory entry; names central's reason |
+| `projectRejected` | spec 2 WA-10: central refused to create the project; names central's reason. Nothing is created on the machine |
 | `leaseExpired` | spec 2 WA-11: the holder's lease expired and hasn't renewed yet; names when it expired. Writes resume on renewal |
 | `adminRequired` | spec 3 FL-10: a move or takeover was requested without admin credentials; nothing changed |
 | `transferInProgress` | spec 3 FL-10: another holder change for the project is in progress; names it |
@@ -371,7 +366,6 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 | `notHeld` | spec 3 FL-15, FL-14: the project has no holder (imported and not yet claimed); a write or a forwarded post needs one. Claim it first (FL-16) |
 | `alreadyHeld` | spec 3 FL-16: a claim on a project that has a holder; names the holder; nothing changed |
 | `alreadyImported` | spec 3 FL-17: an import whose ID and digest match what central has; nothing changed (not a rejection) |
-| `tailConflict` | spec 3 FL-8 and FL-12: a rejected-tail report for a project and epoch that already has a report with a different digest; names the stored digest, and the first report stands |
 | `retired` | spec 3 FL-18: the project's copy was retired; nothing about it is accepted or returned, and its ID is never reused |
 | `importConflict` | spec 3 FL-17: an import offering different content under an existing project ID, whether that project is unheld, held or once claimed; names both digests, or the offered one and that the existing project wasn't imported; nothing changed |
 
@@ -399,7 +393,7 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 | Identity and security | Actors are recorded as declared. The board MUST NOT present a declared actor as authenticated, and views show provenance (e.g. "relayed by"). Machine and admin credentials are central's (spec 3 FL-10, FL-12) |
 | Reliability | WA-4/WA-5 (no loss on a clean switch; a bounded, visible loss on an unclean one), RC-4 (retries), RC-12 (atomic outcome), MV-3 (rejections recorded). The recovery-point gap of an unclean switch is the records after the last replicated position, and nothing else |
 | Freshness | A read copy MUST say which feed position it reflects (VW-1, WA-6). Nothing promises a copy is current |
-| Data lifecycle | Posts, moves, workspace ADRs, work-trail rows (and so the decision register), role history, request decisions and rejected-tail facts are kept for the project's life. Retention per fact kind is open (G5) |
+| Data lifecycle | Posts, moves, workspace ADRs, work-trail rows (and so the decision register), role history and request decisions are kept for the project's life. Retention per fact kind is open (G5) |
 | Privacy | Owner words (G3), work-trail rows and hook facts can carry sensitive text. Which kinds are written, and where, is decided with Q9 and Q1 |
 | Performance | Hook calls run on edits and commits. E2 measured 150–180 ms per call, CLI start included. No budget is authorized yet (G6) |
 | Operability | Each store reports its schema version (WA-7), feed high-water position (RC-5) and current writer epoch (VW-2) |
@@ -473,7 +467,8 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 | G5 | Retention per fact kind | Lead, with Q1 |
 | G6 | A latency budget for hook calls | Lead, from replay measurements |
 | G7 | Process-definition content for project status: statuses, edges and guards | the process-definition lane; this spec checks only against what's pinned |
-| G8 | What a rejected tail's owner does with it: resubmit, discard, or escalate to the owner | Lead to propose with the replay cases; the board only keeps and shows it (WA-5) |
+| G8 | *Closed by U80:* there are no rejected tails to dispose of | — |
 | G12 | Which board things are events (ordered, idempotent) and which are entities. The owner: "certain things can be an event, but not everything" | owner discussion |
 | G25 | Deferred (U48): a helper that exports a workspace's ADRs as Markdown files, and imports the six ADRs written in `docs/architecture/adr/` so far | Lead, with the board milestone |
 | G16 | `board_thread_wait` settles a batch when the server hands it over, before the caller has it; a lost response stays `WaitOutcomeUnknown`, recovered through subscriptions and the inbox. Settling on the caller's acknowledgement (the next call's `after`) would close that window but changes delivery semantics | P3 (delivery) |
+| G38 | *Closed by U80 (owner, 2026-10-19).* With no voided outcome, a retry the current holder doesn't know is simply evaluated fresh (RC-4) | — |

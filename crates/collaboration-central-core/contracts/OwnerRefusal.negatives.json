@@ -1,0 +1,9 @@
+[
+null,
+{"kind":"conflict","unexpectedField":true},
+{"kind":"notFound","unexpectedField":true},
+{"kind":"notOwner","unexpectedField":true},
+{"kind":"recordUnwritable","unexpectedField":true},
+{"kind":"secondFactorRequired","withinSeconds":900},
+{"kind":"unrecognizedVariant"}
+]

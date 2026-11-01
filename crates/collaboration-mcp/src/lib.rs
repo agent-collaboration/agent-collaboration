@@ -21,6 +21,8 @@ pub mod test_support;
 #[cfg(test)]
 mod api_test_harness;
 #[cfg(test)]
+mod automation_limits_catalog_tests;
+#[cfg(test)]
 use collaboration_service as mail_service;
 #[cfg(test)]
 mod board_argument_rejection_tests;

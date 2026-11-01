@@ -1,0 +1,5 @@
+[
+{"canonical":{"workingDirectory":"/work/item-two"},"input":{"repository":null,"workingDirectory":"/work/item-two"}},
+{"canonical":{"workingDirectory":"/work/item-two"},"input":{"commit":null,"workingDirectory":"/work/item-two"}},
+{"canonical":{"workingDirectory":"/work/item-two"},"input":{"model":null,"workingDirectory":"/work/item-two"}}
+]

@@ -1,0 +1,8 @@
+[
+{"kind":"notMember"},
+{"kind":"projectNotInWorkspace"},
+{"kind":"machineNotAllowed"},
+{"kind":"machineNotConnected"},
+{"kind":"requestIdReused"},
+{"kind":"unavailable"}
+]

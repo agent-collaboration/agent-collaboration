@@ -7,12 +7,15 @@ pub(crate) struct WakeTimingArguments {
     /// Fire once at a UTC RFC3339 instant.
     #[arg(long,required_unless_present_any=["after","every","cron"],conflicts_with_all=["after","every","cron"])]
     at: Option<String>,
-    /// Fire once after a duration: integer followed by s, m, h or d (for example 10m).
+    /// Relative timing is refused for automations; use --at on a five-minute UTC mark.
     #[arg(long,conflicts_with_all=["every","cron"])]
     after: Option<String>,
-    /// Repeat relative to creation, for example 10m. Pausing does not shift this anchor.
+    /// Repeat on the five-minute UTC grid, for example 10m. Pausing keeps the first deadline.
     #[arg(long, conflicts_with = "cron")]
     every: Option<String>,
+    /// First interval deadline on a five-minute UTC mark; defaults to the next mark.
+    #[arg(long, requires = "every")]
+    first_due: Option<String>,
     /// Five fields: minute hour day month weekday. Requires --timezone.
     #[arg(long, requires = "timezone")]
     cron: Option<String>,
@@ -40,6 +43,13 @@ impl WakeTimingArguments {
         } else if let Some(every) = self.every {
             TimingRequest::Interval {
                 seconds: duration(&every)?,
+                first_due: self
+                    .first_due
+                    .map(|due| {
+                        due.try_into()
+                            .map_err(|_| "--first-due requires a valid UTC RFC3339 timestamp")
+                    })
+                    .transpose()?,
             }
         } else {
             TimingRequest::Cron {
