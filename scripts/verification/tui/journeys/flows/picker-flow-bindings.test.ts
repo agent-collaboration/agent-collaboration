@@ -5,13 +5,14 @@ import { expect, test } from 'vitest';
 
 import { sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
+import { checkInputConsumptionReceipt } from '../../sessions/input-consumption-readback.ts';
 import { authoredFlowPlanSchema, paintedMouseExpectationSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, runAuthoredFlow } from './authored-flow-run.ts';
 import { authoredFlows } from './flow-catalogue.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
-import { pickerFilterTextExpectations } from './picker-flow-inputs.ts';
+import { pickerExpectedKey, pickerFilterTextExpectations } from './picker-flow-inputs.ts';
 import { checkQualifiedForkOutcome } from './picker-fork-bindings.ts';
 
 function controlledPlan(journey: string): AuthoredFlowPlan {
@@ -289,4 +290,78 @@ test('the toolbar binds every real menu, Help, Run dropdown and filter interacti
 			},
 		]);
 	}
+});
+
+// crossterm0.29 event.rs Display: fixed keys are serialized via code.to_string().
+test('picker key expectations preserve the producer Display names and reject the Rust variant spelling', () => {
+	const surface = { kind: 'screen' } as const;
+	const actual = {
+		sequence: 174,
+		event: {
+			kind: 'key',
+			code: { kind: 'fixed', name: 'Back Tab' },
+			modifiers: ['shift'],
+			phase: 'press',
+		},
+		surface,
+		target: null,
+		action: null,
+	};
+	const expected = pickerExpectedKey('Shift+Tab', surface);
+	expect(() => checkInputConsumptionReceipt(actual, expected)).not.toThrow();
+	for (const name of ['BackTab', 'Tab'])
+		expect(() =>
+			checkInputConsumptionReceipt(
+				{ ...actual, event: { ...actual.event, code: { kind: 'fixed', name } } },
+				expected,
+			),
+		).toThrow('event mismatch');
+	for (const [key, name] of [
+		['Escape', 'Esc'],
+		['Enter', process.platform === 'darwin' ? 'Return' : 'Enter'],
+		['Tab', 'Tab'],
+		['F1', 'F1'],
+		['F6', 'F6'],
+		['F10', 'F10'],
+		['F12', 'F12'],
+		['Up', 'Up'],
+		['Down', 'Down'],
+		['Left', 'Left'],
+		['Right', 'Right'],
+	]) {
+		if (key === undefined || name === undefined) throw new Error('source key case absent');
+		expect(pickerExpectedKey(key, surface).event).toEqual({
+			kind: 'key',
+			code: { kind: 'fixed', name },
+			modifiers: [],
+			phase: 'press',
+		});
+	}
+});
+test('picker Option aliases and Ctrl chords keep producer code and modifier order', () => {
+	const screen = { kind: 'screen' } as const;
+	expect(pickerExpectedKey('Alt+Shift+Up', screen).event).toEqual({
+		kind: 'key',
+		code: { kind: 'fixed', name: 'Up' },
+		modifiers: ['shift', 'alt'],
+		phase: 'press',
+	});
+	expect(pickerExpectedKey('Alt+Down', screen).event).toEqual({
+		kind: 'key',
+		code: { kind: 'fixed', name: 'Down' },
+		modifiers: ['alt'],
+		phase: 'press',
+	});
+	expect(pickerExpectedKey('Ctrl+N', screen).event).toEqual({
+		kind: 'key',
+		code: { kind: 'shortcut', key: 'n' },
+		modifiers: ['control'],
+		phase: 'press',
+	});
+	expect(pickerExpectedKey('Ctrl+Shift+Enter', screen).event).toEqual({
+		kind: 'key',
+		code: { kind: 'fixed', name: process.platform === 'darwin' ? 'Return' : 'Enter' },
+		modifiers: ['shift', 'control'],
+		phase: 'press',
+	});
 });

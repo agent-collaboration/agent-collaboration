@@ -167,6 +167,10 @@ and the two >2-page alias journeys need `large-list`; the base six-row fixture
 does not supply these. The interpreter accepts all 31 data definitions; that does
 not mean all 31 have fixture bindings.
 
+Fixed key names follow the producer's crossterm Display, including `Back Tab`,
+macOS `Return` and `Esc`; Rust variant names are not the receipt wire format.
+Keep source-qualified modifier order and reject the old `BackTab` spelling.
+
 Each press/focus hop is sent alone and awaits its exact receipt and marked frame
 before the next step. Adjacent contiguous markers may share one just-completed
 frame for a burst, which proves only state after the batch's last input.
