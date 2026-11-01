@@ -1,11 +1,11 @@
 //! Event-controlled atomic store stand-in for focused real-client/Host/registrar integration.
 //! It proves no SQLite durability or process-restart persistence.
-use super::{
-    FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,
-    RegistrationInsert,
-};
 use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionRegistrationRecord, SessionBindingAddress,
+};
+use codex_router_fleet_state::session_registration_repository::{
+    FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,
+    RegistrationInsert,
 };
 use std::sync::{Arc, Mutex};
 

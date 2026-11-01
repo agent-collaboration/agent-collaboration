@@ -1,4 +1,7 @@
 //! Start admission reads live authority before minting a prepared binding or creating anything.
+use codex_router_fleet_state::session_registration_repository::{
+    FleetSessionRegistrationRepository, FleetSessionStorageFailure, RegistrationInsert,
+};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -15,10 +18,7 @@ use fleet_identity_protocol::{
 };
 use runtime_primitives::IdSource;
 
-use super::{
-    BoundFleetSession, FleetSessionConnection, FleetSessionConnectionFailure,
-    FleetSessionRegistrationRepository, FleetSessionStorageFailure, RegistrationInsert,
-};
+use super::{BoundFleetSession, FleetSessionConnection, FleetSessionConnectionFailure};
 
 /// F11 supplies this policy projection; F17 removes the AccessEnrollment branch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

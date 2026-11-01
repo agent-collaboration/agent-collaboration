@@ -9,3 +9,5 @@ pub mod fleet_login;
 pub const FLEET_DATABASE_FILENAME: &str = "fleet.sqlite";
 
 pub mod fleet_session_registration;
+
+pub mod session_registration_repository;

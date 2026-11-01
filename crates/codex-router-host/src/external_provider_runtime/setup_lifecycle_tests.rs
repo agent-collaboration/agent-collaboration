@@ -5,6 +5,7 @@ use acp_client_runtime::{
     ProviderSessionSetupReadiness, ProviderSessionSetupUnavailable, ProviderSettingKind,
     RequestedProviderSettings,
 };
+use codex_router_fleet_state::session_registration_repository::FleetSessionStorageFailure;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -127,7 +128,7 @@ async fn provider_setup_retains_the_returned_id_before_any_initial_setting() {
 #[tokio::test]
 async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_registrar() {
     use collaboration_service::fleet_session_registrar::{
-        FleetSessionStorageFailure, SessionRegistrationMode, test_support::PendingSetupWriteControl,
+        SessionRegistrationMode, test_support::PendingSetupWriteControl,
     };
     let directory = tempfile::tempdir_in("/tmp").unwrap();
     let registrar_fixture = super::setup_registrar_fixture::ProviderRegistrarFixture::new(

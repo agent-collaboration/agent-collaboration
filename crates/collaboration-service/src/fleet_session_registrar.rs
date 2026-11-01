@@ -4,7 +4,6 @@ mod connection_port;
 mod registration_lifecycle;
 mod setup_lifecycle;
 mod start_admission;
-mod storage_port;
 
 #[cfg(any(test, feature = "test-support"))]
 #[path = "fleet_session_registrar/test_support.rs"]
@@ -19,10 +18,6 @@ pub use start_admission::{
     FleetSessionRegistrar, FleetSessionRegistrarProps, PrepareSessionStart, RegistrarFailure,
     SessionBindingEntropy, SessionBindingEntropyUnavailable, SessionBindingListener,
     SessionRegistrationMode, SessionRegistrationModeSource,
-};
-pub use storage_port::{
-    FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,
-    RegistrationInsert,
 };
 
 #[cfg(test)]
