@@ -236,6 +236,7 @@ async fn assert_private_scratch_binding(
 
     // Act: real create, scratch validation, projection and native protocol consumer.
     let result = AcpSessionBinding::create(&mut catalog, SessionSetupInputs {
+        harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
         operation_id: None,
         recorder: Arc::new(AcceptingConversationRecorder),
         connection, schemas, generation,

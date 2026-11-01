@@ -123,6 +123,14 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
             )
         })
     }
+    fn creation_refused<'a>(&'a self, operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()> {
+        Box::pin(async move {
+            self.registrar
+                .creation_refused(operation)
+                .await
+                .map_err(launch_failure)
+        })
+    }
     fn refuse_setup<'a>(
         &'a self,
         operation: &'a OperationId,

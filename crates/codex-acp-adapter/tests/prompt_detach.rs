@@ -410,6 +410,7 @@ async fn native_callback_after_prompt_command_eof_interrupts_active_turn() {
     let session = AcpSessionBinding::load_existing(
         &mut catalog,
         SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,

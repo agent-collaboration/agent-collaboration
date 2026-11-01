@@ -67,6 +67,7 @@ async fn prompt_rechecks_native_activity_before_starting_a_turn() {
     let (session, _) = AcpSessionBinding::load_existing(
         &mut catalog,
         SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,
@@ -161,6 +162,7 @@ async fn failed_native_turn_keeps_its_error_instead_of_projecting_a_result() {
     let (session, _) = AcpSessionBinding::load_existing(
         &mut catalog,
         SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,

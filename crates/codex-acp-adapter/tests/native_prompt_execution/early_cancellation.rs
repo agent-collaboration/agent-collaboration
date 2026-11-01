@@ -66,6 +66,7 @@ async fn assert_early_cancellation(cancellation_point: CancellationPoint) -> Tes
         turn_start_sender,
     ));
     let setup_inputs = SessionSetupInputs {
+        harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
         operation_id: None,
         recorder: Arc::new(AcceptingConversationRecorder),
         connection,

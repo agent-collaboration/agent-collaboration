@@ -7,7 +7,7 @@ use fleet_identity_protocol::{
     StartedBy,
 };
 use message_board::{ProjectId, SessionRef};
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HarnessSessionLaunch {
@@ -52,6 +52,28 @@ pub enum HarnessStartAdmission {
 pub enum HarnessRestoreAdmission {
     AccessEnrollment,
     Bound(HarnessSessionBinding),
+}
+
+#[derive(Clone)]
+pub struct PreparedHarnessSessionStart {
+    pub port: Arc<dyn HarnessSessionLaunchPort>,
+    pub operation_id: OperationId,
+    pub endpoint: message_board::SessionEndpointRef,
+    pub binding: HarnessSessionBinding,
+}
+
+#[derive(Clone)]
+pub struct RestoredHarnessSession {
+    pub session: SessionRef,
+    pub binding: HarnessSessionBinding,
+}
+
+/// These values are supplied by the Host after admission, never deserialized from ACP metadata.
+#[derive(Clone)]
+pub enum HarnessSessionSetup {
+    AccessEnrollment,
+    Start(PreparedHarnessSessionStart),
+    Restore(RestoredHarnessSession),
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HarnessRegistrationOutcome {
@@ -110,6 +132,8 @@ pub trait HarnessSessionLaunchPort: Send + Sync {
         operation: &'a OperationId,
         session: &'a SessionRef,
     ) -> HarnessLaunchFuture<'a, ()>;
+    /// Only a known refusal with no created identity uses this transition.
+    fn creation_refused<'a>(&'a self, operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()>;
     fn complete_setup<'a>(
         &'a self,
         operation: &'a OperationId,

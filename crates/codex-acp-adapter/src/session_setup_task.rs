@@ -120,6 +120,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             .await
             .map_err(|_| SessionSetupError::Unavailable)?;
         let setup = SessionSetupInputs {
+            harness: crate::HarnessSessionSetup::AccessEnrollment,
             connection,
             schemas: inputs.schemas,
             generation: inputs.generation,
@@ -324,6 +325,7 @@ mod tests {
         let (mut binding, initial_history) = AcpSessionBinding::load_existing(
             &mut catalog,
             SessionSetupInputs {
+                harness: crate::HarnessSessionSetup::AccessEnrollment,
                 operation_id: None,
                 recorder: Arc::new(AcceptingRecorder),
                 connection,

@@ -23,6 +23,9 @@ pub use harness_session_launch::{
     HarnessRegistrationOutcome, HarnessRestoreAdmission, HarnessSessionBinding,
     HarnessSessionLaunch, HarnessSessionLaunchPort, HarnessStartAdmission,
 };
+pub use harness_session_launch::{
+    HarnessSessionSetup, PreparedHarnessSessionStart, RestoredHarnessSession,
+};
 mod session_event_hub;
 #[cfg(any(test, feature = "test-support"))]
 pub use native_delivery_result::scripted_delivery_result;

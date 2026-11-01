@@ -199,6 +199,7 @@ fn router_model_choice(params: &Value) -> Result<RouterModelChoice<'_>, SessionS
     })
 }
 pub struct SessionSetupInputs {
+    pub harness: crate::HarnessSessionSetup,
     pub connection: NativeProtocolConnection,
     pub schemas: Arc<NativePayloadSchemas>,
     pub generation: CodexGeneration,

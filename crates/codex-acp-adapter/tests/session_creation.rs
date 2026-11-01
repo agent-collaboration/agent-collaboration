@@ -145,6 +145,7 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
             AcpSessionBinding::create(
                     &mut catalog,
                     SessionSetupInputs {
+                        harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
                         operation_id: None,
                         recorder: Arc::new(AcceptingConversationRecorder),
                         connection,
@@ -159,6 +160,7 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
             AcpSessionBinding::load_existing(
                 &mut catalog,
                 SessionSetupInputs {
+                    harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
                     operation_id: None,
                     recorder: Arc::new(AcceptingConversationRecorder),
                     connection,
@@ -287,6 +289,7 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
     let result = AcpSessionBinding::load_existing(
         &mut catalog,
         SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,
@@ -436,6 +439,7 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
         let session = AcpSessionBinding::create(
         &mut catalog,
         SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,

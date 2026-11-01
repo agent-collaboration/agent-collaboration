@@ -377,6 +377,7 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
             socket.send(Message::Text(json!({"id":request["id"],"result":{"thread":{"id":"thread-a","model":"gpt-5.6-sol","reasoningEffort":thread_effort,"createdAt":thread_created_at,"updatedAt":thread_updated_at,"sandbox":{"type":"workspaceWrite"},"approvalPolicy":"on-request","approvalsReviewer":"auto_review"}}}).to_string().into())).await.unwrap_or_else(|error| panic!("thread read response: {error}"));
         });
         let setup_inputs = SessionSetupInputs {
+            harness: codex_acp_adapter::HarnessSessionSetup::AccessEnrollment,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,
