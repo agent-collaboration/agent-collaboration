@@ -16,7 +16,8 @@ use std::{
 #[derive(Parser)]
 #[command(
     name = "agent-collaboration wake",
-    bin_name = "agent-collaboration wake"
+    bin_name = "agent-collaboration wake",
+    long_about = collaboration_client::protocol::limits::description()
 )]
 struct WakeArguments {
     #[command(subcommand)]
@@ -25,6 +26,7 @@ struct WakeArguments {
 #[derive(Subcommand)]
 enum WakeCommand {
     /// Save a timed message; optional first-fire wait returns one combined result, not native acceptance.
+    #[command(long_about = collaboration_client::protocol::limits::description())]
     Send {
         #[command(flatten)]
         message: Box<SendArguments>,

@@ -953,6 +953,7 @@ dependencies = [
 name = "board-sync-protocol"
 version = "0.1.118"
 dependencies = [
+ "agent-automation",
  "chrono",
  "collaboration-mail-protocol",
  "fleet-sync-protocol",
@@ -1928,7 +1929,9 @@ version = "0.1.118"
 dependencies = [
  "agent-automation",
  "chrono",
+ "chrono-tz",
  "collaboration-mail-protocol",
+ "croner",
  "jsonschema",
  "message-board",
  "proptest",

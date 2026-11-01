@@ -44,6 +44,7 @@ pub struct WakeSendRequest {
     pub requested_by: crate::WakeCreator,
     pub replace: bool,
     pub message: SavedMessage,
+    #[schemars(schema_with = "crate::automation_timing_contract::wake_timing_schema")]
     pub timing: TimingRequest,
     pub expiry: ExpiryRequest,
 }

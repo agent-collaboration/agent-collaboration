@@ -168,6 +168,9 @@ async fn reconcile_notice(
     mail: &Weak<MailDeliveryRuntime>,
 ) -> io::Result<()> {
     match notice {
+        BoardNotice::AutomationBatchReady { .. } => Err(invalid_notice(
+            "automation batch reception is unavailable; the notice remains unhandled",
+        )),
         BoardNotice::LeaseGranted { project, epoch } => {
             projects.receive_grant(project, *epoch).await
         }

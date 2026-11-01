@@ -1,6 +1,6 @@
 //! One provider Session's state and last advertised capabilities/settings.
 
-use crate::{ProviderSessionState, ProviderSettingName, SessionRef};
+use crate::{ProviderHistoryAvailability, ProviderSessionState, ProviderSettingName, SessionRef};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use session_event_model::CapabilityReport;
@@ -9,13 +9,6 @@ use session_event_model::CapabilityReport;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderSessionInspectRequest {
     pub target: SessionRef,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ProviderHistoryAvailability {
-    Available,
-    HistoryUnavailable,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

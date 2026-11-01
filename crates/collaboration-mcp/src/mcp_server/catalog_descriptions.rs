@@ -1,5 +1,5 @@
-pub(super) fn operation_description(name: &str) -> &'static str {
-    match name {
+pub(super) fn operation_description(name: &str) -> String {
+    let description = match name {
         "request_effects" => {
             "Reads a bounded page of the terminal request decision in an explicit project or workspace scope. Pass the opaque next string as after. Read-only: it does not replay writes, marks or watches. UnknownRequest means no receipt is retrievable here and says nothing about whether retrying would be fresh."
         }
@@ -19,7 +19,7 @@ pub(super) fn operation_description(name: &str) -> &'static str {
             "Lists a bounded page of revisions for one instruction. Read-only and ordered by the stored revision history."
         }
         "wake_send" => {
-            "Creates one durable timed wake per target using its required operation identity, recording requestedBy. Active and paused wakes occupy the slot; replace requires the creator, target or declared owner. One-shots are due within 24 hours; repeats require an expiry within 7 days and gaps of at least 5 minutes, including Cron. Reusing the same operation identity replays its first result. Creation confirms local scheduling only; firing, native input acceptance, carrier acceptance, a completed turn and an agent reply remain separate."
+            "Creates one durable timed wake per target using its required operation identity, recording requestedBy. Active and paused wakes occupy the slot; replace requires the creator, target or declared owner. Reusing the same operation identity replays its first result. The central scheduling result, firing, native input acceptance, carrier acceptance, a completed turn and an agent reply remain separate."
         }
         "wake_show" => {
             "Reads one wake definition, state, next due time and recorded first-fire evidence. Read-only; it does not wait for or replay delivery."
@@ -361,5 +361,16 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         _ => {
             "Undocumented collaboration operation; inspect the typed input and output schemas before calling."
         }
+    };
+    if ["wake_", "schedule_", "instruction_", "automation_"]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+    {
+        format!(
+            "{description}\n\n{}",
+            collaboration_protocol::limits::description()
+        )
+    } else {
+        description.to_owned()
     }
 }
