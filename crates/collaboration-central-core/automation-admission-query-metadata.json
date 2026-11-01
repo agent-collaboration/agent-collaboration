@@ -12,7 +12,7 @@
     "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
     "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "core_migrations/0011_automations.sql": "7203cc3a71b4d043c62d29febd55feea97090b80cd52fde54708176b85884b9c",
+    "core_migrations/0011_automations.sql": "a46b1e7e192ca774001b6e6311a3ef825edcb709bfd757fa517d622e0324bfc3",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -75,7 +75,7 @@
     "sql/automations/hold_automation_batch.sql": "9f104ac386541362b5eb125116479d80985d880631fb674519ef509ea58352d1",
     "sql/automations/hold_automation_firings.sql": "c75944d371ead3e58794fe2ef32704dfe63290bcda6ecaf329148984e2ba424a",
     "sql/automations/insert_automation_batch.sql": "0e839ce80c0b8a12695ba4dec5bdf077e81d0e18c140cd9c63a2a983d4dc2147",
-    "sql/automations/insert_pending_firing.sql": "4513405b1f70c054321aaff89aa887d00137cd4bd1cf46a4a8b57a4fa87b5c1f",
+    "sql/automations/insert_pending_firing.sql": "4fade8d29f711d8935167c10ed6a4eefd91dcc26469de98c7f2d2862a01b1b35",
     "sql/automations/record_automation_fault.sql": "fac31a722d7f2ba06dd5c701bdb5044f9ead3cf808bd82530485e9422f348fb3",
     "sql/automations/write_automation_progress.sql": "264e6f956a1efeece4549ef4d96f328870dc4bb4b46add41b6895e8d1de89777",
     "src/generated_automation_admission.rs": "cd84e46ba24468910a757ce469280e73f0a2b2278b16ad93e1fd636a35c34b0e"
