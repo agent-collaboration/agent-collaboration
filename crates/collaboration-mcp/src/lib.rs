@@ -2,11 +2,15 @@
 //! served on every listener the Host holds.
 
 mod collaboration_api_router;
+#[cfg(debug_assertions)]
+mod debug_verification_controls;
 mod local_collaboration;
 mod loopback_bind_address;
 mod mcp_server;
 mod native_schema_definitions;
 mod tool_call_registry;
+#[cfg(debug_assertions)]
+pub use debug_verification_controls::DebugVerificationControls;
 
 pub use collaboration_api_router::{
     COLLABORATION_API_PATH, CollaborationApiConfig, CollaborationApiListener,

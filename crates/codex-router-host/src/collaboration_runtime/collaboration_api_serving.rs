@@ -22,6 +22,8 @@ pub(super) struct BoundCollaborationApi {
     local_address: SocketAddr,
     proxy_authority: Option<collaboration_mcp::ProxyAuthority>,
     service_socket: Option<(UnixListener, SocketCleanup)>,
+    #[cfg(debug_assertions)]
+    debug_verification_controls: Option<collaboration_mcp::DebugVerificationControls>,
 }
 
 impl BoundCollaborationApi {
@@ -37,6 +39,8 @@ impl BoundCollaborationApi {
             local_address,
             proxy_authority,
             service_socket: None,
+            #[cfg(debug_assertions)]
+            debug_verification_controls: None,
         })
     }
 
@@ -44,6 +48,15 @@ impl BoundCollaborationApi {
     pub(super) fn with_service_socket(mut self, path: &Path) -> io::Result<Self> {
         self.service_socket = Some(OwnerOnlySocket::bind(path)?.into_parts());
         Ok(self)
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn with_debug_verification_controls(
+        mut self,
+        controls: collaboration_mcp::DebugVerificationControls,
+    ) -> Self {
+        self.debug_verification_controls = Some(controls);
+        self
     }
 
     pub(super) fn url(&self) -> String {
@@ -56,7 +69,10 @@ impl BoundCollaborationApi {
 
     /// Serves the API on every bound listener until the configuration's shutdown token is
     /// cancelled.
-    pub(super) fn serve(self, config: &CollaborationApiConfig) -> ServedCollaborationApi {
+    pub(super) fn serve(
+        self,
+        config: &CollaborationApiConfig,
+    ) -> io::Result<ServedCollaborationApi> {
         let loopback = collaboration_mcp::collaboration_api_router(
             config,
             CollaborationApiListener::LoopbackTcp {
@@ -64,17 +80,28 @@ impl BoundCollaborationApi {
                 proxy_authority: self.proxy_authority,
             },
         );
+        let socket = if let Some((listener, socket_cleanup)) = self.service_socket {
+            let socket = collaboration_mcp::collaboration_api_router(
+                config,
+                CollaborationApiListener::UnixSocket,
+            );
+            #[cfg(debug_assertions)]
+            let socket = if let Some(controls) = self.debug_verification_controls {
+                socket.with_debug_verification_controls(controls)?
+            } else {
+                socket
+            };
+            Some((listener, socket, socket_cleanup))
+        } else {
+            None
+        };
         let mut tasks = vec![tokio::spawn(collaboration_mcp::serve_collaboration_api(
             self.listener,
             loopback,
             config.shutdown.clone(),
         ))];
         let mut cleanup = None;
-        if let Some((listener, socket_cleanup)) = self.service_socket {
-            let socket = collaboration_mcp::collaboration_api_router(
-                config,
-                CollaborationApiListener::UnixSocket,
-            );
+        if let Some((listener, socket, socket_cleanup)) = socket {
             tasks.push(tokio::spawn(collaboration_mcp::serve_collaboration_api(
                 listener,
                 socket,
@@ -82,11 +109,11 @@ impl BoundCollaborationApi {
             )));
             cleanup = Some(socket_cleanup);
         }
-        ServedCollaborationApi {
+        Ok(ServedCollaborationApi {
             local_address: self.local_address,
             tasks,
             _socket_cleanup: cleanup,
-        }
+        })
     }
 }
 

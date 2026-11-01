@@ -173,12 +173,22 @@ impl CollaborationRuntime {
                 None
             }
         };
+        #[cfg(debug_assertions)]
+        let automation_faults = super::debug_automation_control::configured_faults()?;
         let mut automation_store = None;
         let mut settings_backend = None;
         match automation_storage::AutomationStore::open(&inputs.directory.join("automation.sqlite"))
             .await
         {
             Ok(store) => {
+                #[cfg(debug_assertions)]
+                let store = {
+                    let mut store = store;
+                    if let Some(faults) = &automation_faults {
+                        store.set_automation_faults(faults.clone());
+                    }
+                    store
+                };
                 let store = std::sync::Arc::new(tokio::sync::Mutex::new(store));
                 automation_store = Some(std::sync::Arc::clone(&store));
                 let handle = collaboration_runtime::AutomationConfigurationHandle::default();
@@ -562,6 +572,10 @@ impl CollaborationRuntime {
         };
         let collaboration_api =
             collaboration_api.with_service_socket(&inputs.directory.join("control.sock"))?;
+        #[cfg(debug_assertions)]
+        let collaboration_api = collaboration_api.with_debug_verification_controls(
+            collaboration_mcp::DebugVerificationControls { automation_faults },
+        );
         let native = NativeRelayListener::bind(
             &inputs.directory.join("codex-native.sock"),
             publication.admission_gate(),
@@ -728,7 +742,7 @@ impl CollaborationRuntime {
                 router_executable_relation: relation_receiver,
                 concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
                 shutdown: shutdown.clone(),
-            });
+            })?;
         let mut tasks = JoinSet::new();
         #[cfg(test)]
         let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);

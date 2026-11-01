@@ -115,3 +115,10 @@ mod remote_wake_requests;
 pub use remote_wake_requests::{
     RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
 };
+
+#[cfg(debug_assertions)]
+mod debug_automation_faults;
+#[cfg(debug_assertions)]
+pub use debug_automation_faults::{
+    AutomationFaultEvidence, AutomationFaultObserver, AutomationFaultPoint,
+};
