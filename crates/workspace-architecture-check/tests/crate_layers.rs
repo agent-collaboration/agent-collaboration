@@ -76,6 +76,8 @@ const LAYER_POLICY: [(&str, &[&str]); 16] = [
     (
         "codex-router-cli",
         &[
+            // The quota composition root wires its preference adapter to this leaf store.
+            "ui-preference-store",
             "codex-router-quota-service",
             "agent-router-quota-tui",
             "agent-collaboration-tui",
