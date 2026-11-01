@@ -1,5 +1,8 @@
 //! Row identity drives pointer selection, focus paint and scroll reveal together.
-use crate::controls::list::{ListRowKey, ListSelectionControl, scroll_list::use_scroll_reveal};
+use crate::controls::list::{
+    ListRowKey, ListSelectionControl,
+    scroll_list::{use_scroll_reveal, use_scroll_reveal_prefix},
+};
 use crate::{
     foundation::theme::{SurfaceRole, TextRole, UiGlyph},
     surfaces::{
@@ -19,7 +22,8 @@ pub struct ListRowProps<'a> {
     pub children: Vec<AnyElement<'a>>,
 }
 #[component]
-pub fn ListRow<'a>(props: &mut ListRowProps<'a>) -> impl Into<AnyElement<'a>> {
+pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<AnyElement<'a>> {
+    let prefix = use_scroll_reveal_prefix(&mut hooks, props.control.row_target(&props.row));
     let heading = props.control.heading_before(&props.row);
     let children = std::mem::take(&mut props.children);
     let record = element!(ListRecordRow(control:props.control.clone(),row:props.row.clone(),marker_offset:props.marker_offset,children)).into_any();
@@ -27,7 +31,7 @@ pub fn ListRow<'a>(props: &mut ListRowProps<'a>) -> impl Into<AnyElement<'a>> {
         None => record,
         Some(heading) => element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             crate::controls::typography::GroupHeading(name:heading.name,count:Some(heading.count),summary:heading.summary)
-            #(Some(record))
+            ContextProvider(value:Context::owned(prefix)) {#(Some(record))}
         }).into_any(),
     }
 }

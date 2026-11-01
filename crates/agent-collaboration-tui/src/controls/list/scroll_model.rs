@@ -24,6 +24,7 @@ impl ScrollPosition {
 pub(super) struct ScrollRevealTarget {
     pub target_id: Option<TargetId>,
     pub logical_top: i32,
+    pub heading_top: Option<i32>,
     pub height: u16,
     pub viewport_height: u16,
 }
@@ -198,8 +199,15 @@ impl ScrollHandle {
         }
     }
     pub(super) fn reveal(&self, target: ScrollRevealTarget) {
-        let logical_top = target.logical_top;
-        let height = target.height;
+        let target_bottom = target.logical_top + i32::from(target.height);
+        let logical_top = target
+            .heading_top
+            .filter(|top| {
+                *top <= target.logical_top
+                    && target_bottom - *top <= i32::from(target.viewport_height)
+            })
+            .unwrap_or(target.logical_top);
+        let height = target_bottom - logical_top;
         {
             let mut previous = self
                 .last_reveal
@@ -213,11 +221,10 @@ impl ScrollHandle {
         self.update(|position| {
             let top = i32::from(position.offset);
             let bottom = top + i32::from(position.viewport_height);
-            let target_bottom = logical_top + i32::from(height);
             let next = if logical_top < top {
                 logical_top
             } else if target_bottom > bottom {
-                if height > position.viewport_height {
+                if height > i32::from(position.viewport_height) {
                     logical_top
                 } else {
                     target_bottom - i32::from(position.viewport_height)
