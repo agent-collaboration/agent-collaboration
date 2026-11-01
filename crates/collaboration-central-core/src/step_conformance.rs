@@ -11,6 +11,10 @@ use sqlx_core::{
 use std::sync::Arc;
 
 mod claim_reservation;
+#[cfg(debug_assertions)]
+mod machine_work_fixture;
+#[cfg(debug_assertions)]
+pub use machine_work_fixture::MachineWorkFixtureMutation;
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "step_conformance/native_callback.rs"]
 mod native_callback;
@@ -34,6 +38,18 @@ where
 {
     pub async fn execute(&self, command: StepControl) -> Result<StepControlReply, StoreError> {
         match command {
+            #[cfg(debug_assertions)]
+            StepControl::MachineWorkFixture {
+                work_item_id,
+                mutation,
+            } => self
+                .driver
+                .run(machine_work_fixture::MachineWorkFixture {
+                    work_item_id,
+                    mutation,
+                })
+                .await
+                .map(|(observation, _)| StepControlReply::MachineWorkFixture(observation)),
             #[cfg(debug_assertions)]
             StepControl::AutomationFixture {
                 automation_id,
@@ -184,6 +200,11 @@ where
 )]
 pub enum StepControl {
     #[cfg(debug_assertions)]
+    MachineWorkFixture {
+        work_item_id: collaboration_protocol::WorkItemId,
+        mutation: Option<crate::MachineWorkFixtureMutation>,
+    },
+    #[cfg(debug_assertions)]
     AutomationFixture {
         automation_id: collaboration_protocol::AutomationId,
         definition_json: Option<String>,
@@ -211,6 +232,8 @@ pub enum StepControl {
     deny_unknown_fields
 )]
 pub enum StepControlReply {
+    #[cfg(debug_assertions)]
+    MachineWorkFixture(serde_json::Value),
     #[cfg(debug_assertions)]
     AutomationFixture(serde_json::Value),
     Initialized,

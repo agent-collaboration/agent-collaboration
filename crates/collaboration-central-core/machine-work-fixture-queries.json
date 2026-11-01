@@ -1,0 +1,107 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_machine_work_fixture.rs",
+  "metadata": "machine-work-fixture-query-metadata.json",
+  "queries": [
+    {
+      "name": "fixture_read_machine_work",
+      "sql": "sql/machine_work/fixture_read_machine_work.sql",
+      "row": "StoredMachineWorkFixture",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_machine_work_request",
+      "sql": "sql/machine_work/fixture_write_machine_work_request.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "request_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_machine_work_digest",
+      "sql": "sql/machine_work/fixture_write_machine_work_digest.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "request_digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_machine_work_state",
+      "sql": "sql/machine_work/fixture_write_machine_work_state.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_machine_work_result",
+      "sql": "sql/machine_work/fixture_write_machine_work_result.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "result_json",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_machine_work_batch",
+      "sql": "sql/machine_work/fixture_write_machine_work_batch.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

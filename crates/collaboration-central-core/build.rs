@@ -1,4 +1,5 @@
 fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
+    fleet_sync_query_gen::verify_manifest("machine-work-fixture-queries.json")?;
     fleet_sync_query_gen::verify_manifest("machine-work-item-queries.json")?;
     fleet_sync_query_gen::verify_manifest("automation-fixture-queries.json")?;
     fleet_sync_query_gen::verify_manifest("automation-custody-queries.json")?;

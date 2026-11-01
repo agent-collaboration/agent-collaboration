@@ -4,6 +4,7 @@
 #[cfg(debug_assertions)]
 use collaboration_central_conformance::{
     AutomationClockControl, ConformanceClient, ConformanceResult, JwksFixtureServer,
+    prepare_remote_create_restart, resume_remote_create_restart,
     run_remote_session_create_conformance,
 };
 #[cfg(debug_assertions)]
@@ -71,16 +72,32 @@ async fn main() -> ConformanceResult<()> {
                 now: RegistryTime("2026-10-31T10:00:01.123Z".parse()?),
             })
             .await?;
-        run_remote_session_create_conformance(&client).await
+        run_remote_session_create_conformance(&client).await?;
+        prepare_remote_create_restart(&client).await
     }
     .await;
     let stopped = server.stop().await;
+    let resumed: ConformanceResult<()> = async {
+        let prepared = proof?;
+        stopped?;
+        let server = WorkerdProcess::start_configured(
+            &settings,
+            &settings.relay_peer.to_string(),
+            Some(&bundle),
+        )
+        .await?;
+        let proof = resume_remote_create_restart(&ConformanceClient::new(&base)?, prepared).await;
+        let stopped = server.stop().await;
+        proof?;
+        stopped?;
+        Ok(())
+    }
+    .await;
     let keys = keys.shutdown().await;
-    proof?;
-    stopped?;
+    resumed?;
     keys?;
     println!(
-        "REMOTE_SESSION_CREATE_RESULT shared central custody scenario passed; native effects unverified"
+        "REMOTE_SESSION_CREATE_RESULT shared central custody and retention-restart passed; native effects unverified"
     );
     Ok(())
 }

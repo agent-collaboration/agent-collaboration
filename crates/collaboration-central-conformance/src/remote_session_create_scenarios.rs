@@ -7,7 +7,14 @@ use collaboration_protocol::{
     RemoteSessionCreateRequest, WorkEntry,
 };
 use serde_json::json;
+mod corruption_cases;
+mod fixture;
+mod mixed_report_cases;
 mod report_cases;
+mod restart_cases;
+pub use restart_cases::{
+    RemoteCreateRestartCase, prepare_remote_create_restart, resume_remote_create_restart,
+};
 
 pub async fn run_remote_session_create_conformance(
     client: &ConformanceClient,
@@ -113,6 +120,8 @@ pub async fn run_remote_session_create_conformance(
             "freshStatusCommitted":true,"immutableReplay":true,
             "beforeCallbackCount":before.callbacks.len(),"afterCallbackCount":after.callbacks.len()
         }));
+        corruption_cases::run(client,&mut source,&mut target,&source_service,&target_service).await?;
+        mixed_report_cases::run(client,&mut source,&mut target,&source_service,&target_service).await?;
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
     let source_closed = source.close().await;

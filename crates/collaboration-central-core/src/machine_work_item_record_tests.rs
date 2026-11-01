@@ -215,3 +215,169 @@ fn known_created_session_belongs_to_the_bound_target() {
         ))
     ));
 }
+
+#[test]
+fn every_required_stored_column_refuses_null() {
+    #[derive(Debug)]
+    enum RequiredColumn {
+        Item,
+        Operation,
+        Target,
+        Kind,
+        Request,
+        Digest,
+        Custody,
+    }
+    for column in [
+        RequiredColumn::Item,
+        RequiredColumn::Operation,
+        RequiredColumn::Target,
+        RequiredColumn::Kind,
+        RequiredColumn::Request,
+        RequiredColumn::Digest,
+        RequiredColumn::Custody,
+    ] {
+        let mut stored = row();
+        match column {
+            RequiredColumn::Item => stored.work_item_id = None,
+            RequiredColumn::Operation => stored.operation_id = None,
+            RequiredColumn::Target => stored.service_id = None,
+            RequiredColumn::Kind => stored.kind = None,
+            RequiredColumn::Request => stored.request_json = None,
+            RequiredColumn::Digest => stored.request_digest = None,
+            RequiredColumn::Custody => stored.state = None,
+        }
+        assert!(
+            matches!(decode(stored), Err(AutomationStoreError::InvalidRecord(_))),
+            "null {column:?} was silently filled"
+        );
+    }
+    // result_json is the only nullable column; absence must remain unreported.
+    assert!(decode(row()).expect("nullable result").result.is_none());
+}
+
+#[test]
+fn required_request_fields_refuse_missing_null_and_wrong_types() {
+    for pointer in [
+        "/workItemId",
+        "/operationId",
+        "/sourceInstallation",
+        "/request",
+        "/request/endpoint",
+        "/request/endpoint/serviceId",
+        "/request/endpoint/endpointId",
+        "/request/workingDirectory",
+        "/request/createdBy",
+        "/request/createdBy/endpoint",
+        "/request/createdBy/endpoint/serviceId",
+        "/request/createdBy/endpoint/endpointId",
+        "/request/createdBy/sessionId",
+        "/request/requestedPolicy",
+        "/request/requestedPolicy/access",
+    ] {
+        for invalid in [None, Some(Value::Null), Some(json!(37))] {
+            let mut request = entry();
+            replace_or_remove(&mut request, pointer, invalid);
+            let mut stored = row();
+            stored.request_json = Some(request.to_string());
+            assert!(
+                matches!(decode(stored), Err(AutomationStoreError::InvalidRecord(_))),
+                "malformed {pointer} was coerced"
+            );
+        }
+    }
+    for malformed in ["", "{", "null", "[]", "37"] {
+        let mut stored = row();
+        stored.request_json = Some(malformed.into());
+        assert!(matches!(
+            decode(stored),
+            Err(AutomationStoreError::InvalidRecord(_))
+        ));
+    }
+}
+
+#[test]
+fn result_variants_refuse_incomplete_nested_fields_and_unrecognized_fields() {
+    let created = json!({"seq":1,"create":{"state":"created","sessionRef":{
+        "endpoint":{"serviceId":TARGET,"endpointId":"codex-local"},"sessionId":"target"
+    },"settings":{"state":"applied","effectiveSettings":null,"permissionDifferences":[]}},"input":{"state":"accepted"}});
+    let refused = json!({"seq":1,"create":{"state":"refused","reason":{"kind":"approverRequired"}},
+        "input":{"state":"failed","reason":"fixture input failure"}});
+    for (baseline, pointers) in [
+        (
+            &created,
+            vec![
+                "/seq",
+                "/create",
+                "/input",
+                "/create/state",
+                "/input/state",
+                "/create/sessionRef",
+                "/create/sessionRef/endpoint",
+                "/create/sessionRef/endpoint/serviceId",
+                "/create/sessionRef/endpoint/endpointId",
+                "/create/sessionRef/sessionId",
+                "/create/settings",
+                "/create/settings/state",
+                "/create/settings/permissionDifferences",
+            ],
+        ),
+        (
+            &refused,
+            vec!["/create/reason", "/create/reason/kind", "/input/reason"],
+        ),
+    ] {
+        let mut valid = row();
+        valid.result_json = Some(baseline.to_string());
+        assert!(decode(valid).is_ok(), "matrix baseline must decode");
+        for pointer in pointers {
+            for invalid in [None, Some(Value::Null), Some(json!(true))] {
+                let mut result = baseline.clone();
+                replace_or_remove(&mut result, pointer, invalid);
+                let mut stored = row();
+                stored.result_json = Some(result.to_string());
+                assert!(
+                    matches!(
+                        decode(stored),
+                        Err(AutomationStoreError::InvalidRecord(
+                            "machine_work_items.result_json"
+                        ))
+                    ),
+                    "incomplete result {pointer} was coerced"
+                );
+            }
+        }
+        for pointer in ["", "/create", "/input"] {
+            let mut result = baseline.clone();
+            result
+                .pointer_mut(pointer)
+                .and_then(Value::as_object_mut)
+                .expect("variant object")
+                .insert("unexpected".into(), json!(true));
+            let mut stored = row();
+            stored.result_json = Some(result.to_string());
+            assert!(
+                matches!(
+                    decode(stored),
+                    Err(AutomationStoreError::InvalidRecord(
+                        "machine_work_items.result_json"
+                    ))
+                ),
+                "unknown result field accepted at {pointer}; baseline={baseline}"
+            );
+        }
+    }
+}
+
+fn replace_or_remove(value: &mut Value, pointer: &str, replacement: Option<Value>) {
+    let (parent, key) = pointer.rsplit_once('/').expect("field pointer");
+    let fields = value
+        .pointer_mut(parent)
+        .and_then(Value::as_object_mut)
+        .expect("field owner");
+    if let Some(replacement) = replacement {
+        fields.insert(key.into(), replacement);
+    } else {
+        assert!(fields.remove(key).is_some(), "matrix field must exist");
+    }
+}

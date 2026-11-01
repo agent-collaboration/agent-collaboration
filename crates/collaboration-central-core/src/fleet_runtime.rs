@@ -104,7 +104,8 @@ where
             call.kind == crate::conformance_fleet::FleetReceiptProbe::KIND
                 && matches!(
                     serde_json::from_value::<crate::StepControl>(call.request.clone()),
-                    Ok(crate::StepControl::AutomationFixture { .. })
+                    Ok(crate::StepControl::AutomationFixture { .. }
+                        | crate::StepControl::MachineWorkFixture { .. })
                 )
         });
         #[cfg(not(all(feature = "conformance", debug_assertions)))]

@@ -339,7 +339,7 @@ async fn monotone_report_case(
     Ok(())
 }
 
-async fn accept_report(
+pub(super) async fn accept_report(
     target: &mut NativeBoardSession,
     item_id: &WorkItemId,
     seq: u64,
@@ -362,7 +362,7 @@ async fn accept_report(
     Ok(())
 }
 
-fn report_call(
+pub(super) fn report_call(
     item_id: &WorkItemId,
     seq: u64,
     create: SessionCreateState,
@@ -378,7 +378,7 @@ fn report_call(
     )?))
 }
 
-async fn status(
+pub(super) async fn status(
     reader: &mut NativeBoardSession,
     operation_id: &OperationId,
 ) -> ConformanceResult<RemoteSessionCreateSnapshot> {
@@ -395,7 +395,7 @@ async fn status(
     }
 }
 
-async fn acknowledge(
+pub(super) async fn acknowledge(
     target: &mut NativeBoardSession,
     batch: &FrozenAutomationBatch,
 ) -> ConformanceResult<()> {
