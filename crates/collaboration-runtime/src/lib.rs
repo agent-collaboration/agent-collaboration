@@ -158,3 +158,12 @@ pub mod scheduled_route_fixture;
 /// Test-only hooks for causal runtime steps observed through the application.
 #[cfg(feature = "test-support")]
 pub mod test_support;
+
+#[cfg(debug_assertions)]
+mod debug_automation_faults;
+#[cfg(debug_assertions)]
+pub use automation_storage::AutomationFaultPoint;
+#[cfg(debug_assertions)]
+pub use debug_automation_faults::{
+    AutomationFaultSelector, DebugAutomationFaultController, HeldAutomationFault,
+};

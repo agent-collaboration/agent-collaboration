@@ -109,12 +109,29 @@ pub enum StorageError {
 
 pub struct AutomationStore {
     pub(crate) connection: SqliteConnection,
+    #[cfg(debug_assertions)]
+    pub(crate) automation_faults: Option<std::sync::Arc<dyn crate::AutomationFaultObserver>>,
 }
 impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
         let mut connection = connect(path, true).await?;
         crate::schema_initialization::initialize(&mut connection).await?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            #[cfg(debug_assertions)]
+            automation_faults: None,
+        })
+    }
+    #[cfg(debug_assertions)]
+    pub fn set_automation_faults(
+        &mut self,
+        faults: std::sync::Arc<dyn crate::AutomationFaultObserver>,
+    ) {
+        self.automation_faults = Some(faults);
+    }
+    #[cfg(debug_assertions)]
+    pub fn automation_faults(&self) -> Option<std::sync::Arc<dyn crate::AutomationFaultObserver>> {
+        self.automation_faults.clone()
     }
     pub async fn close(self) -> Result<(), StorageError> {
         self.connection.close().await?;
