@@ -3,7 +3,6 @@ use super::session_binding::CallSessionAdmission;
 use super::{CallToolResult, CollaborationMcpServer, structured_tool_error};
 use collaboration_contracts::HarnessLaunchFailure;
 use collaboration_protocol::{ConversationOperationFailureStage, ProviderOperationEffect};
-use fleet_identity_protocol::SessionStartRefusal;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,13 +16,13 @@ enum PreparationRefusalKind {
 }
 
 #[derive(serde::Serialize)]
-struct PreparationRefusal {
+struct PreparationRefusal<TReason> {
     kind: PreparationRefusalKind,
     stage: ConversationOperationFailureStage,
     effect: ProviderOperationEffect,
     message: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<SessionStartRefusal>,
+    reason: Option<TReason>,
 }
 fn refusal(failure: HarnessLaunchFailure) -> CallToolResult {
     let (kind, message, reason) = match failure {
