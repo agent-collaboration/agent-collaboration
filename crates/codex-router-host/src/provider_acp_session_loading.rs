@@ -123,7 +123,11 @@ pub(crate) async fn ensure_provider_session_loaded(
         }
     };
     match runtime
-        .load_session(provider_session_id, working_directory)
+        .load_session(
+            provider_session_id,
+            working_directory,
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,

@@ -268,7 +268,11 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
     .expect("load fixture initializes");
     assert!(load_runtime.admission().supports_mcp_http);
     load_runtime
-        .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
+        .load_session(
+            "fixture-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("load with MCP binding");
     load_runtime.shutdown().await;

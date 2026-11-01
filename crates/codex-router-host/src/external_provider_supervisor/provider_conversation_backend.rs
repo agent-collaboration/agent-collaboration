@@ -115,7 +115,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     model: requested_settings.model,
                                     effort: requested_settings.effort,
                                 },
-                            )
+                             acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,)
                             .await
                         {
                             Ok(created) => {
@@ -295,6 +295,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             .load_session(
                                 provider_session_id.clone(),
                                 PathBuf::from(String::from(working_directory.clone())),
+                                acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
                             )
                             .await
                         {

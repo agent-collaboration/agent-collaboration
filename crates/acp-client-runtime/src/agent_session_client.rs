@@ -122,6 +122,7 @@ enum ProviderCommand<P: InteractionPort> {
     Create {
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
+        mcp: crate::ProviderSessionMcp,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
         >,
@@ -130,6 +131,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: provider_session_restore::RestoreHistoryMode,
+        mcp: crate::ProviderSessionMcp,
         reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },
     List {

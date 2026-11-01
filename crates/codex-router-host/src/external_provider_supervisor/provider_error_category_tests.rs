@@ -234,7 +234,7 @@ async fn scripted_load_not_found_keeps_session_mapping_and_safe_category() -> Te
         .launch();
     let runtime = ExternalProviderRuntime::initialize(fixture).await?;
     let result = async {
-        let error = match runtime.load_session("missing-session".to_owned(), PathBuf::from("/tmp")).await {
+        let error = match runtime.load_session("missing-session".to_owned(), PathBuf::from("/tmp"), acp_client_runtime::ProviderSessionMcp::ConnectionDefaults).await {
             Err(error) => error,
             Ok(_) => return Err("scripted missing-session load unexpectedly succeeded".into()),
         };

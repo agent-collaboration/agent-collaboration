@@ -232,7 +232,11 @@ async fn shutdown_drains_more_than_completion_channel_capacity_of_held_loads() {
         let runtime = Arc::clone(&runtime);
         loads.push(tokio::spawn(async move {
             runtime
-                .load_session(format!("held-load-{index}"), PathBuf::from("/tmp"))
+                .load_session(
+                    format!("held-load-{index}"),
+                    PathBuf::from("/tmp"),
+                    acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+                )
                 .await
         }));
     }
@@ -333,8 +337,11 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
         None,
     ));
     assert!(futures_util::poll!(&mut prompt).is_pending());
-    let mut load =
-        Box::pin(runtime.load_session("loaded-session".to_owned(), PathBuf::from("/tmp")));
+    let mut load = Box::pin(runtime.load_session(
+        "loaded-session".to_owned(),
+        PathBuf::from("/tmp"),
+        acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+    ));
     assert!(futures_util::poll!(&mut load).is_pending());
     tokio::time::timeout(Duration::from_secs(2), async {
         while !observed.exists() {
@@ -429,7 +436,11 @@ async fn load_history_replay_is_not_returned_as_the_next_prompt_output() {
         .await
         .expect("fixture initializes");
     runtime
-        .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
+        .load_session(
+            "fixture-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("session loads");
 
@@ -488,7 +499,11 @@ async fn live_external_provider_create_and_prompt() {
         .await
         .expect("provider reinitializes for load");
     resumed
-        .load_session(provider_session_id.clone(), cwd)
+        .load_session(
+            provider_session_id.clone(),
+            cwd,
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("provider conversation loads");
     let resumed_outcome = resumed

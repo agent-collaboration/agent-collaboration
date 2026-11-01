@@ -135,7 +135,11 @@ async fn advertised_list_resume_and_idle_close_keep_wire_order() {
     assert_eq!(listed[0].provider_session_id, "fixture-session");
     assert_eq!(listed[0].title.as_deref(), Some("Fixture session"));
     client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("resume");
     assert_eq!(sink.0.load(Ordering::Relaxed), 0, "resume does not replay");
@@ -180,7 +184,11 @@ async fn close_admission_rejects_a_new_prompt_before_close_command_is_processed(
         .await
         .expect("list");
     client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("resume");
     client
@@ -236,7 +244,11 @@ async fn dropped_close_before_command_submission_releases_admission_mark() {
         .await
         .expect("list");
     client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("resume");
     client
@@ -312,7 +324,11 @@ async fn dropped_close_waiter_keeps_mark_until_submitted_close_settles() {
         .await
         .expect("list");
     client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("resume");
     client
@@ -395,7 +411,11 @@ async fn close_cancels_running_turn_before_session_close() {
         .await
         .expect("list");
     client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("resume");
     let (dispatch_tx, dispatch_rx) = tokio::sync::oneshot::channel();
@@ -447,10 +467,18 @@ async fn unadvertised_lifecycle_methods_send_no_acp_request() {
     .expect("fixture initializes");
     let listed = client.list_sessions(None).await;
     let loaded = client
-        .load_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .load_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await;
     let resumed = client
-        .resume_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .resume_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await;
     let closed = client.close_session("fixture-session".to_owned()).await;
     client.shutdown().await;

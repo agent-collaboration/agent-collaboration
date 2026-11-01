@@ -143,7 +143,11 @@ async fn load_replays_historical_items_before_publishing_idle() {
     let (_root, store, hub, runtime, session) = fixture("load").await;
     record_session(&store, &session).await;
     runtime
-        .load_session("fixture-session".into(), PathBuf::from("/tmp"))
+        .load_session(
+            "fixture-session".into(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("session/load");
     assert_listed_idle(&hub, &session).await;
@@ -170,7 +174,11 @@ async fn resume_invalidates_history_before_publishing_idle() {
     let (_root, store, hub, runtime, session) = fixture("resume").await;
     record_session(&store, &session).await;
     runtime
-        .resume_session("fixture-session".into(), PathBuf::from("/tmp"))
+        .resume_session(
+            "fixture-session".into(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("session/resume");
     assert_listed_idle(&hub, &session).await;

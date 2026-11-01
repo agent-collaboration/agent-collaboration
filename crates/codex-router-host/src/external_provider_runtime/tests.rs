@@ -340,7 +340,11 @@ async fn resource_not_found_from_session_load_is_session_not_found() {
         .await
         .expect("fixture initializes");
     let error = runtime
-        .load_session("missing-session".to_owned(), PathBuf::from("/tmp"))
+        .load_session(
+            "missing-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect_err("missing session");
     assert!(matches!(

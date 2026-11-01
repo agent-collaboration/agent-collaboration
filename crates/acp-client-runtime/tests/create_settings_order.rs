@@ -200,6 +200,7 @@ async fn create_applies_requested_settings_before_first_prompt() {
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await
         .expect("settings applied");
@@ -266,6 +267,7 @@ async fn invalid_first_setting_closes_created_session() {
                 mode: Some("impossible".to_owned()),
                 ..Default::default()
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await;
     client.shutdown().await;
@@ -316,6 +318,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await;
     let Err(acp_client_runtime::ExternalProviderRuntimeError::CreatedWithoutSettings {
@@ -406,6 +409,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await;
     let Err(acp_client_runtime::ExternalProviderRuntimeError::CreatedWithoutSettings {
@@ -486,6 +490,7 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
                 mode: Some("ask".to_owned()),
                 ..Default::default()
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await
         .expect("mode applied");

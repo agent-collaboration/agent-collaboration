@@ -467,9 +467,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 command = command_rx.recv() => {
                                     let Some(command) = command else { break; };
                                     match command {
-                                        ProviderCommand::Create { cwd, settings, reply } => {
+                                        ProviderCommand::Create { cwd, settings, mcp, reply } => {
                                             let request = NewSessionRequest::new(&cwd)
-                                                .mcp_servers(session_mcp_servers.clone());
+                                                .mcp_servers(mcp.into_servers(&session_mcp_servers));
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
                                             let pending_admission_tx = admission_tx.clone();
@@ -495,7 +495,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 .await;
                                             });
                                         }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, reply } => {
+                                        ProviderCommand::Restore { provider_session_id, cwd, mode, mcp, reply } => {
                                             if sessions.contains_key(&provider_session_id) || !pending_loads.insert(provider_session_id.clone()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                             } else {
@@ -505,7 +505,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     provider_session_id,
                                                     cwd,
                                                     mode,
-                                                    mcp_servers: session_mcp_servers.clone(),
+                                                    mcp_servers: mcp.into_servers(&session_mcp_servers),
                                                     shutdown: task_shutdown.clone(),
                                                     event_sink: Arc::clone(&task_event_sink),
                                                     admission_tx: admission_tx.clone(),

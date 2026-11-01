@@ -97,7 +97,11 @@ async fn load_replay_drains_more_than_the_old_update_limit_without_leaking_histo
         .await
         .expect("fixture initializes");
     runtime
-        .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
+        .load_session(
+            "fixture-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("large replay loads");
 
@@ -117,7 +121,11 @@ async fn load_replay_accepts_the_old_exact_update_boundary_without_history_leak(
         .await
         .expect("fixture initializes");
     runtime
-        .load_session("fixture-session".to_owned(), PathBuf::from("/tmp"))
+        .load_session(
+            "fixture-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("exact-boundary replay loads");
 
@@ -281,7 +289,11 @@ async fn implemented_permission_request_during_load_replay_is_answered() {
         .expect("fixture initializes");
     tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        runtime.load_session("fixture-session".to_owned(), PathBuf::from("/tmp")),
+        runtime.load_session(
+            "fixture-session".to_owned(),
+            PathBuf::from("/tmp"),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        ),
     )
     .await
     .expect("permission request does not block load")

@@ -151,7 +151,11 @@ async fn live_update_continues_replayed_item_projection() {
     .await
     .expect("fixture initializes");
     client
-        .load_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .load_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("history loads");
     let catalog = client
@@ -219,7 +223,11 @@ async fn history_replay_reset_precedes_session_load() {
     .expect("fixture initializes");
 
     let result = client
-        .load_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .load_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await;
     let catalog = client
         .settings_catalog("fixture-session")
@@ -270,7 +278,11 @@ async fn failed_history_replay_never_sends_session_load() {
     .expect("fixture initializes");
 
     let result = client
-        .load_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .load_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await;
     client.shutdown().await;
 
@@ -305,7 +317,11 @@ async fn session_load_publishes_two_historical_turns_and_items() {
     .await
     .expect("fixture initializes");
     client
-        .load_session("fixture-session".to_owned(), root.path().to_path_buf())
+        .load_session(
+            "fixture-session".to_owned(),
+            root.path().to_path_buf(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("load");
     client.shutdown().await;

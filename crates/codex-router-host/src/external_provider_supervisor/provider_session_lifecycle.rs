@@ -63,6 +63,7 @@ pub(super) fn resume(
                         .resume_session(
                             provider_session_id.clone(),
                             PathBuf::from(String::from(working_directory.clone())),
+                            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
                         )
                         .await
                     {

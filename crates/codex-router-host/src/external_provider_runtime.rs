@@ -276,6 +276,7 @@ impl ExternalProviderRuntime {
         self.create_session_with_settings(
             cwd,
             acp_client_runtime::RequestedProviderSettings::default(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await
     }
@@ -284,10 +285,11 @@ impl ExternalProviderRuntime {
         &self,
         cwd: PathBuf,
         settings: acp_client_runtime::RequestedProviderSettings,
+        mcp: acp_client_runtime::ProviderSessionMcp,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let created = self
             .client
-            .create_session_with_settings(cwd, settings)
+            .create_session_with_settings(cwd, settings, mcp)
             .await;
         let active_session = match &created {
             Ok(created) => Some(created.provider_session_id.as_str()),
@@ -343,9 +345,10 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
+        mcp: acp_client_runtime::ProviderSessionMcp,
     ) -> Result<(), ExternalProviderRuntimeError> {
         self.client
-            .load_session(provider_session_id.clone(), cwd)
+            .load_session(provider_session_id.clone(), cwd, mcp)
             .await?;
         self.publish_active_session(&provider_session_id).await
     }
@@ -354,9 +357,10 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
+        mcp: acp_client_runtime::ProviderSessionMcp,
     ) -> Result<(), ExternalProviderRuntimeError> {
         self.client
-            .resume_session(provider_session_id.clone(), cwd)
+            .resume_session(provider_session_id.clone(), cwd, mcp)
             .await?;
         if let Some(event_sink) = &self.event_sink {
             event_sink

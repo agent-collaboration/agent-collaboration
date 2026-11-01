@@ -98,7 +98,11 @@ async fn check_metadata_projection(replay: bool) {
     tokio::time::timeout(Duration::from_secs(5), async {
         if replay {
             client
-                .load_session("metadata-session".into(), root.path().to_path_buf())
+                .load_session(
+                    "metadata-session".into(),
+                    root.path().to_path_buf(),
+                    acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+                )
                 .await
                 .expect("provider replay loads");
         } else {

@@ -163,6 +163,7 @@ async fn create_refreshes_mode_dependent_model_and_model_dependent_effort_choice
                 model: Some("fixture-b".into()),
                 effort: Some("high".into()),
             },
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
         )
         .await;
     fixture.client.shutdown().await;
@@ -225,7 +226,11 @@ async fn load_and_live_update_refresh_effort_identity_and_invalid_values_do_not_
     let fixture = AcpWireFixture::start("load-update", false).await;
     fixture
         .client
-        .load_session("fixture-session".into(), fixture.root.path().into())
+        .load_session(
+            "fixture-session".into(),
+            fixture.root.path().into(),
+            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+        )
         .await
         .expect("load session");
     tokio::time::timeout(std::time::Duration::from_secs(2), async {

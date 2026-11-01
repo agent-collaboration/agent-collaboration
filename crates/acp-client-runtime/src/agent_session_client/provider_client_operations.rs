@@ -226,20 +226,27 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         cwd: PathBuf,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        self.create_session_with_settings(cwd, crate::RequestedProviderSettings::default())
-            .await
+        self.create_session_with_settings(
+            cwd,
+            crate::RequestedProviderSettings::default(),
+            crate::ProviderSessionMcp::ConnectionDefaults,
+        )
+        .await
     }
 
     pub async fn create_session_with_settings(
         &self,
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
+        mcp: crate::ProviderSessionMcp,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.require_session_mcp(&mcp)?;
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Create {
                 cwd,
                 settings,
+                mcp,
                 reply,
             })
             .await
@@ -251,6 +258,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
+        mcp: crate::ProviderSessionMcp,
     ) -> Result<(), ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_load {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
@@ -261,6 +269,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::Replay,
+            mcp,
         )
         .await
     }
@@ -269,6 +278,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         cwd: PathBuf,
+        mcp: crate::ProviderSessionMcp,
     ) -> Result<(), ExternalProviderRuntimeError> {
         if !self.base_capabilities.supports_resume {
             return Err(ExternalProviderRuntimeError::UnsupportedCapability {
@@ -279,6 +289,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             provider_session_id,
             cwd,
             super::provider_session_restore::RestoreHistoryMode::WithoutReplay,
+            mcp,
         )
         .await
     }
@@ -288,18 +299,33 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         cwd: PathBuf,
         mode: super::provider_session_restore::RestoreHistoryMode,
+        mcp: crate::ProviderSessionMcp,
     ) -> Result<(), ExternalProviderRuntimeError> {
+        self.require_session_mcp(&mcp)?;
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Restore {
                 provider_session_id,
                 cwd,
                 mode,
+                mcp,
                 reply,
             })
             .await
             .map_err(|_| self.retired_operation_error())?;
         result.await.map_err(|_| self.retired_operation_error())?
+    }
+
+    fn require_session_mcp(
+        &self,
+        mcp: &crate::ProviderSessionMcp,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        if mcp.requires_http() && !self.admission.supports_mcp_http {
+            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
+                capability: "mcp/http",
+            });
+        }
+        Ok(())
     }
 
     pub async fn list_sessions(
