@@ -1,0 +1,1 @@
+UPDATE automation_firings SET report_seq=json_extract(?1,'$.reportSeq'),outcome_json=json_extract(?1,'$.outcomeJson') WHERE firing_id=json_extract(?1,'$.firingId') AND automation_id=json_extract(?1,'$.automationId');

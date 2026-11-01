@@ -1,0 +1,157 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_catalog.rs",
+  "metadata": "automation-catalog-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_automation",
+      "sql": "sql/automations/read_automation.sql",
+      "row": "StoredAutomation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "find_wake_slot",
+      "sql": "sql/automations/find_wake_slot.sql",
+      "row": "StoredAutomation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "slot_session_key",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_automations",
+      "sql": "sql/automations/list_automations.sql",
+      "row": "StoredAutomation",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_automation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_automation",
+      "sql": "sql/automations/insert_automation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_automation_timing",
+      "sql": "sql/automations/insert_automation_timing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_due_ms",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "expires_at_ms",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "update_automation",
+      "sql": "sql/automations/update_automation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "revision",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "definition_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "slot_session_key",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "updated_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_automation_deadline",
+      "sql": "sql/automations/update_automation_deadline.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "next_due_ms",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "expires_at_ms",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_automation_deadlines",
+      "sql": "sql/automations/list_automation_deadlines.sql",
+      "row": "StoredAutomationDeadline",
+      "result": "many",
+      "parameters": []
+    }
+  ]
+}

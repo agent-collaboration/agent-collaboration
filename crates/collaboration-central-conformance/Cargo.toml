@@ -10,9 +10,10 @@ workspace = true
 
 [features]
 default = ["client"]
-client = ["dep:collaboration-client", "dep:reqwest", "dep:reqwest-websocket", "dep:tokio", "dep:futures-util", "dep:sha2", "dep:chrono", "dep:uuid", "dep:ring", "dep:base64", "dep:axum", "dep:board-sync-protocol"]
+client = ["dep:collaboration-client", "dep:collaboration-protocol", "dep:reqwest", "dep:reqwest-websocket", "dep:tokio", "dep:futures-util", "dep:sha2", "dep:chrono", "dep:uuid", "dep:ring", "dep:base64", "dep:axum", "dep:board-sync-protocol"]
 
 [dependencies]
+collaboration-protocol = { version = "0.1.118", path = "../collaboration-protocol", optional = true }
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol", optional = true }
 collaboration-client = { version = "0.1.100", path = "../collaboration-client", optional = true }
 durable-steps.workspace = true
