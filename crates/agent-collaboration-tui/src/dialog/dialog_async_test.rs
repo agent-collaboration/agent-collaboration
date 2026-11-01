@@ -279,11 +279,12 @@ fn dialog_render_performance_measurements() {
                         }
                     }.into_any());
                     let output=element! {
-                        DialogHost(width,height,background:vec![element! {
+                        View(width,height,overflow:Overflow::Hidden) {
                             View(width:u32::from(width),height:u32::from(height),overflow:Overflow::Hidden) {
                                 Text(content:"Background account list")
                             }
-                        }.into_any()],dialog)
+                            #(dialog)
+                        }
                     }.to_string();
                     std::hint::black_box(output);
                     samples.push(start.elapsed().as_micros());

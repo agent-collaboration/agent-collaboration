@@ -3,7 +3,7 @@ mod configuration;
 mod control_server;
 mod effect_ports;
 mod grouping_reopen;
-#[path = "../../../../codex-router-quota-reset-test-harness/tests/quota_reset_pty_test/loopback_provider_test.rs"]
+#[path = "../../../../codex-router-quota-reset-test-harness/tests/e2e/quota_reset/quota_reset_pty_test/loopback_provider_test.rs"]
 mod loopback_provider;
 mod owned_state;
 mod receipts;

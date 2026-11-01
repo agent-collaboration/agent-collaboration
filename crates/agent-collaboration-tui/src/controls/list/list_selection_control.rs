@@ -335,7 +335,9 @@ impl ListSelectionControl {
             let input = TargetInputHandler::new(move |event| {
                 let reveal = match event {
                     TerminalEvent::FullscreenMouse(mouse) => match mouse.kind {
-                        MouseEventKind::Down(MouseButton::Left) => SelectionReveal::FollowSelection,
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            SelectionReveal::PreserveViewport
+                        }
                         MouseEventKind::Moved if control.hover_selection => {
                             SelectionReveal::PreserveViewport
                         }
@@ -352,7 +354,9 @@ impl ListSelectionControl {
                     return InputUse::Used;
                 }
                 control.set_selection_reveal(reveal);
-                parent.stack.focus(parent.surface, &control.binding.id);
+                parent
+                    .stack
+                    .focus_from_pointer(parent.surface, &control.binding.id);
                 if next.select(&key) {
                     control.publish_selection(next, reveal);
                 }

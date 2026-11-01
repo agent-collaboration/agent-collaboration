@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Physical screen bounds and caller-owned identity in composed dialogs.
 use super::*;
 
@@ -68,7 +69,7 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "東京 OpenAI Research Account Alpha Long Name",
                     "◎ OpenAI",
                     "1 client",
-                    "99%",
+                    "83%",
                 ),
                 (
                     "Claude",
@@ -76,7 +77,7 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "Claude Research Account Beta Full Name",
                     "◆ Claude",
                     "0 clients",
-                    "70%",
+                    "75%",
                 ),
             ] {
                 let region = phone_account_region(&frame, name, next_name);
@@ -113,9 +114,9 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "status belongs to Account: {region}"
                 );
                 for fact in if name == "東京" {
-                    ["83% · week · 7d 0h", "99% · 5h · 5h 0m"]
+                    ["83%", "Weekly · 7d 0h"]
                 } else {
-                    ["75% · week · 6d 0h", "70% · 5h · 4h 0m"]
+                    ["75%", "Weekly · 6d 0h"]
                 } {
                     assert!(
                         quota_words.contains(fact),
@@ -254,7 +255,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                         .split_once("Weekly pace")
                         .map(|(_, tail)| tail.split("Extra").next().unwrap().replace(' ', ""))
                         .unwrap_or_default();
-                    if quota.contains("70%") && pace.contains(expected_pace) {
+                    if quota.contains("75%") && pace.contains(expected_pace) {
                         reached = true;
                         break;
                     }
@@ -273,7 +274,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                 }
                 assert!(
                     reached,
-                    "lower5h and pace facts remain reachable through actual body scroll: {frame}"
+                    "weekly quota and pace facts remain reachable through actual body scroll: {frame}"
                 );
             }
             sender.send(provider_filter_key(KeyCode::Up)).unwrap();

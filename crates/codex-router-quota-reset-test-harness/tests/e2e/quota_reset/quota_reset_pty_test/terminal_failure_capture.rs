@@ -103,7 +103,9 @@ impl FailureCapture {
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../scripts/verification/tui/render-pty-failure-grid.ts");
         if fs::read(&script)?
-            != include_bytes!("../../../../scripts/verification/tui/render-pty-failure-grid.ts")
+            != include_bytes!(
+                "../../../../../../scripts/verification/tui/render-pty-failure-grid.ts"
+            )
         {
             return Err("failure capture renderer differs from its compiled source binding".into());
         }

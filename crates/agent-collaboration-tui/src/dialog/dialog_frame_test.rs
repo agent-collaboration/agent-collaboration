@@ -7,22 +7,19 @@ use iocraft::prelude::*;
 #[test]
 fn framed_dialog_overlays_without_reducing_background_viewport() {
     let frame = element! {
-        DialogHost(width: 40u16, height: 12u16,
-            background: vec![element! {
+        View(width: 40u16, height: 12u16, overflow: Overflow::Hidden) {
                 View(width: 40, height: 12, flex_direction: FlexDirection::Column) {
                     Text(content: "BACKGROUND TOP")
                     View(flex_grow: 1.0_f32) {}
                     Text(content: "BACKGROUND BOTTOM")
                 }
-            }.into_any()],
-            dialog: Some(element! {
                 DialogFrame(width: 40u16, height: 12u16, title: "Filters".to_owned(),
                     presentation: DialogPresentation::cells(26, 8),
                     margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
                     actions: vec![element!(Text(content: "Apply  Cancel")).into_any()]) {
                     Text(content: "Claude")
                 }
-            }.into_any()))
+        }
     }
     .to_string();
     assert_eq!(frame.lines().count(), 12, "{frame}");

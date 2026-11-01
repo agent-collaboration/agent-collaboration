@@ -22,7 +22,7 @@ import {
 } from './evidence-schema.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { runPublicGridCapture, publicGridActionSchema } from './public-grid-capture.ts';
-const captureTest = 'compiled_public_sessions_grid_observation';
+const captureTest = 'quota_storyboard::compiled_public_sessions_grid_observation';
 import {
 	captureArtifact,
 	fileDigest,

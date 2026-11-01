@@ -16,6 +16,11 @@ pub mod frame_output;
 #[path = "../../agent-collaboration-tui/src/test_support/recording_backend.rs"]
 pub mod recording_backend;
 
+#[path = "../../agent-collaboration-tui/src/test_support/control_kind_contract.rs"]
+pub mod control_kind_contract;
+#[path = "../../agent-collaboration-tui/src/test_support/grids.rs"]
+pub mod grids;
+
 #[derive(Clone, Default)]
 pub(crate) struct PublishedQuotaPopup {
     stack: std::sync::Arc<
@@ -259,6 +264,10 @@ fn quota_event_readback(event: &TerminalEvent) -> serde_json::Value {
         KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => (
             serde_json::json!({"kind":"shortcut","key":"r"}),
             serde_json::json!(["control"]),
+        ),
+        KeyCode::Tab if key.modifiers == KeyModifiers::SHIFT => (
+            serde_json::json!({"kind":"fixed","name":KeyCode::Tab.to_string()}),
+            serde_json::json!(["shift"]),
         ),
         code if key.modifiers.is_empty() => (
             serde_json::json!({"kind":"fixed","name":code.to_string()}),

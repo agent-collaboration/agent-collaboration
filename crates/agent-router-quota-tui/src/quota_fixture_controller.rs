@@ -305,3 +305,7 @@ impl LiveQuotaFixture {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "quota_control_kind_contract_test.rs"]
+mod control_kind_contract_test;

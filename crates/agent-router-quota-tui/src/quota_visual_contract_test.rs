@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Literal C1–C7 contracts at the actual row and mounted controller boundaries.
 use super::*;
 use codex_router_quota_service::quota_display_model::QuotaDisplayWindow;
@@ -55,7 +56,7 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
         .render(None);
     let frame = canvas.to_string();
     assert!(
-        frame.contains("92% · week") && !frame.contains("· —"),
+        frame.contains("92%") && frame.contains("Weekly · unknown") && !frame.contains("· —"),
         "{frame}"
     );
     assert!(
@@ -71,8 +72,8 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
             .chars()
             .filter(|glyph| matches!(*glyph, '█' | '░'))
             .count(),
-        7,
-        "only the known weekly meter remains: {frame}"
+        33,
+        "the wider weekly meter fills its unchanged37-cell column: {frame}"
     );
 }
 
@@ -315,13 +316,11 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
         reset_in_seconds: Some(7800),
         stale: false,
     };
-    let canvas = super::super::quota_account_groups::render_interactive_account(row, 110, false)
-        .render(None);
-    let frame = canvas.to_string();
-    for (percent, label, expected) in [
+    for (fallback, percent, label, expected) in [
         (
+            false,
             "92%",
-            "week",
+            "Weekly",
             Color::Rgb {
                 r: 237,
                 g: 240,
@@ -329,6 +328,7 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
             },
         ),
         (
+            true,
             "83%",
             "5h",
             Color::Rgb {
@@ -338,12 +338,19 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
             },
         ),
     ] {
-        let (row, line) = frame
-            .lines()
-            .enumerate()
-            .find(|(_, line)| line.contains(percent))
-            .unwrap();
+        if fallback {
+            row.display_weekly = QuotaDisplayWindow::Unknown;
+        }
+        let canvas =
+            super::super::quota_account_groups::render_interactive_account(row, 110, false)
+                .render(None);
+        let frame = canvas.to_string();
         for token in [percent, label, "█"] {
+            let (row, line) = frame
+                .lines()
+                .enumerate()
+                .find(|(_, line)| line.contains(token))
+                .unwrap();
             let column = unicode_width::UnicodeWidthStr::width(line.split_once(token).unwrap().0);
             assert_eq!(
                 canvas
@@ -760,19 +767,23 @@ async fn pool_census_all_ten_facts_are_reachable_in_body_at_six_grids_and_restor
 
 #[test]
 fn unknown_reset_keeps_known_amount_and_staleness_in_actual_row() {
-    for (reset_in_seconds, expected) in [(None, "5% · week"), (Some(0), "5% · week · 0m")] {
+    for (reset_in_seconds, stale, expected) in [
+        (None, true, "Weekly · stale"),
+        (Some(0), true, "Weekly · stale"),
+        (None, false, "Weekly · unknown"),
+        (Some(0), false, "Weekly · 0m"),
+    ] {
         let mut model = quota_two_account_view_model();
         let row = &mut model.rows[0];
         row.display_weekly = QuotaDisplayWindow::Known {
             remaining_percent: 5,
             reset_in_seconds,
-            stale: true,
+            stale,
         };
         let frame = super::super::quota_account_groups::render_interactive_account(row, 120, false)
             .render(None)
             .to_string();
-        assert!(frame.contains(expected), "{frame}");
-        assert!(frame.contains("week stale"), "{frame}");
+        assert!(frame.contains("5%") && frame.contains(expected), "{frame}");
     }
 }
 

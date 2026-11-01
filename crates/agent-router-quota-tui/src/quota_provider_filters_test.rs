@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 #[tokio::test]
 async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
     let mut control_f = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('f'));
@@ -59,7 +60,13 @@ fn compact_account_rows_preserve_identity_and_quota_values() {
         )
         .render(None)
         .to_string();
-        for marker in [visible_name, "1 client", "2 resets", "83%", "99%"] {
+        for marker in [
+            visible_name,
+            "1 client",
+            "2 resets",
+            "83%",
+            "Weekly · 7d 0h",
+        ] {
             assert!(
                 frame.contains(marker),
                 "missing {marker} atwidth{width}: {frame}"

@@ -80,7 +80,7 @@ pub(crate) fn render_account_options_content(
             flex_shrink:0.0_f32,max_width:100pct,
         ) {
             #(show_tabs.then(||element! {View(width:100pct,flex_direction:FlexDirection::Row,column_gap:2) {#(resets_tab) #(credits_tab)}}))
-            #(props.options.pending_tab.is_some().then(|| element!(agent_collaboration_tui::FocusReveal(has_focus:true) {Text(content: "Tab change pending", color: Color::Grey, wrap: TextWrap::Wrap)}).into_any()))
+            #(props.options.pending_tab.is_some().then(|| element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:true) {Text(content: "Tab change pending", color: Color::Grey, wrap: TextWrap::Wrap)}).into_any()))
             #((show_tabs&&has_body).then(||element!(View(width:100pct,height:1,border_style:BorderStyle::Single,border_edges:Edges::Bottom,border_color:Color::DarkGrey))))
             #((show_tabs&&has_body).then(||element!(View(height:1))))
             #(body)
@@ -276,7 +276,7 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
             text.to_owned()
         };
         notices.push(
-            element!(agent_collaboration_tui::FocusReveal(has_focus:pending_tab.is_none() && message.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any(),
+            element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:pending_tab.is_none() && message.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any(),
         );
     }
     if let Some((text, role)) = message {
@@ -285,13 +285,13 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
         } else {
             text.to_owned()
         };
-        notices.push(element!(agent_collaboration_tui::FocusReveal(has_focus:pending_tab.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any());
+        notices.push(element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:pending_tab.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any());
     }
     let has_notices = !notices.is_empty();
 
     element! {
         View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
-            agent_collaboration_tui::FormFields(stacked:width<52) {
+            agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {
             #(balance_heading)
             #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, Color::White))
             #((!form||usage.freshness!=codex_router_quota_service::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,freshness_color(usage.freshness))))
@@ -353,7 +353,7 @@ fn render_resets_tab_body(
     let explanation =
         unavailable_reason.or_else(|| reset_target.map(|_| "Checking reset eligibility…"));
     if explanation.is_none() && options.message.is_none() {
-        return Some(element!(agent_collaboration_tui::FormFields(stacked:width<52) {#(account_options_field_line("Eligibility", "Not checked", Color::White))}).into_any());
+        return Some(element!(agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {#(account_options_field_line("Eligibility", "Not checked", Color::White))}).into_any());
     }
     Some(element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
@@ -380,7 +380,7 @@ struct CreditPolicyRowProps<'a> {
 }
 fn render_policy_row(
     props: CreditPolicyRowProps<'_>,
-) -> Element<'static, agent_collaboration_tui::FormField> {
+) -> Element<'static, agent_collaboration_tui::controls::fields::FormField> {
     let CreditPolicyRowProps {
         policy,
         editing,
@@ -393,17 +393,17 @@ fn render_policy_row(
         "Disallow"
     };
     if !editing {
-        return element!(agent_collaboration_tui::FormField(label:"Use credits".to_owned(),has_focus:editor.is_none()&&has_focus) {Text(content:label,color:Color::White)});
+        return element!(agent_collaboration_tui::controls::fields::FormField(label:"Use credits".to_owned(),has_focus:editor.is_none()&&has_focus) {Text(content:label,color:Color::White)});
     }
-    element! {agent_collaboration_tui::FormField(label:"Use credits".to_owned(),has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else{Color::White})}}
+    element! {agent_collaboration_tui::controls::fields::FormField(label:"Use credits".to_owned(),has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else{Color::White})}}
 }
 
 fn account_options_field_line(
     label: &str,
     value: &str,
     value_color: Color,
-) -> Element<'static, agent_collaboration_tui::FormField> {
-    element! {agent_collaboration_tui::FormField(label:label.to_owned()) {Text(content:value.to_owned(),color:value_color)}}
+) -> Element<'static, agent_collaboration_tui::controls::fields::FormField> {
+    element! {agent_collaboration_tui::controls::fields::FormField(label:label.to_owned()) {Text(content:value.to_owned(),color:value_color)}}
 }
 
 pub(crate) fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {

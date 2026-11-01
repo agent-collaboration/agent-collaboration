@@ -3,8 +3,8 @@
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
 │ │   Account           Quota left · reset in         Weekly pace        Extra               │  │ Selected account                                           │ │
 │ │   ───────────────── ───────────────────────────── ────────────────── ──────────────────  │  │ acct00                                                     │ │
-│ │ ❯ acct00            █████░░ 83% · week · 7d 0h    ⏳                 2 resets          █ │  │ Status     available                                       │ │
-│ │   ◎ OpenAI · 0      ██████░ 99% · 5h · 5h 0m                                           │ │  │ Reason     account 00 detail                               │ │
+│ │ ❯ acct00            ████████████████████░░░░░ 83% ⏳                 2 resets          █ │  │ Status     available                                       │ │
+│ │   ◎ OpenAI · 0      Weekly · 7d 0h                                                     │ │  │ Reason     account 00 detail                               │ │
 │ │   clients                                                                              │ │  │                                                            │ │
 │ │   ✓ available                                                                          │ │  │ Quota windows                                              │ │
 │ │                                                                                        │ │  └────────────────────────────────────────────────────────────┘ │

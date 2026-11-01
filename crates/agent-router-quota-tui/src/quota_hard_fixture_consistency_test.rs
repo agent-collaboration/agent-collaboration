@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Literal fixture consistency and error-notice chrome geometry on real components.
 use super::quota_storyboard_fixture_test::{
     FixtureScenario, fixture_ports, fixture_scenario_model, fixture_snapshot,
@@ -181,7 +182,12 @@ async fn hard_fixture_browse_and_captured_details_agree_on_literal_windows() {
             .unwrap()
             .to_string();
         println!("WINDOW ORIGINAL ALPHA BROWSE:\n{alpha}");
-        assert!(alpha.contains("92% · week · 6d 16h") && alpha.contains("83% · 5h · 2h 10m"));
+        assert!(
+            alpha.contains("92%")
+                && alpha.contains("Weekly · 6d 16h")
+                && !alpha.contains("83%")
+                && !alpha.contains("5h ·")
+        );
         sender.send(provider_filter_key(KeyCode::F(4))).unwrap();
         let frame = super::super::quota_frame_observation::next_current_frame(frames.as_mut())
             .await
@@ -220,7 +226,12 @@ async fn hard_fixture_browse_and_captured_details_agree_on_literal_windows() {
             .unwrap()
             .to_string();
         println!("WINDOW ORIGINAL BETA BROWSE:\n{beta}");
-        assert!(beta.contains("75% · week") && !beta.contains("· —") && !beta.contains("No data"));
+        assert!(
+            beta.contains("75%")
+                && beta.contains("Weekly · stale")
+                && !beta.contains("· —")
+                && !beta.contains("No data")
+        );
         sender.send(provider_filter_key(KeyCode::F(4))).unwrap();
         let frame = super::super::quota_frame_observation::next_current_frame(frames.as_mut())
             .await

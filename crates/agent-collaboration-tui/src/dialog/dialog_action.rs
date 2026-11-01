@@ -51,7 +51,3 @@ pub fn DialogAction(props: &mut DialogActionProps, hooks: Hooks) -> impl Into<An
         }
     }
 }
-
-#[cfg(test)]
-#[path = "dialog_action_keyboard_test.rs"]
-mod keyboard_test;

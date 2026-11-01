@@ -292,10 +292,10 @@ fn render_floor_fields(
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:section_gap,margin_top:context_margin) {
             #(status.map(|(message,color)|element!(Text(content:message,color))))
-            agent_collaboration_tui::FormFields(row_gap:section_gap) {
-            #(include_account.then(||element!(agent_collaboration_tui::FormField(label:"Account".to_owned()) {Text(content:editor.account_label.clone(),color:Color::White)})))
-            agent_collaboration_tui::FormField(label:"Current".to_owned()) {Text(content:current,color:Color::White)}
-            agent_collaboration_tui::FormField(label:"Floor".to_owned(),has_focus:true) {
+            agent_collaboration_tui::controls::fields::FormFields(row_gap:section_gap) {
+            #(include_account.then(||element!(agent_collaboration_tui::controls::fields::FormField(label:"Account".to_owned()) {Text(content:editor.account_label.clone(),color:Color::White)})))
+            agent_collaboration_tui::controls::fields::FormField(label:"Current".to_owned()) {Text(content:current,color:Color::White)}
+            agent_collaboration_tui::controls::fields::FormField(label:"Floor".to_owned(),has_focus:true) {
                 View(column_gap:2,align_items:AlignItems::Center) {
                     Text(content:"◀")
                     Text(content:format!("{}%",editor.draft_percent),color:Color::Yellow,weight:Weight::Bold)

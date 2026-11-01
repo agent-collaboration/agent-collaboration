@@ -225,7 +225,9 @@ fn run_claude_terminal_lifecycle(client_label: &str, expected_mode: &str) -> Tes
     command.env("CLAUDE_FIXTURE_RECORD", directory.0.join("record.json"));
     command.env(
         "CLAUDE_FIXTURE_RECEIPT",
-        include_str!("../../agent-collaboration/tests/claude_background_cli/claude_bg_2_1_312.txt"),
+        include_str!(
+            "../../../../agent-collaboration/tests/claude_background_cli/claude_bg_2_1_312.txt"
+        ),
     );
     command.cwd(env!("CARGO_MANIFEST_DIR"));
     let mut child = OwnedChild(pair.slave.spawn_command(command)?);

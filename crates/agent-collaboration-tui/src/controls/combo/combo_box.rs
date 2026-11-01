@@ -43,11 +43,6 @@ pub fn ComboBox(props: &ComboBoxProps, mut hooks: Hooks) -> impl Into<AnyElement
             reason: "Unavailable".into(),
         });
     let focused = context.is_focused(&props.id);
-    crate::controls::list::scroll_list::use_scroll_reveal(
-        &mut hooks,
-        focused,
-        Some(props.id.clone()),
-    );
     let state = props.value.read();
     let label = state
         .options()

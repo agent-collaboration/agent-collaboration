@@ -86,7 +86,7 @@ fn check_first_frame_grid(evidence: &Path, frame: &[u8]) -> TestResult<()> {
             == format!(
                 "{:x}",
                 Sha256::digest(include_bytes!(
-                    "../../../../scripts/verification/tui/check-quota-first-frame.ts"
+                    "../../../../../../scripts/verification/tui/check-quota-first-frame.ts"
                 ))
             ),
         "first-frame checker differs from its compiled source",

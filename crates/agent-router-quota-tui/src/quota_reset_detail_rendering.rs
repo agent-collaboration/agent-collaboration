@@ -104,7 +104,7 @@ pub(crate) fn render_reset_panel(
     let sections = document
         .sections
         .into_iter()
-        .map(|section| render_section(section, inner_width, false, &mut choices))
+        .map(|section| render_section(section, inner_width, false, false, &mut choices))
         .collect::<Vec<_>>();
 
     element! {
@@ -151,6 +151,7 @@ pub(crate) fn render_reset_panel_content(
         ))
         .into_any()
     });
+    let confirmation = confirmation_choices.is_some();
     let sections = document
         .sections
         .into_iter()
@@ -159,6 +160,7 @@ pub(crate) fn render_reset_panel_content(
                 section,
                 width.saturating_sub(2),
                 true,
+                confirmation,
                 &mut confirmation_choices,
             )
         })
@@ -176,9 +178,10 @@ fn render_section(
     section: ResetDetailSection,
     width: usize,
     natural: bool,
+    confirmation: bool,
     choices: &mut Option<AnyElement<'static>>,
 ) -> AnyElement<'static> {
-    let reveal = natural && section.role == ResetSectionRole::Inventory;
+    let reveal = natural && !confirmation && section.role == ResetSectionRole::Inventory;
     let decision = natural && section.role == ResetSectionRole::Decision;
     let show_title = !(decision || natural && section.role == ResetSectionRole::Result);
     let title = show_title.then(|| {
@@ -199,7 +202,7 @@ fn render_section(
             flex_direction: FlexDirection::Column,
             margin_top: if decision {0}else {1},
         ) {
-            agent_collaboration_tui::controls::list::ScrollReveal(focused:reveal) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {#(title) agent_collaboration_tui::FormFields(stacked:width<52) {#(rows)}}}
+            agent_collaboration_tui::controls::list::ScrollReveal(focused:reveal) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {#(title) agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {#(rows)}}}
         }
     }
     .into_any()
@@ -210,7 +213,7 @@ fn render_detail_row(
     width: usize,
     natural: bool,
     choices: &mut Option<AnyElement<'static>>,
-) -> agent_collaboration_tui::FormFieldsChild {
+) -> agent_collaboration_tui::controls::fields::FormFieldsChild {
     let content = match row {
         ResetDetailRow::Text(text) if natural=>element!(Text(content:text.content,color:text.color,weight:text.weight,wrap:TextWrap::Wrap)).into_any(),
         ResetDetailRow::Text(text) => render_styled_text(text, width),
@@ -219,7 +222,7 @@ fn render_detail_row(
             value,
             value_color,
         } => {
-            if natural {return element!(agent_collaboration_tui::FormField(label) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into();}
+            if natural {return element!(agent_collaboration_tui::controls::fields::FormField(label) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into();}
             let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH);
             element! {
                 View(width: 100pct) {
@@ -266,7 +269,7 @@ fn render_detail_row(
             no_label,
             yes_label,
         } => {
-            if let Some(controls)=choices.take() {return element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {agent_collaboration_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:agent_collaboration_tui::UiTextRole::Warning,wrap:TextWrap::Wrap) #(controls)}).into_any().into();}
+            if let Some(controls)=choices.take() {return element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {agent_collaboration_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:agent_collaboration_tui::UiTextRole::Warning,wrap:TextWrap::Wrap) agent_collaboration_tui::controls::list::ScrollReveal(focused:true) {#(controls)}}).into_any().into();}
             element! {
             View(width:100pct,flex_direction:FlexDirection::Column) {
             agent_collaboration_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:agent_collaboration_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)

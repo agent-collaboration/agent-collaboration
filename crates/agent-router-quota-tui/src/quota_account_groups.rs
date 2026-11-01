@@ -54,31 +54,47 @@ fn reset_duration(seconds: u64) -> String {
     }
 }
 
-fn render_window(
-    window: &QuotaDisplayWindow,
-    label: &str,
-    role: QuotaTextRole,
-) -> AnyElement<'static> {
-    match window {
-        QuotaDisplayWindow::Unknown => element!(View).into_any(),
+fn render_main_window(row: &QuotaStatusAccountViewModel, width: usize) -> AnyElement<'static> {
+    // Owner 71efc57bb/873f62923; a12f9c2db keeps this interactive-only.
+    let (window, label, role) = match (&row.display_weekly, &row.display_short) {
+        (weekly @ QuotaDisplayWindow::Known { .. }, _) => {
+            (weekly, "Weekly", QuotaTextRole::WeeklyWindow)
+        }
+        (_, short @ QuotaDisplayWindow::Known { .. }) => (short, "5h", QuotaTextRole::ShortWindow),
+        (weekly, _) => (weekly, "Weekly", QuotaTextRole::Secondary),
+    };
+    let (remaining, reset, stale) = match window {
         QuotaDisplayWindow::Known {
             remaining_percent,
             reset_in_seconds,
             stale,
-        } => {
-            let filled = ((*remaining_percent).min(100) as usize * 7 / 100).min(7);
-            let meter = format!("{}{}", "█".repeat(filled), "░".repeat(7 - filled));
-            let reset = reset_in_seconds
-                .map(|seconds| format!(" · {}", reset_duration(seconds)))
-                .unwrap_or_default();
-            element! {
-                View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-                    QuotaText(content:format!("{meter} {remaining_percent}% · {label}{reset}"),role,wrap:TextWrap::Wrap)
-                    #((*stale).then(||element!(UiText(content:format!("{label} stale"),role:UiTextRole::Warning))))
-                }
-            }.into_any()
+        } => (Some(*remaining_percent), *reset_in_seconds, *stale),
+        QuotaDisplayWindow::Unknown => (None, None, false),
+    };
+    let percentage = remaining.map_or_else(|| "?%".to_owned(), |value| format!("{value}%"));
+    let bar_width =
+        width.saturating_sub(unicode_width::UnicodeWidthStr::width(percentage.as_str()) + 1);
+    let filled = remaining.map_or(0, |value| value.min(100) as usize * bar_width / 100);
+    let meter = format!("{}{}", "█".repeat(filled), "░".repeat(bar_width - filled));
+    let caption = if stale {
+        format!("{label} · stale")
+    } else {
+        reset.map_or_else(
+            || format!("{label} · unknown"),
+            |seconds| format!("{label} · {}", reset_duration(seconds)),
+        )
+    };
+    element! {
+        View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+            View(width:100pct,column_gap:1,min_width:0,flex_shrink:0.0_f32) {
+                View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32) {QuotaText(content:meter,role)}
+                View(flex_shrink:0.0_f32) {QuotaText(content:percentage,role)}
+            }
+            #(if stale { element!(UiText(content:caption,role:UiTextRole::Warning)).into_any() }
+                else if reset.is_none() { element!(UiText(content:caption,role:UiTextRole::Secondary)).into_any() }
+                else { element!(QuotaText(content:caption,role)).into_any() })
         }
-    }
+    }.into_any()
 }
 
 fn account_group(row: &QuotaStatusAccountViewModel, focused: bool) -> AnyElement<'static> {
@@ -166,8 +182,7 @@ pub(crate) fn render_account_groups(
     let groups=vec![
         ("Account",account_group(row,focused)),
         ("Quota left · reset in",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            #(render_window(&row.display_weekly,"week",QuotaTextRole::WeeklyWindow))
-            #(render_window(&row.display_short,"5h",QuotaTextRole::ShortWindow))
+            #(render_main_window(row,widths.map_or(width,|widths|widths[1])))
         }).into_any()),
         ("Weekly pace",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             QuotaText(content:pace_label,role:QuotaTextRole::WeeklyPace(pace.state),wrap:TextWrap::Wrap)
@@ -239,3 +254,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "quota_main_window_test.rs"]
+mod main_window_test;

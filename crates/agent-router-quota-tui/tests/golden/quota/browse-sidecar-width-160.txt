@@ -3,8 +3,8 @@
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
 │ │   Account           Quota left · reset in         Weekly pace        Extra               │  │ Selected account                                           │ │
 │ │   ───────────────── ───────────────────────────── ────────────────── ──────────────────  │  │ ssdev                                                      │ │
-│ │ ❯ ssdev             █████░░ 83% · week · 7d 0h    healthy            2 resets            │  │ Status     available                                       │ │
-│ │   ◎ OpenAI · 1      ██████░ 99% · 5h · 5h 0m      1.00x reset pace                       │  │ Reason     safest quota                                    │ │
+│ │ ❯ ssdev             ████████████████████░░░░░ 83% healthy            2 resets            │  │ Status     available                                       │ │
+│ │   ◎ OpenAI · 1      Weekly · 7d 0h                1.00x reset pace                       │  │ Reason     safest quota                                    │ │
 │ │   client                                          □□□□□□□│□□□□□□□                        │  │                                                            │ │
 │ │   ✓ available                                                                            │  │ Quota windows                                              │ │
 │ │                                                                                          │  │ weekly     ████ 83% left, reset 7d                         │ │

@@ -12,6 +12,7 @@ use agent_collaboration_tui::{
         list::{OptionKey, SelectOption},
         menu_overlay,
     },
+    foundation::theme::TextRole,
     input::input_owner::InputOwner,
     surfaces::{
         focus_model::{FocusModel, TargetId},
@@ -92,6 +93,9 @@ struct AnchorSceneProps {
     height: u16,
     menu: bool,
     near_bottom: bool,
+    anchor_at_left: bool,
+    underlay_pattern: String,
+    underlay_offset: u16,
     options: Option<Vec<SelectOption>>,
     handle: Arc<Mutex<Option<SurfaceStackHandle>>>,
     picks: Arc<Mutex<Vec<OptionKey>>>,
@@ -168,6 +172,16 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     *props.handle.lock().unwrap() = Some(stack);
     let (width, height) = stack.viewport();
     let journal = props.journal.clone();
+    let theme = SurfaceContext {
+        stack,
+        surface: SurfaceId::Screen,
+    }
+    .theme();
+    let pattern_width =
+        unicode_width::UnicodeWidthStr::width(props.underlay_pattern.as_str()).max(1);
+    let underlay = props
+        .underlay_pattern
+        .repeat(usize::from(width) / pattern_width);
     let top = if props.near_bottom {
         height.saturating_sub(2)
     } else {
@@ -175,8 +189,11 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     };
     element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(Vec::new()))) {
         OverlayHost {View(width:100pct,height:100pct,position:Position::Relative) {
+            #((!props.underlay_pattern.is_empty()).then(||element!(View(position:Position::Absolute,left:props.underlay_offset,top:0,width:100pct,height:100pct,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
+                #((0..height).map(|_|element!(View(height:1,flex_shrink:0.0_f32) {Text(content:underlay.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Text))})))
+            })))
             Text(content:"Credit usage")
-            View(position:Position::Absolute,left:width.saturating_sub(12),top,width:12) {
+            View(position:Position::Absolute,left:if props.anchor_at_left {0}else{width.saturating_sub(12)},top,width:12) {
                 #(if props.menu {
                     element!(MenuButton(id:anchor_target(true),action:action("anchor-menu"))).into_any()
                 } else {
@@ -186,6 +203,9 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         }}
     })
 }
+
+#[path = "popup_gutter_test.rs"]
+mod gutter_test;
 async fn assert_placement(width: u16, height: u16, menu: bool, near_bottom: bool) {
     let (mut driver, config, journal) = EventDriver::new();
     let handle = Arc::new(Mutex::new(None));

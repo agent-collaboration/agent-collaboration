@@ -68,8 +68,8 @@ export class PtyGridDriver {
 			target.driver,
 			[
 				target.surface === 'public-sessions'
-					? 'compiled_public_sessions_grid_observation'
-					: 'compiled_grid_terminal_observation',
+					? 'quota_storyboard::compiled_public_sessions_grid_observation'
+					: 'quota_storyboard::compiled_grid_terminal_observation',
 				'--exact',
 				'--ignored',
 				'--nocapture',

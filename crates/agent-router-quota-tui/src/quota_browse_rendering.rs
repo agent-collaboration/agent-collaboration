@@ -134,7 +134,7 @@ pub(crate) fn render_account_row(
     };
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),padding_left:u32::try_from(row_padding).unwrap_or(u32::MAX),padding_right:u32::try_from(row_padding).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
-            agent_collaboration_tui::SelectableRow(selected:focused) {
+            agent_collaboration_tui::controls::fields::SelectableRow(selected:focused) {
                 View(column_gap:1,flex_shrink:0.0_f32) {
                     View(width:u32::try_from(account_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:row.account.clone(),color:if focused {Color::Yellow}else {Color::White},weight:Weight::Bold)
@@ -148,10 +148,10 @@ pub(crate) fn render_account_row(
                     }
                     View(width:u32::try_from(quota_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:row.reason.clone(),color:Color::Grey)
-                        agent_collaboration_tui::FormFields(stacked:quota_width<28) {
-                        agent_collaboration_tui::FormField(label:"Weekly".to_owned()) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
-                        agent_collaboration_tui::FormField(label:"5h".to_owned()) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
-                        agent_collaboration_tui::FormField(label:"Weekly pace".to_owned()) {Text(content:pace_summary,color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
+                        agent_collaboration_tui::controls::fields::FormFields(stacked:quota_width<28) {
+                        agent_collaboration_tui::controls::fields::FormField(label:"Weekly".to_owned()) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+                        agent_collaboration_tui::controls::fields::FormField(label:"5h".to_owned()) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+                        agent_collaboration_tui::controls::fields::FormField(label:"Weekly pace".to_owned()) {Text(content:pace_summary,color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
                         }
                     }
                 }
@@ -212,24 +212,26 @@ pub(crate) fn render_selected_details(
             None,
         );
     }
-    let line =
-        |label: &str, value: &str, role: UiTextRole| -> agent_collaboration_tui::FormFieldsChild {
-            if interactive {
-                element! {
-                    agent_collaboration_tui::FormField(label:label.to_owned()) {
-                        UiText(content:value.to_owned(),role,wrap:TextWrap::Wrap)
-                    }
+    let line = |label: &str,
+                value: &str,
+                role: UiTextRole|
+     -> agent_collaboration_tui::controls::fields::FormFieldsChild {
+        if interactive {
+            element! {
+                agent_collaboration_tui::controls::fields::FormField(label:label.to_owned()) {
+                    UiText(content:value.to_owned(),role,wrap:TextWrap::Wrap)
                 }
-                .into()
-            } else {
-                agent_collaboration_tui::FormFieldsChild::from(detail_line(
-                    label,
-                    value,
-                    detail_width,
-                    role.color(),
-                ))
             }
-        };
+            .into()
+        } else {
+            agent_collaboration_tui::controls::fields::FormFieldsChild::from(detail_line(
+                label,
+                value,
+                detail_width,
+                role.color(),
+            ))
+        }
+    };
     let pace_line = |label: &str, pace: &ResetPaceViewModel| {
         if interactive {
             line(
@@ -249,7 +251,7 @@ pub(crate) fn render_selected_details(
             row_gap: 0,
             padding_top: 0,
         ) {
-            agent_collaboration_tui::FormFields(stacked:detail_width<32) {
+            agent_collaboration_tui::controls::fields::FormFields(stacked:detail_width<32) {
             #((!interactive).then(||element!(Text(content:"Selected account",color:Color::Cyan,weight:Weight::Bold)).into_any()))
             #(if interactive {
                 vec![line("Status",&selected.status,UiTextRole::Body),line("Reason",&selected.reason,UiTextRole::Body)]

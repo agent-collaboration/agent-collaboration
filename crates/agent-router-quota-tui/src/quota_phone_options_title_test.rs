@@ -1,95 +1,170 @@
 #[tokio::test]
 async fn phone_options_titles_keep_the_active_tab_at_body_top_bottom_and_tab_return() {
+    use crate::quota_test_support::frame_output::{SharedFrameOutput, dispatch_render_loop};
+    use crate::quota_test_support::{QuotaInputFrameDriver, current_quota_canvas};
+    use agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink;
     let (ports, driver) = options_preflight_ports();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
+    let directory = tempfile::tempdir().unwrap();
+    let receipt_path = directory.path().join("title-input.jsonl");
+    let sink = InputDispatchReceiptSink::create(&receipt_path).unwrap();
     let model = super::super::quota_storyboard_fixture_test::fixture_model();
     let mut component = element!(QuotaStatusComponent(view_model:model,width:32usize,height:24usize,
-        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
-    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver),dispatch_receipt:Some(sink.clone())));
+    let bytes = SharedFrameOutput::default();
+    let writer = Box::new(sink.frame_writer(bytes.clone()).unwrap());
+    let frames = dispatch_render_loop(
+        &mut component,
+        MockTerminalConfig::with_events(events),
+        bytes,
+        writer,
+    );
     tokio::pin!(frames);
+    let mut input = QuotaInputFrameDriver::new(sender, receipt_path);
     let mut observations = Vec::new();
     let mut routing = Vec::new();
     let journey = async {
-        let mut frame = next_options_title_frame(frames.as_mut()).await;
+        let mut frame = current_quota_canvas(frames.as_mut()).await.to_string();
         assert!(frame.contains("Menu F10"), "real phone browse: {frame}");
-        sender.send(provider_filter_key(KeyCode::F(10))).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
+        frame = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::F(10)),
+                |canvas| canvas.to_string().contains("❯ Details"),
+            )
+            .await
+            .to_string();
         routing.push(("menu-open", frame.clone()));
-        while !frame.contains("❯ Details") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-            routing.push(("menu-open", frame.clone()));
-        }
         for _ in 0..16 {
             if frame.contains("❯ Help") {
                 break;
             }
-            sender.send(provider_filter_key(KeyCode::Down)).unwrap();
-            frame = next_options_title_frame(frames.as_mut()).await;
+            frame = input
+                .step(frames.as_mut(), provider_filter_key(KeyCode::Down), |_| {
+                    true
+                })
+                .await
+                .to_string();
             routing.push(("menu-move", frame.clone()));
         }
-        assert!(frame.contains("❯ Help"), "real phone Help menu target: {frame}");
-        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
+        assert!(
+            frame.contains("❯ Help"),
+            "real phone Help menu target: {frame}"
+        );
+        frame = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Enter),
+                |canvas| {
+                    crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string())
+                },
+            )
+            .await
+            .to_string();
         routing.push(("menu-help", frame.clone()));
-        while !crate::quota_browse_presentation_test::quota_help_visible(&frame) {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while frame.chars().filter(|character| *character == '╮').count() != 1 {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        sender
-            .send(TerminalEvent::Key(clarity_control_key('r')))
-            .unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while !frame.contains("voucher-1") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
+        input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Esc),
+                |canvas| {
+                    canvas
+                        .to_string()
+                        .chars()
+                        .filter(|character| *character == '╮')
+                        .count()
+                        == 1
+                },
+            )
+            .await;
+        frame = input
+            .step(
+                frames.as_mut(),
+                TerminalEvent::Key(clarity_control_key('r')),
+                |canvas| canvas.to_string().contains("voucher-1"),
+            )
+            .await
+            .to_string();
         if !frame.contains("Live eligibility") {
-            sender.send(provider_filter_key(KeyCode::Home)).unwrap();
-            frame = next_options_title_frame(frames.as_mut()).await;
+            frame = input
+                .step(frames.as_mut(), provider_filter_key(KeyCode::Home), |_| {
+                    true
+                })
+                .await
+                .to_string();
         }
         observations.push(("Resets top", "Options · Resets", frame));
-        sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while !crate::quota_browse_presentation_test::quota_help_visible(&frame) {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while !frame.contains("Options · Resets") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::End)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
+        input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::F(1)),
+                |canvas| {
+                    crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string())
+                },
+            )
+            .await;
+        input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Esc),
+                |canvas| canvas.to_string().contains("Options · Resets"),
+            )
+            .await;
+        frame = input
+            .step(frames.as_mut(), provider_filter_key(KeyCode::End), |_| true)
+            .await
+            .to_string();
         observations.push(("Resets bottom", "Options · Resets", frame));
-        sender.send(crate::quota_test_support::shift_tab_event()).unwrap();
-        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
-        // Both pre-fix clipped and corrected headers reach the assertion below;
-        // this routing acknowledgement must not hide the known clipping defect.
-        while frame.contains("Tab change pending")
-            || !(frame.contains("options · Cr") || frame.contains("Options · Credits"))
-        {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::Home)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
+        input
+            .step(
+                frames.as_mut(),
+                crate::quota_test_support::shift_tab_event(),
+                |_| true,
+            )
+            .await;
+        frame = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Enter),
+                |canvas| {
+                    let frame = canvas.to_string();
+                    // Keep the original routing predicate so clipped headers still reach the assertions.
+                    !frame.contains("Tab change pending")
+                        && (frame.contains("options · Cr") || frame.contains("Options · Credits"))
+                },
+            )
+            .await
+            .to_string();
+        routing.push(("credits-settled", frame));
+        // Home at the settled top is an honest no-op. Its actual input receipt and
+        // flushed marker acknowledge it without demanding a new visual change.
+        frame = input
+            .step(frames.as_mut(), provider_filter_key(KeyCode::Home), |_| {
+                true
+            })
+            .await
+            .to_string();
         observations.push(("Credits top", "Options · Credits", frame));
-        sender.send(provider_filter_key(KeyCode::End)).unwrap();
-        frame = next_options_title_frame(frames.as_mut()).await;
+        frame = input
+            .step(frames.as_mut(), provider_filter_key(KeyCode::End), |_| true)
+            .await
+            .to_string();
         observations.push(("Credits bottom", "Options · Credits", frame));
-        for key in [KeyCode::Left, KeyCode::Enter] {
-            sender.send(provider_filter_key(key)).unwrap();
-        }
-        frame = next_options_title_frame(frames.as_mut()).await;
-        while !frame.contains("voucher-1") {
-            frame = next_options_title_frame(frames.as_mut()).await;
-        }
+        input
+            .step(frames.as_mut(), provider_filter_key(KeyCode::Left), |_| {
+                true
+            })
+            .await;
+        frame = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Enter),
+                |canvas| canvas.to_string().contains("voucher-1"),
+            )
+            .await
+            .to_string();
         observations.push(("Resets return", "Options · Resets", frame));
     };
     let result = tokio::time::timeout(std::time::Duration::from_secs(3), journey).await;

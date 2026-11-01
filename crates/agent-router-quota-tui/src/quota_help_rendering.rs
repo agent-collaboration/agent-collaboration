@@ -34,7 +34,7 @@ pub(crate) fn render_quota_screen(props: QuotaScreenChromeProps) -> AnyElement<'
             #(props.controls)
             #(props.body)
             View(width: 100pct, flex_grow: 1.0_f32) {}
-            #((!props.actions.is_empty()).then(||element!(agent_collaboration_tui::DialogFooter(children:props.actions))))
+            #((!props.actions.is_empty()).then(||element!(agent_collaboration_tui::dialog::dialog_footer::DialogFooter(children:props.actions))))
             #(props.static_footer.map(|line| element!(Text(content: line, color: Color::Grey, wrap: TextWrap::NoWrap)).into_any()))
         }
     }.into_any()
