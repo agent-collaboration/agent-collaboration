@@ -232,7 +232,7 @@ test('read-only Host qualification checks actual process binary manifest health 
 	const discovery = controlledExecutable(
 		fixture.root,
 		'capture-discovery',
-		"process.stdout.write('compiled_public_sessions_grid_observation: test\\n');",
+		"process.stdout.write('quota_storyboard::compiled_public_sessions_grid_observation: test\\n');",
 	);
 	const evidence = join(fixture.root, 'evidence');
 	mkdirSync(evidence);

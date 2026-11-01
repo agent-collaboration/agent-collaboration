@@ -23,9 +23,9 @@ node scripts/verification/tui/capture/capture-run.ts PLAN.json
 head, signed driver/product/component artifact paths and SHA-256s, fresh output,
 journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
 uses a prebuilt signed libtest, not Cargo. Quota and component routes use the
-`e2e` entry `quota_storyboard::compiled_grid_terminal_observation`. During the
-Lead-authorized S8 transition, picker/public-entry and standalone showcase routes
-retain their historical flat entries and retained driver artifacts. Discovery and
+`e2e` entry `quota_storyboard::compiled_grid_terminal_observation`. All S8 picker, quota and showcase routes use that namespaced entry; public
+Sessions uses `quota_storyboard::compiled_public_sessions_grid_observation`.
+The S9 cutover retires the historical flat-entry driver selection. Discovery and
 launch share `ptyGridDriverEntry`; no alternate entry is tried. Component
 journeys require the exact fixture-bearing Quota library test executable; the
 runner checks its test entry before launching it. Source files and artifact hashes

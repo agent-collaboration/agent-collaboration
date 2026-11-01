@@ -15,10 +15,10 @@ const entries: readonly (readonly [PtyGridTarget['surface'], string])[] = [
 	['quota-effects', 'quota_storyboard::compiled_grid_terminal_observation'],
 	['normal', 'quota_storyboard::compiled_grid_terminal_observation'],
 	['hard', 'quota_storyboard::compiled_grid_terminal_observation'],
-	['sessions', 'compiled_grid_terminal_observation'],
-	['sessions-filters', 'compiled_grid_terminal_observation'],
-	['public-sessions', 'compiled_public_sessions_grid_observation'],
-	['showcase', 'compiled_grid_terminal_observation'],
+	['sessions', 'quota_storyboard::compiled_grid_terminal_observation'],
+	['sessions-filters', 'quota_storyboard::compiled_grid_terminal_observation'],
+	['public-sessions', 'quota_storyboard::compiled_public_sessions_grid_observation'],
+	['showcase', 'quota_storyboard::compiled_grid_terminal_observation'],
 ];
 
 test.each(entries)('%s launches only its declared exact driver entry', async (surface, entry) => {
