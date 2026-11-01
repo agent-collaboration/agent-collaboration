@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Keyboard paging reveals a tall account without changing the selected account.
 use super::super::quota_group_observation_test::AlphaGroupObservation;
 use super::*;
@@ -27,7 +28,7 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
         let initial = browse_canvas(frames.as_mut(), "exact fixture browse start").await;
         let initial_text = initial.to_string();
         let mut canvas = initial;
-        let (mut credits, mut short, mut pace_label, mut pace_value) = (None, None, None, None);
+        let (mut credits, mut weekly, mut pace_label, mut pace_value) = (None, None, None, None);
         let mut observed = AlphaGroupObservation::default();
         let mut final_page = 0;
         for page in 0..=12 {
@@ -37,8 +38,11 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
             if credits.is_none() && observed.extra.contains("62.5k credits") {
                 credits = Some(page);
             }
-            if short.is_none() && quota_words.contains("99%") && quota_words.contains("5h") {
-                short = Some(page);
+            if weekly.is_none()
+                && quota_words.contains("83%")
+                && quota_words.contains("Weekly · 7d 0h")
+            {
+                weekly = Some(page);
             }
             if pace_label.is_none() && !observed.pace.trim().is_empty() {
                 pace_label = Some(page);
@@ -50,7 +54,7 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
                 "NORMAL BROWSE POSE {width}x{height} page={page} quota={quota_words:?}:\n{text}"
             );
             final_page = page;
-            if credits.is_some() && short.is_some() && pace_label.is_some() && pace_value.is_some()
+            if credits.is_some() && weekly.is_some() && pace_label.is_some() && pace_value.is_some()
             {
                 break;
             }
@@ -62,11 +66,11 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
             canvas = browse_canvas(frames.as_mut(), "next exact fixture page").await;
         }
         assert!(
-            credits.is_some() && short.is_some() && pace_label.is_some() && pace_value.is_some(),
+            credits.is_some() && weekly.is_some() && pace_label.is_some() && pace_value.is_some(),
             "all row-owned Alpha facts remain observable"
         );
         println!(
-            "NORMAL BROWSE POSITIONS {width}x{height}: credits={credits:?} short={short:?} pace_label={pace_label:?} pace_value={pace_value:?}"
+            "NORMAL BROWSE POSITIONS {width}x{height}: credits={credits:?} weekly={weekly:?} pace_label={pace_label:?} pace_value={pace_value:?}"
         );
         if final_page > 0 {
             sender.send(provider_filter_key(KeyCode::Home)).unwrap();
@@ -192,7 +196,7 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
     observed.observe(&initial);
     let mut reached_weekly = false;
     let mut reached_credit = false;
-    let mut reached_short_quota = false;
+    let mut reached_weekly_caption = false;
     let mut reached_pace = false;
     for page in 1..=4 {
         sender.send(provider_filter_key(KeyCode::PageDown)).unwrap();
@@ -205,21 +209,21 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
         println!("BROWSE PAGE down{page}:\n{text}");
         assert_eq!((canvas.width(), canvas.height()), (48, 12));
         assert!(
-            text.contains("Quota status") && text.contains("Pool details"),
+            text.contains("Quota ·") && text.contains("Menu F10"),
             "C5 surface controls stay fixed while group headings scroll: {text}"
         );
         observed.observe(&canvas);
-        reached_weekly |= observed.quota.contains("83% · week · 7d 0h");
+        reached_weekly |= observed.quota.contains("83%");
         reached_credit |= observed.extra.contains("62.5k credits");
-        reached_short_quota |= observed.quota.contains("99% · 5h · 5h 0m");
+        reached_weekly_caption |= observed.quota.contains("Weekly · 7d 0h");
         reached_pace |= observed.pace.contains("alpha pace");
-        if reached_weekly && reached_credit && reached_short_quota && reached_pace {
+        if reached_weekly && reached_credit && reached_weekly_caption && reached_pace {
             break;
         }
     }
     assert!(
-        reached_weekly && reached_credit && reached_short_quota && reached_pace,
-        "compact credits, short quota and pace must remain reachable"
+        reached_weekly && reached_credit && reached_weekly_caption && reached_pace,
+        "compact credits, weekly amount/caption and pace must remain reachable"
     );
     // Details is used ONLY to verify captured identity, never as compact-credit proof.
     sender.send(provider_filter_key(KeyCode::F(4))).unwrap();
@@ -316,7 +320,7 @@ async fn help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_gri
         let mut witnessed = false;
         for reverse_rows in 0..=5 {
             let frame = canvas.to_string();
-            let dialog = actual_dialog_text(&frame, "Quota Help");
+            let dialog = actual_dialog_text(&frame, "Help");
             let words = dialog
                 .replace(['│', '┃'], " ")
                 .split_whitespace()

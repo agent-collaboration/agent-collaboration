@@ -53,10 +53,10 @@ export async function checkShowcaseTarget(plan: ShowcasePlan): Promise<void> {
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
 	const entries = execFileSync(
 		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
+		['quota_storyboard::compiled_grid_terminal_observation', '--exact', '--list'],
 		{ encoding: 'utf8' },
 	);
-	if (!entries.includes('compiled_grid_terminal_observation: test'))
+	if (!entries.includes('quota_storyboard::compiled_grid_terminal_observation: test'))
 		throw new Error('declared grid driver entry missing');
 	await qualifyTerminal();
 }

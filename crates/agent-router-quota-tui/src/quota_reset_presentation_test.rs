@@ -144,6 +144,7 @@ async fn disabled_yes_cannot_receive_focus_and_enter_cancels_from_default_no() {
     let _frames = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
+            fixture_control:Some(crate::test_support::QuotaFixtureControl::ResetPhase),
             width: 120usize,
             height: 48usize,
             reset_intent_sender: Some(ports.intent_sender),
@@ -184,6 +185,7 @@ async fn precommit_cancel_is_not_lost_behind_queued_intents() {
     let _frames = element! {
         QuotaStatusComponent(
             view_model: quota_two_account_view_model(),
+            fixture_control:Some(crate::test_support::QuotaFixtureControl::ResetPhase),
             width: 120usize,
             height: 48usize,
             reset_intent_sender: Some(ports.intent_sender),
@@ -263,7 +265,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-                Some("Pool details"),
+                Some("Quota ·"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -287,7 +289,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             if let Some(marker) = *expected_frame.borrow()
                 && match marker {
                     "declared initial viewport" => {
-                        frame.contains("Quota status")
+                        frame.contains("Quota ·")
                             && frame.lines().count() == height
                             && frame.lines().next().is_some_and(|line| {
                                 unicode_width::UnicodeWidthStr::width(line) == width
@@ -305,6 +307,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
                                 unicode_width::UnicodeWidthStr::width(line) == width
                             })
                     }
+                    "Quota ·" => frame.contains(marker) && !frame.contains("Options · Resets"),
                     _ => frame.contains(marker),
                 }
             {
@@ -368,7 +371,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         );
         assert!(
             frames.last().is_some_and(
-                |frame| frame.contains("Pool details") && !frame.contains("Options · Resets")
+                |frame| frame.contains("Menu F10") && !frame.contains("Options · Resets")
             ),
             "closing the Resets tab should restore browse controls: {frames:?}"
         );
@@ -458,7 +461,7 @@ fn interactive_reset_confirmation_colors_distinguish_selected_and_disabled_choic
             test_credit_inventory(),
             disabled_reason,
         );
-        let canvas = super::quota_reset_detail_rendering::render_reset_panel_content(
+        let content = super::quota_reset_detail_rendering::render_reset_panel_content(
             &snapshot,
             &test_reset_target(),
             100,
@@ -466,8 +469,8 @@ fn interactive_reset_confirmation_colors_distinguish_selected_and_disabled_choic
             4,
             0,
             None,
-        )
-        .render(None);
+        );
+        let canvas = element!(View(width:100) {#(content)}).render(None);
         let frame = canvas.to_string();
         let (row, line) = frame
             .lines()
@@ -621,7 +624,7 @@ fn shared_detail_viewport_pages_every_credit_once_without_corrupting_stacked_geo
         Some(0),
         super::responsive_quota_layout::selected_detail_height(
             true,
-            super::quota_provider_filters::QuotaInteractionMode::Static,
+            super::quota_view_configuration::QuotaInteractionMode::Static,
         ),
     );
     let detail_height = stacked_layout.detail_viewport_height(false);
@@ -649,7 +652,7 @@ fn shared_detail_viewport_pages_every_credit_once_without_corrupting_stacked_geo
         stacked_layout.stacked_details_height,
         super::responsive_quota_layout::selected_detail_height(
             true,
-            super::quota_provider_filters::QuotaInteractionMode::Static
+            super::quota_view_configuration::QuotaInteractionMode::Static
         ),
         "stacked detail must be content-sized instead of consuming all remaining terminal rows"
     );

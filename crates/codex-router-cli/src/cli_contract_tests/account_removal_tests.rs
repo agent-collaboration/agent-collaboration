@@ -2,6 +2,63 @@ use super::*;
 use codex_router_secret_store::test_support::open_encrypted_credential_store;
 
 struct RetainedRemovalCredentialResolver;
+#[path = "account_removal_lifetime_tests.rs"]
+mod lifetime_tests;
+
+#[test]
+fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_deleting() {
+    for mismatch in ["label", "provider", "generation"] {
+        let fixture = RemovalFixture::new("remove-captured-mismatch", AccountStatus::Disabled);
+        fixture.login_account("acct_secondary", "secondary");
+        fixture.seed_dependents();
+        let before = fixture.dependent_row_counts("acct_primary");
+        let runtime = test_async_runtime();
+        let result = runtime.block_on(async {
+            let state =
+                AsyncSqliteStateStore::open_read_only(&fixture.root.path().join("state.sqlite"))
+                    .await
+                    .unwrap();
+            let actual = state
+                .load_account(&account_id("acct_primary"))
+                .await
+                .unwrap()
+                .unwrap();
+            state.close().await.unwrap();
+            let expected = AccountRecord::new(
+                if mismatch == "provider" {
+                    codex_router_core::provider::Provider::Claude
+                } else {
+                    actual.provider()
+                },
+                actual.account_id().clone(),
+                if mismatch == "label" {
+                    "different captured label"
+                } else {
+                    actual.label()
+                },
+                AccountStatus::Disabled,
+            )
+            .with_active_credential_generation(if mismatch == "generation" { 99 } else { 1 });
+            crate::account::account_removal::remove_resolved_account(
+                fixture.root.path().to_owned(),
+                expected,
+            )
+            .await
+        });
+        assert!(
+            matches!(
+                result,
+                Err(AccountCommandError::RemovalState(
+                    codex_router_state::sqlite::AccountRemovalError::TargetChanged
+                ))
+            ),
+            "{mismatch}: {result:?}"
+        );
+        assert!(fixture.account_exists());
+        assert!(fixture.credential_exists(1));
+        assert_eq!(fixture.dependent_row_counts("acct_primary"), before);
+    }
+}
 
 impl AsyncProviderCredentialResolver for RetainedRemovalCredentialResolver {
     async fn resolve_provider_credentials_async(

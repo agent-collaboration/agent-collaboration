@@ -1393,6 +1393,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "tungstenite 0.28.0",
+ "ui-preference-store",
  "unicode-width 0.2.2",
  "uuid",
 ]
@@ -1532,6 +1533,7 @@ dependencies = [
  "codex-router-core",
  "codex-router-secret-store",
  "codex-router-state",
+ "nix",
  "portable-pty",
  "regex",
  "rustix 1.1.4",

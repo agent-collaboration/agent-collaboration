@@ -19,7 +19,7 @@ export function protocolPlan(root: string): CapturePlan {
 	const binding = captureArtifact(binary);
 	const support = join(
 		root,
-		'crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test',
+		'crates/codex-router-quota-reset-test-harness/tests/e2e/quota_storyboard/quota_storyboard_capture_test',
 	);
 	mkdirSync(support, { recursive: true });
 	writeFileSync(join(support, 'public_sessions_capture.rs'), 'protocol only');

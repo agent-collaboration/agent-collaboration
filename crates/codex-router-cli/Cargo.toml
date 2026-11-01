@@ -50,7 +50,7 @@ collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14
 message-board = { path = "../message-board", version = "0.1.20" }
 clap.workspace = true
 comfy-table.workspace = true
-crossterm.workspace = true
+crossterm = { workspace = true, features = ["osc52"] }
 indicatif.workspace = true
 iocraft.workspace = true
 agent-collaboration-tui.workspace = true
@@ -72,8 +72,10 @@ tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-subscriber.workspace = true
 unicode-width.workspace = true
+ui-preference-store = { path = "../ui-preference-store", version = "0.1.118" }
 
 [dev-dependencies]
+agent-router-quota-tui = { version = "0.1.105", path = "../agent-router-quota-tui", features = ["test-support"] }
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.96" }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.96" }

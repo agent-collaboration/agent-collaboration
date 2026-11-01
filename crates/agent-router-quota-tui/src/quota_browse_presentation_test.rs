@@ -1,6 +1,7 @@
 include!("quota_browse_compatibility_test.rs");
 include!("quota_browse_rendering_test.rs");
 include!("quota_presentation_support_test.rs");
+include!("quota_presentation_fixtures_test.rs");
 include!("quota_provider_filters_test.rs");
 #[path = "quota_static_typography_test.rs"]
 mod quota_static_typography_test;
@@ -12,6 +13,15 @@ mod quota_empty_state_test;
 mod quota_form_alignment_test;
 
 include!("quota_help_presentation_test.rs");
+include!("quota_component_cutover_test.rs");
+#[path = "quota_account_action_component_test.rs"]
+mod quota_account_action_component_test;
+#[path = "quota_refresh_component_test.rs"]
+mod quota_refresh_component_test;
+#[path = "quota_reset_primary_component_test.rs"]
+mod quota_reset_primary_component_test;
+#[path = "quota_taste_review_test.rs"]
+mod quota_taste_review_test;
 
 #[path = "quota_choice_dialog_test.rs"]
 mod quota_choice_dialog_test;
@@ -36,3 +46,15 @@ mod quota_hard_fixture_consistency_test;
 
 #[path = "quota_filter_help_pose_test.rs"]
 mod quota_filter_help_pose_test;
+
+#[path = "quota_fixture_controller_test.rs"]
+mod quota_fixture_controller_test;
+
+#[path = "quota_grouping_component_test.rs"]
+mod quota_grouping_component_test;
+
+#[path = "quota_menu_sections_test.rs"]
+mod quota_menu_sections_test;
+
+#[path = "quota_grouped_rows_test.rs"]
+mod quota_grouped_rows_test;

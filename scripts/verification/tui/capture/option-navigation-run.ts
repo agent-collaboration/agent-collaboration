@@ -119,10 +119,10 @@ export async function checkOptionNavigationTarget(plan: OptionNavigationPlan): P
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
 	const listed = execFileSync(
 		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
+		['quota_storyboard::compiled_grid_terminal_observation', '--exact', '--list'],
 		{ encoding: 'utf8' },
 	);
-	if (!listed.includes('compiled_grid_terminal_observation: test'))
+	if (!listed.includes('quota_storyboard::compiled_grid_terminal_observation: test'))
 		throw new Error('compiled PTY entry absent');
 	await qualifyTerminal();
 }

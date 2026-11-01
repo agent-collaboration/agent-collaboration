@@ -81,10 +81,10 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
 	const listing = execFileSync(
 		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
+		['quota_storyboard::compiled_grid_terminal_observation', '--exact', '--list'],
 		{ encoding: 'utf8' },
 	);
-	if (!listing.split('\n').includes('compiled_grid_terminal_observation: test'))
+	if (!listing.split('\n').includes('quota_storyboard::compiled_grid_terminal_observation: test'))
 		throw new Error('streaming driver entry absent');
 	await qualifyTerminal();
 }

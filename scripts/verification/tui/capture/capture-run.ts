@@ -109,7 +109,7 @@ export async function checkGridCapture(plan: GridCapturePlan): Promise<void> {
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
 	}
 
-	requireTest(plan.driver.path, 'compiled_grid_terminal_observation');
+	requireTest(plan.driver.path, 'quota_storyboard::compiled_grid_terminal_observation');
 	if (plan.journey.startsWith('normal-') || plan.journey.startsWith('hard-')) {
 		if (plan.component === undefined) throw new Error('component fixture required');
 		requireTest(

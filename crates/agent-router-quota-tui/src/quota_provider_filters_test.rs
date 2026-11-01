@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 #[tokio::test]
 async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
     let mut control_f = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('f'));
@@ -8,30 +9,28 @@ async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
             120,
             36,
             vec![
-                ("Filters ▾", vec![TerminalEvent::Key(opening_key)]),
+                ("Filters:", vec![TerminalEvent::Key(opening_key)]),
                 (
                     "Account provider",
                     vec![provider_filter_key(KeyCode::Enter)],
                 ),
-                ("Search:", vec![provider_filter_key(KeyCode::Esc)]),
+                ("Filter:", vec![provider_filter_key(KeyCode::Esc)]),
                 ("Account provider", vec![provider_filter_key(KeyCode::Esc)]),
-                (
-                    "All · Disabled: Shown",
-                    vec![provider_filter_key(KeyCode::Esc)],
-                ),
+                ("Quota ·",vec![provider_filter_key(KeyCode::F(3))]),
+                ("All ▾",vec![provider_filter_key(KeyCode::Esc)]),
+                ("Quota ·",vec![provider_filter_key(KeyCode::Esc)]),
             ],
             None,
         )
         .await;
 
+        assert!(frames.iter().any(|frame|frame.contains("Disabled accounts")&&frame.contains("Apply")&&frame.contains("Cancel")),"the parent fields and actions stay available before and after the dropdown");
         assert!(
             frames.iter().any(|frame| {
-                frame.contains("Search:")
+                frame.contains("Filter:")
                     && frame.contains("OpenAI")
                     && frame.contains("Claude")
-                    && frame.contains("Disabled accounts")
-                    && frame.contains("Select")
-                    && frame.contains("Cancel")
+                    && !frame.contains("Select")
             }),
             "Ctrl+F and F3 must open the actual quota filter chooser; frames: {frames:?}"
         );
@@ -56,12 +55,18 @@ fn compact_account_rows_preserve_identity_and_quota_values() {
             &model.rows[0],
             width,
             true,
-            super::quota_provider_filters::QuotaInteractionMode::Interactive,
+            super::quota_view_configuration::QuotaInteractionMode::Interactive,
             false,
         )
         .render(None)
         .to_string();
-        for marker in [visible_name, "1 client", "2 resets", "83%", "99%"] {
+        for marker in [
+            visible_name,
+            "1 client",
+            "2 resets",
+            "83%",
+            "Weekly · 7d 0h",
+        ] {
             assert!(
                 frame.contains(marker),
                 "missing {marker} atwidth{width}: {frame}"
@@ -90,7 +95,7 @@ async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation()
         while let Some(canvas) = frames.next().await {
             let frame = canvas.to_string();
             match phase {
-                0 if frame.contains("Pool details") => {
+                0 if frame.contains("Quota ·") => {
                     sender.send(TerminalEvent::Resize(48, 24)).unwrap();
                     phase = 1;
                 }
@@ -138,12 +143,12 @@ async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation()
                     sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
                     phase = 6;
                 }
-                6 if !frame.contains("Account details") && frame.contains("Pool details") => {
+                6 if !frame.contains("Account details") && frame.contains("Quota ·") => {
                     assert!(
                         frame.contains("❯ alpha"),
                         "background click changed focus: {frame}"
                     );
-                    sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
+                    sender.send(provider_filter_key(KeyCode::Char('q'))).unwrap();
                     phase = 7;
                 }
                 _ => {}
@@ -170,6 +175,7 @@ fn mixed_provider_filter_view_model() -> QuotaStatusViewModel {
     .enumerate()
     .map(
         |(index, (label, provider, enabled))| QuotaStatusAccountViewModel {
+            login_state: Default::default(),
             provider,
             account_id: test_account_id(label),
             account: label.to_owned(),
@@ -204,7 +210,7 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
         let mut exit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('d'));
         exit.modifiers = KeyModifiers::CONTROL;
         let phases = vec![
-            ("Quota status", vec![provider_filter_key(KeyCode::F(3))]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(3))]),
             (
                 "Account provider",
                 vec![
@@ -213,7 +219,10 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
                     provider_filter_key(KeyCode::Down),
                     provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Tab),
-                    provider_filter_key(KeyCode::Char(' ')),
+                    provider_filter_key(KeyCode::Enter),
+                    provider_filter_key(KeyCode::Down),
+                    provider_filter_key(KeyCode::Enter),
+                    provider_filter_key(KeyCode::Tab),
                     provider_filter_key(KeyCode::Tab),
                     provider_filter_key(KeyCode::Enter),
                 ],
@@ -240,8 +249,11 @@ fn apply_filter_events(provider_steps: usize, hidden: bool) -> Vec<TerminalEvent
     events.push(provider_filter_key(KeyCode::Enter));
     events.push(provider_filter_key(KeyCode::Tab));
     if hidden {
-        events.push(provider_filter_key(KeyCode::Char(' ')));
+        events.push(provider_filter_key(KeyCode::Enter));
+        events.push(provider_filter_key(KeyCode::Down));
+        events.push(provider_filter_key(KeyCode::Enter));
     }
+    events.push(provider_filter_key(KeyCode::Tab));
     events.push(provider_filter_key(KeyCode::Tab));
     events.push(provider_filter_key(KeyCode::Enter));
     events
@@ -273,7 +285,7 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
             "{text}"
         );
         assert!(
-            text.contains("Pool details") && !text.contains("Pool-wide:"),
+            text.contains("Pool F5") && !text.contains("Pool-wide:"),
             "{text}"
         );
     }
@@ -283,7 +295,7 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
 async fn quota_provider_filters_cancel_draft_and_cancel_button_preserve_committed_rows_and_focus() {
     for cancel in [
         vec![KeyCode::Esc],
-        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter],
+        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter],
     ] {
         let mut events = vec![
             provider_filter_key(KeyCode::Down),
@@ -301,7 +313,7 @@ async fn quota_provider_filters_cancel_draft_and_cancel_button_preserve_committe
         for label in ["Alpha", "Beta", "Gamma", "Delta", "Beta-detail"] {
             assert!(text.contains(label), "{text}");
         }
-        assert!(text.contains("Provider: All"), "{text}");
+        assert!(text.contains("Filters: All ▾"), "{text}");
         assert!(!text.contains("Account provider"), "{text}");
     }
 }
@@ -345,7 +357,7 @@ async fn quota_provider_filters_empty_intersection_has_notice_and_no_hidden_deta
     events.push(provider_filter_key(KeyCode::Esc));
     let text = render_quota_capture_model_at(model, 120, 36, events).await;
     assert!(text.contains("No accounts match these filters"), "{text}");
-    assert!(text.contains("0/4 accounts"), "{text}");
+    assert!(text.contains("Quota · 0/4"), "{text}");
     for label in ["Alpha", "Beta", "Gamma", "Delta", "Selected account"] {
         assert!(!text.contains(label), "hidden detail {label}:\n{text}");
     }
@@ -391,33 +403,35 @@ async fn quota_provider_filters_mouse_open_select_toggle_and_apply_match_keyboar
         {
             let frame = canvas.to_string();
             let target = match phase {
-                0 if frame.contains("Filters ▾") => Some("Filters ▾"),
+                0 if frame.contains("Filters:") => Some("Filters:"),
                 1 if frame.contains("Account provider") => Some("All ▾"),
-                2 if frame.contains("Search:") => Some("Claude"),
-                3 if frame.contains("Claude ▾") && !frame.contains("Search:") => Some("Shown ▾"),
-                4 if frame.contains("Search:") => Some("Hidden"),
-                5 if !frame.contains("Search:") => Some("Apply"),
+                2 if frame.contains("Filter:") => Some("Claude"),
+                3 if frame.contains("Claude ▾") && !frame.contains("Filter:") => Some("Shown ▾"),
+                4 if frame.contains("Filter:") => Some("Hidden"),
+                5 if !frame.contains("Filter:") => Some("Apply"),
                 _ => None,
             };
             if let Some(target) = target {
+                let search_start = if matches!(phase,1|3) {
+                    frame.lines().position(|line|line.contains("Account provider")).expect("parent field is visible")
+                } else if matches!(phase,2|4) {
+                    frame.lines().position(|line|line.contains("Filter:")).expect("dropdown query is visible")
+                } else {0};
                 let (row, line) = frame
                     .lines()
                     .enumerate()
+                    .skip(search_start)
                     .find(|(_, line)| line.contains(target) && !(phase == 2 && line.contains("◆")))
                     .expect("literal visible click target");
                 let byte_index = line.find(target).unwrap();
-                let column = line
-                    .get(..byte_index)
-                    .expect("literal match begins at a UTF-8 boundary")
-                    .chars()
-                    .count();
+                let column = unicode_width::UnicodeWidthStr::width(line.get(..byte_index).expect("literal match begins at a UTF-8 boundary"));
                 sender.send(click(u16::try_from(column).unwrap_or(u16::MAX), u16::try_from(row).unwrap_or(u16::MAX))).unwrap();
                 phase += 1;
             } else if phase == 6
                 && !frame.contains("Account provider")
-                && frame.contains("Provider: Claude · Disabled: Hidden")
+                && frame.contains("Filters: Claude · Enabled ▾")
             {
-                sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
+                sender.send(provider_filter_key(KeyCode::Char('q'))).unwrap();
                 phase = 7;
             }
             frames.push(frame);
@@ -428,8 +442,8 @@ async fn quota_provider_filters_mouse_open_select_toggle_and_apply_match_keyboar
     assert_eq!(phase, 7, "{frames:?}");
     let text = frames.last().expect("applied mouse filters must render");
     assert!(
-        text.contains("Provider: Claude")
-            && text.contains("Disabled: Hidden")
+        text.contains("Filters: Claude")
+            && text.contains("Enabled ▾")
             && text.contains("1/4 accounts"),
         "{text}"
     );
@@ -458,7 +472,7 @@ async fn quota_provider_filters_real_component_preserves_account_options_and_flo
             160,
             60,
             vec![
-                ("Filters ▾", vec![TerminalEvent::Key(opening_key)]),
+                ("Filters:", vec![TerminalEvent::Key(opening_key)]),
                 (
                     expected_modal,
                     vec![
@@ -475,10 +489,7 @@ async fn quota_provider_filters_real_component_preserves_account_options_and_flo
                         provider_filter_key(KeyCode::Esc),
                     ],
                 ),
-                (
-                    "All · Disabled: Shown",
-                    vec![provider_filter_key(KeyCode::Esc)],
-                ),
+                ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
             ],
             Some(saver),
         )
@@ -497,7 +508,7 @@ async fn quota_provider_filters_real_component_preserves_account_options_and_flo
             frames
                 .iter()
                 .filter(|frame| frame.contains(expected_modal))
-                .all(|frame| !frame.contains("Filters ▾")),
+                .all(|frame| !quota_ux_clarity_test::actual_dialog_text(frame, expected_modal).contains("Filters:")),
             "modal input owners retain their viewport without unavailable filter controls: {frames:?}"
         );
     }
@@ -528,30 +539,33 @@ async fn quota_provider_filters_reload_keeps_filters_and_reconciles_latest_visib
         (provider_filter_key(KeyCode::Enter), None),
         (provider_filter_key(KeyCode::Tab), None),
         (provider_filter_key(KeyCode::Tab), None),
+        (provider_filter_key(KeyCode::Tab), None),
         (
             provider_filter_key(KeyCode::Enter),
             Some("Delta-after-reload"),
         ),
-        (provider_filter_key(KeyCode::Esc), None),
+        (provider_filter_key(KeyCode::Char('q')), None),
     ]);
     let mut reload_released = false;
-    let frames = element! {
+    let mut component = element! {
         QuotaStatusComponent(view_model: mixed_provider_filter_view_model(), width: 160usize, height: 60usize,
             reload_view_model: Some(loader), reload_interval: Duration::from_secs(1))
-    }
+    };
+    let rendering = component
     .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
     .map(|canvas| canvas.to_string())
     .inspect(move |frame| {
-        if frame.contains("Provider: Claude") && !frame.contains("Account provider") && !reload_released {
+        if frame.contains("Filters: Claude ▾") && !frame.contains("Account provider") && !reload_released {
             release_reload.notify_one();
             reload_released = true;
         }
         if frame.contains("Delta-after-reload") { let _ = acknowledgement_sender.send("Delta-after-reload"); }
     })
-    .collect::<Vec<_>>().await;
+    .collect::<Vec<_>>();
+    let frames = tokio::time::timeout(Duration::from_secs(3), rendering).await.expect("committed filter must release the held reload and return its actual frame");
     let text = frames.last().expect("reload must produce a frame");
     assert!(
-        text.contains("Provider: Claude") && text.contains("1/3 accounts"),
+        text.contains("Filters: Claude ▾") && text.contains("1/3 accounts"),
         "{text}"
     );
     assert!(text.contains("Delta-after-reload"), "{text}");
@@ -568,12 +582,11 @@ async fn quota_provider_filters_toolbar_chooser_and_footer_fit_owner_viewports()
             width,
             height,
             vec![
-                ("Quota status", vec![provider_filter_key(KeyCode::F(3))]),
+                ("Quota ·", vec![provider_filter_key(KeyCode::F(3))]),
                 ("Account provider", vec![provider_filter_key(KeyCode::Esc)]),
-                (
-                    "All · Disabled: Shown",
-                    vec![provider_filter_key(KeyCode::Esc)],
-                ),
+                ("Quota ·",vec![provider_filter_key(KeyCode::F(3))]),
+                ("All ▾",vec![provider_filter_key(KeyCode::Esc)]),
+                ("Quota ·",vec![provider_filter_key(KeyCode::Esc)]),
             ],
             None,
         )
@@ -609,33 +622,23 @@ async fn render_quota_filter_phases(
     let events = futures_util::stream::unfold(event_receiver, |mut receiver| async move {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut phases = phases.into_iter().peekable();
-    let latest_frame = Arc::new(std::sync::Mutex::new(String::new()));
-    let observed_frame = Arc::clone(&latest_frame);
-    let mut component = element! {
-        QuotaStatusComponent(view_model, width, height, weekly_floor_saver)
-    };
-    let render = component
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
-        .map(|canvas| canvas.to_string())
-        .inspect(move |frame| {
-            *observed_frame.lock().expect("frame diagnostic lock") = frame.clone();
-            if phases
-                .peek()
-                .is_some_and(|(marker, _)| frame.contains(marker))
-            {
-                let (_, actions) = phases.next().expect("observed phase must exist");
-                for action in actions {
-                    event_sender
-                        .send(action)
-                        .expect("component input receiver must remain alive");
-                }
-            }
-        })
-        .collect::<Vec<_>>();
-    tokio::time::timeout(Duration::from_secs(2), render)
-        .await
-        .unwrap_or_else(|error| panic!("real quota filter scenario must complete within its existing lifecycle bound: {error}; last frame:\n{}", latest_frame.lock().expect("frame diagnostic lock")))
+    let mut phases=phases;
+    if let Some((_,events))=phases.last_mut() && let Some(TerminalEvent::Key(key))=events.last_mut() && key.code==KeyCode::Esc {key.code=KeyCode::Char('q');}
+    let outcome=Arc::new(std::sync::Mutex::new(None));
+    let mut component=element!(QuotaStatusComponent(view_model,width,height,weekly_floor_saver,spinner_interval:Duration::from_secs(3600),outcome_sink:Some(outcome.clone())));
+    let frames=crate::quota_test_support::recording_backend::recording_terminal_render_loop(&mut component,MockTerminalConfig::with_events(events));tokio::pin!(frames);
+    let mut output=Vec::new();let mut phases=phases.into_iter().peekable();
+    tokio::time::timeout(Duration::from_secs(2),async {
+        while let Some(canvas)=crate::quota_frame_observation::next_current_frame(frames.as_mut()).await.expect("current phase canvas") {
+            let frame=canvas.to_string();
+            let matched=phases.peek().is_some_and(|(marker,_)|if *marker=="Help" {crate::quota_browse_presentation_test::quota_help_visible(&frame)}else if *marker=="Quota ·" {frame.contains(marker)&&frame.chars().filter(|character|*character=='╮').count()==1}else{frame.contains(marker)});
+            if matched {let (_,actions)=phases.next().unwrap();for action in actions {event_sender.send(action).expect("phase event receiver remains mounted");}}
+            output.push(frame);
+        }
+    }).await.unwrap_or_else(|error|panic!("real quota filter scenario must finish: {error}; pending: {:?}; last: {:?}",phases.peek().map(|phase|phase.0),output.last()));
+    assert!(phases.peek().is_none(),"every requested checkpoint must be reached");
+    assert_eq!(*outcome.lock().unwrap(),Some(crate::QuotaOutcome::Quit));
+    output
 }
 
 #[test]
@@ -673,7 +676,7 @@ async fn owner_feedback_quota_chrome_retains_wrapped_counters_and_controls() {
         .await;
         let title_row = frame
             .lines()
-            .position(|line| line.contains("Quota status"))
+            .position(|line| line.contains("Quota ·"))
             .unwrap();
         let first_account = frame
             .lines()
@@ -683,10 +686,10 @@ async fn owner_feedback_quota_chrome_retains_wrapped_counters_and_controls() {
             first_account <= title_row + 7,
             "typed counters may wrap; title, controls, list border and group heading stay compact at {width}: {frame}"
         );
-        assert!(
-            frame.contains("Pool details") && frame.contains("Disabled") && frame.contains("Shown"),
-            "keep active controls and state visible: {frame}"
-        );
+        let menu=quota_menu_canvas(quota_two_account_view_model(),width,height).await.to_string();
+        assert!(menu.contains("Pool"),"Pool remains available in the actual menu: {menu}");
+        let form=render_quota_capture_model_at(quota_two_account_view_model(),width,height,vec![provider_filter_key(KeyCode::F(3)),TerminalEvent::Key({let mut key=KeyEvent::new(KeyEventKind::Press,KeyCode::Char('c'));key.modifiers=KeyModifiers::CONTROL;key})]).await;
+        assert!(form.contains("Disabled accounts")&&form.contains("Shown"),"committed filter state remains visible: {form}");
     }
 }
 
@@ -701,7 +704,7 @@ fn account_rows_wrap_full_name_with_provider_below_and_fixed_selector_columns() 
                 &row,
                 width,
                 focused,
-                super::quota_provider_filters::QuotaInteractionMode::Interactive,
+                super::quota_view_configuration::QuotaInteractionMode::Interactive,
                 false,
             )
             .render(None)
@@ -753,26 +756,29 @@ async fn quota_header_exposes_distinct_availability_and_operational_censuses() {
         120,
         36,
         vec![
-            ("Quota status", vec![provider_filter_key(KeyCode::F(5))]),
-            ("Accounts: 2", vec![provider_filter_key(KeyCode::Esc)]),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(5))]),
+            ("Pool details", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
     )
     .await;
     let pool = frames
         .iter()
-        .find(|frame| frame.contains("Accounts: 2"))
+        .find(|frame| frame.contains("Pool details"))
         .unwrap();
+    // Lead taste review 01a18f46 item 11: aligned fields replace colon lines.
+    let pool = pool.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(pool.contains("Accounts 2"), "{pool}");
     for fact in [
-        "Usable: 2",
-        "Reserve: 0",
-        "Blocked: 0",
-        "Pool unknown: 0",
-        "Excluded: 0",
-        "Fresh: 2",
-        "Stale: 0",
-        "Data unknown: 0",
+        "Usable 2",
+        "Reserve 0",
+        "Blocked 0",
+        "Pool unknown 0",
+        "Excluded 0",
+        "Fresh 2",
+        "Stale 0",
+        "Data unknown 0",
     ] {
         assert!(pool.contains(fact), "{pool}");
     }
