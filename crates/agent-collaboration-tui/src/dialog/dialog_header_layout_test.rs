@@ -112,6 +112,7 @@ fn HeaderScene(props: &HeaderSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         ]
         .into_iter()
         .map(|(name, title, key)| ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action(name),
             title: title.into(),
             toolbar_label: None,

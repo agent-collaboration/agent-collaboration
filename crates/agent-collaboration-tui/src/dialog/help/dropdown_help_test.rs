@@ -217,6 +217,7 @@ fn ScreenScene(props: &ScreenSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             on_pick: Handler::default(),
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: ActionId::new("open").unwrap(),
             title: "Choose".into(),
             toolbar_label: None,
@@ -229,6 +230,7 @@ fn ScreenScene(props: &ScreenSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             }),
         };
         let help_action = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: ActionId::new("help").unwrap(),
             title: "Help".into(),
             toolbar_label: None,

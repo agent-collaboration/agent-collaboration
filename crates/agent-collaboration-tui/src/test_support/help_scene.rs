@@ -87,6 +87,7 @@ pub fn HelpScene(props: &HelpSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             stack,
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("help"),
             title: "Help".into(),
@@ -100,6 +101,7 @@ pub fn HelpScene(props: &HelpSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             ),
         };
         let execute = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("execute"),
             title: "Execute".into(),
@@ -127,6 +129,7 @@ pub fn HelpScene(props: &HelpSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         let mut actions = vec![open, execute];
         for (letter, title) in ('a'..='z').zip(TITLES) {
             actions.push(ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: action(title),
                 title: title.into(),

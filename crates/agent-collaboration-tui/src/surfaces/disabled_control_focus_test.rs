@@ -83,6 +83,7 @@ fn Scene(props: &SceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>>
             }
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: ActionId::new("open").unwrap(),
             title: "Open".into(),
             toolbar_label: None,

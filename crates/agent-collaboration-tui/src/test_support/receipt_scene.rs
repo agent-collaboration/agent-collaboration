@@ -61,6 +61,7 @@ pub(crate) fn ReceiptScene(
             ScopeId::new("receipt-scene").unwrap(),
             vec![
                 ActionDef {
+                    risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                     toolbar_label: None,
                     id: action("inspect"),
                     title: "Inspect".into(),
@@ -74,6 +75,7 @@ pub(crate) fn ReceiptScene(
                     }),
                 },
                 ActionDef {
+                    risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                     toolbar_label: None,
                     id: action("quit"),
                     title: "Quit".into(),
@@ -144,6 +146,7 @@ fn receipt_overlay(
     kind: OverlayKind,
 ) -> OverlaySpec {
     let start = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action("start"),
         title: "Start".into(),

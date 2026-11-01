@@ -73,6 +73,7 @@ pub fn FixedSlotsScene(
         .map(|(name, title, key)| {
             let calls = props.calls.clone();
             ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 id: action(name),
                 title: title.into(),
                 toolbar_label: None,

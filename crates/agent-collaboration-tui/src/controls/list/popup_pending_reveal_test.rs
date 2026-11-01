@@ -70,6 +70,7 @@ fn open_parent(
     let opening_scroll = scroll.clone();
     let opening_observation = before_open.clone();
     let open = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("destination"),
         title: "Destination".into(),
         toolbar_label: None,
@@ -94,6 +95,7 @@ fn open_parent(
         }),
     };
     let cancel = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("cancel"),
         title: "Cancel".into(),
         toolbar_label: None,
@@ -106,6 +108,7 @@ fn open_parent(
         }),
     };
     let fork = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("fork"),
         title: "Fork".into(),
         toolbar_label: None,
@@ -181,6 +184,7 @@ fn PendingForkScene(
     let output = props.handle.clone();
     let stack = use_surface_stack(&mut hooks, move |stack| {
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("open-fork"),
             title: "Fork".into(),
             toolbar_label: None,

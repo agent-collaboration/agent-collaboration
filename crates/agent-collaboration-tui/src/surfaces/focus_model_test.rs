@@ -1,8 +1,8 @@
-use crate::test_support::core_models::{surface, target};
+use crate::test_support::core_models::{action, surface, target};
 use agent_collaboration_tui::{
-    actions::{ActionId, Availability, AvailabilityFn, ScopeId},
+    actions::{ActionId, ActionRegistry, ActionRisk, Availability, AvailabilityFn, ScopeId},
     surfaces::{
-        focus_model::{FocusDirection, FocusModel, GroupId, TargetId},
+        focus_model::{FocusDirection, FocusModel, GroupId, TargetId, TargetVisibility},
         surface_stack::SurfaceStack,
     },
 };
@@ -36,37 +36,63 @@ fn removed_focus_uses_the_scope_initial_target_before_cancel_in_declared_order()
 }
 
 #[test]
-fn absent_initial_focus_never_automatically_selects_an_action() {
+fn absent_initial_focus_prefers_non_primary_actions_then_keeps_any_enabled_target() {
     let initial = target("initial-field");
     let cancel = target("cancel").with_activation(ActionId::new("close").unwrap());
     let primary = target("primary").with_activation(ActionId::new("submit").unwrap());
     let safe = target("body");
-    let mut focus =
-        FocusModel::new(vec![initial, cancel.clone(), primary.clone(), safe.clone()]).unwrap();
-    focus
-        .replace_targets(vec![cancel.clone(), primary.clone(), safe.clone()])
+    let mut screen = surface(&[]);
+    screen.primary_action = Some(ActionId::new("submit").unwrap());
+    screen.focus =
+        FocusModel::new(vec![initial, primary.clone(), cancel.clone(), safe.clone()]).unwrap();
+    let mut stack = SurfaceStack::new(screen);
+    stack
+        .top_mut()
+        .focus
+        .replace_targets(vec![primary.clone(), cancel.clone(), safe])
         .unwrap();
+    stack.top_mut().reconcile_focus();
     assert_eq!(
-        focus.current(),
-        Some(&safe.id),
-        "secondary fallback uses a non-activating target"
+        stack.top().focus.current(),
+        Some(&cancel.id),
+        "declared non-primary activations participate in fallback"
     );
-    focus.replace_targets(vec![cancel, primary]).unwrap();
+    stack
+        .top_mut()
+        .focus
+        .replace_targets(vec![primary.clone()])
+        .unwrap();
+    stack.top_mut().reconcile_focus();
     assert_eq!(
-        focus.current(),
-        None,
-        "no safe target leaves focus empty rather than arming Cancel"
+        stack.top().focus.current(),
+        Some(&primary.id),
+        "a primary-only surface still has focus"
+    );
+    stack
+        .top_mut()
+        .focus
+        .replace_targets(vec![primary.clone(), cancel.clone()])
+        .unwrap();
+    stack.top_mut().reconcile_focus();
+    assert_eq!(stack.top().focus.current(), Some(&cancel.id));
+    assert!(stack.top_mut().focus.focus(&primary.id));
+    stack.top_mut().reconcile_focus();
+    assert_eq!(
+        stack.top().focus.current(),
+        Some(&primary.id),
+        "the user's explicit move wins over fallback priority"
     );
 }
 
 #[test]
-fn initial_disabled_activation_remains_focused_on_mount_and_after_displacement() {
+fn initial_disabled_activation_is_retained_but_cannot_receive_automatic_fallback() {
     let disabled = target("initial-submit")
         .with_activation(ActionId::new("submit").unwrap())
         .with_availability(AvailabilityFn::new(|| Availability::Unavailable {
             reason: "Waiting".into(),
         }));
     let transient = target("transient");
+    let enabled_fallback = target("enabled-fallback");
     let mut screen = surface(&[]);
     screen.focus = FocusModel::new(vec![disabled.clone(), transient.clone()]).unwrap();
     let mut stack = SurfaceStack::new(screen);
@@ -79,14 +105,65 @@ fn initial_disabled_activation_remains_focused_on_mount_and_after_displacement()
     stack
         .top_mut()
         .focus
-        .replace_targets(vec![disabled.clone()])
+        .replace_targets(vec![disabled.clone(), enabled_fallback.clone()])
         .unwrap();
     assert_eq!(
         stack.top().focus.current(),
-        Some(&disabled.id),
-        "only the initial activation may receive automatic fallback"
+        Some(&enabled_fallback.id),
+        "an unavailable initial target cannot displace an enabled fallback"
     );
-    assert!(!stack.top().focus.focused().unwrap().is_enabled());
+    assert!(stack.top().focus.focused().unwrap().is_enabled());
+    assert!(!disabled.is_enabled());
+}
+
+#[test]
+fn mount_classifies_automatic_focus_from_action_declarations_without_losing_initial_intent() {
+    let hidden = target("hidden-initial").with_visibility(TargetVisibility::new(|| false));
+    let mut destructive = action("remove", "F8");
+    destructive.risk = ActionRisk::Destructive;
+    let primary = action("apply", "F9");
+    let ordinary = action("close", "Esc");
+    let remove_target = target("remove").with_activation(destructive.id.clone());
+    let apply_target = target("apply").with_activation(primary.id.clone());
+    let close_target = target("close").with_activation(ordinary.id.clone());
+    let mut screen = surface(&[]);
+    screen.primary_action = Some(primary.id.clone());
+    screen.actions = ActionRegistry::new(
+        ScopeId::new("mount-risk").unwrap(),
+        vec![destructive, primary, ordinary],
+    )
+    .unwrap();
+    screen.focus = FocusModel::new(vec![
+        hidden,
+        remove_target.clone(),
+        apply_target.clone(),
+        close_target.clone(),
+    ])
+    .unwrap();
+    let mut stack = SurfaceStack::new(screen);
+    assert_eq!(
+        stack.top().focus.current(),
+        Some(&close_target.id),
+        "mount corrects the constructor's unclassified fallback"
+    );
+    stack
+        .top_mut()
+        .focus
+        .replace_targets(vec![remove_target.clone(), apply_target.clone()])
+        .unwrap();
+    stack.top_mut().reconcile_focus();
+    assert_eq!(
+        stack.top().focus.current(),
+        Some(&remove_target.id),
+        "only deferred actions remain, so declared order still yields focus"
+    );
+    stack
+        .top_mut()
+        .focus
+        .replace_targets(vec![apply_target.clone(), remove_target])
+        .unwrap();
+    stack.top_mut().reconcile_focus();
+    assert_eq!(stack.top().focus.current(), Some(&apply_target.id));
 }
 
 #[test]

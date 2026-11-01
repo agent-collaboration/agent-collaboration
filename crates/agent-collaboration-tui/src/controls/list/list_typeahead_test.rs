@@ -51,6 +51,7 @@ fn record_label(key: &ListRowKey) -> &'static str {
 }
 fn definition(name: &'static str, keys: &[&str], run: Handler<()>) -> ActionDef {
     ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action(name),
         title: name.into(),
         toolbar_label: None,

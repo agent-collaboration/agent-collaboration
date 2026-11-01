@@ -115,6 +115,7 @@ fn open_result(
     ]
     .into_iter()
     .map(|(name, title, key)| ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action(name),
         title: title.into(),
         toolbar_label: None,
@@ -132,6 +133,7 @@ fn open_result(
     .collect::<Vec<_>>();
     let mut definitions = definitions;
     definitions.push(ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("finish-result"),
         title: "Finish result".into(),
         toolbar_label: None,
@@ -184,6 +186,7 @@ fn ResultScene(props: &ResultSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let handle = props.handle.clone();
     let stack = use_surface_stack(&mut hooks, |stack| {
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("show-result"),
             title: "Show result".into(),
             toolbar_label: None,

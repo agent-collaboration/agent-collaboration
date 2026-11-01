@@ -176,6 +176,13 @@ pub struct FocusModel {
     current: Option<TargetId>,
     initial: Option<TargetId>,
     displaced: Option<TargetId>,
+    focus_origin: FocusOrigin,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FocusOrigin {
+    Intent,
+    AutomaticFallback,
 }
 impl FocusModel {
     pub(crate) fn empty() -> Self {
@@ -184,6 +191,7 @@ impl FocusModel {
             current: None,
             initial: None,
             displaced: None,
+            focus_origin: FocusOrigin::Intent,
         }
     }
     pub fn new(targets: Vec<TargetSpec>) -> Result<Self, FocusError> {
@@ -197,6 +205,7 @@ impl FocusModel {
             initial: current.clone(),
             current,
             displaced: None,
+            focus_origin: FocusOrigin::Intent,
         };
         model.reconcile_eligibility();
         Ok(model)
@@ -220,6 +229,7 @@ impl FocusModel {
         {
             self.current = Some(id.clone());
             self.displaced = None;
+            self.focus_origin = FocusOrigin::Intent;
             true
         } else {
             false
@@ -235,51 +245,83 @@ impl FocusModel {
             .iter()
             .any(|target| target.id == *id && target.can_retain_focus())
     }
-    fn automatic_fallback(&self) -> Option<TargetId> {
+    fn automatic_fallback(&self, is_deferred: &impl Fn(&TargetSpec) -> bool) -> Option<TargetId> {
         self.initial
             .as_ref()
-            .filter(|id| self.is_painted_focus(id))
+            .filter(|id| self.is_focus_eligible(id))
             .cloned()
             .or_else(|| {
                 self.targets
                     .iter()
-                    .find(|target| target.can_focus() && target.activation.is_none())
+                    .find(|target| target.can_focus() && !is_deferred(target))
+                    .map(|target| target.id.clone())
+            })
+            .or_else(|| {
+                self.targets
+                    .iter()
+                    .find(|target| target.can_focus())
                     .map(|target| target.id.clone())
             })
     }
-    pub(crate) fn mount_initial_focus(&mut self) {
-        self.initial = self.current.clone().or_else(|| self.initial.clone());
-        self.reconcile_eligibility();
+    pub(crate) fn capture_initial_focus(&mut self) {
+        if self.focus_origin == FocusOrigin::Intent {
+            self.initial = self.current.clone().or_else(|| self.initial.clone());
+        }
     }
     /// Reconcile only the active surface. Covered and Help-suspended models keep
     /// their displaced intent until the original surface becomes active again.
     pub(crate) fn reconcile_eligibility(&mut self) -> bool {
-        let before = (self.current.clone(), self.displaced.clone());
+        self.reconcile_with_priority(|_| false)
+    }
+    pub(crate) fn reconcile_with_priority(
+        &mut self,
+        is_deferred: impl Fn(&TargetSpec) -> bool,
+    ) -> bool {
+        let before = (
+            self.current.clone(),
+            self.displaced.clone(),
+            self.focus_origin,
+        );
         if self
             .displaced
             .as_ref()
             .is_some_and(|id| self.is_focus_eligible(id))
         {
             self.current = self.displaced.take();
+            self.focus_origin = FocusOrigin::Intent;
         } else if !self
             .current
             .as_ref()
             .is_some_and(|id| self.is_painted_focus(id))
+            || (self.focus_origin == FocusOrigin::AutomaticFallback
+                && self
+                    .current
+                    .as_ref()
+                    .is_some_and(|id| self.is_focus_eligible(id)))
         {
-            if self.displaced.is_none() {
+            if self.focus_origin == FocusOrigin::Intent && self.displaced.is_none() {
                 self.displaced = self.current.clone();
             }
-            self.current = self.automatic_fallback();
+            self.current = self.automatic_fallback(&is_deferred);
+            self.focus_origin = FocusOrigin::AutomaticFallback;
         }
-        (self.current.clone(), self.displaced.clone()) != before
+        (
+            self.current.clone(),
+            self.displaced.clone(),
+            self.focus_origin,
+        ) != before
     }
     /// Model replacement copies intent without reconciling a covered surface.
     pub(crate) fn inherit_focus_intent(&mut self, previous: &Self) {
         self.current = previous.current.clone();
         self.initial = previous.initial.clone();
         self.displaced = previous.displaced.clone();
+        self.focus_origin = previous.focus_origin;
     }
     pub fn restore(&mut self, id: Option<&TargetId>) {
+        if self.current.as_ref() != id {
+            self.focus_origin = FocusOrigin::Intent;
+        }
         self.current = id.cloned();
         self.reconcile_eligibility();
     }
@@ -325,6 +367,7 @@ impl FocusModel {
         };
         self.current = next.map(|(_, target)| target.id.clone());
         self.displaced = None;
+        self.focus_origin = FocusOrigin::Intent;
     }
 }
 

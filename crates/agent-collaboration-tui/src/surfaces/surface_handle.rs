@@ -77,14 +77,14 @@ impl SurfaceStackHandle {
         let previous_focus = model.focus.clone();
         update(model);
         model.focus.inherit_focus_intent(&previous_focus);
-        next.top_mut().focus.reconcile_eligibility();
+        next.top_mut().reconcile_focus();
         self.regions.invalidate();
         self.stack.set(next);
         true
     }
     pub(crate) fn reconcile_active_focus(mut self) {
         let mut next = self.snapshot();
-        if next.top_mut().focus.reconcile_eligibility() {
+        if next.top_mut().reconcile_focus() {
             self.stack.set(next);
         }
     }
@@ -101,7 +101,10 @@ impl SurfaceStackHandle {
         targets: Vec<TargetSpec>,
     ) -> Result<bool, FocusError> {
         self.update(|stack| match stack.surface_mut(surface) {
-            Some(surface) => surface.focus.replace_targets(targets).map(|()| true),
+            Some(surface) => surface.focus.replace_targets(targets).map(|()| {
+                surface.reconcile_focus();
+                true
+            }),
             None => Ok(false),
         })
     }

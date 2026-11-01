@@ -76,6 +76,7 @@ fn PageScene(props: &PageSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'
         let help = HelpControl::new(stack, ActionId::new("help").unwrap());
         let view_help = help.clone();
         let help_action = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: ActionId::new("help").unwrap(),
             title: "Help".into(),
             toolbar_label: None,

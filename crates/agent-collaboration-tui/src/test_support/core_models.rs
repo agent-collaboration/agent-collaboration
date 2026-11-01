@@ -12,6 +12,7 @@ pub fn target(name: &str) -> TargetSpec {
 
 pub fn action(name: &str, chord: &str) -> ActionDef {
     ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: ActionId::new(name).unwrap(),
         title: "Open".into(),

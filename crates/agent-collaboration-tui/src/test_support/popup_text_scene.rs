@@ -61,6 +61,7 @@ fn model(
 ) -> SurfaceModel {
     let parent_scroll = scroll.clone();
     let open = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("open-choice"),
         title: "Choose".into(),
         toolbar_label: None,
@@ -87,6 +88,7 @@ fn model(
         }),
     };
     let close = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action("close"),
         title: "Close".into(),
         toolbar_label: None,

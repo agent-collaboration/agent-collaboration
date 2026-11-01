@@ -34,6 +34,7 @@ fn ButtonScene(props: &ButtonSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         let actions = [("alpha", "Alpha action"), ("bravo", "Bravo action")]
             .into_iter()
             .map(|(name, title)| ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 id: action(name),
                 title: title.into(),
                 toolbar_label: None,

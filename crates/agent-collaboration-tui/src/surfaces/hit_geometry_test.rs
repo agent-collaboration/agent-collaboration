@@ -136,6 +136,7 @@ fn GeometryScene(props: &GeometrySceneProps, mut hooks: Hooks) -> impl Into<AnyE
     let offset = hooks.use_state(|| 0u16);
     let stack = use_surface_stack(&mut hooks, |_| {
         let hit = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action_id("hit"),
             title: "Hit".into(),
@@ -151,6 +152,7 @@ fn GeometryScene(props: &GeometrySceneProps, mut hooks: Hooks) -> impl Into<AnyE
             }),
         };
         let move_action = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action_id("move"),
             title: "Move".into(),

@@ -35,6 +35,7 @@ fn action_id(name: &str) -> ActionId {
 }
 fn action(name: &str, key: &str, run: impl Fn(()) + Send + Sync + 'static) -> ActionDef {
     ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action_id(name),
         title: "Action".into(),

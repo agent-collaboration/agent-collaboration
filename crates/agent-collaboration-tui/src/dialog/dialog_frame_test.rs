@@ -128,6 +128,7 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         actions: ActionRegistry::new(
             ScopeId::new("background").unwrap(),
             vec![ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: ActionId::new("quit").unwrap(),
                 title: "Quit".into(),
