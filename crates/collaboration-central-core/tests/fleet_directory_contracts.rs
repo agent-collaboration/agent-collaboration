@@ -200,7 +200,8 @@ fn fleet_directory_address_boundaries_match_schema_and_serde() {
         ("https://a:1", true),
         ("https://a:65535", true),
         ("https://a:65536", false),
-        ("https://a:00080/a", true),
+        ("https://a:00080/a", false),
+        ("https://a:0443", false),
         ("https://a:", false),
         ("https://-a.example.invalid", false),
         ("https://a-.example.invalid", false),
@@ -229,6 +230,18 @@ fn fleet_directory_address_boundaries_match_schema_and_serde() {
     ]);
     assert_scalar_cases::<HttpsUrl>(cases.clone());
     assert_scalar_cases::<ResourceUri>(cases);
+}
+
+// Oracle correction 0f0c9a55: port spellings are canonical at the boundary.
+#[test]
+fn fleet_directory_refuses_leading_zero_ports() {
+    for address in ["https://a:0443", "http://localhost:00080/a"] {
+        assert!(
+            HttpsUrl::try_from(address.to_owned()).is_err(),
+            "leading-zero port accepted: {address}"
+        );
+        assert!(ResourceUri::try_from(address.to_owned()).is_err());
+    }
 }
 
 #[test]
