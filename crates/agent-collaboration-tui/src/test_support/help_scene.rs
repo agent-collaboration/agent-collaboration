@@ -45,6 +45,8 @@ pub struct HelpSceneProps {
     pub journal: EventJournal,
     pub handle: HelpHandle,
     pub content: HelpContent,
+    pub width: Option<u16>,
+    pub height: Option<u16>,
 }
 pub const TITLES: [&str; 26] = [
     "Alpha action",
@@ -156,7 +158,7 @@ pub fn HelpScene(props: &HelpSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         .control
         .clone();
     let journal = props.journal.clone();
-    element!(InputOwner(stack,width:76u16,height:30u16,quit_action:action("quit"),on_routed:move |_|{let snapshot=stack.snapshot();let mut surfaces=vec![(SurfaceId::Screen,vec![u8::from(enabled.get())])];for overlay in snapshot.overlays(){surfaces.push((SurfaceId::Overlay(overlay.id),overlay.model.focus.current().unwrap().as_str().as_bytes().to_vec()));}journal.processed(SurfaceSnapshot(surfaces));}) {
+    element!(InputOwner(stack,width:props.width.unwrap_or(76),height:props.height.unwrap_or(30),quit_action:action("quit"),on_routed:move |_|{let snapshot=stack.snapshot();let mut surfaces=vec![(SurfaceId::Screen,vec![u8::from(enabled.get())])];for overlay in snapshot.overlays(){surfaces.push((SurfaceId::Overlay(overlay.id),overlay.model.focus.current().unwrap().as_str().as_bytes().to_vec()));}journal.processed(SurfaceSnapshot(surfaces));}) {
         OverlayHost {View {Button(id:TargetId::for_action(help.action()),action:help.action().clone()) Button(id:TargetId::for_action(&action("execute")),action:action("execute"))}}
     })
 }
