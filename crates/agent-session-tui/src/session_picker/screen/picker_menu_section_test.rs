@@ -139,6 +139,10 @@ async fn picker_menu_sections_follow_toolbar_scope_view_actions_and_application_
 
 #[tokio::test]
 async fn picker_menu_sections_reveal_quit_at_all_four_grids() {
+    use crate::picker_control_test_support::event_driver::{
+        EventDriver, InputMode, SurfaceSnapshot,
+    };
+    use crate::picker_control_test_support::recording_backend::recording_terminal_render_loop;
     for (width, height) in [(120usize, 36usize), (76, 30), (48, 12), (32, 24)] {
         let observed = Arc::new(Mutex::new(None));
         let observer = observed.clone();
@@ -146,32 +150,40 @@ async fn picker_menu_sections_reveal_quit_at_all_four_grids() {
         let events = futures_util::stream::unfold(receiver, |mut receiver| async {
             receiver.recv().await.map(|event| (event, receiver))
         });
+        let (mut driver, mut config, journal) = EventDriver::new();
+        // F10 uses the causal driver; later navigation and Quit keep their original channel.
+        // Both feed the same existing terminal backend and InputOwner.
+        config.events = futures_util::stream::select(config.events, events.boxed()).boxed();
+        let captured = Arc::new(Mutex::new(None::<iocraft::Canvas>));
+        let recorded = captured.clone();
         let mut picker = element!(SessionsPickerComponent(
             request:picker_request(),width,height,
-            surface_observer:move |(stack,_): (SurfaceStackHandle,State<SessionsPickerModel>)|{*observer.lock().unwrap()=Some(stack)}
+            surface_observer:move |(stack,_): (SurfaceStackHandle,State<SessionsPickerModel>)|{*observer.lock().unwrap()=Some(stack)},
+            input_observer:move |()| journal.processed(SurfaceSnapshot(Vec::new()))
         ));
-        let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-        tokio::pin!(frames);
-        sender.send(menu_key(KeyCode::F(10))).unwrap();
+        let mut frames = Box::pin(
+            recording_terminal_render_loop(&mut picker, config)
+                .inspect(move |canvas| *recorded.lock().unwrap() = Some(canvas.clone())),
+        );
         let item_count = tokio::time::timeout(Duration::from_secs(5), async {
-            loop {
-                let Some(canvas) = frames.next().await else {panic!("picker ended before menu geometry at {width}x{height}")};
-                let stack = observed.lock().unwrap().unwrap();
-                let snapshot = stack.snapshot();
-                if !snapshot.overlays().last().is_some_and(|overlay|overlay.kind == OverlayKind::Menu) {
-                    continue;
-                }
-                let Some(regions) = stack.hit_regions().published() else {continue};
-                let Some(viewport) = regions.targets.iter().find(|region|region.surface == snapshot.top_id() && region.target.as_str() == "menu-scroll" && !region.cells.is_empty()) else {continue};
-                let rows = viewport.cells.iter().map(|(_, row)|*row).collect::<std::collections::BTreeSet<_>>();
-                let frame = canvas.to_string();
-                let drawn_rows = frame.lines().collect::<Vec<_>>();
-                assert!(rows.iter().all(|row|drawn_rows.get(usize::from(*row)).is_some()), "{width}x{height}: {frame}");
-                let scrollbar = rows.iter().any(|row|drawn_rows.get(usize::from(*row)).is_some_and(|line|line.contains('█')));
-                println!("MENU_VIEWPORT {width}x{height}: items=26 headings=4 separators=6 borders=2 rows_needed=38 interior_available={} scrollbar={scrollbar}\n{frame}",rows.len());
-                assert!(scrollbar, "the declared38-row menu overflows at {width}x{height}: {frame}");
-                break ActionProjections::from_registry(&snapshot.top().actions).menu.len();
+            driver.initial(&mut frames).await;
+            driver.drive(&mut frames, InputMode::FrameSeparated, vec![(menu_key(KeyCode::F(10)), true)], true).await;
+            let canvas = captured.lock().unwrap().clone().expect("processed F10 has a recorded canvas");
+            let stack = observed.lock().unwrap().unwrap();
+            let snapshot = stack.snapshot();
+            if !snapshot.overlays().last().is_some_and(|overlay|overlay.kind == OverlayKind::Menu) {
+                panic!("processed F10 must leave the menu open at {width}x{height}");
             }
+            let regions = stack.hit_regions().published().expect("processed F10 publishes menu hit regions");
+            let viewport = regions.targets.iter().find(|region|region.surface == snapshot.top_id() && region.target.as_str() == "menu-scroll" && !region.cells.is_empty()).expect("processed F10 publishes its menu scroll viewport");
+            let rows = viewport.cells.iter().map(|(_, row)|*row).collect::<std::collections::BTreeSet<_>>();
+            let frame = canvas.to_string();
+            let drawn_rows = frame.lines().collect::<Vec<_>>();
+            assert!(rows.iter().all(|row|drawn_rows.get(usize::from(*row)).is_some()), "{width}x{height}: {frame}");
+            let scrollbar = rows.iter().any(|row|drawn_rows.get(usize::from(*row)).is_some_and(|line|line.contains('█')));
+            println!("MENU_VIEWPORT {width}x{height}: items=26 headings=4 separators=6 borders=2 rows_needed=38 interior_available={} scrollbar={scrollbar}\n{frame}",rows.len());
+            assert!(scrollbar, "the declared38-row menu overflows at {width}x{height}: {frame}");
+            ActionProjections::from_registry(&snapshot.top().actions).menu.len()
         }).await.expect("actual menu viewport publishes after F10");
         for _ in 1..item_count {
             sender.send(menu_key(KeyCode::Down)).unwrap();
