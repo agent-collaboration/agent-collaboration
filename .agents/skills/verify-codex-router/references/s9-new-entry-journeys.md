@@ -217,6 +217,16 @@ An authored binding is not a product pass.
 
 ## Quota B offline preparation (draft)
 
+The authored plan may bind `quota.loginStandin` as an exact artifact path and
+SHA-256. Login and grouping guard routes require it before adapter lookup or
+output creation; a missing binding or changed artifact rejects admission.
+Private per-run fixture configs come from that binding, never ambient lookup.
+The grouping reader validates the actual `grouping-invocation-started` and
+`grouping-invocation-settled` wire facts, including facets/store/mounts, before
+normalizing them for the existing invocation-remount terminal owner. This is
+reader sensitivity proof until the real event journal and native adapter bind it.
+
+
 Use S7's source-only packet with its retained source directory and manifest. Keep
 that snapshot distinct from the moving consumer checkout and the later signed
 product declaration. From the repository root:

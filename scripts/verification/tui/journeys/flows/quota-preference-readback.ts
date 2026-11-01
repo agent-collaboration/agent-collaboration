@@ -15,6 +15,46 @@ const invocationSchema = z.strictObject({
 	finalFacet: facetSchema,
 	storedValue: z.string().nullable(),
 });
+const groupingStartEventSchema = z.strictObject({
+	kind: z.literal('grouping-invocation-started'),
+	invocation: z.number().int().positive(),
+	mount: z.number().int().positive(),
+	facet: facetSchema,
+	storePath: z.string().startsWith('/'),
+});
+const groupingSettledEventSchema = z.strictObject({
+	kind: z.literal('grouping-invocation-settled'),
+	facts: invocationSchema,
+});
+
+/** Decode actual source wire before handing normalized facts to the terminal owner. */
+export function readQuotaGroupingStarted(
+	value: unknown,
+	expected: Omit<z.infer<typeof groupingStartEventSchema>, 'kind'>,
+): Pick<z.infer<typeof groupingStartEventSchema>, 'invocation' | 'mount' | 'storePath'> {
+	const actual = groupingStartEventSchema.parse(value);
+	if (canonicalJson(actual) !== canonicalJson({ ...expected, kind: 'grouping-invocation-started' }))
+		throw new Error(
+			'quota grouping started facts differ from the source-bound invocation, mount, facet or store',
+		);
+	return { invocation: actual.invocation, mount: actual.mount, storePath: actual.storePath };
+}
+export function readQuotaGroupingSettled(
+	value: unknown,
+	expected: z.infer<typeof invocationSchema>,
+): Pick<z.infer<typeof invocationSchema>, 'invocation' | 'initialMount' | 'finalMount'> {
+	const actual = groupingSettledEventSchema.parse(value).facts;
+	if (canonicalJson(actual) !== canonicalJson(expected))
+		throw new Error(
+			'quota grouping settled facts differ from the source-bound saved facet or invocation mount',
+		);
+	return {
+		invocation: actual.invocation,
+		initialMount: actual.initialMount,
+		finalMount: actual.finalMount,
+	};
+}
+
 export const quotaPreferenceReceiptSchema = z.strictObject({
 	groupingReopen: z
 		.strictObject({

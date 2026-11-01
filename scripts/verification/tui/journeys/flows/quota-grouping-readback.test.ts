@@ -2,6 +2,7 @@
 import { expect, test } from 'vitest';
 
 import { checkQuotaEffectReceipt, quotaEffectReceiptSchema } from './quota-effect-readback.ts';
+import { readQuotaGroupingStarted, readQuotaGroupingSettled } from './quota-preference-readback.ts';
 
 function groupingReceipt(): unknown {
 	const accounts = ['openai', 'claude'].map((provider, index) => ({
@@ -206,4 +207,80 @@ test('grouping wire is strict about missing or extra invocation and summary fiel
 	);
 	const { preferenceWrites: _removed, ...missing } = receipt;
 	expect(quotaEffectReceiptSchema.safeParse(missing).success).toBe(false);
+});
+
+const startedFacts = {
+	invocation: 2,
+	mount: 7,
+	facet: 'provider',
+	storePath: '/fixture/agent-proxy-ui.sqlite',
+} as const;
+const settledFacts = {
+	invocation: 1,
+	initialMount: 6,
+	finalMount: 6,
+	initialFacet: 'none',
+	finalFacet: 'provider',
+	storedValue: 'provider',
+} as const;
+test('actual grouping wire normalizes genuine invocation facts without inventing child entry or exit', () => {
+	expect(
+		readQuotaGroupingStarted(
+			{ kind: 'grouping-invocation-started', ...startedFacts },
+			startedFacts,
+		),
+	).toEqual({ invocation: 2, mount: 7, storePath: '/fixture/agent-proxy-ui.sqlite' });
+	expect(
+		readQuotaGroupingSettled(
+			{ kind: 'grouping-invocation-settled', facts: settledFacts },
+			settledFacts,
+		),
+	).toEqual({ invocation: 1, initialMount: 6, finalMount: 6 });
+});
+test('grouping start rejects a changed store, stale mount, wrong invocation or wrong reopened facet', () => {
+	for (const wrong of [
+		{ storePath: '/other/agent-proxy-ui.sqlite' },
+		{ mount: 6 },
+		{ invocation: 1 },
+		{ facet: 'none' },
+	])
+		expect(() =>
+			readQuotaGroupingStarted(
+				{ kind: 'grouping-invocation-started', ...startedFacts, ...wrong },
+				startedFacts,
+			),
+		).toThrow();
+});
+test('grouping settlement checks the actual facet, saved value and unchanged mount before normalization', () => {
+	for (const wrong of [
+		{ initialMount: 5 },
+		{ finalMount: 7 },
+		{ invocation: 2 },
+		{ initialFacet: 'provider' },
+		{ finalFacet: 'status' },
+		{ storedValue: null },
+	])
+		expect(() =>
+			readQuotaGroupingSettled(
+				{ kind: 'grouping-invocation-settled', facts: { ...settledFacts, ...wrong } },
+				settledFacts,
+			),
+		).toThrow();
+});
+test('grouping wire rejects wrong event kinds and extra synthetic child facts', () => {
+	expect(() =>
+		readQuotaGroupingStarted({ kind: 'login-child-entered', ...startedFacts }, startedFacts),
+	).toThrow();
+	expect(() =>
+		readQuotaGroupingStarted(
+			{ kind: 'grouping-invocation-started', ...startedFacts, childPid: 42 },
+			startedFacts,
+		),
+	).toThrow();
+	expect(() =>
+		readQuotaGroupingSettled(
+			{ kind: 'grouping-invocation-settled', facts: { ...settledFacts, childExit: 0 } },
+			settledFacts,
+		),
+	).toThrow();
 });

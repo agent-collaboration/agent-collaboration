@@ -27,6 +27,7 @@ import { executeNativeFlow } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { executePickerGroupingCase } from './picker-grouping-run.ts';
+import { requireQuotaPlanArtifacts } from './quota-plan-admission.ts';
 
 export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocation[] {
 	validateAuthoredFlows();
@@ -37,6 +38,7 @@ export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocat
 	return plan.grids.flatMap((grid) => plan.keys.map((keys) => ({ journey, grid, keys })));
 }
 export function requireAuthoredFlowAdmission(plan: AuthoredFlowPlan): void {
+	requireQuotaPlanArtifacts(plan);
 	for (const invocation of authoredFlowMatrix(plan)) {
 		const bindings = pickerFlowBindings(plan, invocation, plan.output, plan.output);
 		const gaps = pickerFlowAdmission(invocation, bindings);
