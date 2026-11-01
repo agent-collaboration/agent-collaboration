@@ -365,11 +365,11 @@ async fn selecting_all_reports_unqualified_sources_instead_of_empty_success() {
     .await
     .unwrap();
     assert_eq!(outcome, None);
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("sessions · All machines"))
-    );
+    assert!(frames.iter().any(|frame| {
+        frame
+            .lines()
+            .any(|row| row.contains("Menu") && row.contains("· All machines"))
+    }));
     assert!(
         frames
             .iter()
@@ -399,12 +399,11 @@ async fn unavailable_machine_keeps_the_previous_view_and_cannot_fall_back_to_new
             .iter()
             .any(|frame| frame.contains("previous view retained"))
     );
-    assert!(
-        frames
-            .iter()
-            .rev()
-            .any(|frame| frame.contains("sessions · This machine"))
-    );
+    assert!(frames.iter().rev().any(|frame| {
+        frame
+            .lines()
+            .any(|row| row.contains("Menu") && row.contains("· This machine"))
+    }));
 }
 
 #[tokio::test]

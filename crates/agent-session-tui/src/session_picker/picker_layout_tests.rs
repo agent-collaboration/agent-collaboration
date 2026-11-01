@@ -86,7 +86,8 @@ async fn sessions_picker_start_new_is_a_header_action_without_synthetic_session_
     )
     .await;
     assert!(
-        text.lines().any(|line| line.contains(" sessions ·")
+        // R13, design 5bafadfff: the noun shrinks before toolbar controls.
+        text.lines().any(|line| line.contains("1/3 · This machine")
             && line.contains("New")
             && line.contains("Menu")),
         "{text}"
@@ -193,7 +194,7 @@ async fn sessions_picker_width_contract_preserves_layout() {
     assert!(
         empty_text
             .lines()
-            .any(|line| line.contains(" sessions ·") && line.contains("New")),
+            .any(|line| line.contains("0/0") && line.contains("New") && line.contains("Menu")),
         "empty state should offer a new session:\n{empty_text}"
     );
 }

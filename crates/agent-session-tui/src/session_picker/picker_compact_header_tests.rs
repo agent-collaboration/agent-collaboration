@@ -74,7 +74,7 @@ async fn compact_header_machine_and_provider_share_one_row_without_idle_settings
             Some(SessionProviderFilter::All)
         );
         let frame = capture.text;
-        // Taste item 5: the count drops before the filter wraps at narrow widths.
+        // R13: count captions shrink before controls; the compact count stays.
         if width >= 76 {
             assert!(
                 frame
@@ -175,9 +175,13 @@ async fn phone_chrome_preserves_counts_actions_controls_and_selected_name() {
             assert!(chrome.contains("6/6 sessions · This machine"), "{frame}");
         }
         assert!(
+            chrome.contains("6/6"),
+            "R13 keeps the compact count at {width}: {frame}"
+        );
+        assert!(
             chrome
                 .lines()
-                .any(|line| line.contains("Menu") && (width < 40 || line.contains("New"))),
+                .any(|line| line.contains("Menu") && (width < 43 || line.contains("New"))),
             "whole action words at {width}: {frame}"
         );
         for label in ["Filter", "Menu"] {

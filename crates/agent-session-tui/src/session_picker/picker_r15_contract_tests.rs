@@ -12,106 +12,10 @@ use crate::picker_control_test_support::{
 };
 use agent_collaboration_tui::surfaces::{focus_model::TargetId, surface_stack::SurfaceId};
 
-#[derive(Clone)]
-struct ExpectedPicker {
-    identity: &'static str,
-    query: String,
-    root: &'static str,
-    overlays: Vec<&'static str>,
-    client: Option<&'static str>,
-    directory: String,
-    details: Option<&'static str>,
-    filter_focus: bool,
-    width: u16,
-}
-impl ExpectedPicker {
-    fn initial(width: u16) -> Self {
-        Self {
-            identity: "r15-a",
-            query: String::new(),
-            root: "Cwd",
-            overlays: vec![],
-            client: None,
-            directory: "/repo/project-a".into(),
-            details: None,
-            filter_focus: false,
-            width,
-        }
-    }
-    fn snapshot(&self) -> SurfaceSnapshot {
-        let bytes=serde_json::to_vec(&serde_json::json!({
-            "identity":format!("LocalCodex({:?})",self.identity),"query":self.query,"root":self.root,
-            "overlays":self.overlays,
-            "new":self.client.map(|client|serde_json::json!({"client":client,"directory":self.directory})),
-            "start_reason":if self.client==Some("ClaudeNativeBackground") {Some("Selected source client capabilities have not been checked")} else {None},"details":self.details,"scope":self.width==120,"new_button":self.width!=32,
-            "filter_focus":self.filter_focus,"client_focus":self.client.is_some()&&self.overlays.last()==Some(&"dialog"),
-        })).unwrap();
-        SurfaceSnapshot(vec![(SurfaceId::Screen, bytes)])
-    }
-}
-fn key(code: KeyCode) -> ControlInput {
-    ControlInput::Event(TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code)))
-}
-fn ctrl(character: char) -> ControlInput {
-    ControlInput::Event(ctrl_key(character))
-}
-fn pointer(target: &str, kind: MouseEventKind) -> ControlInput {
-    ControlInput::Pointer {
-        target: TargetId::new(target).unwrap(),
-        kind,
-    }
-}
-fn click(target: &str) -> ControlInput {
-    pointer(target, MouseEventKind::Down(MouseButton::Left))
-}
-fn hover(target: &str) -> ControlInput {
-    pointer(target, MouseEventKind::Moved)
-}
-fn contains(text: &str) -> ControlPaint {
-    ControlPaint::Contains(text.into())
-}
-fn styled(
-    text: &str,
-    foreground: Color,
-    background: Color,
-    bold: bool,
-    underline: bool,
-) -> ControlPaint {
-    ControlPaint::Styled {
-        text: text.into(),
-        style: FrameStyle {
-            foreground: Some(foreground),
-            background: Some(background),
-            bold,
-            underline,
-            ..Default::default()
-        },
-    }
-}
-fn step(
-    input: ControlInput,
-    redraw: bool,
-    state: &ExpectedPicker,
-    paint: Vec<ControlPaint>,
-) -> ControlStep {
-    ControlStep {
-        input,
-        redraw,
-        expected_snapshot: state.snapshot(),
-        expected_handlers: vec![],
-        paint,
-    }
-}
-fn open_new(state: &mut ExpectedPicker, steps: &mut Vec<ControlStep>) {
-    state.overlays = vec!["dialog"];
-    state.client = Some("CodexNative");
-    steps.push(step(
-        ctrl('n'),
-        true,
-        state,
-        vec![contains("New session"), contains("Directory")],
-    ));
-}
+#[path = "picker_r15_expectations.rs"]
+mod expectations;
+use expectations::{ExpectedPicker, click, contains, ctrl, hover, key, open_new, step, styled};
+
 fn contract(kind: ControlKind, viewport: (u16, u16)) -> ControlKindContract {
     let mut state = ExpectedPicker::initial(viewport.0);
     let mut steps = Vec::new();
@@ -234,6 +138,13 @@ fn contract(kind: ControlKind, viewport: (u16, u16)) -> ControlKindContract {
             state.query = "Bet".into();
             steps.push(step(
                 key(KeyCode::Backspace),
+                true,
+                &state,
+                vec![contains("1/2")],
+            ));
+            state.query = "Beta".into();
+            steps.push(step(
+                key(KeyCode::Char('a')),
                 true,
                 &state,
                 vec![contains("1/2")],
@@ -364,6 +275,60 @@ fn contract(kind: ControlKind, viewport: (u16, u16)) -> ControlKindContract {
             state.overlays.pop();
             steps.push(step(
                 click("10:new-client:option:client:CodexNative"),
+                true,
+                &state,
+                vec![contains("Codex")],
+            ));
+            state.overlays.push("dropdown:new-client");
+            steps.push(step(key(KeyCode::Enter), true, &state, vec![]));
+            steps.push(step(click("10:new-client:filter"), false, &state, vec![]));
+            steps.push(step(
+                ControlInput::Event(TerminalEvent::BracketedPaste("zzz".into())),
+                true,
+                &state,
+                vec![
+                    contains("No match"),
+                    styled(
+                        "zzz",
+                        Color::AnsiValue(15),
+                        Color::Rgb {
+                            r: 48,
+                            g: 54,
+                            b: 65,
+                        },
+                        false,
+                        false,
+                    ),
+                ],
+            ));
+            steps.push(step(
+                key(KeyCode::Enter),
+                false,
+                &state,
+                vec![contains("No match")],
+            ));
+            steps.push(step(
+                key(KeyCode::Backspace),
+                true,
+                &state,
+                vec![
+                    ControlPaint::Absent("zzz".into()),
+                    styled(
+                        "zz",
+                        Color::AnsiValue(15),
+                        Color::Rgb {
+                            r: 48,
+                            g: 54,
+                            b: 65,
+                        },
+                        false,
+                        false,
+                    ),
+                ],
+            ));
+            state.overlays.pop();
+            steps.push(step(
+                key(KeyCode::Esc),
                 true,
                 &state,
                 vec![contains("Codex")],
