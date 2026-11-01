@@ -81,12 +81,27 @@ where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
 {
-    let now = timestamp(now_ms)?;
     let owner_id = row_ids.next()?;
     let instruction_id: InstructionId = owner_id
         .to_string()
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("instruction_id"))?;
+    insert_with_id(scope, &instruction_id, text, now_ms, row_ids).await
+}
+
+pub(crate) async fn insert_with_id<Scope: TransactionScope>(
+    scope: &mut Scope,
+    instruction_id: &InstructionId,
+    text: &InstructionText,
+    now_ms: i64,
+    row_ids: &mut FleetRowIds,
+) -> AutomationStoreResult<InstructionSnapshot>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+{
+    let now = timestamp(now_ms)?;
+    let owner_id = row_id(instruction_id.as_str(), "instruction_id")?;
     let content = automation_content_store::insert(scope, owner_id, text, now_ms, row_ids).await?;
     queries::insert_instruction_document(
         scope,
@@ -97,7 +112,7 @@ where
     )
     .await?;
     Ok(InstructionSnapshot {
-        instruction_id,
+        instruction_id: instruction_id.clone(),
         revision_id: content.revision_id,
         text: text.clone(),
         created_at: now.clone(),

@@ -29,6 +29,23 @@ fn call_limits(call: &Value) -> AutomationStoreResult<()> {
             counter_limits(at(value, "/message/generationGuard"))?;
         }
         Some("remoteSessionCreate") => message_limits(at(value, "/definition/firstInput"))?,
+        Some("schedulePackageImport") => {
+            text(
+                at(value, "/package/instruction/text"),
+                LimitName::InstructionMaxBytes,
+            )?;
+            text(
+                at(value, "/package/continuity/text"),
+                LimitName::InstructionMaxBytes,
+            )?;
+            for pointer in [
+                "/package/sourceChangeId",
+                "/package/instruction/sourceRevisionId",
+                "/package/continuity/sourceRunId",
+            ] {
+                text(at(value, pointer), LimitName::TextMaxBytes)?;
+            }
+        }
         Some("reportWorkItems") => {
             if let Some(reports) = value["reports"].as_array() {
                 LimitName::ReportFlushMax.validate(reports.len() as u64)?;

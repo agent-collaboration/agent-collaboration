@@ -152,6 +152,36 @@
       "row": "StoredAutomationDeadline",
       "result": "many",
       "parameters": []
+    },
+    {
+      "name": "list_schedule_instruction_references",
+      "sql": "sql/automations/list_schedule_instruction_references.sql",
+      "row": "StoredScheduleInstructionReference",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "update_schedule_import_header",
+      "sql": "sql/automations/update_schedule_import_header.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "anchor_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "imported_continuity_json",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }
