@@ -183,6 +183,25 @@ fn classified_open_absent_backend_stays_absent_without_writes() {
 }
 
 #[test]
+fn classified_open_absent_backend_does_not_hide_existing_encrypted_credentials() {
+    let root = initialized_root();
+    let key = FleetSecretKey::new(FleetSecretKind::MachineCredential, STORE_ID, STORE_ID)
+        .unwrap()
+        .secret_key()
+        .unwrap();
+    fs::write(
+        root.path().join(format!("{}.v2", key.as_str())),
+        b"existing-envelope",
+    )
+    .unwrap();
+    let keychain = RecordedKeychain {
+        response: Err(KeychainAccessError::BackendAbsent),
+        calls: Mutex::new(Vec::new()),
+    };
+    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeyMissing);
+}
+
+#[test]
 fn classified_open_unreadable_metadata_is_unusable() {
     let root = initialized_root();
     fs::write(root.path().join("store-id"), [0xff]).unwrap();
