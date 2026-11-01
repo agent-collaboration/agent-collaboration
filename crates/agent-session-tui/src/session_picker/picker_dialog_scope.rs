@@ -12,7 +12,7 @@ use agent_collaboration_tui::{
         fields::{Button, button_target},
         list::ScrollHandle,
     },
-    dialog::{DialogFrame, PinnedContext, help::HelpDialog},
+    dialog::{DialogFrame, DialogKeyHints, PinnedContext, help::HelpDialog},
     surfaces::{
         focus_model::{GroupId, TargetSpec},
         surface_handle::SurfaceContext,
@@ -430,5 +430,32 @@ fn PickerDialogSurface(
     let pinned_status = (!showing_help)
         .then(|| super::picker_surface_view::dialog_status(context, props.kind, surface))
         .flatten();
-    element!(DialogFrame(title:if showing_help {"Help".to_owned()}else {title.to_owned()},scroll,scroll_target,scroll_focus,context:identity,help_action,pinned_status) {#(Some(body))})
+    // Specification:135 and the New mock:212 place one action-derived hint line
+    // below plain buttons, only in New session (Lead correction 01a19629).
+    let new_session = props.kind == PickerDialogKind::New && !showing_help;
+    let actions = if new_session {
+        surface
+            .stack
+            .snapshot()
+            .surface(surface.surface)
+            .map(|model| {
+                model.actions.presentations().into_iter()
+                    .filter(|action| action.placement == Placement::Toolbar)
+                    .map(|action| element!(Button(id:TargetId::for_action(&action.id),action:action.id,show_key:Some(false))).into_any())
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let action_hints = if new_session {
+        let hints = ["new-start", "dialog-close"]
+            .into_iter()
+            .filter_map(|name| ActionId::new(name).ok())
+            .collect::<Vec<_>>();
+        vec![element!(DialogKeyHints(actions:hints)).into_any()]
+    } else {
+        Vec::new()
+    };
+    element!(DialogFrame(title:if showing_help {"Help".to_owned()}else {title.to_owned()},scroll,scroll_target,scroll_focus,context:identity,help_action,pinned_status,actions,action_hints) {#(Some(body))})
 }

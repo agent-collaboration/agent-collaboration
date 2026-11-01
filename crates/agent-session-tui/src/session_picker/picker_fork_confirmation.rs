@@ -217,17 +217,17 @@ impl ForkConfirmation {
 
     pub(super) fn choice_options(
         &self,
-    ) -> Vec<agent_collaboration_tui::ChoiceOption<ForkDestinationKey>> {
+    ) -> Vec<crate::session_picker::picker_choice::PickerChoice<ForkDestinationKey>> {
         self.destinations
             .iter()
             .map(|destination| {
-                let mut option = agent_collaboration_tui::ChoiceOption::available(
+                let mut option = crate::session_picker::picker_choice::PickerChoice::available(
                     destination.key.clone(),
                     destination.label.clone(),
                 );
                 if let Some(reason) = destination.availability.explanation() {
                     option.availability =
-                        agent_collaboration_tui::ChoiceAvailability::Unavailable {
+                        agent_collaboration_tui::actions::Availability::Unavailable {
                             reason: reason.to_owned(),
                         };
                 }

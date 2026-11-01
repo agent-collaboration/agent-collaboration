@@ -19,17 +19,17 @@ impl SessionsPickerModel {
             CursorCreationAvailability, NewClientInventoryState,
         };
         use super::new_session_form::{NewSessionClient, client_availability, machine_choices};
-        use agent_collaboration_tui::ChoiceAvailability;
+        use agent_collaboration_tui::actions::Availability;
         use agent_session_inventory::sessions::source_ssh_protocol::{
             SourceManagedAction, SourceNativeClaudeAction,
         };
         if self.client_action.is_active()
             || self.source_action.pending.is_some()
             || self.show_help
-            || client_availability(draft, draft.client) != ChoiceAvailability::Available
+            || client_availability(draft, draft.client) != Availability::Available
             || !machine_choices(self).iter().any(|choice| {
                 choice.key == draft.selected_source
-                    && choice.availability == ChoiceAvailability::Available
+                    && choice.availability == Availability::Available
             })
         {
             return;

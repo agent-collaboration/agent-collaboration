@@ -570,3 +570,11 @@ fn dropdown_reason_text(dropdown: &str, prefix: &str) -> String {
         .filter(|character| !character.is_whitespace())
         .collect()
 }
+
+#[path = "picker_toolbar_count_tests.rs"]
+mod picker_toolbar_count_tests;
+
+#[path = "picker_r15_contract_tests.rs"]
+mod picker_r15_contract_tests;
+#[path = "picker_r15_instance.rs"]
+mod picker_r15_instance;

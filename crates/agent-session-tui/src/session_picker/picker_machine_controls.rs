@@ -103,9 +103,9 @@ impl PickerMachineControls {
         &self,
         registry: &RouterRegistryRead,
         mode: PickerMachineSourceMode,
-    ) -> Vec<agent_collaboration_tui::ChoiceOption<MachineChoiceKey>> {
-        use agent_collaboration_tui::ChoiceOption;
-        let mut choices = vec![ChoiceOption::available(
+    ) -> Vec<crate::session_picker::picker_choice::PickerChoice<MachineChoiceKey>> {
+        use crate::session_picker::picker_choice::PickerChoice;
+        let mut choices = vec![PickerChoice::available(
             MachineChoiceKey::Default,
             match mode {
                 PickerMachineSourceMode::HostedDefault => "This machine (current/default)",
@@ -116,13 +116,13 @@ impl PickerMachineControls {
             && let RouterRegistryRead::Ready(registry) = registry
         {
             if !registry.routers.is_empty() {
-                choices.push(ChoiceOption::available(
+                choices.push(PickerChoice::available(
                     MachineChoiceKey::All,
                     "All machines",
                 ));
             }
             choices.extend(registry.routers.iter().map(|profile| {
-                ChoiceOption::available(
+                PickerChoice::available(
                     MachineChoiceKey::Configured(PickerSourceContext::ConfiguredHosted(
                         profile.clone(),
                     )),

@@ -1,6 +1,7 @@
 //! One invocation-local New draft; existing source preparation retains launch authority.
 use super::{PickerSourceContext, SessionsPickerOutcome, picker_model::SessionsPickerModel};
-use agent_collaboration_tui::{ChoiceAvailability, ChoiceOption};
+use crate::session_picker::picker_choice::PickerChoice;
+use agent_collaboration_tui::actions::Availability;
 use agent_session_inventory::sessions::{
     RouterRegistryRead, router_connection_registry::RouterConnectionTransport,
 };
@@ -71,12 +72,12 @@ fn source_label(source: &PickerSourceContext) -> String {
 
 pub(super) fn machine_choices(
     model: &SessionsPickerModel,
-) -> Vec<ChoiceOption<PickerSourceContext>> {
+) -> Vec<PickerChoice<PickerSourceContext>> {
     let source = match model.request.machine_mode {
         super::PickerMachineSourceMode::HostedDefault => PickerSourceContext::DefaultHosted,
         super::PickerMachineSourceMode::LocalCodex => PickerSourceContext::LocalCodex,
     };
-    let mut choices = vec![ChoiceOption::available(
+    let mut choices = vec![PickerChoice::available(
         source.clone(),
         source_label(&source),
     )];
@@ -84,7 +85,7 @@ pub(super) fn machine_choices(
         && let RouterRegistryRead::Ready(registry) = &model.request.router_registry
     {
         choices.extend(registry.routers.iter().map(|profile| {
-            let mut choice = ChoiceOption::available(
+            let mut choice = PickerChoice::available(
                 PickerSourceContext::ConfiguredHosted(profile.clone()),
                 profile.name.as_str(),
             );
@@ -93,7 +94,7 @@ pub(super) fn machine_choices(
                 .as_ref()
                 .map(|cwd| cwd.as_str().to_owned());
             if profile.default_remote_cwd.is_none() {
-                choice.availability = ChoiceAvailability::Unavailable {
+                choice.availability = Availability::Unavailable {
                     reason: "Configure a destination working directory before creating a session"
                         .to_owned(),
                 };
@@ -108,7 +109,7 @@ pub(super) fn machine_choices(
                     }
                     Some(_) => "Execution route needs verification; no session created",
                 };
-                choice.availability = ChoiceAvailability::Unavailable {
+                choice.availability = Availability::Unavailable {
                     reason: reason.to_owned(),
                 };
             }
@@ -118,7 +119,7 @@ pub(super) fn machine_choices(
     choices
 }
 
-pub(super) fn client_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<NewSessionClient>> {
+pub(super) fn client_choices(model: &SessionsPickerModel) -> Vec<PickerChoice<NewSessionClient>> {
     let Some(draft) = model.new_session.as_ref() else {
         return Vec::new();
     };
@@ -136,7 +137,7 @@ pub(super) fn client_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<Ne
         } else {
             client
         };
-        ChoiceOption {
+        PickerChoice {
             key: selected,
             label: match client {
                 NewSessionClient::CodexNative => "Codex",
@@ -152,7 +153,7 @@ pub(super) fn client_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<Ne
     .collect()
 }
 
-pub(super) fn run_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<NewSessionClient>> {
+pub(super) fn run_choices(model: &SessionsPickerModel) -> Vec<PickerChoice<NewSessionClient>> {
     let Some(draft) = model.new_session.as_ref() else {
         return Vec::new();
     };
@@ -168,7 +169,7 @@ pub(super) fn run_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<NewSe
         NewSessionClient::ClaudeNativeBackground,
     ]
     .into_iter()
-    .map(|client| ChoiceOption {
+    .map(|client| PickerChoice {
         key: client,
         label: if client == NewSessionClient::ClaudeNativeForeground {
             "Foreground"
@@ -185,14 +186,14 @@ pub(super) fn run_choices(model: &SessionsPickerModel) -> Vec<ChoiceOption<NewSe
 pub(super) fn client_availability(
     draft: &NewSessionDraft,
     client: NewSessionClient,
-) -> ChoiceAvailability {
+) -> Availability {
     use super::new_session_client_inventory::{
         CursorCreationAvailability, NewClientInventoryState,
     };
     use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeLaunchAvailability;
-    let unavailable = |reason: String| ChoiceAvailability::Unavailable { reason };
+    let unavailable = |reason: String| Availability::Unavailable { reason };
     if client == NewSessionClient::CodexNative {
-        return ChoiceAvailability::Available;
+        return Availability::Available;
     }
     if draft.selected_source == PickerSourceContext::LocalCodex {
         return unavailable("Local mode supports Codex only".to_owned());
@@ -211,10 +212,10 @@ pub(super) fn client_availability(
         }
         NewClientInventoryState::Unavailable(reason) => unavailable(reason.clone()),
         NewClientInventoryState::Ready(capabilities) => match client {
-            NewSessionClient::CodexNative => ChoiceAvailability::Available,
+            NewSessionClient::CodexNative => Availability::Available,
             NewSessionClient::ClaudeNativeForeground | NewSessionClient::ClaudeNativeBackground => {
                 match &capabilities.native_claude {
-                    SourceNativeLaunchAvailability::Ready { .. } => ChoiceAvailability::Available,
+                    SourceNativeLaunchAvailability::Ready { .. } => Availability::Available,
                     SourceNativeLaunchAvailability::Unavailable { message } => {
                         unavailable(message.clone())
                     }
@@ -224,7 +225,7 @@ pub(super) fn client_availability(
                 unavailable("Cursor creation does not accept these native arguments".to_owned())
             }
             NewSessionClient::CursorManagedAcp => match &capabilities.cursor {
-                CursorCreationAvailability::Ready(_) => ChoiceAvailability::Available,
+                CursorCreationAvailability::Ready(_) => Availability::Available,
                 CursorCreationAvailability::Unavailable(reason) => unavailable(reason.clone()),
             },
         },
@@ -272,7 +273,7 @@ impl SessionsPickerModel {
             PickerSourceContext::ConfiguredHosted(profile) => {
                 if !machine_choices(self).iter().any(|choice| {
                     choice.key == PickerSourceContext::ConfiguredHosted(profile.clone())
-                        && choice.availability == ChoiceAvailability::Available
+                        && choice.availability == Availability::Available
                 }) {
                     return None;
                 }

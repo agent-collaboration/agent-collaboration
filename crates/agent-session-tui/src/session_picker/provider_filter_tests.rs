@@ -263,7 +263,7 @@ fn filter_query_draft_apply_and_cancel_keep_client_family_separate_from_backend_
 #[test]
 fn configured_filter_choices_explain_unavailability_without_rewriting_query() {
     use super::provider_filter_model::{SessionFilterValue, filter_choices};
-    use agent_collaboration_tui::ChoiceAvailability;
+    use agent_collaboration_tui::actions::Availability;
     let mut model = super::source_action_tests::source_model();
     let agent_session_inventory::sessions::RouterRegistryRead::Ready(registry) =
         &model.request.router_registry
@@ -284,7 +284,7 @@ fn configured_filter_choices_explain_unavailability_without_rewriting_query() {
         ) {
             assert!(matches!(
                 choice.availability,
-                ChoiceAvailability::Unavailable { .. }
+                Availability::Unavailable { .. }
             ));
         }
     }

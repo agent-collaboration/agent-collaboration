@@ -13,11 +13,12 @@ use agent_collaboration_tui::{
         menu_overlay,
     },
     surfaces::{
-        focus_model::{GroupId, TargetInputHandler, TargetSpec, TargetVisibility},
+        focus_model::{GroupId, InputUse, TargetInputHandler, TargetSpec, TargetVisibility},
         surface_handle::SurfaceContext,
     },
 };
 use agent_session_inventory::sessions::{SessionPickerIdentity, SessionsSort};
+use iocraft::MouseButton;
 use iocraft::prelude::*;
 use std::sync::Arc;
 
@@ -93,7 +94,7 @@ pub(super) fn list_control(
 
 fn filter_input_handler(context: &PickerSurfaceContext) -> TargetInputHandler {
     let context = context.clone();
-    TextFieldState::filter_input_handler(
+    let editor = TextFieldState::filter_input_handler(
         context.filter,
         Handler::from(move |text: String| {
             context.change_query(|model| {
@@ -101,7 +102,16 @@ fn filter_input_handler(context: &PickerSurfaceContext) -> TargetInputHandler {
                 model.append_search_text(&text);
             })
         }),
-    )
+    );
+    TargetInputHandler::new(move |event| {
+        // InputOwner already focused the field; clicking must not run Details.
+        if matches!(&event, TerminalEvent::FullscreenMouse(mouse) if mouse.kind == MouseEventKind::Down(MouseButton::Left))
+        {
+            InputUse::Used
+        } else {
+            editor.call(event)
+        }
+    })
 }
 
 pub fn synchronize_rows(
@@ -369,8 +379,11 @@ pub fn build_screen(
             let mut spec = button_target(TargetId::for_action(&action.id), action)
                 .in_group(toolbar_group.clone());
             if name == "new" {
-                spec =
-                    spec.with_visibility(TargetVisibility::new(move || stack.viewport().0 >= 40));
+                let model = context.model;
+                spec = spec.with_visibility(TargetVisibility::new(move || {
+                    super::picker_toolbar::toolbar_layout(&model.read(), stack.viewport().0)
+                        .show_new
+                }));
             }
             targets.push(spec);
         }

@@ -55,10 +55,10 @@ pub(super) fn declare_new(
             };
         }
         match crate::session_picker::new_session_form::client_availability(draft, draft.client) {
-            agent_collaboration_tui::ChoiceAvailability::Unavailable { reason } => {
+            Availability::Unavailable { reason } => {
                 return Availability::Unavailable { reason };
             }
-            agent_collaboration_tui::ChoiceAvailability::Available => {}
+            Availability::Available => {}
         }
         crate::session_picker::new_session_form::machine_choices(&model)
             .into_iter()
@@ -67,14 +67,7 @@ pub(super) fn declare_new(
                 Availability::Unavailable {
                     reason: "Selected machine is unavailable".into(),
                 },
-                |choice| match choice.availability {
-                    agent_collaboration_tui::ChoiceAvailability::Available => {
-                        Availability::Available
-                    }
-                    agent_collaboration_tui::ChoiceAvailability::Unavailable { reason } => {
-                        Availability::Unavailable { reason }
-                    }
-                },
+                |choice| choice.availability,
             )
     });
     let primary = start.id.clone();

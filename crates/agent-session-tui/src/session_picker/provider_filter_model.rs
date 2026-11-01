@@ -105,10 +105,11 @@ impl ProviderFilterDraft {
 pub(super) fn filter_choices(
     model: &super::picker_model::SessionsPickerModel,
     field: ProviderFilterFocus,
-) -> Vec<agent_collaboration_tui::ChoiceOption<SessionFilterValue>> {
+) -> Vec<crate::session_picker::picker_choice::PickerChoice<SessionFilterValue>> {
     use super::picker_model::SessionsPickerRuntimeView;
     use super::{PickerSourceContext, SessionsPickerRoot};
-    use agent_collaboration_tui::{ChoiceAvailability, ChoiceOption};
+    use crate::session_picker::picker_choice::PickerChoice;
+    use agent_collaboration_tui::actions::Availability;
     use agent_session_inventory::sessions::{SessionsProvider, SessionsSort, SessionsSource};
     let configured = model
         .source_contexts()
@@ -122,37 +123,37 @@ pub(super) fn filter_choices(
     let mut choices = match field {
         ProviderFilterFocus::Provider => SessionProviderFilter::CHOICES
             .into_iter()
-            .map(|value| ChoiceOption::available(SessionFilterValue::Client(value), value.label()))
+            .map(|value| PickerChoice::available(SessionFilterValue::Client(value), value.label()))
             .collect(),
         ProviderFilterFocus::Folder => vec![
-            ChoiceOption::available(
+            PickerChoice::available(
                 SessionFilterValue::Folder(SessionsPickerRoot::Cwd),
                 "Current directory",
             ),
-            ChoiceOption {
+            PickerChoice {
                 key: SessionFilterValue::CheckoutUnavailable,
                 label: "Checkout".to_owned(),
                 secondary: None,
-                availability: ChoiceAvailability::Unavailable {
+                availability: Availability::Unavailable {
                     reason: "Checkout scope is supported by CLI --checkout --list only".to_owned(),
                 },
             },
-            ChoiceOption::available(
+            PickerChoice::available(
                 SessionFilterValue::Folder(SessionsPickerRoot::Repo),
                 "Repository / linked worktrees",
             ),
-            ChoiceOption::available(
+            PickerChoice::available(
                 SessionFilterValue::Folder(SessionsPickerRoot::Any),
                 "Any folder",
             ),
         ],
         ProviderFilterFocus::ModelProvider => {
             let mut options = vec![
-                ChoiceOption::available(
+                PickerChoice::available(
                     SessionFilterValue::ModelProvider(SessionsProvider::Any),
                     "Any model provider",
                 ),
-                ChoiceOption::available(
+                PickerChoice::available(
                     SessionFilterValue::ModelProvider(SessionsProvider::Current),
                     "Current model provider",
                 ),
@@ -169,7 +170,7 @@ pub(super) fn filter_choices(
             ids.sort();
             ids.dedup();
             options.extend(ids.into_iter().map(|id| {
-                ChoiceOption::available(
+                PickerChoice::available(
                     SessionFilterValue::ModelProvider(SessionsProvider::Id(id.clone())),
                     id,
                 )
@@ -183,7 +184,7 @@ pub(super) fn filter_choices(
         ]
         .into_iter()
         .map(|source| {
-            ChoiceOption::available(
+            PickerChoice::available(
                 SessionFilterValue::Source(source),
                 match source {
                     SessionsSource::Interactive => "Interactive",
@@ -200,11 +201,11 @@ pub(super) fn filter_choices(
             SessionsPickerRuntimeView::Blocked,
         ]
         .into_iter()
-        .map(|view| ChoiceOption::available(SessionFilterValue::Runtime(view), format!("{view:?}")))
+        .map(|view| PickerChoice::available(SessionFilterValue::Runtime(view), format!("{view:?}")))
         .collect(),
         ProviderFilterFocus::Sort => vec![
-            ChoiceOption::available(SessionFilterValue::Sort(SessionsSort::Updated), "Updated"),
-            ChoiceOption::available(SessionFilterValue::Sort(SessionsSort::Created), "Created"),
+            PickerChoice::available(SessionFilterValue::Sort(SessionsSort::Updated), "Updated"),
+            PickerChoice::available(SessionFilterValue::Sort(SessionsSort::Created), "Created"),
         ],
     };
     for choice in &mut choices {
@@ -228,7 +229,7 @@ pub(super) fn filter_choices(
             _ => None,
         };
         if let Some(reason) = reason {
-            choice.availability = ChoiceAvailability::Unavailable {
+            choice.availability = Availability::Unavailable {
                 reason: reason.to_owned(),
             };
         }

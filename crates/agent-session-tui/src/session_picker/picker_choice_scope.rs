@@ -3,6 +3,7 @@ use super::{
     ActionDef, ActionId, ComboBoxState, HelpControl, PickerDialogKind, PickerMachineFilter,
     PickerSurfaceContext, Placement, SurfaceId, SurfaceResult, SurfaceStackHandle, action, target,
 };
+use crate::session_picker::picker_choice::PickerChoice;
 use crate::session_picker::{
     PickerSourceContext,
     new_session_form::NewSessionClient,
@@ -11,11 +12,10 @@ use crate::session_picker::{
     provider_filter_model::{ProviderFilterFocus, SessionFilterValue},
 };
 use agent_collaboration_tui::{
-    ChoiceAvailability, ChoiceOption,
     actions::Availability,
     controls::{
         combo::{ComboBoxBinding, ComboBoxControl},
-        list::{OptionKey, SelectOption},
+        list::SelectOption,
     },
     surfaces::{
         focus_model::{GroupId, TargetSpec},
@@ -23,6 +23,9 @@ use agent_collaboration_tui::{
     },
 };
 use iocraft::prelude::*;
+#[path = "picker_choice_projection.rs"]
+mod choice_projection;
+use choice_projection::{PickerChoiceValue, option_key, project_choices, resolve_choice};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ChoiceField {
@@ -96,53 +99,16 @@ impl ChoiceField {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum PickerChoiceValue {
-    Client(NewSessionClient),
-    Machine(PickerSourceContext),
-    Run(NewSessionClient),
-    Filter(SessionFilterValue),
-    Browse(MachineChoiceKey),
-    Fork(ForkDestinationKey),
-}
-fn source_key(source: &PickerSourceContext) -> String {
-    match source {
-        PickerSourceContext::DefaultHosted => "default".into(),
-        PickerSourceContext::LocalCodex => "local".into(),
-        PickerSourceContext::ConfiguredHosted(profile) => {
-            format!("configured:{}", profile.name.as_str())
-        }
-    }
-}
-fn option_key(value: &PickerChoiceValue) -> SurfaceResult<OptionKey> {
-    let text = match value {
-        PickerChoiceValue::Client(client) => format!("client:{client:?}"),
-        PickerChoiceValue::Machine(source) => format!("machine:{}", source_key(source)),
-        PickerChoiceValue::Run(client) => format!("run:{client:?}"),
-        PickerChoiceValue::Filter(value) => format!("filter:{value:?}"),
-        PickerChoiceValue::Browse(MachineChoiceKey::Default) => "browse:default".into(),
-        PickerChoiceValue::Browse(MachineChoiceKey::All) => "browse:all".into(),
-        PickerChoiceValue::Browse(MachineChoiceKey::Configured(source)) => {
-            format!("browse:{}", source_key(source))
-        }
-        PickerChoiceValue::Fork(ForkDestinationKey::Source) => "fork:source".into(),
-        PickerChoiceValue::Fork(ForkDestinationKey::Machine(source)) => {
-            format!("fork:{}", source_key(source))
-        }
-    };
-    Ok(OptionKey::new(text)?)
-}
-
 fn values(
     context: &PickerSurfaceContext,
     field: ChoiceField,
-) -> Vec<ChoiceOption<PickerChoiceValue>> {
+) -> Vec<PickerChoice<PickerChoiceValue>> {
     let model = context.model.read();
-    let wrap = |choices: Vec<ChoiceOption<PickerChoiceValue>>| choices;
+    let wrap = |choices: Vec<PickerChoice<PickerChoiceValue>>| choices;
     if let Some(filter) = field.filter() {
         return crate::session_picker::provider_filter_model::filter_choices(&model, filter)
             .into_iter()
-            .map(|option| ChoiceOption {
+            .map(|option| PickerChoice {
                 key: PickerChoiceValue::Filter(option.key),
                 label: option.label,
                 secondary: option.secondary,
@@ -153,7 +119,7 @@ fn values(
     match field {
         ChoiceField::NewClient => crate::session_picker::new_session_form::client_choices(&model)
             .into_iter()
-            .map(|option| ChoiceOption {
+            .map(|option| PickerChoice {
                 key: PickerChoiceValue::Client(option.key),
                 label: option.label,
                 secondary: option.secondary,
@@ -162,7 +128,7 @@ fn values(
             .collect(),
         ChoiceField::NewMachine => crate::session_picker::new_session_form::machine_choices(&model)
             .into_iter()
-            .map(|option| ChoiceOption {
+            .map(|option| PickerChoice {
                 key: PickerChoiceValue::Machine(option.key),
                 label: option.label,
                 secondary: option.secondary,
@@ -171,7 +137,7 @@ fn values(
             .collect(),
         ChoiceField::NewRun => crate::session_picker::new_session_form::run_choices(&model)
             .into_iter()
-            .map(|option| ChoiceOption {
+            .map(|option| PickerChoice {
                 key: PickerChoiceValue::Run(option.key),
                 label: option.label,
                 secondary: option.secondary,
@@ -182,7 +148,7 @@ fn values(
             .machine_controls
             .choice_options(&model.request.router_registry, model.request.machine_mode)
             .into_iter()
-            .map(|option| ChoiceOption {
+            .map(|option| PickerChoice {
                 key: PickerChoiceValue::Browse(option.key),
                 label: option.label,
                 secondary: option.secondary,
@@ -196,7 +162,7 @@ fn values(
                 confirmation
                     .choice_options()
                     .into_iter()
-                    .map(|option| ChoiceOption {
+                    .map(|option| PickerChoice {
                         key: PickerChoiceValue::Fork(option.key),
                         label: option.label,
                         secondary: option.secondary,
@@ -261,23 +227,12 @@ fn selected(context: &PickerSurfaceContext, field: ChoiceField) -> Option<Picker
 }
 
 fn options(context: &PickerSurfaceContext, field: ChoiceField) -> SurfaceResult<Vec<SelectOption>> {
-    values(context, field)
+    Ok(project_choices(values(context, field))?
         .into_iter()
-        .map(|option| {
-            Ok(SelectOption {
-                key: option_key(&option.key)?,
-                label: option.label,
-                secondary: option.secondary,
-                availability: match option.availability {
-                    ChoiceAvailability::Available => Availability::Available,
-                    ChoiceAvailability::Unavailable { reason } => {
-                        Availability::Unavailable { reason }
-                    }
-                },
-            })
-        })
-        .collect()
+        .map(|choice| choice.option)
+        .collect())
 }
+
 pub(super) fn fields(context: &PickerSurfaceContext, kind: PickerDialogKind) -> Vec<ChoiceField> {
     match kind {
         PickerDialogKind::New => {
@@ -422,15 +377,14 @@ fn control(
         parent_scroll: Some(parent_scroll),
         value: combo_state(context, field)?,
         on_pick: Handler::from(move |key| {
-            let choice = values(&effect, field)
-                .into_iter()
-                .find(|option| {
-                    option_key(&option.key).ok().as_ref() == Some(&key)
-                        && option.availability == ChoiceAvailability::Available
-                })
-                .map(|option| option.key);
-            let Some(choice) = choice else {
-                return;
+            let choice = project_choices(values(&effect, field))
+                .and_then(|choices| resolve_choice(&choices, &key));
+            let choice = match choice {
+                Ok(choice) => choice,
+                Err(error) => {
+                    effect.report(error);
+                    return;
+                }
             };
             choose(&effect, choice);
             if let Some(help) = effect.help.read().clone() {

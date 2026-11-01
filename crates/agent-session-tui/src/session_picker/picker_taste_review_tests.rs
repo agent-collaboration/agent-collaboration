@@ -79,20 +79,55 @@ async fn settings_menu_does_not_repeat_cycle_entries_and_help_precedes_quit() {
 }
 
 #[tokio::test]
-async fn new_buttons_show_their_keys_once_without_a_second_hint_row() {
-    let frame = render_picker_capture_at(
-        picker_request(),
-        120,
-        36,
-        vec![ctrl_key('n'), ctrl_key('d')],
-    )
-    .await;
-    assert_eq!(frame.matches("Ctrl+Enter").count(), 1, "{frame}");
-    assert_eq!(frame.matches("Esc").count(), 1, "{frame}");
-    assert!(
-        frame.contains("Start") && frame.contains("Cancel"),
-        "{frame}"
-    );
+async fn new_buttons_are_plain_and_one_action_hint_line_follows_them() {
+    for (width, height) in [(120, 36), (76, 30), (48, 12), (32, 24)] {
+        let frame = render_picker_capture_at(
+            picker_request(),
+            width,
+            height,
+            vec![ctrl_key('n'), ctrl_key('d')],
+        )
+        .await;
+        assert_eq!(frame.matches("Ctrl+Enter").count(), 1, "{frame}");
+        assert_eq!(frame.matches("Esc").count(), 1, "{frame}");
+        assert!(
+            frame.contains("Start") && frame.contains("Cancel"),
+            "{frame}"
+        );
+        let rows = frame.lines().collect::<Vec<_>>();
+        let hint = rows
+            .iter()
+            .position(|row| row.contains("Ctrl+Enter"))
+            .unwrap();
+        let close_hint = rows.iter().position(|row| row.contains("Esc")).unwrap();
+        assert!(
+            rows[hint].contains("Start"),
+            "the start key/title group stays whole: {frame}"
+        );
+        assert!(
+            rows[close_hint].contains("Cancel"),
+            "the close key/title group stays whole: {frame}"
+        );
+        // Lead01a19630: a narrow hint line wraps only between whole groups.
+        assert_eq!(
+            close_hint > hint,
+            width == 32,
+            "hint group wrapping: {frame}"
+        );
+        if close_hint > hint {
+            assert!(
+                !rows[hint..=close_hint].iter().any(|row| row.contains('·')),
+                "wrapped groups omit the separator: {frame}"
+            );
+        }
+        assert!(
+            rows[..hint].iter().any(|row| row.contains("Start")
+                && row.contains("Cancel")
+                && !row.contains("Ctrl+Enter")
+                && !row.contains("Esc")),
+            "plain buttons precede the one hint line: {frame}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -102,14 +137,11 @@ async fn narrow_toolbar_keeps_menu_and_filter_on_one_row() {
             render_picker_capture_at(picker_request(), width, 36, vec![ctrl_key('d')]).await;
         let toolbar = frame.lines().find(|line| line.contains("Menu")).unwrap();
         assert!(toolbar.contains("Filter"), "{width}: {frame}");
-        assert_eq!(toolbar.contains("New"), width >= 40, "{width}: {frame}");
-        assert_eq!(toolbar.contains("Ctrl+N"), width >= 48, "{width}: {frame}");
-        if width < 76 {
-            assert!(
-                !frame.contains("sessions ·"),
-                "count drops before the filter: {frame}"
-            );
-        } else {
+        assert_eq!(toolbar.contains("New"), width >= 43, "{width}: {frame}");
+        assert_eq!(toolbar.contains("Ctrl+N"), width >= 50, "{width}: {frame}");
+        // R13, design 5bafadfff: compact count stays even when its noun/machine go.
+        assert!(toolbar.contains("1/3"), "{width}: {frame}");
+        if width >= 76 {
             assert!(frame.contains("1/3 sessions · This machine"), "{frame}");
         }
         assert!(frame.lines().count() <= 36, "{frame}");
@@ -143,7 +175,7 @@ async fn narrow_toolbar_keeps_menu_and_filter_on_one_row() {
     }
     let activated = render_picker_capture_at(
         picker_request(),
-        40,
+        48,
         24,
         vec![
             key(KeyCode::Tab),
@@ -160,7 +192,7 @@ async fn narrow_toolbar_keeps_menu_and_filter_on_one_row() {
 }
 
 #[tokio::test]
-async fn toolbar_scope_visibility_matches_targets_and_keeps_twelve_filter_editor_cells() {
+async fn toolbar_scope_visibility_matches_targets_and_filter_uses_remaining_cells() {
     use agent_collaboration_tui::surfaces::{
         surface_handle::SurfaceStackHandle, surface_stack::SurfaceId,
     };
@@ -222,7 +254,7 @@ async fn toolbar_scope_visibility_matches_targets_and_keeps_twelve_filter_editor
                     .max()
                     .unwrap();
                 assert!(
-                    maximum - minimum + 1 >= 12,
+                    maximum - minimum + 1 >= if width == 32 { 9 } else { 12 },
                     "filter editor at {width}: {frame}"
                 );
                 checked = true;
@@ -243,7 +275,7 @@ async fn hidden_new_returns_focus_after_resize_unless_the_user_moves() {
     let sink = observed.clone();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     sender.send(TerminalEvent::Resize(24, 24)).unwrap();
-    sender.send(TerminalEvent::Resize(40, 24)).unwrap();
+    sender.send(TerminalEvent::Resize(48, 24)).unwrap();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
@@ -258,7 +290,7 @@ async fn hidden_new_returns_focus_after_resize_unless_the_user_moves() {
             let focused = snapshot.top().focus.current().map(|target| target.as_str());
             let frame = canvas.to_string();
             match phase {
-                0 if canvas.width() == 40 && frame.contains("+ New") => {
+                0 if canvas.width() == 48 && frame.contains("+ New") => {
                     sender.send(key(KeyCode::Tab)).unwrap();
                     sender.send(key(KeyCode::Tab)).unwrap();
                     phase = 1;
@@ -269,10 +301,10 @@ async fn hidden_new_returns_focus_after_resize_unless_the_user_moves() {
                 }
                 2 if canvas.width() == 32 && !frame.contains("+ New") => {
                     assert_eq!(focused, Some("sessions-list"), "{frame}");
-                    sender.send(TerminalEvent::Resize(40, 24)).unwrap();
+                    sender.send(TerminalEvent::Resize(48, 24)).unwrap();
                     phase = 3;
                 }
-                3 if canvas.width() == 40 && frame.contains("+ New") => {
+                3 if canvas.width() == 48 && frame.contains("+ New") => {
                     assert_eq!(focused, Some("action:new"), "{frame}");
                     sender.send(TerminalEvent::Resize(32, 24)).unwrap();
                     phase = 4;
@@ -283,10 +315,10 @@ async fn hidden_new_returns_focus_after_resize_unless_the_user_moves() {
                     phase = 5;
                 }
                 5 if focused == Some("action:menu") => {
-                    sender.send(TerminalEvent::Resize(40, 24)).unwrap();
+                    sender.send(TerminalEvent::Resize(48, 24)).unwrap();
                     phase = 6;
                 }
-                6 if canvas.width() == 40 && frame.contains("+ New") => {
+                6 if canvas.width() == 48 && frame.contains("+ New") => {
                     assert_eq!(focused, Some("action:menu"), "{frame}");
                     sender.send(ctrl_key('d')).unwrap();
                     phase = 7;

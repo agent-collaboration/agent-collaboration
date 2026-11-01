@@ -164,7 +164,7 @@ fn render_structured_details(
 ) -> AnyElement<'static> {
     let field = |label: &str, value: String, secondary: bool| {
         element! {
-            agent_collaboration_tui::FormField(label:label.to_owned()) {
+            agent_collaboration_tui::controls::fields::FormField(label:label.to_owned()) {
                 agent_collaboration_tui::UiText(content:value,role:if secondary {agent_collaboration_tui::UiTextRole::Secondary}else {agent_collaboration_tui::UiTextRole::Body},wrap:TextWrap::Wrap)
             }
         }
@@ -239,7 +239,7 @@ fn render_structured_details(
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             agent_collaboration_tui::dialog::DialogSections {
                 agent_collaboration_tui::dialog::DialogSection {
-                    agent_collaboration_tui::FormFields(stacked:width<52) {#(fields)}
+                    agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {#(fields)}
                 }
                 agent_collaboration_tui::dialog::DialogSection(heading:"Original title".to_owned()) {
                     agent_collaboration_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)

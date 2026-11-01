@@ -8,6 +8,7 @@ mod new_session_form;
 pub use new_session_client_inventory::NewClientInventoryLoader;
 pub use new_session_client_inventory::SessionClientPorts;
 mod picker_actions;
+mod picker_choice;
 mod picker_component;
 mod picker_filters;
 mod session_grouping;
