@@ -4,9 +4,9 @@ use super::ExternalProviderToolCall;
 
 use super::provider_setting_application::{SettingSetupFailure, apply_initial_settings};
 use super::{
-    ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
-    ExternalProviderRuntimeError, HashMap, InteractionPort, NewSessionRequest,
-    PendingSessionAdmission, ProviderFrameObservation, ProviderSessionCommand,
+    ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, CreateSettingsFailurePolicy,
+    ExternalProviderCreatedSession, ExternalProviderRuntimeError, HashMap, InteractionPort,
+    NewSessionRequest, PendingSessionAdmission, ProviderFrameObservation, ProviderSessionCommand,
     ProviderSessionRegistration, ProviderSessionRuntimeHandles, acp_operation_error,
     run_provider_session,
 };
@@ -114,6 +114,7 @@ pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
     pub(super) connection: ConnectionTo<Agent>,
     pub(super) request: NewSessionRequest,
     pub(super) requested_settings: crate::RequestedProviderSettings,
+    pub(super) settings_failure: CreateSettingsFailurePolicy,
     pub(super) supports_close: bool,
     pub(super) shutdown: CancellationToken,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
@@ -131,6 +132,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         connection,
         request,
         requested_settings,
+        settings_failure,
         supports_close,
         shutdown,
         admission_tx,
@@ -163,7 +165,9 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     value,
                     advertised,
                 }) => {
-                    let disposition = if applied.is_empty() && supports_close {
+                    let rollback_unchanged = applied.is_empty()
+                        && settings_failure == CreateSettingsFailurePolicy::CloseUnchangedSession;
+                    let disposition = if rollback_unchanged && supports_close {
                         let close = session
                             .connection()
                             .send_request_to(
@@ -180,7 +184,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     } else {
                         crate::InvalidSettingSessionDisposition::RemainsCreated
                     };
-                    let error = if applied.is_empty() {
+                    let error = if rollback_unchanged {
                         ExternalProviderRuntimeError::InvalidSetting {
                             setting: kind,
                             value,

@@ -6,10 +6,10 @@ use super::{
 };
 
 use super::{
-    AgentSessionClient, Arc, CancellationToken, ExternalProviderAdmission,
-    ExternalProviderCreatedSession, ExternalProviderRuntimeError, InputId, InteractionPort,
-    Ordering, PathBuf, ProviderCapabilityReport, ProviderCommand, ProviderPromptContent,
-    ProviderSessionActivity, ProviderSteeringOutcome,
+    AgentSessionClient, Arc, CancellationToken, CreateSettingsFailurePolicy,
+    ExternalProviderAdmission, ExternalProviderCreatedSession, ExternalProviderRuntimeError,
+    InputId, InteractionPort, Ordering, PathBuf, ProviderCapabilityReport, ProviderCommand,
+    ProviderPromptContent, ProviderSessionActivity, ProviderSteeringOutcome,
 };
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use agent_client_protocol::schema::v1::ContentBlock;
@@ -235,11 +235,40 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_with_settings_failure_policy(
+            cwd,
+            settings,
+            CreateSettingsFailurePolicy::CloseUnchangedSession,
+        )
+        .await
+    }
+
+    /// Keeps a remotely requested session visible when its initial settings fail.
+    pub async fn create_session_retaining_partial_settings(
+        &self,
+        cwd: PathBuf,
+        settings: crate::RequestedProviderSettings,
+    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_with_settings_failure_policy(
+            cwd,
+            settings,
+            CreateSettingsFailurePolicy::RetainCreatedSession,
+        )
+        .await
+    }
+
+    async fn create_with_settings_failure_policy(
+        &self,
+        cwd: PathBuf,
+        settings: crate::RequestedProviderSettings,
+        settings_failure: CreateSettingsFailurePolicy,
+    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Create {
                 cwd,
                 settings,
+                settings_failure,
                 reply,
             })
             .await
