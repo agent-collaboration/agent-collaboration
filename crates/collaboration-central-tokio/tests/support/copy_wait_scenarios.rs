@@ -93,9 +93,11 @@ impl CopyClient {
         database: DatabaseId,
         ready: impl Fn(&Observation) -> bool,
     ) -> ConformanceResult<Observation> {
+        let mut last_observed = None;
         tokio::time::timeout(Duration::from_secs(8), async {
             loop {
                 let observed = self.control(database, "observe").await?;
+                last_observed = Some((observed.attempts, observed.waiting, observed.reads));
                 if ready(&observed) {
                     return Ok(observed);
                 }
@@ -103,7 +105,12 @@ impl CopyClient {
                 // snapshot establishes readiness, never the backoff itself.
             }
         })
-        .await?
+        .await
+        .map_err(|error| {
+            format!(
+                "Copy observation did not reach its predicate before the existing bound: {error}; last (attempts, waiting, reads): {last_observed:?}"
+            )
+        })?
     }
     pub(super) async fn completed(
         &self,

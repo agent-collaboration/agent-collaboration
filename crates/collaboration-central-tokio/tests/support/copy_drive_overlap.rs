@@ -58,7 +58,8 @@ where
     let mut callers = JoinSet::new();
     start(&http, base, &mut callers, input.clone());
     let result = async {
-        let (frame, first) = received(&mut peer.socket).await?;
+        let (frame, first) = received(&mut peer.socket).await
+            .map_err(|error| format!("Copy overlap initial Release was not observed: {error}"))?;
         let ServerCall::Release { call, request } = first else {
             return Err("sequential caller did not send Release".into());
         };
@@ -79,7 +80,8 @@ where
         .await?;
         let first = copy
             .observed(database, |state| state.attempts == 1 && state.waiting == 1)
-            .await?;
+            .await
+            .map_err(|error| format!("first Copy waiter after Release was not observed: {error}"))?;
         let armed = first.deadlines.first().ok_or("Copy wait has no actual armed deadline")?;
         if armed.armed_at.0 != release_at.0.timestamp_millis()
             || armed.deadline.0 - armed.armed_at.0 != 20_000
@@ -132,7 +134,8 @@ where
         // then wake the durable caller again at the same controlled instant.
         callers.join_next().await.ok_or("Copy caller task disappeared")???;
         clock.set_object_time(ObjectAddress::Registry, expires_at).await?;
-        let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await?;
+        let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await
+            .map_err(|error| format!("retried Copy waiter after expiry and caller completion was not observed: {error}"))?;
         let elapsed = armed.deadline.0 - started.0.timestamp_millis();
         let waited = armed.deadline.0 - armed.armed_at.0;
         if elapsed < 37_000 || waited < 19_900

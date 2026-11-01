@@ -55,7 +55,8 @@ where
         json!({"attempt":"019f0000-0000-7000-8000-000000000802","holder":peer.peer,"request":{"kind":"release","value":{"database":"019f0000-0000-7000-8000-000000000803","epoch":1,"transfer":"019f0000-0000-7000-8000-000000000804"}}}),
     );
     let result = async {
-        let (original_frame, first) = received(&mut peer.socket).await?;
+        let (original_frame, first) = received(&mut peer.socket).await
+            .map_err(|error| format!("full-wait initial Release was not observed: {error}"))?;
         let ServerCall::Release { call: original_call, request: original_request } = first else { return Err("full-wait caller did not send Release".into()); };
         if observe().await? != vec![original_frame] { return Err("full-wait first call did not own exactly one waiter".into()); }
         let armed = deadline().await?.ok_or("full-wait call has no armed deadline")?;
@@ -73,7 +74,8 @@ where
         );
         client.set_object_time(collaboration_central_core::ObjectAddress::Registry, expires_at).await?;
         client.set_object_time(connection.clone(), expires_at).await?;
-        let (retry_frame, retry) = received_within(&mut peer.socket, Duration::from_secs(30)).await?;
+        let (retry_frame, retry) = received_within(&mut peer.socket, Duration::from_secs(30)).await
+            .map_err(|error| format!("full-wait retry after the actual armed deadline was not observed: {error}"))?;
         let ServerCall::Release { call, request } = retry else { return Err("full-wait retry did not send Release".into()); };
         if call != original_call || request != original_request || retry_frame == original_frame { return Err("full-wait retry changed its durable call or reused a frame".into()); }
         let frames = observe().await?;
