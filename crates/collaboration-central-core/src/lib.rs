@@ -67,9 +67,13 @@ mod issuer_person_client;
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
 mod directory_service_client;
+mod key_source_contract;
 mod platform_capabilities;
-mod remote_call_outcome;
+mod signature_verification;
+pub use key_source_contract::{KeyFetchFailure, RawJwks};
+pub use signature_verification::{Ed25519Verification, VerifyFailure};
 mod private_key_client_assertion;
+mod remote_call_outcome;
 mod service_receiver_policy;
 mod service_request_bodies;
 pub use directory_service_client::{
@@ -91,8 +95,8 @@ pub use issuer_key_cache::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
 };
 pub use platform_capabilities::{
-    CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks, RegistrationEdits,
-    RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CentralPlatform, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
+    SocketFailure, UpgradeFailure,
 };
 pub use remote_call_outcome::CallOutcome;
 pub use service_receiver_policy::{

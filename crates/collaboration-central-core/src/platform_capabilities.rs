@@ -9,25 +9,9 @@ use std::collections::BTreeMap;
 use std::{future::Future, sync::Arc};
 
 use crate::{
-    AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
+    AccessJwk, AdmissionOrigin, CentralObservation, Ed25519Verification, KeyFetchFailure, RawJwks,
+    SerializedObjectCall, SignatureValidity, VerifyFailure,
 };
-
-pub struct RawJwks {
-    pub body: Vec<u8>,
-    pub cache_control: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum KeyFetchFailure {
-    Unreachable,
-    BadResponse { status: u16 },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VerifyFailure {
-    UnsupportedKey,
-    Crypto,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +20,7 @@ pub enum UpgradeFailure {
     Refused,
 }
 
-pub trait CentralPlatform: Clone + Send + Sync + 'static {
+pub trait CentralPlatform: Ed25519Verification + Clone + Send + Sync + 'static {
     type Host: ObjectHost;
     fn clock(&self) -> &dyn runtime_primitives::Clock;
     fn ids(&self) -> &dyn runtime_primitives::IdSource;
@@ -54,12 +38,6 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
     fn verify_rs256(
         &self,
         key: &AccessJwk,
-        signed: &[u8],
-        signature: &[u8],
-    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;
-    fn verify_ed25519(
-        &self,
-        public_key: &[u8],
         signed: &[u8],
         signature: &[u8],
     ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;

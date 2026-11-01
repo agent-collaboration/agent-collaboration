@@ -1,7 +1,7 @@
 //! Issuer-key refresh policy uses only the configured source, never JWT claims.
 use crate::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
-    KeyFetchFailure, RawJwks, RegistryTime,
+    KeyFetchFailure, RawJwks,
 };
 use runtime_primitives::Clock;
 use std::future::Future;
@@ -60,8 +60,9 @@ async fn fetch_keys<Source: IssuerKeySource>(
         .map_err(Into::into)
 }
 
-fn receipt_time(clock: &dyn Clock) -> Result<RegistryTime, IssuerKeyResolutionRefusal> {
+fn receipt_time(
+    clock: &dyn Clock,
+) -> Result<chrono::DateTime<chrono::Utc>, IssuerKeyResolutionRefusal> {
     chrono::DateTime::from_timestamp_millis(clock.now().unix_millis())
-        .map(RegistryTime)
         .ok_or(IssuerKeyResolutionRefusal::InvalidClock)
 }

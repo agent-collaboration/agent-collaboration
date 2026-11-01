@@ -1,6 +1,6 @@
 //! Conformance-only observation of real issuer I/O, signatures and person policy.
 use crate::{
-    CentralPlatform, IssuerKeyCache, IssuerKeySource, IssuerPersonSignInClient,
+    Ed25519Verification, IssuerKeyCache, IssuerKeySource, IssuerPersonSignInClient,
     PersonSessionConfirmer, ServiceTokenTimeRefusal, ServiceTokenTimeRule,
     grant_deadline_is_current,
     organization_authority::{
@@ -131,7 +131,7 @@ impl PersonSessionConfirmer for ConfirmationFixture {
 }
 
 pub async fn observe_person_proof<
-    Platform: CentralPlatform + Clone,
+    Platform: Ed25519Verification + Clone,
     Source: IssuerKeySource + Clone,
 >(
     platform: Platform,

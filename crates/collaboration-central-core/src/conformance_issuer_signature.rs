@@ -1,5 +1,5 @@
 //! A clock-free observation of the actual host capability, excluded from production.
-use crate::{CentralPlatform, SignatureValidity};
+use crate::{Ed25519Verification, SignatureValidity};
 use serde::{Deserialize, Serialize};
 
 pub const ISSUER_SIGNATURE_PROBE_PATH: &str = "/__conformance/issuer-signature";
@@ -20,7 +20,7 @@ pub enum IssuerSignatureObservation {
     Crypto {},
 }
 
-pub async fn observe_issuer_signature<Platform: CentralPlatform>(
+pub async fn observe_issuer_signature<Platform: Ed25519Verification>(
     platform: &Platform,
     input: IssuerSignatureProbe,
 ) -> IssuerSignatureObservation {

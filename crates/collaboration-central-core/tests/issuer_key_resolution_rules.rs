@@ -4,7 +4,7 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeyResolutionRefusal, IssuerKeySource,
-    KeyFetchFailure, RawJwks, RegistryTime, resolve_issuer_key,
+    KeyFetchFailure, RawJwks, resolve_issuer_key,
 };
 use runtime_primitives::{Clock, SyncTime};
 use std::{
@@ -98,8 +98,8 @@ fn keys(identity: &str, public_key: [u8; 32]) -> RawJwks {
     }
 }
 
-fn at(offset_millis: i64) -> RegistryTime {
-    RegistryTime(chrono::DateTime::from_timestamp_millis(NOW_MILLIS + offset_millis).unwrap())
+fn at(offset_millis: i64) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp_millis(NOW_MILLIS + offset_millis).unwrap()
 }
 
 #[tokio::test(start_paused = true)]

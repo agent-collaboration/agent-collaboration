@@ -1,7 +1,7 @@
 //! Real native capability verdicts for the same fixed cases observed on workerd.
 #![cfg(test)]
 
-use collaboration_central_core::{CentralPlatform, SignatureValidity};
+use collaboration_central_core::{Ed25519Verification, SignatureValidity};
 use collaboration_central_tokio::{DeliveryConfig, TokioCentralPlatform};
 use runtime_primitives::{Clock, SyncTime};
 use serde::Deserialize;

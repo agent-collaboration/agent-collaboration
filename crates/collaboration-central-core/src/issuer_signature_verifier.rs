@@ -1,6 +1,6 @@
 //! Exact signed bytes are checked against keys from the configured issuer source.
 use crate::{
-    CentralPlatform, IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeyResolutionRefusal,
+    Ed25519Verification, IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeyResolutionRefusal,
     IssuerKeySource, SignatureValidity, VerifyFailure, resolve_issuer_key,
 };
 use runtime_primitives::Clock;
@@ -13,7 +13,9 @@ pub struct IssuerSignatureVerifier<Platform, Source> {
     clock: Arc<dyn Clock>,
 }
 
-impl<Platform: CentralPlatform, Source: IssuerKeySource> IssuerSignatureVerifier<Platform, Source> {
+impl<Platform: Ed25519Verification, Source: IssuerKeySource>
+    IssuerSignatureVerifier<Platform, Source>
+{
     #[must_use]
     pub fn new(
         platform: Platform,

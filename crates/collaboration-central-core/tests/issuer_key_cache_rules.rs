@@ -3,15 +3,15 @@
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
-    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, RawJwks, RegistryTime,
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, RawJwks,
 };
 use serde_json::{Value, json};
 
 const SOURCE: &str = "https://issuer.example.invalid/jwks";
 const NOW_MILLIS: i64 = 1_793_462_400_000;
 
-fn at(offset_millis: i64) -> RegistryTime {
-    RegistryTime(chrono::DateTime::from_timestamp_millis(NOW_MILLIS + offset_millis).unwrap())
+fn at(offset_millis: i64) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp_millis(NOW_MILLIS + offset_millis).unwrap()
 }
 
 fn key_id(value: &str) -> IssuerKeyId {

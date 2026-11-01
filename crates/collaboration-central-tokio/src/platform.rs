@@ -5,8 +5,9 @@ use axum::{
     response::IntoResponse,
 };
 use collaboration_central_core::{
-    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, KeyFetchFailure,
-    RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure, VerifyFailure,
+    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, Ed25519Verification,
+    KeyFetchFailure, RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure,
+    VerifyFailure,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -335,7 +336,9 @@ impl CentralPlatform for TokioCentralPlatform {
     fn observe(&self, observation: CentralObservation) {
         (self.observe)(observation);
     }
+}
 
+impl Ed25519Verification for TokioCentralPlatform {
     fn verify_ed25519(
         &self,
         public_key: &[u8],

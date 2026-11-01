@@ -1,6 +1,7 @@
 //! Issuer key decoding and five-minute retention, separate from legacy Access.
-use crate::{RawJwks, RegistryTime};
+use crate::RawJwks;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
 use message_board::IdentityValidationError;
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Mutex};
@@ -151,14 +152,14 @@ pub struct IssuerKeyCache {
 struct CachedIssuerKeys {
     source: String,
     keys: IssuerKeySet,
-    expires_at: RegistryTime,
+    expires_at: DateTime<Utc>,
 }
 
 impl IssuerKeyCache {
     pub fn fresh(
         &self,
         configured_source: &str,
-        now: RegistryTime,
+        now: DateTime<Utc>,
     ) -> Result<Option<IssuerKeySet>, IssuerKeyRefusal> {
         let cached = self
             .cached
@@ -166,7 +167,7 @@ impl IssuerKeyCache {
             .map_err(|_| IssuerKeyRefusal::CacheUnavailable)?;
         Ok(cached
             .as_ref()
-            .filter(|entry| entry.source == configured_source && now.0 < entry.expires_at.0)
+            .filter(|entry| entry.source == configured_source && now < entry.expires_at)
             .map(|entry| entry.keys.clone()))
     }
 
@@ -174,7 +175,7 @@ impl IssuerKeyCache {
         &self,
         configured_source: String,
         response: RawJwks,
-        received_at: RegistryTime,
+        received_at: DateTime<Utc>,
     ) -> Result<IssuerKeySet, IssuerKeyRefusal> {
         let keys = IssuerKeySet::decode(&response.body)?;
         let max_age = response
@@ -188,7 +189,6 @@ impl IssuerKeyCache {
             .unwrap_or(MAXIMUM_KEY_AGE_SECONDS)
             .min(MAXIMUM_KEY_AGE_SECONDS);
         let expires_at = received_at
-            .0
             .checked_add_signed(chrono::TimeDelta::seconds(
                 i64::try_from(max_age).map_err(|_| IssuerKeyRefusal::CacheUnavailable)?,
             ))
@@ -199,7 +199,7 @@ impl IssuerKeyCache {
             .map_err(|_| IssuerKeyRefusal::CacheUnavailable)? = Some(CachedIssuerKeys {
             source: configured_source,
             keys: keys.clone(),
-            expires_at: RegistryTime(expires_at),
+            expires_at,
         });
         Ok(keys)
     }

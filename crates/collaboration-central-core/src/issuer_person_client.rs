@@ -1,6 +1,7 @@
 //! Compose issuer signature checking with the independently authenticated live call.
 use crate::{
-    CentralPlatform, IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier, SignatureValidity,
+    Ed25519Verification, IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier,
+    SignatureValidity,
     organization_authority::{
         PersonSessionConfirmation, PersonSignInPort, PersonSignatureAlgorithm,
         PersonSignatureInput, SignInUnavailable,
@@ -22,7 +23,7 @@ pub struct IssuerPersonSignInClient<Platform, Source, Confirmation> {
     confirmation: Confirmation,
 }
 
-impl<Platform: CentralPlatform, Source: IssuerKeySource, Confirmation: PersonSessionConfirmer>
+impl<Platform: Ed25519Verification, Source: IssuerKeySource, Confirmation: PersonSessionConfirmer>
     IssuerPersonSignInClient<Platform, Source, Confirmation>
 {
     #[must_use]
@@ -40,7 +41,7 @@ impl<Platform: CentralPlatform, Source: IssuerKeySource, Confirmation: PersonSes
     }
 }
 
-impl<Platform: CentralPlatform, Source: IssuerKeySource, Confirmation: PersonSessionConfirmer>
+impl<Platform: Ed25519Verification, Source: IssuerKeySource, Confirmation: PersonSessionConfirmer>
     PersonSignInPort for IssuerPersonSignInClient<Platform, Source, Confirmation>
 {
     async fn verify_person_signature<'request>(

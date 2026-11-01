@@ -1,7 +1,7 @@
 use collaboration_central_core::{
     AccessCaller, AccessCheckOutcome, AccessKeyCache, AccessKeySource, AccessPolicy, AccessRefusal,
-    AccessRouteClass, CentralApplication, CentralObservation, CentralPlatform, KeyFetchFailure,
-    RawJwks, SignatureValidity, VerifyFailure,
+    AccessRouteClass, CentralApplication, CentralObservation, CentralPlatform, Ed25519Verification,
+    KeyFetchFailure, RawJwks, SignatureValidity, VerifyFailure,
 };
 use runtime_primitives::{Clock, SyncTime};
 use std::{
@@ -77,10 +77,7 @@ impl Clock for FixturePlatform {
         SyncTime::from_unix_millis(self.0.now.load(Ordering::SeqCst))
     }
 }
-impl CentralPlatform for FixturePlatform {
-    type Host = collaboration_central_tokio::TokioStorageHost<
-        collaboration_central_core::CoreHost<collaboration_central_tokio::TokioObjectIo>,
-    >;
+impl Ed25519Verification for FixturePlatform {
     // These legacy Access policy fixtures never exercise issuer cryptography.
     async fn verify_ed25519(
         &self,
@@ -90,6 +87,11 @@ impl CentralPlatform for FixturePlatform {
     ) -> Result<SignatureValidity, VerifyFailure> {
         Err(VerifyFailure::Crypto)
     }
+}
+impl CentralPlatform for FixturePlatform {
+    type Host = collaboration_central_tokio::TokioStorageHost<
+        collaboration_central_core::CoreHost<collaboration_central_tokio::TokioObjectIo>,
+    >;
     fn clock(&self) -> &dyn Clock {
         self
     }
