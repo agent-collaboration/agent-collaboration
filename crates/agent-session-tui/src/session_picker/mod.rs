@@ -10,6 +10,10 @@ pub use new_session_client_inventory::SessionClientPorts;
 mod picker_actions;
 mod picker_component;
 mod picker_filters;
+mod session_grouping;
+pub use session_grouping::{
+    SessionGroup, SessionGroupFacet, SessionGroupHeading, compute_session_groups,
+};
 #[cfg(feature = "quota-reset-test-harness")]
 mod picker_fixture_scenarios;
 mod picker_fork_confirmation;
@@ -22,6 +26,7 @@ mod provider_filter_model;
 mod provider_filter_storyboard_fixture;
 #[cfg(test)]
 mod provider_filter_tests;
+pub mod session_group_preferences;
 mod session_id_clipboard;
 pub use picker_machine_controls::PickerMachineSourceMode;
 #[cfg(test)]

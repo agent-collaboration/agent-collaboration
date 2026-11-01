@@ -535,6 +535,30 @@ impl SessionsPickerModel {
             .and_then(|record_index| self.request.records.get(*record_index))
     }
 
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "R19 grouping projection is staged before the shared grouped-list binding."
+        )
+    )]
+    pub fn session_groups<TZone: chrono::TimeZone>(
+        &self,
+        facet: super::SessionGroupFacet,
+        now: chrono::DateTime<chrono::Utc>,
+        time_zone: &TZone,
+    ) -> Vec<super::SessionGroup> {
+        super::compute_session_groups(
+            facet,
+            self.visible_indices
+                .iter()
+                .filter_map(|index| self.request.records.get(*index)),
+            now,
+            time_zone,
+            &self.source_contexts(),
+        )
+    }
+
     fn rebuild_visible_rows(&mut self) {
         let search = SessionSearchExpression::parse(&self.search);
         let mut indices = self

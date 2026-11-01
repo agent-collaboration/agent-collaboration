@@ -162,13 +162,61 @@
           "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-runtime-metadata"
         }
+      },
+      {
+        "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/ui-preferences-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "<root>/tmp/rust-tools/bin/sqlx",
+          "migrate",
+          "run",
+          "--source",
+          "crates/ui-preference-store/migrations"
+        ],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/ui-preferences-schema.sqlite"
+        }
+      },
+      {
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/ui-preference-store"],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "ui-preference-store",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/ui-preference-store",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/ui-preferences-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/ui-preference-store-metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/ui-preference-store",
+          "--all-targets"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "ui-preference-store",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/ui-preference-store",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/ui-preferences-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/ui-preference-store-metadata"
+        }
       }
     ],
     "metadata": {
       ".sqlx": {
         "query-automation-storage.json": "automation-storage",
         "query-codex-router-state.json": "codex-router-state",
-        "query-collaboration-runtime.json": "collaboration-runtime"
+        "query-collaboration-runtime.json": "collaboration-runtime",
+        "query-ui-preference-store.json": "ui-preference-store"
       }
     },
     "stderr": ""
