@@ -107,10 +107,11 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
         )
         .await?;
     for fresh in [false, true] {
-        let owned = ExecutionDestination::OwnedThread {
-            target: "B".to_owned(),
-            cwd: "/isolated-test".into(),
-        };
+        let owned: ExecutionDestination<String, String, String> =
+            ExecutionDestination::OwnedThread {
+                target: "B".to_owned(),
+                cwd: "/isolated-test".into(),
+            };
         let separate = ExecutionDestination::FreshEachRun {
             project_id: None,
             endpoint: "local".to_owned(),
