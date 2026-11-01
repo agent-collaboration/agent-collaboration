@@ -7,12 +7,11 @@
     reason = "Assertions must fail policy regressions while fixture errors propagate."
 )]
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
     SignatureValidity,
     organization_authority::{
         ParsedPersonToken, PersonConfirmationRefusal, PersonConfirmationWindow,
-        PersonSessionConfirmation, PersonTokenAudience, PersonTokenPolicy, PersonTokenRefusal,
+        PersonSessionConfirmation, PersonTokenAudience, PersonTokenRefusal,
     },
 };
 use fleet_identity_protocol::UnixMillis;
@@ -20,50 +19,11 @@ use serde_json::{Value, json};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-const ISSUER: &str = "https://signin.example.invalid";
-const ADMIN: &str = "https://central.example.invalid/v1/admin";
-const OPERATOR: &str = "https://central.example.invalid/v1/operator";
-const PERSON: &str = "019a3dce-2000-7000-8000-000000000001";
-const ORGANIZATION: &str = "019a3dce-2000-7000-8000-000000000002";
-const NOW: UnixMillis = UnixMillis(1_800_000_000_000);
-
-fn claims() -> Value {
-    json!({
-        "iss": ISSUER, "sub": PERSON, "aud": ADMIN,
-        "exp": 1_800_000_300, "iat": 1_800_000_000,
-        "scope": "central:admin", "client_id": "sign-in-app",
-        "azp": "sign-in-app", "sid": "issuer-owned-session",
-        "jti": "issuer-owned-token", "organization_id": ORGANIZATION,
-        "second_factor_at": 1_799_999_950, "amr": ["otp"],
-    })
-}
-
-fn policy() -> Result<PersonTokenPolicy, PersonTokenRefusal> {
-    PersonTokenPolicy::new(
-        ISSUER.into(),
-        ADMIN.into(),
-        OPERATOR.into(),
-        "sign-in-app".into(),
-    )
-}
-
-fn token(header: &Value, body: &Value) -> Result<String, serde_json::Error> {
-    Ok(format!(
-        "{}.{}.{}",
-        URL_SAFE_NO_PAD.encode(serde_json::to_vec(header)?),
-        URL_SAFE_NO_PAD.encode(serde_json::to_vec(body)?),
-        URL_SAFE_NO_PAD.encode([1_u8, 2, 3]),
-    ))
-}
-
-fn person_token(
-    body: &Value,
-) -> Result<ParsedPersonToken, Box<dyn std::error::Error + Send + Sync>> {
-    Ok(ParsedPersonToken::parse(token(
-        &json!({"typ":"at+jwt", "alg":"EdDSA", "kid":"issuer-key"}),
-        body,
-    )?)?)
-}
+#[path = "support/person_token_fixture.rs"]
+mod person_token_fixture;
+use person_token_fixture::{
+    ADMIN, NOW, OPERATOR, ORGANIZATION, PERSON, claims, person_token, policy, token,
+};
 
 #[test]
 fn organization_authority_person_policy_accepts_a_person_and_preserves_signed_bytes() -> TestResult

@@ -1,8 +1,13 @@
 //! One organization's commands, admissions and guarded authority state.
 
+mod owner_guard;
 mod person_confirmation;
 mod person_token;
 
+pub use owner_guard::{
+    AuthorizedOperator, AuthorizedOwner, OwnerGuardSettings, authorize_operator,
+    authorize_owner_read, authorize_owner_write,
+};
 pub use person_confirmation::{
     ConfirmedPersonToken, PersonConfirmationRefusal, PersonConfirmationWindow,
     PersonSessionConfirmation, PersonSignInPort, SignInUnavailable, verify_and_confirm_person,

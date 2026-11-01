@@ -225,12 +225,7 @@ impl ParsedPersonToken {
             return Err(PersonTokenRefusal::WrongAudience);
         }
         let now_seconds = now.0.div_euclid(1_000);
-        let earliest_expiry = now_seconds
-            .checked_sub(SERVICE_CLOCK_SKEW_SECONDS)
-            .ok_or(PersonTokenRefusal::Expired)?;
-        if claims.exp.0 <= earliest_expiry {
-            return Err(PersonTokenRefusal::Expired);
-        }
+        validate_token_expiry(claims.exp, now)?;
         let latest_issue = now_seconds
             .checked_add(SERVICE_CLOCK_SKEW_SECONDS)
             .ok_or(PersonTokenRefusal::NotYetValid)?;
@@ -260,6 +255,7 @@ impl ParsedPersonToken {
             audience: policy.audience(purpose).to_owned(),
             expires_at: claims.exp,
             second_factor_at: claims.second_factor_at,
+            purpose,
         })
     }
 }
@@ -274,9 +270,14 @@ pub struct VerifiedPersonToken {
     audience: String,
     expires_at: UnixSeconds,
     second_factor_at: Option<UnixSeconds>,
+    purpose: PersonTokenAudience,
 }
 
 impl VerifiedPersonToken {
+    pub(super) const fn purpose(&self) -> PersonTokenAudience {
+        self.purpose
+    }
+
     #[must_use]
     pub fn person_id(&self) -> &PersonId {
         &self.person_id
@@ -312,6 +313,21 @@ impl VerifiedPersonToken {
     pub fn bearer_token(&self) -> &str {
         &self.bearer_token
     }
+}
+
+pub(super) fn validate_token_expiry(
+    expires_at: UnixSeconds,
+    now: UnixMillis,
+) -> Result<(), PersonTokenRefusal> {
+    let earliest_expiry = now
+        .0
+        .div_euclid(1_000)
+        .checked_sub(SERVICE_CLOCK_SKEW_SECONDS)
+        .ok_or(PersonTokenRefusal::Expired)?;
+    if expires_at.0 <= earliest_expiry {
+        return Err(PersonTokenRefusal::Expired);
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
