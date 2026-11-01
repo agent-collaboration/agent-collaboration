@@ -452,6 +452,7 @@ async fn directory_service_calls_match_the_shared_real_http_corpus()
         Duration::from_secs(2),
     )
     .await?;
+    let io_clock = paused_http_clock::PausedHttpIo::start().await?;
     let proof=async {
         let observations=observe_directory_client(signer,ClockCheckedTransport {inner:platform.service_http_transport(),receiver:receiver.clone()},ServiceClientId::try_from("pinned-directory".to_owned())?,
             ResourceUri::try_from(format!("{base}/oauth/token"))?,&central,corpus.input).await?;
@@ -488,9 +489,11 @@ async fn directory_service_calls_match_the_shared_real_http_corpus()
         println!("DIRECTORY_HTTP_CENTRAL {}",serde_json::to_string(&central)?);
         Ok::<_,configuration::TestError>(())
     }.await;
+    let clock_result = io_clock.finish().await;
     let _ = shutdown.send(());
     let server_result = server.await?;
     let stopped = platform.shutdown().await;
+    clock_result?;
     server_result?;
     stopped?;
     proof

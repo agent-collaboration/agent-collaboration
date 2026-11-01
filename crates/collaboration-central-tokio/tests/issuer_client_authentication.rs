@@ -284,6 +284,7 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
     )
     .await?;
     let ids = Arc::new(ScriptedIds::default());
+    let io_clock = paused_http_clock::PausedHttpIo::start().await?;
     let proof = async {
         for (index, path) in [
             "/introspect",
@@ -353,9 +354,11 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
         Ok::<_, configuration::TestError>(())
     }
     .await;
+    let clock_result = io_clock.finish().await;
     let _ = shutdown.send(());
     let server_result = server.await?;
     let stopped = platform.shutdown().await;
+    clock_result?;
     server_result?;
     stopped?;
     proof

@@ -43,3 +43,64 @@ impl PausedHttpClock {
         })
     }
 }
+
+/// Keeps the paused clock stationary while real async HTTP is in flight.
+/// Tokio documents that a running blocking task inhibits auto-advance. This
+/// task waits only for an owned channel event; it runs no I/O, clock or timer.
+/// Call finish after the requests to release and join it before cleanup.
+pub struct PausedHttpIo {
+    state: IoClockState,
+}
+enum IoClockState {
+    Active {
+        release: std::sync::mpsc::Sender<()>,
+        task: tokio::task::JoinHandle<()>,
+    },
+    Released,
+}
+#[derive(Debug, thiserror::Error)]
+pub enum PausedIoFailure {
+    #[error("paused HTTP clock task did not report startup")]
+    StartupClosed,
+    #[error("paused HTTP clock task did not join")]
+    Task(#[from] tokio::task::JoinError),
+}
+impl PausedHttpIo {
+    pub async fn start() -> Result<Self, PausedIoFailure> {
+        let (release, released) = std::sync::mpsc::channel();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let task = tokio::task::spawn_blocking(move || {
+            let _ = started.send(());
+            let _ = released.recv();
+        });
+        let hold = Self {
+            state: IoClockState::Active { release, task },
+        };
+        if ready.await.is_err() {
+            hold.finish().await?;
+            return Err(PausedIoFailure::StartupClosed);
+        }
+        Ok(hold)
+    }
+    pub async fn finish(mut self) -> Result<(), PausedIoFailure> {
+        match std::mem::replace(&mut self.state, IoClockState::Released) {
+            IoClockState::Active { release, task } => {
+                let _ = release.send(());
+                task.await?;
+            }
+            IoClockState::Released => {}
+        }
+        Ok(())
+    }
+}
+impl Drop for PausedHttpIo {
+    fn drop(&mut self) {
+        // Exceptional exits still release the event; normal paths join above.
+        // The owning test runtime also drains its blocking pool on shutdown.
+        if let IoClockState::Active { release, .. } =
+            std::mem::replace(&mut self.state, IoClockState::Released)
+        {
+            let _ = release.send(());
+        }
+    }
+}

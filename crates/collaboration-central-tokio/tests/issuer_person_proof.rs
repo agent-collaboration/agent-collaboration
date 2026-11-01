@@ -150,6 +150,7 @@ async fn native_person_proofs_match_the_shared_host_corpus() -> Result<(), confi
         Duration::from_secs(2),
     )
     .await?;
+    let io_clock = paused_http_clock::PausedHttpIo::start().await?;
     let proof = async {
         for case in corpus.cases {
             {
@@ -203,9 +204,11 @@ async fn native_person_proofs_match_the_shared_host_corpus() -> Result<(), confi
         Ok::<_, configuration::TestError>(())
     }
     .await;
+    let clock_result = io_clock.finish().await;
     let _ = shutdown.send(());
     let server_result = server.await?;
     let platform_result = platform.shutdown().await;
+    clock_result?;
     server_result?;
     platform_result?;
     proof
