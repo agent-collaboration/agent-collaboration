@@ -2,7 +2,13 @@
 // Redirect exactly the fixture issuer's certs fetch to the owned HTTP server.
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import publicTemplate from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
+import * as publicTemplateModule from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
+
+// Types use the repository's frozen verification dependency. Execution still
+// loads the exact pinned Miniflare allocation supplied by the Rust harness.
+type MiniflareRuntimeModule =
+  typeof import("../../verification/node_modules/miniflare/dist/src/index.js");
+const publicTemplate = publicTemplateModule.default;
 
 const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
   process.argv.slice(2);
@@ -25,7 +31,7 @@ if (fixture.protocol !== "http:" || fixture.hostname !== "127.0.0.1") {
 }
 // Fill the shipped template, so a missing public binding cannot be masked by
 // the harness's own independent list of production settings.
-const replacements = {
+const replacements: Readonly<Record<string, string>> = {
   ACCESS_TEAM_DOMAIN: "conformance-test.cloudflareaccess.com",
   ACCESS_SESSION_AUD: "test-session-aud",
   ACCESS_ADMIN_AUD: "test-admin-aud",
@@ -42,14 +48,17 @@ const replacements = {
 };
 const templateBindings = Object.fromEntries(
   Object.entries(publicTemplate.worker.env)
-    .filter(([, binding]) => binding.type === "text")
-    .map(([name, binding]) => [name, replacements[name] ?? binding.value]),
+    .flatMap(([name, binding]): Array<[string, string]> => {
+      if (binding.type !== "text") return [];
+      if (!("value" in binding)) throw new Error(`public text binding ${name} has no value`);
+      return [[name, replacements[name] ?? binding.value]];
+    }),
 );
 for (const name of Object.keys(replacements)) {
   if (!(name in templateBindings))
     throw new Error(`public central template missing required ${name}`);
 }
-const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions } = await import(
+const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: MiniflareRuntimeModule = await import(
   pathToFileURL(miniflareEntrypoint).href
 );
 const runtime = new Miniflare(
@@ -101,7 +110,7 @@ const runtime = new Miniflare(
   }),
 );
 
-async function stop() {
+async function stop(): Promise<void> {
   await runtime.dispose();
   process.exitCode = 0;
 }
