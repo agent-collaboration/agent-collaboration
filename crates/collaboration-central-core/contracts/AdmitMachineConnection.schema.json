@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "PresentedMachine": {
+      "additionalProperties": false,
+      "properties": {
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "peer": {
+          "$ref": "#/$defs/RecordId"
+        }
+      },
+      "required": [
+        "installation",
+        "peer"
+      ],
+      "type": "object"
+    },
+    "RecordId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "clientId": {
+      "$ref": "#/$defs/ClientId"
+    },
+    "enrollmentId": {
+      "$ref": "#/$defs/EnrollmentId"
+    },
+    "installation": {
+      "$ref": "#/$defs/InstallationId"
+    },
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "presented": {
+      "$ref": "#/$defs/PresentedMachine"
+    },
+    "tokenExpiresAt": {
+      "$ref": "#/$defs/UnixSeconds"
+    }
+  },
+  "required": [
+    "organizationId",
+    "enrollmentId",
+    "installation",
+    "presented",
+    "tokenExpiresAt",
+    "clientId"
+  ],
+  "title": "AdmitMachineConnection",
+  "type": "object"
+}

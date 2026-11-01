@@ -33,7 +33,7 @@ Each test sends terminal events in two ways:
 The initial frame is drained first. An unchanged canvas produces no new frame, so an ignored key is confirmed by an event-processed counter rather than by waiting for a redraw. The mock loop has no terminal size and no Ctrl+C opt-in, so A uses fixed layout dimensions with the root's real resize handling. B owns real size changes and quitting.
 
 Each test reads two things back:
-- **the serialized frame**: iocraft's mock render loop yields each frame as a `Canvas`. The test serializes it with iocraft's own `Canvas::write_ansi` and feeds those bytes through a terminal-screen parser into a cell grid of characters, colours and attributes. That runs the serializer that dropped the overlay corner in Probe 1, which reading canvas cells alone would miss. It does not run the terminal backend's full, diff and resize writes; B covers those. The parser ignores the trailing CRLF that `write_ansi` appends.
+- **the serialized frame**: iocraft's real render loop, driven through a test-only recording backend that mirrors the pinned mock backend, yields each frame as a `Canvas` (the pinned `mock_terminal_render_loop` cannot opt into `.ignore_ctrl_c()`, so it cannot carry the C3 rows). The test serializes it with iocraft's own `Canvas::write_ansi` and feeds those bytes through a terminal-screen parser into a cell grid of characters, colours and attributes. That runs the serializer that dropped the overlay corner in Probe 1, which reading canvas cells alone would miss. It does not run the terminal backend's full, diff and resize writes; B covers those. The parser ignores the trailing CRLF that `write_ansi` appends.
 - **each surface's input state**: field text and cursor, selection, focus, a counter per surface, and a log of every action handler that ran with its target.
 
 Targets: Linux CI, and macOS arm64 on Sunclaw (owner: tests run on Sunclaw). Debug profile, signed through `scripts/cargo_debug_signing_runner.sh`.
@@ -317,7 +317,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 
 **U16 · R17** (controls)
 - *Seam:* the quota Details actions and `AccountActionTarget`; `QuotaOutcome::AccountCommand` and `AccountCommandResult`; the CLI's run-then-restart.
-- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. C, once: the owner logs in again for real from Details.
+- *Observation:* B, with the login command replaced by a recording stand-in on PATH for the quota run, so no real OAuth happens. Only the interactive login is a child process after teardown. Disable/Enable, Remove and Copy ID run in-process through an injected typed account-commands port over the existing owners (decided 2026-10-30: a subprocess exit code cannot carry the typed `RequiresDisabled` refusal without parsing stderr). In B the quota fixture installs a test-support recording port; the "stand-in invocations" below for those actions are that port's recorded calls, and its "refusal" is a typed `RequiresDisabled` it returns. One adapter test drives the real port against the existing owners in a temporary store for the typed refusal. C, once: the owner logs in again for real from Details.
 - *Target and journey:* B, `needed:` "Log in again" on the quota binary, legacy and kitty modes. Lasting. C is temporary.
 - *Reference:* R17; U16.
 - *Passes when:*
@@ -336,6 +336,22 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Wrong build that fails:* the selected row's neighbour's label; a hard-coded provider; running the command while the quota frame still owns the terminal; a retry after failure; staying out of quota after login; restarting with the cached report; exiting the app on a cancelled login; a preselected Remove or a Ctrl+Enter that removes; an item acting on the browse-focused account instead of the captured one.
 - *Reuses:* the existing removal owner tests for the real refusal and retention: `account_removal_tests.rs:162-173` (enabled refusal, credentials and rows intact), `289-321` (a target re-enabled before the writer → `RequiresDisabled`), and the compiled `account_removal_cli.rs:126-139`.
 - *Unverified:* the real OAuth flows (C).
+
+**U17 · R18** (commands)
+- *Seam:* the quota `Refresh` action; the injected `QuotaRefresher`; the existing view-model reload under its lock.
+- *Observation:* A, with a stand-in `QuotaRefresher` that changes fixture values and counts calls. B, the quota binary with its fixture provider, at 120x36 in legacy and kitty modes.
+- *Target and journey:* B, `needed:` "Quota refresh". Lasting.
+- *Reference:* R18; U17.
+- *Passes when:*
+  - R and the menu item each start exactly one refresh. A second R during it does nothing, and the stand-in counts 1.
+  - "Refreshing…" shows in the top row while it runs, and the menu shows Refresh disabled with that reason.
+  - After it ends, the grid shows the changed values for the same selected account. An open Details shows them too.
+  - A stand-in failure shows one plain sentence (per account where it applies), with no second call.
+- *Wrong build that fails:* a double refresh; stale values after success; leaving or blanking the screen to refresh; a silent failure; an adapter that maps every service `Ok` to `Refreshed` and drops a partial failure.
+  - **Through the real CLI adapter** (not a stand-in port), with the fixture provider serving one healthy and one failing account: the service returns `Ok`, the healthy account's value updates, and the screen shows a plain sentence naming the failing account. The adapter returns `Partial` naming exactly that account. All-success maps to `Refreshed` with no message. **All-failed** (every account failing through the real adapter) maps to `Failed` naming each failing account. An overall setup or read failure maps to `Failed` with the overall message and no account list. Each makes exactly one service call.
+  - The in-flight check holds the first call open with a causal control (the stand-in waits for a release signal), observes the duplicate press and the "Refreshing…" grid, then releases. There are no sleeps.
+- *Reuses:* the existing quota refresh command tests (including `quota_refresh_continues_after_one_account_provider_failure`, `quota_auth_tests.rs:684-777`) for the fetch rules themselves.
+- *Unverified:* real provider latency and real provider errors.
 
 ## Journeys still needed
 

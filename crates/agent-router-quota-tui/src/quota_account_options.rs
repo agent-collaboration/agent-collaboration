@@ -163,7 +163,6 @@ pub(crate) struct CreditPolicyEditorState {
     pub(crate) draft_policy: CreditUsagePolicy,
     pub(crate) phase: CreditPolicyEditorPhase,
     pub(crate) operation_generation: u64,
-    pub(crate) choice: agent_collaboration_tui::SearchSelectState<CreditUsagePolicy>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -209,14 +208,11 @@ impl AccountOptionsState {
     fn start_editing(&mut self) {
         let generation = self.allocate_operation_generation();
         let saved_policy = self.target.credit_usage.policy;
-        let mut choice = agent_collaboration_tui::SearchSelectState::Closed;
-        choice.open(saved_policy);
         self.editor = Some(CreditPolicyEditorState {
             saved_policy,
             draft_policy: saved_policy,
             phase: CreditPolicyEditorPhase::Editing,
             operation_generation: generation,
-            choice,
         });
         self.message = None;
     }
@@ -623,6 +619,7 @@ pub(crate) use commands::AccountOptionsCommandContext;
 pub(crate) use commands::install_reloaded_view_model;
 pub(crate) use commands::run_account_options_commands;
 pub(crate) use events::AccountOptionsKeyEventContext;
+pub(crate) use events::apply_account_options_key_action;
 pub(crate) use events::handle_account_options_key_event;
 pub(crate) use events::open_account_options_for_account;
 pub(crate) use rendering::account_options_content_height;
@@ -631,30 +628,18 @@ pub(crate) use rendering::account_options_reset_inventory_page_size;
 #[path = "quota_account_options_commands.rs"]
 mod commands;
 #[path = "quota_account_options_events.rs"]
-mod events;
+pub(crate) mod events;
 #[path = "quota_account_options_rendering.rs"]
 mod rendering;
 pub(crate) use rendering::AccountOptionsPanelProps;
+#[cfg(test)]
 pub(crate) use rendering::render_account_options_content;
 pub(crate) use rendering::render_account_options_panel;
+pub(crate) use rendering::{
+    account_options_message_role, account_options_message_text, credit_entitlement_label,
+    credit_freshness_label, provider_control_note,
+};
 
 #[cfg(test)]
 #[path = "quota_account_options_test.rs"]
 mod tests;
-
-pub(crate) fn credit_policy_choices()
--> Vec<agent_collaboration_tui::ChoiceOption<CreditUsagePolicy>> {
-    [CreditUsagePolicy::Disallow, CreditUsagePolicy::Allow]
-        .into_iter()
-        .map(|policy| {
-            agent_collaboration_tui::ChoiceOption::available(
-                policy,
-                if policy == CreditUsagePolicy::Allow {
-                    "Allow"
-                } else {
-                    "Disallow"
-                },
-            )
-        })
-        .collect()
-}

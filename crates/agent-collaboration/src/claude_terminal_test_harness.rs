@@ -63,10 +63,17 @@ pub(crate) fn run() -> io::Result<()> {
     };
     let request = SessionsPickerRequest {
         current_dir: std::env::current_dir()?,
+        native_arguments: ["--model", "haiku"].map(std::ffi::OsString::from).to_vec(),
         ..SessionsPickerRequest::default()
     };
-    let outcome = run_sessions_picker(request, None, Some(ports))?;
-    let Some(SessionsPickerOutcome::LaunchNativeClaude(request)) = outcome else {
+    let outcome = run_sessions_picker(
+        request,
+        None,
+        Some(ports),
+        crossterm::terminal::size()?,
+        None,
+    )?;
+    let Some(SessionsPickerOutcome::LaunchNativeClaude(request, mode)) = outcome else {
         return Err(io::Error::other(
             "foreground Claude did not return its terminal handoff",
         ));
@@ -77,6 +84,38 @@ pub(crate) fn run() -> io::Result<()> {
         ));
     }
     println!("CLAUDE_TERMIOS_AFTER {}", read_termios()?);
+    println!("CLAUDE_TERMINAL_MODE {mode:?}");
     println!("CLAUDE_TERMINAL_HANDOFF");
+    if let Some(executable) = std::env::var_os("CLAUDE_TERMINAL_FIXTURE_EXECUTABLE") {
+        use agent_session_inventory::sessions::{
+            claude_terminal_launch::{prepare_claude_terminal_mode, run_claude_terminal},
+            source_ssh_protocol::SourceNativeClaudeAction,
+        };
+        let SessionClientEffect::Native {
+            action:
+                SourceNativeClaudeAction::New {
+                    directory,
+                    arguments,
+                },
+            ..
+        } = request.effect
+        else {
+            return Err(io::Error::other("lifecycle fixture requires New"));
+        };
+        let marker = std::env::var_os("CLAUDE_FIXTURE_TEARDOWN_MARKER")
+            .ok_or_else(|| io::Error::other("missing teardown marker"))?;
+        std::fs::write(marker, b"picker returned; terminal restored\n")?;
+        let mut command = Command::new(executable);
+        command.args(arguments).current_dir(directory.as_str());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let command = runtime
+            .block_on(prepare_claude_terminal_mode(command, mode))
+            .map_err(io::Error::other)?;
+        drop(runtime);
+        run_claude_terminal(command).map_err(io::Error::other)?;
+        println!("CLAUDE_TERMIOS_RETURNED {}", read_termios()?);
+    }
     Ok(())
 }

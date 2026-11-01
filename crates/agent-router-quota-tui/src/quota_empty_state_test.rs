@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 use super::*;
 use codex_router_quota_service::quota_display_model::QuotaDisplayWindow;
 
@@ -8,7 +9,7 @@ fn interactive_row(row: &QuotaStatusAccountViewModel) -> String {
 }
 
 #[test]
-fn luna_422_missing_windows_and_extras_are_empty() {
+fn missing_short_window_is_not_rendered_when_weekly_is_known() {
     let mut model = quota_view_model();
     let row = &mut model.rows[0];
     row.display_short = QuotaDisplayWindow::Unknown;
@@ -17,11 +18,14 @@ fn luna_422_missing_windows_and_extras_are_empty() {
     for placeholder in ["No data", "5h · —", "Credits unknown", "resets unknown"] {
         assert!(!frame.contains(placeholder), "{placeholder}: {frame}");
     }
-    assert!(frame.contains("83% · week · 7d 0h"), "{frame}");
+    assert!(
+        frame.contains("83%") && frame.contains("Weekly · 7d 0h"),
+        "{frame}"
+    );
 }
 
 #[test]
-fn luna_422_unknown_reset_omits_separator_and_dash() {
+fn unknown_reset_keeps_known_weekly_amount_and_staleness() {
     let mut model = quota_view_model();
     let row = &mut model.rows[0];
     row.display_weekly = QuotaDisplayWindow::Known {
@@ -35,10 +39,13 @@ fn luna_422_unknown_reset_omits_separator_and_dash() {
         stale: false,
     };
     let frame = interactive_row(row);
-    for value in ["32% · week", "100% · 5h", "week stale"] {
+    for value in ["32%", "Weekly · stale"] {
         assert!(frame.contains(value), "{frame}");
     }
-    assert!(!frame.contains("· —"), "{frame}");
+    assert!(
+        !frame.contains("· —") && !frame.contains("100%") && !frame.contains("5h ·"),
+        "{frame}"
+    );
 }
 
 #[test]

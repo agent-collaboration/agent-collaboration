@@ -1,0 +1,3 @@
+[
+{"canonical":{"grant_expires_at":1793448600,"organization_id":"019a3dce-2000-7000-8000-000000000001","principal":{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"019a3dce-2000-7000-8000-000000000001","kind":"machine"}},"input":{"aud":"https://central.example.invalid/machine","client_id":"019a3dce-2000-7000-8000-000000000002","exp":1793448600,"grant_expires_at":1793448600,"iat":1793448000,"iss":"https://issuer.example.invalid","jti":"019a3dce-2000-7000-8000-000000000001","organization_id":"019a3dce-2000-7000-8000-000000000001","principal":{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"019a3dce-2000-7000-8000-000000000001","kind":"machine"},"sub":"owner-account"}}
+]

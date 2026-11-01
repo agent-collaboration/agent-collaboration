@@ -38,20 +38,29 @@ impl AlphaGroupObservation {
         });
         for (row, line) in lines.into_iter().enumerate() {
             // Literal adopted selected surface, rather than the production palette helper.
-            let selected = (0..canvas.width()).any(|column| {
-                canvas.cell(column, row).is_some_and(|cell| {
-                    cell.background_color
-                        == Some(Color::Rgb {
-                            r: 52,
-                            g: 59,
-                            b: 70,
-                        })
+            let selected_columns = (0..canvas.width())
+                .filter(|column| {
+                    canvas.cell(*column, row).is_some_and(|cell| {
+                        cell.background_color
+                            == Some(Color::Rgb {
+                                r: 52,
+                                g: 59,
+                                b: 70,
+                            })
+                    })
                 })
-            });
-            if !selected {
+                .collect::<Vec<_>>();
+            if selected_columns.is_empty() {
                 continue;
             }
-            let words = line
+            // Read the selected account's painted cells; the shared scrollbar
+            // occupies a separate column and is not an account fact.
+            let selected_text = cell_columns(
+                line,
+                selected_columns[0],
+                selected_columns[selected_columns.len() - 1] + 1,
+            );
+            let words = selected_text
                 .replace(['│', '┃', '❯'], " ")
                 .split_whitespace()
                 .collect::<Vec<_>>()

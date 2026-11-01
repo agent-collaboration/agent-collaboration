@@ -274,10 +274,10 @@ fn reset_inventory_count_warning_has_one_blank_row_only_when_present() {
         let mut matching = test_reset_target();
         matching.saved_reset_credits = "1 reset".to_owned();
         let render = |target: &ResetPaneTarget| {
-            super::quota_reset_detail_rendering::render_reset_panel_content(
+            let content = super::quota_reset_detail_rendering::render_reset_panel_content(
                 &snapshot, target, width, 0, 4, 0, None,
-            )
-            .render(None)
+            );
+            element!(View(width:u32::try_from(width).unwrap()) {#(content)}).render(None)
         };
         let warning_canvas = render(&mismatched);
         let warning_frame = warning_canvas.to_string();
@@ -393,11 +393,10 @@ fn reset_options_result_content_keeps_outcome_title() {
         None,
     );
 
-    let frame = super::quota_reset_detail_rendering::render_reset_panel_content(
+    let content = super::quota_reset_detail_rendering::render_reset_panel_content(
         &snapshot, &target, 56, 0, 4, 0, None,
-    )
-    .render(None)
-    .to_string();
+    );
+    let frame = element!(View(width:56) {#(content)}).render(None).to_string();
 
     assert!(frame.contains("Outcome unknown — do not retry"), "{frame}");
     assert!(

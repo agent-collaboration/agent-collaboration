@@ -1,4 +1,3 @@
-/** Build-and-drive observations only; independent acceptance belongs to the Advisor. */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -6,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import { isMain, planArgument, reportCliFailure, strictArguments } from '../cli/cli-arguments.ts';
 import { canonicalJson, fileDigest, sourceBinding } from '../evidence/source-binding.ts';
+/** Build-and-drive observations only; independent acceptance belongs to the Advisor. */
+import { ptyGridDriverEntry } from '../terminal/pty-grid-driver.ts';
 import { qualifyTerminal } from '../terminal/terminal-qualification.ts';
 import { PrerequisiteGap, ScenarioMismatch, showcasePlanSchema } from './contracts.ts';
 import type { ShowcasePlan } from './contracts.ts';
@@ -51,13 +52,11 @@ export async function checkShowcaseTarget(plan: ShowcasePlan): Promise<void> {
 			throw new Error('declared artifact path/hash changed: ' + artifact.path);
 	for (const artifact of [plan.driver, plan.example])
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
-	const entries = execFileSync(
-		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
-		{ encoding: 'utf8' },
-	);
-	if (!entries.includes('compiled_grid_terminal_observation: test'))
-		throw new Error('declared grid driver entry missing');
+	const entry = ptyGridDriverEntry('showcase');
+	const entries = execFileSync(plan.driver.path, [entry, '--exact', '--list'], {
+		encoding: 'utf8',
+	});
+	if (!entries.includes(entry + ': test')) throw new Error('declared grid driver entry missing');
 	await qualifyTerminal();
 }
 export async function runShowcaseJourneys(value: unknown, checkOnly = false): Promise<void> {

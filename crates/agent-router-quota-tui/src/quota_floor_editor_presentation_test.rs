@@ -11,7 +11,6 @@ use super::quota_floor_editor::WeeklyFloorEditorState;
 use super::quota_floor_editor::WeeklyFloorStep;
 use super::quota_floor_editor::WeeklyQuotaFloorSaveError;
 use super::quota_floor_editor::WeeklyQuotaFloorSaver;
-use super::quota_floor_editor::render_weekly_floor_editor;
 use super::quota_floor_editor::step_weekly_floor_percent;
 use super::quota_floor_editor::weekly_floor_editor_key_command;
 use super::quota_reset_component_input::forced_quota_exit_key;
@@ -63,6 +62,129 @@ fn committed_save_cannot_be_cancelled_while_refresh_is_unresolved() {
     assert!(state.is_some());
 }
 
+// Each next input follows the real draw produced by the prior domain transition.
+enum FloorFrame {
+    Any,
+    Browse,
+    Draft(u16),
+    Message(&'static str),
+}
+struct FloorScenario {
+    view_model: codex_router_quota_service::quota_display_model::QuotaStatusViewModel,
+    saver: WeeklyQuotaFloorSaver,
+    loader: Option<QuotaStatusViewModelLoader>,
+    steps: Vec<(TerminalEvent, FloorFrame)>,
+}
+fn floor_key(code: KeyCode) -> TerminalEvent {
+    TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
+}
+async fn render_floor_scenario(inputs: FloorScenario) -> Vec<String> {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    // External completions stay held until the actual pending state is painted.
+    // This makes identical retry outcomes observable without timing waits.
+    let release = Arc::new(tokio::sync::Notify::new());
+    let saved_port = inputs.saver;
+    let save_gate = release.clone();
+    let saver: WeeklyQuotaFloorSaver = Arc::new(move |account, percent| {
+        let result = saved_port(account, percent);
+        let gate = save_gate.clone();
+        Box::pin(async move {
+            let result = result.await;
+            gate.notified().await;
+            result
+        })
+    });
+    let loader = inputs.loader.map(|loader| {
+        let gate = release.clone();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        Arc::new(move || {
+            let result = loader();
+            let gate = gate.clone();
+            let retry = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) > 0;
+            Box::pin(async move {
+                let result = result.await;
+                if retry {
+                    gate.notified().await;
+                }
+                result
+            }) as crate::quota_status_view_model::QuotaStatusViewModelLoadFuture
+        }) as QuotaStatusViewModelLoader
+    });
+    let outcome = Arc::new(Mutex::new(None));
+    let mut component = element!(QuotaStatusComponent(view_model:inputs.view_model,width:120usize,height:48usize,weekly_floor_saver:Some(saver),reload_view_model:loader,spinner_interval:Duration::from_secs(3600),outcome_sink:Some(outcome.clone())));
+    let frames = crate::quota_test_support::recording_backend::recording_terminal_render_loop(
+        &mut component,
+        MockTerminalConfig::with_events(events),
+    );
+    tokio::pin!(frames);
+    let mut output = Vec::new();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        output.push(
+            crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                .await
+                .unwrap()
+                .unwrap()
+                .to_string(),
+        );
+        for (event, expected) in inputs.steps {
+            let operation = matches!(&event,TerminalEvent::Key(key) if key.code==KeyCode::Enter);
+            sender.send(event).unwrap();
+            if operation {
+                loop {
+                    let frame = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .to_string();
+                    let pending = frame.contains("Saving preference");
+                    output.push(frame);
+                    if pending {
+                        break;
+                    }
+                }
+                release.notify_one();
+            }
+            loop {
+                let frame = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                    .await
+                    .unwrap()
+                    .expect("floor must remain mounted until its quit action")
+                    .to_string();
+                let matched = match expected {
+                    FloorFrame::Any => true,
+                    FloorFrame::Browse => {
+                        !frame.contains("Weekly floor") && frame.contains("Filters")
+                    }
+                    FloorFrame::Draft(percent) => frame.lines().any(|line| {
+                        line.contains("Floor") && line.contains(&format!("{percent}%"))
+                    }),
+                    FloorFrame::Message(message) => frame.contains(message),
+                };
+                output.push(frame);
+                if matched {
+                    break;
+                }
+            }
+        }
+        sender.send(TerminalEvent::Key(control_key('c'))).unwrap();
+        while let Some(canvas) = frames.next().await {
+            output.push(canvas.to_string());
+        }
+    })
+    .await
+    .unwrap_or_else(|error| {
+        panic!(
+            "floor scenario must reach its actual quit boundary: {error}; last frame: {:?}",
+            output.last()
+        )
+    });
+    assert_eq!(*outcome.lock().unwrap(), Some(crate::QuotaOutcome::Quit));
+    output
+}
+
 #[tokio::test]
 async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
     let mut view_model = quota_two_account_view_model();
@@ -87,31 +209,17 @@ async fn ctrl_e_saves_the_focused_stable_account_and_reloads_immediately() {
         let reloaded_view_model = reloaded_view_model.clone();
         Box::pin(async move { Some(reloaded_view_model) })
     });
-    let events = vec![
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Down)),
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-    ];
-
-    let frames = element! {
-        QuotaStatusComponent(
-            view_model,
-            width: 120usize,
-            height: 48usize,
-            reload_view_model: Some(loader),
-            weekly_floor_saver: Some(saver),
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
+    let frames = render_floor_scenario(FloorScenario {
+        view_model,
+        saver,
+        loader: Some(loader),
+        steps: vec![
+            (floor_key(KeyCode::Down), FloorFrame::Any),
+            (TerminalEvent::Key(control_key('e')), FloorFrame::Draft(10)),
+            (floor_key(KeyCode::Right), FloorFrame::Draft(11)),
+            (floor_key(KeyCode::Enter), FloorFrame::Browse),
+        ],
+    })
     .await;
 
     assert_eq!(
@@ -141,24 +249,15 @@ async fn esc_and_ctrl_e_cancel_without_saving() {
                 Box::pin(async { Ok(()) })
             })
         };
-        let events = vec![
-            TerminalEvent::Key(control_key('e')),
-            cancel_event,
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        ];
-
-        let _frames = element! {
-            QuotaStatusComponent(
-                view_model: quota_two_account_view_model(),
-                width: 120usize,
-                height: 48usize,
-                weekly_floor_saver: Some(saver),
-            )
-        }
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            events,
-        )))
-        .collect::<Vec<_>>()
+        let _frames = render_floor_scenario(FloorScenario {
+            view_model: quota_two_account_view_model(),
+            saver,
+            loader: None,
+            steps: vec![
+                (TerminalEvent::Key(control_key('e')), FloorFrame::Draft(0)),
+                (cancel_event, FloorFrame::Browse),
+            ],
+        })
         .await;
 
         assert!(
@@ -183,31 +282,23 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
         })
     };
     let loader: QuotaStatusViewModelLoader = Arc::new(|| Box::pin(async { None }));
-    let events = vec![
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(control_key('c')),
-    ];
-
-    let frames = element! {
-        QuotaStatusComponent(
-            view_model: quota_two_account_view_model(),
-            width: 120usize,
-            height: 48usize,
-            reload_view_model: Some(loader),
-            weekly_floor_saver: Some(saver),
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
+    let frames = render_floor_scenario(FloorScenario {
+        view_model: quota_two_account_view_model(),
+        saver,
+        loader: Some(loader),
+        steps: vec![
+            (TerminalEvent::Key(control_key('e')), FloorFrame::Draft(0)),
+            (floor_key(KeyCode::Right), FloorFrame::Draft(1)),
+            (
+                floor_key(KeyCode::Enter),
+                FloorFrame::Message("saved; refresh failed"),
+            ),
+            (
+                floor_key(KeyCode::Enter),
+                FloorFrame::Message("saved; refresh failed"),
+            ),
+        ],
+    })
     .await;
 
     assert_eq!(
@@ -241,31 +332,24 @@ async fn mutation_failure_remains_visible_and_enter_retries_without_losing_the_d
             Box::pin(async { Err(WeeklyQuotaFloorSaveError::DatabaseBusy) })
         })
     };
-    let events = vec![
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Right)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-        TerminalEvent::Key(control_key('e')),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-    ];
-
-    let frames = element! {
-        QuotaStatusComponent(
-            view_model: quota_two_account_view_model(),
-            width: 120usize,
-            height: 48usize,
-            weekly_floor_saver: Some(saver),
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(
-        futures_util::stream::iter(events).then(|event| async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            event
-        }),
-    ))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
+    let frames = render_floor_scenario(FloorScenario {
+        view_model: quota_two_account_view_model(),
+        saver,
+        loader: None,
+        steps: vec![
+            (TerminalEvent::Key(control_key('e')), FloorFrame::Draft(0)),
+            (floor_key(KeyCode::Right), FloorFrame::Draft(1)),
+            (
+                floor_key(KeyCode::Enter),
+                FloorFrame::Message("database busy; retry save"),
+            ),
+            (
+                floor_key(KeyCode::Enter),
+                FloorFrame::Message("database busy; retry save"),
+            ),
+            (TerminalEvent::Key(control_key('e')), FloorFrame::Browse),
+        ],
+    })
     .await;
 
     assert_eq!(
@@ -282,52 +366,37 @@ async fn mutation_failure_remains_visible_and_enter_retries_without_losing_the_d
     assert!(frames.iter().any(|frame| frame.contains("1%")));
 }
 
-#[component]
-fn WeeklyFloorMouseHarness(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let mut system = hooks.use_context_mut::<SystemContext>();
-    let mut should_exit = hooks.use_state(|| false);
-    let editor_state = hooks.use_state(|| {
-        Some(WeeklyFloorEditorState::new(
-            codex_router_core::ids::AccountId::new("mouse-account")
-                .expect("test account should be valid"),
-            "mouse".to_owned(),
-            10,
-        ))
-    });
-    hooks.use_terminal_events(move |event| {
-        if matches!(
-            event,
-            TerminalEvent::Key(KeyEvent {
-                code: KeyCode::Char('q'),
-                ..
-            })
-        ) {
-            should_exit.set(true);
-        }
-    });
-    if should_exit.get() {
-        system.exit();
-    }
-    let editor = editor_state
-        .read()
-        .clone()
-        .expect("editor should remain available");
-    render_weekly_floor_editor(&editor, 48, 10, editor_state)
-}
-
 #[tokio::test]
 async fn real_iocraft_arrow_button_handles_mouse_click() {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut harness = element!(WeeklyFloorMouseHarness);
+    let mut model = quota_two_account_view_model();
+    model.rows[0].account_id = codex_router_core::ids::AccountId::new("mouse-account").unwrap();
+    model.rows[0].account = "mouse".to_owned();
+    model.rows[0].weekly_quota_floor_percent = 10;
+    let mut harness =
+        crate::test_support::quota_control_fixture(crate::test_support::QuotaFixtureOptions {
+            view_model: model,
+            ports: crate::QuotaStatusViewOptions {
+                weekly_floor_saver: Some(Arc::new(|_, _| Box::pin(async { Ok(()) }))),
+                ..Default::default()
+            },
+            width: 48,
+            height: 24,
+            control: crate::test_support::QuotaFixtureControl::Floor,
+        })
+        .element;
     let frames = harness.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let mut clicked = false;
     let mut observed = false;
     tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(canvas) = frames.next().await {
+        while let Some(canvas) = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+            .await
+            .expect("current floor frame")
+        {
             let frame = canvas.to_string();
             if !clicked {
                 let (row, line) = frame
@@ -352,12 +421,7 @@ async fn real_iocraft_arrow_button_handles_mouse_click() {
                 .any(|line| line.contains("Floor") && line.contains("11%"))
             {
                 observed = true;
-                sender
-                    .send(TerminalEvent::Key(KeyEvent::new(
-                        KeyEventKind::Press,
-                        KeyCode::Char('q'),
-                    )))
-                    .unwrap();
+                sender.send(TerminalEvent::Key(control_key('c'))).unwrap();
             }
         }
     })
@@ -394,19 +458,28 @@ async fn weekly_floor_dialog_pointer_changes_draft_without_saving_on_cancel() {
     let mut phase = 0;
     let mut last = String::new();
     let result = tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(canvas) = frames.next().await {
+        while let Some(canvas) = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+            .await
+            .expect("current floor frame")
+        {
             let frame = canvas.to_string();
             match phase {
                 0 if frame.contains("Filters") => {
                     sender.send(TerminalEvent::Key(control_key('e'))).unwrap();
                     phase = 1;
                 }
-                1 if frame.contains("Weekly floor") => {
+                1 if frame.contains("Weekly floor")
+                    && frame
+                        .lines()
+                        .any(|line| line.contains("Floor") && line.contains('▶')) =>
+                {
                     let (row, line) = frame
                         .lines()
                         .enumerate()
                         .find(|(_, line)| line.contains("Floor") && line.contains('▶'))
-                        .expect("real composed dialog must expose increment control");
+                        .unwrap_or_else(|| {
+                            panic!("real composed dialog must expose increment control: {frame}")
+                        });
                     let offset = line.find('▶').unwrap();
                     let column = UnicodeWidthStr::width(
                         line.get(..offset)
@@ -447,7 +520,7 @@ async fn weekly_floor_dialog_pointer_changes_draft_without_saving_on_cancel() {
                     sender
                         .send(TerminalEvent::Key(KeyEvent::new(
                             KeyEventKind::Press,
-                            KeyCode::Esc,
+                            KeyCode::Char('q'),
                         )))
                         .unwrap();
                     phase = 4;

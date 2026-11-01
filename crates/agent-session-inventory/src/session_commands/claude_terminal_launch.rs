@@ -13,6 +13,48 @@ use std::{
 
 pub const RESUME_OVERRIDES_MESSAGE: &str = "Claude would start a copy if resumed with extra options. Run it again without them to continue this session, or use Fork to start a copy with new options.";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClaudeTerminalMode {
+    Foreground,
+    BackgroundThenAttach,
+}
+
+/// Applies the local terminal choice after the captured source has been validated.
+pub async fn prepare_claude_terminal_mode(
+    command: Command,
+    mode: ClaudeTerminalMode,
+) -> Result<Command, SessionsCommandError> {
+    match mode {
+        ClaudeTerminalMode::Foreground => Ok(command),
+        ClaudeTerminalMode::BackgroundThenAttach => {
+            let mut background = command_in_same_context(&command);
+            background.arg("--bg").args(command.get_args());
+            let handle = start_background_and_read_handle(background).await?;
+            let mut attach = command_in_same_context(&command);
+            attach.args(["attach", &String::from(handle)]);
+            Ok(attach)
+        }
+    }
+}
+
+fn command_in_same_context(command: &Command) -> Command {
+    let mut prepared = Command::new(command.get_program());
+    if let Some(directory) = command.get_current_dir() {
+        prepared.current_dir(directory);
+    }
+    for (name, value) in command.get_envs() {
+        match value {
+            Some(value) => {
+                prepared.env(name, value);
+            }
+            None => {
+                prepared.env_remove(name);
+            }
+        }
+    }
+    prepared
+}
+
 pub fn run_claude_terminal(mut command: Command) -> Result<(), SessionsCommandError> {
     let status = command.status().map_err(|error| {
         SessionsCommandError::ClaudeLaunch(format!(
@@ -81,6 +123,13 @@ pub async fn prepare_claude_terminal(
         working_directory.as_deref(),
         environment.clone(),
     );
+    let handle = start_background_and_read_handle(command).await?;
+    Ok(launch.attach_command(&handle, working_directory.as_deref(), environment))
+}
+
+async fn start_background_and_read_handle(
+    command: Command,
+) -> Result<NativeClaudeJobHandle, SessionsCommandError> {
     let mut command = tokio::process::Command::from(command);
     command.stdin(Stdio::null()).kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(30), command.output()).await
@@ -100,8 +149,7 @@ pub async fn prepare_claude_terminal(
             "Claude {status}. {excerpt} Check claude agents before trying again."
         )));
     }
-    let handle = parse_background_receipt(&output.stdout)?;
-    Ok(launch.attach_command(&handle, working_directory.as_deref(), environment))
+    parse_background_receipt(&output.stdout)
 }
 
 pub fn parse_background_receipt(

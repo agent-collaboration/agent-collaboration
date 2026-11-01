@@ -22,7 +22,7 @@ async fn quota_component_performance_measurements() {
                 })
                 .collect();
             for (screen, opening_key, marker) in [
-                ("browse", None, "Quota status"),
+                ("browse", None, "Quota ·"),
                 ("filters", Some(KeyCode::F(3)), "Account provider"),
                 ("details", Some(KeyCode::F(4)), "Account details"),
             ] {

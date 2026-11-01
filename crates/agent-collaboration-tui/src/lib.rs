@@ -1,53 +1,41 @@
 //! Shared terminal presentation. Product state and effects remain with callers.
-mod dialog_sizing;
-pub use dialog_sizing::{
-    DialogAxisBounds, DialogAxisSize, DialogPercentage, DialogPreferredSize, DialogPresentation,
-};
-mod dialog_body_viewport;
-pub use dialog_body_viewport::{DialogBodyViewport, DialogBodyViewportProps, DialogScrollKeys};
-mod dialog;
-mod dialog_interaction;
-
-pub use dialog::{DialogFrame, DialogFrameProps, DialogHost, DialogHostProps, DialogMargins};
-pub use dialog_interaction::{
-    DialogButton, DialogButtonProps, DialogInputScope, UseDialogInteraction,
-};
-mod dialog_action;
-pub use dialog_action::{
-    DialogAction, DialogActionEmphasis, DialogActionProps, DialogKeyboardOwner,
-};
-mod typography;
-pub use typography::{
-    SurfaceHeader, SurfaceHeaderProps, UiColumnHeading, UiColumnHeadingProps, UiHeading,
-    UiHeadingLevel, UiHeadingProps, UiSurface, UiText, UiTextProps, UiTextRole,
-};
-mod shortcut_help;
-pub use shortcut_help::{ShortcutEntry, ShortcutHelp, ShortcutHelpProps, ShortcutSection};
-
-#[cfg(test)]
-mod dialog_action_keyboard_tests;
-#[cfg(test)]
-mod dialog_async_tests;
-#[cfg(test)]
-mod dialog_tests;
-mod form_field;
-#[cfg(test)]
-mod typography_tests;
-pub use form_field::{
-    FormField, FormFieldProps, FormFields, FormFieldsChild, FormFieldsProps, SelectableRow,
-    SelectableRowProps,
-};
-mod search_select;
-pub use search_select::{
+pub mod actions;
+pub mod controls;
+pub mod dialog;
+pub mod foundation;
+pub mod input;
+pub mod surfaces;
+pub use controls::combo::search_select::{
     ChoiceAvailability, ChoiceOption, ChoiceTransition, SearchSelect, SearchSelectProps,
     SearchSelectState,
 };
+pub use controls::fields::legacy_form_field::{
+    FormField, FormFieldProps, FormFields, FormFieldsChild, FormFieldsProps, SelectableRow,
+    SelectableRowProps,
+};
+pub use controls::focus_reveal::{FocusReveal, FocusRevealProps};
+pub use controls::form_interaction::{
+    DialogButton, DialogButtonProps, DialogInputScope, UseDialogInteraction,
+};
+pub use controls::typography::{
+    SurfaceHeader, SurfaceHeaderProps, UiColumnHeading, UiColumnHeadingProps, UiHeading,
+    UiHeadingLevel, UiHeadingProps, UiSurface, UiText, UiTextProps, UiTextRole,
+};
+pub use dialog::dialog_action::{
+    DialogAction, DialogActionEmphasis, DialogActionProps, DialogKeyboardOwner,
+};
+pub use dialog::dialog_body_viewport::{
+    DialogBodyViewport, DialogBodyViewportProps, DialogScrollKeys,
+};
+pub use dialog::legacy_dialog::{DialogFrame, DialogFrameProps, DialogHost, DialogHostProps};
+pub use dialog::legacy_dialog_footer::{DialogFooter, DialogFooterProps};
+pub use dialog::shortcut_help::{ShortcutEntry, ShortcutHelp, ShortcutHelpProps, ShortcutSection};
+pub use foundation::dialog_sizing::{
+    DialogAxisBounds, DialogAxisSize, DialogMargins, DialogPercentage, DialogPreferredSize,
+    DialogPresentation,
+};
+
 #[cfg(test)]
-mod search_select_tests;
-
-mod dialog_focus_reveal;
-
-pub use dialog_focus_reveal::{FocusReveal, FocusRevealProps};
-
-mod dialog_footer;
-pub use dialog_footer::{DialogFooter, DialogFooterProps};
+extern crate self as agent_collaboration_tui;
+#[cfg(test)]
+mod test_support;

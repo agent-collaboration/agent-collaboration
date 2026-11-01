@@ -1,0 +1,15 @@
+[
+null,
+{"harness":"claude","requestedPolicy":{"access":"workspace-write","unexpectedField":true},"workingDirectory":"/work/item-two"},
+{"harness":"claude","requestedPolicy":{"access":"workspace-write"},"unexpectedField":true,"workingDirectory":"/work/item-two"},
+{"harness":"claude","requestedPolicy":{"access":"workspace-write"},"working_directory":"/work/item-two"},
+{"harness":"claude","requested_policy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"},
+{"harness":"codex","requestedPolicy":{"access":"workspace-write","unexpectedField":true},"workingDirectory":"/work/item-two"},
+{"harness":"codex","requestedPolicy":{"access":"workspace-write"},"unexpectedField":true,"workingDirectory":"/work/item-two"},
+{"harness":"codex","requestedPolicy":{"access":"workspace-write"},"working_directory":"/work/item-two"},
+{"harness":"codex","requested_policy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"},
+{"harness":"cursor","requestedPolicy":{"access":"workspace-write","unexpectedField":true},"workingDirectory":"/work/item-two"},
+{"harness":"cursor","requestedPolicy":{"access":"workspace-write"},"unexpectedField":true,"workingDirectory":"/work/item-two"},
+{"harness":"cursor","requestedPolicy":{"access":"workspace-write"},"working_directory":"/work/item-two"},
+{"harness":"cursor","requested_policy":{"access":"workspace-write"},"workingDirectory":"/work/item-two"}
+]

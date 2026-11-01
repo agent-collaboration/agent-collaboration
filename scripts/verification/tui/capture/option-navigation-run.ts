@@ -1,6 +1,3 @@
-/** Run source-pinned picker/Help aliases after S6b declaration and Lead's native window.
- * node scripts/verification/tui/capture/option-navigation-run.ts PLAN.json [--check]
- */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
@@ -38,6 +35,10 @@ import type {
 import { readSourceQualifiedOutcome } from '../sessions/source-qualified-outcome.ts';
 import type { GhosttyKey } from '../terminal/ghostty-input-encoding.ts';
 import { GhosttyJourneyInput, requireDelivered } from '../terminal/ghostty-journey-input.ts';
+/** Run source-pinned picker/Help aliases after S6b declaration and Lead's native window.
+ * node scripts/verification/tui/capture/option-navigation-run.ts PLAN.json [--check]
+ */
+import { ptyGridDriverEntry } from '../terminal/pty-grid-driver.ts';
 import { PtyGridDriver } from '../terminal/pty-grid-driver.ts';
 import type { KeyProtocol } from '../terminal/pty-grid-driver.ts';
 import { gridLines } from '../terminal/terminal-grid.ts';
@@ -117,13 +118,9 @@ export async function checkOptionNavigationTarget(plan: OptionNavigationPlan): P
 	for (const artifact of [plan.driver, plan.product, plan.node]) verifyArtifact(artifact);
 	for (const artifact of [plan.driver, plan.product])
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
-	const listed = execFileSync(
-		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
-		{ encoding: 'utf8' },
-	);
-	if (!listed.includes('compiled_grid_terminal_observation: test'))
-		throw new Error('compiled PTY entry absent');
+	const entry = ptyGridDriverEntry('sessions-filters');
+	const listed = execFileSync(plan.driver.path, [entry, '--exact', '--list'], { encoding: 'utf8' });
+	if (!listed.includes(entry + ': test')) throw new Error('compiled PTY entry absent');
 	await qualifyTerminal();
 }
 async function observeCase(

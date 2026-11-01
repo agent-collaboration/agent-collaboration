@@ -165,7 +165,10 @@ test.each([undefined, 'normal codex'])(
 		});
 		ownedLaunchChildren.push(child);
 		await once(child, 'close');
-		expect(child.exitCode).toBe(0);
+		expect(
+			child.exitCode,
+			JSON.stringify({ status: child.exitCode, signal: child.signalCode }),
+		).toBe(0);
 		expect(child.signalCode).toBeNull();
 		expect(readJson(fixture.record)).toEqual({
 			argv: [],

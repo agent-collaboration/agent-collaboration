@@ -17,7 +17,7 @@ import { encodeJourneyKey } from '../journeys/journey-key.ts';
 import { checkGridControls } from '../journeys/scenes/grid-control-checks.ts';
 import { gridFieldPair, observeGridScene } from '../journeys/scenes/grid-scene-matcher.ts';
 import { GhosttyJourneyInput, requireDelivered } from '../terminal/ghostty-journey-input.ts';
-import { PtyGridDriver } from '../terminal/pty-grid-driver.ts';
+import { PtyGridDriver, ptyGridDriverEntry } from '../terminal/pty-grid-driver.ts';
 import type { KeyProtocol } from '../terminal/pty-grid-driver.ts';
 import { gridLines } from '../terminal/terminal-grid.ts';
 import { renderOriginal } from '../terminal/terminal-original.ts';
@@ -109,7 +109,10 @@ export async function checkGridCapture(plan: GridCapturePlan): Promise<void> {
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
 	}
 
-	requireTest(plan.driver.path, 'compiled_grid_terminal_observation');
+	requireTest(
+		plan.driver.path,
+		ptyGridDriverEntry(plan.journey.startsWith('sessions-') ? 'sessions-filters' : 'quota-filters'),
+	);
 	if (plan.journey.startsWith('normal-') || plan.journey.startsWith('hard-')) {
 		if (plan.component === undefined) throw new Error('component fixture required');
 		requireTest(
