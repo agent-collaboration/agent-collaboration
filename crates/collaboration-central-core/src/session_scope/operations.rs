@@ -160,6 +160,15 @@ where
                     request,
                 })
             }
+            BoardConsumerRequest::Automation(request) => {
+                self.transport
+                    .push(SessionTransportEffect::AutomationRequest {
+                        connection,
+                        session,
+                        frame,
+                        request,
+                    })
+            }
             BoardConsumerRequest::MailSubmit { item, origin_epoch } => {
                 self.transport.push(SessionTransportEffect::MailSubmit {
                     connection,

@@ -268,6 +268,8 @@ impl RuntimeFaults {
     pub fn observe(&self) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         let state = self.state()?;
         Ok(RuntimeFaultObservation {
+            #[cfg(debug_assertions)]
+            automation_clock: None,
             clock: match state.clock {
                 Some(now) => ClockObservation::Pinned { now },
                 None => ClockObservation::Wall,
@@ -401,6 +403,8 @@ impl RuntimeFaults {
                 observed.wait().await?;
             }
             RuntimeControl::Observe => {}
+            #[cfg(debug_assertions)]
+            RuntimeControl::AutomationClock(_) => return Err(RuntimeControlFailure::NotArmed),
         }
         self.observe()
     }

@@ -1,5 +1,13 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
+#[cfg(debug_assertions)]
+mod automation_clock_controls;
+#[cfg(debug_assertions)]
+pub use automation_clock_controls::*;
+#[cfg(feature = "client")]
+mod automation_catalog_scenarios;
+#[cfg(feature = "client")]
+pub use automation_catalog_scenarios::run_automation_catalog_conformance;
 #[cfg(feature = "client")]
 mod access_expiry_scenario;
 #[cfg(feature = "client")]

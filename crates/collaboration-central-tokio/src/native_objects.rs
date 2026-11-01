@@ -1,5 +1,11 @@
 //! Physical object hosting, one timer per object and native socket tasks.
 mod health_read;
+#[cfg(all(feature = "conformance", debug_assertions))]
+pub(crate) mod verification_clock;
+#[cfg(all(feature = "conformance", debug_assertions))]
+use verification_clock::NativeWake;
+#[cfg(not(all(feature = "conformance", debug_assertions)))]
+type NativeWake = TokioWakeTimer<SharedClock>;
 #[cfg(feature = "conformance")]
 pub use health_read::HealthFileSample;
 
@@ -15,7 +21,9 @@ use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
 use fleet_sync_session::ConnectionBinding;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
-use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
+#[cfg(not(all(feature = "conformance", debug_assertions)))]
+use runtime_primitives::TokioWakeTimer;
+use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
     path::Path,
@@ -43,7 +51,7 @@ impl Clock for SharedClock {
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
     clock: SharedClock,
-    wake: Arc<TokioWakeTimer<SharedClock>>,
+    wake: Arc<NativeWake>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
@@ -155,12 +163,44 @@ pub(crate) struct NativeObjects {
     health_samples: Mutex<BTreeMap<fleet_sync_protocol::DatabaseId, Vec<HealthFileSample>>>,
 }
 impl NativeObjects {
+    fn new_wake(&self, address: &ObjectAddress) -> NativeWake {
+        #[cfg(all(feature = "conformance", debug_assertions))]
+        {
+            NativeWake::new(
+                self.clock.clone(),
+                self.startup_controls.clock.is_some(),
+                !matches!(address, ObjectAddress::Copy(_)),
+            )
+        }
+        #[cfg(not(all(feature = "conformance", debug_assertions)))]
+        {
+            let _ = address;
+            TokioWakeTimer::new(self.clock.clone())
+        }
+    }
     #[cfg(feature = "conformance")]
     pub(crate) async fn runtime_control(
         self: &Arc<Self>,
         request: collaboration_central_conformance::RuntimeControlRequest,
     ) -> Result<collaboration_central_conformance::RuntimeFaultObservation, StoreError> {
         request.validate().map_err(StoreError::backend)?;
+        #[cfg(debug_assertions)]
+        if let collaboration_central_conformance::RuntimeControl::AutomationClock(command) =
+            &request.command
+        {
+            return self.automation_clock_control(command.clone()).await;
+        }
+        #[cfg(debug_assertions)]
+        if self.startup_controls.clock.is_some()
+            && matches!(
+                request.command,
+                collaboration_central_conformance::RuntimeControl::SetTime { .. }
+            )
+        {
+            return Err(StoreError::backend(
+                "SetTime cannot override the coherent verification clock",
+            ));
+        }
         let advances_clock = matches!(
             request.command,
             collaboration_central_conformance::RuntimeControl::SetTime { .. }
@@ -227,7 +267,13 @@ impl NativeObjects {
         copy_ack_wait: std::time::Duration,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Arc<Self>, StoreError> {
-        let prepared = crate::startup_controls::PreparedRuntimeControls::prepare(controls).await?;
+        let prepared =
+            crate::startup_controls::PreparedRuntimeControls::prepare(controls, root).await?;
+        #[cfg(debug_assertions)]
+        let clock: Arc<dyn Clock> = match &prepared.clock {
+            Some(controlled) => controlled.clone(),
+            None => clock,
+        };
         Self::open_prepared(
             root,
             clock,
@@ -302,7 +348,7 @@ impl NativeObjects {
                         io: TokioObjectIo {
                             objects: Arc::downgrade(self),
                             clock: self.clock.clone(),
-                            wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
+                            wake: Arc::new(self.new_wake(&address)),
                             #[cfg(feature = "conformance")]
                             faults: self.startup_controls.faults_for(&key),
                         },

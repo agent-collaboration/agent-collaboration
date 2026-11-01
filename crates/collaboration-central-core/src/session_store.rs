@@ -74,6 +74,12 @@ pub(crate) enum SessionTransportEffect {
         frame: fleet_sync_protocol::FrameId,
         request: board_sync_protocol::FleetRequestEnvelope,
     },
+    AutomationRequest {
+        connection: ConnectionId,
+        session: fleet_sync_session::SessionKey,
+        frame: fleet_sync_protocol::FrameId,
+        request: board_sync_protocol::BoardPayload,
+    },
     ArchiveReport {
         connection: ConnectionId,
         session: fleet_sync_session::SessionKey,

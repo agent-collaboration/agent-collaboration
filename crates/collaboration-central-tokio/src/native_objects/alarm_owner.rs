@@ -1,6 +1,6 @@
 //! Redeliver failed native alarms even while their durable deadlines are unreadable.
-use super::{RuntimeFace, SharedClock};
-use runtime_primitives::{Clock, TokioWakeTimer, WakeScheduler};
+use super::{NativeWake, RuntimeFace, SharedClock};
+use runtime_primitives::{Clock, WakeScheduler};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
@@ -9,7 +9,7 @@ const MAXIMUM_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 pub(super) async fn run(
     runtime: Arc<RuntimeFace>,
-    wake: Arc<TokioWakeTimer<SharedClock>>,
+    wake: Arc<NativeWake>,
     clock: SharedClock,
     stop: CancellationToken,
     #[cfg(test)] ready: tokio::sync::watch::Sender<bool>,
@@ -32,12 +32,15 @@ pub(super) async fn run(
 
 async fn drive(
     runtime: &RuntimeFace,
-    wake: &TokioWakeTimer<SharedClock>,
+    wake: &NativeWake,
     clock: &SharedClock,
     retry_delay: &mut Duration,
 ) {
-    if runtime.on_alarm().await.is_ok() {
+    let failed = runtime.on_alarm().await.is_err();
+    if !failed {
         *retry_delay = INITIAL_RETRY_DELAY;
+        #[cfg(all(feature = "conformance", debug_assertions))]
+        wake.completed(false).await;
         return;
     }
     eprintln!("central alarm drive failed");
@@ -49,4 +52,6 @@ async fn drive(
         eprintln!("central alarm retry scheduling failed");
     }
     *retry_delay = retry_delay.saturating_mul(2).min(MAXIMUM_RETRY_DELAY);
+    #[cfg(all(feature = "conformance", debug_assertions))]
+    wake.completed(true).await;
 }

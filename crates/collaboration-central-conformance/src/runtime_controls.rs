@@ -14,6 +14,8 @@ pub struct RuntimeControlRequest {
 impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
         match (&self.command, &self.address) {
+            #[cfg(debug_assertions)]
+            (RuntimeControl::AutomationClock(_), ObjectAddress::Fleet) => Ok(()),
             (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
             | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
             | (
@@ -49,6 +51,8 @@ impl RuntimeControlRequest {
     deny_unknown_fields
 )]
 pub enum RuntimeControl {
+    #[cfg(debug_assertions)]
+    AutomationClock(crate::AutomationClockControl),
     SmallMailboxCapacity,
     SetTime {
         now: RegistryTime,
@@ -189,6 +193,9 @@ pub enum ObjectReplyFaultObservation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuntimeFaultObservation {
+    #[cfg(debug_assertions)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation_clock: Option<crate::AutomationClockObservation>,
     pub clock: ClockObservation,
     pub storage: StorageFaultObservation,
     pub answer: AnswerFaultObservation,

@@ -14,6 +14,13 @@ pub(super) fn classify_session(
     identity: CallId,
 ) -> Result<SerializedObjectCall, CallFailure> {
     match kind {
+        crate::fleet_automation_calls::FleetAutomation::KIND => {
+            encode_shared_call::<
+                SessionKind,
+                FleetKind,
+                crate::fleet_automation_calls::FleetAutomation,
+            >(caller, (), decode(target)?, decode(request)?, identity)
+        }
         crate::mail_sender_calls::SenderMailboxRegistry::KIND => {
             encode_shared_call::<
                 SessionKind,

@@ -37,6 +37,7 @@ pub enum BoardConsumerRequest {
         origin_epoch: Option<Epoch>,
     },
     Fleet(FleetRequestEnvelope),
+    Automation(BoardPayload),
     Read {
         scope: BoardReadScope,
         cursor: Option<BoardReadCursor>,
@@ -65,6 +66,7 @@ enum BoardConsumerRequestFields {
         origin_epoch: Option<Epoch>,
     },
     Fleet(FleetRequestEnvelope),
+    Automation(BoardPayload),
     Read {
         scope: BoardReadScope,
         cursor: Option<BoardReadCursor>,
@@ -143,6 +145,7 @@ pub enum BoardConsumerAnswer {
         request_id: message_board::RequestId,
         decision: BoardPayload,
     },
+    Automation(BoardPayload),
     Read(BoardReadPage),
     ArchiveSeen(BoardPayload),
 }

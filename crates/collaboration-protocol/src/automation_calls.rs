@@ -52,7 +52,19 @@ pub enum AutomationCall {
 )]
 pub enum CatalogAutomation {
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[schemars(extend("allOf" = [{"required":["nextDueAt","firstFiring"]}]))]
+pub struct CentralWakeSnapshot {
+    pub definition: crate::WakeDefinition,
+    pub state: crate::WakeState,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub next_due_at: Option<crate::ObservationTimestamp>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub first_firing: Option<FiringSnapshot>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -95,6 +107,23 @@ pub enum AutomationRefusal {
     OperationConflict {
         operation_id: crate::OperationId,
     },
+    InstructionRevisionConflict {
+        current_revision_id: crate::RevisionId,
+    },
+    ScheduleChangeConflict {
+        current_change_id: crate::ChangeId,
+    },
+    InvalidRecord {
+        field: String,
+    },
+    InvalidRequest {
+        field: String,
+        reason: AutomationRequestConstraint,
+    },
+    WakeExpiryRequired,
+    WakeLifecycleConflict {
+        state: crate::WakeState,
+    },
     WakeExists {
         creator: crate::WakeCreator,
     },
@@ -104,6 +133,17 @@ pub enum AutomationRefusal {
     NotFound,
     OriginMismatch,
     DigestMismatch,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AutomationRequestConstraint {
+    MalformedShape,
+    InvalidCursor,
+    RequiredToken,
+    AbsolutePathRequired,
+    ExecutionModeFixed,
+    UnpreparedDestination,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -116,8 +156,10 @@ pub enum AutomationRefusal {
 )]
 pub enum AutomationAnswer {
     Instruction(crate::InstructionSnapshot),
+    Instructions(crate::AutomationPage<crate::InstructionSnapshot>),
+    Revisions(crate::AutomationPage<crate::RevisionRecord>),
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {

@@ -1,0 +1,1 @@
+INSERT INTO automation_timing(automation_id,next_due_ms,admitted_through_ms,imported_watermark_local_ms,occupying_firing_id,waiting_firing_id,occupying_external_run) VALUES (?,CAST(? AS INTEGER),NULL,NULL,NULL,NULL,NULL);

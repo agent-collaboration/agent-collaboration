@@ -2,9 +2,10 @@
 // Redirect exactly the fixture issuer's certs fetch to the owned HTTP server.
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import publicTemplate from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
 
-const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
+const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer, automationClockBundle] =
   process.argv.slice(2);
 if (
   !miniflareEntrypoint ||
@@ -52,6 +53,11 @@ for (const name of Object.keys(replacements)) {
 const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions } = await import(
   pathToFileURL(miniflareEntrypoint).href
 );
+const clockModule = automationClockBundle ? [{
+  type: "ESModule",
+  path: resolve("crates/collaboration-central-cloudflare/build/automation-clock.js"),
+  contents: await readFile(automationClockBundle, "utf8"),
+}] : [];
 const runtime = new Miniflare(
   convertV4MiniflareOptions({
     host: "127.0.0.1",
@@ -65,6 +71,7 @@ const runtime = new Miniflare(
         compatibilityDate: "2026-08-21",
         modulesRoot: resolve("crates/collaboration-central-cloudflare/build"),
         modules: [
+          ...clockModule,
           {
             type: "ESModule",
             path: resolve("crates/collaboration-central-cloudflare/build/index.js"),

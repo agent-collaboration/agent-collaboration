@@ -12,6 +12,7 @@ workspace = true
 conformance = []
 
 [dependencies]
+collaboration-protocol = { version = "0.1.118", path = "../collaboration-protocol" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 axum = { workspace = true, features = ["json", "query"] }
 http.workspace = true

@@ -132,6 +132,9 @@ where
         if call.kind == crate::fleet_metadata_calls::FleetMetadata::KIND {
             return self.metadata_call(call).await;
         }
+        if call.kind == crate::fleet_automation_calls::FleetAutomation::KIND {
+            return self.automation_call(call).await;
+        }
         if call.kind == crate::fleet_lease_calls::AdvanceLeaseIncarnation::KIND {
             return self.advance_lease_incarnation_call(call).await;
         }
