@@ -10,7 +10,6 @@ mod mail_store_test_faults;
 #[cfg(feature = "runtime-test-support")]
 pub use mail_store_test_faults::MailStoreTestFault;
 mod interaction_atomic_store;
-mod interaction_retention;
 pub use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordDraft};
 pub use interaction_atomic_store::InteractionAtomicStore;
 mod interaction_history;

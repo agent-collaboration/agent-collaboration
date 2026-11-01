@@ -8,6 +8,8 @@ use collaboration_protocol::{
 use sqlx_turso::TursoConnection;
 use std::time::Duration;
 
+mod interaction_retention;
+
 const PUSH_INSERT_RETRY_WINDOW: Duration = Duration::from_secs(5);
 const PUSH_CONNECTION_BUSY_TIMEOUT: Duration = Duration::from_secs(1);
 const PUSH_INSERT_INITIAL_BACKOFF: Duration = Duration::from_millis(25);
@@ -312,7 +314,7 @@ impl InteractionStore {
         now: DateTime<Utc>,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        crate::interaction_retention::prune(self, now, batch_size).await
+        interaction_retention::prune(self, now, batch_size).await
     }
 }
 

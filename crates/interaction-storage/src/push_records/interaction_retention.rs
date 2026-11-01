@@ -23,7 +23,7 @@ fn is_terminal(state: PushDeliveryState) -> bool {
     )
 }
 
-pub(crate) async fn prune(
+pub(super) async fn prune(
     store: &InteractionStore,
     now: DateTime<Utc>,
     batch_size: u32,
