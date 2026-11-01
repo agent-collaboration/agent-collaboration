@@ -114,8 +114,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     mode: requested_settings.mode,
                                     model: requested_settings.model,
                                     effort: requested_settings.effort,
-                                },
-                             acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,)
+                                }, acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment { mcp: acp_client_runtime::ProviderSessionMcp::ConnectionDefaults },)
                             .await
                         {
                             Ok(created) => {

@@ -120,14 +120,18 @@ async fn session_mcp_binding_create_load_and_resume_keep_their_own_full_addresse
         .create_session_with_settings(
             root.path().into(),
             RequestedProviderSettings::default(),
-            session_mcp(FIRST_ADDRESS),
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: session_mcp(FIRST_ADDRESS),
+            },
         )
         .await?;
     let second = client
         .create_session_with_settings(
             root.path().into(),
             RequestedProviderSettings::default(),
-            session_mcp(SECOND_ADDRESS),
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: session_mcp(SECOND_ADDRESS),
+            },
         )
         .await?;
     client
@@ -196,7 +200,9 @@ async fn session_mcp_binding_http_requirement_refuses_before_any_provider_comman
         .create_session_with_settings(
             root.path().into(),
             RequestedProviderSettings::default(),
-            session_mcp(FIRST_ADDRESS),
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: session_mcp(FIRST_ADDRESS),
+            },
         )
         .await;
     let load = client
@@ -253,7 +259,9 @@ async fn session_mcp_binding_access_enrollment_keeps_the_existing_non_http_creat
         .create_session_with_settings(
             root.path().into(),
             RequestedProviderSettings::default(),
-            ProviderSessionMcp::ConnectionDefaults,
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: ProviderSessionMcp::ConnectionDefaults,
+            },
         )
         .await?;
     client.shutdown().await;

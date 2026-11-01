@@ -276,7 +276,9 @@ impl ExternalProviderRuntime {
         self.create_session_with_settings(
             cwd,
             acp_client_runtime::RequestedProviderSettings::default(),
-            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+            },
         )
         .await
     }
@@ -285,11 +287,11 @@ impl ExternalProviderRuntime {
         &self,
         cwd: PathBuf,
         settings: acp_client_runtime::RequestedProviderSettings,
-        mcp: acp_client_runtime::ProviderSessionMcp,
+        setup: acp_client_runtime::ProviderSessionCreateSetup,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let created = self
             .client
-            .create_session_with_settings(cwd, settings, mcp)
+            .create_session_with_settings(cwd, settings, setup)
             .await;
         let active_session = match &created {
             Ok(created) => Some(created.provider_session_id.as_str()),
@@ -677,3 +679,7 @@ mod approval_dispatch_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_push_fixture.rs"]
 mod approval_push_fixture;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/setup_lifecycle_tests.rs"]
+mod setup_lifecycle_tests;

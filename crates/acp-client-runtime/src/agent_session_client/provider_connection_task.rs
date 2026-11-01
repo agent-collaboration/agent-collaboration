@@ -467,9 +467,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 command = command_rx.recv() => {
                                     let Some(command) = command else { break; };
                                     match command {
-                                        ProviderCommand::Create { cwd, settings, mcp, reply } => {
+                                        ProviderCommand::Create { cwd, settings, setup, reply } => {
+                                            let (servers, setup_port) = setup.into_parts(&session_mcp_servers);
                                             let request = NewSessionRequest::new(&cwd)
-                                                .mcp_servers(mcp.into_servers(&session_mcp_servers));
+                                                .mcp_servers(servers);
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
                                             let pending_admission_tx = admission_tx.clone();
@@ -483,6 +484,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                     connection: pending_connection,
                                                     request,
                                                     requested_settings: settings,
+                                                    setup_port,
                                                     supports_close,
                                                     shutdown: pending_shutdown,
                                                     admission_tx: pending_admission_tx,

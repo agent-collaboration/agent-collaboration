@@ -88,6 +88,9 @@ pub enum HarnessLocalSetupRefusal {
     ModelMismatch,
     EffectiveWorkingDirectoryMismatch,
     WorkspaceRootsMismatch,
+    InitialSettingRefused {
+        setting: collaboration_protocol::ProviderSettingName,
+    },
 }
 impl From<HarnessLocalSetupRefusal> for SessionSetupAbandonmentCause {
     fn from(cause: HarnessLocalSetupRefusal) -> Self {
@@ -97,6 +100,9 @@ impl From<HarnessLocalSetupRefusal> for SessionSetupAbandonmentCause {
                 Self::EffectiveWorkingDirectoryMismatch {}
             }
             HarnessLocalSetupRefusal::WorkspaceRootsMismatch => Self::WorkspaceRootsMismatch {},
+            HarnessLocalSetupRefusal::InitialSettingRefused { setting } => {
+                Self::InitialSettingRefused { setting }
+            }
         }
     }
 }

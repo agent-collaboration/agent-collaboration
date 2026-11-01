@@ -163,7 +163,9 @@ async fn create_refreshes_mode_dependent_model_and_model_dependent_effort_choice
                 model: Some("fixture-b".into()),
                 effort: Some("high".into()),
             },
-            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+            acp_client_runtime::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+            },
         )
         .await;
     fixture.client.shutdown().await;

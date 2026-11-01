@@ -22,6 +22,11 @@ fn fleet_session_setup_pending_and_local_refusals_retain_the_actual_id_as_closed
             "kind":"knownCreated","session":session,"cause":{"kind":cause}
         }}));
     }
+    for setting in ["mode", "model", "effort"] {
+        payloads.push(json!({"state":"abandoned","creation":{
+            "kind":"knownCreated","session":session,"cause":{"kind":"initialSettingRefused","setting":setting}
+        }}));
+    }
     for payload in payloads {
         let lifecycle: FleetSessionBindingLifecycle =
             serde_json::from_value(payload.clone()).unwrap();
@@ -34,6 +39,8 @@ fn fleet_session_setup_pending_and_local_refusals_retain_the_actual_id_as_closed
     }
     for cause in [
         json!({"kind":"networkFailure"}),
+        json!({"kind":"initialSettingRefused","setting":"future"}),
+        json!({"kind":"initialSettingRefused","setting":"mode","value":"raw-setting"}),
         json!({"kind":"modelMismatch","extra":true}),
     ] {
         assert!(

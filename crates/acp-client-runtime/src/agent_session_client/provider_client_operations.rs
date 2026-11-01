@@ -229,7 +229,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         self.create_session_with_settings(
             cwd,
             crate::RequestedProviderSettings::default(),
-            crate::ProviderSessionMcp::ConnectionDefaults,
+            crate::ProviderSessionCreateSetup::AccessEnrollment {
+                mcp: crate::ProviderSessionMcp::ConnectionDefaults,
+            },
         )
         .await
     }
@@ -238,15 +240,19 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
-        mcp: crate::ProviderSessionMcp,
+        setup: crate::ProviderSessionCreateSetup,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        self.require_session_mcp(&mcp)?;
+        if setup.requires_http() && !self.admission.supports_mcp_http {
+            return Err(ExternalProviderRuntimeError::UnsupportedCapability {
+                capability: "mcp/http",
+            });
+        }
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Create {
                 cwd,
                 settings,
-                mcp,
+                setup,
                 reply,
             })
             .await

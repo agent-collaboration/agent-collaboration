@@ -137,6 +137,12 @@ impl AcpFixtureScript {
         self
     }
 
+    pub(crate) fn wait_for_socket_signal(mut self, socket_path: &std::path::Path) -> Self {
+        self.steps
+            .push(json!({"action":"wait_for_socket_signal","socketPath":socket_path}));
+        self
+    }
+
     pub(crate) fn exit_on_socket_signal(mut self, socket_path: &std::path::Path) -> Self {
         self.steps.push(json!({
             "action": "exit_on_socket_signal",

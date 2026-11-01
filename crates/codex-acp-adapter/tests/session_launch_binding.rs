@@ -274,6 +274,9 @@ async fn session_launch_binding_local_refusals_record_the_returned_id_before_aba
 
         assert_eq!(request["method"], "thread/start");
         match cause {
+            HarnessLocalSetupRefusal::InitialSettingRefused { .. } => {
+                panic!("native fixture selects only native setup checks")
+            }
             HarnessLocalSetupRefusal::ModelMismatch => assert!(matches!(
                 answer,
                 Err(codex_acp_adapter::SessionSetupError::ModelMismatch { .. })

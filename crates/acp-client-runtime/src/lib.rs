@@ -47,6 +47,11 @@ mod provider_prompt_observation;
 mod provider_prompt_result_codec;
 mod provider_session_actor;
 mod provider_session_mcp;
+mod provider_session_setup;
+pub use provider_session_setup::{
+    ProviderSessionCreateSetup, ProviderSessionSetupFuture, ProviderSessionSetupPort,
+    ProviderSessionSetupReadiness, ProviderSessionSetupUnavailable,
+};
 mod provider_session_setting_update;
 mod provider_session_settings;
 mod provider_settings_catalog_codec;

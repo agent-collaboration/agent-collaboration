@@ -1,4 +1,4 @@
-//! A known native conversation can be unusable without having been refused by its provider.
+//! A known harness conversation can be unusable without having been refused by its provider.
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -7,5 +7,6 @@ pub enum SessionSetupAbandonmentCause {
     ModelMismatch {},
     EffectiveWorkingDirectoryMismatch {},
     WorkspaceRootsMismatch {},
+    InitialSettingRefused { setting: crate::ProviderSettingName },
     SetupInterrupted {},
 }

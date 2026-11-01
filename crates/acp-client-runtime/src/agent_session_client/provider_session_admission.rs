@@ -111,6 +111,7 @@ pub(super) fn register_static_provider_session<P: InteractionPort>(
 }
 
 pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
+    pub(super) setup_port: Option<Arc<dyn crate::ProviderSessionSetupPort>>,
     pub(super) connection: ConnectionTo<Agent>,
     pub(super) request: NewSessionRequest,
     pub(super) requested_settings: crate::RequestedProviderSettings,
@@ -131,6 +132,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         connection,
         request,
         requested_settings,
+        setup_port,
         supports_close,
         shutdown,
         admission_tx,
@@ -140,6 +142,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         #[cfg(any(test, feature = "test-observation"))]
         test_tool_calls,
     } = inputs;
+    let _declared_setup_port = &setup_port;
     let (registration_tx, mut registration_rx) = tokio::sync::oneshot::channel::<
         Result<ProviderSessionRegistration<P>, ExternalProviderRuntimeError>,
     >();

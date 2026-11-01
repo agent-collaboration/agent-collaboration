@@ -122,7 +122,7 @@ enum ProviderCommand<P: InteractionPort> {
     Create {
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
-        mcp: crate::ProviderSessionMcp,
+        setup: crate::ProviderSessionCreateSetup,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
         >,
