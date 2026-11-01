@@ -116,7 +116,7 @@ async fn provider_registration_supervisor_create_activates_the_returned_session_
     supervisor.shutdown().await.unwrap();
 
     assert!(
-        matches!(settlement, Ok(ConversationOperationSettlement::Created { target, .. }) if target.session_id.as_str() == "actual-supervised-conversation")
+        matches!(settlement, Ok(ConversationOperationSettlement::Created { target, .. }) if String::from(target.session_id.clone()) == "actual-supervised-conversation")
     );
     let registrations = registrar.authority.registrations.lock().unwrap().clone();
     assert_eq!(registrations.len(), 1);

@@ -48,7 +48,7 @@ async fn provider_registration_delivery_load_requires_and_reuses_the_active_bind
                         .try_into()
                         .unwrap(),
                 },
-                session_id: target.session_id.as_str().to_owned().try_into().unwrap(),
+                session_id: String::from(target.session_id.clone()).try_into().unwrap(),
             };
             registrar
                 .registrar
