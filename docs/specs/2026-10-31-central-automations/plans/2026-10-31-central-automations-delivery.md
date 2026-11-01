@@ -82,7 +82,7 @@ A milestone counts as done only when its gate below has been observed by the �
 | M0 | an isolated signed debug Router on Sunclaw, started over a seeded copy of each store with old rows and an `approval-routes.json` | every store opens in WAL; rows past each window are gone and newer ones remain; free pages are reclaimed; routes are in `approval_routes` and survive a restart; both JSON files are gone; a corrupt routes file is refused and kept | retention off for one store; a route lost in the import; a JSON file left behind |
 | M1 | the contracts crate and the debug CLI's and MCP's published schemas (no central yet) | V5 stage one: for each Limit, schema bound = validator = CLI and MCP description; a corrupted stored value is refused; V6's validator property test (10:05 accepted; 10:02, a 7-minute period, cron minute 3 and `after` refused `offGrid` with the two nearest grid times). **Not proven here:** acceptance through real central, CLI and MCP calls, which M2 and M4 own | a schema and validator mismatch; an off-grid time accepted or rounded |
 | M2 | conformance on Tokio **and** Cloudflare `workerd`, with a controlled clock, driven through the central contract client (the real CLI and MCP arrive at M4) | V1 catalog, V2, V3, V4, V5 and V6 central stages, V8, V10 and V13 central side. Counted as business effects: one admission per (automation, due time) across a duplicate alarm and a shared notice retry; a 250-entry fixture for one machine splits into 3 Batches of at most 100, each with a stable ID and the same bytes on every resend; each Batch held until acknowledged | a duplicated Firing; a dropped chunk; changed bytes on resend; a Batch over 100 entries; a Batch released before acknowledgement |
-| M3 | the rig: two signed debug Routers (A, B) and the local Tokio central, with Haiku sessions | V7 reporter, V9, V11, V12, V13: wakes and schedule runs arrive on B from the central list; kills at each admission point lose and double nothing; reports reach central in order | a duplicate run after a kill; a lost Firing while B is offline |
+| M3 | the rig: two signed debug Routers (A, B) and the local Tokio central, with Luna sessions | V7 reporter, V9, V11, V12, V13: wakes and schedule runs arrive on B from the central list; kills at each admission point lose and double nothing; reports reach central in order | a duplicate run after a kill; a lost Firing while B is offline |
 | M4 | the rig | V1, V4, and V5 and V6 through the real CLI and MCP on A and B: `wake` and `schedule` go to central; off-grid inputs refused with their neighbours; the old cross-machine path is refused | a local definition still created; the old remote-wake path still accepted |
 | M3b | the rig | V18: from A, a session created on B with a first input; its route records A's requester as creator; a permission prompt in it reaches B's Chief of Staff and the session resumes on the Chief's decision; `approverRequired` when B has none; offline, retry and refusal behave | a second session or input; a missing default accepted; a route refused after native creation |
 | M5 | the rig, with A on the old release first and an owner-shaped fixture | V14, V15, V16: the move with kills at every step; no loss, no double fire; every converted executable timing passes entry validation; the 10:02 one-shot is excluded on the imported definition's own first `due_ms`; an inexpressible cron arrives suspended with its `legacy_timing` and fires nowhere; old-release B keeps its own; history stays readable | a doubled fire at the handover; a definition lost |
@@ -128,7 +128,7 @@ These run on Sunclaw, never on Sunbook.
 - **Milestone gates:** the table above; the Verifier records each observation with the build, target and evidence path before the milestone counts.
 - **Rig:**
   - two signed debug Routers plus a local Tokio central on Sunclaw, driven by the `verify-codex-router` journey;
-  - Haiku sessions with a small budget;
+  - Codex Luna sessions with a small budget by default; Haiku only for a Claude-provider check, after asking the owner;
   - each V row's passing condition, exactly as written.
 - **Merge gate for the stack:**
   - PR 1 and PR 2 CI green;
@@ -136,6 +136,12 @@ These run on Sunclaw, never on Sunbook.
   - the version bumped to the next unused number, with `Cargo.lock` updated;
   - both PRs merged together, PR 2 as **one squash commit** (V17 part 2 scanned on it), then the tag, release and Homebrew steps per AGENTS.md.
   - The production Router is never restarted by the agent.
+
+## Follow-up PRs (owner, 2026-11-01)
+
+- **PR 2b, mechanical split of interactions** (stacked after PR 2): a new crate owns typed interactions (approval and question history, approval routes) on the same `interaction.sqlite`, while `interaction-storage` keeps delivery. It's a mechanical move with no behavior change, and no stored data moves. It’s kept out of PR 1 because PR 2’s lanes change `interaction-storage`. Its plan: [2026-11-01-pr2b-plan.md](2026-11-01-pr2b-plan.md).
+- **Library follow-up** (owner approved the pin changes): `agent-fleet-sync` install-attempt pruning and journal mode for its stores, and `sqlx-turso` vacuum.
+- **PR 3, routed approvals through central:** its own design cycle.
 
 ## Obligation-to-proof map
 
@@ -152,7 +158,7 @@ These run on Sunclaw, never on Sunbook.
 | V9 | S4, S5 | the rig: offline past the notice window, lost replies, crashes |
 | V10 | S3, S6 | conformance plus the rig: before and after the cutoff |
 | V11 | S5 | the rig kill points |
-| V12 | S5 | the rig with Haiku on an empty B |
+| V12 | S5 | the rig with Luna on an empty B |
 | V13 | S4, S5 | conformance plus the rig: states, `seq`, sparse flush |
 | V14 | S7 | the rig: owner-shaped fixture and kill points |
 | V15 | S7 | the rig: an old-release B |
@@ -163,7 +169,7 @@ These run on Sunclaw, never on Sunbook.
 ## Risks
 
 - **Owed work lost or doubled at the migration, admission or acknowledgement boundaries** (the Advisor's top risk). V9, V11 and V14 must run on the real paths before any "working" claim.
-- **Self-healing depends on a later central request**, as specified. A Fleet with no traffic after exhausted alarm retries waits for its next request.
+- **Self-healing depends on a later catalog call or machine pull**, as specified. A Fleet with none after exhausted alarm retries waits for the next one.
 - **Turso migration paths** (the interaction store). Proven on Turso temporary databases.
 - **The public repository.** The design-branch history is never pushed; S9 publishes only a selected tree.
 
