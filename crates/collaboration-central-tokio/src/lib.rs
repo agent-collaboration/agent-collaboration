@@ -6,6 +6,7 @@ mod access_crypto;
 mod conformance_control;
 #[cfg(feature = "conformance")]
 mod conformance_store;
+mod issuer_crypto;
 mod native_logging;
 mod native_objects;
 mod native_server;

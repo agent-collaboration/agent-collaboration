@@ -23,6 +23,13 @@ pub use admin_import_store::AdminImportRefusal;
 #[cfg(feature = "conformance")]
 mod conformance_access;
 #[cfg(feature = "conformance")]
+mod conformance_issuer_signature;
+#[cfg(feature = "conformance")]
+pub use conformance_issuer_signature::{
+    ISSUER_SIGNATURE_PROBE_PATH, IssuerSignatureObservation, IssuerSignatureProbe,
+    observe_issuer_signature,
+};
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;

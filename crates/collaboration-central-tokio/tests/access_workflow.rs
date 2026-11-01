@@ -81,6 +81,15 @@ impl CentralPlatform for FixturePlatform {
     type Host = collaboration_central_tokio::TokioStorageHost<
         collaboration_central_core::CoreHost<collaboration_central_tokio::TokioObjectIo>,
     >;
+    // These legacy Access policy fixtures never exercise issuer cryptography.
+    async fn verify_ed25519(
+        &self,
+        _: &[u8],
+        _: &[u8],
+        _: &[u8],
+    ) -> Result<SignatureValidity, VerifyFailure> {
+        Err(VerifyFailure::Crypto)
+    }
     fn clock(&self) -> &dyn Clock {
         self
     }

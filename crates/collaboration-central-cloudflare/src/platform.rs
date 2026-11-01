@@ -183,4 +183,15 @@ impl CentralPlatform for CloudflareCentralPlatform {
     fn observe(&self, observation: CentralObservation) {
         self.labels.observe(self.layer, observation);
     }
+
+    fn verify_ed25519(
+        &self,
+        public_key: &[u8],
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send {
+        SendFuture::new(crate::issuer_crypto::verify_ed25519_signature(
+            public_key, signed, signature,
+        ))
+    }
 }

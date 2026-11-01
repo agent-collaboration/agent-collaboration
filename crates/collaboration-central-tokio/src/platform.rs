@@ -322,4 +322,15 @@ impl CentralPlatform for TokioCentralPlatform {
     fn observe(&self, observation: CentralObservation) {
         (self.observe)(observation);
     }
+
+    fn verify_ed25519(
+        &self,
+        public_key: &[u8],
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send {
+        ready(Ok(crate::issuer_crypto::verify_ed25519_signature(
+            public_key, signed, signature,
+        )))
+    }
 }

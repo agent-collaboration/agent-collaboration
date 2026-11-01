@@ -63,6 +63,12 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
         signed: &[u8],
         signature: &[u8],
     ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;
+    fn verify_ed25519(
+        &self,
+        public_key: &[u8],
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;
     fn observe(&self, observation: CentralObservation);
 }
 
