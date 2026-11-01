@@ -13,10 +13,16 @@ pub use project_replication_position::{
 };
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
+mod harness_session_launch;
 mod native_delivery_result;
 mod provider_conversation_backend;
 mod scheduled_run_contract;
 mod session_command_port;
+pub use harness_session_launch::{
+    HarnessLaunchFailure, HarnessLaunchFuture, HarnessLocalSetupRefusal,
+    HarnessRegistrationOutcome, HarnessRestoreAdmission, HarnessSessionBinding,
+    HarnessSessionLaunch, HarnessSessionLaunchPort, HarnessStartAdmission,
+};
 mod session_event_hub;
 #[cfg(any(test, feature = "test-support"))]
 pub use native_delivery_result::scripted_delivery_result;

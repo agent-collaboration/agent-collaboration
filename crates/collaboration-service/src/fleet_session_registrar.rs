@@ -11,9 +11,9 @@ pub use connection_port::{
 };
 pub use registration_lifecycle::RegistrationCompletion;
 pub use start_admission::{
-    FleetSessionLaunch, FleetSessionRegistrar, FleetSessionRegistrarProps, PrepareSessionStart,
-    RegistrarFailure, SessionBindingEntropy, SessionBindingEntropyUnavailable,
-    SessionBindingListener, SessionRegistrationMode, SessionRegistrationModeSource,
+    FleetSessionRegistrar, FleetSessionRegistrarProps, PrepareSessionStart, RegistrarFailure,
+    SessionBindingEntropy, SessionBindingEntropyUnavailable, SessionBindingListener,
+    SessionRegistrationMode, SessionRegistrationModeSource,
 };
 pub use storage_port::{
     FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,

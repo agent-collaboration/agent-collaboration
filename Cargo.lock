@@ -1857,6 +1857,7 @@ dependencies = [
  "board-sync-protocol",
  "collaboration-mail-protocol",
  "collaboration-protocol",
+ "fleet-identity-protocol",
  "fleet-sync-delivery",
  "fleet-sync-protocol",
  "fleet-sync-writer",

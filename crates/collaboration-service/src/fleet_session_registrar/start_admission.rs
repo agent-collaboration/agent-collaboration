@@ -5,12 +5,10 @@ use codex_router_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionPreparation, FleetSessionRegistrationRecord,
     PreparedFleetSession, PreparedSessionCreation, SessionBindingOrigin,
 };
-use collaboration_protocol::{EndpointRef, OperationId};
+use collaboration_contracts::HarnessSessionLaunch;
 use fleet_identity_protocol::{
-    AgentIsolation, CheckSessionStart, InstallationId, LaunchContext, MachineEnvironment,
-    SessionStartCheck, SessionStartRefusal, StartedBy,
+    CheckSessionStart, InstallationId, SessionStartCheck, SessionStartRefusal,
 };
-use message_board::ProjectId;
 use runtime_primitives::IdSource;
 
 use super::{
@@ -38,17 +36,6 @@ pub trait SessionBindingEntropy: Send + Sync {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("session binding entropy unavailable")]
 pub struct SessionBindingEntropyUnavailable;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FleetSessionLaunch {
-    pub operation_id: OperationId,
-    pub endpoint: EndpointRef,
-    pub project_id: Option<ProjectId>,
-    pub started_by: StartedBy,
-    pub isolation: AgentIsolation,
-    pub launch_context: LaunchContext,
-    pub machine_environment: MachineEnvironment,
-}
 
 pub struct FleetSessionRegistrarProps {
     pub installation: InstallationId,
@@ -122,7 +109,7 @@ impl FleetSessionRegistrar {
 
     pub async fn prepare(
         &self,
-        intent: &FleetSessionLaunch,
+        intent: &HarnessSessionLaunch,
     ) -> Result<PrepareSessionStart, RegistrarFailure> {
         if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
             return Ok(PrepareSessionStart::AccessEnrollment);
@@ -235,7 +222,7 @@ impl FleetSessionRegistrar {
     }
 }
 
-fn matches_intent(record: &FleetSessionRegistrationRecord, intent: &FleetSessionLaunch) -> bool {
+fn matches_intent(record: &FleetSessionRegistrationRecord, intent: &HarnessSessionLaunch) -> bool {
     let launch = &record.preparation().launch;
     record.preparation().operation_id == intent.operation_id
         && launch.endpoint == intent.endpoint

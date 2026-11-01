@@ -1,6 +1,7 @@
 //! Policy-only atomic repository and event-ordered authority; neither proves SQLite or a provider.
 use super::*;
 use codex_router_state::fleet_session_registration::*;
+use collaboration_contracts::HarnessSessionLaunch;
 use fleet_identity_protocol::*;
 use std::sync::{
     Arc, Mutex,
@@ -270,8 +271,8 @@ impl Fixture {
             entropy: Arc::new(FixedEntropy),
         })
     }
-    pub fn intent(&self) -> FleetSessionLaunch {
-        FleetSessionLaunch {
+    pub fn intent(&self) -> HarnessSessionLaunch {
+        HarnessSessionLaunch {
             operation_id: serde_json::from_value(serde_json::json!(
                 "019f0000-0000-7000-8000-000000000020"
             ))

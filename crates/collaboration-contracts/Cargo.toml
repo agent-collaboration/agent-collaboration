@@ -12,6 +12,7 @@ test-support = []
 workspace = true
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-protocol.workspace = true
 fleet-sync-writer.workspace = true
