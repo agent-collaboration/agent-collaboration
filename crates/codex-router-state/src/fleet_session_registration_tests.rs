@@ -5,6 +5,48 @@ use serde_json::json;
 const CAPABILITY: &str = "0123456789abcdef0123456789abcdef";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000004";
 
+#[test]
+fn fleet_session_setup_pending_and_local_refusals_retain_the_actual_id_as_closed_payloads() {
+    let preparation = preparation();
+    let session = serde_json::to_value(registration(&preparation).session).unwrap();
+    let mut payloads = vec![json!({"state":"prepared","creation":{
+        "kind":"createdPendingSetup","session":session
+    }})];
+    for cause in [
+        "modelMismatch",
+        "effectiveWorkingDirectoryMismatch",
+        "workspaceRootsMismatch",
+        "setupInterrupted",
+    ] {
+        payloads.push(json!({"state":"abandoned","creation":{
+            "kind":"knownCreated","session":session,"cause":{"kind":cause}
+        }}));
+    }
+    for payload in payloads {
+        let lifecycle: FleetSessionBindingLifecycle =
+            serde_json::from_value(payload.clone()).unwrap();
+        let record = FleetSessionRegistrationRecord::new(preparation.clone(), lifecycle).unwrap();
+        assert_eq!(serde_json::to_value(record.lifecycle()).unwrap(), payload);
+        assert!(
+            record.lifecycle().registration().is_none(),
+            "local setup must not become a registration-ready request"
+        );
+    }
+    for cause in [
+        json!({"kind":"networkFailure"}),
+        json!({"kind":"modelMismatch","extra":true}),
+    ] {
+        assert!(
+            serde_json::from_value::<FleetSessionBindingLifecycle>(
+                json!({"state":"abandoned","creation":{
+                    "kind":"knownCreated","session":session,"cause":cause
+                }})
+            )
+            .is_err()
+        );
+    }
+}
+
 fn preparation() -> FleetSessionPreparation {
     FleetSessionPreparation {
         registration_id: "019f0000-0000-7000-8000-000000000001".to_owned().try_into().unwrap(),
