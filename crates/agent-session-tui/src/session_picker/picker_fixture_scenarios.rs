@@ -7,6 +7,12 @@ use collaboration_client::protocol::{
 };
 use std::io;
 
+#[cfg(debug_assertions)]
+#[path = "picker_fixture_fork_preparation.rs"]
+mod fork_preparation;
+#[cfg(debug_assertions)]
+pub(super) use fork_preparation::source_preparer;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum FixtureSourceChange {
     Add,
@@ -20,6 +26,9 @@ pub(super) enum PickerFixtureScenario {
     LocalCodexNew,
     UncommittedMachine,
     SourceOptions(FixtureSourceChange),
+    ForkSshProfile,
+    ClaudeNewSuccess,
+    LargeList,
 }
 
 impl PickerFixtureScenario {
@@ -31,6 +40,9 @@ impl PickerFixtureScenario {
             "source-options-add" => Self::SourceOptions(FixtureSourceChange::Add),
             "source-options-remove" => Self::SourceOptions(FixtureSourceChange::Remove),
             "source-options-replace" => Self::SourceOptions(FixtureSourceChange::Replace),
+            "fork-ssh-profile" => Self::ForkSshProfile,
+            "claude-new-success" => Self::ClaudeNewSuccess,
+            "large-list" => Self::LargeList,
             _ => return None,
         })
     }
@@ -82,6 +94,57 @@ impl PickerFixtureScenario {
                 );
             }
             Self::SourceOptions(change) => request.records = change.initial_records(),
+            Self::ForkSshProfile => {
+                request = super::provider_filter_storyboard_fixture::apply_storyboard_variant(
+                    request,
+                    Some("configured-source-new"),
+                )?;
+                let agent_session_inventory::sessions::RouterRegistryRead::Ready(registry) =
+                    &request.router_registry
+                else {
+                    return Err(io::Error::other(
+                        "SSH fork fixture requires its configured source",
+                    ));
+                };
+                let profile = registry
+                    .routers
+                    .first()
+                    .cloned()
+                    .ok_or_else(|| io::Error::other("SSH fork source is absent"))?;
+                let target:SessionRef=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":FIXTURE_SERVICE,"endpointId":"codex-fixture-ssh"},"sessionId":SHARED_SESSION})).map_err(io::Error::other)?;
+                let mut record = super::test_support::picker_record(
+                    SHARED_SESSION,
+                    "SSH fork source",
+                    "/fixture/ssh-fork",
+                    "codex-router",
+                    "cli",
+                );
+                record.identity =
+                    agent_session_inventory::sessions::SessionPickerIdentity::HostedCodex(target);
+                record.provenance =
+                    agent_session_inventory::sessions::SessionRowProvenance::ObservedHosted;
+                record.machine_display_label = Some(profile.name.as_str().to_owned());
+                record.source_context = Some(PickerSourceContext::ConfiguredHosted(profile));
+                request.records = vec![record];
+            }
+            Self::ClaudeNewSuccess => {}
+            Self::LargeList => {
+                const RECENCY_BASE_MS: i64 = 1_790_000_000_000;
+                request.records = (0..60)
+                    .map(|index| {
+                        let mut record = super::test_support::picker_record(
+                            &format!("fixture-large-{index:03}"),
+                            &format!("Large session {:03}", index + 1),
+                            "/repo/project-a",
+                            "codex-router",
+                            "cli",
+                        );
+                        record.recency_at_ms = Some(RECENCY_BASE_MS - i64::from(index) * 60_000);
+                        record.created_at_ms = Some(RECENCY_BASE_MS - 86_400_000);
+                        record
+                    })
+                    .collect();
+            }
         }
         Ok(request)
     }
@@ -130,6 +193,9 @@ pub(super) fn client_ports(
         source_ssh_protocol::{SourceNativeBinding, SourceReadError, SourceRejection},
     };
     use std::sync::Arc;
+    if scenario == Some(PickerFixtureScenario::ClaudeNewSuccess) {
+        return claude_new_ports();
+    }
     if scenario != Some(PickerFixtureScenario::StoppedNativeClaude) {
         return None;
     }
@@ -165,6 +231,49 @@ pub(super) fn client_ports(
                     },
                 })
             })
+        }),
+    })
+}
+
+#[cfg(debug_assertions)]
+fn claude_new_ports() -> Option<super::SessionClientPorts> {
+    use super::new_session_client_inventory::{
+        CursorCreationAvailability, NewClientSourceCapabilities,
+    };
+    use agent_session_inventory::sessions::source_ssh_protocol::{
+        SourceNativeLaunchAvailability, SourceReadError, SourceRejection,
+    };
+    use std::sync::Arc;
+    let capabilities = NewClientSourceCapabilities {
+        service_id: FIXTURE_SERVICE.to_owned().try_into().ok()?,
+        service_epoch: "00000000-0000-4000-8000-000000000002"
+            .to_owned()
+            .try_into()
+            .ok()?,
+        native_claude: SourceNativeLaunchAvailability::Ready {
+            capabilities: Vec::new(),
+        },
+        cursor: CursorCreationAvailability::Unavailable(
+            "Fixture has no Cursor endpoint".to_owned(),
+        ),
+    };
+    Some(super::SessionClientPorts {
+        inventory_loader: Arc::new(move |source| {
+            let capabilities = capabilities.clone();
+            Box::pin(async move {
+                if source != PickerSourceContext::DefaultHosted {
+                    return Err(SourceReadError::Rejected(SourceRejection::InvalidRequest));
+                }
+                Ok(capabilities)
+            })
+        }),
+        // Foreground New returns a captured terminal handoff. An unexpected
+        // in-picker execution is rejected; this fixture never starts a client.
+        executor: Arc::new(|_| {
+            Box::pin(async { Err(SourceReadError::Rejected(SourceRejection::InvalidRequest)) })
+        }),
+        details_inspector: Arc::new(|_| {
+            Box::pin(async { Err(SourceReadError::Rejected(SourceRejection::InvalidRequest)) })
         }),
     })
 }

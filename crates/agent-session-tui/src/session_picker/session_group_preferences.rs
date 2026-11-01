@@ -24,6 +24,7 @@ pub struct SqliteSessionUiPreferences {
 impl SqliteSessionUiPreferences {
     /// The caller supplies its existing production or debug service directory.
     pub async fn open_and_migrate(service_directory: &Path) -> Self {
+        let _ = tokio::fs::create_dir_all(service_directory).await;
         Self {
             store: ui_preference_store::UiPreferenceStore::open_and_migrate(
                 &service_directory.join(SESSION_UI_PREFERENCES_FILENAME),
@@ -59,6 +60,16 @@ impl UiPreferenceStore for SqliteSessionUiPreferences {
 pub struct SessionGroupPreferences {
     facet: SessionGroupFacet,
     changes: watch::Sender<SessionGroupFacet>,
+}
+
+impl Default for SessionGroupPreferences {
+    fn default() -> Self {
+        let (changes, _) = watch::channel(SessionGroupFacet::None);
+        Self {
+            facet: SessionGroupFacet::None,
+            changes,
+        }
+    }
 }
 
 pub struct SessionGroupPreferenceWriter {

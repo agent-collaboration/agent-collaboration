@@ -80,12 +80,20 @@ fn render_screen(
         })
         .collect::<Vec<_>>();
     let mut rows = Vec::new();
-    for index in 0..model.visible_record_len() {
-        let Some(record) = model.visible_record_at(index) else {
+    let records = (0..model.visible_record_len())
+        .filter_map(|index| model.visible_record_at(index))
+        .map(|record| {
+            Ok((
+                super::picker_screen_scope::row_key(&record.identity)?,
+                record,
+            ))
+        })
+        .collect::<SurfaceResult<std::collections::HashMap<_, _>>>()?;
+    for key in control.rows() {
+        let Some(record) = records.get(&key) else {
             continue;
         };
-        let key = super::picker_screen_scope::row_key(&record.identity)?;
-        let record = record.clone();
+        let record = (*record).clone();
         rows.push(element!(View(key:key.as_str().to_owned(),width:100pct,padding_left:u16::from(width>=54),flex_shrink:0.0_f32) {
             ListRow(control:control.clone(),row:key.clone()) {PickerSessionRow(record)}
         }).into_any());

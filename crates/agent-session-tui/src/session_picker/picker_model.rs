@@ -535,13 +535,6 @@ impl SessionsPickerModel {
             .and_then(|record_index| self.request.records.get(*record_index))
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "R19 grouping projection is staged before the shared grouped-list binding."
-        )
-    )]
     pub fn session_groups<TZone: chrono::TimeZone>(
         &self,
         facet: super::SessionGroupFacet,

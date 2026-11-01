@@ -1,7 +1,9 @@
 //! Each wait follows a real source-page or render event; no whole-journey budget.
 use agent_session_inventory::{
     picker_runtime_status::NativeLiveReadState,
-    source_inventory_request::{SourceInventoryRejection, SourceInventoryResult},
+    source_inventory_request::{
+        InventoryPageProgress, SourceInventoryRejection, SourceInventoryResult,
+    },
 };
 use futures_util::{Stream, StreamExt};
 use iocraft::Canvas;
@@ -15,6 +17,7 @@ const CONFIGURED_SOURCE_PAGE_BOUND: Duration = Duration::from_secs(30);
 
 pub(super) struct SourcePageSettlement {
     native_finished: bool,
+    source_finished: bool,
 }
 impl SourcePageSettlement {
     pub(super) fn from_result(result: &SourceInventoryResult) -> Self {
@@ -35,7 +38,18 @@ impl SourcePageSettlement {
             }
             _ => false,
         };
-        Self { native_finished }
+        let source_finished = matches!(
+            result,
+            SourceInventoryResult::Rejected { .. }
+                | SourceInventoryResult::Ready {
+                    progress: InventoryPageProgress::Complete,
+                    ..
+                }
+        );
+        Self {
+            native_finished,
+            source_finished,
+        }
     }
 }
 
@@ -85,6 +99,10 @@ pub(super) async fn native_inventory_settled<TStream: Stream<Item = Canvas> + Un
         if page.native_finished {
             return;
         }
+        assert!(
+            !page.source_finished,
+            "actual source page finished without native settlement: {last}"
+        );
     }
 }
 

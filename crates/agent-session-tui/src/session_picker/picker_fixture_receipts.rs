@@ -169,10 +169,15 @@ fn outcome_readback<'a>(
                 },
             })
         }
-        Some(SessionsPickerOutcome::PreparedSourceSession(_)) => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "prepared configured-source outcome is outside the local/U4 fixture outcome case",
-        )),
+        Some(SessionsPickerOutcome::PreparedSourceSession(prepared)) => {
+            if let agent_session_inventory::sessions::source_ssh_protocol::SourceSessionAction::Fork{target,..}=&prepared.launch.action {
+                return Ok(PickerOutcomeReadback::Fork{identity:PickerIdentityReadback::HostedCodex{target}});
+            }
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "prepared configured-source outcome is outside the local/U4 fixture outcome case",
+            ))
+        }
         Some(SessionsPickerOutcome::InterruptedClientAction(_)) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "interrupted client action is outside the local/U4 fixture outcome case",

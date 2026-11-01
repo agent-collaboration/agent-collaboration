@@ -51,6 +51,8 @@ pub struct SessionsPickerComponentProps<'a> {
         Option<agent_session_inventory::sessions::source_client_action::SessionClientExecutor>,
     details_client_inspector: Option<super::details_client_inventory::DetailsClientInspector>,
     session_clipboard_writer: Option<super::session_id_clipboard::SessionClipboardWriter>,
+    group_preferences: Option<super::session_group_preferences::SessionGroupPreferences>,
+    grouping_clock: Option<picker_surface::SessionGroupingClock>,
     width: usize,
     height: usize,
     selected_outcome_out: Option<&'a mut Option<SessionsPickerOutcome>>,
@@ -96,6 +98,16 @@ pub fn SessionsPickerComponent<'a>(
         model
     });
     let mut conversation_cache = hooks.use_state(ConversationPreviewCache::default);
+    let group_preferences = hooks.use_state(|| props.group_preferences.take().unwrap_or_default());
+    let grouping_clock = hooks.use_memo(
+        || {
+            props
+                .grouping_clock
+                .clone()
+                .unwrap_or_else(|| std::sync::Arc::new(|| chrono::Local::now().fixed_offset()))
+        },
+        (),
+    );
     let reload_generation = hooks.use_state(|| 0_u64);
     let reload_port = hooks.use_memo(
         || SessionRecordsReloadPort::new(model.read().data_query(), model.read().source_contexts()),
@@ -217,7 +229,11 @@ pub fn SessionsPickerComponent<'a>(
         surfaces::{overlay_host::OverlayHost, surface_handle::use_surface_stack},
     };
     let setup = (|| -> picker_surface::SurfaceResult<_> {
-        let rows = picker_surface::selection_rows(&model.read())?;
+        let rows = picker_surface::selection_rows(
+            &model.read(),
+            group_preferences.read().facet(),
+            grouping_clock(),
+        )?;
         let list = ListSelectionState::new(rows, None)?;
         let combo = ComboBoxState::new(Vec::new(), None)?;
         let empty = picker_surface::empty_model()?;
@@ -231,6 +247,8 @@ pub fn SessionsPickerComponent<'a>(
     };
     let surface_context = picker_surface::PickerSurfaceContext {
         model,
+        group_preferences,
+        grouping_clock,
         outcome: selected_outcome,
         cancelled: should_cancel,
         error: hooks.use_state(|| None),

@@ -43,6 +43,15 @@ mod session_choice_ux_tests;
 #[path = "native_catalogue_publication_tests.rs"]
 mod native_catalogue_publication_tests;
 
+#[path = "picker_grouping_component_tests.rs"]
+mod picker_grouping_component_tests;
+
+#[path = "picker_grouping_projection_tests.rs"]
+mod picker_grouping_projection_tests;
+
+#[path = "picker_grouping_persistence_tests.rs"]
+mod picker_grouping_persistence_tests;
+
 // Blocking external fixture procedures run off the executor; production loaders are async.
 fn fixture_record_loader<FixtureProcedure>(
     procedure: FixtureProcedure,

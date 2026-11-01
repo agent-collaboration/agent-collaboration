@@ -1,22 +1,33 @@
 //! Terminal lifecycle and fixture entry points for the actual picker component.
+use super::super::session_group_preferences::{
+    SessionGroupPreferenceWriter, SessionGroupPreferences, SqliteSessionUiPreferences,
+};
 use super::{
     ElementExt, SessionsPickerComponent, SessionsPickerOutcome, SessionsPickerRecordLoader,
     SessionsPickerRequest, element,
 };
-use std::io;
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub fn run_sessions_picker(
     request: SessionsPickerRequest,
     record_loader: Option<SessionsPickerRecordLoader>,
     client_ports: Option<super::super::SessionClientPorts>,
     initial_size: (u16, u16),
+    service_directory: Option<&Path>,
 ) -> io::Result<Option<SessionsPickerOutcome>> {
     render_picker(
         request,
         record_loader,
         client_ports,
         initial_size,
-        PickerRenderSupport::default(),
+        PickerRenderSupport {
+            preferences_directory: service_directory.map(Path::to_owned),
+            ..PickerRenderSupport::default()
+        },
     )
 }
 
@@ -26,6 +37,21 @@ struct PickerRenderSupport {
     dispatch_receipt:
         Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
     source_preparer: Option<super::super::source_action_worker::SourceActionPreparer>,
+    preferences_directory: Option<PathBuf>,
+}
+
+pub(super) async fn load_group_preferences(
+    directory: Option<&Path>,
+) -> (
+    SessionGroupPreferences,
+    Option<SessionGroupPreferenceWriter>,
+) {
+    let Some(directory) = directory else {
+        return (SessionGroupPreferences::default(), None);
+    };
+    let store = Arc::new(SqliteSessionUiPreferences::open_and_migrate(directory).await);
+    let (preferences, writer) = SessionGroupPreferences::load(store).await;
+    (preferences, Some(writer))
 }
 
 fn render_picker(
@@ -39,6 +65,10 @@ fn render_picker(
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
+    let (group_preferences, writer) = runtime.block_on(load_group_preferences(
+        support.preferences_directory.as_deref(),
+    ));
+    let writer = writer.map(|writer| runtime.spawn(writer.run()));
     let mut component = element! {
         SessionsPickerComponent(
             request: request,
@@ -48,6 +78,7 @@ fn render_picker(
             client_executor: client_ports.as_ref().map(|ports|ports.executor.clone()),
             details_client_inspector:client_ports.as_ref().map(|ports|ports.details_inspector.clone()),
             session_clipboard_writer: Some(super::super::session_id_clipboard::terminal_session_clipboard_writer()),
+            group_preferences: Some(group_preferences),
             width: usize::from(initial_size.0),
             height: usize::from(initial_size.1),
             selected_outcome_out: &mut selected_outcome,
@@ -57,24 +88,34 @@ fn render_picker(
     {
         component.props.dispatch_receipt = support.dispatch_receipt.clone();
     }
-    let render_loop = component
-        .render_loop()
-        .enable_bracketed_paste()
-        .fullscreen()
-        .ignore_ctrl_c();
-    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
-    let render_loop = match support.dispatch_receipt {
-        Some(sink) => render_loop.stdout(sink.frame_writer(io::stdout())?),
-        None => render_loop,
-    };
-    runtime.block_on(render_loop)?;
+    let render_result = (|| {
+        let render_loop = component
+            .render_loop()
+            .enable_bracketed_paste()
+            .fullscreen()
+            .ignore_ctrl_c();
+        #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+        let render_loop = match support.dispatch_receipt {
+            Some(sink) => render_loop.stdout(sink.frame_writer(io::stdout())?),
+            None => render_loop,
+        };
+        runtime.block_on(render_loop)
+    })();
     drop(component);
+    if let Some(writer) = writer {
+        runtime.block_on(writer).map_err(io::Error::other)?;
+    }
+    render_result?;
     Ok(selected_outcome)
 }
 
 #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
 #[path = "picker_fixture_receipts.rs"]
 mod picker_fixture_receipts;
+
+#[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+#[path = "picker_fixture_preferences.rs"]
+mod picker_fixture_preferences;
 
 #[cfg(feature = "quota-reset-test-harness")]
 pub fn run_sessions_picker_test_harness() -> io::Result<()> {
@@ -106,16 +147,20 @@ pub fn run_sessions_picker_test_harness() -> io::Result<()> {
         })
         .transpose()?;
     #[cfg(debug_assertions)]
-    let support = PickerRenderSupport {
-        dispatch_receipt: dispatch_receipt.clone(),
-        source_preparer: Some(picker_fixture_receipts::recording_preparer(
-            receipt_directory.as_deref(),
-        )),
-    };
-    #[cfg(debug_assertions)]
     let scenario = variant
         .as_deref()
         .and_then(super::super::picker_fixture_scenarios::PickerFixtureScenario::from_name);
+    #[cfg(debug_assertions)]
+    let support = PickerRenderSupport {
+        dispatch_receipt: dispatch_receipt.clone(),
+        source_preparer: Some(
+            super::super::picker_fixture_scenarios::source_preparer(scenario, &request)
+                .unwrap_or_else(|| {
+                    picker_fixture_receipts::recording_preparer(receipt_directory.as_deref())
+                }),
+        ),
+        preferences_directory: picker_fixture_preferences::directory()?,
+    };
     #[cfg(debug_assertions)]
     let record_loader = super::super::picker_fixture_scenarios::source_updates::record_loader(
         scenario,

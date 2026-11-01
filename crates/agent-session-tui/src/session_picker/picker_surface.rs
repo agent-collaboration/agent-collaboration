@@ -27,6 +27,8 @@ use iocraft::prelude::*;
 mod picker_choice_scope;
 #[path = "picker_dialog_scope.rs"]
 mod picker_dialog_scope;
+#[path = "picker_grouping.rs"]
+mod picker_grouping;
 #[path = "picker_help_content.rs"]
 mod picker_help_content;
 #[path = "picker_new_scope.rs"]
@@ -62,6 +64,9 @@ pub(super) struct ActivePickerDialog {
 #[derive(Clone)]
 pub(super) struct PickerSurfaceContext {
     pub model: State<SessionsPickerModel>,
+    pub group_preferences:
+        State<crate::session_picker::session_group_preferences::SessionGroupPreferences>,
+    pub grouping_clock: picker_grouping::SessionGroupingClock,
     pub outcome: State<Option<SessionsPickerOutcome>>,
     pub cancelled: State<bool>,
     pub error: State<Option<String>>,
@@ -271,5 +276,6 @@ pub(super) fn empty_model() -> SurfaceResult<SurfaceModel> {
     })
 }
 
-pub(super) use picker_screen_scope::{build_screen, selection_rows, synchronize_rows};
+pub(super) use picker_grouping::{SessionGroupingClock, selection_rows};
+pub(super) use picker_screen_scope::{build_screen, synchronize_rows};
 pub(super) use picker_surface_view::PickerSurfaceView;

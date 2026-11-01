@@ -52,7 +52,18 @@ async fn exercise(
     name: &str,
     directory: &Path,
     initial: Vec<TerminalEvent>,
+    next: impl FnMut(&Canvas, SurfaceStackHandle, State<SessionsPickerModel>) -> FixtureStep,
+) -> Option<SessionsPickerOutcome> {
+    exercise_at(name, directory, initial, next, 76, 30).await
+}
+
+async fn exercise_at(
+    name: &str,
+    directory: &Path,
+    initial: Vec<TerminalEvent>,
     mut next: impl FnMut(&Canvas, SurfaceStackHandle, State<SessionsPickerModel>) -> FixtureStep,
+    width: usize,
+    height: usize,
 ) -> Option<SessionsPickerOutcome> {
     let request =
         apply_storyboard_variant(provider_filter_storyboard_request().unwrap(), Some(name))
@@ -60,6 +71,8 @@ async fn exercise(
     let captured_request = request.clone();
     let scenario = PickerFixtureScenario::from_name(name);
     let ports = picker_fixture_scenarios::client_ports(scenario, &request);
+    let source_preparer = picker_fixture_scenarios::source_preparer(scenario, &request)
+        .unwrap_or_else(|| super::recording_preparer(Some(directory)));
     let loader =
         picker_fixture_scenarios::source_updates::record_loader(scenario, Some(directory)).unwrap();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -78,53 +91,73 @@ async fn exercise(
     {
         let mut component = element!(SessionsPickerComponent(
             request, record_loader:loader,
-            source_preparer:Some(super::recording_preparer(Some(directory))),
+            source_preparer:Some(source_preparer),
             details_client_inspector:ports.as_ref().map(|ports|ports.details_inspector.clone()),
             client_inventory_loader:ports.as_ref().map(|ports|ports.inventory_loader.clone()),
             client_executor:ports.as_ref().map(|ports|ports.executor.clone()),
-            width:76usize,height:30usize,selected_outcome_out:&mut outcome,
+            width,height,selected_outcome_out:&mut outcome,
             surface_observer:move |value|{*observer.lock().unwrap()=Some(value)},
             input_observer:move |_| { input_observer.fetch_add(1,Ordering::Release); }
         ));
         let mut frames =
             Box::pin(component.mock_terminal_render_loop(MockTerminalConfig::with_events(events)));
         let mut releases = tokio::task::JoinSet::new();
-        let journey = async {
-            while let Some(canvas) = frames.next().await {
-                // Layout and source publication can paint before queued input.
-                // Only the real routing callback establishes the next input pose.
-                if processed_inputs.load(Ordering::Acquire) < submitted_inputs {
-                    continue;
+        loop {
+            let mut last = String::new();
+            let step = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                while let Some(canvas) = frames.next().await {
+                    last=canvas.to_string();
+                    // A layout/source frame does not establish input consumption.
+                    if processed_inputs.load(Ordering::Acquire) < submitted_inputs {
+                        continue;
+                    }
+                    let (stack, model) = observed.lock().unwrap().unwrap();
+                    let step = next(&canvas, stack, model);
+                    if step.release_source || !step.events.is_empty() {
+                        return Some(step);
+                    }
                 }
-                let (stack, model) = observed.lock().unwrap().unwrap();
-                let step = next(&canvas, stack, model);
-                if step.release_source {
-                    let socket = directory.join("source-update.sock");
-                    releases.spawn(async move {
-                        let mut stream = tokio::net::UnixStream::connect(socket).await.unwrap();
-                        stream.write_all(b"update\n").await.unwrap();
-                        stream.shutdown().await.unwrap();
-                        let mut response = Vec::new();
-                        stream.read_to_end(&mut response).await.unwrap();
-                        assert_eq!(response, b"prepared\n");
-                    });
-                }
-                for event in step.events {
-                    submitted_inputs += 1;
-                    sender.send(event).unwrap();
-                }
-            }
-            while let Some(released) = releases.join_next().await {
-                released.unwrap();
-            }
-        };
-        tokio::time::timeout(std::time::Duration::from_secs(2), journey)
+                None
+            })
             .await
-            .unwrap();
+            .unwrap_or_else(|_| {
+                panic!(
+                    "{name}: waiting for published fixture state after {submitted_inputs} inputs: {last}"
+                )
+            });
+            let Some(step) = step else {
+                break;
+            };
+            if step.release_source {
+                let socket = directory.join("source-update.sock");
+                releases.spawn(async move {
+                    let mut stream = tokio::net::UnixStream::connect(socket).await.unwrap();
+                    stream.write_all(b"update\n").await.unwrap();
+                    stream.shutdown().await.unwrap();
+                    let mut response = Vec::new();
+                    stream.read_to_end(&mut response).await.unwrap();
+                    assert_eq!(response, b"prepared\n");
+                });
+            }
+            for event in step.events {
+                submitted_inputs += 1;
+                sender.send(event).unwrap();
+            }
+        }
+        while let Some(released) =
+            tokio::time::timeout(std::time::Duration::from_secs(2), releases.join_next())
+                .await
+                .expect("fixture source-update task settles its real ACK")
+        {
+            released.unwrap();
+        }
     }
     write_outcome(directory, &outcome, &captured_request).unwrap();
     outcome
 }
+
+#[path = "picker_fixture_additional_scenario_tests.rs"]
+mod additional_scenarios;
 
 fn highlighted_option(canvas: &Canvas, stack: SurfaceStackHandle) -> Option<String> {
     let map = stack.hit_regions().published()?;

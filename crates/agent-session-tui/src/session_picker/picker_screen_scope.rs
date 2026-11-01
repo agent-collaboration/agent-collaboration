@@ -2,16 +2,14 @@
 use super::picker_toolbar::SCOPE_SETTINGS;
 use super::{
     ActionDef, ActionId, ActionRegistry, FocusModel, HelpControl, PickerSurfaceContext, Placement,
-    ScopeId, SessionsPickerModel, SurfaceId, SurfaceModel, SurfaceResult, SurfaceStackHandle,
-    TargetId, TextFieldState, action, target,
+    ScopeId, SurfaceId, SurfaceModel, SurfaceResult, SurfaceStackHandle, TargetId, TextFieldState,
+    action, target,
 };
 use agent_collaboration_tui::{
     actions::Checked,
     controls::{
         fields::{button_target, segmented_targets},
-        list::{
-            ListNavigationPolicy, ListRowKey, ListRows, ListSelectionBinding, ListSelectionControl,
-        },
+        list::{ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl},
         menu_overlay,
     },
     surfaces::{
@@ -37,14 +35,6 @@ pub(super) fn row_key(identity: &SessionPickerIdentity) -> SurfaceResult<ListRow
         }
     };
     Ok(ListRowKey::new(key)?)
-}
-
-pub fn selection_rows(model: &SessionsPickerModel) -> SurfaceResult<ListRows> {
-    let keys = (0..model.visible_record_len())
-        .filter_map(|index| model.visible_record_at(index))
-        .map(|record| row_key(&record.identity))
-        .collect::<SurfaceResult<Vec<_>>>()?;
-    Ok(ListRows::Ungrouped(keys))
 }
 
 pub(super) fn list_control(
@@ -120,7 +110,14 @@ pub fn synchronize_rows(
 ) -> SurfaceResult<()> {
     let (rows, focused_identity) = {
         let model = context.model.read();
-        (selection_rows(&model)?, model.focused_identity().cloned())
+        (
+            super::picker_grouping::selection_rows(
+                &model,
+                context.group_preferences.read().facet(),
+                (context.grouping_clock)(),
+            )?,
+            model.focused_identity().cloned(),
+        )
     };
     list_control(context, stack)?.replace_rows(rows)?;
     if let Some(identity) = focused_identity {
@@ -298,6 +295,7 @@ pub fn build_screen(
         },
     )?);
     add_settings(&mut actions, &context)?;
+    super::picker_grouping::add_group_actions(&mut actions, &context)?;
     let escape = context.clone();
     actions.push(action(
         "escape",
