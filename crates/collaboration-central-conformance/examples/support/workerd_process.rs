@@ -33,7 +33,7 @@ impl WorkerdProcess {
         relay: &str,
     ) -> ConformanceResult<Self> {
         let mut child = Command::new(&settings.node)
-            .arg("scripts/tooling/run-central-workerd.mts")
+            .arg("verification/tooling/run-central-workerd.ts")
             .arg(&settings.miniflare)
             .arg(&settings.persistence)
             .arg(settings.port.to_string())

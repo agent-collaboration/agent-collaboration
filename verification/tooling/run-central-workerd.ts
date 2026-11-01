@@ -2,12 +2,29 @@
 // Redirect exactly the fixture issuer's certs fetch to the owned HTTP server.
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import * as publicTemplateModule from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
-import type * as MiniflareTypes from "../../verification/node_modules/miniflare/dist/src/index.js";
+import { z } from "zod";
+import type * as MiniflareTypes from "miniflare";
 
-// Types use the repository's frozen verification dependency. Execution still
-// loads the exact pinned Miniflare allocation supplied by the Rust harness.
-const publicTemplate = publicTemplateModule.default;
+// This fixture consumes the public template's binding view. Runtime validation
+// preserves its own module scope while the SDK types use this package's owner.
+const templateBindingSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), value: z.string() }),
+  z.object({
+    type: z.literal("durable-object"),
+    worker: z.string(),
+    exportName: z.string(),
+  }),
+]);
+const templateModuleSchema = z.object({
+  default: z.object({
+    worker: z.object({ env: z.record(z.string(), templateBindingSchema) }),
+  }),
+});
+const { default: publicTemplate } = templateModuleSchema.parse(
+  await import(
+    new URL("../../crates/collaboration-central-cloudflare/cloudflare.config.ts", import.meta.url).href
+  ),
+);
 
 const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
   process.argv.slice(2);
@@ -49,7 +66,6 @@ const templateBindings = Object.fromEntries(
   Object.entries(publicTemplate.worker.env)
     .flatMap(([name, binding]): Array<[string, string]> => {
       if (binding.type !== "text") return [];
-      if (!("value" in binding)) throw new Error(`public text binding ${name} has no value`);
       return [[name, replacements[name] ?? binding.value]];
     }),
 );
