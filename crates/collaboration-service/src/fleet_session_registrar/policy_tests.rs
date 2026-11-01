@@ -1,0 +1,280 @@
+//! Narrow policy evidence on event-controlled stand-ins; SQLite restart and real harness proofs remain separate.
+use super::*;
+use codex_router_state::fleet_session_registration::{
+    FleetSessionBindingLifecycle, PreparedSessionCreation,
+};
+use fleet_identity_protocol::{
+    RegisterFleetSessionResult, SessionEndCause, SessionStartCheck, SessionStartRefusal,
+};
+use futures_util::FutureExt;
+
+#[path = "policy_test_fixture.rs"]
+mod fixture;
+use fixture::*;
+
+#[tokio::test]
+async fn fleet_session_registrar_missing_project_and_each_live_refusal_store_no_preparation() {
+    let fixture = Fixture::new();
+    let mut intent = fixture.intent();
+    intent.project_id = None;
+    assert!(matches!(
+        fixture.registrar.prepare(&intent).await,
+        Err(RegistrarFailure::ProjectRequired)
+    ));
+    assert!(fixture.authority.events.lock().unwrap().is_empty());
+    intent.project_id = Some(PROJECT.to_owned().try_into().unwrap());
+    for reason in [
+        SessionStartRefusal::ProjectUnknown {},
+        SessionStartRefusal::MachineNotAllowed {},
+        SessionStartRefusal::DifferentWorkspace {},
+        SessionStartRefusal::StarterNotActive {},
+    ] {
+        *fixture.authority.check.lock().unwrap() = Ok(SessionStartCheck::Refused {
+            reason: reason.clone(),
+        });
+        assert!(
+            matches!(fixture.registrar.prepare(&intent).await, Err(RegistrarFailure::StartRefused(actual)) if actual == reason)
+        );
+        assert!(fixture.repository.records.lock().unwrap().is_empty());
+    }
+    *fixture.authority.check.lock().unwrap() = Err(FleetSessionConnectionFailure::Unavailable);
+    assert!(matches!(
+        fixture.registrar.prepare(&intent).await,
+        Err(RegistrarFailure::Connection(_))
+    ));
+    assert!(fixture.repository.records.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_access_enrollment_preserves_the_old_no_registration_path() {
+    let fixture = Fixture::new();
+    *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::AccessEnrollment;
+    let mut intent = fixture.intent();
+    intent.project_id = None;
+    assert!(matches!(
+        fixture.registrar.prepare(&intent).await.unwrap(),
+        PrepareSessionStart::AccessEnrollment
+    ));
+    assert!(fixture.authority.events.lock().unwrap().is_empty());
+    assert!(fixture.repository.records.lock().unwrap().is_empty());
+    *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::MachineTokens;
+    assert!(matches!(
+        fixture.registrar.prepare(&intent).await,
+        Err(RegistrarFailure::ProjectRequired)
+    ));
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_persists_actual_identity_before_registration_and_holds_binding_until_granted()
+ {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    let PrepareSessionStart::Prepared(record) = fixture.registrar.prepare(&intent).await.unwrap()
+    else {
+        panic!("new preparation missing");
+    };
+    let address = fixture
+        .registrar
+        .mark_dispatched(&intent.operation_id)
+        .await
+        .unwrap();
+    assert_eq!(address, record.preparation().binding_address);
+    let session = fixture.session();
+    let registering = fixture
+        .registrar
+        .created(&intent.operation_id, session.clone());
+    tokio::pin!(registering);
+    assert!(registering.as_mut().now_or_never().is_none());
+    assert_eq!(
+        *fixture.authority.events.lock().unwrap(),
+        [
+            "startChecked",
+            "preparedStored",
+            "lifecycleStored",
+            "lifecycleStored",
+            "registrationSent"
+        ]
+    );
+    assert!(matches!(
+        fixture.repository.records.lock().unwrap()[0].lifecycle(),
+        FleetSessionBindingLifecycle::Prepared {
+            creation: PreparedSessionCreation::Created { .. }
+        }
+    ));
+    assert!(matches!(
+        fixture.registrar.resolve_binding(&address).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    fixture.grant();
+    let RegistrationCompletion::Registered(bound) = registering.await.unwrap() else {
+        panic!("confirmed registration missing");
+    };
+    assert_eq!(bound.session(), &session);
+    bound.require_sender(&session).unwrap();
+    let mut forged = session.clone();
+    forged.session_id = "different-conversation".to_owned().try_into().unwrap();
+    assert_eq!(
+        bound.require_sender(&forged),
+        Err(RegistrarFailure::SenderMismatch)
+    );
+    assert_eq!(
+        fixture
+            .registrar
+            .binding_for_restore(&session)
+            .await
+            .unwrap(),
+        address
+    );
+    fixture
+        .registrar
+        .end(&session, SessionEndCause::Archived)
+        .await
+        .unwrap();
+    assert!(matches!(
+        fixture.registrar.resolve_binding(&address).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    assert!(matches!(
+        fixture.registrar.binding_for_restore(&session).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    assert_eq!(
+        *fixture.authority.events.lock().unwrap().last().unwrap(),
+        "endSent"
+    );
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_ambiguous_registration_resends_identical_bytes_without_another_dispatch()
+ {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    fixture.registrar.prepare(&intent).await.unwrap();
+    let address = fixture
+        .registrar
+        .mark_dispatched(&intent.operation_id)
+        .await
+        .unwrap();
+    fixture
+        .answers
+        .send(Err(FleetSessionConnectionFailure::MalformedReply))
+        .unwrap();
+    assert_eq!(
+        fixture
+            .registrar
+            .created(&intent.operation_id, fixture.session())
+            .await
+            .unwrap(),
+        RegistrationCompletion::Pending
+    );
+    assert!(matches!(
+        fixture.registrar.resolve_binding(&address).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    assert!(matches!(
+        fixture.registrar.prepare(&intent).await.unwrap(),
+        PrepareSessionStart::Existing(_)
+    ));
+    assert_eq!(
+        fixture
+            .registrar
+            .mark_dispatched(&intent.operation_id)
+            .await,
+        Err(RegistrarFailure::InvalidTransition)
+    );
+    fixture.grant();
+    assert!(matches!(
+        fixture
+            .registrar
+            .reconcile_registration(&intent.operation_id)
+            .await
+            .unwrap(),
+        RegistrationCompletion::Registered(_)
+    ));
+    let sent = fixture.authority.registrations.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[0], sent[1]);
+    drop(sent);
+    let mut different = intent.clone();
+    different.project_id = Some(
+        "019f0000-0000-7000-8000-000000000099"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    );
+    assert!(matches!(
+        fixture.registrar.prepare(&different).await,
+        Err(RegistrarFailure::OperationConflict)
+    ));
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_created_then_refused_and_known_failed_creation_never_restore() {
+    for created in [false, true] {
+        let fixture = Fixture::new();
+        let intent = fixture.intent();
+        fixture.registrar.prepare(&intent).await.unwrap();
+        let address = fixture
+            .registrar
+            .mark_dispatched(&intent.operation_id)
+            .await
+            .unwrap();
+        if created {
+            fixture
+                .answers
+                .send(Ok(RegisterFleetSessionResult::Refused {
+                    reason: fleet_identity_protocol::SessionRefusal::MachineNotAllowed {},
+                }))
+                .unwrap();
+            assert!(matches!(
+                fixture
+                    .registrar
+                    .created(&intent.operation_id, fixture.session())
+                    .await
+                    .unwrap(),
+                RegistrationCompletion::Refused(_)
+            ));
+        } else {
+            fixture
+                .registrar
+                .creation_refused(&intent.operation_id)
+                .await
+                .unwrap();
+        }
+        assert!(matches!(
+            fixture.repository.records.lock().unwrap()[0].lifecycle(),
+            FleetSessionBindingLifecycle::Abandoned { .. }
+        ));
+        assert!(matches!(
+            fixture.registrar.resolve_binding(&address).await,
+            Err(RegistrarFailure::InactiveBinding)
+        ));
+        assert!(matches!(
+            fixture
+                .registrar
+                .binding_for_restore(&fixture.session())
+                .await,
+            Err(RegistrarFailure::InactiveBinding)
+        ));
+    }
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_origin_change_refuses_an_existing_registration_without_authority_io()
+ {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    fixture.registrar.prepare(&intent).await.unwrap();
+    fixture.authority.events.lock().unwrap().clear();
+    let moved = Fixture::make_registrar(
+        fixture.repository.clone(),
+        fixture.authority.clone(),
+        fixture.mode.clone(),
+        "http://127.0.0.1:8789",
+    );
+    assert!(matches!(
+        moved.prepare(&intent).await,
+        Err(RegistrarFailure::OriginChanged)
+    ));
+    assert!(fixture.authority.events.lock().unwrap().is_empty());
+}

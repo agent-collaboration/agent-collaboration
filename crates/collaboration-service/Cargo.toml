@@ -12,6 +12,8 @@ runtime-test-support = ["interaction-storage/runtime-test-support", "collaborati
 [lints]
 workspace = true
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
+codex-router-state = { path = "../codex-router-state", version = "0.1.119" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }

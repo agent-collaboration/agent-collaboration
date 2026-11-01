@@ -1,6 +1,7 @@
 //! Collaboration application operations and publication policy, independent of the Host executable.
 pub mod collaboration_application;
 pub mod collaboration_rejection;
+pub mod fleet_session_registrar;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
 mod board_views;
 mod notification_publisher;

@@ -12,6 +12,12 @@ workspace = true
 sync-rusqlite-fixtures = ["dep:rusqlite"]
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.119" }
+message-board = { path = "../message-board", version = "0.1.119" }
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
 codex-router-core.workspace = true
 codex-router-selection = { path = "../codex-router-selection", version = "0.1.4" }
 futures-util.workspace = true
