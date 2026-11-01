@@ -34,10 +34,18 @@ impl NativeSessionRegistration {
             return Ok(None);
         }
         let operation = operation.ok_or(HarnessLaunchFailure::InvalidInput)?;
-        let endpoint = crate::native_thread_preparation::endpoint(destination);
-        let project_id = match destination {
-            DestinationPreparation::Fresh { project_id, .. }
-            | DestinationPreparation::Fork { project_id, .. } => project_id.clone(),
+        let (endpoint, working_directory, project_id) = match destination {
+            DestinationPreparation::Fresh {
+                endpoint,
+                cwd,
+                project_id,
+            } => (endpoint, cwd, project_id.clone()),
+            DestinationPreparation::Fork {
+                source,
+                cwd,
+                project_id,
+                ..
+            } => (&source.endpoint, cwd, project_id.clone()),
             DestinationPreparation::Existing { .. } => unreachable!(),
         };
         let fork = match destination {
@@ -54,7 +62,7 @@ impl NativeSessionRegistration {
         let declared = HarnessDeclaredLaunchInput {
             endpoint: endpoint.clone(),
             project_id,
-            working_directory: crate::native_thread_preparation::cwd(destination)
+            working_directory: working_directory
                 .to_owned()
                 .try_into()
                 .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
