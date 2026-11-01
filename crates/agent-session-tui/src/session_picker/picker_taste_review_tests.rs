@@ -81,13 +81,7 @@ async fn settings_menu_does_not_repeat_cycle_entries_and_help_precedes_quit() {
 #[tokio::test]
 async fn new_buttons_are_plain_and_one_action_hint_line_follows_them() {
     for (width, height) in [(120, 36), (76, 30), (48, 12), (32, 24)] {
-        let frame = render_picker_capture_at(
-            picker_request(),
-            width,
-            height,
-            vec![ctrl_key('n'), ctrl_key('d')],
-        )
-        .await;
+        let frame = capture_new_dialog_after_processed_open(width, height).await;
         assert_eq!(frame.matches("Ctrl+Enter").count(), 1, "{frame}");
         assert_eq!(frame.matches("Esc").count(), 1, "{frame}");
         assert!(
@@ -128,6 +122,38 @@ async fn new_buttons_are_plain_and_one_action_hint_line_follows_them() {
             "plain buttons precede the one hint line: {frame}"
         );
     }
+}
+
+async fn capture_new_dialog_after_processed_open(width: usize, height: usize) -> String {
+    use crate::picker_control_test_support::{
+        event_driver::{EventDriver, InputMode, SurfaceSnapshot},
+        recording_backend::recording_terminal_render_loop,
+    };
+    let (mut driver, config, journal) = EventDriver::new();
+    let mut ui = element!(SessionsPickerComponent(request:picker_request(),width,height,
+        input_observer:move |()| journal.processed(SurfaceSnapshot(Vec::new()))));
+    let captured = Arc::new(Mutex::new(String::new()));
+    let sink = captured.clone();
+    let mut frames = Box::pin(
+        recording_terminal_render_loop(&mut ui, config)
+            .inspect(move |canvas| *sink.lock().unwrap() = canvas.to_string()),
+    );
+    // Opening and immediate global Quit observe an intermediate measured layout.
+    // Use the same causal frame drain as R15, without selecting a passing frame.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        driver.initial(&mut frames).await;
+        driver
+            .drive(
+                &mut frames,
+                InputMode::FrameSeparated,
+                vec![(ctrl_key('n'), true)],
+                true,
+            )
+            .await;
+        captured.lock().unwrap().clone()
+    })
+    .await
+    .expect("processed New dialog and its ready layout frames")
 }
 
 #[tokio::test]

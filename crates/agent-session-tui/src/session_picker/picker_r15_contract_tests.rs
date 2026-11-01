@@ -3,8 +3,8 @@ use super::picker_r15_instance::PickerR15Instance;
 use super::*;
 use crate::picker_control_test_support::{
     control_kind_contract::{
-        ControlInput, ControlKind, ControlKindContract, ControlPaint, ControlStep,
-        assert_control_kind_matrix,
+        ControlInput, ControlKind, ControlKindContract, ControlKindDeclaration, ControlPaint,
+        ControlStep, ScreenControlContracts, assert_control_kind_matrix,
     },
     event_driver::SurfaceSnapshot,
     frame_grid::FrameStyle,
@@ -472,6 +472,11 @@ fn contract(kind: ControlKind, viewport: (u16, u16)) -> ControlKindContract {
         }
         ControlKind::DialogKeyHints => {
             open_new(&mut state, &mut steps);
+            steps
+                .last_mut()
+                .unwrap()
+                .paint
+                .extend([contains("Ctrl+Enter Start"), contains("Esc Cancel")]);
             steps.last_mut().unwrap().paint.push(styled(
                 "Ctrl+Enter",
                 Color::AnsiValue(7),
@@ -507,24 +512,36 @@ fn contract(kind: ControlKind, viewport: (u16, u16)) -> ControlKindContract {
 }
 #[tokio::test]
 async fn r15_actual_picker_control_instances_cover_all_kinds_and_grids() {
-    let contracts = STANDARD_GRIDS
-        .into_iter()
-        .flat_map(|viewport| {
-            [
-                ControlKind::Button,
-                ControlKind::TextField,
-                ControlKind::FilterField,
-                ControlKind::ComboBox,
-                ControlKind::SegmentedSwitch,
-                ControlKind::ScrollingList,
-                ControlKind::FormField,
-                ControlKind::DialogKeyHints,
-            ]
-            .map(|kind| contract(kind, viewport))
-        })
-        .collect();
-    assert_control_kind_matrix(contracts, |instance, journal, observed| {
-        element!(PickerR15Instance(instance, journal, observed))
+    let kinds = [
+        ControlKind::Button,
+        ControlKind::TextField,
+        ControlKind::FilterField,
+        ControlKind::ComboBox,
+        ControlKind::SegmentedSwitch,
+        ControlKind::ScrollingList,
+        ControlKind::FormField,
+        ControlKind::DialogKeyHints,
+    ]
+    .into_iter()
+    .map(|kind| ControlKindDeclaration::OnScreen {
+        kind,
+        contracts: STANDARD_GRIDS
+            .into_iter()
+            .map(|viewport| contract(kind, viewport))
+            .collect(),
     })
+    .collect();
+    let summary = assert_control_kind_matrix(
+        vec![ScreenControlContracts {
+            screen: "Sessions",
+            kinds,
+        }],
+        |instance, journal, observed| element!(PickerR15Instance(instance, journal, observed)),
+    )
     .await;
+    assert_eq!(summary.passed_contracts, 32);
+    assert!(
+        summary.not_on_screen.is_empty(),
+        "picker mounts all eight real kinds, with the declared narrow switch projections"
+    );
 }
