@@ -13,6 +13,7 @@ members = [
     "crates/message-board-storage",
     "crates/agent-automation",
     "crates/automation-storage",
+    "crates/ui-preference-store",
     "crates/interaction-storage",
     "crates/codex-acp-adapter",
     "crates/lifecycle-observation",

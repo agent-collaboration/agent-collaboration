@@ -9,11 +9,13 @@ use super::{
     },
 };
 use agent_collaboration_tui::{
-    controls::HelpControl,
-    input_owner::InputOwner,
-    overlay_host::OverlayHost,
-    surface_handle::{SurfaceStackHandle, use_surface_stack},
-    surface_stack::SurfaceId,
+    dialog::help::HelpControl,
+    input::input_owner::InputOwner,
+    surfaces::{
+        overlay_host::OverlayHost,
+        surface_handle::{SurfaceStackHandle, use_surface_stack},
+        surface_stack::SurfaceId,
+    },
 };
 use iocraft::prelude::*;
 use std::sync::Arc;
@@ -33,6 +35,11 @@ pub(crate) fn render_interactive_quota_status(
         return element!(Text(content:"Quota control options are invalid",color:Color::Red))
             .into_any();
     };
+    let group_choice =
+        match super::quota_combo_controls::grouping_options(props.initial_group_facet) {
+            Ok(value) => value,
+            Err(error) => return element!(Text(content:error,color:Color::Red)).into_any(),
+        };
     let initial_focus = props.initial_focused_account_id.clone().or_else(|| {
         props
             .view_model
@@ -45,6 +52,7 @@ pub(crate) fn render_interactive_quota_status(
     let initial_selection = match super::quota_list_controls::initial_account_selection(
         &props.view_model,
         initial_focus.as_ref(),
+        props.initial_group_facet,
     ) {
         Ok(value) => value,
         Err(error) => return element!(Text(content:error,color:Color::Red)).into_any(),
@@ -63,8 +71,16 @@ pub(crate) fn render_interactive_quota_status(
         #[cfg(test)]
         viewport_trace: props.viewport_trace.clone(),
         view_model,
-        filters: hooks.use_state(Default::default),
+        group_preferences: props.group_preferences.clone(),
+        filters: hooks.use_state(|| super::quota_provider_filters::QuotaFilterState {
+            committed: super::quota_provider_filters::QuotaAccountFilters {
+                group_by: props.initial_group_facet,
+                ..Default::default()
+            },
+            draft: None,
+        }),
         provider_choice: hooks.use_state(|| provider),
+        group_choice: hooks.use_state(|| group_choice),
         disabled_choice: hooks.use_state(|| disabled),
         credit_choice: hooks.use_state(|| credit),
         focused_account_id: hooks.use_state(|| initial_focus),
@@ -147,7 +163,7 @@ pub(crate) fn render_interactive_quota_status(
             }
         }
     });
-    #[cfg(test)]
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
     if let Some(observer) = &props.surface_stack_observer {
         observer(stack);
     }
@@ -170,6 +186,18 @@ pub(crate) fn render_interactive_quota_status(
     }
     use_quota_scope_updates(&mut hooks, stack, &context, &list);
     let reload_lock = hooks.use_memo(|| Arc::new(tokio::sync::Mutex::new(())), ());
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+    super::quota_fixture_view::use_fixture_controller(
+        &mut hooks,
+        props.fixture_controller.clone(),
+        super::quota_fixture_controller::LiveQuotaFixture {
+            context: context.clone(),
+            list: list.clone(),
+            stack,
+            loader: props.reload_view_model.clone(),
+            reload_lock: reload_lock.clone(),
+        },
+    );
     super::quota_background_updates::use_quota_background_updates(
         &mut hooks,
         super::quota_background_updates::QuotaBackgroundUpdates {
@@ -246,7 +274,7 @@ pub(crate) fn render_interactive_quota_status(
         if let Some(session)=routed_context.dialog.read().clone() && stack.snapshot().surface(SurfaceId::Overlay(session.id)).is_none() {let mut dialog=routed_context.dialog;dialog.set(None);}
         #[cfg(test)] if let Some(observer)=&routed_outcome_observer {observer(routed_context.outcome.read().clone());}
     }) {OverlayHost {super::quota_control_browse_view::QuotaControlBrowse(context,list)}});
-    #[cfg(test)]
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
     let root = {
         let mut root = root;
         root.props.dispatch_receipt = props.dispatch_receipt.clone();
@@ -279,7 +307,7 @@ fn use_quota_scope_updates(
     hooks: &mut Hooks<'_, '_>,
     stack: SurfaceStackHandle,
     context: &QuotaControlContext,
-    list: &agent_collaboration_tui::controls::ListSelectionControl,
+    list: &agent_collaboration_tui::controls::list::ListSelectionControl,
 ) {
     show_control_result(
         context,

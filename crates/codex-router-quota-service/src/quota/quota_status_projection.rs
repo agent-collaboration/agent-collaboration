@@ -57,6 +57,7 @@ pub fn quota_status_view_model(
                 account: row.account_label.clone(),
                 status: display_quota_row_status(report, row),
                 active_clients: active_clients_label(row),
+                active_clients_value: row.active_clients_value,
                 reset_credits: reset_credits_account_list_label(row.reset_credits_available_value),
                 credit_usage_summary: credit_usage_compact_summary(&row.credit_usage),
                 credit_usage: row.credit_usage.clone(),
@@ -365,6 +366,18 @@ mod presentation_projection_tests {
             quota_status_view_model(&report, report.rows(), 120).rows[0].login_state,
             QuotaLoginState::NotRequired
         );
+    }
+
+    #[test]
+    fn row_projection_carries_typed_active_clients_independently_from_display_text() {
+        for count in [None, Some(0), Some(9)] {
+            let mut row = observed_row();
+            row.active_clients_value = count;
+            row.active_clients = "unrelated presentation".to_owned();
+            let report = report(vec![row]);
+            let view = quota_status_view_model(&report, report.rows(), 120);
+            assert_eq!(view.rows[0].active_clients_value, count);
+        }
     }
 
     fn observed_row() -> QuotaStatusRow {

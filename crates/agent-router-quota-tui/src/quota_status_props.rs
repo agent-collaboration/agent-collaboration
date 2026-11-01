@@ -14,16 +14,18 @@ use tokio::sync::watch;
 
 #[derive(Default, Props)]
 pub(crate) struct QuotaStatusComponentProps {
-    #[cfg(test)]
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
     pub(crate) surface_stack_observer:
-        Option<Handler<agent_collaboration_tui::surface_handle::SurfaceStackHandle>>,
-    #[cfg(test)]
+        Option<Handler<agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle>>,
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
     pub(crate) dispatch_receipt:
-        Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
+        Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
     #[cfg(test)]
     pub(crate) quit_observer: Option<Handler<()>>,
     #[cfg(test)]
     pub(crate) routed_outcome_observer: Option<Handler<Option<crate::QuotaOutcome>>>,
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+    pub(crate) fixture_controller: Option<crate::quota_fixture_controller::QuotaFixtureController>,
     pub(crate) quota_refresher: Option<crate::QuotaRefresher>,
     pub(crate) account_commands: Option<crate::QuotaAccountCommandQueue>,
     pub(crate) outcome_sink: Option<std::sync::Arc<std::sync::Mutex<Option<crate::QuotaOutcome>>>>,
@@ -31,6 +33,8 @@ pub(crate) struct QuotaStatusComponentProps {
     pub(crate) fixture_control: Option<crate::test_support::QuotaFixtureControl>,
     pub(crate) initial_focused_account_id: Option<codex_router_core::ids::AccountId>,
     pub(crate) notice: Option<String>,
+    pub(crate) initial_group_facet: crate::QuotaGroupFacet,
+    pub(crate) group_preferences: Option<crate::QuotaGroupPreferences>,
     pub(crate) interaction_mode: QuotaInteractionMode,
     pub(crate) view_model: QuotaStatusViewModel,
     pub(crate) width: usize,

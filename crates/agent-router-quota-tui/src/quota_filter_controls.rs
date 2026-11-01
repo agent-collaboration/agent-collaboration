@@ -8,9 +8,11 @@ use super::{
 };
 use agent_collaboration_tui::{
     actions::Placement,
-    controls::button_target,
-    focus_model::{GroupId, TargetId},
-    surface_handle::SurfaceStackHandle,
+    controls::fields::button_target,
+    surfaces::{
+        focus_model::{GroupId, TargetId},
+        surface_handle::SurfaceStackHandle,
+    },
 };
 
 pub(crate) fn filter_dialog_controls(
@@ -20,6 +22,7 @@ pub(crate) fn filter_dialog_controls(
     let group = GroupId::new("quota-filter-fields").map_err(|error| error.to_string())?;
     let provider = choice_action(stack, context.clone(), QuotaChoiceField::Provider)?;
     let disabled = choice_action(stack, context.clone(), QuotaChoiceField::Disabled)?;
+    let grouping = choice_action(stack, context.clone(), QuotaChoiceField::Group)?;
     let apply_context = context.clone();
     let apply = quota_action(
         "apply-filters",
@@ -33,6 +36,9 @@ pub(crate) fn filter_dialog_controls(
                 next.committed = draft.filters;
             }
             filters.set(next);
+            if let Some(preferences) = &apply_context.group_preferences {
+                preferences.remember(next.committed.group_by);
+            }
             let rows = next
                 .committed
                 .visible_rows(&apply_context.view_model.read().rows);
@@ -53,9 +59,15 @@ pub(crate) fn filter_dialog_controls(
     let targets = vec![
         button_target(choice_target(QuotaChoiceField::Provider)?, &provider)
             .in_group(group.clone()),
-        button_target(choice_target(QuotaChoiceField::Disabled)?, &disabled).in_group(group),
+        button_target(choice_target(QuotaChoiceField::Disabled)?, &disabled)
+            .in_group(group.clone()),
+        button_target(choice_target(QuotaChoiceField::Group)?, &grouping).in_group(group),
         button_target(TargetId::for_action(&apply.id), &apply),
         button_target(TargetId::for_action(&cancel.id), &cancel),
     ];
-    Ok((vec![provider, disabled, apply, cancel], targets, primary))
+    Ok((
+        vec![provider, disabled, grouping, apply, cancel],
+        targets,
+        primary,
+    ))
 }

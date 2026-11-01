@@ -1,6 +1,6 @@
 //! Consumer context accompanies Help's live action projection; it adds no fake actions.
 use super::quota_control_context::{QuotaControlContext, QuotaDialogKind};
-use agent_collaboration_tui::controls::{HelpContent, HelpContextLine, HelpInputConvention};
+use agent_collaboration_tui::dialog::help::{HelpContent, HelpContextLine, HelpInputConvention};
 
 pub(crate) fn quota_header_help_context(context: &QuotaControlContext) -> Vec<HelpContextLine> {
     let model = context.view_model.read();

@@ -78,6 +78,41 @@ fn main() -> io::Result<ExitCode> {
     serde_json::to_writer(&mut output, &receipt).map_err(io::Error::other)?;
     writeln!(output)?;
     output.sync_all()?;
+    await_owned_fixture_release(&receipt)?;
     println!("Recording login child finished");
     Ok(ExitCode::from(exit_code))
+}
+
+fn await_owned_fixture_release(receipt: &LoginStandinReceipt) -> io::Result<()> {
+    use std::io::Read;
+    use std::os::unix::{
+        fs::{FileTypeExt, PermissionsExt},
+        net::UnixStream,
+    };
+    let Some(path) = std::env::var_os("QUOTA_LOGIN_STANDIN_GATE").map(PathBuf::from) else {
+        return Ok(());
+    };
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("fixture gate has no parent"))?;
+    let metadata = std::fs::symlink_metadata(&path)?;
+    if !path.is_absolute()
+        || !metadata.file_type().is_socket()
+        || std::fs::metadata(parent)?.permissions().mode() & 0o077 != 0
+    {
+        return Err(io::Error::other(
+            "login gate must be an owned socket in a private fixture directory",
+        ));
+    }
+    let mut stream = UnixStream::connect(path)?;
+    serde_json::to_writer(&mut stream, receipt).map_err(io::Error::other)?;
+    writeln!(stream)?;
+    let mut release = [0; 7];
+    stream.read_exact(&mut release)?;
+    if &release != b"settle\n" {
+        return Err(io::Error::other(
+            "login fixture gate returned an invalid release",
+        ));
+    }
+    Ok(())
 }

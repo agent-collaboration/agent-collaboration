@@ -55,12 +55,17 @@ pub struct QuotaStatusViewOptions {
     pub account_commands: Option<crate::QuotaAccountCommandQueue>,
     pub focused_account_id: Option<codex_router_core::ids::AccountId>,
     pub notice: Option<String>,
+    pub group_preferences: Option<crate::QuotaGroupPreferences>,
 }
 
 pub async fn run_quota_status_view(
     view_model: QuotaStatusViewModel,
     options: QuotaStatusViewOptions,
 ) -> io::Result<crate::QuotaOutcome> {
+    #[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+    if let Some(fixture) = crate::quota_fixture_view::current() {
+        return crate::quota_fixture_view::run(view_model, options, fixture).await;
+    }
     let (reset_intent_sender, reset_snapshot_receiver) = options
         .reset_session_ports
         .map(|ports| (Some(ports.intent_sender), Some(ports.snapshot_receiver)))
@@ -83,6 +88,8 @@ pub async fn run_quota_status_view(
             account_commands:options.account_commands,
             initial_focused_account_id:options.focused_account_id,
             notice:options.notice,
+            initial_group_facet:options.group_preferences.as_ref().map_or(crate::QuotaGroupFacet::None, crate::QuotaGroupPreferences::current_facet),
+            group_preferences:options.group_preferences,
             outcome_sink,
             reload_interval: LIVE_QUOTA_STATUS_RELOAD_INTERVAL,
             spinner_interval: LIVE_QUOTA_STATUS_SPINNER_INTERVAL,

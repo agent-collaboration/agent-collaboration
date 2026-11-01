@@ -154,3 +154,6 @@ async fn screen_refresh_adapter_setup_failure_has_overall_message_and_no_account
     );
     assert_eq!(provider.0.load(Ordering::SeqCst), 0);
 }
+
+#[path = "quota_refresh_observer_contract_test.rs"]
+mod observer_contract;

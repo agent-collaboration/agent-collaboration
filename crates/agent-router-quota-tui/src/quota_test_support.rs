@@ -1,24 +1,35 @@
 //! Reuse S2's recording backend and causal driver; quota adds no second emulator.
-#[path = "../../agent-collaboration-tui/tests/support/dispatch_frame_scene.rs"]
-pub mod dispatch_frame_scene;
-#[path = "../../agent-collaboration-tui/tests/support/event_driver.rs"]
+use futures_util::StreamExt;
+use iocraft::{
+    Canvas, TerminalEvent,
+    prelude::{KeyCode, KeyEventKind, KeyModifiers},
+};
+use std::time::Duration;
+#[path = "../../agent-collaboration-tui/src/test_support/event_driver.rs"]
 pub mod event_driver;
-#[path = "../../agent-collaboration-tui/tests/support/frame_grid.rs"]
+#[path = "../../agent-collaboration-tui/src/test_support/frame_grid.rs"]
 pub mod frame_grid;
-#[path = "../../agent-collaboration-tui/tests/support/recording_backend.rs"]
+#[path = "../../agent-collaboration-tui/src/test_support/frame_inspection.rs"]
+mod frame_inspection;
+#[path = "../../agent-collaboration-tui/src/test_support/frame_output.rs"]
+pub mod frame_output;
+#[path = "../../agent-collaboration-tui/src/test_support/recording_backend.rs"]
 pub mod recording_backend;
 
 #[derive(Clone, Default)]
 pub(crate) struct PublishedQuotaPopup {
     stack: std::sync::Arc<
-        std::sync::Mutex<Option<agent_collaboration_tui::surface_handle::SurfaceStackHandle>>,
+        std::sync::Mutex<
+            Option<agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle>,
+        >,
     >,
 }
 
 impl PublishedQuotaPopup {
     pub(crate) fn observer(
         &self,
-    ) -> iocraft::Handler<agent_collaboration_tui::surface_handle::SurfaceStackHandle> {
+    ) -> iocraft::Handler<agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle>
+    {
         let observed = self.stack.clone();
         iocraft::Handler::from(move |stack| *observed.lock().unwrap() = Some(stack))
     }
@@ -33,7 +44,7 @@ impl PublishedQuotaPopup {
         assert!(
             matches!(
                 snapshot.overlays().last().expect("popup is open").kind,
-                agent_collaboration_tui::surface_stack::OverlayKind::Dropdown { .. }
+                agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Dropdown { .. }
             ),
             "popup extraction cannot borrow a dialog or the screen"
         );
@@ -50,7 +61,7 @@ impl PublishedQuotaPopup {
     }
 }
 
-fn published_popup_frame(canvas: &iocraft::Canvas, cells: &[(u16, u16)]) -> String {
+pub(crate) fn published_popup_frame(canvas: &iocraft::Canvas, cells: &[(u16, u16)]) -> String {
     let left = usize::from(
         cells
             .iter()
@@ -144,4 +155,161 @@ pub fn require_color_environment() {
         std::env::var_os("NO_COLOR").is_none(),
         "quota frame checks require NO_COLOR unset"
     );
+}
+
+pub(crate) fn dispatched_frame_sequences(bytes: &[u8]) -> Vec<u64> {
+    let text = std::str::from_utf8(bytes).unwrap();
+    let (_, mut suffix) = text
+        .rsplit_once("\x1b[?2026l")
+        .expect("shared native backend ends every synchronized frame");
+    let mut sequences = Vec::new();
+    while !suffix.is_empty() {
+        let next = suffix
+            .strip_prefix("\x1b]7770;dispatch=")
+            .expect("only dispatch markers follow the frame flush");
+        let (sequence, rest) = next
+            .split_once("\x1b\\")
+            .expect("complete dispatch marker terminator");
+        sequences.push(sequence.parse().expect("dispatch sequence is a u64"));
+        suffix = rest;
+    }
+    sequences
+}
+
+pub(crate) struct QuotaInputFrameDriver {
+    sender: tokio::sync::mpsc::UnboundedSender<TerminalEvent>,
+    receipt_path: std::path::PathBuf,
+    sequence: u64,
+}
+impl QuotaInputFrameDriver {
+    pub(crate) fn new(
+        sender: tokio::sync::mpsc::UnboundedSender<TerminalEvent>,
+        receipt_path: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            sender,
+            receipt_path,
+            sequence: 0,
+        }
+    }
+
+    pub(crate) async fn step<TFrames>(
+        &mut self,
+        mut frames: std::pin::Pin<&mut TFrames>,
+        event: TerminalEvent,
+        mut matches: impl FnMut(&Canvas) -> bool,
+    ) -> Canvas
+    where
+        TFrames: futures_util::Stream<Item = frame_output::DispatchFrame> + ?Sized,
+    {
+        self.sequence = self.sequence.checked_add(1).unwrap();
+        let sequence = self.sequence;
+        let marker_sequence = sequence;
+        let expected_event = quota_event_readback(&event);
+        self.sender.send(event).unwrap();
+        let mut receipt_seen = false;
+        let mut marker_seen = false;
+        let mut last_frame = String::new();
+        let result = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let (canvas, markers) = current_quota_batch(frames.as_mut()).await;
+                let receipts = std::fs::read_to_string(&self.receipt_path)
+                    .unwrap()
+                    .lines()
+                    .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+                    .collect::<Vec<_>>();
+                if let Some(receipt) = receipts.iter().find(|value| value["sequence"] == sequence) {
+                    assert_eq!(receipts.len(), usize::try_from(sequence).unwrap());
+                    assert_eq!(
+                        receipt["event"], expected_event,
+                        "actual event for this step"
+                    );
+                    receipt_seen = true;
+                }
+                marker_seen |= markers.contains(&marker_sequence);
+                if marker_seen {
+                    assert!(
+                        receipt_seen,
+                        "flush marker must have its actual event receipt"
+                    );
+                }
+                if let Some(canvas) = canvas {
+                    last_frame = canvas.to_string();
+                    if receipt_seen && marker_seen && matches(&canvas) {
+                        return canvas;
+                    }
+                }
+            }
+        })
+        .await;
+        result.unwrap_or_else(|error| {
+            panic!(
+                "quota causal step {sequence}: {error}; receipt={receipt_seen}, marker={marker_seen}, expected marker={marker_sequence}; last frame:\n{last_frame}"
+            )
+        })
+    }
+}
+
+fn quota_event_readback(event: &TerminalEvent) -> serde_json::Value {
+    let TerminalEvent::Key(key) = event else {
+        panic!("quota journey uses only its declared key inputs");
+    };
+    assert_eq!(key.kind, KeyEventKind::Press);
+    let (code, modifiers) = match key.code {
+        KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => (
+            serde_json::json!({"kind":"shortcut","key":"r"}),
+            serde_json::json!(["control"]),
+        ),
+        code if key.modifiers.is_empty() => (
+            serde_json::json!({"kind":"fixed","name":code.to_string()}),
+            serde_json::json!([]),
+        ),
+        _ => panic!("quota journey received an undeclared key chord"),
+    };
+    serde_json::json!({"kind":"key","code":code,"modifiers":modifiers,"phase":"press"})
+}
+
+pub(crate) async fn current_quota_canvas<TFrames>(mut frames: std::pin::Pin<&mut TFrames>) -> Canvas
+where
+    TFrames: futures_util::Stream<Item = frame_output::DispatchFrame> + ?Sized,
+{
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let (canvas, markers) = current_quota_batch(frames.as_mut()).await;
+            assert!(markers.is_empty(), "initial paint precedes all input");
+            if let Some(canvas) = canvas {
+                return canvas;
+            }
+        }
+    })
+    .await
+    .expect("initial quota Canvas must paint")
+}
+
+async fn current_quota_batch<TFrames>(
+    mut frames: std::pin::Pin<&mut TFrames>,
+) -> (Option<Canvas>, Vec<u64>)
+where
+    TFrames: futures_util::Stream<Item = frame_output::DispatchFrame> + ?Sized,
+{
+    use futures_util::FutureExt;
+    let mut frame = frames.next().await.expect("quota render stream is live");
+    let mut canvas = None;
+    let mut markers = Vec::new();
+    for _ in 0..64 {
+        let sequences = dispatched_frame_sequences(&frame.bytes);
+        assert!(
+            sequences.is_empty() || frame.canvas.is_some(),
+            "quota marker follows this frame's actual Canvas, never a cached frame"
+        );
+        markers.extend(sequences);
+        if let Some(painted) = frame.canvas {
+            canvas = Some(painted);
+        }
+        match frames.next().now_or_never() {
+            Some(Some(painted)) => frame = painted,
+            _ => return (canvas, markers),
+        }
+    }
+    panic!("quota ready-frame drain exceeded64")
 }

@@ -8,7 +8,7 @@ pub(crate) fn quota_help_key(code: iocraft::KeyCode, modifiers: iocraft::KeyModi
     let mut event = iocraft::KeyEvent::new(iocraft::KeyEventKind::Press, code);
     event.modifiers = modifiers;
     quota_help_keys().iter().any(|key| {
-        key.parse::<agent_collaboration_tui::actions::KeyChord>()
+        key.parse::<agent_collaboration_tui::foundation::KeyChord>()
             .is_ok_and(|key| key.matches(&event))
     })
 }

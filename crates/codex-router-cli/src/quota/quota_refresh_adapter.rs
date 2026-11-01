@@ -31,12 +31,20 @@ pub(super) fn interactive_quota_refresher(
             .await
             {
                 Ok(resolver) => resolver,
-                Err(error) => return overall_failure(error.to_string()),
+                Err(error) => {
+                    #[cfg(test)]
+                    observation::setup_error(&error);
+                    return overall_failure(error.to_string());
+                }
             };
             let provider = match codex_router_quota_service::quota::HttpQuotaRefreshProvider::new()
             {
                 Ok(provider) => provider,
-                Err(error) => return overall_failure(error.to_string()),
+                Err(error) => {
+                    #[cfg(test)]
+                    observation::setup_error(&error);
+                    return overall_failure(error.to_string());
+                }
             };
             refresh_quota_for_screen(
                 QuotaRefreshRequest {
@@ -62,6 +70,8 @@ where
     P: QuotaRefreshProvider,
 {
     if !super::is_allowed_quota_refresh_base_url(&request.base_url) {
+        #[cfg(test)]
+        observation::setup_error(&"Quota refresh provider URL is not allowed");
         return overall_failure("Quota refresh provider URL is not allowed".to_owned());
     }
     match refresh_quota_with_dependencies(
@@ -75,6 +85,11 @@ where
     .await
     {
         Ok(report) => {
+            #[cfg(test)]
+            {
+                observation::service_ok(&report);
+                observation::mapping_ok(&report);
+            }
             let refreshed = report
                 .account_outcomes
                 .iter()
@@ -92,12 +107,21 @@ where
             }
         }
         Err(QuotaServiceError::AllAccountsFailed { account_outcomes }) => {
+            #[cfg(test)]
+            {
+                observation::all_failed(&account_outcomes);
+                observation::mapping_all_failed(&account_outcomes);
+            }
             QuotaRefreshResult::Failed {
                 failed: refresh_failures(account_outcomes),
                 overall: None,
             }
         }
-        Err(error) => overall_failure(error.to_string()),
+        Err(error) => {
+            #[cfg(test)]
+            observation::service_error(&error);
+            overall_failure(error.to_string())
+        }
     }
 }
 
@@ -126,3 +150,7 @@ fn overall_failure(message: String) -> QuotaRefreshResult {
 #[cfg(test)]
 #[path = "quota_refresh_adapter_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "quota_refresh_observation_test_support.rs"]
+pub(super) mod observation;

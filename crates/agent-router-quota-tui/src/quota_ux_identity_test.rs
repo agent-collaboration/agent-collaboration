@@ -1,8 +1,8 @@
 //! Help preserves the captured target and an existing Yes choice without effects.
 use super::*;
+use crate::quota_test_support::{QuotaInputFrameDriver, current_quota_canvas};
 use codex_router_quota_service::quota_reset::reset_session_supervisor::*;
 use iocraft::Canvas;
-use std::time::Duration;
 
 #[tokio::test]
 async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_without_effects() {
@@ -41,41 +41,63 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
+    use crate::quota_test_support::frame_output::{SharedFrameOutput, dispatch_render_loop};
+    use agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink;
+    let directory = tempfile::tempdir().unwrap();
+    let receipt_path = directory.path().join("identity-input.jsonl");
+    let sink = InputDispatchReceiptSink::create(&receipt_path).unwrap();
     let mut component = element!(QuotaStatusComponent(
         view_model:super::super::quota_storyboard_fixture_test::fixture_model(),width:32usize,height:24usize,
-        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)
+        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver),dispatch_receipt:Some(sink.clone())
     ));
-    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    let bytes = SharedFrameOutput::default();
+    let writer = Box::new(sink.frame_writer(bytes.clone()).unwrap());
+    let frames = dispatch_render_loop(
+        &mut component,
+        MockTerminalConfig::with_events(events),
+        bytes,
+        writer,
+    );
     tokio::pin!(frames);
     let mut evidence = Vec::new();
+    let mut input = QuotaInputFrameDriver::new(sender, receipt_path);
     let journey = async {
-        current_identity_canvas(frames.as_mut()).await;
-        sender
-            .send(TerminalEvent::Key(clarity_control_key('r')))
-            .unwrap();
-        let mut canvas = current_identity_canvas(frames.as_mut()).await;
-        while !canvas.to_string().contains("Review") {
-            canvas = current_identity_canvas(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
-        canvas = current_identity_canvas(frames.as_mut()).await;
-        while !canvas.to_string().contains("Confirm reset") {
-            canvas = current_identity_canvas(frames.as_mut()).await;
-        }
-        sender.send(provider_filter_key(KeyCode::Right)).unwrap();
-        canvas = current_identity_canvas(frames.as_mut()).await;
-        while yes_choice_color(&canvas) != Some(Color::Yellow)
-            || !canvas.to_string().contains("● Yes")
-        {
-            canvas = current_identity_canvas(frames.as_mut()).await;
-        }
+        current_quota_canvas(frames.as_mut()).await;
+        input
+            .step(
+                frames.as_mut(),
+                TerminalEvent::Key(clarity_control_key('r')),
+                |canvas| canvas.to_string().contains("Review"),
+            )
+            .await;
+        input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Enter),
+                |canvas| canvas.to_string().contains("Confirm reset"),
+            )
+            .await;
+        let mut canvas = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::Right),
+                |canvas| {
+                    yes_choice_color(canvas) == Some(Color::Yellow)
+                        && canvas.to_string().contains("● Yes")
+                },
+            )
+            .await;
         evidence.push(("Yes before Help", canvas.to_string()));
         assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 3);
-        sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
-        canvas = current_identity_canvas(frames.as_mut()).await;
-        while !crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string()) {
-            canvas = current_identity_canvas(frames.as_mut()).await;
-        }
+        canvas = input
+            .step(
+                frames.as_mut(),
+                provider_filter_key(KeyCode::F(1)),
+                |canvas| {
+                    crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string())
+                },
+            )
+            .await;
         let mut full_name_visible = false;
         for _ in 0..24 {
             let frame = canvas.to_string();
@@ -89,15 +111,19 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
             if body.contains("Current quota") && full_name_visible {
                 break;
             }
-            sender.send(provider_filter_key(KeyCode::Down)).unwrap();
-            canvas = current_identity_canvas(frames.as_mut()).await;
+            canvas = input
+                .step(frames.as_mut(), provider_filter_key(KeyCode::Down), |_| {
+                    true
+                })
+                .await;
         }
         assert!(
             full_name_visible,
             "full captured label must be in actual scrollable Help body: {evidence:?}"
         );
-        sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-        canvas = current_identity_canvas(frames.as_mut()).await;
+        canvas = input
+            .step(frames.as_mut(), provider_filter_key(KeyCode::Esc), |_| true)
+            .await;
         assert_eq!(
             yes_choice_color(&canvas),
             Some(Color::Yellow),
@@ -114,7 +140,7 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
             "Help has no reset effect"
         );
     };
-    let result = tokio::time::timeout(Duration::from_secs(3), journey).await;
+    journey.await;
     driver.abort();
     if let Err(error) = driver.await {
         assert!(error.is_cancelled(), "{error}");
@@ -122,7 +148,7 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
     for (phase, frame) in &evidence {
         println!("IDENTITY32 {phase}:\n{frame}");
     }
-    result.expect("bounded real confirmation Help/return journey");
+    sink.flush_and_check().unwrap();
     let before = &evidence.first().unwrap().1;
     let after = &evidence.last().unwrap().1;
     let captured = |frame: &str| {
@@ -143,15 +169,6 @@ async fn phone_confirmation_identity_has_continuation_and_help_returns_to_yes_wi
     );
 }
 
-async fn current_identity_canvas<TFrames>(frames: std::pin::Pin<&mut TFrames>) -> Canvas
-where
-    TFrames: futures_util::Stream<Item = Canvas> + ?Sized,
-{
-    crate::quota_frame_observation::next_current_frame(frames)
-        .await
-        .unwrap()
-        .unwrap()
-}
 fn yes_choice_color(canvas: &Canvas) -> Option<Color> {
     let frame = canvas.to_string();
     let (row, line) = frame

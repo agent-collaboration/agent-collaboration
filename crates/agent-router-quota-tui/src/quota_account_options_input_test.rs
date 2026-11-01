@@ -1,3 +1,4 @@
+use crate::quota_test_support::dispatched_frame_sequences;
 // Causal rendered-frame acknowledgements and real Ctrl+C fixture input.
 #[derive(Clone, Copy, Debug)]
 enum ExpectedCreditFrame {
@@ -25,10 +26,10 @@ async fn render_account_options_component_frames<
     ordered_events: Vec<(TerminalEvent, Option<TAcknowledgement>)>,
     credit_policy_saver: Option<CreditUsagePolicySaver>,
 ) -> Vec<String> {
-    use crate::quota_test_support::dispatch_frame_scene::{
+    use crate::quota_test_support::frame_output::{
         SharedFrameOutput, dispatch_render_loop,
     };
-    use agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink;
+    use agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink;
 
     let directory = tempfile::tempdir().unwrap();
     let receipt_path = directory.path().join("input-dispatch.jsonl");
@@ -117,25 +118,6 @@ async fn render_account_options_component_frames<
             last_frame.lock().expect("frame trace lock")
         ),
     }
-}
-
-fn dispatched_frame_sequences(bytes: &[u8]) -> Vec<u64> {
-    let text = std::str::from_utf8(bytes).unwrap();
-    let (_, mut suffix) = text
-        .rsplit_once("\x1b[?2026l")
-        .expect("shared native backend ends every synchronized frame");
-    let mut sequences = Vec::new();
-    while !suffix.is_empty() {
-        let next = suffix
-            .strip_prefix("\x1b]7770;dispatch=")
-            .expect("only dispatch markers follow the frame flush");
-        let (sequence, rest) = next
-            .split_once("\x1b\\")
-            .expect("complete dispatch marker terminator");
-        sequences.push(sequence.parse().expect("dispatch sequence is a u64"));
-        suffix = rest;
-    }
-    sequences
 }
 
 fn assert_end_receipt(path: &std::path::Path, sequence: u64) {

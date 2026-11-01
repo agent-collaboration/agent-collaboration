@@ -1,13 +1,16 @@
 //! Map stable account identities into the shared list's selection and navigation.
 use super::quota_control_context::{QuotaControlContext, QuotaControlResult, action_id};
+use super::quota_grouped_rows::account_row_key;
 use agent_collaboration_tui::{
-    controls::{
+    controls::list::{
         ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl,
         ListSelectionState,
     },
-    focus_model::TargetId,
-    surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::SurfaceId,
+    surfaces::{
+        focus_model::TargetId,
+        surface_handle::{SurfaceContext, SurfaceStackHandle},
+        surface_stack::SurfaceId,
+    },
 };
 use codex_router_core::ids::AccountId;
 use codex_router_quota_service::quota_display_model::QuotaStatusViewModel;
@@ -18,23 +21,24 @@ pub(crate) fn account_list_target() -> QuotaControlResult<TargetId> {
     Ok(TargetId::for_action(&action_id("accounts")?))
 }
 
-pub(crate) fn account_row_key(account_id: &AccountId) -> QuotaControlResult<ListRowKey> {
-    ListRowKey::new(account_id.as_str()).map_err(|error| error.to_string())
-}
-
 pub(crate) fn initial_account_selection(
     model: &QuotaStatusViewModel,
     selected: Option<&AccountId>,
+    facet: crate::QuotaGroupFacet,
 ) -> QuotaControlResult<ListSelectionState> {
-    let rows = model
-        .rows
-        .iter()
-        .map(|row| account_row_key(&row.account_id))
-        .collect::<Result<Vec<_>, _>>()?;
-    let selected = selected
-        .map(account_row_key)
-        .transpose()?
-        .filter(|key| rows.contains(key));
+    let rows = super::quota_grouped_rows::grouped_account_rows(
+        super::quota_provider_filters::QuotaAccountFilters {
+            group_by: facet,
+            ..Default::default()
+        },
+        &model.rows,
+    )?;
+    let selected = selected.map(account_row_key).transpose()?.filter(|key| {
+        model
+            .rows
+            .iter()
+            .any(|row| row.account_id.as_str() == key.as_str())
+    });
     ListSelectionState::new(rows, selected).map_err(|error| error.to_string())
 }
 
@@ -76,14 +80,10 @@ pub(crate) fn synchronize_account_selection(
     control: &ListSelectionControl,
     context: &QuotaControlContext,
 ) -> QuotaControlResult<()> {
-    let rows = context
-        .filters
-        .read()
-        .committed
-        .visible_rows(&context.view_model.read().rows)
-        .iter()
-        .map(|row| account_row_key(&row.account_id))
-        .collect::<Result<Vec<_>, _>>()?;
+    let rows = super::quota_grouped_rows::grouped_account_rows(
+        context.filters.read().committed,
+        &context.view_model.read().rows,
+    )?;
     control
         .replace_rows(rows)
         .map_err(|error| error.to_string())?;

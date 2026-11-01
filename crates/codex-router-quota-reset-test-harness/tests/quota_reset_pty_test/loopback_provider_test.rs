@@ -39,6 +39,8 @@ struct LoopbackProviderResponsePlan {
     usage_failure: Option<UsageFailure>,
     usage_request_counts: BTreeMap<String, usize>,
     initial_get_responses_immediately: usize,
+    refresh_failed_accounts: Vec<String>,
+    complete_refresh_usage: bool,
 }
 
 struct UsageFailure {
@@ -53,6 +55,9 @@ impl LoopbackProviderResponsePlan {
             return None;
         }
         let routing_account = request.routing_account.as_ref()?;
+        if self.refresh_failed_accounts.contains(routing_account) {
+            return Some(429);
+        }
         let occurrence = self
             .usage_request_counts
             .entry(routing_account.clone())
@@ -88,6 +93,7 @@ impl HeldLoopbackProvider {
             }),
             usage_request_counts: BTreeMap::new(),
             initial_get_responses_immediately: 0,
+            ..LoopbackProviderResponsePlan::default()
         })
     }
 
@@ -96,6 +102,14 @@ impl HeldLoopbackProvider {
     ) -> TestResult<Self> {
         Self::bind_with_response_plan(LoopbackProviderResponsePlan {
             initial_get_responses_immediately: immediate_get_response_count,
+            ..LoopbackProviderResponsePlan::default()
+        })
+    }
+
+    pub(super) fn bind_quota_refresh(failed_accounts: &[String]) -> TestResult<Self> {
+        Self::bind_with_response_plan(LoopbackProviderResponsePlan {
+            refresh_failed_accounts: failed_accounts.to_vec(),
+            complete_refresh_usage: true,
             ..LoopbackProviderResponsePlan::default()
         })
     }
@@ -233,13 +247,14 @@ fn handle_provider_connection(
     let mut record = safe_request_record(&request);
     let method = record.method.clone();
     let path = record.path.clone();
-    let (response_status, release_get_immediately) = {
+    let (response_status, release_get_immediately, complete_refresh_usage) = {
         let mut response_plan = response_plan
             .lock()
             .map_err(|_poisoned| std::io::Error::other("provider response plan lock poisoned"))?;
         (
             response_plan.status_for(&record),
             method == "GET" && request_index < response_plan.initial_get_responses_immediately,
+            response_plan.complete_refresh_usage,
         )
     };
     record.response_status = response_status.unwrap_or(200);
@@ -273,6 +288,8 @@ fn handle_provider_connection(
     }
     let body = if method == "POST" {
         r#"{"code":"reset","windows_reset":2}"#
+    } else if path.ends_with("/usage") && complete_refresh_usage {
+        r#"{"rate_limit":{"primary_window":{"used_percent":10,"reset_at":2000000000,"limit_window_seconds":18000},"secondary_window":{"used_percent":91,"reset_at":2000000000,"limit_window_seconds":604800}},"code_review_rate_limit":{"primary_window":{"used_percent":20,"reset_at":2000000000,"limit_window_seconds":604800}},"additional_rate_limits":[],"credits":{"has_credits":true,"unlimited":false,"balance":"42.00"},"spend_control":{"reached":false}}"#
     } else if path.ends_with("/usage") {
         r#"{"rate_limit":{"primary_window":{"used_percent":10,"reset_at":2000000000,"limit_window_seconds":18000},"secondary_window":{"used_percent":91,"reset_at":2000000000,"limit_window_seconds":604800}},"additional_rate_limits":[],"credits":{"has_credits":true,"unlimited":false,"balance":"42.00"},"spend_control":{"reached":false}}"#
     } else {
@@ -325,5 +342,69 @@ fn safe_request_record(request: &[u8]) -> SafeRequestRecord {
         path,
         routing_account,
         response_status: 200,
+    }
+}
+
+#[test]
+fn quota_refresh_response_plan_is_opt_in_and_retains_real_get_post_gates() {
+    let routing = "routing-provider-contract";
+    for (mut provider, status, complete) in [
+        (HeldLoopbackProvider::bind().unwrap(), 200, false),
+        (
+            HeldLoopbackProvider::bind_failing_usage_for_account(routing, 1, 429).unwrap(),
+            429,
+            false,
+        ),
+        (
+            HeldLoopbackProvider::bind_releasing_first_gets(1).unwrap(),
+            200,
+            false,
+        ),
+        (
+            HeldLoopbackProvider::bind_quota_refresh(&[]).unwrap(),
+            200,
+            true,
+        ),
+        (
+            HeldLoopbackProvider::bind_quota_refresh(&[routing.to_owned()]).unwrap(),
+            429,
+            true,
+        ),
+    ] {
+        let mut usage = TcpStream::connect(provider.address()).unwrap();
+        usage
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        write!(usage, "GET /backend-api/wham/usage HTTP/1.1\r\nhost: localhost\r\nchatgpt-account-id: {routing}\r\nconnection: close\r\n\r\n").unwrap();
+        let requested = provider
+            .wait_for_request_count(1, Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(requested[0].method, "GET");
+        assert_eq!(requested[0].response_status, status);
+        provider.release_get_responses().unwrap();
+        let mut response = String::new();
+        usage.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with(&format!("HTTP/1.1 {status}")));
+        if status == 200 {
+            assert_eq!(
+                response.contains("code_review_rate_limit"),
+                complete,
+                "the original grid provider payload remains the default"
+            );
+        }
+        let mut reset = TcpStream::connect(provider.address()).unwrap();
+        reset
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        write!(reset, "POST /backend-api/wham/usage/reset HTTP/1.1\r\nhost: localhost\r\nchatgpt-account-id: {routing}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n").unwrap();
+        let requested = provider
+            .wait_for_request_count(2, Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(requested[1].method, "POST");
+        provider.release_post_response().unwrap();
+        let mut response = String::new();
+        reset.read_to_string(&mut response).unwrap();
+        assert!(response.contains("\"windows_reset\":2"));
+        assert_eq!(provider.finish().unwrap().len(), 2);
     }
 }

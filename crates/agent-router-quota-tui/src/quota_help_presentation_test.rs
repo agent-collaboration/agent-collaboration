@@ -169,6 +169,7 @@ async fn quota_help_inactive_filter_value_is_white_while_apply_focus_is_yellow()
                 provider_filter_key(KeyCode::Enter),
                 provider_filter_key(KeyCode::Tab),
                 provider_filter_key(KeyCode::Tab),
+                provider_filter_key(KeyCode::Tab),
                 TerminalEvent::Key(exit),
             ],
         )))

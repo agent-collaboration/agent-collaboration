@@ -7,10 +7,11 @@ use super::{
     },
 };
 use agent_collaboration_tui::{
-    actions::{ActionDef, ActionRegistry, ActionTitle, AvailabilityFn, Placement, ScopeId},
-    controls::{button_target, menu_overlay},
-    focus_model::TargetId,
-    surface_handle::SurfaceStackHandle,
+    actions::{
+        ActionDef, ActionRegistry, ActionRisk, ActionTitle, AvailabilityFn, Placement, ScopeId,
+    },
+    controls::{fields::button_target, menu::menu_overlay},
+    surfaces::{focus_model::TargetId, surface_handle::SurfaceStackHandle},
 };
 use codex_router_quota_service::quota_display_model::QuotaLoginState;
 
@@ -49,6 +50,7 @@ pub(crate) fn account_dialog_controls(
                 )
             },
         )?;
+        remove.risk = ActionRisk::Destructive;
         remove.availability = removal_availability(&context, target);
         let primary = Some(cancel.id.clone());
         let targets = [&cancel, &remove]
@@ -228,6 +230,7 @@ fn account_actions(
             super::quota_dialog_controls::set_remove_confirmation(stack, &remove_context, true);
         },
     )?;
+    remove.risk = ActionRisk::Destructive;
     remove.availability = removal_availability(&context, target);
     actions.push(remove);
     Ok(actions)

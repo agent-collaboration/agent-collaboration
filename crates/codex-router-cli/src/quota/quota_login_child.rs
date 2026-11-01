@@ -26,12 +26,12 @@ pub(super) async fn run_quota_login_child(
 ) -> QuotaLoginResult {
     // The child shares the terminal's foreground process group. Catch its Ctrl+C
     // in the parent as well; cancellation must return to quota, not kill it.
-    let mut interrupt =
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()) {
-            Ok(interrupt) => interrupt,
-            Err(error) => return QuotaLoginResult::Failed(error.to_string()),
-        };
-    let mut child = match tokio::process::Command::new("codex-router")
+    let interrupt = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+    {
+        Ok(interrupt) => interrupt,
+        Err(error) => return QuotaLoginResult::Failed(error.to_string()),
+    };
+    let child = match tokio::process::Command::new("codex-router")
         .args(login_arguments(router_root, target))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
@@ -41,9 +41,22 @@ pub(super) async fn run_quota_login_child(
         Ok(child) => child,
         Err(error) => return QuotaLoginResult::Failed(error.to_string()),
     };
+    await_quota_login_child(child, interrupt).await
+}
+
+async fn await_quota_login_child(
+    mut child: tokio::process::Child,
+    mut interrupt: tokio::signal::unix::Signal,
+) -> QuotaLoginResult {
+    #[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+    let child_pid = child.id();
     loop {
         tokio::select! {
-            status = child.wait() => return login_result(status),
+            status = child.wait() => {
+                #[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+                observation::parent_wait_returned(child_pid, &status);
+                return login_result(status);
+            },
             _ = interrupt.recv() => {}
         }
     }
@@ -63,14 +76,19 @@ fn login_arguments(router_root: &Path, target: &AccountActionTarget) -> Vec<OsSt
 }
 
 fn login_result(status: io::Result<ExitStatus>) -> QuotaLoginResult {
-    match status {
+    #[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+    observation::mapping_consumed(&status);
+    let result = match status {
         Ok(status) if status.success() => QuotaLoginResult::Succeeded,
         Ok(status) if status.code() == Some(130) || status.signal() == Some(2) => {
             QuotaLoginResult::Cancelled
         }
         Ok(status) => QuotaLoginResult::Failed(status.to_string()),
         Err(error) => QuotaLoginResult::Failed(error.to_string()),
-    }
+    };
+    #[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+    observation::mapping_returned(&result);
+    result
 }
 
 #[cfg(test)]
@@ -128,3 +146,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+#[path = "quota_login_wait_observation_test_support.rs"]
+pub(crate) mod observation;

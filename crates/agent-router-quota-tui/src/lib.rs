@@ -23,6 +23,10 @@ mod quota_domain_controls;
 mod quota_fact_presentation;
 mod quota_filter_controls;
 mod quota_floor_editor;
+mod quota_group_controls;
+mod quota_group_preferences;
+mod quota_grouped_rows;
+mod quota_grouping;
 mod quota_help_rendering;
 mod quota_interactive_component;
 mod quota_key_bindings;
@@ -74,6 +78,11 @@ pub use quota_account_runner::{
 };
 pub use quota_floor_editor::WeeklyQuotaFloorSaveError;
 pub use quota_floor_editor::WeeklyQuotaFloorSaver;
+pub use quota_group_preferences::{
+    QuotaGroupPreferenceWriter, QuotaGroupPreferences, QuotaPreferenceFuture,
+    QuotaPreferenceSaveError, QuotaPreferenceWriterStopped, QuotaUiPreferenceStore,
+};
+pub use quota_grouping::QuotaGroupFacet;
 pub use quota_refresh_action::{QuotaRefreshFailure, QuotaRefreshResult, QuotaRefresher};
 pub use quota_status_entrypoint::QuotaStatusViewOptions;
 pub use quota_status_entrypoint::run_quota_status_view;
@@ -93,3 +102,8 @@ use codex_router_quota_service::quota_display_model::{
 };
 mod quota_view_model_loader;
 pub use quota_view_model_loader::quota_status_view_model_loader;
+
+#[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+mod quota_fixture_controller;
+#[cfg(any(test, all(debug_assertions, feature = "test-support")))]
+mod quota_fixture_view;

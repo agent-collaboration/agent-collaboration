@@ -559,6 +559,7 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
                 codex_router_quota_service::quota_display_facts::QuotaAccountStatus::Available,
             ),
             active_clients: "1 client".to_owned(),
+            active_clients_value: Some(1),
             reset_credits: "2 resets".to_owned(),
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: codex_router_quota_service::quota::CreditUsageStatus::default(),

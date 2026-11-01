@@ -6,10 +6,13 @@ use super::quota_control_context::{
 use agent_collaboration_tui::{
     DialogAxisSize, DialogMargins, DialogPresentation,
     actions::Placement,
-    controls::{HelpControl, ScrollHandle, button_target},
-    focus_model::{InputUse, TargetId, TargetInputHandler, TargetSpec},
-    surface_handle::SurfaceStackHandle,
-    surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    controls::{fields::button_target, list::ScrollHandle},
+    dialog::help::HelpControl,
+    surfaces::{
+        focus_model::{InputUse, TargetId, TargetInputHandler, TargetSpec},
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    },
 };
 use codex_router_quota_service::quota_reset::reset_session_supervisor::WorkflowPhase;
 use iocraft::prelude::*;
@@ -79,6 +82,11 @@ pub(crate) fn open_quota_dialog(
             .disabled_choice
             .set(super::quota_combo_controls::disabled_options(
                 state.committed.disabled,
+            )?);
+        context
+            .group_choice
+            .set(super::quota_combo_controls::grouping_options(
+                state.committed.group_by,
             )?);
         context.filters.set(state);
     }
@@ -163,9 +171,11 @@ pub(crate) fn quota_dialog_model(
     )?;
     help_action.run = help.open_handler(
         move || super::quota_control_help::quota_help_content(&help_context, &help_kind),
-        Handler::from(move |error: agent_collaboration_tui::controls::HelpError| {
-            error_context.report(error.to_string())
-        }),
+        Handler::from(
+            move |error: agent_collaboration_tui::dialog::help::HelpError| {
+                error_context.report(error.to_string())
+            },
+        ),
     );
     let help_target = button_target(TargetId::for_action(&help_action.id), &help_action);
     if *kind == QuotaDialogKind::Options {
@@ -335,7 +345,7 @@ pub(crate) fn set_remove_confirmation(
         && let Ok(cancel) = action_id("cancel-remove")
     {
         stack.focus(
-            agent_collaboration_tui::surface_stack::SurfaceId::Overlay(session.id),
+            agent_collaboration_tui::surfaces::surface_stack::SurfaceId::Overlay(session.id),
             &TargetId::for_action(&cancel),
         );
     }

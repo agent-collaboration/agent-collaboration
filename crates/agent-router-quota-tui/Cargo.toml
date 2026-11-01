@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 default = []
-test-support = []
+test-support = ["agent-collaboration-tui/test-support"]
 quota-reset-test-harness = ["codex-router-quota-service/quota-reset-test-harness"]
 
 [dependencies]

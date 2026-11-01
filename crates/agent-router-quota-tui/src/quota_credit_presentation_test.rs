@@ -60,7 +60,7 @@ async fn credit_policy_options_render_in_keyboard_selection_order() {
         );
         assert!(
             frame.lines().any(|line| line
-                .contains(agent_collaboration_tui::theme::UiGlyph::Current.text())
+                .contains(agent_collaboration_tui::foundation::theme::UiGlyph::Current.text())
                 && line.contains(label)),
             "captured typed policy remains selected: {frame}"
         );

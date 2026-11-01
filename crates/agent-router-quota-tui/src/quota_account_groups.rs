@@ -1,7 +1,7 @@
 //! Interactive account composition; the static renderer keeps its own format.
 use super::quota_fact_presentation::reset_pace_meter;
 use super::quota_typography::{QuotaText, QuotaTextRole};
-use agent_collaboration_tui::controls::SelectableRow;
+use agent_collaboration_tui::controls::fields::SelectableRow;
 use agent_collaboration_tui::{UiColumnHeading, UiText, UiTextRole};
 use codex_router_quota_service::quota_display_model::{
     QuotaDisplayWindow, QuotaStatusAccountViewModel,

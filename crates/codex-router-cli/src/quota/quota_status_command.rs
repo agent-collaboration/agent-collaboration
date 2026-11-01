@@ -48,34 +48,54 @@ pub(super) async fn render_interactive_quota_status(
     reset_session_factory: &dyn codex_router_quota_service::quota_reset::InteractiveResetSessionFactory,
     credit_usage_base_url: &str,
 ) -> Result<(), QuotaCommandError> {
-    let mut focused_account_id = None;
-    let mut notice = None;
-    loop {
-        let outcome = render_interactive_quota_once(InteractiveQuotaIteration {
-            router_root: router_root.clone(),
-            stdout_terminal_width,
-            all_limits,
-            now_unix_seconds: if focused_account_id.is_none() {
-                now_unix_seconds
-            } else {
-                current_unix_seconds()
-            },
-            reset_session_factory,
-            credit_usage_base_url,
-            focused_account_id: focused_account_id.take(),
-            notice: notice.take(),
-        })
-        .await?;
-        match outcome {
-            agent_router_quota_tui::QuotaOutcome::Quit => return Ok(()),
-            agent_router_quota_tui::QuotaOutcome::LogInAgain { target } => {
-                let result =
-                    super::quota_login_child::run_quota_login_child(&router_root, &target).await;
-                notice = Some(result.notice(target.label.as_str()));
-                focused_account_id = Some(target.account_id);
+    let store = super::quota_group_preferences::SqliteQuotaPreferences::open(&router_root).await;
+    let (preferences, writer) =
+        agent_router_quota_tui::QuotaGroupPreferences::load(Arc::new(store.clone())).await;
+    let writer = tokio::spawn(writer.run());
+    let result = async {
+        let mut focused_account_id = None;
+        let mut notice = None;
+        loop {
+            let outcome = render_interactive_quota_once(InteractiveQuotaIteration {
+                router_root: router_root.clone(),
+                stdout_terminal_width,
+                all_limits,
+                now_unix_seconds: if focused_account_id.is_none() {
+                    now_unix_seconds
+                } else {
+                    current_unix_seconds()
+                },
+                reset_session_factory,
+                credit_usage_base_url,
+                focused_account_id: focused_account_id.take(),
+                notice: notice.take(),
+                group_preferences: preferences.clone(),
+            })
+            .await?;
+            match outcome {
+                agent_router_quota_tui::QuotaOutcome::Quit => return Ok(()),
+                agent_router_quota_tui::QuotaOutcome::LogInAgain { target } => {
+                    let result =
+                        super::quota_login_child::run_quota_login_child(&router_root, &target)
+                            .await;
+                    notice = Some(result.notice(target.label.as_str()));
+                    focused_account_id = Some(target.account_id);
+                }
             }
         }
     }
+    .await;
+    preferences.finish();
+    drop(preferences);
+    match writer.await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "quota preference writer missed its terminal signal")
+        }
+        Err(error) => tracing::warn!(%error, "quota preference writer did not settle"),
+    }
+    store.close().await;
+    result
 }
 
 struct InteractiveQuotaIteration<'a> {
@@ -88,6 +108,7 @@ struct InteractiveQuotaIteration<'a> {
     credit_usage_base_url: &'a str,
     focused_account_id: Option<AccountId>,
     notice: Option<String>,
+    group_preferences: agent_router_quota_tui::QuotaGroupPreferences,
 }
 
 async fn render_interactive_quota_once(
@@ -102,6 +123,7 @@ async fn render_interactive_quota_once(
         credit_usage_base_url,
         focused_account_id,
         notice,
+        group_preferences,
     } = inputs;
     let width = stdout_terminal_width.unwrap_or(100).max(40);
     let credential_resources = QuotaCredentialResources::open(&router_root).await;
@@ -161,6 +183,7 @@ async fn render_interactive_quota_once(
                     account_commands: Some(queue),
                     focused_account_id,
                     notice,
+                    group_preferences: Some(group_preferences),
                 },
             )
         })
@@ -370,217 +393,9 @@ pub(super) fn effective_human_quota_format(
 }
 
 #[cfg(test)]
-mod weekly_floor_save_error_tests {
-    use super::*;
-
-    #[test]
-    fn tui_weekly_floor_errors_are_closed_and_redacted() {
-        let canaries = [
-            "sensitive-account",
-            "/private/router/state.sqlite",
-            "internal sql diagnostic",
-        ];
-        for canary in canaries {
-            let mapped = render_safe_weekly_floor_error(StateStoreError::Sqlite {
-                message: canary.to_owned(),
-            });
-            assert_eq!(mapped, WeeklyQuotaFloorSaveError::StateOperationFailed);
-            assert!(!format!("{mapped:?}").contains(canary));
-        }
-        assert_eq!(
-            render_safe_weekly_floor_error(StateStoreError::WeeklyQuotaFloorDatabaseBusy),
-            WeeklyQuotaFloorSaveError::DatabaseBusy
-        );
-        assert_eq!(
-            render_safe_weekly_floor_error(StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired),
-            WeeklyQuotaFloorSaveError::SchemaUpgradeRequired
-        );
-        assert_eq!(
-            render_safe_weekly_floor_error(StateStoreError::WeeklyQuotaFloorAccountNotFound),
-            WeeklyQuotaFloorSaveError::AccountNotFound
-        );
-    }
-
-    #[tokio::test]
-    async fn interactive_weekly_floor_saver_persists_by_stable_account_id() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "agent-collaboration-tui-weekly-floor-{}-{unique}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&root).expect("temporary router root should be created");
-        let database_path = root.join("state.sqlite");
-        let account_id = AccountId::new("tui-floor-account").expect("account id should be valid");
-        let state = AsyncSqliteStateStore::open(&database_path)
-            .await
-            .expect("state should open");
-        state
-            .upsert_account(&AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                "duplicate",
-                AccountStatus::Enabled,
-            ))
-            .await
-            .expect("account should persist");
-        state.close().await.expect("state should close");
-
-        weekly_quota_floor_saver(database_path.clone())(account_id.clone(), 15)
-            .await
-            .expect("TUI saver should persist 15 percent");
-
-        let state = AsyncSqliteStateStore::open_read_only(&database_path)
-            .await
-            .expect("state should reopen read-only");
-        let policies = state
-            .list_account_routing_policies()
-            .await
-            .expect("policy should read");
-        assert_eq!(policies.len(), 1);
-        assert_eq!(policies[0].account_id(), &account_id);
-        assert_eq!(
-            policies[0].weekly_quota_floor_basis_points().basis_points(),
-            1_500
-        );
-        state.close().await.expect("read-only state should close");
-        std::fs::remove_dir_all(root).expect("temporary router root should be removed");
-    }
-
-    #[tokio::test]
-    async fn interactive_credit_policy_saver_reads_back_and_rejects_replaced_generation() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "agent-collaboration-tui-credit-policy-{}-{unique}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&root).expect("temporary router root should be created");
-        let database_path = root.join("state.sqlite");
-        let account_id = AccountId::new("tui-credit-policy").expect("account id should be valid");
-        let state = AsyncSqliteStateStore::open(&database_path)
-            .await
-            .expect("state should open and migrate before the mutation fixture");
-        state
-            .upsert_account(
-                &AccountRecord::new(
-                    codex_router_core::provider::Provider::Openai,
-                    account_id.clone(),
-                    "credit policy",
-                    AccountStatus::Disabled,
-                )
-                .with_active_credential_generation(7),
-            )
-            .await
-            .expect("account should persist");
-        state.close().await.expect("state should close");
-
-        let saver = credit_usage_policy_saver(database_path.clone());
-        assert_eq!(
-            saver(
-                account_id.clone(),
-                Some(7),
-                codex_router_core::credit_usage::CreditUsagePolicy::Allow,
-            )
-            .await
-            .expect("disabled account policy can save and read back"),
-            codex_router_core::credit_usage::CreditUsagePolicy::Allow
-        );
-        assert_eq!(
-            saver(
-                account_id.clone(),
-                Some(6),
-                codex_router_core::credit_usage::CreditUsagePolicy::Disallow,
-            )
-            .await
-            .expect_err("old credential pane cannot overwrite the saved policy"),
-            CreditUsagePolicySaveError::TargetChanged
-        );
-
-        let reopened = AsyncSqliteStateStore::open_read_only(&database_path)
-            .await
-            .expect("saved policy should reopen read-only");
-        assert_eq!(
-            reopened
-                .load_account_credit_usage_policy(&account_id)
-                .await
-                .expect("saved policy should read"),
-            codex_router_core::credit_usage::CreditUsagePolicy::Allow
-        );
-        reopened
-            .close()
-            .await
-            .expect("read-only state should close");
-        std::fs::remove_dir_all(root).expect("temporary router root should be removed");
-    }
-}
+#[path = "quota_status_command_test.rs"]
+mod weekly_floor_save_error_tests;
 
 #[cfg(test)]
-mod credit_usage_refresh_preflight_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn unavailable_refresh_targets_are_rejected_before_secret_access() {
-        let root = tempfile::tempdir().expect("temporary router root should exist");
-        let database_path = root.path().join("state.sqlite");
-        let disabled_id = AccountId::new("refresh-disabled").expect("account id");
-        let credentialless_id = AccountId::new("refresh-credentialless").expect("account id");
-        let claude_id = AccountId::new("refresh-claude").expect("account id");
-        let state = AsyncSqliteStateStore::open(&database_path)
-            .await
-            .expect("state should open");
-        for account in [
-            AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                disabled_id.clone(),
-                "disabled",
-                AccountStatus::Disabled,
-            )
-            .with_active_credential_generation(7),
-            AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                credentialless_id.clone(),
-                "credentialless",
-                AccountStatus::Enabled,
-            ),
-            AccountRecord::new(
-                codex_router_core::provider::Provider::Claude,
-                claude_id.clone(),
-                "Claude",
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(11),
-        ] {
-            state
-                .upsert_account(&account)
-                .await
-                .expect("account should persist");
-        }
-        state.close().await.expect("state should close");
-
-        let refresher = interactive_credit_usage_refresher(
-            root.path().to_path_buf(),
-            "http://127.0.0.1:1".to_owned(),
-        );
-        assert_eq!(
-            refresher(disabled_id, Some(7)).await,
-            Err(CreditUsageRefreshError::ACCOUNT_DISABLED),
-        );
-        assert_eq!(
-            refresher(credentialless_id, None).await,
-            Err(CreditUsageRefreshError::CREDENTIALS_UNAVAILABLE),
-        );
-        assert_eq!(
-            refresher(claude_id, Some(11)).await,
-            Err(CreditUsageRefreshError::PROVIDER_UNSUPPORTED),
-        );
-        assert!(
-            !root.path().join("secrets").exists(),
-            "preflight must not create or open the secrets directory"
-        );
-    }
-}
+#[path = "quota_credit_usage_refresh_preflight_test.rs"]
+mod credit_usage_refresh_preflight_tests;

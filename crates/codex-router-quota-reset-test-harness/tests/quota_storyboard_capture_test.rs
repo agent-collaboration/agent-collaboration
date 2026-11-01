@@ -11,10 +11,6 @@ mod capture_support;
 )]
 mod isolated_fixture_test;
 #[path = "quota_reset_pty_test/loopback_provider_test.rs"]
-#[expect(
-    dead_code,
-    reason = "Read-only shared provider also exposes fault/held-response scenarios, outside this journey"
-)]
 mod loopback_provider_test;
 
 #[path = "quota_storyboard_capture_test/component_first_frame_test.rs"]

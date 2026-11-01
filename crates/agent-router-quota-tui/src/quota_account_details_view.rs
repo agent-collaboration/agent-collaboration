@@ -4,7 +4,8 @@ use super::quota_fact_presentation::{
 };
 use agent_collaboration_tui::{
     UiText, UiTextRole,
-    controls::{DialogSection, DialogSections, FormField, FormFields},
+    controls::fields::{FormField, FormFields},
+    dialog::{DialogSection, DialogSections},
 };
 use codex_router_quota_service::quota_display_model::QuotaSelectedAccountViewModel;
 use iocraft::prelude::*;

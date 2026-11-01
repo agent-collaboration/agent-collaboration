@@ -14,10 +14,12 @@ use super::{
     },
 };
 use agent_collaboration_tui::{
-    actions::{ActionDef, Availability, AvailabilityFn, Checked, Placement},
-    controls::{button_target, segmented_targets},
-    focus_model::{GroupId, InputUse, TargetId, TargetInputHandler, TargetSpec},
-    surface_handle::SurfaceStackHandle,
+    actions::{ActionDef, ActionRisk, Availability, AvailabilityFn, Checked, Placement},
+    controls::fields::{button_target, segmented_targets},
+    surfaces::{
+        focus_model::{GroupId, InputUse, TargetId, TargetInputHandler, TargetSpec},
+        surface_handle::SurfaceStackHandle,
+    },
 };
 use codex_router_quota_service::quota_reset::reset_session_supervisor::{
     ConfirmationSelection, WorkflowPhase,
@@ -150,7 +152,9 @@ pub(crate) fn domain_dialog_controls(
                 )
             {
                 stack.focus(
-                    agent_collaboration_tui::surface_stack::SurfaceId::Overlay(session.id),
+                    agent_collaboration_tui::surfaces::surface_stack::SurfaceId::Overlay(
+                        session.id,
+                    ),
                     &target,
                 );
             }
@@ -200,16 +204,17 @@ pub(crate) fn domain_dialog_controls(
         actions.push(refresh);
     } else if phase != WorkflowPhase::Browse {
         let advance_context = context.clone();
-        let (title, available) = match phase {
-            WorkflowPhase::Inspected => ("Review", true),
-            WorkflowPhase::Confirming => ("Confirm", true),
-            WorkflowPhase::Result => ("Close", true),
-            _ => ("Continue", false),
+        let (title, available, risk) = match phase {
+            WorkflowPhase::Inspected => ("Review", true, ActionRisk::Destructive),
+            WorkflowPhase::Confirming => ("Confirm", true, ActionRisk::Destructive),
+            WorkflowPhase::Result => ("Close", true, ActionRisk::Ordinary),
+            _ => ("Continue", false, ActionRisk::Ordinary),
         };
         let mut advance =
             quota_action("reset-advance", title, &[], Placement::Toolbar, move |()| {
                 advance_context.reset_key(KeyCode::Enter, KeyModifiers::NONE)
             })?;
+        advance.risk = risk;
         let live = context.clone();
         advance.availability = AvailabilityFn::new(move || {
             if available && live.phase() != WorkflowPhase::Committing {

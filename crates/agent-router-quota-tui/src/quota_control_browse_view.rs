@@ -2,10 +2,13 @@
 use super::quota_control_context::{QuotaControlContext, QuotaRefreshState, action_id};
 use agent_collaboration_tui::{
     UiText, UiTextRole,
-    controls::{ListRow, ListSelectionControl, MenuButton, ScrollList, Toolbar},
-    focus_model::TargetId,
-    surface_handle::SurfaceContext,
-    theme::{SurfaceRole, TextRole},
+    controls::{
+        fields::MenuButton,
+        list::{ListRow, ListSelectionControl, ScrollList},
+        toolbar::Toolbar,
+    },
+    foundation::theme::{SurfaceRole, TextRole},
+    surfaces::{focus_model::TargetId, surface_handle::SurfaceContext},
 };
 use iocraft::prelude::*;
 
@@ -72,8 +75,8 @@ pub(crate) fn QuotaControlBrowse(
         .unwrap_or_default();
     let counts = toolbar.caption;
     let keyboard_target = Some(props.list.id().clone());
-    let rendered_rows = rows.iter().enumerate().filter_map(|(index,row)| {
-        let key=super::quota_list_controls::account_row_key(&row.account_id).ok()?;
+    let rendered_rows = props.list.rows().into_iter().enumerate().filter_map(|(index,key)| {
+        let row=rows.iter().find(|row|row.account_id.as_str()==key.as_str())?;
         let focused=props.list.selected().as_ref()==Some(&key) && surface.is_focused(props.list.id());
         Some(element!(View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else{2}) {
             ListRow(control:props.list.clone(),row:key,marker_offset:if super::quota_account_groups::group_widths(row_width.saturating_sub(2)).is_some(){0u16}else{2u16}) {

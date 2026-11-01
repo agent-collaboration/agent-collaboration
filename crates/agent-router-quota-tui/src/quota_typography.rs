@@ -43,9 +43,9 @@ pub(crate) struct QuotaTextProps {
 #[component]
 pub(crate) fn QuotaText(props: &QuotaTextProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let theme = hooks
-        .try_use_context::<agent_collaboration_tui::surface_handle::SurfaceContext>()
+        .try_use_context::<agent_collaboration_tui::surfaces::surface_handle::SurfaceContext>()
         .map_or(
-            agent_collaboration_tui::theme::Theme::default(),
+            agent_collaboration_tui::foundation::theme::Theme::default(),
             |context| context.theme(),
         );
     element!(Text(content:props.content.clone(),color:theme.foreground_color(props.role.color()),weight:props.weight.unwrap_or(Weight::Normal),
@@ -57,10 +57,12 @@ mod tests {
     use super::*;
     use agent_collaboration_tui::{
         actions::{ActionRegistry, ScopeId},
-        focus_model::FocusModel,
-        surface_handle::{SurfaceContext, use_surface_stack},
-        surface_stack::{
-            OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceId, SurfaceModel,
+        surfaces::{
+            focus_model::FocusModel,
+            surface_handle::{SurfaceContext, use_surface_stack},
+            surface_stack::{
+                OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceId, SurfaceModel,
+            },
         },
     };
 

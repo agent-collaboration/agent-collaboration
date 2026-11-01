@@ -6,8 +6,9 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 15] = [
+const LAYER_POLICY: [(&str, &[&str]); 16] = [
     ("node-test-fixture", &[]),
+    ("ui-preference-store", &[]),
     ("codex-router-quota", &[]),
     ("codex-router-selection", &["codex-router-quota"]),
     (

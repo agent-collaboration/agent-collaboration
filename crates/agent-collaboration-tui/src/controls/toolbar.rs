@@ -1,16 +1,22 @@
 //! The same width calculation drives drawing and keyboard reachability.
-use super::{ActionProjections, Button, button_target};
+use crate::controls::{
+    ActionProjections,
+    fields::{Button, button_target},
+};
 use crate::{
     actions::{ActionPresentation, ActionRegistry},
-    focus_model::{TargetId, TargetSpec, TargetVisibility},
-    surface_handle::SurfaceContext,
+    surfaces::{
+        focus_model::{TargetId, TargetSpec, TargetVisibility},
+        surface_handle::SurfaceContext,
+    },
 };
 use iocraft::prelude::*;
 pub fn toolbar_actions(registry: &ActionRegistry, available: u16) -> Vec<ActionPresentation> {
     let mut remaining = usize::from(available);
     let mut actions = Vec::new();
     for action in ActionProjections::from_registry(registry).toolbar {
-        let width = super::button::action_button_width(&action, true).saturating_add(1);
+        let width =
+            crate::controls::fields::button::action_button_width(&action, true).saturating_add(1);
         if width > remaining {
             break;
         }
@@ -50,3 +56,7 @@ pub fn Toolbar<'a>(props: &mut ToolbarProps<'a>, hooks: Hooks) -> impl Into<AnyE
     let children = std::mem::take(&mut props.children);
     element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,overflow:Overflow::Hidden) {#(children) #(actions.into_iter().map(|action|element!(Button(id:TargetId::for_action(&action.id),action:action.id))))})
 }
+
+#[cfg(test)]
+#[path = "toolbar_labels_test.rs"]
+mod tests;

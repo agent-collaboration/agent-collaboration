@@ -216,6 +216,7 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
                     provider_filter_key(KeyCode::Down),
                     provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Tab),
+                    provider_filter_key(KeyCode::Tab),
                     provider_filter_key(KeyCode::Enter),
                 ],
             ),
@@ -245,6 +246,7 @@ fn apply_filter_events(provider_steps: usize, hidden: bool) -> Vec<TerminalEvent
         events.push(provider_filter_key(KeyCode::Down));
         events.push(provider_filter_key(KeyCode::Enter));
     }
+    events.push(provider_filter_key(KeyCode::Tab));
     events.push(provider_filter_key(KeyCode::Tab));
     events.push(provider_filter_key(KeyCode::Enter));
     events
@@ -286,7 +288,7 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
 async fn quota_provider_filters_cancel_draft_and_cancel_button_preserve_committed_rows_and_focus() {
     for cancel in [
         vec![KeyCode::Esc],
-        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter],
+        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter],
     ] {
         let mut events = vec![
             provider_filter_key(KeyCode::Down),
@@ -528,6 +530,7 @@ async fn quota_provider_filters_reload_keeps_filters_and_reconciles_latest_visib
         (provider_filter_key(KeyCode::Down), None),
         (provider_filter_key(KeyCode::Down), None),
         (provider_filter_key(KeyCode::Enter), None),
+        (provider_filter_key(KeyCode::Tab), None),
         (provider_filter_key(KeyCode::Tab), None),
         (provider_filter_key(KeyCode::Tab), None),
         (

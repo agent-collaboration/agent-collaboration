@@ -266,61 +266,64 @@ fn NewInspectionPageResetProbe(
     let inventory_page_start = hooks.use_state(|| 4usize);
     let should_exit = hooks.use_state(|| false);
     let intents = props.reset_intent_sender.clone();
-    let stack = agent_collaboration_tui::surface_handle::use_surface_stack(&mut hooks, move |_| {
-        let start = crate::quota_control_context::quota_action(
-            "probe-inspect",
-            "Inspect",
-            &["Enter"],
-            agent_collaboration_tui::actions::Placement::Hidden,
-            move |()| {
-                let mut options = account_options;
-                let mut target = reset_target;
-                let mut page = inventory_page_start;
-                handle_account_options_key_event(
-                    &mut options,
-                    &mut target,
-                    AccountOptionsKeyEventContext {
-                        phase: WorkflowPhase::Browse,
-                        code: KeyCode::Enter,
-                        modifiers: KeyModifiers::NONE,
-                        command_port: &command_port,
-                        reset_snapshot: None,
-                        reset_intent_sender: intents.as_ref(),
-                        inventory_page_start: &mut page,
-                        now_unix_seconds: 1_000,
-                    },
-                );
-            },
-        )
-        .unwrap();
-        let quit = crate::quota_control_context::quota_action(
-            "probe-quit",
-            "Quit",
-            &["Ctrl+C"],
-            agent_collaboration_tui::actions::Placement::Hidden,
-            move |()| {
-                let mut exit = should_exit;
-                exit.set(true);
-            },
-        )
-        .unwrap();
-        let targets = vec![agent_collaboration_tui::controls::button_target(
-            agent_collaboration_tui::focus_model::TargetId::for_action(&start.id),
-            &start,
-        )];
-        crate::quota_control_context::control_model(
-            "inspection-page-probe",
-            vec![start, quit],
-            targets,
-            None,
-        )
-        .unwrap()
-    });
+    let stack = agent_collaboration_tui::surfaces::surface_handle::use_surface_stack(
+        &mut hooks,
+        move |_| {
+            let start = crate::quota_control_context::quota_action(
+                "probe-inspect",
+                "Inspect",
+                &["Enter"],
+                agent_collaboration_tui::actions::Placement::Hidden,
+                move |()| {
+                    let mut options = account_options;
+                    let mut target = reset_target;
+                    let mut page = inventory_page_start;
+                    handle_account_options_key_event(
+                        &mut options,
+                        &mut target,
+                        AccountOptionsKeyEventContext {
+                            phase: WorkflowPhase::Browse,
+                            code: KeyCode::Enter,
+                            modifiers: KeyModifiers::NONE,
+                            command_port: &command_port,
+                            reset_snapshot: None,
+                            reset_intent_sender: intents.as_ref(),
+                            inventory_page_start: &mut page,
+                            now_unix_seconds: 1_000,
+                        },
+                    );
+                },
+            )
+            .unwrap();
+            let quit = crate::quota_control_context::quota_action(
+                "probe-quit",
+                "Quit",
+                &["Ctrl+C"],
+                agent_collaboration_tui::actions::Placement::Hidden,
+                move |()| {
+                    let mut exit = should_exit;
+                    exit.set(true);
+                },
+            )
+            .unwrap();
+            let targets = vec![agent_collaboration_tui::controls::fields::button_target(
+                agent_collaboration_tui::surfaces::focus_model::TargetId::for_action(&start.id),
+                &start,
+            )];
+            crate::quota_control_context::control_model(
+                "inspection-page-probe",
+                vec![start, quit],
+                targets,
+                None,
+            )
+            .unwrap()
+        },
+    );
     if *should_exit.read() {
         system.exit();
     }
     element! {
-        agent_collaboration_tui::input_owner::InputOwner(stack,width:60u16,height:4u16,quit_action:crate::quota_control_context::action_id("probe-quit").unwrap()) {Text(content: format!("inventory page start: {}", inventory_page_start.get()))}
+        agent_collaboration_tui::input::input_owner::InputOwner(stack,width:60u16,height:4u16,quit_action:crate::quota_control_context::action_id("probe-quit").unwrap()) {Text(content: format!("inventory page start: {}", inventory_page_start.get()))}
     }
 }
 

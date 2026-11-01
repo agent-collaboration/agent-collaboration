@@ -6,7 +6,7 @@ use super::{
         QuotaControlContext, QuotaRefreshState, close_quota_dialog, show_control_result,
     },
 };
-use agent_collaboration_tui::surface_handle::SurfaceStackHandle;
+use agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle;
 use iocraft::prelude::*;
 use std::sync::Arc;
 
@@ -45,15 +45,34 @@ pub(crate) fn use_quota_control_effects(hooks: &mut Hooks<'_, '_>, inputs: Quota
                     ));
                 } else {
                     if completion.command.action == QuotaAccountAction::Remove {
-                        let rows = observer_context
-                            .filters
-                            .read()
-                            .committed
-                            .visible_rows(&observer_context.view_model.read().rows);
-                        let neighbor = rows
-                            .get(completion.command.target.position)
-                            .or_else(|| rows.last())
-                            .map(|row| row.account_id.clone());
+                        let model = observer_context.view_model.read();
+                        let rows = super::quota_grouped_rows::grouped_account_rows(
+                            observer_context.filters.read().committed,
+                            &model.rows,
+                        )
+                        .and_then(|rows| {
+                            agent_collaboration_tui::controls::list::ListSelectionState::new(
+                                rows, None,
+                            )
+                            .map_err(|error| error.to_string())
+                        });
+                        let neighbor = match rows {
+                            Ok(rows) => rows
+                                .rows()
+                                .get(completion.command.target.position)
+                                .or_else(|| rows.rows().last())
+                                .and_then(|key| {
+                                    model
+                                        .rows
+                                        .iter()
+                                        .find(|row| row.account_id.as_str() == key.as_str())
+                                })
+                                .map(|row| row.account_id.clone()),
+                            Err(error) => {
+                                observer_context.report(error);
+                                None
+                            }
+                        };
                         let mut focused = observer_context.focused_account_id;
                         focused.set(neighbor);
                         close_quota_dialog(stack, &observer_context);

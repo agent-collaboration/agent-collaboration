@@ -386,7 +386,7 @@ async fn quota_status_keeps_focused_account_visible_when_height_clips_list() {
     let text = frames.last().expect("focused account rendered");
     assert!(text.contains("❯ acct06"), "{text}");
     assert!(
-        text.contains(agent_collaboration_tui::theme::UiGlyph::ScrollThumb.text()),
+        text.contains(agent_collaboration_tui::foundation::theme::UiGlyph::ScrollThumb.text()),
         "measured scroll position remains visible: {text}"
     );
 }

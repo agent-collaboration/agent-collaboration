@@ -9,12 +9,19 @@ use super::{
 };
 use agent_collaboration_tui::{
     actions::{
-        ActionDef, ActionId, ActionRegistry, Availability, AvailabilityFn, Placement, ScopeId,
+        ActionDef, ActionId, ActionRegistry, ActionRisk, Availability, AvailabilityFn, Placement,
+        ScopeId,
     },
-    controls::{ComboBoxState, HelpControl, ListSelectionState, ScrollHandle},
-    focus_model::{FocusModel, TargetSpec},
-    surface_handle::SurfaceStackHandle,
-    surface_stack::{OverlayId, SurfaceModel},
+    controls::{
+        combo::ComboBoxState,
+        list::{ListSelectionState, ScrollHandle},
+    },
+    dialog::help::HelpControl,
+    surfaces::{
+        focus_model::{FocusModel, TargetSpec},
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{OverlayId, SurfaceModel},
+    },
 };
 use codex_router_core::ids::AccountId;
 use codex_router_quota_service::{
@@ -59,7 +66,9 @@ pub(crate) struct QuotaControlContext {
     pub(crate) viewport_trace: Option<super::quota_viewport_trace::QuotaViewportTrace>,
     pub(crate) view_model: State<QuotaStatusViewModel>,
     pub(crate) filters: State<QuotaFilterState>,
+    pub(crate) group_preferences: Option<crate::QuotaGroupPreferences>,
     pub(crate) provider_choice: State<ComboBoxState>,
+    pub(crate) group_choice: State<ComboBoxState>,
     pub(crate) disabled_choice: State<ComboBoxState>,
     pub(crate) credit_choice: State<ComboBoxState>,
     pub(crate) focused_account_id: State<Option<AccountId>>,
@@ -112,14 +121,11 @@ impl QuotaControlContext {
         let row = self
             .selected_row()
             .ok_or_else(|| "No account selected".to_owned())?;
-        let rows = self
-            .filters
-            .read()
-            .committed
-            .visible_rows(&self.view_model.read().rows);
-        let position = rows
+        let selection = self.account_selection.read();
+        let position = selection
+            .rows()
             .iter()
-            .position(|entry| entry.account_id == row.account_id)
+            .position(|entry| entry.as_str() == row.account_id.as_str())
             .unwrap_or(0);
         AccountActionTarget::from_row(&row, position).map_err(|error| error.to_string())
     }
@@ -282,15 +288,15 @@ pub(crate) fn quota_action(
         keys: keys
             .iter()
             .map(|key| {
-                key.parse()
-                    .map_err(|error: agent_collaboration_tui::actions::KeyChordError| {
-                        error.to_string()
-                    })
+                key.parse().map_err(
+                    |error: agent_collaboration_tui::foundation::KeyChordError| error.to_string(),
+                )
             })
             .collect::<Result<_, _>>()?,
         availability: AvailabilityFn::default(),
         choice: None,
         placement,
+        risk: ActionRisk::Ordinary,
         run: Handler::from(run),
     })
 }
@@ -347,9 +353,9 @@ pub(crate) fn close_quota_dialog(stack: SurfaceStackHandle, context: &QuotaContr
     if let Some(session) = session {
         while stack
             .snapshot()
-            .surface(agent_collaboration_tui::surface_stack::SurfaceId::Overlay(
-                session.id,
-            ))
+            .surface(
+                agent_collaboration_tui::surfaces::surface_stack::SurfaceId::Overlay(session.id),
+            )
             .is_some()
         {
             if stack.close_top().is_none() {

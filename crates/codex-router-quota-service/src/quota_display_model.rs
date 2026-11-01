@@ -27,6 +27,7 @@ pub struct QuotaStatusAccountViewModel {
     pub account: String,
     pub status: crate::quota_display_facts::QuotaRowStatus,
     pub active_clients: String,
+    pub active_clients_value: Option<u32>,
     pub reset_credits: String,
     pub credit_usage_summary: String,
     pub credit_usage: CreditUsageStatus,

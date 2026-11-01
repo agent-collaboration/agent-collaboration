@@ -58,6 +58,7 @@ impl DisabledAccountVisibility {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct QuotaAccountFilters {
+    pub(crate) group_by: crate::QuotaGroupFacet,
     pub(crate) provider: AccountProviderFilter,
     pub(crate) disabled: DisabledAccountVisibility,
 }

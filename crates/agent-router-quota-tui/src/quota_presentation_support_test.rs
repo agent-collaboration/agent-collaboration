@@ -58,7 +58,7 @@ struct QuotaCaptureHarnessProps {
 fn QuotaCaptureHarness(props:&QuotaCaptureHarnessProps,mut hooks:Hooks)->impl Into<AnyElement<'static>> {
     crate::quota_test_support::event_driver::record_draw(&mut hooks,&props.journal);
     let journal=props.journal.clone();
-    element!(QuotaStatusComponent(view_model:props.view_model.clone(),width:props.width,height:props.height,spinner_interval:Duration::from_secs(3600),outcome_sink:Some(props.outcome.clone()),routed_outcome_observer:Some(Handler::from(move |outcome|journal.processed(crate::quota_test_support::event_driver::SurfaceSnapshot(vec![(agent_collaboration_tui::surface_stack::SurfaceId::Screen,format!("{outcome:?}").into_bytes())]))))))
+    element!(QuotaStatusComponent(view_model:props.view_model.clone(),width:props.width,height:props.height,spinner_interval:Duration::from_secs(3600),outcome_sink:Some(props.outcome.clone()),routed_outcome_observer:Some(Handler::from(move |outcome|journal.processed(crate::quota_test_support::event_driver::SurfaceSnapshot(vec![(agent_collaboration_tui::surfaces::surface_stack::SurfaceId::Screen,format!("{outcome:?}").into_bytes())]))))))
 }
 
 async fn render_quota_capture_frames(

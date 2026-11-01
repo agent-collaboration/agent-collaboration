@@ -199,7 +199,7 @@ fn render_section(
             flex_direction: FlexDirection::Column,
             margin_top: if decision {0}else {1},
         ) {
-            agent_collaboration_tui::controls::ScrollReveal(focused:reveal) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {#(title) agent_collaboration_tui::FormFields(stacked:width<52) {#(rows)}}}
+            agent_collaboration_tui::controls::list::ScrollReveal(focused:reveal) {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {#(title) agent_collaboration_tui::FormFields(stacked:width<52) {#(rows)}}}
         }
     }
     .into_any()

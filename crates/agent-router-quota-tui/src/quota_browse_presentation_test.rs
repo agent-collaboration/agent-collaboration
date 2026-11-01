@@ -46,3 +46,15 @@ mod quota_hard_fixture_consistency_test;
 
 #[path = "quota_filter_help_pose_test.rs"]
 mod quota_filter_help_pose_test;
+
+#[path = "quota_fixture_controller_test.rs"]
+mod quota_fixture_controller_test;
+
+#[path = "quota_grouping_component_test.rs"]
+mod quota_grouping_component_test;
+
+#[path = "quota_menu_sections_test.rs"]
+mod quota_menu_sections_test;
+
+#[path = "quota_grouped_rows_test.rs"]
+mod quota_grouped_rows_test;

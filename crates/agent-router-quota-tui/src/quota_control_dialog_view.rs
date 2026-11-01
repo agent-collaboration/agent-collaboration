@@ -7,12 +7,15 @@ use agent_collaboration_tui::{
     UiText, UiTextRole,
     actions::ActionId,
     controls::{
-        Button, ComboBox, DialogFrame, DialogSection, DialogSections, FormField, FormFields,
-        HelpControl, HelpDialog, PinnedContext, ScrollHandle, SegmentedSwitch, StatusKind,
-        StatusValue,
+        combo::ComboBox,
+        fields::{Button, FormField, FormFields, SegmentedSwitch, StatusKind, StatusValue},
+        list::ScrollHandle,
     },
-    focus_model::TargetId,
-    surface_handle::SurfaceContext,
+    dialog::{
+        DialogFrame, DialogSection, DialogSections, PinnedContext,
+        help::{HelpControl, HelpDialog},
+    },
+    surfaces::{focus_model::TargetId, surface_handle::SurfaceContext},
 };
 use codex_router_quota_service::quota_reset::reset_session_supervisor::WorkflowPhase;
 use iocraft::{ComponentDrawer, Hook, prelude::*};
@@ -152,6 +155,7 @@ fn dialog_content(
         QuotaDialogKind::Filters=>Ok(("Account filters".into(),element!(DialogSections {DialogSection(heading:String::new()) {FormFields(stacked:context.width.get()<60) {
             FormField(label:"Account provider".to_owned(),has_focus:surface.is_focused(&choice_target(QuotaChoiceField::Provider)?)) {ComboBox(id:choice_target(QuotaChoiceField::Provider)?,value:context.provider_choice)}
             FormField(label:"Disabled accounts".to_owned(),has_focus:surface.is_focused(&choice_target(QuotaChoiceField::Disabled)?)) {ComboBox(id:choice_target(QuotaChoiceField::Disabled)?,value:context.disabled_choice)}
+            FormField(label:"Group by".to_owned(),has_focus:surface.is_focused(&choice_target(QuotaChoiceField::Group)?)) {ComboBox(id:choice_target(QuotaChoiceField::Group)?,value:context.group_choice)}
         }}}).into_any())),
         QuotaDialogKind::Floor=>Ok(("Weekly floor".into(),floor_content(context)?)),
         QuotaDialogKind::Options=>options_content(context,surface),

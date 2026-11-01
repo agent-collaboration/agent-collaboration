@@ -380,7 +380,7 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     ))?;
     let dispatch_sink = dispatch_receipt_path
         .as_ref()
-        .map(agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink::create)
+        .map(agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink::create)
         .transpose()?;
     let (release_sender, release_receiver) = tokio::sync::watch::channel(false);
     let (floor, policy, refresh) = fixture_ports(model.clone(), scenario, release_receiver);

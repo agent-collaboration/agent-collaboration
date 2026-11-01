@@ -4,13 +4,14 @@ use super::quota_control_context::{
     control_model, quota_action, quota_quit_action, show_control_result, unavailable,
 };
 use agent_collaboration_tui::{
-    actions::{ActionTitle, Availability, AvailabilityFn, Placement},
-    controls::{
-        HelpContent, HelpControl, HelpInputConvention, button_target, menu_overlay, toolbar_target,
+    actions::{ActionTitle, Availability, AvailabilityFn, MenuSectionSpec, Placement},
+    controls::{fields::button_target, menu::menu_overlay, toolbar::toolbar_target},
+    dialog::help::{HelpContent, HelpControl, HelpInputConvention},
+    surfaces::{
+        focus_model::TargetId,
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{SurfaceId, SurfaceModel},
     },
-    focus_model::TargetId,
-    surface_handle::SurfaceStackHandle,
-    surface_stack::{SurfaceId, SurfaceModel},
 };
 use iocraft::prelude::*;
 
@@ -42,7 +43,7 @@ pub(crate) fn quota_screen_model(
     stack: SurfaceStackHandle,
     context: QuotaControlContext,
     help: HelpControl,
-    list: &agent_collaboration_tui::controls::ListSelectionControl,
+    list: &agent_collaboration_tui::controls::list::ListSelectionControl,
 ) -> QuotaControlResult<SurfaceModel> {
     let menu_context = context.clone();
     let menu_anchor = TargetId::for_action(&action_id("menu")?);
@@ -117,7 +118,14 @@ pub(crate) fn quota_screen_model(
         } else {
             ""
         };
-        format!("Filters: {}{disabled} ▾", filters.provider.label())
+        let grouping = match filters.group_by {
+            crate::QuotaGroupFacet::None => String::new(),
+            facet => format!(" · Group: {}", facet.label()),
+        };
+        format!(
+            "Filters: {}{disabled}{grouping} ▾",
+            filters.provider.label()
+        )
     }));
     let pool_context = context.clone();
     let pool = quota_action("pool", "Pool", &["F5"], Placement::Toolbar, move |()| {
@@ -202,7 +210,7 @@ pub(crate) fn quota_screen_model(
         "refresh",
         "Refresh",
         &["R"],
-        Placement::Menu { section: "Quota" },
+        Placement::Menu { section: "Refresh" },
         move |()| {
             if refresh_context
                 .refresh
@@ -234,6 +242,7 @@ pub(crate) fn quota_screen_model(
         }
     });
     actions.push(refresh);
+    actions.extend(super::quota_group_controls::grouping_actions(&context)?);
     let error_context = context.clone();
     let mut help_action = quota_action(
         "help",
@@ -245,9 +254,11 @@ pub(crate) fn quota_screen_model(
     let help_context = context.clone();
     help_action.run = help.open_handler(
         move || browse_help_content(&help_context),
-        Handler::from(move |error: agent_collaboration_tui::controls::HelpError| {
-            error_context.report(error.to_string())
-        }),
+        Handler::from(
+            move |error: agent_collaboration_tui::dialog::help::HelpError| {
+                error_context.report(error.to_string())
+            },
+        ),
     );
     actions.push(help_action);
     actions.push(quota_quit_action(&context, true)?);
@@ -256,6 +267,25 @@ pub(crate) fn quota_screen_model(
             .map_err(|error| error.to_string())?,
         actions.clone(),
     )
+    .map_err(|error| error.to_string())?
+    .with_menu_sections(vec![
+        MenuSectionSpec {
+            section: "View",
+            heading_action: Some(action_id("group-cycle")?),
+        },
+        MenuSectionSpec {
+            section: "Account",
+            heading_action: None,
+        },
+        MenuSectionSpec {
+            section: "Refresh",
+            heading_action: None,
+        },
+        MenuSectionSpec {
+            section: "Screen",
+            heading_action: None,
+        },
+    ])
     .map_err(|error| error.to_string())?;
     let mut targets = vec![button_target(TargetId::for_action(&menu.id), &menu)];
     for action in &actions {
@@ -270,6 +300,7 @@ pub(crate) fn quota_screen_model(
     }
     targets.extend(list.targets());
     let mut model = control_model("quota-browse", actions, targets, None)?;
+    model.actions = registry;
     model.focus.focus(list.id());
     Ok(model)
 }

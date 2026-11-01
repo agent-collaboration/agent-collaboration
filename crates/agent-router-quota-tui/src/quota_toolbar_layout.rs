@@ -1,6 +1,6 @@
 //! The toolbar reserves its fixed menu and visible account-count suffix once.
 use super::quota_control_context::QuotaControlContext;
-use agent_collaboration_tui::{actions::ActionRegistry, controls::toolbar_actions};
+use agent_collaboration_tui::{actions::ActionRegistry, controls::toolbar::toolbar_actions};
 use unicode_width::UnicodeWidthStr;
 
 // MenuButton: glyph + title + F10 + two internal gaps + padding, then one gap.

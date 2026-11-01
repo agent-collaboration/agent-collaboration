@@ -61,7 +61,7 @@ pub fn quota_control_fixture(inputs: QuotaFixtureOptions) -> QuotaControlFixture
 }
 
 pub(crate) fn open_fixture_control(
-    stack: agent_collaboration_tui::surface_handle::SurfaceStackHandle,
+    stack: agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,
     context: &crate::quota_control_context::QuotaControlContext,
     control: QuotaFixtureControl,
 ) -> Result<(), String> {
@@ -144,3 +144,14 @@ pub(crate) fn open_fixture_control(
         }
     }
 }
+
+#[cfg(any(test, debug_assertions))]
+pub use crate::quota_fixture_controller::{
+    QuotaCapturedContext, QuotaFixtureControlAck, QuotaFixtureController, QuotaFixtureOperation,
+    QuotaFixturePendingAck, QuotaFixtureReadback,
+};
+#[cfg(any(test, debug_assertions))]
+pub use crate::quota_fixture_view::{
+    ControlledQuotaFixture, QuotaFixtureObservers, QuotaFixtureView, controlled_quota_fixture,
+    with_quota_fixture_view,
+};

@@ -12,6 +12,10 @@ use std::{io, path::PathBuf, sync::Arc};
 type QuotaClipboardWriter = Arc<dyn Fn(&str) -> io::Result<()> + Send + Sync>;
 
 pub(super) fn interactive_quota_account_commands(router_root: PathBuf) -> QuotaAccountCommands {
+    #[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+    if let Some(commands) = fixture_factory::commands_for(&router_root) {
+        return commands;
+    }
     account_commands_with_clipboard(
         router_root,
         Arc::new(|payload| {
@@ -172,3 +176,7 @@ fn failed(message: String) -> QuotaAccountCommandResult {
 #[cfg(test)]
 #[path = "quota_account_adapter_test.rs"]
 mod tests;
+
+#[cfg(all(test, debug_assertions, feature = "quota-reset-test-harness"))]
+#[path = "quota_account_factory_test_support.rs"]
+pub(crate) mod fixture_factory;

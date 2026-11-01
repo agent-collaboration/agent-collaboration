@@ -3,7 +3,7 @@ use super::{
     quota_account_options::AccountOptionsState, quota_floor_editor::WeeklyFloorEditorState,
     quota_reset_presentation_model::ResetPaneTarget,
 };
-use agent_collaboration_tui::controls::PinnedContext;
+use agent_collaboration_tui::dialog::PinnedContext;
 use codex_router_quota_service::quota_display_model::QuotaStatusAccountViewModel;
 
 pub(crate) struct QuotaDialogIdentity {

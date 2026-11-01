@@ -162,3 +162,7 @@ async fn quota_account_port_copies_the_full_captured_id_through_the_terminal_wri
     );
     assert_eq!(*copied.lock().unwrap(), vec!["captured"]);
 }
+
+#[cfg(all(debug_assertions, feature = "quota-reset-test-harness"))]
+#[path = "quota_effectful_fixture/mod.rs"]
+mod effectful_fixture;
