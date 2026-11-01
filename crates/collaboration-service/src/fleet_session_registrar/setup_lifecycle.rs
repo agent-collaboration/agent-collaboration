@@ -85,17 +85,23 @@ impl FleetSessionRegistrar {
     pub async fn settle_interrupted_setups_after_restart(&self) -> Result<(), RegistrarFailure> {
         for record in self.repository.reconcile_candidates().await? {
             self.require_record_context(&record)?;
-            if matches!(
-                record.lifecycle(),
+            match record.lifecycle() {
                 FleetSessionBindingLifecycle::Prepared {
-                    creation: PreparedSessionCreation::CreatedPendingSetup { .. }
+                    creation: PreparedSessionCreation::NotDispatched {},
+                } => {
+                    self.creation_refused(&record.preparation().operation_id)
+                        .await?;
                 }
-            ) {
-                self.abandon_created_setup(
-                    &record.preparation().operation_id,
-                    SessionSetupAbandonmentCause::SetupInterrupted {},
-                )
-                .await?;
+                FleetSessionBindingLifecycle::Prepared {
+                    creation: PreparedSessionCreation::CreatedPendingSetup { .. },
+                } => {
+                    self.abandon_created_setup(
+                        &record.preparation().operation_id,
+                        SessionSetupAbandonmentCause::SetupInterrupted {},
+                    )
+                    .await?;
+                }
+                _ => {}
             }
         }
         Ok(())
