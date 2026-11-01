@@ -150,3 +150,14 @@ export function requireHelpRows(actual: readonly string[], expected: readonly st
 	if (JSON.stringify(actual) !== JSON.stringify(expected))
 		throw new Error('Help alias did not reach its independently indexed physical page');
 }
+
+/** Content ends at its last painted row; retain the raw physical census separately. */
+export function paintedHelpContentRows(rows: readonly string[]): readonly string[] {
+	const lastPainted = rows.findLastIndex((row) => row.trim() !== '');
+	return rows.slice(0, lastPainted + 1);
+}
+
+export function requireHelpContentRange(physicalRows: readonly string[]): void {
+	if (paintedHelpContentRows(physicalRows).length !== physicalRows.length)
+		throw new Error('Help plain Down overshoots painted content into trailing blank rows');
+}
