@@ -73,3 +73,34 @@ test('marked replay retains UTF-8 byte boundaries and the kernel resize geometry
 	expect(grid).toMatchObject({ columns: 32, rows: 24 });
 	expect(gridLines(grid)[0]?.trim()).toBe('❯ Claude · 📂');
 });
+
+test('only an explicit next handoff ACK permits an unframed sequence; it never invents a frame', () => {
+	const index = new DispatchFrameIndex();
+	index.acknowledgeLoopEndingHandoff(1);
+	expect(index.get(1)).toBeNull();
+	expect(index.isUnframedHandoff(1)).toBe(true);
+	expect(() => index.acknowledgeLoopEndingHandoff(1)).toThrow('next exact');
+	expect(() => index.acknowledgeLoopEndingHandoff(3)).toThrow('next exact');
+	index.append(Buffer.from(frame('fresh quota') + marker(2)));
+	expect(index.get(2)?.sequence).toBe(2);
+	expect(() => index.append(Buffer.from(frame('skipped') + marker(4)))).toThrow('not contiguous');
+});
+test('an optional real loop-ending marker stays real and cannot be silently renumbered', () => {
+	const index = new DispatchFrameIndex();
+	index.append(Buffer.from(frame('ending') + marker(1)));
+	index.acknowledgeLoopEndingHandoff(1);
+	expect(index.isUnframedHandoff(1)).toBe(false);
+	index.append(Buffer.from(frame('remount') + marker(2)));
+	expect(index.get(1)?.sequence).toBe(1);
+	expect(index.get(2)?.sequence).toBe(2);
+	expect(() => index.append(Buffer.from(frame('duplicate') + marker(2)))).toThrow('not contiguous');
+});
+test('an optional marker for an explicitly acknowledged handoff may finish arriving before the next input marker', () => {
+	const index = new DispatchFrameIndex();
+	index.acknowledgeLoopEndingHandoff(1);
+	index.append(Buffer.from(frame('ending') + marker(1)));
+	expect(index.isUnframedHandoff(1)).toBe(false);
+	index.append(Buffer.from(frame('fresh quota') + marker(2)));
+	expect(index.get(2)?.sequence).toBe(2);
+	expect(() => index.append(Buffer.from(frame('duplicate') + marker(1)))).toThrow('not contiguous');
+});

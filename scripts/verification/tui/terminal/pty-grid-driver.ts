@@ -7,6 +7,8 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { GhosttyCore } from '@wterm/ghostty';
 
 import type { ArtifactBinding } from '../evidence/evidence-schema.ts';
+import { PENDING_SCENARIOS, isComponentScenario } from '../fixtures/component-fixture-contract.ts';
+import type { ComponentScenario } from '../fixtures/component-fixture-contract.ts';
 import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
@@ -37,16 +39,18 @@ export interface PtyGridTarget {
 		| 'normal'
 		| 'hard'
 		| 'public-sessions'
-		| 'showcase';
+		| 'showcase'
+		| 'quota-effects';
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
 	readonly componentDispatchReceipt?: string;
-	readonly componentScenario?: 'normal' | 'save-failed' | 'visual-hard-cases' | 'commit-pending';
+	readonly componentScenario?: ComponentScenario;
 	readonly componentReleaseFile?: string;
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly showcaseEnvironment?: NodeJS.ProcessEnv;
+	readonly quotaEffectEnvironment?: NodeJS.ProcessEnv;
 	readonly handshakeOnly?: boolean;
 	readonly storyboardVariant?:
 		| 'wide-glyph-left-border'
@@ -82,18 +86,18 @@ function componentEnvironment(target: PtyGridTarget): Readonly<Record<string, st
 	const scenario = target.componentScenario;
 	if (
 		scenario !== undefined &&
-		!(
-			target.surface === 'normal'
-				? ['normal', 'save-failed', 'commit-pending']
-				: ['visual-hard-cases']
-		).includes(scenario)
+		(!isComponentScenario(scenario) ||
+			(target.surface === 'normal'
+				? scenario === 'visual-hard-cases'
+				: scenario !== 'visual-hard-cases'))
 	)
 		throw new Error('component scenario does not match its surface');
 	const release = target.componentReleaseFile;
-	if (release !== undefined && scenario !== 'commit-pending')
-		throw new Error('component release requires commit-pending');
-	if (scenario === 'commit-pending' && release === undefined)
-		throw new Error('commit-pending requires a fresh owned release path');
+	const pending = scenario !== undefined && PENDING_SCENARIOS.has(scenario);
+	if (release !== undefined && !pending)
+		throw new Error('component release requires a pending scenario');
+	if (pending && release === undefined)
+		throw new Error('pending scenario requires a fresh owned release path');
 	const paths = [target.componentDispatchReceipt, release].filter((path) => path !== undefined);
 	if (new Set(paths).size !== paths.length) throw new Error('component output paths collide');
 	for (const path of paths) validateFreshComponentPath(target.evidence, path);
@@ -182,6 +186,7 @@ export class PtyGridDriver {
 				...receiptEnvironment,
 				...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
 				...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
+				...(target.surface === 'quota-effects' ? target.quotaEffectEnvironment : {}),
 				TUI_GRID_CHECK_ONLY: undefined,
 				TUI_GRID_HANDSHAKE_ONLY: target.handshakeOnly === true ? '1' : undefined,
 				TUI_GRID_SURFACE: target.surface,
@@ -394,6 +399,8 @@ export class PtyGridDriver {
 		});
 	}
 	async waitForDispatchFrame(sequence: number): Promise<DispatchFrameObservation> {
+		if (this.dispatchFrames.isUnframedHandoff(sequence))
+			throw new Error('loop-ending handoff has no promised continuing frame');
 		const deadline = Date.now() + 8_000;
 		const next = async (): Promise<DispatchFrameObservation> => {
 			if (this.failure !== null) throw this.failure;
@@ -419,6 +426,9 @@ export class PtyGridDriver {
 			return next();
 		};
 		return next();
+	}
+	acknowledgeLoopEndingHandoff(sequence: number): void {
+		this.dispatchFrames.acknowledgeLoopEndingHandoff(sequence);
 	}
 	grid(): TerminalGrid {
 		return snapshotGrid(this.core);

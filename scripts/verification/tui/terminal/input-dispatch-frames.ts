@@ -21,7 +21,8 @@ export class DispatchFrameIndex {
 	private insideFrame = false;
 	private frameEnd = 0;
 	private markerEnd = 0;
-	private readonly bindings: DispatchFrameBinding[] = [];
+	private readonly bindings = new Map<number, DispatchFrameBinding>();
+	private lastSequence = 0;
 	append(bytes: Uint8Array): void {
 		this.pending += Buffer.from(bytes).toString('latin1');
 		// eslint-disable-next-line no-control-regex -- Match the actual VT wire protocol, including ESC and ST.
@@ -40,21 +41,24 @@ export class DispatchFrameIndex {
 				const sequence = Number(token[2]);
 				if (!/^[1-9][0-9]*$/u.test(token[2] ?? '') || !Number.isSafeInteger(sequence))
 					throw new Error('invalid dispatch marker sequence');
-				if (sequence !== this.bindings.length + 1)
+				const optionalHandoffMarker =
+					sequence === this.lastSequence && this.isUnframedHandoff(sequence);
+				if (sequence !== this.lastSequence + 1 && !optionalHandoffMarker)
 					throw new Error('dispatch marker sequence is not contiguous');
-				const previous = this.bindings.at(-1);
+				const previous = this.bindings.get(this.lastSequence);
 				const adjacentCohort =
 					previous !== undefined &&
 					previous.frameEndByteOffset === this.frameEnd &&
 					previous.markerEndByteOffset === this.pendingOffset + token.index;
 				if (this.insideFrame || (this.frameEnd <= this.markerEnd && !adjacentCohort))
 					throw new Error('dispatch marker lacks its own complete frame');
-				this.bindings.push({
+				this.bindings.set(sequence, {
 					sequence,
 					frameGeneration: this.generation,
 					frameEndByteOffset: this.frameEnd,
 					markerEndByteOffset: end,
 				});
+				this.lastSequence = sequence;
 				this.markerEnd = end;
 			}
 		}
@@ -72,7 +76,26 @@ export class DispatchFrameIndex {
 		}
 	}
 	get(sequence: number): DispatchFrameBinding | null {
-		return this.bindings[sequence - 1] ?? null;
+		return this.bindings.get(sequence) ?? null;
+	}
+	/** Only the handoff mode calls this after its exact ACK and lifecycle facts.
+	 * No frame is invented, and every unexplained missing/duplicate marker still fails.
+	 */
+	acknowledgeLoopEndingHandoff(sequence: number): void {
+		if (!Number.isSafeInteger(sequence) || sequence <= 0)
+			throw new Error('invalid handoff sequence');
+		if (sequence === this.lastSequence && this.bindings.has(sequence)) return;
+		if (sequence !== this.lastSequence + 1)
+			throw new Error('handoff acknowledgement is not the next exact dispatch sequence');
+		this.lastSequence = sequence;
+	}
+	isUnframedHandoff(sequence: number): boolean {
+		return (
+			Number.isSafeInteger(sequence) &&
+			sequence > 0 &&
+			sequence <= this.lastSequence &&
+			!this.bindings.has(sequence)
+		);
 	}
 }
 /** Replay only through the marked frame, even if newer frames arrived in the same chunk. */

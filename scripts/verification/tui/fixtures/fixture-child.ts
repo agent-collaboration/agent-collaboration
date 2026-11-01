@@ -39,34 +39,14 @@ import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
 } from '../sessions/sessions-receipt-directory.ts';
+import {
+	COMPONENT_SCENARIOS,
+	COMPONENT_TEST,
+	PENDING_SCENARIOS,
+	isComponentScenario,
+} from './component-fixture-contract.ts';
 import { holdFixtureHandshake } from './fixture-handshake.ts';
-
-export const COMPONENT_TEST =
-	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
-
-export const COMPONENT_SCENARIOS = {
-	normal: 'Normal',
-	'inspection-pending': 'InspectionPending',
-	'commit-pending': 'CommitPending',
-	'unknown-result': 'UnknownResult',
-	'save-failed': 'SaveFailed',
-	'disabled-yes': 'DisabledYes',
-	'revalidation-pending': 'RevalidationPending',
-	'refused-result': 'RefusedResult',
-	'refresh-pending': 'RefreshPending',
-	'save-pending': 'SavePending',
-	'visual-hard-cases': 'VisualHardCases',
-} as const satisfies Readonly<Record<string, string>>;
-
-type ComponentScenario = keyof typeof COMPONENT_SCENARIOS;
-
-const PENDING_SCENARIOS: ReadonlySet<ComponentScenario> = new Set<ComponentScenario>([
-	'inspection-pending',
-	'commit-pending',
-	'revalidation-pending',
-	'refresh-pending',
-	'save-pending',
-]);
+import { quotaEffectLaunch } from './quota-effect-launch.ts';
 
 const PUBLIC_SESSIONS_FIELDS: ReadonlySet<string> = new Set([
 	'surface',
@@ -87,6 +67,7 @@ const capturedTuiSurfaceSchema = z.enum([
 	'quota-component',
 	'public-sessions',
 	'showcase',
+	'quota-effects',
 ]);
 type CapturedTuiSurface = z.infer<typeof capturedTuiSurfaceSchema>;
 
@@ -142,10 +123,6 @@ function ownedFuturePath(configuration: FixtureCommand, key: string): string {
 		throw new FixtureLaunchRejected(`${key} must be absent inside the owned output directory`);
 	}
 	return path;
-}
-
-function isComponentScenario(value: string): value is ComponentScenario {
-	return Object.hasOwn(COMPONENT_SCENARIOS, value);
 }
 
 function fileSha256(path: string): string {
@@ -298,6 +275,7 @@ export function childLaunchConfiguration(
 		return publicSessionsLaunch(configuration, binary);
 	}
 	if (surface === 'showcase') return showcaseLaunch(configuration, binary);
+	if (surface === 'quota-effects') return quotaEffectLaunch(configuration);
 	const temporary = requiredText(configuration, 'temporary_directory');
 	const environment: Record<string, string> = {
 		HOME: temporary,
@@ -508,7 +486,12 @@ async function main(): Promise<number> {
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));
-	if (surface === 'public-sessions' || surface === 'quota-component' || surface === 'showcase') {
+	if (
+		surface === 'public-sessions' ||
+		surface === 'quota-component' ||
+		surface === 'showcase' ||
+		surface === 'quota-effects'
+	) {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
 	}
 	if (process.env['TUI_GRID_HANDSHAKE_ONLY'] === '1') {

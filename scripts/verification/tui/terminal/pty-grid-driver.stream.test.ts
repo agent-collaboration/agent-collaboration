@@ -171,6 +171,38 @@ process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');proce
 	}
 });
 
+test('inspection-pending forwards its own release without executing a product', async () => {
+	const directory = temporaryRoot(),
+		observed = join(directory, 'inspection-nomination.json');
+	const executable = controlledExecutable(
+		directory,
+		'inspection-nomination-control',
+		`
+require('node:fs').writeFileSync(${JSON.stringify(observed)},JSON.stringify({release:process.env.TUI_GRID_COMPONENT_RELEASE,scenario:process.env.TUI_GRID_COMPONENT_SCENARIO}));
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});`,
+	);
+	const release = join(directory, 'inspection.release');
+	const driver = await PtyGridDriver.start({
+		repository: directory,
+		driver: executable,
+		surface: 'normal',
+		keys: 'legacy',
+		evidence: directory,
+		componentBinary: '/declared/component',
+		componentScenario: 'inspection-pending',
+		componentReleaseFile: release,
+	});
+	try {
+		expect(JSON.parse(readFileSync(observed, 'utf8'))).toEqual({
+			release,
+			scenario: 'inspection-pending',
+		});
+	} finally {
+		await driver.stop();
+	}
+});
+
 test('component receipt rejects occupied and foreign paths before any controlled child launch', async () => {
 	const directory = temporaryRoot(),
 		foreign = temporaryRoot();

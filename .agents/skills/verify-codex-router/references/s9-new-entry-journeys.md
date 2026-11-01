@@ -198,3 +198,86 @@ The catalogue exposes named `sessions-group-by-f6` and `quota-group-by-f6`
 placeholders for U18/R19 while the grouped crate/consumer target is pending.
 F6 is the settled grouping key on both screens; picker Ctrl+G/F2 remain Machine.
 A placeholder is not an authored runnable flow or a product pass.
+
+## Quota B offline preparation (draft)
+
+Use S7's source-only packet with its retained source directory and manifest. Keep
+that snapshot distinct from the moving consumer checkout and the later signed
+product declaration. From the repository root:
+
+```sh
+node scripts/verification/tui/journeys/flows/quota-flow-census.ts "$PRODUCT_REPOSITORY" "$QUOTA_OFFLINE_PACKET" "$CENSUS_OUTPUT"
+```
+
+The census hash-checks every retained manifest file, anchors the scenario/control
+rules to source lines, and lists the catalogue's quota fixtures and checks.
+`quota-argument-admission.ts` checks the exact CLI libtest/read-only argument
+profiles. It reports executable admission as unbound when the packet's artifacts
+are null. Source argument matches, synthetic helper checks and reader sensitivity
+are zero product passes; they cannot replace signed-driver check-only admission.
+R19 remains an explicit placeholder until grouped rendering, summaries and
+preference reopen have their own declared target and expected outcomes.
+
+`fixtures/quota-effect-launch.ts` admits the fixed effectful CLI libtest entry,
+hash-bound JSON configuration and fresh private paths under `/private/tmp`.
+Login additionally requires the exact declared stand-in and private PATH prefix;
+normal home is inherited. It changes no product configuration. The `quota-effects`
+streaming-driver route uses the existing inherited-PTY wrapper and binds
+`TUI_QUOTA_EFFECT_OUTPUT`, `TUI_QUOTA_EFFECT_CONFIGURATION` and its `_SHA256`,
+plus the same nominated product path/hash. Rebuild and sign the driver against
+the current wrapper source before using it. This route is draft until qualified.
+
+All eleven read-only scenario names retain their separate component entry and
+unchanged read-only proof. The five pending scenarios require their own absent
+release path and exact `settle\n` bytes. Do not substitute those release files
+for effectful fixture gates.
+
+`quota-fixture-control.ts` keeps one setup socket connection with increasing
+request IDs and no reconnect/replay after an unknown result. Its ACKs cannot
+claim native sequence/event/surface facts. Account actions use the captured A
+while Browse moves to B; Options/Floor replace Details. `remove-held` is an
+additional seed of the middle-removal journey and requires causal commit-gate
+release and retained completion. Each refresh outcome needs separate fresh key
+and menu children, with actual duplicate ACK/frame proof before release.
+
+`quota-effect-readback.ts` checks raw producer receipts for exact account effects,
+captured identity, login argv/exit/terminal flags and restart, removal reselection,
+and this invocation's service/mapper results. It supplies no input/frame/cleanup
+proof by itself. Native input/focus/pointer bindings, the refresh child transition,
+the actual signed artifacts and startup qualification must all be admitted before
+a quota B window is requested. No product/native run follows from this draft.
+
+### Loop-ending login handoff
+
+`MarkerInputSession.handoff` observes the exact action ACK, restored-terminal
+child entry, the parent's actual wait result, and a strictly newer quota mount
+on the same retained PTY driver. It then requires a new synchronized frame and
+an independent F12 ACK/marker whose captured state matches the expected remount.
+An entry receipt's planned exit code cannot supply the parent wait result.
+The quota producer's parent-wait event and returned status must be source-bound
+before this mode can observe a product.
+
+Native key bindings use `kind: handoff`; pointer bindings use `ending: handoff`.
+A handoff pointer sends MouseDown once and resumes input only on the new quota
+mount. The mode keeps child facts, exact action sequence, fresh frame binding
+and driver identity in its evidence. Lifecycle callbacks receive an owned abort
+signal and release their watchers on completion, cancellation or the failure
+guard. A missing remount cannot leave the observer waiting indefinitely.
+
+The frame index accepts an unframed sequence only when this mode registers its
+already verified loop-ending action. A real optional marker for that action is
+retained if it arrives; unexplained gaps, duplicates and markers inside frames
+retain their existing rejections. First-remount evidence must be newer than the
+pre-handoff frame and byte boundary. Controlled stream/fact tests qualify these
+apparatus rules, including missing remount and unrestored terminal controls;
+they establish no real child/terminal or quota behavior.
+
+The source-qualified parent-wait wire is an event envelope with
+`event.kind: login-parent-exited`, `childPid`, `waitOrdinal`, and `status`;
+the final summary retains the same fields under `loginParentExit`.
+`requireQuotaLoginParentExit` requires a positive parent-observed PID, exactly
+one wait, an exited status of 0/130/7 as declared, and rawStatus equal to the
+exit code shifted left eight bits. A planned child exit, a signal, a wait
+failure, an absent PID, or a different raw status cannot substitute.
+The live lifecycle adapter must still bind the event to the final receipt and
+its source/artifact declaration; these offline reader controls do not do that.

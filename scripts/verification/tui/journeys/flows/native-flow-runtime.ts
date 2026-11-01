@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { InputConsumptionExpectation } from '../../sessions/input-consumption-schema.ts';
 import { requireDelivered } from '../../terminal/ghostty-journey-input.ts';
 import type { DispatchFrameObservation } from '../../terminal/input-dispatch-frames.ts';
+import type { LoopEndingHandoff } from '../../terminal/loop-ending-handoff.ts';
 import { MarkerInputSession } from '../../terminal/marker-input-session.ts';
 import type { MarkedInputEvidence } from '../../terminal/marker-input-session.ts';
 import { PtyGridDriver } from '../../terminal/pty-grid-driver.ts';
@@ -31,6 +32,9 @@ export interface NativeFlowContext {
 	readonly frame: DispatchFrameObservation;
 }
 type ExpectedInput = readonly InputConsumptionExpectation[];
+type NativeHandoffBinding = (
+	context: NativeFlowContext,
+) => LoopEndingHandoff | Promise<LoopEndingHandoff>;
 export interface NativeFlowKey {
 	readonly key: string;
 	readonly expected: ExpectedInput;
@@ -39,11 +43,21 @@ export interface NativeFlowKey {
 export type NativeFlowInputBinding =
 	| { readonly kind: 'continuing' | 'exit'; readonly expected: ExpectedInput }
 	| {
+			readonly kind: 'handoff';
+			readonly expected: ExpectedInput;
+			readonly handoff: NativeHandoffBinding;
+	  }
+	| ({
 			readonly kind: 'click';
 			readonly expected: (location: PaintedTargetLocation) => ExpectedInput;
-			/** The declared action ends the loop on MouseDown; no release/frame can be required afterward. */
-			readonly endsOnPress?: boolean;
-	  }
+	  } & (
+			| { readonly ending: 'continue' }
+			| { readonly ending: 'process-exit' }
+			| {
+					readonly ending: 'handoff';
+					readonly handoff: NativeHandoffBinding;
+			  }
+	  ))
 	| {
 			readonly kind: 'focus';
 			readonly route: readonly NativeFlowKey[];
@@ -106,7 +120,7 @@ export class NativeFlowRuntime implements FlowRuntime {
 				const input = requireBinding(bindings.inputs.get(index), 'input step ' + index);
 				if (
 					step.kind === 'press' &&
-					(input.kind === 'continuing' || input.kind === 'exit') &&
+					(input.kind === 'continuing' || input.kind === 'exit' || input.kind === 'handoff') &&
 					input.expected.length !== 1
 				)
 					throw new Error(
@@ -117,7 +131,7 @@ export class NativeFlowRuntime implements FlowRuntime {
 				if (
 					step.kind === 'click' || step.kind === 'focus'
 						? input.kind !== step.kind
-						: !['continuing', 'exit'].includes(input.kind)
+						: !['continuing', 'exit', 'handoff'].includes(input.kind)
 				)
 					throw new Error('native input binding kind differs at step ' + index);
 			}
@@ -176,6 +190,12 @@ export class NativeFlowRuntime implements FlowRuntime {
 	): Promise<FlowStepEvidence> {
 		const { input } = this.context();
 		const binding = requireBinding(this.bindings.inputs.get(index), 'input step ' + index);
+		if (binding.kind === 'handoff')
+			return this.performHandoff({
+				handoff: await binding.handoff(this.context()),
+				expected: binding.expected,
+				inject: () => send(input),
+			});
 		if (binding.kind !== 'continuing' && binding.kind !== 'exit')
 			throw new Error('expected a key/text binding');
 		if (binding.kind === 'exit') {
@@ -211,7 +231,21 @@ export class NativeFlowRuntime implements FlowRuntime {
 		if (binding.kind !== 'click') throw new Error('expected a click binding');
 		const target = requireBinding(this.bindings.targets.get(step.target), step.target)(frame.grid);
 		const location = locatePaintedTarget(frame.grid, target);
-		if (binding.endsOnPress === true) {
+		if (binding.ending === 'handoff')
+			return this.performHandoff({
+				handoff: await binding.handoff(this.context()),
+				expected: binding.expected(location),
+				inject: async () =>
+					requireDelivered(
+						await input.input.mouse({
+							kind: 'press',
+							button: 'left',
+							column: location.column,
+							row: location.row,
+						}),
+					),
+			});
+		if (binding.ending === 'process-exit') {
 			const result = await input.exit({
 				expected: binding.expected(location),
 				inject: async () =>
@@ -239,6 +273,43 @@ export class NativeFlowRuntime implements FlowRuntime {
 				},
 			}),
 		);
+	}
+	private async performHandoff(options: {
+		readonly handoff: LoopEndingHandoff;
+		readonly expected: ExpectedInput;
+		readonly inject: () => Promise<void>;
+	}): Promise<FlowStepEvidence> {
+		const proof = await this.context().input.handoff({
+			...options.handoff,
+			expected: options.expected,
+			inject: options.inject,
+		});
+		const evidence = this.retain(proof.firstFrame);
+		const path = join(this.bindings.target.evidence, `handoff-${proof.receipts[0]?.sequence}.json`);
+		writeFileSync(
+			path,
+			JSON.stringify(
+				{
+					kind: 'loop-ending-handoff',
+					driverPid: proof.driverPid,
+					receipts: proof.receipts,
+					childEntry: proof.childEntry,
+					childExit: proof.childExit,
+					remount: proof.remount,
+					firstFrame: proof.firstFrame.frames.at(-1)?.binding,
+				},
+				null,
+				2,
+			),
+		);
+		return {
+			...evidence,
+			files: [...evidence.files, path],
+			dispatchSequences: [
+				...proof.receipts.map((receipt) => receipt.sequence),
+				...evidence.dispatchSequences,
+			],
+		};
 	}
 	async focus(
 		_step: Extract<FlowStep, { kind: 'focus' }>,

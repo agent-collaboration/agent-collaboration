@@ -11,8 +11,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[path = "showcase_grid_capture.rs"]
-mod showcase_grid_capture;
+#[path = "wrapped_fixture_capture.rs"]
+mod wrapped_fixture_capture;
 
 pub(super) fn emit(line: &str) -> TestResult<()> {
     let mut output = std::io::stdout().lock();
@@ -71,6 +71,17 @@ fn component_scenario(
         ("normal", None | Some("normal")) => Ok(("normal", "scenario=Normal")),
         ("normal", Some("save-failed")) => Ok(("save-failed", "scenario=SaveFailed")),
         ("normal", Some("commit-pending")) => Ok(("commit-pending", "scenario=CommitPending")),
+        ("normal", Some("inspection-pending")) => {
+            Ok(("inspection-pending", "scenario=InspectionPending"))
+        }
+        ("normal", Some("unknown-result")) => Ok(("unknown-result", "scenario=UnknownResult")),
+        ("normal", Some("disabled-yes")) => Ok(("disabled-yes", "scenario=DisabledYes")),
+        ("normal", Some("revalidation-pending")) => {
+            Ok(("revalidation-pending", "scenario=RevalidationPending"))
+        }
+        ("normal", Some("refused-result")) => Ok(("refused-result", "scenario=RefusedResult")),
+        ("normal", Some("refresh-pending")) => Ok(("refresh-pending", "scenario=RefreshPending")),
+        ("normal", Some("save-pending")) => Ok(("save-pending", "scenario=SavePending")),
         ("hard", None | Some("visual-hard-cases")) => {
             Ok(("visual-hard-cases", "scenario=VisualHardCases"))
         }
@@ -119,6 +130,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
                 | "normal"
                 | "hard"
                 | "showcase"
+                | "quota-effects"
         ),
         "unknown grid capture surface",
     )?;
@@ -128,7 +140,18 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         _ => return Err("invalid grid check-only nomination".into()),
     };
     if surface == "showcase" {
-        return showcase_grid_capture::run(protocol, check_only);
+        return wrapped_fixture_capture::run(
+            protocol,
+            check_only,
+            wrapped_fixture_capture::WrappedFixtureSurface::Showcase,
+        );
+    }
+    if surface == "quota-effects" {
+        return wrapped_fixture_capture::run(
+            protocol,
+            check_only,
+            wrapped_fixture_capture::WrappedFixtureSurface::QuotaEffects,
+        );
     }
     let fixture = if surface == "quota-filters" {
         QuotaResetFixture::create_provider_filters(ProviderFilterFixtureScenario::MixedAccounts)
@@ -179,8 +202,18 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         .then(|| component_scenario(&surface, scenario_nomination.as_deref()))
         .transpose()?;
     ensure(
-        release_path.is_some() == (scenario.map(|value| value.0) == Some("commit-pending")),
-        "component release requires the commit-pending scenario and vice versa",
+        release_path.is_some()
+            == scenario.is_some_and(|value| {
+                matches!(
+                    value.0,
+                    "inspection-pending"
+                        | "commit-pending"
+                        | "revalidation-pending"
+                        | "refresh-pending"
+                        | "save-pending"
+                )
+            }),
+        "component release requires a pending scenario and vice versa",
     )?;
     let release_path = component_dispatch_receipt(&surface, release_path.as_deref())?;
     let dispatch_nomination = std::env::var_os("TUI_GRID_COMPONENT_DISPATCH_RECEIPT");

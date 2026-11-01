@@ -145,7 +145,7 @@ export function pickerNewBindings(
 		} else if (step.kind === 'click') {
 			inputs.set(index, {
 				kind: 'click',
-				endsOnPress: true,
+				ending: 'process-exit',
 				expected: (location) => [
 					{
 						event: {

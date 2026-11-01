@@ -7,6 +7,7 @@ import { expect, test } from 'vitest';
 import { controlledExecutable } from '../../fixtures/controlled-child-fixtures.ts';
 import { temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
 import type { InputConsumptionExpectation } from '../../sessions/input-consumption-schema.ts';
+import { inputDispatchReceiptSchema } from '../../sessions/input-consumption-schema.ts';
 import { gridLines } from '../../terminal/terminal-grid.ts';
 import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
@@ -53,7 +54,9 @@ const journey: FlowJourney = {
 	wrongOutcomes: ['unrelated later frame replaces marked result', 'wrong target launches'],
 	admissionInputs: [],
 };
-function setup(mode: 'right' | 'wrong-frame' | 'missing-binding' | 'exit-step' | 'exit-click'): {
+function setup(
+	mode: 'right' | 'wrong-frame' | 'missing-binding' | 'exit-step' | 'exit-click' | 'handoff-click',
+): {
 	bindings: NativeFlowBindings;
 	directory: string;
 } {
@@ -77,14 +80,20 @@ const hex=line.slice(6),text=Buffer.from(hex,'hex').toString();let event,target=
 if(hex==='1b') event={kind:'key',code:{kind:'fixed',name:'Esc'},modifiers:[],phase:'press'};
 else if(hex==='09'){event={kind:'key',code:{kind:'fixed',name:'Tab'},modifiers:[],phase:'press'};target='action:start';}
 else if(hex==='03'){event={kind:'key',code:{kind:'shortcut',key:'c'},modifiers:['control'],phase:'press'};action='quit';ending=true;}
+else if(hex==='1b5b32347e')event={kind:'key',code:{kind:'fixed',name:'F12'},modifiers:[],phase:'press'};
 else {
  const match=/^\\x1b\\[<0;4;1([Mm])$/.exec(text);if(!match)throw new Error('wrong painted click '+JSON.stringify(text));
  event={kind:'mouse',mouse:{kind:match[1]==='M'?'down':'up',button:'left'},column:3,row:0,modifiers:[]};target='action:start';
  if(match[1]==='M'){action='start';starts++;if(mode==='exit-click')ending=true;}
 }
-sequence++;fs.appendFileSync(receipt,JSON.stringify({sequence,event,surface:{kind:'screen'},target,action})+'\\n');emit('OK');
-if(ending){fs.writeFileSync(${JSON.stringify(join(directory, 'effects.json'))},JSON.stringify({starts}));emit('EOF');process.stdout.write('TUI_GRID FINISHED 0\\n',()=>process.exit(0));return;}
-const label=mode==='wrong-frame'&&sequence===2?'WRONG':'界 Start';
+sequence++;fs.appendFileSync(receipt,JSON.stringify({sequence,event,surface:{kind:'screen'},target,action})+'\\n');
+if(ending){fs.writeFileSync(${JSON.stringify(join(directory, 'effects.json'))},JSON.stringify({starts}));emit('OK');emit('EOF');process.stdout.write('TUI_GRID FINISHED 0\\n',()=>process.exit(0));return;}
+if(mode==='handoff-click'&&event.kind==='mouse'&&event.mouse.kind==='down'){
+ fs.writeFileSync(${JSON.stringify(join(directory, 'handoff-facts.json'))},JSON.stringify({entry:{arguments:['synthetic-login'],terminal:{kind:'interactive',canonical:true,echo:true,signals:true,foreground:true}},exit:{kind:'exited',code:0},mount:{mount:2}}));
+ bytes(frame('fresh quota'));emit('OK');return;
+}
+const label=mode==='handoff-click'&&sequence>=3?'fresh quota':mode==='wrong-frame'&&sequence===2?'WRONG':'界 Start';
+emit('OK');
 bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispatch='+sequence+'\\x1b\\\\'+frame('unrelated later'));
 });`,
 	);
@@ -101,6 +110,7 @@ bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispat
 			1,
 			{
 				kind: 'click',
+				ending: 'continue',
 				expected: (location) => [
 					{
 						event: {
@@ -136,8 +146,59 @@ bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispat
 		if (click?.kind !== 'click') throw new Error('controlled click absent');
 		inputs.set(1, {
 			...click,
-			endsOnPress: true,
+			ending: 'process-exit',
 			expected: (point) => click.expected(point).slice(0, 1),
+		});
+	}
+	if (mode === 'handoff-click') {
+		const click = inputs.get(1);
+		if (click?.kind !== 'click') throw new Error('controlled click absent');
+		const facts = (): unknown =>
+			JSON.parse(readFileSync(join(directory, 'handoff-facts.json'), 'utf8'));
+		inputs.set(1, {
+			kind: 'click',
+			ending: 'handoff',
+			expected: (point) => click.expected(point).slice(0, 1),
+			handoff: async () => ({
+				previousMount: 1,
+				expectedChildArguments: ['synthetic-login'],
+				expectedChildExitCode: 0,
+				childEntered: async () => {
+					const value = facts();
+					if (typeof value !== 'object' || value === null || !('entry' in value))
+						throw new Error('entry absent');
+					return value.entry;
+				},
+				childExited: async () => {
+					const value = facts();
+					if (typeof value !== 'object' || value === null || !('exit' in value))
+						throw new Error('exit absent');
+					return value.exit;
+				},
+				remounted: async () => {
+					const value = facts();
+					if (typeof value !== 'object' || value === null || !('mount' in value))
+						throw new Error('mount absent');
+					return value.mount;
+				},
+				ready: (grid) => gridLines(grid)[0]?.trim() === 'fresh quota',
+				firstFrame: {
+					key: 'F12',
+					expected: [
+						{
+							event: {
+								kind: 'key',
+								code: { kind: 'fixed', name: 'F12' },
+								modifiers: [],
+								phase: 'press',
+							},
+							surface: { kind: 'screen' },
+							target: null,
+							action: null,
+						},
+					],
+				},
+			}),
 		});
 	}
 	if (mode === 'exit-step') {
@@ -177,7 +238,8 @@ bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispat
 				[
 					'compound-start-once',
 					async (_context, observed) =>
-						JSON.stringify(observed) === JSON.stringify({ line: '界 Start' })
+						JSON.stringify(observed) ===
+						JSON.stringify({ line: mode === 'handoff-click' ? 'fresh quota' : '界 Start' })
 							? []
 							: ['wrong marked grid'],
 				],
@@ -210,6 +272,28 @@ test('terminal pointer activation settles through exact press ACK and exit, with
 	expect(result.steps[1]?.inputObservation).toBeUndefined();
 	expect(result.finish.dispatchSequences).toEqual([3]);
 	expect(JSON.parse(readFileSync(join(directory, 'effects.json'), 'utf8'))).toEqual({ starts: 1 });
+});
+test('authored handoff click sends no MouseUp into the child and retains fresh-frame and child evidence', async () => {
+	const { bindings, directory } = setup('handoff-click');
+	const result = await executeNativeFlow({ journey, grid: '120x36', keys: 'legacy' }, bindings);
+	if (result.kind !== 'completed') throw new Error('controlled handoff admission gap');
+	expect(result.steps[1]?.dispatchSequences).toEqual([3, 4]);
+	expect(result.steps[2]?.dispatchSequences).toEqual([4]);
+	expect(result.finish.dispatchSequences).toEqual([5]);
+	expect(JSON.parse(readFileSync(join(directory, 'handoff-3.json'), 'utf8'))).toMatchObject({
+		kind: 'loop-ending-handoff',
+		childExit: { kind: 'exited', code: 0 },
+		remount: { mount: 2 },
+		firstFrame: { sequence: 4 },
+	});
+	const records = readFileSync(join(directory, 'input-dispatch.jsonl'), 'utf8')
+		.trim()
+		.split('\n')
+		.map((line) => inputDispatchReceiptSchema.parse(JSON.parse(line)));
+	expect(records).toHaveLength(5);
+	expect(
+		records.some((record) => record.event.kind === 'mouse' && record.event.mouse.kind === 'up'),
+	).toBe(false);
 });
 test('an absent late input binding rejects before launching a controlled child', async () => {
 	const { bindings, directory } = setup('missing-binding');
