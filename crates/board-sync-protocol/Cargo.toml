@@ -9,6 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
 schemars.workspace = true
 fleet-sync-protocol.workspace = true
 message-board = { path = "../message-board", version = "0.1.96" }

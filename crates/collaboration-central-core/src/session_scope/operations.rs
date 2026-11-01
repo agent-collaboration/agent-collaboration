@@ -140,6 +140,17 @@ where
         forward_frame: FrameId,
     ) -> Result<(), StoreError> {
         match request {
+            // F10 owns machine-token admission. The current access-enrollment
+            // entry has no admitted machine token and cannot renew one.
+            BoardConsumerRequest::RenewMachineToken(_) => self.stage_operation_answer(
+                connection,
+                frame,
+                OperationAnswer::Consumer(BoardConsumerAnswer::RenewMachineToken(
+                    fleet_identity_protocol::MachineTokenRenewal::Refused {
+                        reason: fleet_identity_protocol::MachineTokenRenewalRefusal::TokenInvalid {},
+                    },
+                )),
+            )?,
             BoardConsumerRequest::ForwardedPost { project, post } => {
                 let pending = crate::forward_store::PendingForward {
                     forward_frame,

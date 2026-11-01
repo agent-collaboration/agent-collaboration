@@ -28,6 +28,7 @@ impl ConsumerProtocol for BoardConsumerProtocol {
     deny_unknown_fields
 )]
 pub enum BoardConsumerRequest {
+    RenewMachineToken(fleet_identity_protocol::RenewMachineToken),
     ForwardedPost {
         project: message_board::ProjectId,
         post: ForwardedPost,
@@ -56,6 +57,7 @@ pub enum BoardConsumerRequest {
     deny_unknown_fields
 )]
 enum BoardConsumerRequestFields {
+    RenewMachineToken(fleet_identity_protocol::RenewMachineToken),
     ForwardedPost {
         project: message_board::ProjectId,
         post: ForwardedPost,
@@ -137,6 +139,7 @@ impl<'de> Deserialize<'de> for BoardConsumerRequest {
     deny_unknown_fields
 )]
 pub enum BoardConsumerAnswer {
+    RenewMachineToken(fleet_identity_protocol::MachineTokenRenewal),
     ForwardedPost(ForwardOutcome),
     MailSubmit(MailSubmitAnswer),
     Fleet {

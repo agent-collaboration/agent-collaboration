@@ -955,6 +955,7 @@ version = "0.1.119"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
+ "fleet-identity-protocol",
  "fleet-sync-protocol",
  "message-board",
  "schemars 1.2.2",
