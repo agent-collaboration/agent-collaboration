@@ -245,7 +245,11 @@ Quota keeps the 2026-10-23 contract, which governs where it changed 10-17:
 - readable balances;
 - its reset workflow's quit behaviour (Ctrl+C ignored while committing; exit without commit before it).
 
-Field columns stay aligned with a reserved selector gutter, and dialogs keep the existing sizing contract. The identity and effect guards hold: source-qualified session identity and AccountId are captured exactly; drafts stay separate from committed filters; Start runs once; a pending or unknown outcome is never retried automatically; no ID is fabricated. Only these superseded rules change, each by owner decision: inline choices become dropdowns (R14), and Esc no longer exits the quota screen (R4). Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
+Field columns stay aligned with a reserved selector gutter, and dialogs keep the existing sizing contract. The identity and effect guards hold: source-qualified session identity and AccountId are captured exactly; drafts stay separate from committed filters; Start runs once; a pending or unknown outcome is never retried automatically; no ID is fabricated. Only these superseded rules change, each by owner decision: inline choices become dropdowns (R14), and Esc no longer exits the quota screen (R4). The quota list's Quota column also changes, by owner decision (2026-11-01: "providers are removing 5 hour limits, can we make this 2 lines for weekly, week · xxx, and not show 5 hour in main screen. in details we can show if it exists"):
+- The main list shows only the weekly window, on two lines: the bar and the percentage on the first line, then "week · <reset in>" on the second. A stale weekly reading says "week · stale" in the warning colour on that second line.
+- The 5-hour window and its staleness no longer appear in the main list. Account Details shows the 5-hour window when the provider reports one.
+- An account that reports no weekly window shows its 5-hour window in the same two-line form, so its row is never blank.
+The static geometry and JSON output follow from this; no other field moves. Enter still opens Details and Ctrl+Enter still opens the session directly. The no-footer rule is kept: dialogs show a key-hint line only where it helps (R9). *Entities: E1, E4, E5.*
 
 **R17 — log in again from account Details** (U16).
 
