@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND kind IN ('board-notification','subscription-activity','subscription-expiry') AND delivery_state='held' AND (retention='creationAge' OR notification_item_digest IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=router_pushes.push_id AND r.scheduled_retry_at IS NOT NULL) ORDER BY push_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "36946a4f142eb33b2c546655c603d1f29fcef5285275224d3533ef81b72f4c7f"
+}

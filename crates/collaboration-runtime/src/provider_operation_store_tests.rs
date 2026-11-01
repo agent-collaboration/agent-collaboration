@@ -12,7 +12,9 @@ async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Resul
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut store.connection)
         .await?;
-    assert_eq!(mode, 2);
+    if mode != 2 {
+        return Err(format!("expected incremental auto_vacuum mode 2, got {mode}").into());
+    }
     store.close().await?;
     Ok(())
 }

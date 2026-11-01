@@ -47,8 +47,34 @@ pub(super) struct NativeClient {
     scripts: Mutex<HashMap<PushId, VecDeque<collaboration_contracts::NativeDeliveryResult>>>,
     calls: Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>,
     gates: Mutex<HashMap<PushId, NativeAttemptGate>>,
+    unlisted: Mutex<
+        VecDeque<(
+            collaboration_contracts::NativeDeliveryResult,
+            NativeAttemptGate,
+        )>,
+    >,
 }
 impl NativeClient {
+    #[cfg(debug_assertions)]
+    pub(super) fn pause_next_unlisted_result(
+        &self,
+        result: collaboration_contracts::NativeDeliveryResult,
+    ) -> PausedNativeAttempt {
+        let (entered, observed) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        self.unlisted
+            .lock()
+            .unwrap()
+            .push_back((result, NativeAttemptGate { entered, released }));
+        PausedNativeAttempt {
+            entered: observed,
+            release,
+        }
+    }
+    #[cfg(debug_assertions)]
+    pub(super) fn all_calls(&self) -> Vec<collaboration_contracts::layer_zero::DeliveryRequest> {
+        self.calls.lock().unwrap().clone()
+    }
     pub(super) fn pause_before_answer(&self, item: ItemId) -> PausedNativeAttempt {
         let (entered, observed) = tokio::sync::oneshot::channel();
         let (release, released) = tokio::sync::oneshot::channel();
@@ -104,21 +130,34 @@ impl SessionMessageDelivery for NativeClient {
         Box::pin(async move {
             let push_id = request.payload.push_id.clone();
             self.calls.lock().unwrap().push(request);
-            let gate = { self.gates.lock().unwrap().remove(&push_id) };
+            let scripted = self
+                .scripts
+                .lock()
+                .unwrap()
+                .get_mut(&push_id)
+                .map(|answers| {
+                    answers
+                        .pop_front()
+                        .expect("one scripted native answer per real attempt")
+                });
+            let (answer, gate) = match scripted {
+                Some(answer) => (answer, self.gates.lock().unwrap().remove(&push_id)),
+                None => {
+                    let (answer, gate) = self
+                        .unlisted
+                        .lock()
+                        .unwrap()
+                        .pop_front()
+                        .expect("one scripted native answer per real attempt");
+                    (answer, Some(gate))
+                }
+            };
             if let Some(gate) = gate {
                 gate.entered.send(()).expect("native observer attached");
                 gate.released
                     .await
                     .expect("native call explicitly released");
             }
-            let answer = self
-                .scripts
-                .lock()
-                .unwrap()
-                .get_mut(&push_id)
-                .unwrap()
-                .pop_front()
-                .expect("one scripted native answer per real attempt");
             Ok(answer)
         })
     }
@@ -151,6 +190,7 @@ pub(super) struct Runtime {
     pub(super) client: Arc<NativeClient>,
     publisher: Arc<crate::NotificationPublisher>,
     fleet_runtime: board_central_test_support::FleetTestRuntime,
+    reader_clock: Option<Arc<dyn SubscriptionClock>>,
     _directory: tempfile::TempDir,
 }
 impl Runtime {
@@ -160,7 +200,10 @@ impl Runtime {
             actors: self.actors.clone(),
             presence: Arc::new(Running),
             machine: machine(),
-            clock: Arc::new(Clock(self.fixture.host.clock.clone())),
+            clock: self
+                .reader_clock
+                .clone()
+                .unwrap_or_else(|| Arc::new(Clock(self.fixture.host.clock.clone()))),
         }
     }
     pub(super) fn local_mail_runtime(&self) -> crate::MailDeliveryRuntime {
@@ -184,6 +227,9 @@ impl Runtime {
     }
 
     pub(super) async fn new() -> Self {
+        Self::new_with_clock(None).await
+    }
+    pub(super) async fn new_with_clock(reader_clock: Option<Arc<dyn SubscriptionClock>>) -> Self {
         let fixture = Fixture::new().await;
         let directory = tempfile::tempdir().unwrap();
         let automation = Arc::new(tokio::sync::Mutex::new(
@@ -193,7 +239,7 @@ impl Runtime {
         ));
         let client = Arc::new(NativeClient::default());
         let (actors, publisher, fleet_runtime) =
-            Self::start_actors(&fixture, &client, directory.path()).await;
+            Self::start_actors(&fixture, &client, directory.path(), reader_clock.clone()).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
@@ -202,6 +248,7 @@ impl Runtime {
             client,
             publisher,
             fleet_runtime,
+            reader_clock,
             _directory: directory,
         }
     }
@@ -209,6 +256,7 @@ impl Runtime {
         fixture: &Fixture,
         client: &Arc<NativeClient>,
         directory: &std::path::Path,
+        reader_clock: Option<Arc<dyn SubscriptionClock>>,
     ) -> (
         SubscriptionDeliveryService,
         Arc<crate::NotificationPublisher>,
@@ -220,7 +268,7 @@ impl Runtime {
             delivery: client.clone(),
             presence: Arc::new(Running),
             machine_identity: machine(),
-            clock: Arc::new(crate::SystemSubscriptionClock),
+            clock: reader_clock.unwrap_or_else(|| Arc::new(crate::SystemSubscriptionClock)),
         });
         // This recipient has no sender project. Its real check must establish
         // that absence before dispatch, instead of omitting the check port.
@@ -355,6 +403,7 @@ impl Runtime {
             client,
             publisher,
             fleet_runtime,
+            reader_clock,
             _directory,
         } = self;
         fixture.host.consumer.native.lock().unwrap().take();
@@ -365,7 +414,7 @@ impl Runtime {
         fleet_runtime.shutdown().await.unwrap();
         let fixture = fixture.reopen().await;
         let (actors, publisher, fleet_runtime) =
-            Self::start_actors(&fixture, &client, _directory.path()).await;
+            Self::start_actors(&fixture, &client, _directory.path(), reader_clock.clone()).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
@@ -374,6 +423,7 @@ impl Runtime {
             client,
             publisher,
             fleet_runtime,
+            reader_clock,
             _directory,
         }
     }
@@ -385,6 +435,7 @@ impl Runtime {
             client: _,
             publisher,
             fleet_runtime,
+            reader_clock: _,
             _directory,
         } = self;
         publisher.shutdown().await;

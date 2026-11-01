@@ -26,7 +26,10 @@ impl SubscriptionPushStore {
         self.store
             .list_unsent_direct_messages(target)
             .await
-            .map_err(|_| BoardError::board_unavailable())
+            .map_err(|error| {
+                tracing::warn!(%error, "reader carrier recovery query failed");
+                BoardError::board_unavailable()
+            })
     }
 
     pub(super) async fn direct_message(&self, push_id: &PushId) -> Result<PushRecord, BoardError> {
@@ -47,7 +50,12 @@ impl SubscriptionPushStore {
                 DeliveryReceipt {
                     outcome: DeliveryOutcome::NotSubmitted {
                         retryable: true,
-                        reason: "target is not running; direct message held".to_owned(),
+                        reason: if interaction_storage::is_notification_kind(record.kind) {
+                            "target is not running; notification held"
+                        } else {
+                            "target is not running; direct message held"
+                        }
+                        .to_owned(),
                     },
                     reachability: None,
                     client: None,

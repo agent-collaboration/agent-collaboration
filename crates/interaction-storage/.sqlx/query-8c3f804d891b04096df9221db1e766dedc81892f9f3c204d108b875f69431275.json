@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE notification_windows SET flush_due_at_ms=NULL WHERE recipient_key=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "8c3f804d891b04096df9221db1e766dedc81892f9f3c204d108b875f69431275"
+}

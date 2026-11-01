@@ -13,11 +13,12 @@ mod reader_held_push_settlement;
 
 impl ReaderDeliveryOwner {
     pub(super) async fn expiry_notices(&mut self, records: &[ThreadSubscriptionRecord]) {
-        let Ok(store) = self.board_store() else {
+        let Ok(store) = self.board_store().map(std::sync::Arc::clone) else {
             return;
         };
         let mut ended_reason = None;
-        for prior in &self.prior_records.records {
+        let prior_records = self.prior_records.records.clone();
+        for prior in &prior_records {
             let project = &prior.project;
             let prior = &prior.record;
             if records.iter().any(|record| record.scope() == prior.scope()) {
@@ -58,8 +59,9 @@ impl ReaderDeliveryOwner {
                 .push
                 .expiry(&target, expired.scope(), expired.generation())
                 .await
+                && let Ok(Some(record)) = self.push.store.get_push_record(&prepared.push_id).await
             {
-                let _ = self.push.deliver(&target, prepared).await;
+                let _ = self.deliver_stored_notification(&record).await;
             }
         }
         if let Some(end_reason) = ended_reason {

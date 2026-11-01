@@ -3,6 +3,24 @@ use super::super::local_mail_proofs::native_mail_owner::NativeMailOwner;
 use super::*;
 
 impl OwnerRuntime {
+    pub async fn native_request_or_pass_error(
+        &self,
+    ) -> Result<collaboration_contracts::layer_zero::DeliveryRequest, message_board::BoardError>
+    {
+        let mut requests = self.requests.lock().await;
+        let mut observations = self.observations.lock().await;
+        loop {
+            tokio::select! {
+                request = requests.recv() => return request.ok_or_else(message_board::BoardError::board_unavailable),
+                observation = observations.recv() => match observation {
+                    Ok(super::super::super::subscription_service::OwnerObservation::ReaderPassFailed(error)) => return Err(error),
+                    Ok(_) => {},
+                    Err(_) => return Err(message_board::BoardError::board_unavailable()),
+                }
+            }
+        }
+    }
+
     pub async fn await_mail_outcome(
         &self,
         push: &collaboration_protocol::PushId,

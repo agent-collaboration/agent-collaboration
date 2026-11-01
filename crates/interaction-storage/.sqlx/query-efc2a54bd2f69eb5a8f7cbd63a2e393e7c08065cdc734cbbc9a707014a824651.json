@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT last_delivered_at_ms AS \"last_delivered_at_ms!: i64\",flush_due_at_ms AS \"flush_due_at_ms?: i64\" FROM notification_windows WHERE recipient_key=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_delivered_at_ms!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "flush_due_at_ms?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "efc2a54bd2f69eb5a8f7cbd63a2e393e7c08065cdc734cbbc9a707014a824651"
+}

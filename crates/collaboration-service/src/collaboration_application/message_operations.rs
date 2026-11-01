@@ -18,6 +18,9 @@ use interaction_storage::{InteractionStore, PushInboxQuery, StorageError};
 use std::sync::Arc;
 #[path = "message_status_operations.rs"]
 mod message_status_operations;
+#[path = "notification_member_operations.rs"]
+mod notification_member_operations;
+pub use notification_member_operations::NotificationMembersFailure;
 
 /// Direct-message operations over the push store and the subscription delivery owner.
 pub struct MessageOperations {

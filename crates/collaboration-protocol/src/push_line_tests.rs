@@ -236,6 +236,12 @@ fn every_push_kind_renders_as_one_bounded_line_with_a_complete_link() {
     let requester = session("codex-local", "fedcba98-requester");
     let cases = [
         line_input(
+            PushOrigin::Router(PushKind::NotificationListing),
+            PushHeaderFacts::NotificationListing { item_count: 51 },
+            Some("Notification references and an overflow pointer".to_owned()),
+            "machine",
+        ),
+        line_input(
             PushOrigin::Session(requester.clone()),
             PushHeaderFacts::DirectMessage {
                 sender_display_name: display_name("🤖 Codex Main"),
@@ -515,8 +521,15 @@ proptest::proptest! {
             PushKind::SubscriptionActivity,
             PushKind::SubscriptionExpiry,
             PushKind::BoardNotification,
+            PushKind::NotificationListing,
         ] {
             let request = match kind {
+                PushKind::NotificationListing => line_input(
+                    PushOrigin::Router(PushKind::NotificationListing),
+                    PushHeaderFacts::NotificationListing { item_count: message_count.saturating_add(1) },
+                    Some(body.clone()),
+                    &machine_label,
+                ),
                 PushKind::DirectMessage => line_input(
                     PushOrigin::Session(requester.clone()),
                     PushHeaderFacts::DirectMessage {

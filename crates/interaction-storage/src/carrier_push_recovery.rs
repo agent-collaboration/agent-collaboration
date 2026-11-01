@@ -20,10 +20,11 @@ impl InteractionStore {
         let mut connection = self.writer.lock().await;
         let kind = push_record_rows::serialize_kind(PushKind::DirectMessage)?;
         let board = push_record_rows::serialize_kind(PushKind::BoardNotification)?;
+        let expiry = push_record_rows::serialize_kind(PushKind::SubscriptionExpiry)?;
         let rows = sqlx_turso::query_as!(
             DirectMessageTargetRow,
-            "SELECT DISTINCT target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\" FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?) AND delivery_state IN ('pending','held') ORDER BY target_service_id,target_endpoint_id,target_session_id",
-            kind, board
+            "SELECT DISTINCT target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\" FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?,?) AND delivery_state IN ('pending','held') ORDER BY target_service_id,target_endpoint_id,target_session_id",
+            kind, board, expiry
         )
         .fetch_all(&mut *connection)
         .await?;
@@ -49,6 +50,7 @@ impl InteractionStore {
         let mut connection = self.writer.lock().await;
         let kind = push_record_rows::serialize_kind(PushKind::DirectMessage)?;
         let board = push_record_rows::serialize_kind(PushKind::BoardNotification)?;
+        let expiry = push_record_rows::serialize_kind(PushKind::SubscriptionExpiry)?;
         let (service_id, endpoint_id, session_id) = (
             String::from(target.endpoint.service_id.clone()),
             String::from(target.endpoint.endpoint_id.clone()),
@@ -56,8 +58,8 @@ impl InteractionStore {
         );
         let rows = sqlx_turso::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",kind AS \"kind!: String\",origin_kind AS \"origin_kind!: String\",origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\",reply_to_push_id,header_facts_json AS \"header_facts_json!: String\",body,ranges_json,delivery_state AS \"delivery_state!: String\",last_outcome_json,cancelled_after_delivery_json,created_at AS \"created_at!: String\",settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?) AND target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state IN ('pending','held') ORDER BY created_at,push_id",
-            kind, board, service_id, endpoint_id, session_id
+            "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",kind AS \"kind!: String\",origin_kind AS \"origin_kind!: String\",origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\",reply_to_push_id,header_facts_json AS \"header_facts_json!: String\",body,ranges_json,delivery_state AS \"delivery_state!: String\",last_outcome_json,cancelled_after_delivery_json,created_at AS \"created_at!: String\",settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?,?) AND target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state IN ('pending','held') ORDER BY created_at,push_id",
+            kind, board, expiry, service_id, endpoint_id, session_id
         ).fetch_all(&mut *connection).await?;
         rows.into_iter()
             .map(push_record_rows::PushRecordRow::into_record)

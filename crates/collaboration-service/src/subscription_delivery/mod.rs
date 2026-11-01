@@ -1,9 +1,13 @@
 mod board_availability;
+#[cfg(debug_assertions)]
+mod debug_subscription_clock;
 mod direct_message_push;
 mod native_mail_attempt;
 mod reader_delivery_owner;
 mod reader_scan_scope;
 mod subscription_clock;
+#[cfg(debug_assertions)]
+pub use debug_subscription_clock::DebugSubscriptionClock;
 mod subscription_facts;
 pub(crate) use subscription_facts::delivery_retry_delay;
 mod subscription_push;

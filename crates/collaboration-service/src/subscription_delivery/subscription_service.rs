@@ -51,6 +51,7 @@ pub struct SubscriptionDeliveryServiceProps {
 #[cfg(test)]
 #[derive(Clone, Debug)]
 pub(super) enum OwnerObservation {
+    ReaderPassFailed(BoardError),
     Started,
     RowsLoaded(usize),
     SelectingDueRoots,
@@ -178,6 +179,19 @@ impl SubscriptionDeliveryService {
                 None,
             ),
         };
+        self.inner
+            .push
+            .store
+            .recover_interrupted_notification_listings(self.inner.clock.now())
+            .await
+            .map_err(|_| BoardError::board_unavailable())?;
+        let notification_targets = self
+            .inner
+            .push
+            .store
+            .notification_recovery_targets()
+            .await
+            .map_err(|_| BoardError::board_unavailable())?;
         let dm_targets = match self.inner.push.restore_direct_messages().await {
             Ok(targets) => targets,
             Err(error) if recovery_connection_failed(&error) => {
@@ -192,7 +206,7 @@ impl SubscriptionDeliveryService {
         *started = true;
         self.ensure_restored_owners(restored.records, restored.expiry_readers)
             .await?;
-        for target in dm_targets {
+        for target in dm_targets.into_iter().chain(notification_targets) {
             self.ensure_owner(reader_for_target(&target)?).await?;
         }
         if let Some(store) = probe_store {
@@ -420,6 +434,54 @@ impl SubscriptionDeliveryService {
         }
     }
 
+    pub(crate) async fn notification_listing_result(
+        &self,
+        target: SessionRef,
+        listing: PushId,
+    ) -> collaboration_contracts::NativeDeliveryResult {
+        use collaboration_contracts::NativeDeliveryResult;
+        loop {
+            let record = match self.inner.push.store.get_push_record(&listing).await {
+                Ok(Some(record))
+                    if record.target == target
+                        && record.kind == collaboration_protocol::PushKind::NotificationListing =>
+                {
+                    record
+                }
+                _ => return NativeDeliveryResult::unknown(),
+            };
+            if matches!(
+                record.delivery_state,
+                collaboration_protocol::PushDeliveryState::Delivered
+                    | collaboration_protocol::PushDeliveryState::OutcomeUnknown
+                    | collaboration_protocol::PushDeliveryState::Rejected
+            ) {
+                return crate::mail_push_outcome::listing_native_result(&record);
+            }
+            if self.require_started().await.is_err() {
+                return NativeDeliveryResult::unknown();
+            }
+            let Ok(reader) = reader_for_target(&target) else {
+                return NativeDeliveryResult::unknown();
+            };
+            let Ok(sender) = self.ensure_owner(reader).await else {
+                return NativeDeliveryResult::unknown();
+            };
+            let (reply, response) = oneshot::channel();
+            if sender
+                .send(ReaderDeliveryCommand::ListingResult {
+                    listing: listing.clone(),
+                    reply,
+                })
+                .await
+                .is_err()
+            {
+                continue;
+            }
+            return tokio::select! {() = self.inner.shutdown.cancelled() =>NativeDeliveryResult::unknown(),result=response=>result.unwrap_or_else(|_|NativeDeliveryResult::unknown())};
+        }
+    }
+
     /// Internal batch handoff. The public stored-notice conversion belongs to the surface.
     pub async fn wait(
         &self,
@@ -577,6 +639,46 @@ impl SubscriptionDeliveryService {
             );
             return Ok(sender);
         }
+    }
+
+    #[cfg(debug_assertions)]
+    pub async fn debug_advance_notification_clock(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<usize, BoardError> {
+        self.require_started().await?;
+        self.inner
+            .clock
+            .debug_advance_to(now)
+            .map_err(|message| BoardError::invalid_field("nowMs", message))?;
+        let readers: Vec<_> = self.inner.owners.lock().await.keys().cloned().collect();
+        let mut completed = 0;
+        for reader in readers {
+            loop {
+                let (reply, response) = oneshot::channel();
+                self.submit_reader_command(
+                    reader.clone(),
+                    ReaderScanScope::All,
+                    ReaderDeliveryCommand::DebugScan(reply),
+                )
+                .await?;
+                let result = tokio::select! {
+                    () = self.inner.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
+                    result = response => result,
+                };
+                match result {
+                    Ok(outcome) => {
+                        outcome?;
+                        break;
+                    }
+                    // An idle owner may close after accepting the command. Its
+                    // channel closure prompts one scan on its replacement owner.
+                    Err(_) => continue,
+                }
+            }
+            completed += 1;
+        }
+        Ok(completed)
     }
 
     #[cfg(test)]

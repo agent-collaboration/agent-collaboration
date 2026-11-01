@@ -73,6 +73,9 @@ use native::*;
 mod direct;
 #[path = "local_mail_runtime_tests.rs"]
 mod local_runtime;
+#[path = "notification_listing_sdk_tests.rs"]
+#[cfg(debug_assertions)]
+mod notification_listing_sdk;
 #[path = "remote_mail_assembly_tests.rs"]
 mod remote_assembly;
 #[path = "remote_wake_replay_tests.rs"]

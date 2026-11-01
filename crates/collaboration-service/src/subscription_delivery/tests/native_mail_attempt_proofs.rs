@@ -97,6 +97,9 @@ struct Runtime {
 }
 impl Runtime {
     async fn new() -> Self {
+        Self::with_clock(Arc::new(SystemSubscriptionClock)).await
+    }
+    async fn with_clock(clock: Arc<dyn crate::SubscriptionClock>) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let store = Arc::new(
             interaction_storage::InteractionStore::open(
@@ -122,7 +125,7 @@ impl Runtime {
                 Some("Native attempt test"),
             )
             .unwrap(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock,
         });
         let observations = service.observe_owners();
         service.start().await.unwrap();
@@ -327,5 +330,182 @@ async fn no_route_normalization_keeps_queue_auto_and_steer_semantics() {
             ),
         }
     }
+    runtime.close().await;
+}
+
+#[tokio::test]
+async fn notification_cooldown_holds_a_second_item_without_blocking_a_direct_message() {
+    let mut runtime = Runtime::new().await;
+    let make_notification = || {
+        let mut request = request("reader-a", MessageDelivery::Auto);
+        request.payload.line = "board notification".to_owned().try_into().unwrap();
+        request
+    };
+    let first = make_notification();
+    let service = runtime.service.clone();
+    let first = tokio::spawn(async move {
+        service
+            .attempt_mail_once(PushKind::BoardNotification, first)
+            .await
+    });
+    runtime.next_call().await.reply.send(started()).unwrap();
+    assert_eq!(
+        first.await.unwrap().receipt().outcome,
+        DeliveryOutcome::Started
+    );
+
+    // Legacy expiry uses stored carrier recovery, exercised by the cadence/reopen proof.
+    for kind in [PushKind::BoardNotification, PushKind::SubscriptionActivity] {
+        let second = make_notification();
+        let service = runtime.service.clone();
+        let mut second = tokio::spawn(async move { service.attempt_mail_once(kind, second).await });
+        let held = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                result = &mut second => result.unwrap(),
+                call = runtime.calls.recv() => {
+                    call.unwrap().reply.send(started()).unwrap();
+                    let result = second.await.unwrap();
+                    panic!("{kind:?} escaped cooldown: {:?}", result.receipt().outcome);
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            held.receipt().outcome,
+            DeliveryOutcome::NotSubmitted {
+                retryable: true,
+                ..
+            }
+        ));
+    }
+    let service = runtime.service.clone();
+    let dm = tokio::spawn(async move {
+        service
+            .attempt_mail_once(
+                PushKind::DirectMessage,
+                request("reader-a", MessageDelivery::Auto),
+            )
+            .await
+    });
+    runtime.next_call().await.reply.send(started()).unwrap();
+    assert_eq!(
+        dm.await.unwrap().receipt().outcome,
+        DeliveryOutcome::Started
+    );
+    runtime.close().await;
+}
+
+#[tokio::test]
+#[cfg(debug_assertions)]
+async fn debug_clock_control_waits_for_the_due_reader_scan_after_native_io_finishes() {
+    use std::{
+        future::{Future, poll_fn},
+        task::Poll,
+    };
+    let start = chrono::DateTime::from_timestamp_millis(1_000_000).unwrap();
+    let clock = Arc::new(crate::DebugSubscriptionClock::new(start));
+    let mut runtime = Runtime::with_clock(clock.clone()).await;
+    let service = runtime.service.clone();
+    let native = tokio::spawn(async move {
+        service
+            .attempt_mail_once(
+                PushKind::DirectMessage,
+                request("reader-a", MessageDelivery::Auto),
+            )
+            .await
+    });
+    let call = runtime.next_call().await;
+    let advanced = start + chrono::Duration::seconds(600);
+    let mut control = Box::pin(runtime.service.debug_advance_notification_clock(advanced));
+    assert!(
+        poll_fn(|context| Poll::Ready(control.as_mut().poll(context)))
+            .await
+            .is_pending()
+    );
+    assert_eq!(
+        crate::SubscriptionClock::now(&*clock),
+        advanced,
+        "control reached the clock step before the barrier"
+    );
+    call.reply.send(started()).unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), control)
+            .await
+            .unwrap()
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        native.await.unwrap().receipt().outcome,
+        DeliveryOutcome::Started
+    );
+    runtime.close().await;
+}
+
+#[path = "notification_cadence_proofs.rs"]
+#[cfg(debug_assertions)]
+mod notification_cadence_proofs;
+
+#[tokio::test]
+#[cfg(debug_assertions)]
+async fn debug_clock_control_refuses_a_failed_reader_scan_instead_of_reporting_completion() {
+    use sqlx::Connection;
+    let clock = Arc::new(crate::DebugSubscriptionClock::new(
+        chrono::DateTime::from_timestamp_millis(0).unwrap(),
+    ));
+    let mut runtime = Runtime::with_clock(clock).await;
+    let service = runtime.service.clone();
+    let first = tokio::spawn(async move {
+        service
+            .attempt_mail_once(
+                PushKind::BoardNotification,
+                request("reader-a", MessageDelivery::Auto),
+            )
+            .await
+    });
+    runtime.next_call().await.reply.send(started()).unwrap();
+    assert_eq!(
+        first.await.unwrap().receipt().outcome,
+        DeliveryOutcome::Started
+    );
+    let held = runtime
+        .service
+        .attempt_mail_once(
+            PushKind::BoardNotification,
+            request("reader-a", MessageDelivery::Auto),
+        )
+        .await;
+    assert!(matches!(
+        held.receipt().outcome,
+        DeliveryOutcome::NotSubmitted {
+            retryable: true,
+            ..
+        }
+    ));
+    let mut observer = sqlx_turso::TursoConnection::connect_with(
+        &sqlx_turso::TursoConnectOptions::new()
+            .filename(runtime._directory.path().join("interaction.sqlite")),
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE notification_windows SET flush_due_at_ms=42")
+        .execute(&mut observer)
+        .await
+        .unwrap();
+    observer.close().await.unwrap();
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        runtime.service.debug_advance_notification_clock(
+            chrono::DateTime::from_timestamp_millis(600_000).unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
+    assert!(
+        result.is_err(),
+        "a refused stored window cannot be a completed scan"
+    );
+    assert!(runtime.calls.try_recv().is_err());
     runtime.close().await;
 }

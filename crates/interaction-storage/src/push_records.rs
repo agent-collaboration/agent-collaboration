@@ -324,7 +324,7 @@ impl InteractionStore {
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         let pruned = async {
             let candidates = sqlx_turso::query!(
-                "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
+                "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE ((retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge')) AND NOT EXISTS (SELECT 1 FROM router_pushes member WHERE member.notification_listing_push_id=router_pushes.push_id) ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
                 cutoff, cutoff, i64::from(batch_size)
             ).fetch_all(&mut *transaction).await?;
             let mut pruned = 0;

@@ -9,6 +9,10 @@ use std::borrow::Cow;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RouterOriginRef {
+    NotificationListing {
+        target: SessionRef,
+        listing_id: crate::PushId,
+    },
     BoardIntent {
         project: message_board::ProjectId,
         intent: message_board::NotifyIntentId,
@@ -129,6 +133,10 @@ impl JsonSchema for InteractionPresentationId {
     deny_unknown_fields
 )]
 enum RouterOriginRefWire {
+    NotificationListing {
+        target: SessionRef,
+        listing_id: crate::PushId,
+    },
     BoardIntent {
         project: message_board::ProjectId,
         intent: message_board::NotifyIntentId,
@@ -160,6 +168,7 @@ impl RouterOriginRef {
     #[must_use]
     pub const fn supports_kind(&self, kind: PushKind) -> bool {
         match self {
+            Self::NotificationListing { .. } => matches!(kind, PushKind::NotificationListing),
             Self::BoardIntent { .. } => matches!(kind, PushKind::BoardNotification),
             Self::Wake { .. } => matches!(kind, PushKind::Wake),
             Self::ScheduleRun { .. } => matches!(kind, PushKind::ScheduleRun),
@@ -213,6 +222,12 @@ impl RouterOriginRef {
                 interaction_id: interaction_id.clone(),
                 presentation_id: presentation_id.clone(),
             },
+            Self::NotificationListing { target, listing_id } => {
+                RouterOriginRefWire::NotificationListing {
+                    target: target.clone(),
+                    listing_id: listing_id.clone(),
+                }
+            }
             Self::SubscriptionActivity { target, batch_id } => {
                 RouterOriginRefWire::SubscriptionActivity {
                     target: target.clone(),
@@ -257,6 +272,9 @@ impl RouterOriginRef {
                 interaction_id,
                 presentation_id,
             },
+            RouterOriginRefWire::NotificationListing { target, listing_id } => {
+                Self::NotificationListing { target, listing_id }
+            }
             RouterOriginRefWire::SubscriptionActivity { target, batch_id } => {
                 Self::SubscriptionActivity { target, batch_id }
             }

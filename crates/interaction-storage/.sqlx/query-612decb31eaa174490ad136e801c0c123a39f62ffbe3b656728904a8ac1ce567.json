@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO notification_windows(recipient_key,last_delivered_at_ms,flush_due_at_ms) VALUES(?,?,NULL) ON CONFLICT(recipient_key) DO UPDATE SET last_delivered_at_ms=MAX(last_delivered_at_ms,excluded.last_delivered_at_ms),flush_due_at_ms=NULL",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "612decb31eaa174490ad136e801c0c123a39f62ffbe3b656728904a8ac1ce567"
+}

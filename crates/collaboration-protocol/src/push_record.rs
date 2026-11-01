@@ -105,6 +105,23 @@ impl PushRecordDraft {
             (_, None, None) => {}
         }
 
+        if let PushHeaderFacts::NotificationListing { item_count } = &self.header_facts {
+            let expected = crate::RouterOriginRef::NotificationListing {
+                target: self.target.clone(),
+                listing_id: self.push_id.clone(),
+            };
+            if *item_count == 0
+                || self.origin_router_ref.as_deref()
+                    != Some(
+                        expected
+                            .canonical_string()
+                            .map_err(|_| PushRecordValidationError::InvalidOriginReference)?
+                            .as_str(),
+                    )
+            {
+                return Err(PushRecordValidationError::InvalidOriginReference);
+            }
+        }
         let is_subscription_activity = self.kind == PushKind::SubscriptionActivity;
         if self.kind == PushKind::BoardNotification {
             if self.body.is_some() || self.activity.is_some() {

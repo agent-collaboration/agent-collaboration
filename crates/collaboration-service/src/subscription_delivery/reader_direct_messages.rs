@@ -40,7 +40,11 @@ impl ReaderDeliveryOwner {
                 record.delivery_state,
             ) == LoadPolicy::MayLoad;
             let settled = if !known_unloaded || new_auto {
-                self.push.deliver_direct_message(record).await?
+                if interaction_storage::is_notification_kind(record.kind) {
+                    self.deliver_stored_notification(record).await?
+                } else {
+                    self.push.deliver_direct_message(record).await?
+                }
             } else if record.mode == Some(MessageDelivery::Steer) || record.guard.is_some() {
                 self.push.reject_direct_message(record).await?
             } else {

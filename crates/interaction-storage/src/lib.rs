@@ -58,6 +58,17 @@ pub use message_send_answers::{
     MessageSendAnswer, read_message_send_answer_in_scope, record_message_send_admission,
     record_message_send_outcome,
 };
+mod notification_windows;
+pub use notification_windows::NotificationWindow;
+mod notification_listings;
+pub use notification_listings::is_notification_kind;
+mod notification_references;
+mod notification_settlement;
+pub use notification_references::{
+    NotificationListingMember, notification_listing_for_member_in_scope,
+    prepare_notification_listing_in_scope, record_notification_reference_in_scope,
+    release_unsent_notification_member_in_scope,
+};
 mod carrier_push_recovery;
 mod carrier_push_transitions;
 mod held_mail;
@@ -79,3 +90,6 @@ pub use subscription_delivery_progress::{
 mod interaction_atomic_store_tests;
 #[cfg(test)]
 mod schema_prefix_fixture;
+
+#[cfg(test)]
+mod notification_window_tests;

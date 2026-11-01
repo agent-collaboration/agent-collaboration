@@ -255,7 +255,10 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
     fixture.post(&fixture.root, "older allocated item").await;
-    let request = runtime.requests.lock().await.recv().await.unwrap();
+    let request = runtime
+        .native_request_or_pass_error()
+        .await
+        .expect("reader pass reached its native effect");
     let older = request.payload.push_id;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
@@ -346,7 +349,10 @@ async fn failed_delivery_retries_at_its_scheduled_time_then_clears_the_public_fi
     fixture
         .post(&fixture.root, "failed delivery with backoff")
         .await;
-    let request = runtime.requests.lock().await.recv().await.unwrap();
+    let request = runtime
+        .native_request_or_pass_error()
+        .await
+        .expect("reader pass reached its native effect");
     let push = request.payload.push_id;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime

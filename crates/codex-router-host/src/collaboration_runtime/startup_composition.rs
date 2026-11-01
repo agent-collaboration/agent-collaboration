@@ -303,8 +303,35 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
-            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> = {
+            #[cfg(debug_assertions)]
+            {
+                match std::env::var("CODEX_ROUTER_DEBUG_NOTIFICATION_CLOCK_MS") {
+                    Ok(value) => {
+                        let millis = value.parse::<i64>().map_err(|_|io::Error::other("CODEX_ROUTER_DEBUG_NOTIFICATION_CLOCK_MS must be UTC epoch milliseconds"))?;
+                        let now =
+                            chrono::DateTime::from_timestamp_millis(millis).ok_or_else(|| {
+                                io::Error::other(
+                                    "debug notification clock is outside the UTC timestamp range",
+                                )
+                            })?;
+                        std::sync::Arc::new(collaboration_service::DebugSubscriptionClock::new(now))
+                    }
+                    Err(std::env::VarError::NotPresent) => {
+                        std::sync::Arc::new(collaboration_service::SystemSubscriptionClock)
+                    }
+                    Err(std::env::VarError::NotUnicode(_)) => {
+                        return Err(io::Error::other(
+                            "debug notification clock setting is not UTF-8",
+                        ));
+                    }
+                }
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                std::sync::Arc::new(collaboration_service::SystemSubscriptionClock)
+            }
+        };
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {

@@ -1,6 +1,29 @@
 use super::*;
 
 #[tokio::test]
+async fn notification_member_page_refuses_the_named_limit_before_storage_access() {
+    let server = CollaborationMcpServer::catalog_only();
+    for limit in [0, 51] {
+        let request = serde_json::from_value(serde_json::json!({
+            "caller":fixture_session("codex-local", "listing-recipient"),
+            "listingId":FIXTURE_PUSH_ID,"after":null,"limit":limit
+        }))
+        .unwrap();
+        let result = server
+            .notification_members(super::super::Parameters(request))
+            .await;
+        assert_eq!(result.is_error, Some(true));
+        let error = result.structured_content.unwrap();
+        assert_eq!(error["serviceKind"], "limitExceeded");
+        assert_eq!(error["data"]["limit"], "NOTIFICATION_LISTING_MAX_ENTRIES");
+        assert_eq!(error["data"]["value"], limit);
+        assert_eq!(error["data"]["minimum"], 1);
+        assert_eq!(error["data"]["maximum"], 50);
+        assert_eq!(error["effect"], "none");
+    }
+}
+
+#[tokio::test]
 async fn installation_read_without_a_configured_peer_does_not_mint_an_identity() {
     let server = CollaborationMcpServer::catalog_only();
     assert!(server.application.installation_peer().is_none());
@@ -125,8 +148,8 @@ fn success_schema_branches_match_main_golden_snapshot() {
         std::fs::write(snapshot_path, snapshot).expect("write resolved MCP success schemas");
         return;
     }
-    assert_eq!(actual.len(), 165);
-    assert_eq!(expected.len(), 165);
+    assert_eq!(actual.len(), 166);
+    assert_eq!(expected.len(), 166);
     for (name, success) in actual {
         assert_eq!(success, expected[&name], "{name} success schema drifted");
     }

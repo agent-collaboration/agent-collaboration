@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET delivery_state=?,last_outcome_json=?,settled_at=?,last_outcome_at=? WHERE push_id=? AND kind='notification-listing' AND delivery_state='attempted'",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f51b6c10aac6471b315e57e1e54f958352e297947568a533f72e39d148179bbd"
+}
