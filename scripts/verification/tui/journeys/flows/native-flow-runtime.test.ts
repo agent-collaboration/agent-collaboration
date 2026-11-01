@@ -160,6 +160,7 @@ bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispat
 			ending: 'handoff',
 			expected: (point) => click.expected(point).slice(0, 1),
 			handoff: async () => ({
+				kind: 'child-login',
 				previousMount: 1,
 				expectedChildArguments: ['synthetic-login'],
 				expectedChildExitCode: 0,

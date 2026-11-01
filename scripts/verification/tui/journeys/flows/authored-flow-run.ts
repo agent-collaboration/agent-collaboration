@@ -17,6 +17,7 @@ import {
 	sourceDigest,
 	verifyArtifact,
 } from '../../evidence/source-binding.ts';
+import { ptyGridDriverEntry } from '../../terminal/pty-grid-driver.ts';
 import { qualifyTerminal } from '../../terminal/terminal-qualification.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
@@ -27,6 +28,7 @@ import { executeNativeFlow } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { executePickerGroupingCase } from './picker-grouping-run.ts';
+import { requireQuotaPlanArtifacts } from './quota-plan-admission.ts';
 
 export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocation[] {
 	validateAuthoredFlows();
@@ -37,6 +39,7 @@ export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocat
 	return plan.grids.flatMap((grid) => plan.keys.map((keys) => ({ journey, grid, keys })));
 }
 export function requireAuthoredFlowAdmission(plan: AuthoredFlowPlan): void {
+	requireQuotaPlanArtifacts(plan);
 	for (const invocation of authoredFlowMatrix(plan)) {
 		const bindings = pickerFlowBindings(plan, invocation, plan.output, plan.output);
 		const gaps = pickerFlowAdmission(invocation, bindings);
@@ -79,12 +82,13 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 	for (const retained of preflight.retainedComparisons) verifyArtifact(retained);
 	for (const artifact of [plan.driver, plan.product])
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
-	const listing = execFileSync(
-		plan.driver.path,
-		['quota_storyboard::compiled_grid_terminal_observation', '--exact', '--list'],
-		{ encoding: 'utf8' },
-	);
-	if (!listing.split('\n').includes('quota_storyboard::compiled_grid_terminal_observation: test'))
+	const invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('authored-flow matrix is empty');
+	const entry = ptyGridDriverEntry(invocation.journey.surface);
+	const listing = execFileSync(plan.driver.path, [entry, '--exact', '--list'], {
+		encoding: 'utf8',
+	});
+	if (!listing.split('\n').includes(entry + ': test'))
 		throw new Error('streaming driver entry absent');
 	await qualifyTerminal();
 }

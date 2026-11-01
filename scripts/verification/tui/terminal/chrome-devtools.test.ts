@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,14 +102,15 @@ helper.once('message',()=>{
 			new URL('../fixtures/chrome-lifecycle-fixture.ts', import.meta.url),
 		);
 		const runner = spawn(process.execPath, [fixture, browser, root], {
-			stdio: ['ignore', 'pipe', 'pipe'],
+			stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
 		});
+		const ready = once(runner, 'message');
 		let stdout = '',
 			stderr = '';
-		runner.stdout.on('data', (bytes: Buffer) => {
+		runner.stdout?.on('data', (bytes: Buffer) => {
 			stdout += bytes.toString();
 		});
-		runner.stderr.on('data', (bytes: Buffer) => {
+		runner.stderr?.on('data', (bytes: Buffer) => {
 			stderr += bytes.toString();
 		});
 		const completion = new Promise<{
@@ -122,6 +124,14 @@ helper.once('message',()=>{
 		const owned: ProcessIdentity[] = [];
 		let guard: ReturnType<typeof setTimeout> | undefined;
 		try {
+			// Startup is separate from the real browser/helper teardown this guard bounds.
+			const message = await Promise.race([
+				ready,
+				completion.then(() => {
+					throw new Error('controlled runner exited before browser readiness');
+				}),
+			]);
+			browserReceiptSchema.parse(message[0]);
 			// Act: only the failure guard may stop a broken runner; correct cleanup must beat it.
 			const result = await Promise.race([
 				completion,

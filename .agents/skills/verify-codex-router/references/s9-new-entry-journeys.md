@@ -167,6 +167,10 @@ and the two >2-page alias journeys need `large-list`; the base six-row fixture
 does not supply these. The interpreter accepts all 31 data definitions; that does
 not mean all 31 have fixture bindings.
 
+Fixed key names follow the producer's crossterm Display, including `Back Tab`,
+macOS `Return` and `Esc`; Rust variant names are not the receipt wire format.
+Keep source-qualified modifier order and reject the old `BackTab` spelling.
+
 Each press/focus hop is sent alone and awaits its exact receipt and marked frame
 before the next step. Adjacent contiguous markers may share one just-completed
 frame for a burst, which proves only state after the batch's last input.
@@ -175,6 +179,13 @@ separate authored steps. Missing, inside-frame, duplicate and skipped markers
 still reject; later unmarked frames cannot replace the bound frame. Loop-ending
 inputs settle through exact ACK, real EOF, outcome and exit status; their marker
 is optional.
+
+On the aea741ef6 menu implementation, Down and Tab are consumed by the button
+focused before navigation. Expect that action target and a null action field;
+keep every visual inventory, checked-choice, content-end and thumb assertion.
+The fixed picker fixture starts at New and wraps its 26 eligible actions in the
+independently source-qualified order. Wrong, next-focus and null owners reject
+(Lead correction 01a19760-9bdb).
 
 Async inspection/source publication waits for the exact ready scene, then uses
 a harmless F12 ACK/marker for capture. A setup ACK, arbitrary redraw or delay
@@ -194,12 +205,27 @@ reopens A through real Enter and changes Browse to B under that captured dialog.
 Disable/Enable retain Details and get no extra Enter. Setup control ACKs remain
 distinct from actual UI input/frame proof.
 
-The catalogue exposes named `sessions-group-by-f6` and `quota-group-by-f6`
-placeholders for U18/R19 while the grouped crate/consumer target is pending.
+The picker `sessions-group-by-f6` binding traverses the nine declared identities,
+checks all six menu facets and reopens the same private preference store.
+After every processed F6 it sends exactly one separately acknowledged safe F12;
+strict selection, heading and bucket checks use that marked frame. Preserve the
+F6 ACK/frame and raw bytes as the owner-deferred first-frame measurement
+limitation, never as a first-paint pass (Lead decision 01a196f6-4356).
 F6 is the settled grouping key on both screens; picker Ctrl+G/F2 remain Machine.
-A placeholder is not an authored runnable flow or a product pass.
+Quota grouping still needs its separately declared child-free remount binding.
+An authored binding is not a product pass.
 
 ## Quota B offline preparation (draft)
+
+The authored plan may bind `quota.loginStandin` as an exact artifact path and
+SHA-256. Login and grouping guard routes require it before adapter lookup or
+output creation; a missing binding or changed artifact rejects admission.
+Private per-run fixture configs come from that binding, never ambient lookup.
+The grouping reader validates the actual `grouping-invocation-started` and
+`grouping-invocation-settled` wire facts, including facets/store/mounts, before
+normalizing them for the existing invocation-remount terminal owner. This is
+reader sensitivity proof until the real event journal and native adapter bind it.
+
 
 Use S7's source-only packet with its retained source directory and manifest. Keep
 that snapshot distinct from the moving consumer checkout and the later signed
@@ -215,8 +241,26 @@ rules to source lines, and lists the catalogue's quota fixtures and checks.
 profiles. It reports executable admission as unbound when the packet's artifacts
 are null. Source argument matches, synthetic helper checks and reader sensitivity
 are zero product passes; they cannot replace signed-driver check-only admission.
-R19 remains an explicit placeholder until grouped rendering, summaries and
-preference reopen have their own declared target and expected outcomes.
+The current source binding has fifteen effectful scenarios, including
+`grouping-reopen`, and eleven read-only scenarios. Historical fourteen-scenario
+packets remain retained evidence; the strict current census requires a fresh
+source packet. Grouping native admission still needs its declared signed target.
+
+`quota-effect-readback.ts` requires the producer's `groupingReopen`,
+`preferenceWrites` and `storedGrouping` fields on every final receipt. Empty or
+null values are explicit for ordinary profiles. The grouping profile requires
+two genuine Quit outcomes, two ordered grouping activations, unchanged accounts
+and policies, the same actual store, consecutive mounts, checked None/Provider
+then Provider/Status poses, and exactly two successful saved choices. A planned
+facet or invented child cannot supply these facts.
+
+`LoopEndingHandoff` has explicit `child-login` and `invocation-remount` alternatives.
+The former preserves terminal restoration and the actual parent's wait result.
+The latter consumes genuine invocation-settled then invocation-started facts,
+keeps the same Rust PTY owner and store, and requires the next invocation and
+mount before one separately acknowledged F12 frame. The first Quit has no EOF
+requirement. A producer adapter must parse and correlate the real event sequence
+before normalizing these facts; controlled lifecycle tests are not quota proof.
 
 `fixtures/quota-effect-launch.ts` admits the fixed effectful CLI libtest entry,
 hash-bound JSON configuration and fresh private paths under `/private/tmp`.
@@ -246,6 +290,15 @@ and this invocation's service/mapper results. It supplies no input/frame/cleanup
 proof by itself. Native input/focus/pointer bindings, the refresh child transition,
 the actual signed artifacts and startup qualification must all be admitted before
 a quota B window is requested. No product/native run follows from this draft.
+
+`quota-event-journal.ts` reads the actual `{sequence,event}` envelopes from an
+explicit owned regular file. It rejects file replacement, rewritten byte prefixes,
+invalid complete UTF-8/JSON and skipped sequences. Parent-directory and file
+notifications trigger the same exact-file read, with an immediate read after both
+subscriptions are armed. A retained pre-input sequence floor excludes stale facts;
+the caller owns the abort/deadline and a strict decoder for the selected event.
+Final producer settlement must reject a partial last line. These file-reader
+controls establish no native input, parent wait or preference persistence proof.
 
 ### Loop-ending login handoff
 

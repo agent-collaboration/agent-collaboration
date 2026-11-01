@@ -31,15 +31,20 @@ afterEach(async () => {
 	);
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-function fixture(cooperative: boolean): { root: string; child: DriverChild } {
+function fixture(
+	cooperative: boolean,
+	preexistingStop = false,
+): { root: string; child: DriverChild } {
 	const root = temporaryRoot();
 	roots.push(root);
 	mkdirSync(join(root, 'cua-sessions'));
 	mkdirSync(join(root, 'cua-quota'));
+	const marker = cooperative ? 'cua-sessions/cua-stop' : 'fixture-release';
+	if (preexistingStop) writeFileSync(join(root, marker), 'stop\n');
 	const executable = controlledExecutable(
 		root,
 		'owned-cua-driver',
-		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const watcher=fs.watch(root,{recursive:true},()=>{const stop=path.join(root,${JSON.stringify(cooperative ? 'cua-sessions/cua-stop' : 'fixture-release')});if(fs.existsSync(stop)){watcher.close();process.disconnect();}});process.send('ready');`,
+		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const stop=path.join(root,${JSON.stringify(marker)});${preexistingStop ? "fs.watch=()=>{throw new Error('preexisting stop must not install a watcher');};" : ''}let watcher;let finished=false;const finishIfStopped=()=>{if(finished)return true;if(!fs.existsSync(stop))return false;finished=true;watcher?.close();process.disconnect();return true;};if(!finishIfStopped()){watcher=fs.watch(path.dirname(stop),finishIfStopped);if(!finishIfStopped())process.send('ready');}`,
 	);
 	const stdout = openSync(join(root, 'stdout'), 'wx');
 	const stderr = openSync(join(root, 'stderr'), 'wx');
@@ -105,3 +110,11 @@ test('fixture CUA timeout uses declared CUA marker instead of static capture mar
 	await waiting;
 	expect(existsSync(join(root, 'capture-stop'))).toBe(false);
 });
+
+test.each([false, true])(
+	'preexisting CUA release settles without installing any watcher (cooperative=%s)',
+	async (cooperative) => {
+		const { child } = fixture(cooperative, true);
+		expect(await child.completion).toBe(0);
+	},
+);

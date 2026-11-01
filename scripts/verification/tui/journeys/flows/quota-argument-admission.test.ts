@@ -67,7 +67,7 @@ function offlinePacket(): unknown {
 }
 test('source admission counts both refresh children and both protocols without an executable pass', () => {
 	expect(quotaArgumentAdmission(offlinePacket())).toMatchObject({
-		sourceProfiles: 58,
+		sourceProfiles: 60,
 		executableChecks: 0,
 		productLaunches: 0,
 		productPasses: 0,

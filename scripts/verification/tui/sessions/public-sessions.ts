@@ -21,8 +21,9 @@ import {
 } from '../evidence/evidence-schema.ts';
 import { discoverCaptureTest } from '../processes/driver-lifecycle.ts';
 import { lookupProcessIdentity, sameIdentity } from '../processes/process-identity.ts';
+import { ptyGridDriverEntry } from '../terminal/pty-grid-driver.ts';
 import { runPublicGridCapture, publicGridActionSchema } from './public-grid-capture.ts';
-const captureTest = 'quota_storyboard::compiled_public_sessions_grid_observation';
+const captureTest = ptyGridDriverEntry('public-sessions');
 import {
 	captureArtifact,
 	fileDigest,

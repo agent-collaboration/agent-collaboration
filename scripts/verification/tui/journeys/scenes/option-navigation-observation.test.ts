@@ -8,8 +8,23 @@ import {
 	requireHelpNoop,
 	pickerPageRows,
 	requireHelpRows,
+	paintedHelpContentRows,
+	requireHelpContentRange,
 	selectedFixtureRow,
 } from './option-navigation-observation.ts';
+
+test('Help Last excludes blank tail rows but retains internal spacing and rejects Down overscroll', () => {
+	const physical = Array.from({ length: 47 }, (_, index) => 'row ' + index);
+	physical[2] = '';
+	physical.push('');
+	const painted = paintedHelpContentRows(physical);
+	expect(painted).toHaveLength(47);
+	expect(painted[2]).toBe('');
+	expect(painted.length - 14).toBe(33);
+	expect(physical).toHaveLength(48);
+	expect(() => requireHelpContentRange(physical)).toThrow('Down overshoots painted content');
+	expect(() => requireHelpContentRange(painted)).not.toThrow();
+});
 
 test('list oracle measures physical body rows and refuses a highlighted toolbar word as selection', async () => {
 	const core = await createTerminalCore(48, 12);

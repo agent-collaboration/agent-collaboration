@@ -135,7 +135,9 @@ export function quotaArgumentAdmission(packetValue: unknown): unknown {
 										'distinct absent direct children of an owned mode-0700 directory under /private/tmp',
 									login: scenario.startsWith('login-')
 										? 'declared signed stand-in plus owned PATH prefix and causal gate'
-										: 'login fields forbidden',
+										: scenario === 'grouping-reopen'
+											? 'same private stand-in guard; no child or gate listener'
+											: 'login fields forbidden',
 								}
 							: {
 									variable: packet.readOnly.scenarioEnvironment,

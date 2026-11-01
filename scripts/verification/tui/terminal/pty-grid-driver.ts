@@ -72,16 +72,26 @@ export interface PtyGridTarget {
 		| 'large-list'
 		| 'r19-grouping';
 }
+export function ptyGridDriverEntry(surface: PtyGridTarget['surface']): string {
+	switch (surface) {
+		case 'quota':
+		case 'quota-filters':
+		case 'quota-effects':
+		case 'normal':
+		case 'hard':
+			return 'quota_storyboard::compiled_grid_terminal_observation';
+		case 'public-sessions':
+			return 'compiled_public_sessions_grid_observation';
+		case 'sessions':
+		case 'sessions-filters':
+		case 'showcase':
+			return 'compiled_grid_terminal_observation';
+	}
+	const exhaustive: never = surface;
+	throw new Error('unknown driver surface: ' + String(exhaustive));
+}
 export function ptyGridDriverArguments(surface: PtyGridTarget['surface']): readonly string[] {
-	return [
-		surface === 'public-sessions'
-			? 'quota_storyboard::compiled_public_sessions_grid_observation'
-			: 'quota_storyboard::compiled_grid_terminal_observation',
-		'--exact',
-		'--ignored',
-		'--nocapture',
-		'--test-threads=1',
-	];
+	return [ptyGridDriverEntry(surface), '--exact', '--ignored', '--nocapture', '--test-threads=1'];
 }
 function componentEnvironment(target: PtyGridTarget): Readonly<Record<string, string>> {
 	if (
