@@ -234,6 +234,7 @@ impl Fixture {
                 model: intent.launch_context.model.clone(),
                 effort: Some("low".to_owned().try_into().unwrap()),
                 access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                additional_directories: Vec::new(),
                 fork: None,
                 root_message_id: None,
             },

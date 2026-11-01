@@ -41,6 +41,7 @@ pub enum HarnessDeclaredSettings {
         model: Option<ModelName>,
         effort: Option<NonEmptyText>,
         access: RouterAccess,
+        additional_directories: Vec<AbsolutePath>,
         fork: Option<HarnessForkInput>,
         root_message_id: Option<UuidIdentity>,
     },
