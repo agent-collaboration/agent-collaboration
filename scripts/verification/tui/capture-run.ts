@@ -9,11 +9,13 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { isMain, reportCliFailure, strictArguments, planArgument } from './cli-arguments.ts';
+import { GhosttyJourneyInput, requireDelivered } from './ghostty-journey-input.ts';
 import { checkGridControls } from './grid-control-checks.ts';
 import { gridFieldPair, observeGridScene } from './grid-scene-matcher.ts';
 import { journeyCatalogue } from './journey-catalogue.ts';
 import { journeyDefinitionSchema } from './journey-definition.ts';
 import type { JourneyAction } from './journey-definition.ts';
+import { encodeJourneyKey } from './journey-key.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { KeyProtocol } from './pty-grid-driver.ts';
 import { canonicalJson, sourceBinding } from './source-binding.ts';
@@ -35,62 +37,35 @@ export const gridCapturePlanSchema = z.strictObject({
 	journey: z.string(),
 	keys: z.enum(['legacy', 'kitty']),
 	chrome: z.string().optional(),
+	inputProfile: z.enum(['terminal-only', 'example-ghostty-keybinds']).optional(),
 });
 export type GridCapturePlan = z.infer<typeof gridCapturePlanSchema>;
-export function encodeJourneyKey(key: string, protocol: KeyProtocol): Buffer {
-	const legacy: Readonly<Record<string, string>> = {
-		Enter: '\r',
-		Escape: '\x1b',
-		Tab: '\t',
-		'Shift+Tab': '\x1b[Z',
-		['Up']: '\x1b[A',
-		Down: '\x1b[B',
-		Right: '\x1b[C',
-		PageUp: '\x1b[5~',
-		PageDown: '\x1b[6~',
-		['F1']: '\x1bOP',
-		['F4']: '\x1bOS',
-		['F5']: '\x1b[15~',
-	};
-	const kitty: Readonly<Record<string, string>> = {
-		Enter: '\x1b[13u',
-		Escape: '\x1b[27u',
-		Tab: '\x1b[9u',
-		'Shift+Tab': '\x1b[9;2u',
-		['Up']: '\x1b[1;1A',
-		Down: '\x1b[1;1B',
-		Right: '\x1b[1;1C',
-		PageUp: '\x1b[5;1~',
-		PageDown: '\x1b[6;1~',
-		['F1']: '\x1b[1;1P',
-		['F4']: '\x1b[1;1S',
-		['F5']: '\x1b[15;1~',
-	};
-	if (/^Ctrl\+[A-Z]$/u.test(key)) {
-		const code = key.toLowerCase().charCodeAt(key.length - 1);
-		return Buffer.from(protocol === 'kitty' ? `\x1b[${code};5u` : String.fromCodePoint(code - 96));
-	}
-	const sequence = (protocol === 'kitty' ? kitty : legacy)[key];
-	if (sequence === undefined) throw new Error(`unsupported journey key: ${key}`);
-	return Buffer.from(sequence);
-}
 async function applyAction(
 	driver: PtyGridDriver,
 	action: JourneyAction,
 	keys: KeyProtocol,
+	input?: GhosttyJourneyInput,
 ): Promise<void> {
 	if (action.kind === 'key') {
 		const before = driver.frameGeneration();
-		await driver.send(
-			Buffer.concat(
-				Array.from({ length: action.repeat }, () => encodeJourneyKey(action.key, keys)),
-			),
-		);
+		if (input !== undefined) {
+			await Array.from({ length: action.repeat }).reduce<Promise<void>>(async (previous) => {
+				await previous;
+				requireDelivered(await input.key(action.key));
+			}, Promise.resolve());
+		} else {
+			await driver.send(
+				Buffer.concat(
+					Array.from({ length: action.repeat }, () => encodeJourneyKey(action.key, keys)),
+				),
+			);
+		}
 		if (action.repeat === 1 && action.key !== 'Ctrl+D')
 			await driver.waitForGrid(`frame after ${action.key}`, () => true, before);
 	} else if (action.kind === 'text') {
 		const before = driver.frameGeneration();
-		await driver.send(Buffer.from(action.text));
+		if (input === undefined) await driver.send(Buffer.from(action.text));
+		else requireDelivered(await input.text(action.text));
 		if (action.text !== 'q') await driver.waitForGrid('frame after text', () => true, before);
 	} else if (action.kind === 'field') {
 		await driver.waitForGrid(`${action.dialog} ${action.label} ${action.value}`, (grid) =>
@@ -107,10 +82,11 @@ async function applyActions(
 	driver: PtyGridDriver,
 	actions: readonly JourneyAction[],
 	keys: KeyProtocol,
+	input?: GhosttyJourneyInput,
 ): Promise<void> {
 	await actions.reduce<Promise<void>>(async (previous, action) => {
 		await previous;
-		await applyAction(driver, action, keys);
+		await applyAction(driver, action, keys, input);
 	}, Promise.resolve());
 }
 const requireTest = (binary: string, name: string): void => {
@@ -173,6 +149,10 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 		...(plan.component === undefined ? {} : { componentBinary: plan.component.path }),
 	});
 	const checkpoints: unknown[] = [];
+	const input =
+		plan.inputProfile === undefined
+			? undefined
+			: new GhosttyJourneyInput(driver, plan.inputProfile);
 	try {
 		await driver.waitForGrid('compiled initial screen', (grid) =>
 			gridLines(grid).some((line) =>
@@ -182,7 +162,7 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 		if (columns !== 120 || rows !== 36) await driver.resize(columns, rows);
 		await journey.groups.reduce<Promise<void>>(async (previous, group) => {
 			await previous;
-			await applyActions(driver, group.actions, plan.keys);
+			await applyActions(driver, group.actions, plan.keys, input);
 			const grid = await driver.waitForGrid(
 				group.checkpoint,
 				(candidate) => observeGridScene(candidate, group.checkpoint).passed,
@@ -235,7 +215,7 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 				blankRejected: negativeControls,
 			});
 		}, Promise.resolve());
-		await applyActions(driver, journey.finish, plan.keys);
+		await applyActions(driver, journey.finish, plan.keys, input);
 		const drain = async (): Promise<void> => {
 			if ((await driver.receive()) !== 'eof') await drain();
 		};
@@ -276,6 +256,24 @@ export async function runGridCapture(plan: GridCapturePlan): Promise<void> {
 		);
 	} finally {
 		await driver.stop();
+		if (input !== undefined)
+			writeFileSync(
+				join(plan.output, 'input-delivery.json'),
+				JSON.stringify(
+					{
+						profile: plan.inputProfile,
+						records: input.history(),
+						limits: [
+							'physical keyboard hardware',
+							'Ghostty app keybinds beyond the modelled set',
+							'OS-level shortcuts',
+							'real Ghostty rendering beyond libghostty',
+						],
+					},
+					null,
+					2,
+				),
+			);
 		writeFileSync(
 			join(plan.output, 'checkpoint-progress.json'),
 			JSON.stringify(checkpoints, null, 2),

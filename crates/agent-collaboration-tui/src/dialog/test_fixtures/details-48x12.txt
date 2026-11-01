@@ -1,0 +1,10 @@
+╭────────────────────────────────────────╮
+│Session details Feature design session …│
+│                                        │
+│Session ID: thread-a                   █│
+│HISTORY_ROW_0                          ││
+│                                        │
+│ Close Esc    Copy session ID           │
+│ Copy path    Fork Ctrl+Shift+Enter     │
+│ ● Resume                               │
+╰────────────────────────────────────────╯

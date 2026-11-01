@@ -8,6 +8,11 @@ at `014e25e08`). All 19 cases are explicitly
 entries and their real fixture seams. An absent entry is neither a product pass
 nor a product failure. The Lead declares the later exact target before a run.
 
+The later [Ghostty input harness extension](ghostty-input-harness.md) adds a
+separate layer-C keyboard/pointer matrix to `s9-prestage.ts` output. It uses the
+same existing PTY owner, opt-in input profiles and actual modes; its authored
+matrix and apparatus qualification add no product passes to these 19 B cases.
+
 From the repository root:
 
 ```sh

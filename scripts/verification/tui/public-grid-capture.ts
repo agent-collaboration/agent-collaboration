@@ -5,9 +5,9 @@ import { join } from 'node:path';
 
 import { z } from 'zod';
 
-import { encodeJourneyKey } from './capture-run.ts';
 import { cuaReadbackSchema } from './evidence-schema.ts';
 import type { CuaPtyReadback, TerminalViewport } from './evidence-schema.ts';
+import { encodeJourneyKey } from './journey-key.ts';
 import { lookupProcessIdentity, sameIdentity } from './process-identity.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import type { PublicSessionsPlan } from './public-sessions.ts';
@@ -46,13 +46,15 @@ export function readPublicGridState(
 	const output = join(plan.output, 'cua-sessions');
 	const wrapperPid = Number(readFileSync(join(output, 'quota-wrapper.pid'), 'utf8').trim());
 	const wrapper = lookupProcessIdentity(wrapperPid);
+	// Same LC_ALL=C as the receipt writer, so the raw `lstart` bytes compare across locales.
 	const identity = spawnSync('/bin/ps', ['-p', String(wrapperPid), '-o', 'uid=,lstart=,command='], {
 		encoding: 'utf8',
 		timeout: 3000,
+		env: { ...process.env, LC_ALL: 'C' },
 	});
 	if (
 		wrapper === null ||
-		wrapper.uid !== process.getuid?.() ||
+		wrapper.realUid !== process.getuid?.() ||
 		realpathSync(wrapper.executable) !== plan.node.path ||
 		identity.status !== 0 ||
 		identity.stdout !== readFileSync(join(output, 'quota-wrapper.identity'), 'utf8') ||
@@ -64,7 +66,7 @@ export function readPublicGridState(
 	const child = lookupProcessIdentity(pid);
 	if (
 		child === null ||
-		child.uid !== process.getuid?.() ||
+		child.realUid !== process.getuid?.() ||
 		realpathSync(child.executable) !== plan.public_target.binary.path
 	)
 		throw new Error('public PTY identity does not match executable/owner');

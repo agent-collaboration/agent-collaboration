@@ -35,6 +35,11 @@ import { dirname, isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+	SESSIONS_RECEIPT_DIRECTORY,
+	sessionsReceiptEnvironment,
+} from './sessions-receipt-directory.ts';
+
 export const COMPONENT_TEST =
 	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 
@@ -238,7 +243,10 @@ function publicSessionsLaunch(configuration: FixtureCommand, binary: string): Ch
 }
 
 /** The exact child argv, environment and working directory for one surface. */
-export function childLaunchConfiguration(configuration: FixtureCommand): ChildLaunch {
+export function childLaunchConfiguration(
+	configuration: FixtureCommand,
+	launchEnvironment: NodeJS.ProcessEnv = {},
+): ChildLaunch {
 	const surfaceResult = capturedTuiSurfaceSchema.safeParse(requiredText(configuration, 'surface'));
 	if (!surfaceResult.success) {
 		throw new FixtureLaunchRejected('unknown captured TUI surface');
@@ -293,6 +301,13 @@ export function childLaunchConfiguration(configuration: FixtureCommand): ChildLa
 				cwd: undefined,
 			};
 		case 'sessions':
+			Object.assign(
+				environment,
+				sessionsReceiptEnvironment(
+					launchEnvironment[SESSIONS_RECEIPT_DIRECTORY],
+					requiredText(configuration, 'output'),
+				),
+			);
 			return {
 				executable: binary,
 				arguments: [
@@ -393,15 +408,26 @@ function readTerminalViewport(): string {
 	return `${columns} ${rows}`;
 }
 
+/**
+ * The wrapper's `quota-wrapper.identity` receipt: the raw `uid=,lstart=,command=` line, which
+ * public-grid-capture.ts and the Rust TerminalDriver compare byte for byte before any signal.
+ * Ownership is decided separately by the real UID (`ruid`), the same kind as process.getuid().
+ */
 function processIdentityLine(pid: number): string {
-	const identity = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'uid=,lstart=,command='], {
+	const owner = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'ruid='], {
 		encoding: 'utf8',
 		timeout: 3000,
 	});
-	if (
-		identity.status !== 0 ||
-		!identity.stdout.trim().startsWith(`${String(process.getuid?.())} `)
-	) {
+	if (owner.status !== 0 || owner.stdout.trim() !== String(process.getuid?.())) {
+		throw new FixtureLaunchRejected('public wrapper UID observation failed');
+	}
+	// LC_ALL=C on the writer and both readers keeps the `lstart` bytes locale-independent.
+	const identity = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'uid=,lstart=,command='], {
+		encoding: 'utf8',
+		timeout: 3000,
+		env: { ...process.env, LC_ALL: 'C' },
+	});
+	if (identity.status !== 0) {
 		throw new FixtureLaunchRejected('public wrapper UID observation failed');
 	}
 	return identity.stdout;
@@ -427,7 +453,7 @@ async function main(): Promise<number> {
 	const configuration = readFixtureCommand(
 		fixtureCommandPath(process.argv.slice(2), process.env['QUOTA_STORYBOARD_FIXTURE_COMMAND']),
 	);
-	const launch = childLaunchConfiguration(configuration);
+	const launch = childLaunchConfiguration(configuration, process.env);
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));

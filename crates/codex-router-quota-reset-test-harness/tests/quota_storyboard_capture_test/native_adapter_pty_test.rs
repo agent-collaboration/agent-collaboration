@@ -376,3 +376,45 @@ fn same_child_kernel_resize_and_restore_reach_real_pty_eof() -> TestResult<()> {
     require_process_absent(&wrapper_pid)?;
     fixture.cleanup()
 }
+
+/// macOS installs /bin/ps setuid root: a user-launched ps has effective UID 0 and the
+/// launching account's real UID. Hosts without that split cannot exercise this case.
+fn setuid_system_ps_available() -> TestResult<bool> {
+    let metadata = fs::metadata("/bin/ps")?;
+    Ok(metadata.uid() == 0 && metadata.mode() & 0o4000 != 0)
+}
+
+#[test]
+fn process_fingerprint_names_the_real_owner_of_a_user_launched_setuid_utility() -> TestResult<()> {
+    if !setuid_system_ps_available()? {
+        eprintln!(
+            "skipped: host /bin/ps is not setuid root, so no effective/real UID split exists"
+        );
+        return Ok(());
+    }
+    // Repeated comm columns exceed what the pipe holds, so the actual setuid ps stays blocked in
+    // write until this test drains it; only backpressure matters, not other processes' arguments.
+    let mut held = Command::new("/bin/ps")
+        .arg("-axww")
+        .args(std::iter::repeat_n(["-o", "comm="], 40).flatten())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    let mut stdout = held
+        .stdout
+        .take()
+        .ok_or("held setuid utility stdout absent")?;
+    let mut first = [0_u8; 1];
+    std::io::Read::read_exact(&mut stdout, &mut first)?;
+    let observed = observe_process(&held.id().to_string());
+    let controller = observe_process(&std::process::id().to_string());
+    std::io::copy(&mut stdout, &mut std::io::sink())?;
+    require_condition(held.wait()?.success(), "held setuid utility failed")?;
+    let owner = |line: &str| line.split_whitespace().nth(1).map(str::to_owned);
+    let (observed, controller) = (observed?, controller?);
+    require_equal(
+        owner(&observed),
+        owner(&controller),
+        "setuid utility fingerprint must carry its launching account's real UID",
+    )
+}

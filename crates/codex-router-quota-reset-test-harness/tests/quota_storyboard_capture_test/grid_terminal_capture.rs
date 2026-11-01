@@ -80,6 +80,23 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let release_path = std::env::var_os("TUI_GRID_COMPONENT_RELEASE");
     let component = matches!(surface.as_str(), "normal" | "hard");
     let mut environment: Vec<(&str, &OsStr)> = Vec::new();
+    let sessions_receipt_directory = std::env::var_os("TUI_SESSIONS_FIXTURE_RECEIPT_DIR");
+    if let Some(directory) = sessions_receipt_directory.as_deref() {
+        ensure(
+            matches!(surface.as_str(), "sessions" | "sessions-filters"),
+            "sessions receipt directory requires a sessions fixture surface",
+        )?;
+        let directory_path = Path::new(directory);
+        let metadata = std::fs::symlink_metadata(directory_path)?;
+        ensure(
+            directory_path.is_absolute()
+                && metadata.is_dir()
+                && !metadata.file_type().is_symlink()
+                && std::fs::read_dir(directory_path)?.next().is_none(),
+            "sessions receipt directory must be an empty owned directory",
+        )?;
+        environment.push(("TUI_SESSIONS_FIXTURE_RECEIPT_DIR", directory));
+    }
     let storyboard_variant = std::env::var_os("TUI_GRID_STORYBOARD_VARIANT");
     if let Some(variant) = storyboard_variant.as_deref() {
         ensure(
@@ -217,4 +234,75 @@ pub(super) fn drive_terminal(
         }
     }
     Err("grid observer closed before explicit cleanup".into())
+}
+
+#[test]
+fn sessions_receipt_input_crosses_the_real_pty_environment_boundary() -> TestResult<()> {
+    let receipt_directory = Path::new("/fixture-owned/sessions-receipts");
+    let terminal = TerminalDriver::spawn_with_environment(
+        Path::new("/usr/bin/env"),
+        std::iter::empty::<&str>(),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &[(
+            "TUI_SESSIONS_FIXTURE_RECEIPT_DIR",
+            receipt_directory.as_os_str(),
+        )],
+    )?;
+    let transcript = String::from_utf8(terminal.finish(Duration::from_secs(8))?)?;
+    ensure(
+        transcript.lines().any(|line| {
+            line.trim_end() == "TUI_SESSIONS_FIXTURE_RECEIPT_DIR=/fixture-owned/sessions-receipts"
+        }),
+        "nominated sessions receipt directory did not reach the PTY child",
+    )?;
+    let terminal = TerminalDriver::spawn_with_environment(
+        Path::new("/usr/bin/env"),
+        std::iter::empty::<&str>(),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &[],
+    )?;
+    let transcript = String::from_utf8(terminal.finish(Duration::from_secs(8))?)?;
+    ensure(
+        !transcript.contains("TUI_SESSIONS_FIXTURE_RECEIPT_DIR="),
+        "sessions receipt input acquired an ambient fallback",
+    )
+}
+
+#[test]
+fn sessions_wrapper_receipt_input_reaches_its_child_on_the_existing_pty_owner() -> TestResult<()> {
+    use crate::native_adapter_fixture_support::NativeFixture;
+    use portable_pty::CommandBuilder;
+    for (surface, nominated) in [("sessions", true), ("sessions", false), ("quota", true)] {
+        let fixture = NativeFixture::prepare(surface)?;
+        let output = fixture.root.join("output");
+        let directory = output.join("sessions-receipts");
+        std::fs::create_dir(&directory)?;
+        let configuration = fixture.root.join("configuration.json");
+        let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/verification/tui/fixture-child.ts");
+        let mut command = CommandBuilder::new(&fixture.node);
+        command.args([wrapper.as_os_str(), configuration.as_os_str()]);
+        command.env_clear();
+        command.env("QUOTA_STORYBOARD_FIXTURE_COMMAND", &configuration);
+        if nominated {
+            command.env("TUI_SESSIONS_FIXTURE_RECEIPT_DIR", &directory);
+        }
+        command.cwd(&fixture.root);
+        let terminal = TerminalDriver::spawn_prepared_command(command, None)?;
+        terminal.finish(Duration::from_secs(8))?;
+        let environment_keys = fixture.read("environment-keys.txt")?;
+        ensure(
+            environment_keys
+                .lines()
+                .any(|key| key == "TUI_SESSIONS_FIXTURE_RECEIPT_DIR")
+                == (surface == "sessions" && nominated),
+            "sessions wrapper omitted the nomination or forwarded it outside sessions",
+        )?;
+        ensure(
+            std::fs::read_dir(&directory)?.next().is_none(),
+            "transport wrote receipts in place of the product producer",
+        )?;
+        fixture.cleanup()?;
+    }
+    Ok(())
 }

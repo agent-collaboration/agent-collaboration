@@ -247,6 +247,9 @@ version = "0.1.119"
 dependencies = [
  "futures-util",
  "iocraft",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "unicode-width 0.1.14",
  "unicode-width 0.2.2",

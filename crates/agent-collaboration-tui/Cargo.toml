@@ -8,11 +8,17 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-support = ["dep:serde", "dep:serde_json", "iocraft/unstable-output-streams"]
+
 [dependencies]
 iocraft.workspace = true
 unicode-width.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 futures-util.workspace = true
 tokio.workspace = true
 unicode-width-legacy = { package = "unicode-width", version = "=0.1.14" }
+tempfile = "3.27.0"
