@@ -68,7 +68,7 @@ pub(super) struct PreparedMachineSession {
     pub(super) requests: SessionRequests<BoardConsumerProtocol>,
     pub(super) peer: PeerId,
     pub(super) relay: PeerId,
-    notices: MachineNoticeReactions,
+    pub(super) notices: MachineNoticeReactions,
     pub projects: Arc<ProjectWriters>,
     pub(super) welcomed: watch::Sender<bool>,
     stop: watch::Sender<bool>,

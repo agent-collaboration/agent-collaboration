@@ -71,6 +71,37 @@ pub(super) struct BoardComposition {
 }
 
 impl BoardComposition {
+    pub async fn attach_automations(
+        &mut self,
+        store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
+        clock: Arc<dyn collaboration_runtime::CentralAutomationClock>,
+        service_id: collaboration_protocol::UuidIdentity,
+    ) -> Option<(
+        Arc<collaboration_runtime::CentralAutomationReceiver>,
+        collaboration_runtime::CentralReportWorker,
+    )> {
+        let session = self.session.as_mut()?;
+        let report_clock = clock.clone();
+        store
+            .lock()
+            .await
+            .set_central_report_clock(Arc::new(move || report_clock.now_ms()));
+        let transport = Arc::new(collaboration_runtime::SessionAutomationTransport::new(
+            session.requests.clone(),
+        ));
+        let receiver = Arc::new(collaboration_runtime::CentralAutomationReceiver::new(
+            store.clone(),
+            transport.clone(),
+            clock.clone(),
+            service_id,
+        ));
+        session.notices.attach_automations(receiver.clone());
+        Some((
+            receiver,
+            collaboration_runtime::CentralReportWorker::new(store, transport, clock),
+        ))
+    }
+
     pub fn mail_session(&self) -> Option<MailDeliverySession> {
         self.session.as_ref().map(|session| MailDeliverySession {
             requests: session.requests.clone(),

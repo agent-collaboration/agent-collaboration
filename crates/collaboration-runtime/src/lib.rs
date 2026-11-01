@@ -159,6 +159,8 @@ pub use remote_create_admission::{
     RemoteCreateAdmissionError, RemoteCreateAdmissionInputs, RemoteCreateConfigurationError,
 };
 mod central_automation_transport;
+mod session_automation_transport;
+pub use session_automation_transport::SessionAutomationTransport;
 mod central_report_worker;
 /// Test-only schedule execution fixtures shared with application inspection tests.
 #[cfg(any(test, feature = "test-support"))]

@@ -6,6 +6,8 @@ use std::{future::Future, pin::Pin};
 pub enum CentralAutomationError {
     #[error("central automation transport unavailable")]
     Unavailable,
+    #[error("central automation answer was lost; the operation outcome is unknown")]
+    OutcomeUnknown,
     #[error("central automation reply does not match the request")]
     InvalidReply,
     #[error("central automation work is invalid")]

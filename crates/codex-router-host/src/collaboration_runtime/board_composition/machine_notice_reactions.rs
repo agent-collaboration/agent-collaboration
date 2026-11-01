@@ -19,6 +19,7 @@ use std::{
 pub(super) struct MachineNoticeReactions {
     progress: MachineNoticeProgressStore,
     handled_through: NoticePosition,
+    automations: Option<Arc<collaboration_runtime::CentralAutomationReceiver>>,
 }
 
 impl MachineNoticeReactions {
@@ -30,7 +31,22 @@ impl MachineNoticeReactions {
         Ok(Self {
             progress,
             handled_through,
+            automations: None,
         })
+    }
+
+    pub fn attach_automations(
+        &mut self,
+        receiver: Arc<collaboration_runtime::CentralAutomationReceiver>,
+    ) {
+        self.automations = Some(receiver);
+    }
+
+    async fn receive_automations(&self) -> io::Result<()> {
+        if let Some(receiver) = &self.automations {
+            receiver.receive_pending().await.map_err(io::Error::other)?;
+        }
+        Ok(())
     }
 
     pub async fn handle_pushed_notice(
@@ -55,7 +71,15 @@ impl MachineNoticeReactions {
         if self.handled_through.next() != Some(notice.position) {
             return Err(invalid_notice("machine notice gap remains after catch-up"));
         }
-        reconcile_notice(&notice.kind, projects, admission, fleet, mail).await?;
+        reconcile_notice(
+            &notice.kind,
+            projects,
+            admission,
+            fleet,
+            mail,
+            self.automations.as_ref(),
+        )
+        .await?;
         self.save(notice.position).await
     }
 
@@ -69,6 +93,8 @@ impl MachineNoticeReactions {
         mail: &Weak<MailDeliveryRuntime>,
         requests: &SessionRequests<BoardConsumerProtocol>,
     ) -> io::Result<()> {
+        // Every Welcome reconciles custody even when no retained hint exists.
+        self.receive_automations().await?;
         let mut after = Some(self.handled_through);
         loop {
             match read_notices(requests, after).await? {
@@ -85,7 +111,15 @@ impl MachineNoticeReactions {
                         if !retained_start && self.handled_through.next() != Some(notice.position) {
                             return Err(invalid_notice("machine notice page is not contiguous"));
                         }
-                        reconcile_notice(&notice.kind, projects, admission, fleet, mail).await?;
+                        reconcile_notice(
+                            &notice.kind,
+                            projects,
+                            admission,
+                            fleet,
+                            mail,
+                            self.automations.as_ref(),
+                        )
+                        .await?;
                         self.save(notice.position).await?;
                         retained_start = false;
                     }
@@ -98,6 +132,7 @@ impl MachineNoticeReactions {
                     if after.is_none() || floor <= self.handled_through {
                         return Err(invalid_notice("expired notice floor did not advance"));
                     }
+                    self.receive_automations().await?;
                     recover_owners(projects, admission, fleet, mail).await?;
                     self.save(floor).await?;
                     after = Some(floor);
@@ -106,6 +141,7 @@ impl MachineNoticeReactions {
                     if after.is_none() {
                         return Err(invalid_notice("notice read without a cursor was invalid"));
                     }
+                    self.receive_automations().await?;
                     recover_owners(projects, admission, fleet, mail).await?;
                     self.save(NoticePosition::new(0)).await?;
                     after = None;
@@ -166,11 +202,14 @@ async fn reconcile_notice(
     admission: &Weak<ProjectAdmission>,
     fleet: &Weak<FleetClient>,
     mail: &Weak<MailDeliveryRuntime>,
+    automations: Option<&Arc<collaboration_runtime::CentralAutomationReceiver>>,
 ) -> io::Result<()> {
     match notice {
-        BoardNotice::AutomationBatchReady { .. } => Err(invalid_notice(
-            "automation batch reception is unavailable; the notice remains unhandled",
-        )),
+        BoardNotice::AutomationBatchReady { .. } => {
+            let receiver =
+                automations.ok_or_else(|| invalid_notice("automation receiver is unavailable"))?;
+            receiver.receive_pending().await.map_err(io::Error::other)
+        }
         BoardNotice::LeaseGranted { project, epoch } => {
             projects.receive_grant(project, *epoch).await
         }

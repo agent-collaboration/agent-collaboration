@@ -327,6 +327,19 @@ impl CollaborationRuntime {
         let provider_delivery_route = message_routes.provider_route;
         let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
             std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        let central_report_worker = match (&mut prepared_board, &automation_store) {
+            (Some(board), Some(store)) => board
+                .attach_automations(
+                    store.clone(),
+                    std::sync::Arc::new(super::automation_clock::HostAutomationClock(
+                        subscription_clock.clone(),
+                    )),
+                    service_id.clone(),
+                )
+                .await
+                .map(|(_, worker)| worker),
+            _ => None,
+        };
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
@@ -756,6 +769,13 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             })?;
         let mut tasks = JoinSet::new();
+        if let Some(worker) = central_report_worker {
+            let report_shutdown = shutdown.clone();
+            tasks.spawn(async move {
+                worker.run(report_shutdown).await;
+                Ok(())
+            });
+        }
         #[cfg(test)]
         let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]

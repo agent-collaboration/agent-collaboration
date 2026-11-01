@@ -10,6 +10,10 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
 use tokio::{sync::watch, time::timeout};
 
+#[cfg(debug_assertions)]
+#[path = "tests/central_automation.rs"]
+mod central_automation;
+
 #[path = "tests/archive_observation.rs"]
 mod archive_observation;
 #[path = "tests/archive_owner_replacement.rs"]

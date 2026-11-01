@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+const CUSTODY_RETRY_MILLIS: i64 = 1000;
+
 pub struct CentralAutomationReceiver {
     store: Arc<Mutex<AutomationStore>>,
     transport: Arc<dyn CentralAutomationTransport>,
@@ -38,6 +40,25 @@ impl CentralAutomationReceiver {
     /// Called at connect/reconnect, batch hints and notice-cursor recovery. Hints never supply work bytes.
     pub async fn receive_pending(&self) -> Result<(), CentralAutomationError> {
         let _receiving = self.receiving.lock().await;
+        loop {
+            match self.receive_once().await {
+                Err(
+                    error @ (CentralAutomationError::Unavailable
+                    | CentralAutomationError::OutcomeUnknown),
+                ) => {
+                    tracing::warn!(%error, "central custody remains owed");
+                    // Pull, content fetch and ACK reconcile the same frozen work.
+                    // Reopening the traversal also covers an ACK applied with its reply lost.
+                    self.clock
+                        .wait_until(self.clock.now_ms().saturating_add(CUSTODY_RETRY_MILLIS))
+                        .await;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn receive_once(&self) -> Result<(), CentralAutomationError> {
         let mut after = None;
         loop {
             let AutomationAnswer::Batches(page) = self

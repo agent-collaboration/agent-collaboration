@@ -253,6 +253,8 @@ impl CollaborationRuntime {
 #[path = "collaboration_runtime/collaboration_api_serving.rs"]
 mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
+#[path = "collaboration_runtime/automation_clock.rs"]
+mod automation_clock;
 #[path = "collaboration_runtime/board_composition.rs"]
 mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
