@@ -81,7 +81,7 @@ pub(super) async fn run(machine: &mut NativeBoardSession, service: &str) -> Conf
     Ok(())
 }
 
-async fn limited(
+pub(super) async fn limited(
     machine: &mut NativeBoardSession,
     request: Value,
     expected: LimitName,
