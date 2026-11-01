@@ -9,9 +9,14 @@ import {
 	existsSync,
 	watch,
 } from 'node:fs';
+import { createServer } from 'node:net';
+import type { Socket } from 'node:net';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Interface } from 'node:readline';
 
 import { afterEach, expect, test, vi } from 'vitest';
+import { z } from 'zod';
 
 import { requireOneTest } from '../capture/capture-selection.ts';
 import { readJson } from '../evidence/source-binding.ts';
@@ -333,28 +338,106 @@ test.each([false, true])(
 	},
 );
 
+interface OracleReleaseControl {
+	readonly port: number;
+	readonly ready: Promise<void>;
+	release(childPid: number | undefined): void;
+	close(): Promise<void>;
+}
+/** Only the controlled child uses this loopback connection; command capture keeps real file descriptors. */
+async function oracleReleaseControl(root: string): Promise<OracleReleaseControl> {
+	let socket: Socket | null = null;
+	let lines: Interface | null = null;
+	let childPid: number | null = null;
+	let failure: Error | null = null;
+	const readySchema = z.strictObject({
+		kind: z.literal('ready'),
+		root: z.literal(root),
+		pid: z.number().int().positive(),
+	});
+	const server = createServer((connection) => {
+		if (socket !== null) {
+			connection.destroy();
+			server.emit('error', new Error('oracle control received a second child'));
+			return;
+		}
+		socket = connection;
+		connection.on('error', (error) => server.emit('error', error));
+		lines = createInterface({ input: connection, crlfDelay: Infinity });
+		lines.on('line', (line: string) => {
+			try {
+				if (childPid !== null) throw new Error('oracle repeated readiness');
+				const ready = readySchema.parse(JSON.parse(line));
+				childPid = ready.pid;
+				server.emit('oracle-ready');
+			} catch (error) {
+				server.emit('error', error instanceof Error ? error : new Error(String(error)));
+			}
+		});
+	});
+	server.on('error', (error) => {
+		failure ??= error;
+	});
+	const ready = once(server, 'oracle-ready', { signal: AbortSignal.timeout(5000) }).then(() => {});
+	// Retain the rejection even if setup itself fails before the caller awaits it.
+	void ready.catch(() => {});
+	server.listen(0, '127.0.0.1');
+	await once(server, 'listening');
+	const address = server.address();
+	if (address === null || typeof address === 'string')
+		throw new Error('oracle control address absent');
+	return {
+		port: address.port,
+		ready,
+		release: (pid) => {
+			if (failure !== null) throw failure;
+			if (socket === null || childPid === null || pid !== childPid)
+				throw new Error('oracle release must belong to the actual ready child');
+			socket.write('release\n');
+		},
+		close: async () => {
+			lines?.close();
+			socket?.destroy();
+			await new Promise<void>((resolve, reject) =>
+				server.close((error) => (error ? reject(error) : resolve())),
+			);
+		},
+	};
+}
+function controlledOracleSocketSource(root: string, port: number, exit: number): string {
+	return [
+		// The regression must remain valid even when file notifications are unavailable.
+		"require('node:fs').watch=()=>{throw new Error('oracle lifecycle must not depend on file notifications');};",
+		"const net=require('node:net');const readline=require('node:readline');",
+		"const channel=net.createConnection({host:'127.0.0.1',port:" + port + '});',
+		'const lines=readline.createInterface({input:channel,crlfDelay:Infinity});let released=false;',
+		"lines.once('line',(line)=>{if(line!=='release')throw new Error('wrong oracle release');released=true;process.stdout.write('late observation');process.stderr.write('retained stderr');process.exitCode=" +
+			exit +
+			';lines.close();channel.end();});',
+		"channel.on('connect',()=>channel.write(JSON.stringify({kind:'ready',root:" +
+			JSON.stringify(root) +
+			",pid:process.pid})+'\\n'));",
+		"channel.on('error',()=>{process.exitCode=1;lines.close();channel.destroy();});",
+		"channel.on('close',()=>{if(!released)process.exitCode=1;lines.close();});",
+	].join('');
+}
 test.each([0, 1])(
 	'oracle timeout remains failure after later exit %s when own-child signal is not delivered',
 	async (exit) => {
 		const root = rootDirectory();
-		const readyPath = join(root, 'oracle-ready');
-		const releasePath = join(root, 'oracle-release');
-		const watcher = watch(root, { signal: AbortSignal.timeout(5000) });
-		const ready = new Promise<void>((resolve, reject) => {
-			const observeReady = (): void => {
-				if (existsSync(readyPath) && readFileSync(readyPath, 'utf8') === 'ready\n') resolve();
-			};
-			watcher.on('change', observeReady);
-			watcher.once('error', reject);
-			watcher.once('close', () => reject(new Error('oracle readiness closed before ready')));
-			observeReady();
-		});
-		const executable = controlledExecutable(root, 'late-oracle', lateOracleSource(exit));
-		// The real child owns readiness and exit; only the parent's deadline is advanced.
-		// A refused signal releases the child causally, with no child timer race.
+		const control = await oracleReleaseControl(root);
+		const executable = controlledExecutable(
+			root,
+			'late-oracle',
+			controlledOracleSocketSource(root, control.port, exit),
+		);
+		// The real child reports readiness and cooperatively exits through its owned channel.
+		// Only the parent's deadline is advanced; refusing SIGKILL remains observable.
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-		const refusedSignal = vi.spyOn(ChildProcess.prototype, 'kill').mockImplementation(() => {
-			writeFileSync(releasePath, 'release\n');
+		const refusedSignal = vi.spyOn(ChildProcess.prototype, 'kill').mockImplementation(function (
+			this: ChildProcess,
+		) {
+			control.release(this.pid);
 			return false;
 		});
 		const outcome = runCapturedCommand({
@@ -366,19 +449,23 @@ test.each([0, 1])(
 			(error: unknown) => String(error),
 		);
 		try {
-			await ready;
+			await control.ready;
 			await vi.advanceTimersByTimeAsync(100);
 			const failure = await outcome;
-			expect(failure).toContain(`"exit":${exit},"timeout":true`);
+			expect(failure).toContain('"exit":' + exit + ',"timeout":true');
 			expect(failure).toContain(Buffer.from('late observation').toString('base64'));
 			expect(failure).toContain(Buffer.from('retained stderr').toString('base64'));
 			expect(refusedSignal).toHaveBeenCalledWith('SIGKILL');
 		} finally {
-			writeFileSync(releasePath, 'release\n');
-			await outcome;
-			refusedSignal.mockRestore();
-			watcher.close();
-			vi.useRealTimers();
+			try {
+				// A readiness failure must not leave the existing deadline frozen in cleanup.
+				await vi.advanceTimersByTimeAsync(100);
+			} finally {
+				refusedSignal.mockRestore();
+				await control.close();
+				await outcome;
+				vi.useRealTimers();
+			}
 		}
 	},
 );
