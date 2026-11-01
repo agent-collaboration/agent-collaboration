@@ -141,6 +141,15 @@ with retained receipts wherever those inputs were reached. Missing/incomplete
 matrix preflights reject before launch. `--check` qualifies these sources,
 artifacts and emulator and reports zero product passes.
 
+Picker transport uses the existing direct Rust PTY owner, not the showcase's
+wrapper. `qualify-picker-flow-transport.ts PLAN.json` is a separate bounded
+native startup: it launches the declared signed product at 120×36 in each mode,
+requires its own initial F12 receipt and completed frame, captures original
+output, quits through the real picker and independently checks both owned
+process identities. It needs an explicit startup grant before use and claims
+zero B passes. It must never be described as a no-product wrapper handshake.
+Exact `TUI_GRID_CHECK_ONLY=1` argument admission is separate and launches no product.
+
 `picker-flow-bindings.ts` binds `stopped-claude-details-open-only`, same-ID
 HostedCodex Resume, and nine New flows through source-pinned adapters. Resume
 selects Indigo, independently distinguished from Quartz by service and Cedar by
