@@ -240,12 +240,12 @@ Nothing is retried. The owners' own guards stay in force: login re-resolves iden
 
 - **Crate.** `ListSelectionControl` accepts optional ordered groups from the consumer (`ListGroup { heading: ListGroupHeading { name, count, summary }, keys }`). Heading rows are drawn by the crate and are never focus or selection targets. Navigation, paging, typeahead, wheel and pointer resolve over row keys only, with headings counted as drawn rows for viewport sizing. No groups means the existing render, unchanged. The same heading row draws T2's menu section headings.
 - **Consumers.** Each screen owns its facet enum (`SessionGroupFacet`: None, StartedBy, Day, Folder, Provider, Machine; `QuotaGroupFacet`: None, Provider, Status), computes groups from rows it already holds after filtering, and declares the Group by action and checked items.
-  - The picker's StartedBy reads `collaboration_protocol::parse_push_line_header(...).kind` from the record's first-message title source; no push header means You.
+  - The picker's StartedBy reads a **strict** `collaboration_protocol::parse_push_line(...)` (additive): only a complete Router push line ending in its `router://<service>/push/<id>` link counts, and the kind comes from its header. Anything else, including a title that merely starts with "✉️ ", means You. The existing loose `parse_push_line_header` stays unchanged for display titles.
   - Day uses the record's recency timestamp against local midnight.
 - **Remembering.** A `UiPreferenceStore` port in each consumer loads the facet at startup and saves it on change. Saving is fire-and-forget off the input path, and a failure keeps the run's value. An unknown stored value decodes as None. Each service owns its own store, because the two screens are separate services (owner, 2026-10-31: "the two screens are separate services fyi" / "each will get their own you mean?"):
   - the picker stores its preference in `agent-sessions-ui.sqlite` in its service folder (`<router root>/agent-communication/`);
   - the quota screen stores its preference in `agent-proxy-ui.sqlite` in the codex-router root (owner, 2026-10-31, named both files).
-  Both use one `ui_preferences` table shape (a UUIDv7 primary key, a unique (screen, setting) pair and a text value, with no CHECK constraints; Rust enums validate on read) and shared store code. Neither service reads the other's file, and no existing database changes.
+  The shared SQLite adapter lives in a small crate `ui-preference-store` (owned by the picker lane; sqlx and uuid only, no TUI dependency; values are opaque text). Each consumer's enum validates its own values. Both use one `ui_preferences` table shape (a UUIDv7 primary key, a unique (screen, setting) pair and a text value, with no CHECK constraints; Rust enums validate on read) and shared store code. Neither service reads the other's file, and no existing database changes.
 
 ## Trace table
 
