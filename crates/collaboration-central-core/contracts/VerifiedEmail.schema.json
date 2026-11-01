@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "pattern": "(?=[\\x00-\\x7F]*$(?![\\s\\S]))(?:^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$)$(?![\\s\\S])",
+  "title": "VerifiedEmail",
+  "type": "string",
+  "x-maxUtf8Bytes": 254
+}

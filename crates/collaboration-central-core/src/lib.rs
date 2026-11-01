@@ -1,6 +1,7 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
+pub mod fleet_directory;
 pub mod identity_contract;
 
 mod admin_import_contract;

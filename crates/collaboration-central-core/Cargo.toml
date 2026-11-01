@@ -12,6 +12,7 @@ workspace = true
 conformance = []
 
 [dependencies]
+regex = "=1.12.4"
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
