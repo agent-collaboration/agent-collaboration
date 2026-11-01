@@ -38,6 +38,8 @@ pub enum SessionSetupError {
     },
     #[error("native session creation outcome unknown")]
     OutcomeUnknown,
+    #[error("session launch admission failed: {0}")]
+    LaunchAdmissionFailed(collaboration_contracts::HarnessLaunchFailure),
     #[error("organization authority refused the created session registration")]
     RegistrationRefused,
     #[error("native session request rejected")]

@@ -27,7 +27,10 @@ pub(crate) struct SetupTaskOutput {
     pub outcome: Result<(Vec<Value>, Value), SessionSetupError>,
 }
 pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutput {
-    let _declared_admission = &inputs.harness;
+    let managed = matches!(
+        &inputs.harness,
+        crate::CodexHarnessAdmission::MachineTokens { .. }
+    );
     let mut catalog = match AcpSchemaCatalog::load() {
         Ok(catalog) => catalog,
         Err(_) => {
@@ -38,6 +41,21 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
         }
     };
     if let Some(mut session) = inputs.known_session {
+        let admission = match inputs.harness.restore(&inputs.params).await {
+            Ok(admission) => admission,
+            Err(error) => {
+                return SetupTaskOutput {
+                    binding: None,
+                    outcome: Err(error),
+                };
+            }
+        };
+        if let Err(error) = session.require_harness_restore(&admission) {
+            return SetupTaskOutput {
+                binding: None,
+                outcome: Err(error),
+            };
+        }
         if inputs.adopt_unmaterialized {
             let outcome = session
                 .adopt_unmaterialized(&mut catalog, &inputs.generation, &inputs.params)
@@ -118,11 +136,35 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
         }
     }
     let outcome = async {
-        let connection = NativeProtocolConnection::connect(&inputs.backend_path)
-            .await
-            .map_err(|_| SessionSetupError::Unavailable)?;
+        let harness = if inputs.create_new {
+            inputs
+                .harness
+                .prepare_start(
+                    &mut catalog,
+                    &inputs.params,
+                    operation_id
+                        .as_ref()
+                        .ok_or(SessionSetupError::InvalidParameters)?,
+                )
+                .await?
+        } else {
+            inputs.harness.restore(&inputs.params).await?
+        };
+        let connection = match NativeProtocolConnection::connect(&inputs.backend_path).await {
+            Ok(connection) => connection,
+            Err(_) => {
+                if let crate::HarnessSessionSetup::Start(prepared) = &harness {
+                    prepared
+                        .port
+                        .creation_refused(&prepared.operation_id)
+                        .await
+                        .map_err(|_| SessionSetupError::OutcomeUnknown)?;
+                }
+                return Err(SessionSetupError::Unavailable);
+            }
+        };
         let setup = SessionSetupInputs {
-            harness: crate::HarnessSessionSetup::AccessEnrollment,
+            harness,
             connection,
             schemas: inputs.schemas,
             generation: inputs.generation,
@@ -162,16 +204,24 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             outcome: Ok((history, result)),
         },
         Err(error) => {
-            let known_not_submitted = matches!(
-                error,
-                SessionSetupError::InvalidParameters
-                    | SessionSetupError::ConfigurationMismatch
-                    | SessionSetupError::ModelMismatch { .. }
-                    | SessionSetupError::AccessMismatch { .. }
-                    | SessionSetupError::NativeRejected
-                    | SessionSetupError::SchemaUnavailable
-                    | SessionSetupError::HostLocationsUnavailable { .. }
-            );
+            let known_not_submitted = if managed {
+                matches!(
+                    error,
+                    SessionSetupError::LaunchAdmissionFailed(_) | SessionSetupError::NativeRejected
+                )
+            } else {
+                matches!(
+                    error,
+                    SessionSetupError::InvalidParameters
+                        | SessionSetupError::ConfigurationMismatch
+                        | SessionSetupError::ModelMismatch { .. }
+                        | SessionSetupError::AccessMismatch { .. }
+                        | SessionSetupError::NativeRejected
+                        | SessionSetupError::SchemaUnavailable
+                        | SessionSetupError::HostLocationsUnavailable { .. }
+                        | SessionSetupError::LaunchAdmissionFailed(_)
+                )
+            };
             let error = if let Some(operation_id) = operation_id.as_ref() {
                 if inputs
                     .recorder

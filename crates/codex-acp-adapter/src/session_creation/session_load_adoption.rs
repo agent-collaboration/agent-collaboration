@@ -5,6 +5,27 @@ use super::{
 };
 
 impl AcpSessionBinding {
+    pub(crate) fn require_harness_restore(
+        &self,
+        setup: &crate::HarnessSessionSetup,
+    ) -> Result<(), SessionSetupError> {
+        match setup {
+            crate::HarnessSessionSetup::AccessEnrollment => Ok(()),
+            crate::HarnessSessionSetup::Restore(restored)
+                if restored.session.session_id.as_str() == self.session_id
+                    && self.session_binding.as_ref().is_some_and(|original| {
+                        original.server_name() == restored.binding.server_name()
+                            && original.expose_address() == restored.binding.expose_address()
+                    }) =>
+            {
+                Ok(())
+            }
+            crate::HarnessSessionSetup::Start(_) | crate::HarnessSessionSetup::Restore(_) => {
+                Err(SessionSetupError::ConfigurationMismatch)
+            }
+        }
+    }
+
     pub async fn adopt_unmaterialized(
         &self,
         catalog: &mut AcpSchemaCatalog,

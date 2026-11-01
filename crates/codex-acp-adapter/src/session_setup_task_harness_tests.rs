@@ -93,3 +93,44 @@ async fn native_setup_task_consumes_host_admission_before_dispatch_and_returns_t
         ["prepared", "dispatched", "rpc", "created", "registered"]
     );
 }
+
+#[tokio::test]
+async fn native_setup_task_refuses_an_inactive_restore_before_opening_the_backend() {
+    let directory = tempfile::tempdir().unwrap();
+    let launch = Arc::new(recording_harness_launch::RecordingLaunch::default());
+    let endpoint = serde_json::from_value(
+        json!({"serviceId":"019f0000-0000-7000-8000-000000000003","endpointId":"codex-local"}),
+    )
+    .unwrap();
+
+    let result = run_session_setup(SetupTaskInputs {
+        harness: CodexHarnessAdmission::MachineTokens {
+            endpoint,
+            port: launch.clone(),
+        },
+        known_session: None,
+        adopt_unmaterialized: false,
+        backend_path: directory.path().join("must-not-be-opened.sock"),
+        schemas: super::tests::native_schemas(),
+        generation: serde_json::from_value(
+            json!({"serviceEpoch":"019f0000-0000-7000-8000-000000000004","generation":1}),
+        )
+        .unwrap(),
+        params: json!({"sessionId":"retired-conversation","cwd":directory.path(),"mcpServers":[]}),
+        create_new: false,
+        operation_id: None,
+        recorder: Arc::new(super::tests::AcceptingRecorder),
+        cancellation_barrier: None,
+        approval_broker: Arc::new(RejectingApprovalBroker),
+    })
+    .await;
+
+    assert!(matches!(
+        result.outcome,
+        Err(crate::SessionSetupError::LaunchAdmissionFailed(
+            collaboration_contracts::HarnessLaunchFailure::InactiveBinding
+        ))
+    ));
+    assert!(result.binding.is_none());
+    assert_eq!(*launch.events.lock().unwrap(), ["restoreChecked"]);
+}

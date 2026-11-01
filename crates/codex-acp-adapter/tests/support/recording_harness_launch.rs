@@ -10,6 +10,7 @@ use std::sync::Mutex;
 
 pub(crate) struct RecordingLaunch {
     pub(crate) binding: Option<HarnessSessionBinding>,
+    pub(crate) restored_binding: Option<HarnessSessionBinding>,
     pub(crate) completion: HarnessRegistrationOutcome,
     pub(crate) events: Mutex<Vec<&'static str>>,
     pub(crate) created: Mutex<Vec<SessionRef>>,
@@ -19,6 +20,7 @@ impl Default for RecordingLaunch {
     fn default() -> Self {
         Self {
             binding: None,
+            restored_binding: None,
             completion: HarnessRegistrationOutcome::Registered,
             events: Mutex::new(Vec::new()),
             created: Mutex::new(Vec::new()),
@@ -100,6 +102,12 @@ impl HarnessSessionLaunchPort for RecordingLaunch {
         &'a self,
         _session: &'a SessionRef,
     ) -> HarnessLaunchFuture<'a, HarnessRestoreAdmission> {
-        Box::pin(async { Err(HarnessLaunchFailure::InactiveBinding) })
+        Box::pin(async move {
+            self.event("restoreChecked")?;
+            self.restored_binding
+                .as_ref()
+                .map(|binding| HarnessRestoreAdmission::Bound(binding.clone()))
+                .ok_or(HarnessLaunchFailure::InactiveBinding)
+        })
     }
 }
