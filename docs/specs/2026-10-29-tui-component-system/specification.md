@@ -132,7 +132,7 @@ When it becomes available again, all of those places change back together. *Enti
 - Enter acts within the focused target: it opens a closed dropdown, picks the highlighted option in an open one, or activates a focused button.
 - Tab and Shift+Tab move focus as in R3.
 - Where the terminal can't report Ctrl+Enter as distinct from Enter, the primary action stays reachable by Tab to its button then Enter, and by clicking it.
-- A dialog may show one short key-hint line, built from its actions, only where it helps the user complete it; a form like New session shows "Ctrl+Enter start · Esc close". No main screen shows a shortcut footer (10-17/U5, kept).
+- A dialog may show one short key-hint line, built from its actions, only where it helps the user complete it; a form like New session shows "Ctrl+Enter Start · Esc Cancel". Each entry is the key plus the title of the action it runs, the same title its button shows, so the line and the buttons never disagree. (Lead, 2026-11-01: the earlier wording "start · close" came from a mock, not the owner's words; the rule is "built from its actions".) No main screen shows a shortcut footer (10-17/U5, kept).
 
 *Entities: E2, E4, E5, E6.*
 
