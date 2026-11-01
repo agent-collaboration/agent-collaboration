@@ -16,6 +16,11 @@ impl std::io::Write for TraceCapture {
 }
 #[tokio::test]
 async fn fleet_machine_login_records_public_outcomes_without_codes_or_credentials() {
+    // Account for parallel untraced producers in the global interest registry.
+    // With only one registered dispatch, tracing-core 0.1.36 consults the
+    // registering thread's default and can cache Never from another test.
+    // Keep both dispatches alive until every captured owner has joined.
+    let untraced_dispatch = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
     let bytes = Arc::new(std::sync::Mutex::new(Vec::new()));
     let output = bytes.clone();
     let subscriber = tracing_subscriber::fmt()
@@ -55,7 +60,10 @@ async fn fleet_machine_login_records_public_outcomes_without_codes_or_credential
         ORGANIZATION,
         ENROLLMENT,
     ] {
-        assert!(text.contains(expected));
+        assert!(
+            text.contains(expected),
+            "missing public trace fragment {expected}; captured: {text:?}"
+        );
     }
     for secret in [
         "ABCD-EFGH",
@@ -65,4 +73,5 @@ async fn fleet_machine_login_records_public_outcomes_without_codes_or_credential
     ] {
         assert!(!text.contains(secret));
     }
+    drop(untraced_dispatch);
 }
