@@ -169,7 +169,7 @@ These run on Sunclaw, never on Sunbook.
 ## Risks
 
 - **Owed work lost or doubled at the migration, admission or acknowledgement boundaries** (the Advisor's top risk). V9, V11 and V14 must run on the real paths before any "working" claim.
-- **Self-healing depends on a later central request**, as specified. A Fleet with no traffic after exhausted alarm retries waits for its next request.
+- **Self-healing depends on a later catalog call or machine pull**, as specified. A Fleet with none after exhausted alarm retries waits for the next one.
 - **Turso migration paths** (the interaction store). Proven on Turso temporary databases.
 - **The public repository.** The design-branch history is never pushed; S9 publishes only a selected tree.
 

@@ -115,7 +115,7 @@ target Router ──Session→Fleet: PullAutomationBatches (on connect, reconnec
 
 | Case | Behaviour |
 | --- | --- |
-| The alarm handler fails, or the alarm is lost after exhausted retries | a permanent per-Automation error is recorded and the others continue; a transient error commits nothing and is retried by the platform; any later central request re-arms for the earliest pending due time; no Firing is lost or doubled |
+| The alarm handler fails, or the alarm is lost after exhausted retries | a permanent per-Automation error is recorded and the others continue; a transient error commits nothing and is retried by the platform; the next catalog call or machine pull re-arms for the earliest pending due time (unrelated Fleet calls restore only the journal deadline); no Firing is lost or doubled |
 | A duplicate or retried alarm | `evaluate`'s admission is unique on (automation, due time); the same Batch bytes |
 | A lost notice answer | retried; reconciled against the machine's notice position; unknown until then |
 | The machine is offline beyond the notice window | the notice is gone, but the Batch stays in central's custody. On reconnect, or on `CursorExpired`, the machine lists its unacknowledged Batches, fetches, admits, acknowledges, and expires each Wake entry past its end |
