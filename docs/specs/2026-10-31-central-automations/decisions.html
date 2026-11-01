@@ -29,7 +29,17 @@
 <ex-document id="content">
 <h1 id="heading-your-decisions">Your decisions</h1>
 
-<p><strong>One thing is waiting on you: a model login for the test rig.</strong> Everything else you answered on 31 October. This page records each answer and what it changed in the design.</p>
+<p><strong>Two things are waiting on you: the database PR's library gaps, and a model login for the test rig.</strong> Everything else you answered on 31 October. This page records each answer and what it changed in the design.</p>
+
+<ex-callout title="Waiting on you: the database PR's library gaps" tone="question" icon="database">
+  <p>The Verifier supports everything PR 1 implements for the stores the Router controls: retention windows, WAL, the one-time vacuum, and approvals moving into <code>interaction.sqlite</code>. Three things sit in pinned libraries the Router doesn't control:</p>
+  <ul>
+    <li>finished install attempts are never pruned, because pinned <code>agent-fleet-sync</code> has no delete call and no timestamp;</li>
+    <li>the journal mode of the library-owned install and read-copy stores is being observed now;</li>
+    <li>the Turso stores (<code>interaction.sqlite</code>, fleet, project files) can't be vacuumed, because pinned <code>sqlx-turso</code> disables it.</li>
+  </ul>
+  <p><strong>I've provisionally taken option A</strong>, which is reversible because nothing merges before both PRs are ready: accept PR 1 for what the Router controls, and change the libraries in a follow-up PR. That follow-up changes library pins, which needs your approval. <strong>Option B</strong> holds PR 1 until the library changes land. Tell me if you want B, and whether you approve the pin changes.</p>
+</ex-callout>
 
 <ex-callout title="Waiting on you: a model login for the Sunclaw test rig" tone="question" icon="users">
   <p>The Verifier's test rig on Sunclaw runs isolated debug Routers, and to prove the notification milestone (M6), and later M3, it has to deliver to a real session, which starts a short Haiku turn. The rig has no model account of its own, and it's correctly barred from reading <code>~/.codex-router</code> and <code>~/.codex-router-debug</code>.</p>
