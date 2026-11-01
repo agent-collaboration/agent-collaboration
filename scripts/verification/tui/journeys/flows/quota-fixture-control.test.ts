@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { afterEach, expect, test } from 'vitest';
 import { z } from 'zod';
 
+import { shortTemporaryRoot } from '../../fixtures/short-temporary-root.ts';
 import { QuotaFixtureControl } from './quota-fixture-control.ts';
 
 const resources: {
@@ -22,7 +23,7 @@ const requestSchema = z
 async function connectFixture(
 	handler: (request: z.infer<typeof requestSchema>, socket: Socket) => void,
 ): Promise<QuotaFixtureControl> {
-	const root = realpathSync(mkdtempSync('/private/tmp/2026-11-qc-')),
+	const root = realpathSync(mkdtempSync(join(shortTemporaryRoot(), '2026-11-qc-'))),
 		path = join(root, 'socket');
 	const sockets = new Set<Socket>();
 	const server = createServer((socket) => {

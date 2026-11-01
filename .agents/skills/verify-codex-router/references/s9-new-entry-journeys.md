@@ -263,7 +263,10 @@ requirement. A producer adapter must parse and correlate the real event sequence
 before normalizing these facts; controlled lifecycle tests are not quota proof.
 
 `fixtures/quota-effect-launch.ts` admits the fixed effectful CLI libtest entry,
-hash-bound JSON configuration and fresh private paths under `/private/tmp`.
+hash-bound JSON configuration and fresh private paths under the shared
+`shortTemporaryRoot()` policy: `/private/tmp` on macOS and `/tmp` on Linux.
+The launcher, argument admission and fixture setup use that same selector;
+owner-only directories and the 103-byte socket bound remain required.
 Login additionally requires the exact declared stand-in and private PATH prefix;
 normal home is inherited. It changes no product configuration. The `quota-effects`
 streaming-driver route uses the existing inherited-PTY wrapper and binds

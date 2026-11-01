@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { canonicalJson } from '../../evidence/source-binding.ts';
 import { COMPONENT_SCENARIOS, COMPONENT_TEST } from '../../fixtures/component-fixture-contract.ts';
+import { shortTemporaryRoot } from '../../fixtures/short-temporary-root.ts';
 import { quotaEffectArguments, quotaEffectScenarioSchema } from './quota-fixture-contract.ts';
 
 const unboundArtifactSchema = z.object({
@@ -44,7 +45,7 @@ export const quotaOfflinePacketSchema = z.object({
 	}),
 	commonChildEnvironment: z.strictObject({
 		NO_COLOR: z.literal('absent'),
-		TMPDIR: z.literal('/private/tmp'),
+		TMPDIR: z.literal(shortTemporaryRoot()),
 	}),
 	r19: z.object({ status: z.string().startsWith('unbound placeholder') }),
 });
@@ -131,8 +132,7 @@ export function quotaArgumentAdmission(packetValue: unknown): unknown {
 							? {
 									variable: packet.effectful.configurationEnvironment,
 									storage: 'fresh private JSON configuration, not inline JSON',
-									outputPaths:
-										'distinct absent direct children of an owned mode-0700 directory under /private/tmp',
+									outputPaths: `distinct absent direct children of an owned mode-0700 directory under ${shortTemporaryRoot()}`,
 									login: scenario.startsWith('login-')
 										? 'declared signed stand-in plus owned PATH prefix and causal gate'
 										: scenario === 'grouping-reopen'
