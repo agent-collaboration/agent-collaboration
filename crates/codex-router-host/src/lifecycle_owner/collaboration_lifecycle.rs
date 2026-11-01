@@ -7,6 +7,7 @@ use std::{io, path::PathBuf};
 
 pub(super) struct CollaborationLifecycle {
     owner_human_id: Option<message_board::HumanId>,
+    remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     directory: PathBuf,
     router_root: PathBuf,
     codex_home: PathBuf,
@@ -52,6 +53,7 @@ impl CollaborationLifecycle {
         );
         let mut owner = Self {
             owner_human_id: config.owner_human_id().cloned(),
+            remote_create_default_approver: config.remote_create_default_approver().cloned(),
             directory: directory.to_owned(),
             router_root: config
                 .coordination_paths()
@@ -146,6 +148,7 @@ impl CollaborationLifecycle {
             );
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
+                    remote_create_default_approver: self.remote_create_default_approver.clone(),
                     collaboration_runtime: CollaborationRuntimeInputs {
                         board_session,
                         directory: self.directory.clone(),

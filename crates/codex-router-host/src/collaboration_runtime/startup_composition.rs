@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            host_inputs.remote_create_default_approver,
         ))
         .await
     }
@@ -68,9 +70,19 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
+        if remote_create_default_approver
+            .as_ref()
+            .is_some_and(|approver| approver.endpoint.service_id != service_id)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "interim remote-create default approver must be a Session on this service",
+            ));
+        }
         let installation_peer = load_installation_peer(&inputs.directory)?;
         if inputs
             .board_session
@@ -801,6 +813,7 @@ impl CollaborationRuntime {
             installation_peer,
             board_session: None,
             owner_human_id,
+            remote_create_default_approver,
             project_admission,
             subscription_delivery,
             provider_store,

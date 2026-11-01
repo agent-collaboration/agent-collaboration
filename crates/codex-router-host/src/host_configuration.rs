@@ -76,6 +76,7 @@ pub fn router_fleet_enrollment_file(root: &Path) -> PathBuf {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HostConfig {
     owner_human_id: Option<message_board::HumanId>,
+    remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     collaboration_directory: Option<PathBuf>,
     collaboration_codex_home: Option<PathBuf>,
     collaboration_peer_registry_directory: Option<PathBuf>,
@@ -113,6 +114,7 @@ impl HostConfig {
     pub fn new(inputs: HostConfigInputs) -> Self {
         Self {
             owner_human_id: None,
+            remote_create_default_approver: None,
             collaboration_directory: None,
             collaboration_codex_home: None,
             collaboration_peer_registry_directory: None,
@@ -137,6 +139,19 @@ impl HostConfig {
     #[must_use]
     pub fn owner_human_id(&self) -> Option<&message_board::HumanId> {
         self.owner_human_id.as_ref()
+    }
+    /// Interim target Chief of Staff, removed when routed approvals land.
+    #[must_use]
+    pub fn with_remote_create_default_approver(
+        mut self,
+        approver: collaboration_protocol::SessionRef,
+    ) -> Self {
+        self.remote_create_default_approver = Some(approver);
+        self
+    }
+    #[must_use]
+    pub fn remote_create_default_approver(&self) -> Option<&collaboration_protocol::SessionRef> {
+        self.remote_create_default_approver.as_ref()
     }
     #[must_use]
     pub fn with_external_provider_startup(
