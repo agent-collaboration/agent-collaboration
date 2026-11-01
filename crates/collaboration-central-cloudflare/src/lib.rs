@@ -29,10 +29,37 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "conformance")]
+    let capture = http_body::capture(&request);
+    let response = handle_request(
+        request,
+        env,
+        #[cfg(feature = "conformance")]
+        capture.as_ref(),
+    )
+    .await;
+    #[cfg(feature = "conformance")]
+    if let Some(capture) = capture {
+        capture.record_response();
+    }
+    response
+}
+
+async fn handle_request(
+    request: Request,
+    env: Env,
+    #[cfg(feature = "conformance")] capture: Option<&collaboration_central_core::BodyOrderCapture>,
+) -> Result<Response> {
     let labels = access_verification::InvocationLabels::for_request(&request)?;
     let request: worker::HttpRequest = request.try_into()?;
     let (parts, body) = request.into_parts();
-    let body = match http_body::complete(body).await? {
+    let body = match http_body::complete(
+        body,
+        #[cfg(feature = "conformance")]
+        capture,
+    )
+    .await?
+    {
         http_body::BodyCompletion::Complete(body) => body,
         http_body::BodyCompletion::OverLimit => return http_body::over_limit(),
     };

@@ -13,6 +13,9 @@ use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
     deny_unknown_fields
 )]
 enum Command {
+    BodyOrder {
+        command: collaboration_central_core::BodyOrderCommand,
+    },
     Origins {
         service: message_board::ServiceId,
     },
@@ -67,11 +70,12 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
         return Response::error("owner required", 401);
     }
     let command: Command = request.json().await?;
-    forward_command(command, env).await
+    dispatch_command(command, env).await
 }
 
-async fn forward_command(command: Command, env: Env) -> Result<Response> {
+async fn dispatch_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
+        Command::BodyOrder { command } => return crate::http_body::control(command).await,
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
             service,
@@ -171,7 +175,7 @@ pub(crate) async fn forward_state(mut request: Request, env: Env) -> Result<Resp
         return Response::error("owner required", 401);
     }
     let input: collaboration_central_core::ForwardStateRequest = request.json().await?;
-    forward_command(
+    dispatch_command(
         Command::ForwardState {
             service: input.service,
         },
