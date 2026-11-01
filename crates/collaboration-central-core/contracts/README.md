@@ -40,7 +40,13 @@ The directory's `HttpsUrl` and `ResourceUri` preserve bytes and enforce one
 bounded lexical pattern, shared with their schemas. HTTP is permitted only for
 loopback hosts; queries, fragments and user information are refused. Percent
 escapes are retained, with exactly two hexadecimal digits after each `%`.
-Ports may contain leading zeroes; their numeric value is 1–65535.
+Ports have no leading zeros; their numeric value is 1–65535.
+
+Production Rust uses pinned regex 1.12.4 with whole-input anchors and explicit
+ASCII/email lookahead checks. The schema retains its JavaScript expression;
+Rust derives the non-lookaround body from that same expression. No backtracking
+engine is a normal dependency of the core. The generated three-judge probe
+checks equivalence rather than assuming the engines accept the same syntax.
 
 `VerifiedEmail` deliberately publishes its accepted input language rather than
 only its canonical output. Its pattern includes the verbatim email expression
