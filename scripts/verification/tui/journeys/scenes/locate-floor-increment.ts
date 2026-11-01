@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { isMain, reportCliFailure } from '../../cli/cli-arguments.ts';
-import { findDialog } from './grid-scene-matcher.ts';
 import { cellText, createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
+import { findDialog } from './grid-scene-matcher.ts';
 
 interface ControlCell {
 	readonly column: number;
