@@ -57,6 +57,7 @@ mod automation_pending_mutation;
 mod automation_record_header;
 mod automation_request_decode;
 mod automation_revision_store;
+mod automation_schedule_package_import;
 mod automation_schedule_store;
 mod automation_schedule_validation;
 mod automation_store_error;
