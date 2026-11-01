@@ -18,6 +18,7 @@ pub enum AutomationCall {
     ScheduleCreate(crate::ScheduleCreateRequest),
     ScheduleUpdate(crate::ScheduleUpdateRequest),
     ScheduleBindPrepared(crate::ScheduleBindPreparedRequest),
+    SchedulePackageImport(crate::SchedulePackageImportRequest),
     ScheduleShow(crate::ScheduleShowRequest),
     ScheduleEnable(crate::ScheduleEnableRequest),
     ScheduleDisable(crate::ScheduleEnableRequest),

@@ -13,7 +13,9 @@ use crate::{
     },
     generated_automation_catalog as queries,
 };
-use collaboration_protocol::{AutomationId, AutomationKind, ChangeId, FiringId, GridTime};
+use collaboration_protocol::{
+    AutomationId, AutomationKind, ChangeId, FiringId, GridTime, InstructionId, ScheduleId,
+};
 use durable_steps::storage::TransactionScope;
 use serde::Serialize;
 use sqlx_core::{
@@ -231,6 +233,57 @@ where
         return Err(AutomationStoreError::InvalidRecord("automation_id"));
     }
     Ok(record)
+}
+
+pub(crate) async fn referencing_schedules<Scope: TransactionScope>(
+    scope: &mut Scope,
+    instruction_id: &InstructionId,
+) -> AutomationStoreResult<Vec<ScheduleId>>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let mut references = Vec::new();
+    for row in queries::list_schedule_instruction_references(scope).await? {
+        let id: ScheduleId = required(row.automation_id, "automation_id")?
+            .try_into()
+            .map_err(|_| AutomationStoreError::InvalidRecord("automation_id"))?;
+        let raw: serde_json::Value =
+            serde_json::from_str(&required(row.definition_json, "definition_json")?)
+                .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?;
+        let referenced: InstructionId = serde_json::from_value(
+            raw.pointer("/value/definition/instructionId")
+                .cloned()
+                .ok_or(AutomationStoreError::InvalidRecord("definition_json"))?,
+        )
+        .map_err(|_| AutomationStoreError::InvalidRecord("instruction_id"))?;
+        if referenced == *instruction_id {
+            references.push(id);
+        }
+    }
+    Ok(references)
+}
+
+pub(crate) async fn update_imported_schedule_header<Scope: TransactionScope>(
+    scope: &mut Scope,
+    record: &AutomationRecord,
+) -> AutomationStoreResult<()>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Encode<'value, Scope::Database>,
+{
+    let header = record.header.columns()?;
+    queries::update_schedule_import_header(
+        scope,
+        header.anchor_at_ms.to_string(),
+        header.imported_continuity_json,
+        record.id.as_str().into(),
+    )
+    .await?;
+    Ok(())
 }
 
 pub(crate) async fn insert<Scope: TransactionScope>(

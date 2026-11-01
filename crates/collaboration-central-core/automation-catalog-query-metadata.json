@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-catalog-queries.json": "13ee8975159dc494eceb70b2e90e8b1b2ff6b5a3253844a124d03e29a5ca4ad5",
+    "automation-catalog-queries.json": "b28138c98c07935b6aa8f208eb0d9c348adeff851e5c7fee28f47ddf6c1539bc",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -70,12 +70,14 @@
     "sql/automations/insert_automation_timing.sql": "208e47207b09d8036866709bf445305c921e2c3fc88aff4f7356180970bf8c18",
     "sql/automations/list_automation_deadlines.sql": "90e3a0f97ae89fc34e68013d92fa4fa212e144efd9f4a4383ba55866723fa28d",
     "sql/automations/list_automations.sql": "a2b901a99862581e15d5412bd63ea6d91dc557db614c4d38081ece435e06db75",
+    "sql/automations/list_schedule_instruction_references.sql": "083cddd7d2ff406a803a0c53b96709db88269281be57679fcdc2b2bae9b47caf",
     "sql/automations/read_automation.sql": "8916925e47c1c1c761899b91d8a10cdc5813141ebffea094b3ca701cabd692ed",
     "sql/automations/update_automation.sql": "62b8543bb274d80ee39cffa0468430214d9ad609124032287bfafc9ccfba6fe0",
     "sql/automations/update_automation_deadline.sql": "17772c6ed6767af9ca6da19f087c18130121d4addbe48b66116c8a68869f42fc",
-    "src/generated_automation_catalog.rs": "410a5cce177de1b048ba76f46a5e9b1faf7bc85520c81ebcdf2266a9e98aefe5"
+    "sql/automations/update_schedule_import_header.sql": "96e656606c002fc645f5db82a819bdf807a497e31cc450a5ccb22f659d1c157b",
+    "src/generated_automation_catalog.rs": "5dce5a9a5ee721d428043c4b566e77c16faa76fae27105063f2b5f94de14db73"
   },
-  "queries_digest": "ed98f0e8ce6bf9f909a2bdaf72777164f231c52aaa1ffea4f4ee5a6121b1e0f6",
+  "queries_digest": "1406d650bb62809465ae57c058c0c255562f8962fd63d258dde25dd1030f9bc0",
   "queries": [
     {
       "name": "read_automation",
@@ -610,6 +612,31 @@
           "type_source": "cast"
         }
       ]
+    },
+    {
+      "name": "list_schedule_instruction_references",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "automation_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "definition_json",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "update_schedule_import_header",
+      "bind_slots": 3,
+      "columns": []
     }
   ]
 }

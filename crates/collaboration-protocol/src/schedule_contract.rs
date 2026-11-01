@@ -82,7 +82,9 @@ pub struct ScheduleUpdateRequest {
     pub definition: ScheduleDefinition,
 }
 
-fn central_schedule_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+pub(crate) fn central_schedule_schema(
+    generator: &mut schemars::SchemaGenerator,
+) -> schemars::Schema {
     schemars::json_schema!({"allOf":[generator.subschema_for::<ScheduleDefinition>()],
         "properties":{"timing":crate::automation_timing_contract::central_timing_schema(generator)}})
 }

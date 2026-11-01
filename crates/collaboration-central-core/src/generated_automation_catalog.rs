@@ -308,3 +308,59 @@ where
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredScheduleInstructionReference {
+    pub automation_id: Option<String>,
+    pub definition_json: Option<String>,
+}
+pub(crate) fn list_schedule_instruction_references<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredScheduleInstructionReference>, sqlx_core::Error>>
++ Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/list_schedule_instruction_references.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredScheduleInstructionReference {
+                    automation_id: row.try_get("automation_id")?,
+                    definition_json: row.try_get("definition_json")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn update_schedule_import_header<S>(
+    scope: &mut S,
+    anchor_at_ms: String,
+    imported_continuity_json: Option<String>,
+    automation_id: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/update_schedule_import_header.sql"
+        )))
+        .bind(anchor_at_ms)
+        .bind(imported_continuity_json)
+        .bind(automation_id);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}

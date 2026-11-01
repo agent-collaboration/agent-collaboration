@@ -322,7 +322,10 @@ pub use schedule_contract::{
     ScheduleEnableRequest, ScheduleShowRequest, ScheduleSnapshot, ScheduleUpdateRequest,
 };
 pub use schedule_failure::ScheduleFailureDetails;
-pub use schedule_package_contract::{ScheduleExportResult, ScheduleImportRequest};
+pub use schedule_package_contract::{
+    ScheduleExportResult, ScheduleImportRequest, SchedulePackage, SchedulePackageContinuity,
+    SchedulePackageImportRequest, SchedulePackageInstruction,
+};
 mod schedule_failure;
 pub use agent_automation::{ChangeId, RunId, ScheduleId};
 pub use schedule_failure::{
