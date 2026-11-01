@@ -1,27 +1,18 @@
 //! Immutable revision pages are scoped to their instruction, never used to choose its head.
 use crate::{
     automation_content_store,
+    automation_list_cursor::{AutomationListCursor, invalid_cursor},
     automation_store_error::{AutomationStoreError, AutomationStoreResult, row_id, timestamp},
     generated_automation_instruction as queries,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_protocol::{
-    AutomationAnswer, AutomationPage, AutomationRefusal, AutomationRequestConstraint, ContentId,
-    InstructionId, RevisionListRequest, RevisionRecord,
+    AutomationAnswer, AutomationPage, AutomationRefusal, RevisionListRequest, RevisionRecord,
 };
 use durable_steps::storage::TransactionScope;
-use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RevisionCursor {
-    instruction_id: InstructionId,
-    after_content_id: ContentId,
-}
 
 pub(crate) async fn list<Scope: TransactionScope>(
     scope: &mut Scope,
@@ -36,7 +27,13 @@ where
     let after = request
         .cursor
         .as_deref()
-        .map(|cursor| decode_cursor(cursor, &request.instruction_id))
+        .map(|cursor| match AutomationListCursor::decode(cursor)? {
+            AutomationListCursor::Revisions {
+                instruction_id,
+                after,
+            } if instruction_id == request.instruction_id => Ok(after),
+            _ => Err(invalid_cursor()),
+        })
         .transpose()?;
     if !queries::instruction_document_exists(scope, request.instruction_id.as_str().into()).await? {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
@@ -56,16 +53,11 @@ where
         let last = rows
             .last()
             .ok_or(AutomationStoreError::InvalidRecord("revision_page"))?;
-        let cursor = RevisionCursor {
+        let cursor = AutomationListCursor::Revisions {
             instruction_id: request.instruction_id.clone(),
-            after_content_id: last.reference.content_id.clone(),
+            after: last.reference.content_id.clone(),
         };
-        Some(
-            URL_SAFE_NO_PAD.encode(
-                serde_json::to_vec(&cursor)
-                    .map_err(|_| AutomationStoreError::InvalidRecord("revision_cursor"))?,
-            ),
-        )
+        Some(cursor.encode()?)
     } else {
         None
     };
@@ -85,17 +77,4 @@ where
         records,
         next_cursor,
     }))
-}
-
-fn decode_cursor(cursor: &str, instruction_id: &InstructionId) -> AutomationStoreResult<ContentId> {
-    let invalid = || AutomationStoreError::InvalidRequest {
-        field: "cursor",
-        reason: AutomationRequestConstraint::InvalidCursor,
-    };
-    let bytes = URL_SAFE_NO_PAD.decode(cursor).map_err(|_| invalid())?;
-    let decoded: RevisionCursor = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if decoded.instruction_id != *instruction_id {
-        return Err(invalid());
-    }
-    Ok(decoded.after_content_id)
 }

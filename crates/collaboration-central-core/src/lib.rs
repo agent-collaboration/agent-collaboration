@@ -52,6 +52,7 @@ mod automation_entry_capture;
 mod automation_fault_projection;
 mod automation_firing_store;
 mod automation_instruction_store;
+mod automation_list_cursor;
 mod automation_operation_store;
 mod automation_pending_mutation;
 mod automation_record_header;

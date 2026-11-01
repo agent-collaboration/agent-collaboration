@@ -1,5 +1,6 @@
 //! Inspection reads the admitted content identity and central outcome without local IDs.
 use crate::{
+    automation_list_cursor::{AutomationListCursor, invalid_cursor},
     automation_store_error::{
         AutomationStoreError, AutomationStoreResult, required, timestamp_millis,
     },
@@ -171,16 +172,17 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let invalid_cursor = || AutomationStoreError::InvalidRequest {
-        field: "cursor",
-        reason: collaboration_protocol::AutomationRequestConstraint::InvalidCursor,
-    };
     let after = request
         .cursor
-        .as_ref()
-        .map(|value| FiringId::try_from(value.clone()))
-        .transpose()
-        .map_err(|_| invalid_cursor())?;
+        .as_deref()
+        .map(|cursor| match AutomationListCursor::decode(cursor)? {
+            AutomationListCursor::Firings {
+                automation_id,
+                after,
+            } if automation_id == request.automation_id => Ok(after),
+            _ => Err(invalid_cursor()),
+        })
+        .transpose()?;
     if let Some(id) = &after {
         let snapshot = read(scope, id).await?.ok_or_else(invalid_cursor)?;
         if snapshot.automation_id != request.automation_id {
@@ -209,12 +211,15 @@ where
     }
     let next_cursor = if more {
         Some(
-            records
-                .last()
-                .ok_or(AutomationStoreError::InvalidRecord("firing.page"))?
-                .firing_id
-                .as_str()
-                .into(),
+            AutomationListCursor::Firings {
+                automation_id: request.automation_id.clone(),
+                after: records
+                    .last()
+                    .ok_or(AutomationStoreError::InvalidRecord("firing.page"))?
+                    .firing_id
+                    .clone(),
+            }
+            .encode()?,
         )
     } else {
         None

@@ -1,6 +1,7 @@
 //! An instruction's explicit head selects an immutable content revision.
 use crate::{
     automation_content_store,
+    automation_list_cursor::{AutomationListCursor, invalid_cursor},
     automation_store_error::{
         AutomationStoreError, AutomationStoreResult, required, row_id, timestamp, timestamp_millis,
     },
@@ -8,9 +9,8 @@ use crate::{
     generated_automation_instruction as queries,
 };
 use collaboration_protocol::{
-    AutomationAnswer, AutomationPage, AutomationPageRequest, AutomationRefusal,
-    AutomationRequestConstraint, ContentId, InstructionId, InstructionSnapshot, InstructionText,
-    InstructionUpdateParams,
+    AutomationAnswer, AutomationPage, AutomationPageRequest, AutomationRefusal, ContentId,
+    InstructionId, InstructionSnapshot, InstructionText, InstructionUpdateParams,
 };
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
@@ -174,13 +174,12 @@ where
 {
     let after = request
         .cursor
-        .as_ref()
-        .map(|cursor| InstructionId::try_from(cursor.clone()))
-        .transpose()
-        .map_err(|_| AutomationStoreError::InvalidRequest {
-            field: "cursor",
-            reason: AutomationRequestConstraint::InvalidCursor,
-        })?;
+        .as_deref()
+        .map(|cursor| match AutomationListCursor::decode(cursor)? {
+            AutomationListCursor::Instructions { after } => Ok(after),
+            _ => Err(invalid_cursor()),
+        })
+        .transpose()?;
     let limit = usize::try_from(u32::from(request.limit))
         .map_err(|_| AutomationStoreError::InvalidRecord("page_limit"))?;
     let rows = queries::list_instruction_documents(
@@ -196,12 +195,14 @@ where
     }
     let next_cursor = if more {
         Some(
-            records
-                .last()
-                .ok_or(AutomationStoreError::InvalidRecord("instruction_page"))?
-                .instruction_id
-                .as_str()
-                .into(),
+            AutomationListCursor::Instructions {
+                after: records
+                    .last()
+                    .ok_or(AutomationStoreError::InvalidRecord("instruction_page"))?
+                    .instruction_id
+                    .clone(),
+            }
+            .encode()?,
         )
     } else {
         None
