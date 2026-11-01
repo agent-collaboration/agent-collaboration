@@ -253,7 +253,7 @@ Each row: requirement and obligations, the seam it observes (Program Design trac
 - *Target and journey:* B on both screens at all six grids. Lasting.
 - *Reference:* R13 text; mocks 1, 2, q2 and q3.
 - *Passes when:*
-  - The picker's top row reads ≡ Menu F10, [+ New], [/ Filter…], [This folder | All], plus count and machine.
+  - The picker's top row reads ≡ Menu F10, [+ New], [/ Filter…], [This folder | All], plus count and machine. At every grid the count is on the row: in full at 120×36, compact (count only) where the row is narrow, and no button is dropped while the count's longer forms still fit.
   - The quota screen's top row reads ≡ Menu F10, [Details], [Filters: … ▾], [Pool], [Options], [Floor] when available, plus account count and clients.
   - Each menu lists exactly R13's items with their keys.
   - At narrow grids, buttons drop from the right, and every dropped action is still in the menu.
