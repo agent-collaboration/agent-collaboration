@@ -107,6 +107,8 @@ enum ObjectReplyFault {
     },
 }
 struct FaultState {
+    #[cfg(debug_assertions)]
+    storage_failures_remaining: u8,
     clock: Option<RegistryTime>,
     small_mailbox_capacity: bool,
     storage: StorageFaultObservation,
@@ -118,6 +120,8 @@ struct FaultState {
 impl Default for FaultState {
     fn default() -> Self {
         Self {
+            #[cfg(debug_assertions)]
+            storage_failures_remaining: 0,
             clock: None,
             small_mailbox_capacity: false,
             storage: StorageFaultObservation::Idle,
@@ -157,6 +161,15 @@ impl RuntimeFaults {
         let mut state = self.state()?;
         match state.storage {
             StorageFaultObservation::Armed { after_writes } if written >= after_writes.get() => {
+                #[cfg(debug_assertions)]
+                if state.storage_failures_remaining > 1 {
+                    state.storage_failures_remaining -= 1;
+                    return Ok(true);
+                }
+                #[cfg(debug_assertions)]
+                {
+                    state.storage_failures_remaining = 0;
+                }
                 state.storage = StorageFaultObservation::Triggered {
                     after_writes,
                     written,
@@ -268,6 +281,8 @@ impl RuntimeFaults {
     pub fn observe(&self) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         let state = self.state()?;
         Ok(RuntimeFaultObservation {
+            #[cfg(debug_assertions)]
+            automation_clock: None,
             clock: match state.clock {
                 Some(now) => ClockObservation::Pinned { now },
                 None => ClockObservation::Wall,
@@ -315,11 +330,25 @@ impl RuntimeFaults {
         command: RuntimeControl,
     ) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         match command {
+            #[cfg(debug_assertions)]
+            RuntimeControl::AutomationStoreFailures {
+                after_writes,
+                failures,
+            } => {
+                let mut state = self.state()?;
+                state.storage_failures_remaining = failures.get();
+                state.storage = StorageFaultObservation::Armed { after_writes };
+            }
             // Startup and live controls select the same fixed quota at the platform owner.
             RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
             RuntimeControl::CopyFull { after_writes } => {
-                self.state()?.storage = StorageFaultObservation::Armed { after_writes };
+                let mut state = self.state()?;
+                #[cfg(debug_assertions)]
+                {
+                    state.storage_failures_remaining = 1;
+                }
+                state.storage = StorageFaultObservation::Armed { after_writes };
             }
             RuntimeControl::DropNextAnswer { frame } => {
                 let mut state = self.state()?;
@@ -401,6 +430,8 @@ impl RuntimeFaults {
                 observed.wait().await?;
             }
             RuntimeControl::Observe => {}
+            #[cfg(debug_assertions)]
+            RuntimeControl::AutomationClock(_) => return Err(RuntimeControlFailure::NotArmed),
         }
         self.observe()
     }

@@ -261,7 +261,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
         let request = serde_json::to_value(request).map_err(encode_refusal)?;
         match &self.caller {
             SharedTaskCaller::Fleet(caller) => {
-                use crate::machine_notice_delivery::DeliverMachineNotice;
+                use crate::machine_notice_calls::DeliverMachineNotice;
                 if Call::KIND != DeliverMachineNotice::KIND {
                     return Err(no_route());
                 }
@@ -275,9 +275,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 )
             }
             SharedTaskCaller::Mailbox(caller) => {
-                if Call::KIND == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
-                    let target: crate::machine_notice_delivery::DeliverMachineNotice =
-                        decode(target)?;
+                if Call::KIND == crate::machine_notice_calls::DeliverMachineNotice::KIND {
+                    let target: crate::machine_notice_calls::DeliverMachineNotice = decode(target)?;
                     let notice: board_sync_protocol::BoardNotice = decode(request)?;
                     if caller.address() != ObjectAddress::Mailbox(target.installation.clone())
                         || !matches!(notice, board_sync_protocol::BoardNotice::MailWaiting { .. })
@@ -287,7 +286,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     return encode_shared_call::<
                         MailboxKind,
                         DeliveryKind,
-                        crate::machine_notice_delivery::DeliverMachineNotice,
+                        crate::machine_notice_calls::DeliverMachineNotice,
                     >(
                         caller,
                         target.installation.clone(),
@@ -354,9 +353,9 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     };
                 }
                 match Call::KIND {
-                    crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
-                        let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
-                        encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
+                    crate::machine_notice_calls::DeliverMachineNotice::KIND => {
+                        let target: crate::machine_notice_calls::DeliverMachineNotice = decode(target)?;
+                        encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_calls::DeliverMachineNotice>(
                             caller, target.installation.clone(), target, decode(request)?, identity,
                         )
                     }

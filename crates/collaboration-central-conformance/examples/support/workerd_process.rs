@@ -30,7 +30,16 @@ impl WorkerdProcess {
         settings: &WorkerdSettings,
         relay: &str,
     ) -> ConformanceResult<Self> {
-        let mut child = Command::new(&settings.node)
+        Self::start_configured(settings, relay, None).await
+    }
+    /// An optional debug adapter is a separate module in the local harness.
+    pub async fn start_configured(
+        settings: &WorkerdSettings,
+        relay: &str,
+        clock_bundle: Option<&std::path::Path>,
+    ) -> ConformanceResult<Self> {
+        let mut command = Command::new(&settings.node);
+        command
             .arg("scripts/tooling/run-central-workerd.mjs")
             .arg(&settings.miniflare)
             .arg(&settings.persistence)
@@ -38,7 +47,11 @@ impl WorkerdProcess {
             .arg(&settings.jwks_url)
             .arg(serde_json::to_string(&settings.holder_answer_timeout)?)
             .arg(serde_json::to_string(&settings.copy_ack_wait)?)
-            .arg(relay)
+            .arg(relay);
+        if let Some(bundle) = clock_bundle {
+            command.arg(bundle);
+        }
+        let mut child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .kill_on_drop(true)

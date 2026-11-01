@@ -1,0 +1,1 @@
+UPDATE automation_batches SET frozen_bytes=json_extract(?1,'$.frozenBytes'),digest=json_extract(?1,'$.digest') WHERE batch_id=json_extract(?1,'$.batchId') AND batch_id IN (SELECT batch_id FROM automation_firings WHERE automation_id=json_extract(?1,'$.automationId'));

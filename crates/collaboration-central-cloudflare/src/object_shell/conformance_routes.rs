@@ -13,6 +13,41 @@ impl ShellActor {
     ) -> Result<Option<Response>> {
         if request.path() == crate::composed_control::OBJECT_PATH {
             let command: collaboration_central_conformance::RuntimeControl = request.json().await?;
+            #[cfg(debug_assertions)]
+            if let collaboration_central_conformance::RuntimeControl::AutomationClock(control) =
+                &command
+            {
+                use collaboration_central_conformance::AutomationClockControl;
+                let now = match control {
+                    AutomationClockControl::Start { now } => self.faults.clock().unwrap_or(*now),
+                    AutomationClockControl::Advance { now } => {
+                        if self
+                            .faults
+                            .clock()
+                            .is_some_and(|previous| now.0 < previous.0)
+                        {
+                            return Err(error("verification clock cannot move backwards"));
+                        }
+                        *now
+                    }
+                    AutomationClockControl::Observe
+                    | AutomationClockControl::InvokeAlarm
+                    | AutomationClockControl::RemoveAlarm => self
+                        .faults
+                        .clock()
+                        .ok_or_else(|| error("verification clock not configured"))?,
+                };
+                self.state
+                    .storage()
+                    .put(crate::composed_control::CLOCK_KEY, now)
+                    .await?;
+                self.faults.restore_clock(Some(now)).map_err(error)?;
+                let mut response = crate::composed_control::observation(self.faults.observe())?;
+                response
+                    .headers_mut()
+                    .set("x-central-debug-automation-clock", "v1")?;
+                return Ok(Some(response));
+            }
             if matches!(
                 command,
                 collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity

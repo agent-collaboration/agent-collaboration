@@ -1,0 +1,1 @@
+UPDATE automation_firings SET revision=json_extract(?1,'$.revision'),content_id=json_extract(?1,'$.content.contentId'),pending_entry_json=?1 WHERE firing_id=json_extract(?1,'$.firingId') AND state='pending' AND batch_id IS NULL;

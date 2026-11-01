@@ -1,0 +1,45 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_capability.rs",
+  "metadata": "automation-capability-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_work_capability",
+      "sql": "sql/automations/read_work_capability.sql",
+      "row": "StoredWorkCapability",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_work_capability",
+      "sql": "sql/automations/write_work_capability.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "protocols_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "observed_at_ms",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

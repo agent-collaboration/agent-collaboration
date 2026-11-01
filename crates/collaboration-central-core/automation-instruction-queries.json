@@ -1,0 +1,104 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_instruction.rs",
+  "metadata": "automation-instruction-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_instruction_document",
+      "sql": "sql/automations/read_instruction_document.sql",
+      "row": "StoredInstructionDocument",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "instruction_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_instruction_document",
+      "sql": "sql/automations/insert_instruction_document.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "instruction_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "current_content_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at_ms",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "move_instruction_head",
+      "sql": "sql/automations/move_instruction_head.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "content_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "instruction_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_instruction_documents",
+      "sql": "sql/automations/list_instruction_documents.sql",
+      "row": "StoredInstructionDocument",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_instruction_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "instruction_document_exists",
+      "sql": "sql/automations/instruction_document_exists.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": [
+        {
+          "name": "instruction_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

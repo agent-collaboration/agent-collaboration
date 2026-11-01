@@ -1,0 +1,1 @@
+SELECT c.content_id FROM content_revisions c WHERE c.content_id=? AND EXISTS(SELECT 1 FROM automation_firings f JOIN automation_batches b USING(batch_id) WHERE f.content_id=c.content_id AND b.service_id=?);

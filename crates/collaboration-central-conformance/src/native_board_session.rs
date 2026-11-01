@@ -12,10 +12,22 @@ impl NativeBoardSession {
         &mut self,
         request: board_sync_protocol::BoardConsumerRequest,
     ) -> ConformanceResult<board_sync_protocol::BoardConsumerAnswer> {
+        match self
+            .operation(fleet_sync_protocol::OperationRequest::Consumer(request))
+            .await?
+        {
+            fleet_sync_protocol::OperationAnswer::Consumer(answer) => Ok(answer),
+            _ => Err("native board request returned another answer family".into()),
+        }
+    }
+    pub(crate) async fn operation(
+        &mut self,
+        request: fleet_sync_protocol::OperationRequest<board_sync_protocol::BoardConsumerProtocol>,
+    ) -> ConformanceResult<
+        fleet_sync_protocol::OperationAnswer<board_sync_protocol::BoardConsumerProtocol>,
+    > {
         use board_sync_protocol::BoardConsumerProtocol;
-        use fleet_sync_protocol::{
-            ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame,
-        };
+        use fleet_sync_protocol::{ClientFrame, FrameId, ServerFrame};
         use futures_util::{SinkExt, StreamExt};
         let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
         self.0
@@ -23,7 +35,7 @@ impl NativeBoardSession {
             .send(reqwest_websocket::Message::Binary(
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
                     frame,
-                    body: OperationRequest::Consumer(request),
+                    body: request,
                 })?
                 .into(),
             ))
@@ -41,8 +53,8 @@ impl NativeBoardSession {
             match serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(&bytes)? {
                 ServerFrame::Answer {
                     frame: actual,
-                    body: OperationAnswer::Consumer(answer),
-                } if actual == frame => return Ok(answer),
+                    body,
+                } if actual == frame => return Ok(body),
                 ServerFrame::Notice { .. } => {}
                 _ => return Err("unexpected native board frame or correlation".into()),
             }

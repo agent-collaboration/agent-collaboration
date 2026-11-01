@@ -1,0 +1,1 @@
+INSERT INTO machine_work_capabilities(service_id,protocols_json,observed_at_ms) VALUES (?,?,CAST(? AS INTEGER)) ON CONFLICT(service_id) DO UPDATE SET protocols_json=excluded.protocols_json,observed_at_ms=excluded.observed_at_ms;

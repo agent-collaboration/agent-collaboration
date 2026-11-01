@@ -1,0 +1,1 @@
+SELECT automation_id,occupying_firing_id,waiting_firing_id,occupying_external_run FROM automation_timing WHERE automation_id=?;

@@ -1,0 +1,118 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_fixture.rs",
+  "metadata": "automation-fixture-query-metadata.json",
+  "queries": [
+    {
+      "name": "fixture_write_automation_definition",
+      "sql": "sql/automations/fixture_write_automation_definition.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "definition_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_read_automation",
+      "sql": "sql/automations/fixture_read_automation.sql",
+      "row": "StoredAutomationFixture",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_automation_content",
+      "sql": "sql/automations/fixture_write_automation_content.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_automation_outcome",
+      "sql": "sql/automations/fixture_write_automation_outcome.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_automation_batch",
+      "sql": "sql/automations/fixture_write_automation_batch.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_wake_expiry",
+      "sql": "sql/automations/fixture_write_wake_expiry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_insert_automation_import",
+      "sql": "sql/automations/fixture_insert_automation_import.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fixture_write_external_occupant",
+      "sql": "sql/automations/fixture_write_external_occupant.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "input",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

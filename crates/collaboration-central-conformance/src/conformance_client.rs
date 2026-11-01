@@ -15,6 +15,20 @@ pub struct ConformanceClient {
     access: AccessCredentials,
 }
 impl ConformanceClient {
+    #[cfg(debug_assertions)]
+    pub async fn automation_clock(
+        &self,
+        command: crate::AutomationClockControl,
+    ) -> ConformanceResult<crate::AutomationClockObservation> {
+        crate::composed_client::control(
+            self,
+            collaboration_central_core::ObjectAddress::Fleet,
+            crate::RuntimeControl::AutomationClock(command),
+        )
+        .await?
+        .automation_clock
+        .ok_or_else(|| "clock control omitted callback observation".into())
+    }
     pub fn new(base_url: &str) -> ConformanceResult<Self> {
         Ok(Self {
             client: reqwest::Client::builder()

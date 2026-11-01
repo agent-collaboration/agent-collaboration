@@ -1,0 +1,244 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_custody.rs",
+  "metadata": "automation-custody-query-metadata.json",
+  "queries": [
+    {
+      "name": "list_automation_batches",
+      "sql": "sql/automations/list_automation_batches.sql",
+      "row": "StoredCustodyBatch",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_automation_batch",
+      "sql": "sql/automations/read_automation_batch.sql",
+      "row": "StoredCustodyBatch",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "ack_automation_batch",
+      "sql": "sql/automations/ack_automation_batch.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "acked_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "receive_automation_firings",
+      "sql": "sql/automations/receive_automation_firings.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "authorized_automation_content",
+      "sql": "sql/automations/authorized_automation_content.sql",
+      "row": "AuthorizedContent",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "content_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_firing_owner",
+      "sql": "sql/automations/read_firing_owner.sql",
+      "row": "StoredFiringOwner",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_firing_report",
+      "sql": "sql/automations/write_firing_report.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "seq",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "outcome_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_custody_progress",
+      "sql": "sql/automations/read_custody_progress.sql",
+      "row": "StoredCustodyProgress",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_pending_entry",
+      "sql": "sql/automations/read_pending_entry.sql",
+      "row": "StoredPendingEntry",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "promote_automation_waiter",
+      "sql": "sql/automations/promote_automation_waiter.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "occupying_firing_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_automation_import_owner",
+      "sql": "sql/automations/read_automation_import_owner.sql",
+      "row": "StoredImportOwner",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_pending_entries",
+      "sql": "sql/automations/list_pending_entries.sql",
+      "row": "StoredPendingEntry",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "replace_pending_entry",
+      "sql": "sql/automations/replace_pending_entry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "entry_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "clear_cancelled_occupancy",
+      "sql": "sql/automations/clear_cancelled_occupancy.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "prune_acknowledged_batches",
+      "sql": "sql/automations/prune_acknowledged_batches.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "cutoff_ms",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

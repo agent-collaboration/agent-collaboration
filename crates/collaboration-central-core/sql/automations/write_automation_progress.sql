@@ -1,0 +1,1 @@
+UPDATE automation_timing SET next_due_ms=json_extract(?1,'$.next_due_ms'),admitted_through_ms=json_extract(?1,'$.admitted_through_ms'),occupying_firing_id=json_extract(?1,'$.occupying_firing_id'),waiting_firing_id=json_extract(?1,'$.waiting_firing_id'),occupying_external_run=json_extract(?1,'$.occupying_external_run') WHERE automation_id=json_extract(?1,'$.automation_id');

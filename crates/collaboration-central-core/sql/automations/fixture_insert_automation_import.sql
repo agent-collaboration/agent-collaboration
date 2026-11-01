@@ -1,0 +1,1 @@
+INSERT INTO automation_imports(import_id,service_id,automation_id,digest) VALUES(json_extract(?1,'$.importId'),json_extract(?1,'$.serviceId'),json_extract(?1,'$.automationId'),json_extract(?1,'$.digest'));

@@ -34,6 +34,20 @@ where
 {
     pub async fn execute(&self, command: StepControl) -> Result<StepControlReply, StoreError> {
         match command {
+            #[cfg(debug_assertions)]
+            StepControl::AutomationFixture {
+                automation_id,
+                definition_json,
+                mutation,
+            } => self
+                .driver
+                .run(crate::conformance_automation_fixture::AutomationFixture {
+                    id: automation_id,
+                    definition_json,
+                    mutation,
+                })
+                .await
+                .map(|(observation, _)| StepControlReply::AutomationFixture(observation)),
             StepControl::Initialize => {
                 self.initialize().await?;
                 Ok(StepControlReply::Initialized)
@@ -169,6 +183,12 @@ where
     deny_unknown_fields
 )]
 pub enum StepControl {
+    #[cfg(debug_assertions)]
+    AutomationFixture {
+        automation_id: collaboration_protocol::AutomationId,
+        definition_json: Option<String>,
+        mutation: Option<crate::AutomationFixtureMutation>,
+    },
     Initialize,
     Read {
         request_id: RequestId,
@@ -191,6 +211,8 @@ pub enum StepControl {
     deny_unknown_fields
 )]
 pub enum StepControlReply {
+    #[cfg(debug_assertions)]
+    AutomationFixture(serde_json::Value),
     Initialized,
     Read(Option<Box<RequestLedgerEntry>>),
     ClaimReservation(Option<crate::ClaimReservationState>),

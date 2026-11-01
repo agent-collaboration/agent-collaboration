@@ -1,0 +1,83 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_content.rs",
+  "metadata": "automation-content-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_content_revision",
+      "sql": "sql/automations/read_content_revision.sql",
+      "row": "StoredContentRevision",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "content_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_content_revision",
+      "sql": "sql/automations/insert_content_revision.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "content_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "owner_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "revision_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "recorded_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "text",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_content_revisions",
+      "sql": "sql/automations/list_content_revisions.sql",
+      "row": "StoredContentRevision",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "owner_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_content_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

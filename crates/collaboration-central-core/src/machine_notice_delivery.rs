@@ -2,34 +2,24 @@
 use crate::{
     CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
+    machine_notice_calls::DeliverMachineNotice,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardNotice};
 use durable_steps::{
-    AtomicStore, CallFailure, CallTarget, JournalScope, OperationContext, OperationFailure,
-    ReborrowScope, RequestKey, StoreError, Task,
+    AtomicStore, CallFailure, JournalScope, OperationContext, OperationFailure, ReborrowScope,
+    RequestKey, StoreError, Task,
     storage::{JournalStorage, OperationExecution, TransactionScope},
 };
 use runtime_primitives::Clock;
-use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
 use std::{marker::PhantomData, sync::Arc};
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct DeliverMachineNotice {
-    pub installation: message_board::ServiceId,
-}
-impl CallTarget for DeliverMachineNotice {
-    const KIND: &'static str = "central.machine-notice";
-    type Request = BoardNotice;
-    type Answer = ();
-}
 pub(crate) struct MachineNoticeTask<Host, Io>(pub PhantomData<fn() -> (Host, Io)>);
 impl<Host: ObjectHost, Io: PlatformIo> Task for MachineNoticeTask<Host, Io>
 where

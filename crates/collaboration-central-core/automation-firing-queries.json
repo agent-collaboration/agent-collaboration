@@ -1,0 +1,71 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_firing.rs",
+  "metadata": "automation-firing-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_automation_firing",
+      "sql": "sql/automations/read_automation_firing.sql",
+      "row": "StoredAutomationFiring",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "first_automation_firing",
+      "sql": "sql/automations/first_automation_firing.sql",
+      "row": "StoredAutomationFiring",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "automation_sent_firings",
+      "sql": "sql/automations/automation_sent_firings.sql",
+      "row": "StoredSentFiring",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_automation_firings",
+      "sql": "sql/automations/list_automation_firings.sql",
+      "row": "StoredAutomationFiring",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_firing_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

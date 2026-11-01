@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 import { z } from "zod";
-import { conformanceMarkers } from "./worker-bundle-markers.ts";
+import { automationClockMarkers, conformanceMarkers } from "./worker-bundle-markers.ts";
 import { retiredMarkers } from "./worker-retired-markers.ts";
 
 export function checkDeployTemplate(
@@ -82,6 +82,11 @@ export function checkWorkerBundle(
   if (failure !== undefined) return { status: 1, message: failure };
   if (mode === "production" && content.includes("_cf_test_directory_updates"))
     return { status: 1, message: "Worker production bundle contains the test-only Fleet receiver" };
+  if (mode === "production" && automationClockMarkers.some((marker) => content.includes(marker)))
+    return {
+      status: 1,
+      message: "Worker production bundle contains an automation verification control",
+    };
   if (content.includes("central depth measurement"))
     return { status: 1, message: "Worker bundle contains the temporary depth instrument" };
   if (retiredMarkers.some((marker) => content.includes(marker)))

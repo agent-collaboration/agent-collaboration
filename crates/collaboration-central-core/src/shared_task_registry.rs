@@ -60,13 +60,22 @@ where
 }
 
 /// Fleet registers one central notice workflow; inbound mutations only admit it.
-pub(crate) fn fleet_engine<Store: AtomicStore, Io: PlatformIo>(
+pub(crate) fn fleet_engine<Store: AtomicStore, Driver: Database, Io: PlatformIo>(
     store: Arc<Store>,
     host: Arc<CoreHost<Io>>,
-) -> Result<Engine<Store, CoreHost<Io>>, StoreError> {
+) -> Result<Engine<Store, CoreHost<Io>>, StoreError>
+where
+    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
+    Driver::Arguments: IntoArguments<Driver>,
+    for<'value> String: Type<Driver> + Encode<'value, Driver>,
+{
     let mut engine = Engine::new(store, host);
     engine.register(crate::machine_notice_outbox::FleetNoticeTask::<Store>(
         std::marker::PhantomData,
     ))?;
+    engine.register(crate::automation_batch_notifier::AutomationNoticeTask::<
+        Store,
+        Driver,
+    >(std::marker::PhantomData))?;
     Ok(engine)
 }

@@ -1,0 +1,223 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_admission.rs",
+  "metadata": "automation-admission-query-metadata.json",
+  "queries": [
+    {
+      "name": "insert_pending_firing",
+      "sql": "sql/automations/insert_pending_firing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "entry_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_automation_progress",
+      "sql": "sql/automations/write_automation_progress.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "progress_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "fold_automation_firing",
+      "sql": "sql/automations/fold_automation_firing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "through_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "record_automation_fault",
+      "sql": "sql/automations/record_automation_fault.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "fault_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "faulted_at_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "clear_automation_due",
+      "sql": "sql/automations/clear_automation_due.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "expire_automation_wake",
+      "sql": "sql/automations/expire_automation_wake.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "finish_automation_wake",
+      "sql": "sql/automations/finish_automation_wake.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "cancel_pending_firings",
+      "sql": "sql/automations/cancel_pending_firings.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_automation_batch",
+      "sql": "sql/automations/insert_automation_batch.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "frozen_bytes",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "freeze_automation_firing",
+      "sql": "sql/automations/freeze_automation_firing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "report_service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "firing_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "hold_automation_batch",
+      "sql": "sql/automations/hold_automation_batch.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "hold_automation_firings",
+      "sql": "sql/automations/hold_automation_firings.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "batch_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "end_faulted_wake",
+      "sql": "sql/automations/end_faulted_wake.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}
