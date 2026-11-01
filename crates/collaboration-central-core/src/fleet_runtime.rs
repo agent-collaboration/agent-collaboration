@@ -1,12 +1,17 @@
 //! The Fleet face owns central's nonreplicated application state.
 
+mod automation_calls;
+mod automation_catalog_step;
+mod automation_clock_step;
+
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
     ObjectRuntime, PlatformIo, caller_context::CallAuthority, fleet_effects_read::ReadFleetEffects,
     object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
-    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError, storage::TransactionScope,
+    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError,
+    storage::{JournalStorage, TransactionScope},
 };
 use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
@@ -56,7 +61,7 @@ where
         };
         self.prune_feed().await?;
         StepDriver::new(host.clone())
-            .run(crate::automation_clock_step::EvaluateAutomations {
+            .run(automation_clock_step::EvaluateAutomations {
                 now_ms: io.now().unix_millis(),
                 row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
             })
@@ -88,6 +93,9 @@ where
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet);
+        let automation_call = call
+            .as_ref()
+            .is_ok_and(|call| call.kind == crate::fleet_automation_calls::FleetAutomation::KIND);
         // Raw debug observations must not repair the very alarm being observed.
         // Normal requests and the existing journal fixture keep their postlude.
         #[cfg(all(feature = "conformance", debug_assertions))]
@@ -105,9 +113,30 @@ where
             Err(error) => Err(error),
         };
         if !fixture_only {
-            self.rearm().await.map_err(|_| CallFailure::AnswerLost)?;
+            let rearmed = if automation_call {
+                self.rearm().await
+            } else {
+                self.rearm_journal().await
+            };
+            rearmed.map_err(|_| CallFailure::AnswerLost)?;
         }
         answer
+    }
+    async fn rearm_journal(&self) -> Result<(), StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        // Unrelated Fleet calls restore their journal debt without scanning the
+        // Automation catalog. Both platform timers preserve an earlier wake;
+        // catalog calls, machine pulls and actual alarms restore that deadline.
+        let earliest = host
+            .store()
+            .transaction(|scope| Box::pin(async move { scope.earliest().await }))
+            .await?;
+        if let Some(at) = earliest {
+            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
+        }
+        Ok(())
     }
     async fn rearm(&self) -> Result<(), StoreError> {
         let ObjectWork::Fleet { host, .. } = &self.work else {

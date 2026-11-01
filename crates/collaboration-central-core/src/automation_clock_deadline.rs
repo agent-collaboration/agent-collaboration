@@ -1,4 +1,4 @@
-//! Every Fleet entry point uses the same durable Automation and journal minimum.
+//! Automation calls and Fleet alarms restore the durable Automation and journal minimum.
 use crate::{automation_store_error::timestamp_millis, generated_automation_catalog as queries};
 use durable_steps::{
     JournalScope, StoreError,
