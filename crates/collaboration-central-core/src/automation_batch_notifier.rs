@@ -10,7 +10,10 @@ use durable_steps::{
 };
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
-use sqlx_core::{arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode, encode::Encode, types::Type};
+use sqlx_core::{
+    arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
+    encode::Encode, types::Type,
+};
 use std::marker::PhantomData;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -54,9 +57,22 @@ where
         context
             .local(step("record_custody")?, move |scope| {
                 Box::pin(async move {
-                    if let Some(row) = crate::generated_automation_custody::read_automation_batch(scope, batch.as_str().into()).await.map_err(StoreError::backend)? {
-                        let decoded = crate::automation_batch_decode::decode(row, &installation).map_err(StoreError::backend)?;
-                        crate::machine_work_item_store::advance_batch_custody(scope, &decoded.batch, MachineWorkCustodyState::Held).await.map_err(StoreError::backend)?;
+                    if let Some(row) = crate::generated_automation_custody::read_automation_batch(
+                        scope,
+                        batch.as_str().into(),
+                    )
+                    .await
+                    .map_err(StoreError::backend)?
+                    {
+                        let decoded = crate::automation_batch_decode::decode(row, &installation)
+                            .map_err(StoreError::backend)?;
+                        crate::machine_work_item_store::advance_batch_custody(
+                            scope,
+                            &decoded.batch,
+                            MachineWorkCustodyState::Held,
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
                     }
                     queries::hold_automation_batch(scope, batch.as_str().into())
                         .await

@@ -9,7 +9,10 @@ use crate::{
 use collaboration_protocol::{AutomationBatch, BatchId, FiringEntry, WorkEntry};
 use durable_steps::{AtomicStore, JournalScope, RequestKey, StoreError, storage::TransactionScope};
 use runtime_primitives::SyncTime;
-use sqlx_core::{arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode, encode::Encode, types::Type};
+use sqlx_core::{
+    arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
+    encode::Encode, types::Type,
+};
 use std::collections::BTreeMap;
 
 pub(crate) async fn freeze<Store: AtomicStore, Driver: Database>(
@@ -50,41 +53,60 @@ where
                     .try_into()
                     .map_err(StoreError::backend)?,
             };
-            let bytes = serde_json::to_string(&batch).map_err(StoreError::backend)?;
-            let digest = text_digest(&bytes).map_err(StoreError::backend)?;
-            queries::insert_automation_batch(
+            publish_batch::<Store, Driver>(scope, &batch, now_ms).await?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn publish_batch<Store: AtomicStore, Driver: Database>(
+    scope: &mut Store::Scope<'_>,
+    batch: &AutomationBatch,
+    now_ms: i64,
+) -> Result<(), StoreError>
+where
+    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
+    Driver::Arguments: IntoArguments<Driver>,
+    for<'value> String: Type<Driver> + Encode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
+{
+    let machine = String::from(batch.service_id.clone());
+    let bytes = serde_json::to_string(batch).map_err(StoreError::backend)?;
+    let digest = text_digest(&bytes).map_err(StoreError::backend)?;
+    queries::insert_automation_batch(
+        scope,
+        batch.batch_id.as_str().into(),
+        machine.clone(),
+        bytes,
+        digest.as_str().into(),
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    for entry in batch.entries.entries() {
+        if let WorkEntry::Firing(entry) = entry {
+            queries::freeze_automation_firing(
                 scope,
-                batch_id.as_str().into(),
+                batch.batch_id.as_str().into(),
                 machine.clone(),
-                bytes,
-                digest.as_str().into(),
+                entry.firing_id.as_str().into(),
             )
             .await
             .map_err(StoreError::backend)?;
-            for entry in chunk {
-                queries::freeze_automation_firing(
-                    scope,
-                    batch_id.as_str().into(),
-                    machine.clone(),
-                    entry.firing_id.as_str().into(),
-                )
-                .await
-                .map_err(StoreError::backend)?;
-            }
-            let input = AutomationNoticeInput {
-                installation: machine.clone().try_into().map_err(StoreError::backend)?,
-                batch_id: batch_id.clone(),
-            };
-            let key = RequestKey::new(format!("automation-batch:{}", batch_id.as_str()))
-                .map_err(StoreError::backend)?;
-            scope
-                .admit::<AutomationNoticeTask<Store, Driver>>(&key, &input)
-                .await
-                .map_err(StoreError::backend)?;
-            scope
-                .ensure_wake(SyncTime::from_unix_millis(now_ms))
-                .await?;
         }
     }
+    let input = AutomationNoticeInput {
+        installation: machine.try_into().map_err(StoreError::backend)?,
+        batch_id: batch.batch_id.clone(),
+    };
+    let key = RequestKey::new(format!("automation-batch:{}", batch.batch_id.as_str()))
+        .map_err(StoreError::backend)?;
+    scope
+        .admit::<AutomationNoticeTask<Store, Driver>>(&key, &input)
+        .await
+        .map_err(StoreError::backend)?;
+    scope
+        .ensure_wake(SyncTime::from_unix_millis(now_ms))
+        .await?;
     Ok(())
 }

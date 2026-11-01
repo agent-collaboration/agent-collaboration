@@ -34,9 +34,21 @@ where
     // Validate every kind in the complete envelope before the first write.
     for item in request.reports() {
         match item {
-            WorkItemReport::Firing(report) => validate_firing_report(scope, installation, report).await?,
-            WorkItemReport::SessionCreate { work_item_id, create, .. } => {
-                crate::machine_work_item_reports::validate(scope, installation, work_item_id, create).await?;
+            WorkItemReport::Firing(report) => {
+                validate_firing_report(scope, installation, report).await?
+            }
+            WorkItemReport::SessionCreate {
+                work_item_id,
+                create,
+                ..
+            } => {
+                crate::machine_work_item_reports::validate(
+                    scope,
+                    installation,
+                    work_item_id,
+                    create,
+                )
+                .await?;
             }
         }
     }
@@ -45,12 +57,30 @@ where
     for item in request.reports() {
         let (subject, seq) = match item {
             WorkItemReport::Firing(report) => {
-                if let Some(entry) = apply_firing_report(scope, report).await? { ready.push(entry); }
-                (WorkReportSubject::Firing { firing_id: report.firing_id.clone() }, report.seq)
+                if let Some(entry) = apply_firing_report(scope, report).await? {
+                    ready.push(entry);
+                }
+                (
+                    WorkReportSubject::Firing {
+                        firing_id: report.firing_id.clone(),
+                    },
+                    report.seq,
+                )
             }
-            WorkItemReport::SessionCreate { work_item_id, seq, create, input } => {
-                crate::machine_work_item_reports::apply(scope, work_item_id, *seq, create, input).await?;
-                (WorkReportSubject::SessionCreate { work_item_id: work_item_id.clone() }, *seq)
+            WorkItemReport::SessionCreate {
+                work_item_id,
+                seq,
+                create,
+                input,
+            } => {
+                crate::machine_work_item_reports::apply(scope, work_item_id, *seq, create, input)
+                    .await?;
+                (
+                    WorkReportSubject::SessionCreate {
+                        work_item_id: work_item_id.clone(),
+                    },
+                    *seq,
+                )
             }
         };
         accepted.push(AcceptedWorkReport { subject, seq });
@@ -61,14 +91,19 @@ where
     }))
 }
 
-async fn validate_firing_report<Scope: TransactionScope>(scope: &mut Scope, installation: &ServiceId, report: &collaboration_protocol::FiringReport) -> AutomationStoreResult<()>
+async fn validate_firing_report<Scope: TransactionScope>(
+    scope: &mut Scope,
+    installation: &ServiceId,
+    report: &collaboration_protocol::FiringReport,
+) -> AutomationStoreResult<()>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-        let owner = queries::read_firing_owner(scope, report.firing_id.as_str().into())
+    let owner = queries::read_firing_owner(scope, report.firing_id.as_str().into())
         .await?
         .ok_or(AutomationStoreError::Refused(AutomationRefusal::NotFound))?;
     let service: ServiceId = owner
@@ -87,14 +122,18 @@ where
     Ok(())
 }
 
-async fn apply_firing_report<Scope: TransactionScope>(scope: &mut Scope, report: &collaboration_protocol::FiringReport) -> AutomationStoreResult<Option<collaboration_protocol::FiringEntry>>
+async fn apply_firing_report<Scope: TransactionScope>(
+    scope: &mut Scope,
+    report: &collaboration_protocol::FiringReport,
+) -> AutomationStoreResult<Option<collaboration_protocol::FiringEntry>>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-        // Re-read inside the transaction: one envelope may contain reordered
+    // Re-read inside the transaction: one envelope may contain reordered
     // reports for the same Firing, and each sees the preceding accepted seq.
     let current = automation_firing_store::read(scope, &report.firing_id)
         .await

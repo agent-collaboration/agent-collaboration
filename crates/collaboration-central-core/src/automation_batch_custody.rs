@@ -1,13 +1,12 @@
 //! A machine reads exactly its committed Batch bytes until its durable acknowledgement.
 use crate::{
     automation_batch_decode::decode,
-    machine_work_item_store,
     automation_store_error::{AutomationStoreError, AutomationStoreResult},
-    generated_automation_custody as queries,
+    generated_automation_custody as queries, machine_work_item_store,
 };
 use collaboration_protocol::{
-    AutomationAnswer, AutomationBatches, AutomationRefusal,
-    AutomationRequestConstraint, MachineWorkCustodyState, PullAutomationBatches,
+    AutomationAnswer, AutomationBatches, AutomationRefusal, AutomationRequestConstraint,
+    MachineWorkCustodyState, PullAutomationBatches,
 };
 use durable_steps::storage::TransactionScope;
 use message_board::ServiceId;
@@ -110,7 +109,12 @@ where
         queries::ack_automation_batch(scope, now_ms.to_string(), ack.batch_id.as_str().into())
             .await?;
         queries::receive_automation_firings(scope, ack.batch_id.as_str().into()).await?;
-        machine_work_item_store::advance_batch_custody(scope, batch, MachineWorkCustodyState::Received).await?;
+        machine_work_item_store::advance_batch_custody(
+            scope,
+            batch,
+            MachineWorkCustodyState::Received,
+        )
+        .await?;
     }
     Ok(AutomationAnswer::Acknowledged)
 }

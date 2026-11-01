@@ -3,6 +3,7 @@
 mod automation_calls;
 mod automation_catalog_step;
 mod automation_clock_step;
+mod remote_session_create;
 
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,

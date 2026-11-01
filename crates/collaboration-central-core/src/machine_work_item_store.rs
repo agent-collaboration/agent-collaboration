@@ -25,9 +25,16 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     let record = queries::read_machine_work_item(scope, id.as_str().into())
-        .await?.map(records::decode).transpose()?;
-    if record.as_ref().is_some_and(|record| record.entry.work_item_id != *id) {
-        return Err(AutomationStoreError::InvalidRecord("machine_work_items.work_item_id"));
+        .await?
+        .map(records::decode)
+        .transpose()?;
+    if record
+        .as_ref()
+        .is_some_and(|record| record.entry.work_item_id != *id)
+    {
+        return Err(AutomationStoreError::InvalidRecord(
+            "machine_work_items.work_item_id",
+        ));
     }
     Ok(record)
 }
@@ -43,9 +50,16 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     let record = queries::read_machine_work_operation(scope, id.as_str().into())
-        .await?.map(records::decode).transpose()?;
-    if record.as_ref().is_some_and(|record| record.entry.operation_id != *id) {
-        return Err(AutomationStoreError::InvalidRecord("machine_work_items.operation_id"));
+        .await?
+        .map(records::decode)
+        .transpose()?;
+    if record
+        .as_ref()
+        .is_some_and(|record| record.entry.operation_id != *id)
+    {
+        return Err(AutomationStoreError::InvalidRecord(
+            "machine_work_items.operation_id",
+        ));
     }
     Ok(record)
 }
@@ -70,8 +84,11 @@ where
         entry: &'entry SessionCreateEntry,
         request_digest: collaboration_mail_protocol::MailDigest,
     }
-    let encoded = serde_json::to_string(&Admission { entry, request_digest: digest })
-        .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.request_json"))?;
+    let encoded = serde_json::to_string(&Admission {
+        entry,
+        request_digest: digest,
+    })
+    .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.request_json"))?;
     queries::insert_machine_work_item(scope, encoded).await?;
     Ok(())
 }
@@ -85,8 +102,7 @@ where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
 {
-    let encoded = serde_json::to_string(result)
-        .map_err(durable_steps::StoreError::backend)?;
+    let encoded = serde_json::to_string(result).map_err(durable_steps::StoreError::backend)?;
     queries::write_machine_work_result(scope, encoded, id.as_str().into()).await?;
     Ok(())
 }
@@ -102,9 +118,13 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     for entry in batch.entries.entries() {
-        let WorkEntry::SessionCreate(entry) = entry else { continue };
+        let WorkEntry::SessionCreate(entry) = entry else {
+            continue;
+        };
         let invalid = || AutomationStoreError::InvalidRecord("batch.work_item");
-        let stored = read(scope, &entry.work_item_id).await?.ok_or_else(invalid)?;
+        let stored = read(scope, &entry.work_item_id)
+            .await?
+            .ok_or_else(invalid)?;
         if stored.target.as_str() != String::from(batch.service_id.clone())
             || serde_json::to_vec(&stored.entry).map_err(|_| invalid())?
                 != serde_json::to_vec(entry).map_err(|_| invalid())?
@@ -128,11 +148,22 @@ where
 {
     validate_batch(scope, batch).await?;
     for entry in batch.entries.entries() {
-        let WorkEntry::SessionCreate(entry) = entry else { continue };
+        let WorkEntry::SessionCreate(entry) = entry else {
+            continue;
+        };
         match state {
-            MachineWorkCustodyState::Held => queries::hold_machine_work_item(scope, entry.work_item_id.as_str().into()).await?,
-            MachineWorkCustodyState::Received => queries::receive_machine_work_item(scope, entry.work_item_id.as_str().into()).await?,
-            MachineWorkCustodyState::Pending => return Err(AutomationStoreError::InvalidRecord("machine_work_items.state")),
+            MachineWorkCustodyState::Held => {
+                queries::hold_machine_work_item(scope, entry.work_item_id.as_str().into()).await?
+            }
+            MachineWorkCustodyState::Received => {
+                queries::receive_machine_work_item(scope, entry.work_item_id.as_str().into())
+                    .await?
+            }
+            MachineWorkCustodyState::Pending => {
+                return Err(AutomationStoreError::InvalidRecord(
+                    "machine_work_items.state",
+                ));
+            }
         }
     }
     Ok(())

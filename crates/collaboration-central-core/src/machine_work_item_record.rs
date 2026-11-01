@@ -7,7 +7,7 @@ use crate::{
 use collaboration_mail_protocol::MailDigest;
 use collaboration_protocol::{
     FirstInputState, MachineWorkCustodyState, ProviderIdentity, RemoteSessionCreateRequest,
-    SessionCreateEntry, SessionCreateState, WorkReportSequence,
+    RemoteSessionCreateSnapshot, SessionCreateEntry, SessionCreateState, WorkReportSequence,
 };
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,27 @@ pub(crate) struct MachineWorkItemRecord {
     pub target: ServiceId,
     pub state: MachineWorkCustodyState,
     pub result: Option<MachineWorkResult>,
+}
+
+impl MachineWorkItemRecord {
+    pub fn snapshot(&self) -> RemoteSessionCreateSnapshot {
+        RemoteSessionCreateSnapshot {
+            work_item_id: self.entry.work_item_id.clone(),
+            operation_id: self.entry.operation_id.clone(),
+            state: self.state,
+            create: self.result.as_ref().map(|result| result.create.clone()),
+            input: match &self.result {
+                Some(result) => Some(result.input.clone()),
+                None => self
+                    .entry
+                    .request
+                    .first_input
+                    .is_none()
+                    .then_some(FirstInputState::None),
+            },
+            report_seq: self.result.as_ref().map(|result| result.seq),
+        }
+    }
 }
 
 pub(crate) fn request_digest(
@@ -63,16 +84,19 @@ pub(crate) fn decode(row: StoredMachineWorkItem) -> AutomationStoreResult<Machin
         "machine_work_items.kind",
     )?))
     .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.kind"))?;
-    let raw: serde_json::Value =
-        serde_json::from_str(&required(row.request_json, "machine_work_items.request_json")?)
-            .map_err(|_| invalid())?;
+    let raw: serde_json::Value = serde_json::from_str(&required(
+        row.request_json,
+        "machine_work_items.request_json",
+    )?)
+    .map_err(|_| invalid())?;
     crate::automation_request_decode::identity_limits(&raw)?;
     let entry: SessionCreateEntry = serde_json::from_value(raw).map_err(|_| invalid())?;
     let target: ServiceId = required(row.service_id, "machine_work_items.service_id")?
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.service_id"))?;
     if required(row.work_item_id, "machine_work_items.work_item_id")? != entry.work_item_id.as_str()
-        || required(row.operation_id, "machine_work_items.operation_id")? != entry.operation_id.as_str()
+        || required(row.operation_id, "machine_work_items.operation_id")?
+            != entry.operation_id.as_str()
         || target.as_str() != String::from(entry.request.endpoint.service_id.clone())
     {
         return Err(invalid());
@@ -83,30 +107,48 @@ pub(crate) fn decode(row: StoredMachineWorkItem) -> AutomationStoreResult<Machin
         operation_id: entry.operation_id.clone(),
         definition: entry.request.clone(),
     };
-    crate::automation_request_decode::call_limits(&serde_json::to_value(
-        collaboration_protocol::AutomationCall::RemoteSessionCreate(request.clone()),
-    ).map_err(|_| invalid())?)?;
+    crate::automation_request_decode::call_limits(
+        &serde_json::to_value(collaboration_protocol::AutomationCall::RemoteSessionCreate(
+            request.clone(),
+        ))
+        .map_err(|_| invalid())?,
+    )?;
     let digest: MailDigest = required(row.request_digest, "machine_work_items.request_digest")?
         .try_into()
         .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.request_digest"))?;
     if digest != request_digest(&entry.source_installation, &request)? {
-        return Err(AutomationStoreError::InvalidRecord("machine_work_items.request_digest"));
+        return Err(AutomationStoreError::InvalidRecord(
+            "machine_work_items.request_digest",
+        ));
     }
     let state = serde_json::from_value(serde_json::Value::String(required(
         row.state,
         "machine_work_items.state",
     )?))
     .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.state"))?;
-    let result: Option<MachineWorkResult> = row.result_json.map(|value| {
-        serde_json::from_str(&value)
-            .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.result_json"))
-    }).transpose()?;
-    if let Some(MachineWorkResult { create: SessionCreateState::Created { session_ref, .. }, .. }) = &result
+    let result: Option<MachineWorkResult> = row
+        .result_json
+        .map(|value| {
+            serde_json::from_str(&value)
+                .map_err(|_| AutomationStoreError::InvalidRecord("machine_work_items.result_json"))
+        })
+        .transpose()?;
+    if let Some(MachineWorkResult {
+        create: SessionCreateState::Created { session_ref, .. },
+        ..
+    }) = &result
         && String::from(session_ref.endpoint.service_id.clone()) != target.as_str()
     {
-        return Err(AutomationStoreError::InvalidRecord("machine_work_items.result_json"));
+        return Err(AutomationStoreError::InvalidRecord(
+            "machine_work_items.result_json",
+        ));
     }
-    Ok(MachineWorkItemRecord { entry, target, state, result })
+    Ok(MachineWorkItemRecord {
+        entry,
+        target,
+        state,
+        result,
+    })
 }
 
 #[cfg(test)]

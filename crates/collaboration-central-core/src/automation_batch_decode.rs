@@ -1,5 +1,9 @@
 //! One decoder binds immutable Batch bytes to their digest and destination.
-use crate::{automation_content_store::text_digest, automation_store_error::{AutomationStoreError, AutomationStoreResult, required}, generated_automation_custody as queries};
+use crate::{
+    automation_content_store::text_digest,
+    automation_store_error::{AutomationStoreError, AutomationStoreResult, required},
+    generated_automation_custody as queries,
+};
 use collaboration_protocol::{AutomationBatch, AutomationRefusal, FrozenAutomationBatch};
 use message_board::ServiceId;
 pub(crate) struct DecodedAutomationBatch {
@@ -35,16 +39,16 @@ pub(crate) fn decode(
     crate::automation_request_decode::counter_limits(&raw)?;
     let batch: AutomationBatch = serde_json::from_value(raw)
         .map_err(|_| AutomationStoreError::InvalidRecord("batch.frozen_bytes"))?;
-    if batch.batch_id != batch_id || String::from(batch.service_id.clone()) != installation.as_str() {
+    if batch.batch_id != batch_id || String::from(batch.service_id.clone()) != installation.as_str()
+    {
         return Err(AutomationStoreError::InvalidRecord("batch.identity"));
     }
     Ok(DecodedAutomationBatch {
         frozen: FrozenAutomationBatch {
-        batch_id,
-        digest,
-        frozen_bytes: bytes.into_bytes(),
+            batch_id,
+            digest,
+            frozen_bytes: bytes.into_bytes(),
         },
         batch,
     })
 }
-

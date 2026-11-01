@@ -391,8 +391,8 @@ pub use wire_contract::*;
 
 pub use core_contract::*;
 
+mod automation_batch_decode;
 mod generated_machine_work_item;
 mod machine_work_item_record;
-mod machine_work_item_store;
-mod automation_batch_decode;
 mod machine_work_item_reports;
+mod machine_work_item_store;
