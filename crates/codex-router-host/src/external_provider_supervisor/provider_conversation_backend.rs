@@ -12,8 +12,8 @@ use super::{
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
     ProviderPromptContentsRequest, ProviderReconciliationState, ProviderSessionInspectFuture,
     ProviderSessionInspectRequest, ProviderSettingsAcceptRequest, ProviderSettingsFuture,
-    ProviderSettingsSetRequest, SessionRef, admitted_submission, effective_settings,
-    existing_submission, failure, now_ms, provider_session_inspection, provider_session_lifecycle,
+    ProviderSettingsSetRequest, admitted_submission, effective_settings, existing_submission,
+    failure, now_ms, provider_session_inspection, provider_session_lifecycle,
     provider_session_record, provider_settings_control, retain_operation, runtime_failure,
     snapshot_failure, snapshot_from_record, unavailable_failure,
 };

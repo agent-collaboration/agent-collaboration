@@ -188,10 +188,10 @@ pub(super) fn create(
                             }
                             Err(error) => {
                                 let failure = runtime_failure(operation_id.clone(), None, error);
-                                if failure.effect == ProviderOperationEffect::None {
-                                    if let Err(error) = admission.creation_refused().await {
-                                        return ProviderOperationCompletion::Failure(launch_failure(operation_id, None, error));
-                                    }
+                                if failure.effect == ProviderOperationEffect::None
+                                    && let Err(error) = admission.creation_refused().await
+                                {
+                                    return ProviderOperationCompletion::Failure(launch_failure(operation_id, None, error));
                                 }
                                 ProviderOperationCompletion::Failure(failure)
                             },

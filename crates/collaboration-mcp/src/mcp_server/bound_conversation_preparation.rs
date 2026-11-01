@@ -2,6 +2,8 @@
 use super::session_binding::CallSessionAdmission;
 use super::{CallToolResult, CollaborationMcpServer, structured_tool_error};
 use collaboration_contracts::HarnessLaunchFailure;
+use collaboration_protocol::{ConversationOperationFailureStage, ProviderOperationEffect};
+use fleet_identity_protocol::SessionStartRefusal;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +14,16 @@ enum PreparationRefusalKind {
     StartRefused,
     InactiveSessionBinding,
     OperationConflict,
+}
+
+#[derive(serde::Serialize)]
+struct PreparationRefusal {
+    kind: PreparationRefusalKind,
+    stage: ConversationOperationFailureStage,
+    effect: ProviderOperationEffect,
+    message: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<SessionStartRefusal>,
 }
 fn refusal(failure: HarnessLaunchFailure) -> CallToolResult {
     let (kind, message, reason) = match failure {
@@ -33,7 +45,7 @@ fn refusal(failure: HarnessLaunchFailure) -> CallToolResult {
         HarnessLaunchFailure::StartRefused(reason) => (
             PreparationRefusalKind::StartRefused,
             "The organization authority refused the session start",
-            Some(serde_json::json!(reason)),
+            Some(reason),
         ),
         HarnessLaunchFailure::InactiveBinding => (
             PreparationRefusalKind::InactiveSessionBinding,
@@ -46,12 +58,13 @@ fn refusal(failure: HarnessLaunchFailure) -> CallToolResult {
             None,
         ),
     };
-    let mut result =
-        serde_json::json!({"kind":kind,"stage":"admission","effect":"none","message":message});
-    if let Some(reason) = reason {
-        result["reason"] = reason;
-    }
-    structured_tool_error(result)
+    structured_tool_error(serde_json::json!(PreparationRefusal {
+        kind,
+        stage: ConversationOperationFailureStage::Admission,
+        effect: ProviderOperationEffect::None,
+        message,
+        reason,
+    }))
 }
 impl CollaborationMcpServer {
     pub(super) async fn prepare_bound_conversation(
