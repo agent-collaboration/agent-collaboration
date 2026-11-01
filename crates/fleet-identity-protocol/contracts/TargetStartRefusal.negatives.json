@@ -1,0 +1,8 @@
+[
+null,
+{"kind":"deadlinePassed","unexpectedField":true},
+{"kind":"providerCreateFailed","unexpectedField":true},
+{"kind":"startCheckRefused","unexpectedField":true},
+{"kind":"unrecognizedVariant"},
+{"kind":"workingDirectoryMissing","unexpectedField":true}
+]

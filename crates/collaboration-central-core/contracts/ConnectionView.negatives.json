@@ -1,0 +1,11 @@
+[
+null,
+{"lastHeardAt":1793448005000,"since":1793448000000,"state":"connected","unexpectedField":true},
+{"lastHeardAt":1793448005000,"since":1793448000000,"state":"unrecognizedVariant"},
+{"lastSeenAt":1793448005000,"state":"notConnected","unexpectedField":true},
+{"lastSeenAt":1793448005000,"state":"unrecognizedVariant"},
+{"last_heard_at":1793448005000,"since":1793448000000,"state":"connected"},
+{"last_seen_at":1793448005000,"state":"notConnected"},
+{"state":"notConnected","unexpectedField":true},
+{"state":"unrecognizedVariant"}
+]

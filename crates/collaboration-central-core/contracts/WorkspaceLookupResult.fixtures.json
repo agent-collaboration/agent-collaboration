@@ -1,0 +1,5 @@
+[
+{"allowedMachines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine"}],"result":"workspace","workspace":{"name":"Fixture workspace","workspaceId":"019a3dce-2000-7000-8000-000000000001"}},
+{"result":"unknown"},
+{"reason":{"kind":"notOwner"},"result":"refused"}
+]
