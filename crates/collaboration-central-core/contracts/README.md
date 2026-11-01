@@ -31,6 +31,26 @@ Schemas validate canonical values; Rust additionally accepts and normalizes
 surrounding whitespace on read. A padded label may exceed the raw schema bound
 while its trimmed value is within Rust's bound; full read equivalence is not claimed.
 
+K14 publishes `FindCentral`, `CentralLookup` and `CentralAddresses` from
+`fleet_directory_contracts`. `CentralLookup::Found` carries only public
+addresses; `CentralRecord` also keeps the private `directoryCalls` used for
+initialization and device approval. These are separate types.
+
+The directory's `HttpsUrl` and `ResourceUri` preserve bytes and enforce one
+bounded lexical pattern, shared with their schemas. HTTP is permitted only for
+loopback hosts; queries, fragments and user information are refused. Percent
+escapes are retained, with exactly two hexadecimal digits after each `%`.
+Ports may contain leading zeroes; their numeric value is 1–65535.
+
+`VerifiedEmail` deliberately publishes its accepted input language rather than
+only its canonical output. Its pattern includes the verbatim email expression
+from the sign-in service's pinned Zod 4.4.3, with explicit ASCII and whole-input
+guards, and its byte bound is checked before normalization. Rust accepts
+uppercase ASCII and serializes lowercase; its `.reads.json` pins that behavior.
+Consumers must not generalize either this rule or the whitespace-normalizing
+types' canonical-only schema policy to the other. Verification provenance comes
+from the provider or operator, and cannot be established by email syntax.
+
 Reserved and approved enrollments remain internal to the authority. F1
 defines no Rust `Principal` union. The Switchboard actor-union parsing and
 cross-repository real-output checks remain with their consuming tickets.

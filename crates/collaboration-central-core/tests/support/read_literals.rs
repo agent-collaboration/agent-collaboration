@@ -2,6 +2,12 @@ use serde_json::{Value, json};
 
 pub fn accepted_reads(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut reads = Vec::new();
+    if name == "VerifiedEmail" {
+        reads.push(json!({
+            "input":"OWNER@EXAMPLE.INVALID",
+            "canonical":"owner@example.invalid"
+        }));
+    }
     for literal in literals {
         let fields: &[&str] = match name {
             "LaunchContext" => &["repository", "commit", "model"],
