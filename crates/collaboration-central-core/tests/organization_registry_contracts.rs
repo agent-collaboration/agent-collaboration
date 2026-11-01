@@ -5,7 +5,7 @@ use collaboration_central_core::identity_contract::{
 };
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::json;
 #[path = "support/contract_artifacts.rs"]
 #[cfg(test)]
 mod contract_artifacts;
