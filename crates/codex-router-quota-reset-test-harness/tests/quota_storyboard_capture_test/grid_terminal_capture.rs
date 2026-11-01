@@ -11,6 +11,9 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[path = "showcase_grid_capture.rs"]
+mod showcase_grid_capture;
+
 pub(super) fn emit(line: &str) -> TestResult<()> {
     let mut output = std::io::stdout().lock();
     writeln!(output, "TUI_GRID {line}")?;
@@ -106,6 +109,27 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         "kitty" => KeyboardProtocol::Kitty,
         _ => return Err("unknown terminal key mode".into()),
     };
+    ensure(
+        matches!(
+            surface.as_str(),
+            "sessions"
+                | "sessions-filters"
+                | "quota"
+                | "quota-filters"
+                | "normal"
+                | "hard"
+                | "showcase"
+        ),
+        "unknown grid capture surface",
+    )?;
+    let check_only = match std::env::var("TUI_GRID_CHECK_ONLY") {
+        Err(std::env::VarError::NotPresent) => false,
+        Ok(value) if value == "1" => true,
+        _ => return Err("invalid grid check-only nomination".into()),
+    };
+    if surface == "showcase" {
+        return showcase_grid_capture::run(protocol, check_only);
+    }
     let fixture = if surface == "quota-filters" {
         QuotaResetFixture::create_provider_filters(ProviderFilterFixtureScenario::MixedAccounts)
             .await?
@@ -233,6 +257,16 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     } else {
         OsStr::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness"))
     };
+    if check_only {
+        ensure(
+            Path::new(binary).is_absolute() && Path::new(binary).is_file(),
+            "capture binary must be an absolute existing file",
+        )?;
+        return emit(&format!(
+            "CHECKED {surface} {} 120 36",
+            std::env::var("TUI_GRID_KEYS")?
+        ));
+    }
     let terminal = TerminalDriver::spawn_with_environment(
         Path::new(binary),
         arguments,

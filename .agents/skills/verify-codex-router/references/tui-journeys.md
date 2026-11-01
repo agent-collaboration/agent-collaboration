@@ -42,6 +42,19 @@ libtest containing
 `quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture`.
 A CLI libtest without that entry rejects before startup.
 
+Before requesting any native window, invoke the exact driver entry and arguments
+with the case's surface, mode, artifact and fixture environment, adding
+`TUI_GRID_CHECK_ONLY=1`. Require exit 0 and `TUI_GRID CHECKED <surface> <mode>
+120 36` before requesting the window. The driver starts at 120×36; narrower cases
+then use the journey's acknowledged same-child resize. This admission path stops
+before opening the PTY or spawning the fixture. Keep its stdout/stderr, exact
+binary hash, admitted configuration and evidence that no child PID files or
+product receipts were written. Wrong surfaces, modes and artifact hashes must
+refuse. Hash/signature and libtest-entry checks alone do not establish admission.
+The separately declared `showcase` surface validates its example launch through
+the fixed wrapper's `--check-only` path, including its path/hash, working directory
+and owned receipt directory. It does not observe the showcase.
+
 `--check` verifies head, signed artifacts, exact entries and emulator qualification;
 it does not observe a product. Qualification covers named/24-bit colours,
 bold/dim, 📂/✉️/界 widths/graphemes, overlay-left−1 gutter writes, right-edge

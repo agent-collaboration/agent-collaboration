@@ -36,7 +36,8 @@ export interface PtyGridTarget {
 		| 'quota-filters'
 		| 'normal'
 		| 'hard'
-		| 'public-sessions';
+		| 'public-sessions'
+		| 'showcase';
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
@@ -45,6 +46,7 @@ export interface PtyGridTarget {
 	readonly componentReleaseFile?: string;
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
+	readonly showcaseEnvironment?: NodeJS.ProcessEnv;
 	readonly storyboardVariant?:
 		| 'wide-glyph-left-border'
 		| 'source-qualified-outcome'
@@ -176,6 +178,7 @@ export class PtyGridDriver {
 					[SESSIONS_RECEIPT_DIRECTORY]: undefined,
 					...receiptEnvironment,
 					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
+					...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
 					TUI_GRID_SURFACE: target.surface,
 					TUI_GRID_KEYS: target.keys,
 					...(target.storyboardVariant === undefined

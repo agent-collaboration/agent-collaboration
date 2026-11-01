@@ -1,6 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	realpathSync,
@@ -10,6 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, test } from 'vitest';
 
@@ -39,6 +42,58 @@ const COMPONENT_ARGUMENTS = [
 	'--nocapture',
 	'--test-threads=1',
 ];
+
+test('showcase admission binds the example and check-only never starts it or writes PID receipts', () => {
+	const output = temporaryDirectory();
+	const receipts = join(output, 'receipts');
+	mkdirSync(receipts);
+	const binary = join(output, 'component_showcase');
+	const sentinel = join(output, 'must-not-exist');
+	writeFileSync(binary, `#!/bin/sh\ntouch '${sentinel}'\n`);
+	chmodSync(binary, 0o700);
+	const record = {
+		surface: 'showcase',
+		binary,
+		binary_sha256: createHash('sha256').update(`#!/bin/sh\ntouch '${sentinel}'\n`).digest('hex'),
+		approved_cwd: output,
+		output,
+		temporary_directory: output,
+		receipt_directory: receipts,
+	};
+	const launch = childLaunchConfiguration(record);
+	expect(launch.executable).toBe(binary);
+	expect(launch.arguments).toEqual(['--receipt-directory', receipts]);
+	expect(launch.cwd).toBe(output);
+	const configuration = join(output, 'fixture-command.json');
+	writeFileSync(configuration, JSON.stringify(record));
+	const invoke = (): ReturnType<typeof spawnSync> =>
+		spawnSync(
+			process.execPath,
+			[
+				fileURLToPath(new URL('./fixture-child.ts', import.meta.url)),
+				configuration,
+				'--check-only',
+			],
+			{
+				env: { ...process.env, QUOTA_STORYBOARD_FIXTURE_COMMAND: configuration },
+				encoding: 'utf8',
+			},
+		);
+	const admitted = invoke();
+	expect(admitted.status, String(admitted.stderr)).toBe(0);
+	expect(String(admitted.stdout)).toContain('FIXTURE_LAUNCH_ADMITTED');
+	for (const name of ['must-not-exist', 'quota-wrapper.pid', 'quota-child.pid', 'quota-child.exit'])
+		expect(existsSync(join(output, name))).toBe(false);
+	writeFileSync(configuration, JSON.stringify({ ...record, binary_sha256: '0'.repeat(64) }));
+	const changed = invoke();
+	expect(changed.status).not.toBe(0);
+	expect(String(changed.stderr)).toContain('binary path or hash changed');
+	writeFileSync(configuration, JSON.stringify({ ...record, surface: 'unregistered-surface' }));
+	const unknown = invoke();
+	expect(unknown.status).not.toBe(0);
+	expect(String(unknown.stderr)).toContain('unknown captured TUI surface');
+	expect(existsSync(sentinel)).toBe(false);
+});
 
 test('component_pending_receipt_requires_exact_release_and_fresh_paths', () => {
 	const output = temporaryDirectory();
