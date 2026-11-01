@@ -80,7 +80,7 @@ pub enum FiringWork {
     },
 }
 
-fn frozen_schedule_schema(generator: &mut SchemaGenerator) -> Schema {
+pub(crate) fn frozen_schedule_schema(generator: &mut SchemaGenerator) -> Schema {
     let mut schema = crate::ScheduleDefinition::json_schema(generator);
     let timing = crate::automation_timing_contract::central_timing_schema(generator).to_value();
     let effort = generator.subschema_for::<Option<String>>().to_value();
