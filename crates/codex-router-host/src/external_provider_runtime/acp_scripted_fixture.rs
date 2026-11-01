@@ -151,6 +151,15 @@ impl AcpFixtureScript {
         self
     }
 
+    pub(crate) fn record_requests(mut self, path: &std::path::Path) -> Self {
+        for step in &mut self.steps {
+            if step.get("action").and_then(Value::as_str) == Some("expect_request") {
+                step["recordPath"] = json!(path);
+            }
+        }
+        self
+    }
+
     pub(crate) fn record_diagnostics(mut self, path: PathBuf) -> Self {
         self.diagnostic_path = Some(path);
         self

@@ -124,7 +124,7 @@ async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_
         FleetSessionStorageFailure, SessionRegistrationMode, test_support::PendingSetupWriteControl,
     };
     let directory = tempfile::tempdir_in("/tmp").unwrap();
-    let rig = super::setup_registrar_fixture::RegistrarFixture::new(
+    let registrar_fixture = super::setup_registrar_fixture::ProviderRegistrarFixture::new(
         SessionRegistrationMode::MachineTokens,
     )
     .unwrap();
@@ -132,10 +132,13 @@ async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_
         mode: Some("ask".to_owned()),
         ..Default::default()
     };
-    let managed = rig.create_setup(directory.path(), &settings).await.unwrap();
+    let managed = registrar_fixture
+        .create_setup(directory.path(), &settings)
+        .await
+        .unwrap();
     let (entered, pending_save) = tokio::sync::oneshot::channel();
     let (decide, outcome) = tokio::sync::oneshot::channel();
-    *rig.repository.pending_setup.lock().unwrap() =
+    *registrar_fixture.repository.pending_setup.lock().unwrap() =
         Some(PendingSetupWriteControl { entered, outcome });
     let marker = directory.path().join("setting-observed");
     let fixture = AcpFixtureScript::new()
@@ -173,15 +176,23 @@ async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_
         !marker.exists(),
         "a setting arrived after the created-ID save failed"
     );
-    assert!(rig.authority.registrations.lock().unwrap().is_empty());
+    assert!(
+        registrar_fixture
+            .authority
+            .registrations
+            .lock()
+            .unwrap()
+            .is_empty()
+    );
     assert!(matches!(
-        rig.registrar
+        registrar_fixture
+            .registrar
             .resolve_binding_capability("35353535353535353535353535353535")
             .await,
         Err(collaboration_service::fleet_session_registrar::RegistrarFailure::InactiveBinding)
     ));
     {
-        let records = rig.repository.records.lock().unwrap();
+        let records = registrar_fixture.repository.records.lock().unwrap();
         assert_eq!(records.len(), 1);
         assert!(records[0].lifecycle().session().is_none());
     }

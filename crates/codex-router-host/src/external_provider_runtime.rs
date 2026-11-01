@@ -687,3 +687,7 @@ mod setup_lifecycle_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/setup_registrar_fixture.rs"]
 mod setup_registrar_fixture;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/setup_refusal_matrix_tests.rs"]
+mod setup_refusal_matrix_tests;

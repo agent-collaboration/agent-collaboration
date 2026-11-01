@@ -30,10 +30,10 @@ const PROJECT: &str = "019f0000-0000-7000-8000-000000000002";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000003";
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-000000000004";
 
-pub(super) struct Authority {
+pub(super) struct FixtureSessionAuthority {
     pub registrations: Mutex<Vec<RegisterFleetSession>>,
 }
-impl FleetSessionConnection for Authority {
+impl FleetSessionConnection for FixtureSessionAuthority {
     fn check_start<'a>(
         &'a self,
         _: &'a CheckSessionStart,
@@ -58,43 +58,43 @@ impl FleetSessionConnection for Authority {
         Box::pin(async { Ok(()) })
     }
 }
-struct Mode(SessionRegistrationMode);
-impl SessionRegistrationModeSource for Mode {
+struct FixedRegistrationMode(SessionRegistrationMode);
+impl SessionRegistrationModeSource for FixedRegistrationMode {
     fn mode(&self) -> SessionRegistrationMode {
         self.0
     }
 }
-struct FixedIds(AtomicU64);
-impl runtime_primitives::IdSource for FixedIds {
+struct SequenceLaunchIds(AtomicU64);
+impl runtime_primitives::IdSource for SequenceLaunchIds {
     fn new_id(&self) -> uuid::Uuid {
         uuid::Uuid::from_u128(
             0x019f0000000070008000000000000100 + u128::from(self.0.fetch_add(1, Ordering::SeqCst)),
         )
     }
 }
-struct Entropy;
-impl SessionBindingEntropy for Entropy {
+struct FixedBindingEntropy;
+impl SessionBindingEntropy for FixedBindingEntropy {
     fn new_capability(&self) -> Result<[u8; 16], SessionBindingEntropyUnavailable> {
         Ok([0x35; 16])
     }
 }
 
-pub(super) struct RegistrarFixture {
+pub(super) struct ProviderRegistrarFixture {
     pub registrar: Arc<FleetSessionRegistrar>,
     pub repository: Arc<MemoryRegistrationRepository>,
-    pub authority: Arc<Authority>,
-    port: Arc<dyn HarnessSessionLaunchPort>,
+    pub authority: Arc<FixtureSessionAuthority>,
+    launch_port: Arc<dyn HarnessSessionLaunchPort>,
     pub operation: OperationId,
 }
-impl RegistrarFixture {
+impl ProviderRegistrarFixture {
     pub fn new(mode: SessionRegistrationMode) -> Result<Self, Box<dyn std::error::Error>> {
         let repository = Arc::new(MemoryRegistrationRepository::new(Arc::new(Mutex::new(
             Vec::new(),
         ))));
-        let authority = Arc::new(Authority {
+        let authority = Arc::new(FixtureSessionAuthority {
             registrations: Mutex::new(Vec::new()),
         });
-        let ids = Arc::new(FixedIds(AtomicU64::new(0)));
+        let ids = Arc::new(SequenceLaunchIds(AtomicU64::new(0)));
         let registrar = Arc::new(FleetSessionRegistrar::new(FleetSessionRegistrarProps {
             installation: INSTALLATION.to_owned().try_into()?,
             listener: SessionBindingListener::Stable(
@@ -102,9 +102,9 @@ impl RegistrarFixture {
             ),
             repository: repository.clone(),
             connection: authority.clone(),
-            mode: Arc::new(Mode(mode)),
+            mode: Arc::new(FixedRegistrationMode(mode)),
             ids: ids.clone(),
-            entropy: Arc::new(Entropy),
+            entropy: Arc::new(FixedBindingEntropy),
         }));
         let port = Arc::new(crate::HostHarnessSessionLaunchPort::new(
             registrar.clone(),
@@ -116,7 +116,7 @@ impl RegistrarFixture {
             registrar,
             repository,
             authority,
-            port,
+            launch_port: port,
             operation: "019f0000-0000-7000-8000-000000000020"
                 .to_owned()
                 .try_into()?,
@@ -152,7 +152,11 @@ impl RegistrarFixture {
             approver: actor.into(),
             user_mcp: HarnessMcpConfigurationIdentity::empty(),
         };
-        match self.port.prepare_start(&self.operation, &declared).await? {
+        match self
+            .launch_port
+            .prepare_start(&self.operation, &declared)
+            .await?
+        {
             HarnessStartAdmission::AccessEnrollment => {
                 Ok(ProviderSessionCreateSetup::AccessEnrollment {
                     mcp: ProviderSessionMcp::ConnectionDefaults,
@@ -160,7 +164,7 @@ impl RegistrarFixture {
             }
             HarnessStartAdmission::Prepared(binding) => Ok(crate::prepare_provider_session_setup(
                 PreparedHarnessSessionStart {
-                    port: Arc::clone(&self.port),
+                    port: Arc::clone(&self.launch_port),
                     operation_id: self.operation.clone(),
                     endpoint: message_board::SessionEndpointRef {
                         service_id: String::from(endpoint.service_id).try_into()?,
