@@ -27,13 +27,20 @@ pub enum AutomationCall {
     WakeResume(crate::WakeMutationRequest),
     WakeCancel(crate::WakeMutationRequest),
     List(crate::AutomationPageRequest),
+    FiringShow {
+        #[serde(rename = "firingId")]
+        firing_id: crate::FiringId,
+    },
+    FiringList(FiringListRequest),
     PullAutomationBatches(crate::PullAutomationBatches),
     FetchContents(crate::FetchContents),
     AckAutomationBatches(crate::AckAutomationBatches),
     ReportWorkItems(crate::ReportWorkItems),
     LocalRunSettled(crate::LocalRunSettled),
     RemoteSessionCreate(crate::RemoteSessionCreateRequest),
-    RemoteSessionCreateStatus { operation_id: crate::OperationId },
+    RemoteSessionCreateStatus {
+        operation_id: crate::OperationId,
+    },
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -46,6 +53,32 @@ pub enum AutomationCall {
 pub enum CatalogAutomation {
     Schedule(crate::ScheduleSnapshot),
     Wake(crate::WakeSnapshot),
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FiringListRequest {
+    pub automation_id: crate::AutomationId,
+    #[serde(default, deserialize_with = "Option::deserialize")]
+    pub cursor: Option<String>,
+    pub limit: crate::PageLimit,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[schemars(extend("allOf" = [{"required":["reportSeq","batchId"]}]))]
+pub struct FiringSnapshot {
+    pub firing_id: crate::FiringId,
+    pub automation_id: crate::AutomationId,
+    pub due_at: crate::GridTime,
+    pub revision: crate::ChangeId,
+    pub content: crate::ContentReference,
+    pub outcome: crate::FiringOutcome,
+    /// Null until the first machine report; otherwise its highest accepted sequence.
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub report_seq: Option<crate::WorkReportSequence>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub batch_id: Option<crate::BatchId>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -85,6 +118,8 @@ pub enum AutomationAnswer {
     Instruction(crate::InstructionSnapshot),
     Schedule(crate::ScheduleSnapshot),
     Wake(crate::WakeSnapshot),
+    Firing(FiringSnapshot),
+    Firings(crate::AutomationPage<FiringSnapshot>),
     List {
         automations: Vec<CatalogAutomation>,
         next: Option<String>,
