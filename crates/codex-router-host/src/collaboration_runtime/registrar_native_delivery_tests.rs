@@ -343,7 +343,6 @@ async fn f4a_native_delivery_fresh_run_uses_its_durable_run_id_and_never_replays
     assert_eq!(
         runtime.fixture.repository.records.lock().unwrap()[0]
             .preparation()
-            .launch
             .operation_id
             .as_str(),
         SECOND
