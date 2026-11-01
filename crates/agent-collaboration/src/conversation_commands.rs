@@ -579,7 +579,7 @@ fn current_session_ref(
     resolve_current_session_ref(
         service_id,
         from,
-        collaboration_client::current_session_identity::read_harness_session_identity,
+        crate::current_session_identity::read_harness_session_identity,
     )
 }
 
@@ -588,8 +588,8 @@ fn resolve_current_session_ref(
     service_id: &collaboration_client::protocol::UuidIdentity,
     from: Option<&str>,
     read_harness: impl FnOnce() -> Result<
-        collaboration_client::current_session_identity::HarnessSessionIdentity,
-        collaboration_client::current_session_identity::CurrentSessionIdentityError,
+        crate::current_session_identity::HarnessSessionIdentity,
+        crate::current_session_identity::CurrentSessionIdentityError,
     >,
 ) -> Result<collaboration_client::protocol::SessionRef, String> {
     if let Some(value) = from {
@@ -898,14 +898,12 @@ mod tests {
         let from = r#"{"endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"codex-local"},"sessionId":"cursor-conversation"}"#;
         let harness = |pairs: &'static [(&'static str, &'static str)]| {
             move || {
-                collaboration_client::current_session_identity::resolve_harness_session_identity(
-                    |name| {
-                        pairs
-                            .iter()
-                            .find(|(variable, _)| *variable == name)
-                            .map(|(_, value)| std::ffi::OsString::from(*value))
-                    },
-                )
+                crate::current_session_identity::resolve_harness_session_identity(|name| {
+                    pairs
+                        .iter()
+                        .find(|(variable, _)| *variable == name)
+                        .map(|(_, value)| std::ffi::OsString::from(*value))
+                })
             }
         };
         let resolved = resolve_current_session_ref(&service_id, Some(from), harness(&[]))

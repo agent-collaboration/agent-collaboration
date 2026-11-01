@@ -96,18 +96,17 @@ pub(super) fn run_message_reply(args: ReplyArguments) -> i32 {
             return report_message_failure("invalidField", &message, 2, machine);
         }
     };
-    let harness_identity =
-        match collaboration_client::current_session_identity::read_harness_session_identity() {
-            Ok(identity) => identity,
-            Err(error) => {
-                return report_message_failure(
-                    "currentSessionUnavailable",
-                    &format!("{error}; run agent-collaboration whoami --json"),
-                    2,
-                    machine,
-                );
-            }
-        };
+    let harness_identity = match crate::current_session_identity::read_harness_session_identity() {
+        Ok(identity) => identity,
+        Err(error) => {
+            return report_message_failure(
+                "currentSessionUnavailable",
+                &format!("{error}; run agent-collaboration whoami --json"),
+                2,
+                machine,
+            );
+        }
+    };
     let directory = match crate::endpoint_commands::resolve_directory(args.service_directory) {
         Ok(directory) => directory,
         Err(message) => {

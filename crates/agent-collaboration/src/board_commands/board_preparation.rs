@@ -161,7 +161,7 @@ pub(super) fn finalize_actor(
 }
 
 fn self_identity(client: &CollaborationClient) -> Result<Identity, String> {
-    let harness = collaboration_client::current_session_identity::read_harness_session_identity()
+    let harness = crate::current_session_identity::read_harness_session_identity()
         .map_err(|error| format!("--actor self: {error}"))?;
     let service_id: ServiceId = String::from(client.identity().service_id.clone())
         .try_into()

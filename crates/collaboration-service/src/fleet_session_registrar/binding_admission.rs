@@ -78,20 +78,6 @@ impl FleetSessionRegistrar {
         self.resolve_binding(&address).await
     }
 
-    /// Owner-only Unix calls carry a session claim, never a capability lookup result.
-    pub async fn resolve_session_context(
-        &self,
-        session: &SessionRef,
-    ) -> Result<BoundFleetSession, RegistrarFailure> {
-        let record = self
-            .repository
-            .conversation(session)
-            .await?
-            .ok_or(RegistrarFailure::InactiveBinding)?;
-        self.require_record_context(&record)?;
-        BoundFleetSession::from_active(&record)
-    }
-
     pub async fn resolve_binding(
         &self,
         address: &SessionBindingAddress,

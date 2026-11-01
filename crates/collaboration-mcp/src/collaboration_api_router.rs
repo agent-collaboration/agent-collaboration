@@ -72,12 +72,6 @@ pub enum CollaborationApiListener {
     UnixSocket,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum CallTransport {
-    OwnerUnix,
-    Http,
-}
-
 /// One listener's copy of the collaboration API, ready to serve.
 pub struct CollaborationApiRouter {
     router: Router,
@@ -106,10 +100,6 @@ pub fn collaboration_api_router(
     config: &CollaborationApiConfig,
     listener: CollaborationApiListener,
 ) -> CollaborationApiRouter {
-    let call_transport = match &listener {
-        CollaborationApiListener::UnixSocket => CallTransport::OwnerUnix,
-        CollaborationApiListener::LoopbackTcp { .. } => CallTransport::Http,
-    };
     let mut service_config = StreamableHttpServerConfig::default()
         .with_legacy_session_mode(false)
         .with_json_response(true)
@@ -160,7 +150,6 @@ pub fn collaboration_api_router(
     let mut router = Router::new()
         .route_service(COLLABORATION_API_PATH, service.clone())
         .route_service(SESSION_COLLABORATION_API_PATH, service)
-        .layer(axum::Extension(call_transport))
         .layer(middleware::from_fn_with_state(
             admission,
             shed_past_capacity,

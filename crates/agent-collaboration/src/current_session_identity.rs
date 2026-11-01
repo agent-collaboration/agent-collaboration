@@ -1,19 +1,19 @@
 //! Resolves the calling agent's own session from the harness that runs its tools.
 //!
 //! Each supported harness exports its conversation ID into tool processes. The shared
-//! MCP server does not inherit that environment. CLI and SDK calls carry the resolved
-//! identity on the owner-only Unix transport; it is a trusted-machine claim, not authentication.
-use collaboration_protocol::{EndpointRef, SessionRef, UuidIdentity};
+//! MCP server never sees that environment, so the CLI is the only place Router can
+//! learn "who am I" without the caller declaring it by hand.
+use collaboration_client::protocol::{EndpointRef, SessionRef, UuidIdentity};
 use std::ffi::OsString;
 
 /// One harness whose tool environment names the current conversation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SessionHarness {
+pub(crate) struct SessionHarness {
     pub environment_variable: &'static str,
     pub endpoint_id: &'static str,
 }
 
-pub const SESSION_HARNESSES: [SessionHarness; 3] = [
+pub(crate) const SESSION_HARNESSES: [SessionHarness; 3] = [
     SessionHarness {
         environment_variable: "CODEX_THREAD_ID",
         endpoint_id: "codex-local",
@@ -30,13 +30,13 @@ pub const SESSION_HARNESSES: [SessionHarness; 3] = [
 
 /// The harness-reported session, before it is bound to a Router service.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct HarnessSessionIdentity {
+pub(crate) struct HarnessSessionIdentity {
     pub harness: SessionHarness,
     pub session_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CurrentSessionIdentityError {
+pub(crate) enum CurrentSessionIdentityError {
     Missing,
     Ambiguous { variables: Vec<&'static str> },
     NotUnicode { variable: &'static str },
@@ -70,13 +70,13 @@ impl std::fmt::Display for CurrentSessionIdentityError {
 }
 
 /// Reads the process environment of the calling agent's tool invocation.
-pub fn read_harness_session_identity() -> Result<HarnessSessionIdentity, CurrentSessionIdentityError>
-{
+pub(crate) fn read_harness_session_identity()
+-> Result<HarnessSessionIdentity, CurrentSessionIdentityError> {
     resolve_harness_session_identity(|name| std::env::var_os(name))
 }
 
 /// Exactly one harness variable must be set; nested harnesses are refused, not guessed.
-pub fn resolve_harness_session_identity(
+pub(crate) fn resolve_harness_session_identity(
     read_variable: impl Fn(&str) -> Option<OsString>,
 ) -> Result<HarnessSessionIdentity, CurrentSessionIdentityError> {
     let present = SESSION_HARNESSES
@@ -111,7 +111,7 @@ pub fn resolve_harness_session_identity(
 
 impl HarnessSessionIdentity {
     /// Binds the harness session to the Router service that owns its endpoint.
-    pub fn session_ref(&self, service_id: &UuidIdentity) -> Result<SessionRef, String> {
+    pub(crate) fn session_ref(&self, service_id: &UuidIdentity) -> Result<SessionRef, String> {
         Ok(SessionRef {
             endpoint: EndpointRef {
                 service_id: service_id.clone(),

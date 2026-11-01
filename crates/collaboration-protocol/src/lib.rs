@@ -333,7 +333,5 @@ pub use automation_configuration_contract::{
 
 // The facade preserves mail identity through every local message boundary.
 pub use collaboration_mail_protocol::{MailDigest, MailItemId};
-mod unix_session_context;
-pub use unix_session_context::{UNIX_SESSION_CONTEXT_HEADER, UnixSessionContext};
 mod session_setup_outcome;
 pub use session_setup_outcome::SessionSetupAbandonmentCause;

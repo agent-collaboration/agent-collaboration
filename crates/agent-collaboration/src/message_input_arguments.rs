@@ -162,7 +162,7 @@ fn prepare_message_input(
             .transpose()
             .map_err(|_| session_ref_guidance("--from"))?;
         if sender.is_none() {
-            collaboration_client::current_session_identity::read_harness_session_identity()
+            crate::current_session_identity::read_harness_session_identity()
                 .map_err(|error| format!("{error}; run agent-collaboration whoami --json"))?;
         }
         PreparedMessageContent::Agent { sender, text }
@@ -243,7 +243,7 @@ impl PreparedMessageContent {
                 let sender = resolve_sender_ref(
                     service_id,
                     sender,
-                    collaboration_client::current_session_identity::read_harness_session_identity,
+                    crate::current_session_identity::read_harness_session_identity,
                 )?;
                 MessageContent::Agent { sender, text }
             }
@@ -255,8 +255,8 @@ fn resolve_sender_ref(
     service_id: &UuidIdentity,
     explicit: Option<SessionRef>,
     read_harness: impl FnOnce() -> Result<
-        collaboration_client::current_session_identity::HarnessSessionIdentity,
-        collaboration_client::current_session_identity::CurrentSessionIdentityError,
+        crate::current_session_identity::HarnessSessionIdentity,
+        crate::current_session_identity::CurrentSessionIdentityError,
     >,
 ) -> Result<SessionRef, String> {
     if let Some(sender) = explicit {
@@ -278,18 +278,16 @@ mod tests {
         let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())
             .expect("service identity");
         let resolved = resolve_sender_ref(&service_id, None, || {
-            collaboration_client::current_session_identity::resolve_harness_session_identity(
-                |name| (name == "CURSOR_CONVERSATION_ID").then(|| "cursor-1".into()),
-            )
+            crate::current_session_identity::resolve_harness_session_identity(|name| {
+                (name == "CURSOR_CONVERSATION_ID").then(|| "cursor-1".into())
+            })
         })
         .expect("harness identity");
         assert_eq!(String::from(resolved.endpoint.endpoint_id), "cursor-local");
         assert_eq!(String::from(resolved.session_id), "cursor-1");
 
         let error = resolve_sender_ref(&service_id, None, || {
-            collaboration_client::current_session_identity::resolve_harness_session_identity(|_| {
-                None
-            })
+            crate::current_session_identity::resolve_harness_session_identity(|_| None)
         })
         .expect_err("sender must fail closed");
         assert!(error.contains("agent-collaboration whoami --json"));

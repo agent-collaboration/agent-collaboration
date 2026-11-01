@@ -37,7 +37,6 @@ pub(crate) enum ToolAnswer {
 pub(crate) struct ApiConnection {
     client: UnixSocketHttpClient,
     uri: Arc<str>,
-    session_context: Option<http::HeaderValue>,
 }
 
 impl ApiConnection {
@@ -45,21 +44,7 @@ impl ApiConnection {
         Self {
             client: UnixSocketHttpClient::new(socket, API_URI),
             uri: Arc::from(API_URI),
-            session_context: None,
         }
-    }
-
-    pub(crate) fn with_session_context(
-        mut self,
-        session: collaboration_protocol::SessionRef,
-    ) -> Result<Self, ClientError> {
-        let context = serde_json::to_vec(&collaboration_protocol::UnixSessionContext { session })
-            .map_err(|_| ClientError::InvalidRequest("invalid Unix session context"))?;
-        self.session_context = Some(
-            http::HeaderValue::from_bytes(&context)
-                .map_err(|_| ClientError::InvalidRequest("invalid Unix session context"))?,
-        );
-        Ok(self)
     }
 
     /// Calls `tool`, answering its structured result; a tool error becomes the rejection the
@@ -143,12 +128,6 @@ impl ApiConnection {
             http::HeaderName::from_static("mcp-protocol-version"),
             http::HeaderValue::from_static(API_PROTOCOL_VERSION),
         );
-        if let Some(context) = &self.session_context {
-            headers.insert(
-                http::HeaderName::from_static(collaboration_protocol::UNIX_SESSION_CONTEXT_HEADER),
-                context.clone(),
-            );
-        }
         let response = self
             .client
             .post_message(Arc::clone(&self.uri), request, None, None, headers)
@@ -257,7 +236,3 @@ fn transport_failure(
         _ => ClientError::Protocol("API transport failed"),
     }
 }
-
-#[cfg(test)]
-#[path = "api_connection_context_tests.rs"]
-mod context_tests;

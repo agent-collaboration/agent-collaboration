@@ -85,7 +85,7 @@ fn run_push_record_query(
         None
     } else {
         Some(
-            match collaboration_client::current_session_identity::read_harness_session_identity() {
+            match crate::current_session_identity::read_harness_session_identity() {
                 Ok(identity) => identity,
                 Err(error) => {
                     return report_message_failure(
