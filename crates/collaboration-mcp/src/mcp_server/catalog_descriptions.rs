@@ -131,7 +131,7 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         }
         "workspace_show" => "Reads one workspace by identity without changing board state.",
         "workspace_list" => {
-            "Lists a bounded page of workspaces, optionally filtered by repository. Read-only. In machine-token mode, notLoggedIn with nextAction runFleetLogin means run: codex-router fleet login --organization <id> --label <label>."
+            "Lists a bounded page of workspaces, optionally filtered by repository. Read-only. In machine-token mode, notLoggedIn with nextAction runFleetLogin means run: codex-router fleet login --organization <id> --label <label>. For the first login, also pass --sign-in <https-address>."
         }
         "repository_attach" => {
             "Attaches a validated repository reference to an existing workspace using the supplied actor. It changes discovery metadata, not repository contents."

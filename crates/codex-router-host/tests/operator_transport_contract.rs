@@ -29,9 +29,57 @@ use codex_router_host::encode_operator_request;
 
 const EXPECTED_PROTOCOL_VERSION: u16 = 1;
 
+// Wrong behavior: conflating CLI spellings with wire tags, or defaulting an
+// absent assertion before the replacement transaction. Oracle: PD bb4c7145.
+// This input-path draft has no observed pre-fix red yet.
+#[test]
+fn fleet_machine_login_operator_environment_is_optional_and_has_closed_wire_tags() {
+    for tag in ["physical", "cloudVm"] {
+        // Arrange
+        let wire = serde_json::json!({"protocol_version":1,"request":{"fleet_login":{
+            "organizationId":"019f0000-0000-7000-8000-000000000001",
+            "label":"Fixture machine", "machineEnvironment":tag
+        }}});
+
+        // Act
+        let request = decode_operator_request(&serde_json::to_vec(&wire).unwrap()).unwrap();
+
+        // Assert
+        assert!(matches!(
+            &request,
+            OperatorRequest::FleetLogin {
+                machine_environment: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(
+                &encode_operator_request(&request).unwrap()
+            )
+            .unwrap(),
+            wire
+        );
+    }
+    for invalid in [
+        serde_json::json!("cloud-vm"),
+        serde_json::json!("Physical"),
+        serde_json::json!("unknown"),
+        serde_json::json!(1),
+        serde_json::json!(true),
+    ] {
+        let wire = serde_json::json!({"protocol_version":1,"request":{"fleet_login":{
+            "organizationId":"019f0000-0000-7000-8000-000000000001",
+            "label":"Fixture machine", "machineEnvironment":invalid
+        }}});
+        assert!(decode_operator_request(&serde_json::to_vec(&wire).unwrap()).is_err());
+    }
+}
+
 #[test]
 fn fleet_machine_login_operator_request_keeps_v1_envelope_and_adopted_camel_case_fields() {
     let request = OperatorRequest::FleetLogin {
+        sign_in: None,
+        machine_environment: None,
         organization_id: "019f0000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
@@ -49,6 +97,34 @@ fn fleet_machine_login_operator_request_keeps_v1_envelope_and_adopted_camel_case
         !request.is_mutating(),
         "login never takes lifecycle replacement ownership"
     );
+}
+
+#[test]
+fn fleet_machine_login_operator_validates_the_optional_sign_in_address_before_admission() {
+    let mut wire = serde_json::json!({"protocol_version":1,"request":{"fleet_login":{"signIn":"https://issuer.example.invalid/api/auth","organizationId":"019f0000-0000-7000-8000-000000000001","label":"Fixture machine"}}});
+    let encoded = serde_json::to_vec(&wire).unwrap();
+    let request = decode_operator_request(&encoded).unwrap();
+    assert!(matches!(
+        request,
+        OperatorRequest::FleetLogin {
+            sign_in: Some(_),
+            ..
+        }
+    ));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&encode_operator_request(&request).unwrap())
+            .unwrap(),
+        wire
+    );
+    for invalid in [
+        "http://issuer.example.invalid",
+        "https://user:secret@issuer.example.invalid",
+        "https://issuer.example.invalid/#fragment",
+        "https://issuer.example.invalid/?query=1",
+    ] {
+        wire["request"]["fleet_login"]["signIn"] = serde_json::json!(invalid);
+        assert!(decode_operator_request(&serde_json::to_vec(&wire).unwrap()).is_err());
+    }
 }
 
 #[test]

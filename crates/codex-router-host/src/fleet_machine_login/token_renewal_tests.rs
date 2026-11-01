@@ -24,7 +24,6 @@ use super::super::{
         DeviceCodeAuthorization, DeviceLoginRequest, DevicePollResult, IssuerFailure,
     },
     login_clock::LoginFuture,
-    login_publication::sync_directory,
     refresh_credential_store::RefreshCredentialStore,
 };
 use super::*;
@@ -201,9 +200,11 @@ async fn exercise(
         refresh_credential: SecretString::new("refresh-0"),
     };
     let publication = Arc::new(MachineLoginPublication {
-        root: root.path().to_owned(),
+        repository: Arc::new(
+            codex_router_fleet_state::test_support::MemoryFleetLoginRepository::new(),
+        ),
         credentials: Arc::new(RefreshCredentialStore::MemoryOnly),
-        sync_directory,
+        after_commit: None,
     });
 
     let result = renew_machine_token(

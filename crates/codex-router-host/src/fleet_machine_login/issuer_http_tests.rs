@@ -13,7 +13,7 @@ use axum::{
     extract::{Form, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -53,6 +53,7 @@ enum GrantState {
 }
 struct StandIn {
     clock: Arc<ControlledClock>,
+    origin: String,
     verification_uri: String,
     grant: Mutex<GrantState>,
     requests: Mutex<Vec<HashMap<String, String>>>,
@@ -82,7 +83,6 @@ async fn authorize(
     let expected = [
         ("client_id", "fixture-device-client"),
         ("scope", "offline_access"),
-        ("resource", "https://central.example.invalid/machine"),
         (
             "machine_installation_id",
             "019f0000-0000-7000-8000-000000000002",
@@ -120,7 +120,8 @@ fn token_body(state: &StandIn, refresh: &str, generation: u64) -> Value {
     // An obviously fake signature; the Router only reads timing here. F10/SO8
     // verify the real issuer's signature at central.
     json!({"access_token":format!("{header}.{payload}.f11-access-canary-{generation}"), "refresh_token":refresh,
-        "token_type":"Bearer", "expires_in":3600, "machine_client_id":MACHINE_CLIENT, "scope":"offline_access"})
+        "token_type":"Bearer", "expires_in":3600, "machine_client_id":MACHINE_CLIENT, "scope":"offline_access",
+        "fleet_central":{"receiver":"019f0000-0000-7000-8000-000000000011", "relay":"019f0000-0000-7000-8000-000000000012"}})
 }
 
 async fn token(
@@ -128,7 +129,7 @@ async fn token(
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
     state.requests.lock().unwrap().push(form.clone());
-    if form.get("resource").map(String::as_str) != Some("https://central.example.invalid/machine") {
+    if form.contains_key("resource") {
         return error("invalid_request");
     }
     match form.get("grant_type").map(String::as_str) {
@@ -207,26 +208,44 @@ async fn token(
     }
 }
 
+async fn metadata(State(state): State<Arc<StandIn>>) -> Json<Value> {
+    Json(
+        json!({"issuer":format!("{}/api/auth", state.origin), "device_authorization_endpoint":format!("{}/device", state.origin), "token_endpoint":format!("{}/token", state.origin)}),
+    )
+}
+
+async fn client_document() -> Json<Value> {
+    Json(json!({"client_id":"fixture-device-client"}))
+}
+
+fn issuer_router(state: Arc<StandIn>) -> Router {
+    Router::new()
+        .route(
+            "/.well-known/oauth-authorization-server/api/auth",
+            get(metadata),
+        )
+        .route("/.well-known/fleet-login", get(client_document))
+        .route("/device", post(authorize))
+        .route("/token", post(token))
+        .with_state(state)
+}
+
 #[tokio::test]
 async fn fleet_machine_login_http_flow_keeps_machine_fields_client_rotation_and_code_display_real()
 {
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .unwrap();
-    let address = listener.local_addr().unwrap();
+    let listener = super::tls_fixture::HttpsListener::bind().await.unwrap();
+    let address = listener.address().unwrap();
     let clock = Arc::new(ControlledClock(AtomicI64::new(0)));
     let state = Arc::new(StandIn {
         clock: clock.clone(),
-        verification_uri: format!("http://{address}/activate"),
+        origin: format!("https://{address}"),
+        verification_uri: format!("https://{address}/activate"),
         grant: Mutex::new(GrantState::Unrequested),
         requests: Mutex::new(Vec::new()),
         poll_times: Mutex::new(Vec::new()),
         redemption_reply: RedemptionReply::Complete,
     });
-    let router = Router::new()
-        .route("/device", post(authorize))
-        .route("/token", post(token))
-        .with_state(state.clone());
+    let router = issuer_router(state.clone());
     let stop = CancellationToken::new();
     let shutdown = stop.clone();
     let server = tokio::spawn(async move {
@@ -234,20 +253,14 @@ async fn fleet_machine_login_http_flow_keeps_machine_fields_client_rotation_and_
             .with_graceful_shutdown(shutdown.cancelled_owned())
             .await
     });
-    let configuration: super::super::login_files::FleetLoginConfiguration = serde_json::from_value(json!({
-        "deviceAuthorizationUrl":format!("http://{address}/device"),"tokenUrl":format!("http://{address}/token"),
-        "deviceClientId":"fixture-device-client","machineResource":"https://central.example.invalid/machine",
-        "endpoint":"wss://central.example.invalid/v1/session","receiver":"019f0000-0000-7000-8000-000000000011",
-        "relay":"019f0000-0000-7000-8000-000000000012","access":{"kind":"none"},
-    })).unwrap();
-    let issuer = HttpMachineTokenIssuer::new(
-        configuration.device_authorization_url,
-        configuration.token_url,
-        configuration.device_client_id,
-        configuration.machine_resource,
-        clock.clone(),
+    let client = super::tls_fixture::issuer_client().unwrap();
+    let configuration = super::super::issuer_discovery::discover_issuer(
+        &client,
+        &format!("https://{address}/api/auth").try_into().unwrap(),
     )
+    .await
     .unwrap();
+    let issuer = HttpMachineTokenIssuer::new(configuration, client, clock.clone());
     let request = DeviceLoginRequest {
         organization_id: "019f0000-0000-7000-8000-000000000001"
             .to_owned()
@@ -274,16 +287,34 @@ async fn fleet_machine_login_http_flow_keeps_machine_fields_client_rotation_and_
         *state.poll_times.lock().unwrap(),
         vec![5_000, 10_000, 20_000]
     );
-    assert_eq!(issued.credential.machine_client_id.as_str(), MACHINE_CLIENT);
-    assert_eq!(issued.valid_until, SyncTime::from_unix_millis(620_000));
+    assert_eq!(
+        issued.token.credential.machine_client_id.as_str(),
+        MACHINE_CLIENT
+    );
+    assert_eq!(
+        issued.token.valid_until,
+        SyncTime::from_unix_millis(620_000)
+    );
+    assert_eq!(
+        issued.central.receiver.to_string(),
+        "019f0000-0000-7000-8000-000000000011"
+    );
     let display = serde_json::to_string(&display.unwrap()).unwrap();
     assert!(display.contains("ABCD-EFGH"));
     assert!(!display.contains(DEVICE_CODE));
-    assert!(!display.contains(issued.token.expose_secret()));
-    assert!(!display.contains(issued.credential.refresh_credential.expose_secret()));
+    assert!(!display.contains(issued.token.token.expose_secret()));
+    assert!(!display.contains(issued.token.credential.refresh_credential.expose_secret()));
     assert!(!display.contains("verification_uri_complete"));
     assert!(!display.contains("user_code="));
-    let first = issued.credential.clone();
+    assert!(
+        state
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|form| !form.contains_key("resource"))
+    );
+    let first = issued.token.credential.clone();
     let rotated = issuer.refresh(&first).await.unwrap();
     assert_eq!(
         rotated.credential.refresh_credential.expose_secret(),
@@ -316,23 +347,19 @@ async fn fleet_machine_login_http_consume_then_lost_or_malformed_success_is_unkn
         RedemptionReply::LoseAfterConsume,
         RedemptionReply::MalformedAfterConsume,
     ] {
-        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-            .await
-            .unwrap();
-        let address = listener.local_addr().unwrap();
+        let listener = super::tls_fixture::HttpsListener::bind().await.unwrap();
+        let address = listener.address().unwrap();
         let clock = Arc::new(ControlledClock(AtomicI64::new(0)));
         let state = Arc::new(StandIn {
             clock: clock.clone(),
-            verification_uri: format!("http://{address}/activate"),
+            origin: format!("https://{address}"),
+            verification_uri: format!("https://{address}/activate"),
             grant: Mutex::new(GrantState::Unrequested),
             requests: Mutex::new(Vec::new()),
             poll_times: Mutex::new(Vec::new()),
             redemption_reply,
         });
-        let router = Router::new()
-            .route("/device", post(authorize))
-            .route("/token", post(token))
-            .with_state(state.clone());
+        let router = issuer_router(state.clone());
         let stop = CancellationToken::new();
         let shutdown = stop.clone();
         let server = tokio::spawn(async move {
@@ -340,17 +367,14 @@ async fn fleet_machine_login_http_consume_then_lost_or_malformed_success_is_unkn
                 .with_graceful_shutdown(shutdown.cancelled_owned())
                 .await
         });
-        let issuer = HttpMachineTokenIssuer::new(
-            format!("http://{address}/device").try_into().unwrap(),
-            format!("http://{address}/token").try_into().unwrap(),
-            "fixture-device-client".to_owned().try_into().unwrap(),
-            "https://central.example.invalid/machine"
-                .to_owned()
-                .try_into()
-                .unwrap(),
-            clock.clone(),
+        let client = super::tls_fixture::issuer_client().unwrap();
+        let configuration = super::super::issuer_discovery::discover_issuer(
+            &client,
+            &format!("https://{address}/api/auth").try_into().unwrap(),
         )
+        .await
         .unwrap();
+        let issuer = HttpMachineTokenIssuer::new(configuration, client, clock.clone());
         let request = DeviceLoginRequest {
             organization_id: "019f0000-0000-7000-8000-000000000001"
                 .to_owned()

@@ -201,16 +201,14 @@ impl HostRuntime {
         child_launch_plans: ManagedChildLaunchPlans,
         update_inputs: ManagedUpdateInputs,
     ) -> Result<HostExit, HostError> {
-        let startup_started_at = tokio::time::Instant::now();
         let instance = HostInstance::acquire(config.coordination_paths().clone())?;
         Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
-            startup_started_at,
             None,
-            None,
+            crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
         )
         .await
     }
@@ -222,7 +220,6 @@ impl HostRuntime {
         update_inputs: ManagedUpdateInputs,
         marker: &std::ffi::OsStr,
     ) -> Result<HostExit, HostError> {
-        let startup_started_at = tokio::time::Instant::now();
         let instance =
             HostInstance::acquire_inherited(config.coordination_paths().clone(), marker)?;
         Self::run_owned(
@@ -230,9 +227,8 @@ impl HostRuntime {
             child_launch_plans,
             update_inputs,
             instance,
-            startup_started_at,
             None,
-            None,
+            crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
         )
         .await
     }
@@ -266,9 +262,8 @@ impl HostRuntime {
             child_launch_plans,
             update_inputs,
             instance,
-            tokio::time::Instant::now(),
             progress,
-            None,
+            crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
         )
         .await
     }
@@ -280,6 +275,9 @@ impl HostRuntime {
         child_launch_plans: ManagedChildLaunchPlans,
         update_inputs: ManagedUpdateInputs,
         instance: HostInstance,
+        repository: std::sync::Arc<
+            dyn codex_router_fleet_state::fleet_login_repository::FleetLoginRepository,
+        >,
         dependencies: crate::fleet_machine_login::FleetLoginDependencies,
     ) -> Result<HostExit, HostError> {
         Self::run_owned(
@@ -287,9 +285,11 @@ impl HostRuntime {
             child_launch_plans,
             update_inputs,
             instance,
-            tokio::time::Instant::now(),
             None,
-            Some(dependencies),
+            crate::fleet_machine_login::MachineLoginStartup::MachineTokens {
+                repository: Some(repository),
+                dependencies: Some(dependencies),
+            },
         )
         .await
     }
@@ -299,10 +299,10 @@ impl HostRuntime {
         child_launch_plans: ManagedChildLaunchPlans,
         update_inputs: ManagedUpdateInputs,
         instance: HostInstance,
-        startup_started_at: tokio::time::Instant,
         progress: Option<HostProgressCallback<'_>>,
-        login_dependencies: Option<crate::fleet_machine_login::FleetLoginDependencies>,
+        login_startup: crate::fleet_machine_login::MachineLoginStartup,
     ) -> Result<HostExit, HostError> {
+        let startup_started_at = tokio::time::Instant::now();
         let running_version = std::env::var("CODEX_ROUTER_DEBUG_RUNNING_VERSION")
             .ok()
             .filter(|_| cfg!(debug_assertions))
@@ -372,7 +372,7 @@ impl HostRuntime {
             &app_server,
             readiness.remote_control_server_name().cloned(),
             router_executable_relation,
-            login_dependencies,
+            login_startup,
         )
         .await
         {
@@ -385,6 +385,9 @@ impl HostRuntime {
             }
         };
         let mut state = RuntimeState::ready(router_condition, readiness);
+        let mut machine_login_changes = collaboration
+            .as_ref()
+            .and_then(|owner| owner.route_changes());
         state.login_reload = Some(login_reload_status);
         let initial_router_relation = router_executable_observer.lock().await.relation();
         state.observe_router_executable(initial_router_relation);
@@ -429,6 +432,7 @@ impl HostRuntime {
                         .await
                 };
                 if let Err(error) = result {
+                    owner.route_unavailable();
                     tracing::error!("collaboration lifecycle synchronization failed");
                     let cleanup = if config.remote_access().is_some() {
                         owner.shutdown().await
@@ -464,6 +468,7 @@ impl HostRuntime {
                 }
             }
             tokio::select! {
+                _ = collaboration_lifecycle::wait_route_change(&mut machine_login_changes) => {},
                 never = &mut login_reload, if matches!(state.phase, HostPhase::Steady) && app_server.is_some() => match never {},
                 failure = collaboration_lifecycle::wait_failure(&mut collaboration), if collaboration.is_some() => {
                     match failure {

@@ -172,3 +172,34 @@ async fn fleet_machine_login_token_source_is_closed_before_login_and_uses_the_la
         Err(ConnectFailure::Unavailable)
     ));
 }
+
+// Explicit machine-token mode has no enrollment phase (Lead01a197a4).
+#[tokio::test]
+async fn fleet_machine_login_empty_token_source_stays_logged_out_until_a_grant() {
+    let (sender, source) = MachineTokenSource::channel(Arc::new(ControlledClock::new(0)));
+    assert_eq!(source.machine_login_state(), MachineLoginState::NotLoggedIn);
+    assert!(source.next_credential().now_or_never().is_none());
+    drop(sender);
+    assert!(matches!(
+        source.next_credential().await,
+        Err(ConnectFailure::Unavailable)
+    ));
+}
+
+#[tokio::test]
+async fn fleet_machine_login_unadopted_route_never_exposes_its_credential_or_opens_admission() {
+    let (sender, source) = MachineTokenSource::channel(Arc::new(ControlledClock::new(0)));
+    let enrollment_id: EnrollmentId = "019f0000-0000-7000-8000-000000000001"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    sender.send_replace(MachineAccessToken::AwaitingRoute {
+        enrollment_id: enrollment_id.clone(),
+        token: SecretString::new("awaiting-route-secret-canary"),
+        expires_at: SyncTime::from_unix_millis(1_000),
+    });
+
+    assert_eq!(source.machine_login_state(), MachineLoginState::NotLoggedIn);
+    assert!(source.next_credential().now_or_never().is_none());
+    assert!(!source.is_current_for(&enrollment_id));
+}

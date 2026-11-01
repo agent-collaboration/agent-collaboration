@@ -43,6 +43,7 @@ collaboration-service = { path = "../collaboration-service", version = "0.1.96" 
 collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.96" }
 collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.102" }
 fleet-sync-protocol.workspace = true
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
 fleet-sync-lease.workspace = true
 fs2.workspace = true
 uuid.workspace = true
@@ -74,6 +75,7 @@ tracing-subscriber.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
 axum = { workspace = true, features = ["form", "json", "http1", "tokio"] }
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.96" }

@@ -162,7 +162,7 @@ impl CollaborationRuntime {
         let mut prepared_board = None;
         let project_admission = match opened_board {
             Ok(board) => {
-                if let Some(login) = machine_login.as_ref().and_then(|login| login.handle()) {
+                if let Some(login) = machine_login.as_ref().map(|login| login.handle()) {
                     login.attach_connection(board.mail_session().map(|session| {
                         crate::fleet_machine_login::MachineRenewalConnection {
                             requests: session.requests,

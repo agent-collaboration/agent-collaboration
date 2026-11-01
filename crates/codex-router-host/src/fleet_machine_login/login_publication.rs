@@ -1,49 +1,48 @@
-//! Confirms the credential, public metadata and retirement before a login becomes usable.
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+//! Confirms credential bytes, the public repository row, and retirement in that order.
+use std::sync::Arc;
+
+use codex_router_fleet_state::fleet_login::{FleetLoginCandidate, SavedFleetLogin};
+use codex_router_fleet_state::fleet_login_repository::FleetLoginRepository;
 
 use super::{
     device_code_flow::RefreshCredentialBundle,
     login_contract::{FleetLoginUnknown, RefreshCredentialKeeping},
-    login_files::{MachineLoginMetadata, persist_metadata_with_sync},
     refresh_credential_store::{RefreshCredentialError, RefreshCredentialStore},
 };
 
 pub(super) struct MachineLoginPublication {
-    pub root: PathBuf,
+    pub repository: Arc<dyn FleetLoginRepository>,
     pub credentials: Arc<RefreshCredentialStore>,
-    pub sync_directory: fn(&Path) -> std::io::Result<()>,
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    pub after_commit: Option<fn() -> Result<(), ()>>,
 }
-
-pub(super) fn sync_directory(directory: &Path) -> std::io::Result<()> {
-    std::fs::File::open(directory)?.sync_all()
-}
-
 impl MachineLoginPublication {
-    pub(super) fn publish_login(
+    pub(super) async fn publish_login(
         &self,
-        metadata: &MachineLoginMetadata,
+        candidate: &FleetLoginCandidate,
         credential: &RefreshCredentialBundle,
         keeping: RefreshCredentialKeeping,
-    ) -> Result<(), FleetLoginUnknown> {
+    ) -> Result<SavedFleetLogin, FleetLoginUnknown> {
         let unknown = || FleetLoginUnknown::CredentialPublication {
-            organization_id: metadata.organization_id.clone(),
-            enrollment_id: metadata.enrollment_id.clone(),
+            organization_id: candidate.organization_id.clone(),
+            enrollment_id: candidate.enrollment_id.clone(),
             keeping,
         };
-        // Issuance may already have superseded the previous enrollment. Even an
-        // early local write failure therefore cannot promise a refused login.
         self.credentials.write(credential).map_err(|_| unknown())?;
-        persist_metadata_with_sync(&self.root, metadata, self.sync_directory)
+        let saved = self
+            .repository
+            .replace_fleet_login(candidate)
+            .await
             .map_err(|_| unknown())?;
+        #[cfg(any(test, feature = "runtime-test-support"))]
+        if let Some(after_commit) = self.after_commit {
+            after_commit().map_err(|()| unknown())?;
+        }
         self.credentials
-            .retire_earlier_machine_credentials(&metadata.enrollment_id)
+            .retire_earlier_machine_credentials(&saved.enrollment_id)
             .map_err(|_| unknown())?;
-        Ok(())
+        Ok(saved)
     }
-
     pub(super) fn publish_rotation(
         &self,
         credential: &RefreshCredentialBundle,

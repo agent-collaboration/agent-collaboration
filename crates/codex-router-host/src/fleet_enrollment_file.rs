@@ -144,6 +144,14 @@ pub fn read_fleet_enrollment_document(
     path: &Path,
     root: &Path,
 ) -> io::Result<FleetEnrollmentDocument> {
+    let document: FleetEnrollmentDocument =
+        serde_json::from_slice(&read_private_enrollment_bytes(path, root)?)
+            .map_err(|_| io::Error::other("invalid fleet enrollment inputs"))?;
+    document.secret_keys()?;
+    Ok(document)
+}
+
+fn read_private_enrollment_bytes(path: &Path, root: &Path) -> io::Result<Vec<u8>> {
     let invalid = || {
         io::Error::other("fleet enrollment requires a private owner-only file in the Router root")
     };
@@ -158,10 +166,27 @@ pub fn read_fleet_enrollment_document(
     {
         return Err(invalid());
     }
-    let document: FleetEnrollmentDocument = serde_json::from_slice(&std::fs::read(path)?)
-        .map_err(|_| io::Error::other("invalid fleet enrollment inputs"))?;
-    document.secret_keys()?;
-    Ok(document)
+    std::fs::read(path)
+}
+
+/// New machine login consumes only the existing edge reference; the retired
+/// enrollment credential and old routing fields are not inputs to that path.
+pub(crate) fn load_router_fleet_access(root: &Path) -> io::Result<Option<FleetAccess>> {
+    #[derive(Deserialize)]
+    struct AccessOnly {
+        access: FleetAccess,
+    }
+    let path = crate::router_fleet_enrollment_file(root);
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => {
+            let access: AccessOnly =
+                serde_json::from_slice(&read_private_enrollment_bytes(&path, root)?)
+                    .map_err(|_| io::Error::other("invalid Fleet Access reference"))?;
+            Ok(Some(access.access))
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 pub fn open_fleet_enrollment_store(root: &Path) -> io::Result<RuntimeCredentialStore> {
@@ -286,6 +311,10 @@ pub(crate) fn load_router_fleet_enrollment(root: &Path) -> io::Result<Option<Boa
 #[cfg(test)]
 #[path = "fleet_enrollment_publication_tests.rs"]
 mod publication_tests;
+
+#[cfg(test)]
+#[path = "fleet_access_reference_tests.rs"]
+mod access_reference_tests;
 
 #[cfg(test)]
 mod tests {

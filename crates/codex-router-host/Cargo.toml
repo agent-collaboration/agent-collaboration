@@ -26,6 +26,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+codex-router-fleet-state = { path = "../codex-router-fleet-state", version = "0.1.119" }
 base64.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
 nix = { workspace = true, features = ["event"] }
@@ -77,6 +78,8 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+codex-router-fleet-state = { path = "../codex-router-fleet-state", version = "0.1.119", features = ["test-support"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
 proptest.workspace = true
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }

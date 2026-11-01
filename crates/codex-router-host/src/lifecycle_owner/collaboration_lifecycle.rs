@@ -23,7 +23,8 @@ pub(super) struct CollaborationLifecycle {
     runtime: Option<CollaborationRuntime>,
     published_child: Option<u32>,
     schema_digest: Option<[u8; 32]>,
-    machine_login: Option<crate::fleet_machine_login::HostMachineLogin>,
+    machine_login: Option<Box<crate::fleet_machine_login::HostMachineLogin>>,
+    assembled_login: Option<codex_router_fleet_state::fleet_login::SavedFleetLogin>,
 }
 impl CollaborationLifecycle {
     pub(super) async fn start(
@@ -34,8 +35,9 @@ impl CollaborationLifecycle {
         router_executable_relation: tokio::sync::watch::Receiver<
             collaboration_protocol::RouterExecutableRelation,
         >,
-        login_dependencies: Option<crate::fleet_machine_login::FleetLoginDependencies>,
+        login_startup: crate::fleet_machine_login::MachineLoginStartup,
     ) -> io::Result<Option<Self>> {
+        let token_startup = login_startup.resolve().map_err(io::Error::other)?;
         let Some(directory) = config.collaboration_directory() else {
             return Ok(None);
         };
@@ -46,22 +48,29 @@ impl CollaborationLifecycle {
             .router_root()
             .ok_or_else(|| io::Error::other("fleet enrollment requires a Router root"))?
             .to_owned();
-        let secret_root = router_secret_root
-            .as_ref()
-            .ok_or_else(|| io::Error::other("machine login requires a Router secret root"))?
-            .clone();
-        let login_root = router_root.clone();
-        let login_directory = directory.to_owned();
-        let machine_login = tokio::task::spawn_blocking(move || {
-            crate::fleet_machine_login::start_machine_login(
-                &login_root,
-                &secret_root,
-                &login_directory,
-                login_dependencies,
-            )
-        })
-        .await
-        .map_err(io::Error::other)??;
+        let machine_login = match token_startup {
+            None => None,
+            Some(inputs) => {
+                let secret_root = router_secret_root
+                    .as_ref()
+                    .ok_or_else(|| io::Error::other("machine login requires a Router secret root"))?
+                    .clone();
+                let edge_root = router_root.clone();
+                let edge =
+                    tokio::task::spawn_blocking(move || load_machine_edge_reference(&edge_root))
+                        .await
+                        .map_err(io::Error::other)??;
+                Some(Box::new(
+                    Box::pin(crate::fleet_machine_login::start_machine_login(
+                        &secret_root,
+                        directory,
+                        edge,
+                        inputs,
+                    ))
+                    .await?,
+                ))
+            }
+        };
         let external_provider_startups =
             crate::claude_provider_launch_environment::configure_claude_provider_launches(
                 config.external_provider_startups().to_vec(),
@@ -96,6 +105,7 @@ impl CollaborationLifecycle {
             published_child: None,
             schema_digest: None,
             machine_login,
+            assembled_login: None,
         };
         if let Err(error) = owner.synchronize(instance, Some(child)).await {
             let cleanup = owner.shutdown().await;
@@ -128,7 +138,18 @@ impl CollaborationLifecycle {
             }
             return Ok(());
         };
+        let learned = self
+            .machine_login
+            .as_ref()
+            .and_then(|login| login.route().saved().cloned());
+        let route_changed = self.assembled_login.as_ref() != learned.as_deref();
+        if self.runtime.is_some() && route_changed {
+            self.shutdown_runtime().await?;
+        }
         if self.published_child == Some(child.process.process_id()) {
+            if let (Some(handle), Some(saved)) = (self.machine_login_handle(), learned) {
+                handle.route_adopted(saved);
+            }
             return Ok(());
         }
         let export = child.schema_export();
@@ -141,13 +162,18 @@ impl CollaborationLifecycle {
         if self.runtime.is_none() {
             let inputs_started_at = std::time::Instant::now();
             let router_root = self.router_root.clone();
-            let board_session = match &self.machine_login {
-                Some(login) => login.session_inputs()?,
-                None => tokio::task::spawn_blocking(move || {
+            let use_legacy = self.machine_login.is_none();
+            let board_session = if use_legacy {
+                tokio::task::spawn_blocking(move || {
                     crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
                 })
                 .await
-                .map_err(io::Error::other)??,
+                .map_err(io::Error::other)??
+            } else {
+                match &self.machine_login {
+                    Some(login) => login.session_inputs()?,
+                    None => None,
+                }
             };
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
@@ -226,6 +252,10 @@ impl CollaborationLifecycle {
             )
             .await?;
         self.published_child = Some(child.process.process_id());
+        self.assembled_login = learned.as_ref().map(|saved| (**saved).clone());
+        if let (Some(handle), Some(saved)) = (self.machine_login_handle(), learned) {
+            handle.route_adopted(saved);
+        }
         Ok(())
     }
     pub(super) async fn listener_failure(&mut self) -> crate::CollaborationFailure {
@@ -243,7 +273,7 @@ impl CollaborationLifecycle {
     pub(super) async fn shutdown(&mut self) -> io::Result<()> {
         let runtime = self.shutdown_runtime().await;
         let login = match self.machine_login.take() {
-            Some(login) => login.shutdown().await,
+            Some(login) => (*login).shutdown().await,
             None => Ok(()),
         };
         runtime.and(login)
@@ -254,18 +284,72 @@ impl CollaborationLifecycle {
     ) -> Option<crate::fleet_machine_login::MachineLoginHandle> {
         self.machine_login
             .as_ref()
-            .and_then(|login| login.binding().handle())
+            .map(|login| login.binding().handle())
+    }
+
+    pub(super) fn route_changes(
+        &self,
+    ) -> Option<tokio::sync::watch::Receiver<crate::fleet_machine_login::MachineLoginRoute>> {
+        self.machine_login_handle()
+            .map(|handle| handle.route_changes())
+    }
+
+    pub(super) fn route_unavailable(&self) {
+        if let Some(handle) = self.machine_login_handle()
+            && let Some(saved) = handle.route().saved()
+        {
+            handle.route_unavailable(saved.clone());
+        }
     }
 
     pub(super) async fn shutdown_runtime(&mut self) -> io::Result<()> {
         if let Some(handle) = self.machine_login_handle() {
+            handle.suspend_route().await;
             handle.attach_connection(None);
         }
         self.published_child = None;
+        self.assembled_login = None;
         if let Some(runtime) = self.runtime.take() {
             runtime.shutdown().await?;
         }
         Ok(())
+    }
+}
+
+fn load_machine_edge_reference(
+    root: &std::path::Path,
+) -> io::Result<crate::fleet_machine_login::MachineEdgeAccess> {
+    use crate::fleet_machine_login::MachineEdgeAccess;
+    use codex_router_secret_store::model::SecretKey;
+    let invalid = || io::Error::other("invalid configured Fleet Access reference");
+    Ok(
+        match crate::fleet_enrollment_file::load_router_fleet_access(root)? {
+            None => MachineEdgeAccess::Unconfigured,
+            Some(crate::FleetAccess::Cloudflare(reference)) => MachineEdgeAccess::Cloudflare {
+                client_id: reference.client_id,
+                secret_key: SecretKey::new(reference.client_secret_key).map_err(|_| invalid())?,
+            },
+            Some(crate::FleetAccess::SelfHosted(
+                crate::SelfHostedAccessReference::SelfHosted { assertion_key },
+            )) => MachineEdgeAccess::SelfHosted {
+                assertion_key: SecretKey::new(assertion_key).map_err(|_| invalid())?,
+            },
+        },
+    )
+}
+
+pub(super) async fn wait_route_change(
+    route: &mut Option<tokio::sync::watch::Receiver<crate::fleet_machine_login::MachineLoginRoute>>,
+) {
+    match route {
+        Some(route) => {
+            if route.changed().await.is_err() {
+                std::future::pending().await
+            } else {
+                route.borrow_and_update();
+            }
+        }
+        None => std::future::pending().await,
     }
 }
 pub(super) async fn wait_failure(

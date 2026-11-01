@@ -141,7 +141,7 @@ impl BoardOperations {
                 collaboration_contracts::MachineLoginState::NotLoggedIn => Err(BoardError {
                     kind: BoardFailureKind::NotLoggedIn,
                     stage: BoardFailureStage::Admission,
-                    message: "This Router is not logged in. Run: codex-router fleet login --organization <id> --label <label>".to_owned(),
+                    message: "This Router is not logged in. Run: codex-router fleet login --organization <id> --label <label>. For the first login, also pass --sign-in <https-address>.".to_owned(),
                     next_action: BoardNextAction::RunFleetLogin,
                     details: BoardErrorDetails::None,
                 }),

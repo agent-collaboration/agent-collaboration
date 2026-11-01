@@ -17,6 +17,11 @@ use super::login_clock::FleetLoginClock;
 #[derive(Clone, Debug)]
 pub(super) enum MachineAccessToken {
     NotLoggedIn,
+    AwaitingRoute {
+        enrollment_id: EnrollmentId,
+        token: SecretString,
+        expires_at: SyncTime,
+    },
     Granted {
         enrollment_id: EnrollmentId,
         token: SecretString,
@@ -59,7 +64,7 @@ impl MachineTokenSource {
         }
         match &*self.token.borrow() {
             MachineAccessToken::Granted { expires_at, .. } => *expires_at > self.clock.now(),
-            MachineAccessToken::NotLoggedIn => false,
+            MachineAccessToken::NotLoggedIn | MachineAccessToken::AwaitingRoute { .. } => false,
         }
     }
 
@@ -121,7 +126,9 @@ impl MachineTokenSource {
                         ))?,
                     });
                 }
-                MachineAccessToken::Granted { .. } | MachineAccessToken::NotLoggedIn => {}
+                MachineAccessToken::Granted { .. }
+                | MachineAccessToken::NotLoggedIn
+                | MachineAccessToken::AwaitingRoute { .. } => {}
             }
             token
                 .changed()

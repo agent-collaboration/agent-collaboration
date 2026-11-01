@@ -39,11 +39,82 @@ fn status_frame() -> OperatorFrame {
 }
 fn login_request() -> OperatorRequest {
     OperatorRequest::FleetLogin {
+        sign_in: None,
+        machine_environment: None,
         organization_id: "019f0000-0000-7000-8000-000000000001"
             .to_owned()
             .try_into()
             .unwrap(),
         label: "Fixture machine".to_owned().try_into().unwrap(),
+    }
+}
+
+// Wrong behavior: parsing an assertion but dropping it before the Host, or
+// replacing omission with physical. Oracle: PD bb4c7145. The real run function
+// and operator codec/socket keep this boundary real; Host persistence is outside
+// this test. No pre-fix red observed on this uncompiled input-path draft.
+#[tokio::test]
+async fn fleet_machine_login_cli_forwards_the_optional_environment_on_the_operator_socket() {
+    use crate::fleet_command::arguments::LoginMachineEnvironment;
+    for (argument, expected) in [
+        (None, None),
+        (
+            Some(LoginMachineEnvironment::Physical),
+            Some(fleet_identity_protocol::MachineEnvironment::Physical),
+        ),
+        (
+            Some(LoginMachineEnvironment::CloudVm),
+            Some(fleet_identity_protocol::MachineEnvironment::CloudVm),
+        ),
+    ] {
+        // Arrange
+        let root = tempfile::tempdir().unwrap();
+        let paths = HostCoordinationPaths::for_router_root(root.path());
+        std::fs::create_dir_all(paths.operator_socket().parent().unwrap()).unwrap();
+        let listener = UnixListener::bind(paths.operator_socket()).unwrap();
+        let server = tokio::spawn(async move {
+            answer_status(&listener, status_frame()).await;
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut expected_request = login_request();
+            let OperatorRequest::FleetLogin {
+                machine_environment,
+                ..
+            } = &mut expected_request
+            else {
+                panic!("login request expected")
+            };
+            *machine_environment = expected;
+            assert_eq!(read_request(&mut stream).await, expected_request);
+            let terminal = FleetLoginEvent::LoggedIn {
+                organization_id: "019f0000-0000-7000-8000-000000000001"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                enrollment_id: "019f0000-0000-7000-8000-000000000010"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                keeping: RefreshCredentialKeeping::MemoryOnly,
+            };
+            stream
+                .write_all(&encode_operator_frame(&OperatorFrame::FleetLogin(terminal)).unwrap())
+                .await
+                .unwrap();
+        });
+        let arguments = LoginArguments {
+            sign_in: None,
+            organization: "019f0000-0000-7000-8000-000000000001".to_owned(),
+            label: "Fixture machine".to_owned(),
+            machine_environment: argument,
+            router_root: Some(root.path().to_owned()),
+        };
+
+        // Act
+        let result = run(arguments, &mut Vec::new()).await;
+
+        // Assert
+        result.unwrap();
+        server.await.unwrap();
     }
 }
 fn code() -> FleetLoginEvent {

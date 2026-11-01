@@ -1,5 +1,5 @@
 //! Explicit enrollment inputs; expiration policy stays with the Access token's owner.
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -54,12 +54,33 @@ enum FleetAction {
 
 #[derive(Args, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LoginArguments {
+    /// Sign-in issuer; HTTPS or local loopback HTTP, reused after the first login.
+    #[arg(long)]
+    pub sign_in: Option<String>,
     #[arg(long)]
     pub organization: String,
     #[arg(long)]
     pub label: String,
+    /// Owner assertion; an omitted value is resolved by the Host's login transaction.
+    #[arg(long, value_enum)]
+    pub machine_environment: Option<LoginMachineEnvironment>,
     #[arg(long)]
     pub router_root: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum LoginMachineEnvironment {
+    Physical,
+    CloudVm,
+}
+
+impl From<LoginMachineEnvironment> for fleet_identity_protocol::MachineEnvironment {
+    fn from(value: LoginMachineEnvironment) -> Self {
+        match value {
+            LoginMachineEnvironment::Physical => Self::Physical,
+            LoginMachineEnvironment::CloudVm => Self::CloudVm,
+        }
+    }
 }
 
 #[derive(Args, Clone, Debug, Eq, PartialEq)]
@@ -96,4 +117,59 @@ pub(crate) struct EnrollArguments {
 pub(crate) struct StatusArguments {
     #[arg(long)]
     pub router_root: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FleetCommand, LoginMachineEnvironment};
+    use std::ffi::OsString;
+
+    // Wrong behavior: choosing physical in the CLI when omission must preserve
+    // the stored value, or accepting the wire tag as a CLI spelling. Oracle:
+    // PD bb4c7145. No pre-fix red observed on this uncompiled input-path draft.
+    #[test]
+    fn fleet_machine_login_cli_preserves_omission_and_parses_only_the_adopted_environment_names() {
+        for (value, expected) in [
+            (None, None),
+            (Some("physical"), Some(LoginMachineEnvironment::Physical)),
+            (Some("cloud-vm"), Some(LoginMachineEnvironment::CloudVm)),
+        ] {
+            // Arrange
+            let mut arguments = vec![
+                "login",
+                "--organization",
+                "019f0000-0000-7000-8000-000000000001",
+                "--label",
+                "Fixture machine",
+            ];
+            if let Some(value) = value {
+                arguments.extend(["--machine-environment", value]);
+            }
+
+            // Act
+            let command =
+                FleetCommand::parse(arguments.into_iter().map(OsString::from).collect()).unwrap();
+
+            // Assert
+            let FleetCommand::Login(login) = command else {
+                panic!("login command expected")
+            };
+            assert_eq!(login.machine_environment, expected);
+        }
+        for invalid in ["cloudVm", "Physical", "vm", "unknown"] {
+            let arguments = [
+                "login",
+                "--organization",
+                "019f0000-0000-7000-8000-000000000001",
+                "--label",
+                "Fixture machine",
+                "--machine-environment",
+                invalid,
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+            assert!(FleetCommand::parse(arguments).is_err());
+        }
+    }
 }

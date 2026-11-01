@@ -12,6 +12,7 @@ use super::login_contract::{
     FleetLoginEvent, FleetLoginRefusal, FleetLoginUnknown, RefreshCredentialKeeping, UserCode,
     VerificationUri,
 };
+use super::token_response::LearnedFleetCentral;
 
 #[derive(Clone, Debug)]
 pub(super) struct DeviceLoginRequest {
@@ -34,6 +35,12 @@ pub(super) struct IssuedMachineToken {
     pub credential: RefreshCredentialBundle,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct IssuedMachineLogin {
+    pub token: IssuedMachineToken,
+    pub central: LearnedFleetCentral,
+}
+
 pub(super) struct DeviceCodeAuthorization {
     pub device_code: SecretString,
     pub user_code: UserCode,
@@ -45,7 +52,7 @@ pub(super) struct DeviceCodeAuthorization {
 pub(super) enum DevicePollResult {
     Pending,
     SlowDown,
-    Issued(IssuedMachineToken),
+    Issued(IssuedMachineLogin),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,7 +107,7 @@ pub(super) async fn run_device_code_login(
     request: &DeviceLoginRequest,
     keeping: RefreshCredentialKeeping,
     show_code: impl FnOnce(FleetLoginEvent),
-) -> Result<IssuedMachineToken, DeviceCodeFailure> {
+) -> Result<IssuedMachineLogin, DeviceCodeFailure> {
     let authorization = issuer
         .authorize(request)
         .await

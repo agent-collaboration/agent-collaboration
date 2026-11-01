@@ -4,11 +4,12 @@ use codex_router_secret_store::{
     keychain_data_key::PooledCredentialDataKey,
 };
 
-use super::super::{
-    login_files::{MachineLoginMetadata, read_metadata},
-    login_publication::{MachineLoginPublication, sync_directory},
-};
+use super::super::login_publication::MachineLoginPublication;
 use super::*;
+use codex_router_fleet_state::fleet_login::{SavedFleetCentral, SavedFleetLogin};
+use codex_router_fleet_state::{
+    fleet_login_repository::FleetLoginRepository, test_support::MemoryFleetLoginRepository,
+};
 
 const INSTALLATION: &str = "019f0000-0000-7000-8000-000000000001";
 const FIRST: &str = "019f0000-0000-7000-8000-000000000011";
@@ -31,15 +32,41 @@ fn bundle(enrollment: &str, secret: &str) -> RefreshCredentialBundle {
         refresh_credential: SecretString::new(secret),
     }
 }
-fn metadata(enrollment: &str) -> MachineLoginMetadata {
-    MachineLoginMetadata {
+fn saved(enrollment: &str) -> SavedFleetLogin {
+    SavedFleetLogin {
+        sign_in: "https://issuer.example.invalid/issuer"
+            .to_owned()
+            .try_into()
+            .unwrap(),
         organization_id: "019f0000-0000-7000-8000-000000000002"
             .to_owned()
             .try_into()
             .unwrap(),
         enrollment_id: enrollment.to_owned().try_into().unwrap(),
+        machine_environment: fleet_identity_protocol::MachineEnvironment::Physical,
+        central: SavedFleetCentral {
+            receiver: serde_json::from_value(serde_json::json!(
+                "019f0000-0000-7000-8000-000000000021"
+            ))
+            .unwrap(),
+            relay: serde_json::from_value(serde_json::json!(
+                "019f0000-0000-7000-8000-000000000022"
+            ))
+            .unwrap(),
+        },
     }
 }
+fn login_candidate(enrollment: &str) -> codex_router_fleet_state::fleet_login::FleetLoginCandidate {
+    let saved = saved(enrollment);
+    codex_router_fleet_state::fleet_login::FleetLoginCandidate {
+        sign_in: saved.sign_in,
+        organization_id: saved.organization_id,
+        enrollment_id: saved.enrollment_id,
+        requested_machine_environment: Some(saved.machine_environment),
+        central: saved.central,
+    }
+}
+
 fn generation_names(root: &std::path::Path) -> Vec<String> {
     let mut names: Vec<_> = std::fs::read_dir(root.join("secrets"))
         .unwrap()
@@ -103,40 +130,39 @@ fn fleet_machine_login_refresh_rotation_replaces_one_envelope_and_reopens_with_t
     );
 }
 
-#[test]
-fn fleet_machine_login_confirmed_login_retires_an_uncertain_attempt_without_an_unknown_handler_sweep()
+#[tokio::test]
+async fn fleet_machine_login_confirmed_login_retires_an_uncertain_attempt_without_an_unknown_handler_sweep()
  {
     let root = tempfile::tempdir().unwrap();
     let credentials = encrypted(root.path());
+    let repository = Arc::new(MemoryFleetLoginRepository::new());
     let publication = MachineLoginPublication {
-        root: root.path().to_owned(),
+        repository: repository.clone(),
         credentials: credentials.clone(),
-        sync_directory,
+        after_commit: None,
     };
     publication
         .publish_login(
-            &metadata(FIRST),
+            &login_candidate(FIRST),
             &bundle(FIRST, "original-secret"),
             RefreshCredentialKeeping::EncryptedStore,
         )
+        .await
         .unwrap();
     let uncertain = MachineLoginPublication {
-        root: root.path().to_owned(),
+        repository: repository.clone(),
         credentials: credentials.clone(),
-        sync_directory: |_| {
-            Err(std::io::Error::other(
-                "injected metadata directory sync failure",
-            ))
-        },
+        after_commit: Some(|| Err(())),
     };
 
     assert!(
         uncertain
             .publish_login(
-                &metadata(UNCERTAIN),
+                &login_candidate(UNCERTAIN),
                 &bundle(UNCERTAIN, "uncertain-secret"),
                 RefreshCredentialKeeping::EncryptedStore
             )
+            .await
             .is_err()
     );
 
@@ -146,15 +172,16 @@ fn fleet_machine_login_confirmed_login_retires_an_uncertain_attempt_without_an_u
         "the unknown ending leaves committed files untouched"
     );
     assert_eq!(
-        read_metadata(root.path()).unwrap(),
-        Some(metadata(UNCERTAIN))
+        repository.load_fleet_login().await.unwrap(),
+        Some(saved(UNCERTAIN))
     );
     publication
         .publish_login(
-            &metadata(LATEST),
+            &login_candidate(LATEST),
             &bundle(LATEST, "latest-secret"),
             RefreshCredentialKeeping::EncryptedStore,
         )
+        .await
         .unwrap();
     let expected = credential_key(
         &INSTALLATION.to_owned().try_into().unwrap(),
@@ -165,7 +192,10 @@ fn fleet_machine_login_confirmed_login_retires_an_uncertain_attempt_without_an_u
         generation_names(root.path()),
         vec![format!("{}.v2", expected.as_str())]
     );
-    assert_eq!(read_metadata(root.path()).unwrap(), Some(metadata(LATEST)));
+    assert_eq!(
+        repository.load_fleet_login().await.unwrap(),
+        Some(saved(LATEST))
+    );
     assert_eq!(
         credentials
             .read(&LATEST.to_owned().try_into().unwrap())

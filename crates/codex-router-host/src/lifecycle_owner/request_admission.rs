@@ -223,11 +223,14 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
     }
     match work.request {
         OperatorRequest::FleetLogin {
+            sign_in,
             organization_id,
             label,
+            machine_environment,
         } => match context.machine_login {
             Some(login) => {
-                let mut events = login.observe(organization_id, label);
+                let mut events =
+                    login.observe(sign_in, organization_id, label, machine_environment);
                 context.connection_tasks.spawn(async move {
                     while let Some(event) = events.recv().await {
                         let terminal = event.is_terminal();
@@ -246,7 +249,8 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
             None => {
                 let _sent = work.response.try_send(OperatorFrame::FleetLogin(
                     crate::fleet_machine_login::FleetLoginEvent::Refused {
-                        reason: crate::fleet_machine_login::FleetLoginRefusal::NotConfigured {},
+                        reason:
+                            crate::fleet_machine_login::FleetLoginRefusal::ConnectionUnavailable {},
                     },
                 ));
             }

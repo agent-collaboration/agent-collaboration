@@ -1,4 +1,4 @@
-//! The configured C8 OAuth endpoints are the only destination for machine credentials.
+//! Discovered C8 OAuth endpoints are the only destination for machine credentials.
 use std::{sync::Arc, time::Duration};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -9,45 +9,36 @@ use serde::Deserialize;
 
 use super::{
     device_code_flow::{
-        DeviceCodeAuthorization, DeviceLoginRequest, DevicePollResult, IssuedMachineToken,
-        IssuerFailure, MachineTokenIssuer, RefreshCredentialBundle,
+        DeviceCodeAuthorization, DeviceLoginRequest, DevicePollResult, IssuedMachineLogin,
+        IssuedMachineToken, IssuerFailure, MachineTokenIssuer, RefreshCredentialBundle,
     },
+    issuer_discovery::{DeviceLoginClientId, DiscoveredIssuer, IssuerEndpoint},
     login_clock::{FleetLoginClock, LoginFuture},
     login_contract::{UserCode, VerificationUri},
-    login_files::{DeviceLoginClientId, HttpServiceUrl},
+    token_response::LearnedFleetCentral,
 };
 
 pub(super) struct HttpMachineTokenIssuer {
     client: reqwest::Client,
-    device_authorization_url: HttpServiceUrl,
-    token_url: HttpServiceUrl,
+    device_authorization_url: IssuerEndpoint,
+    token_url: IssuerEndpoint,
     device_client_id: DeviceLoginClientId,
-    machine_resource: HttpServiceUrl,
     clock: Arc<dyn FleetLoginClock>,
 }
 
 impl HttpMachineTokenIssuer {
     pub(super) fn new(
-        device_authorization_url: HttpServiceUrl,
-        token_url: HttpServiceUrl,
-        device_client_id: DeviceLoginClientId,
-        machine_resource: HttpServiceUrl,
+        configuration: DiscoveredIssuer,
+        client: reqwest::Client,
         clock: Arc<dyn FleetLoginClock>,
-    ) -> Result<Self, IssuerFailure> {
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(|_| IssuerFailure::Unavailable)?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             client,
-            device_authorization_url,
-            token_url,
-            device_client_id,
-            machine_resource,
+            device_authorization_url: configuration.device_authorization_endpoint,
+            token_url: configuration.token_endpoint,
+            device_client_id: configuration.client_id,
             clock,
-        })
+        }
     }
 
     async fn request_token(
@@ -65,7 +56,7 @@ impl HttpMachineTokenIssuer {
     async fn read_token(
         &self,
         response: reqwest::Response,
-    ) -> Result<IssuedMachineToken, IssuerFailure> {
+    ) -> Result<(IssuedMachineToken, Option<LearnedFleetCentral>), IssuerFailure> {
         let wire: TokenResponse = response
             .json()
             .await
@@ -84,14 +75,17 @@ impl HttpMachineTokenIssuer {
         if valid_until <= now {
             return Err(IssuerFailure::InvalidResponse);
         }
-        Ok(IssuedMachineToken {
-            token: SecretString::new(wire.access_token),
-            valid_until,
-            credential: RefreshCredentialBundle {
-                machine_client_id: wire.machine_client_id,
-                refresh_credential: SecretString::new(wire.refresh_token),
+        Ok((
+            IssuedMachineToken {
+                token: SecretString::new(wire.access_token),
+                valid_until,
+                credential: RefreshCredentialBundle {
+                    machine_client_id: wire.machine_client_id,
+                    refresh_credential: SecretString::new(wire.refresh_token),
+                },
             },
-        })
+            wire.fleet_central,
+        ))
     }
 }
 
@@ -105,7 +99,6 @@ impl MachineTokenIssuer for HttpMachineTokenIssuer {
             let form = [
                 ("client_id", self.device_client_id.as_str()),
                 ("scope", "offline_access"),
-                ("resource", self.machine_resource.as_str()),
                 ("machine_installation_id", request.installation.as_str()),
                 ("machine_peer_id", peer.as_str()),
                 ("machine_label", request.label.as_str()),
@@ -162,14 +155,15 @@ impl MachineTokenIssuer for HttpMachineTokenIssuer {
                     ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
                     ("device_code", device_code.expose_secret()),
                     ("client_id", self.device_client_id.as_str()),
-                    ("resource", self.machine_resource.as_str()),
                 ])
                 .await?;
             if response.status().is_success() {
-                return self
-                    .read_token(response)
-                    .await
-                    .map(DevicePollResult::Issued);
+                let (token, central) = self.read_token(response).await?;
+                let central = central.ok_or(IssuerFailure::InvalidResponse)?;
+                return Ok(DevicePollResult::Issued(IssuedMachineLogin {
+                    token,
+                    central,
+                }));
             }
             if response.status().is_server_error() {
                 return Err(IssuerFailure::Unavailable);
@@ -201,11 +195,10 @@ impl MachineTokenIssuer for HttpMachineTokenIssuer {
                         credential.refresh_credential.expose_secret(),
                     ),
                     ("client_id", credential.machine_client_id.as_str()),
-                    ("resource", self.machine_resource.as_str()),
                 ])
                 .await?;
             if response.status().is_success() {
-                let token = self.read_token(response).await?;
+                let (token, _routing_extension) = self.read_token(response).await?;
                 if token.credential.machine_client_id != credential.machine_client_id {
                     return Err(IssuerFailure::InvalidResponse);
                 }
@@ -260,6 +253,7 @@ struct TokenResponse {
     token_type: String,
     expires_in: u64,
     machine_client_id: EnrollmentId,
+    fleet_central: Option<LearnedFleetCentral>,
 }
 #[derive(Deserialize)]
 struct TokenTimingClaims {
@@ -315,3 +309,7 @@ async fn read_oauth_error(response: reqwest::Response) -> Result<OAuthError, Iss
 #[cfg(test)]
 #[path = "issuer_http_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/support/fleet_login_https.rs"]
+pub(super) mod tls_fixture;

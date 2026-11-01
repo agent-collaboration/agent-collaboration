@@ -48,12 +48,23 @@ pub(super) async fn run(
     let label = arguments.label.try_into().map_err(|_| {
         FleetLoginCommandError::InvalidInput("--label must be a valid machine label")
     })?;
+    let sign_in = arguments
+        .sign_in
+        .map(TryInto::try_into)
+        .transpose()
+        .map_err(|_| {
+            FleetLoginCommandError::InvalidInput(
+                "--sign-in requires HTTPS or loopback HTTP, at most 2048 ASCII bytes, without credentials, query or fragment",
+            )
+        })?;
     let paths = HostCoordinationPaths::for_router_root(&root);
     exchange(
         paths.operator_socket(),
         OperatorRequest::FleetLogin {
+            sign_in,
             organization_id,
             label,
+            machine_environment: arguments.machine_environment.map(Into::into),
         },
         stdout,
     )
@@ -164,7 +175,7 @@ fn refusal_message(reason: &FleetLoginRefusal) -> String {
             "this host doesn't support fleet login; upgrade codex-router".to_owned()
         }
         FleetLoginRefusal::NotConfigured {} => {
-            "fleet login is not configured on this Host".to_owned()
+            "no sign-in address is saved; run codex-router fleet login --sign-in <https-address> --organization <id> --label <label>".to_owned()
         }
         FleetLoginRefusal::StoreUnusable { cause } => {
             format!("fleet login refused: encrypted credential store is unusable ({cause:?})")

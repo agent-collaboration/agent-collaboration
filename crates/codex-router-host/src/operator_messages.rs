@@ -26,9 +26,17 @@ pub const MAX_OPERATOR_FRAME_BYTES: usize = 64 * 1024;
 pub enum OperatorRequest {
     /// Ask this running Host to approve and keep its own machine login.
     FleetLogin {
+        #[serde(rename = "signIn", default, skip_serializing_if = "Option::is_none")]
+        sign_in: Option<codex_router_fleet_state::fleet_login::SignInAddress>,
         #[serde(rename = "organizationId")]
         organization_id: fleet_identity_protocol::OrganizationId,
         label: message_board::MachineLabel,
+        #[serde(
+            rename = "machineEnvironment",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        machine_environment: Option<fleet_identity_protocol::MachineEnvironment>,
     },
     /// Observe current state.
     Status,
