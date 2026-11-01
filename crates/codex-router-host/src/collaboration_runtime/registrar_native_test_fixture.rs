@@ -102,6 +102,7 @@ impl NativeFixture {
                                         recorded_resumes.lock().unwrap().push(request.clone());
                                         thread_result(&request,request["params"]["threadId"].as_str().unwrap())
                                     },
+                                    "turn/start"=>json!({"turn":{"id":"runtime-turn-1"}}),
                                     _=>json!({}),
                                 };
                                 if socket.send(Message::Text(json!({"id":id,"result":result}).to_string().into())).await.is_err(){break;}

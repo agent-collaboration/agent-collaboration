@@ -1,5 +1,6 @@
 //! Real Host route composition and native wire; memory store/central and native answers stand in.
 //! Oracle: Lead01a19876/01a19879, PD bindings wherever StartThread/ForkThread is built.
+//! No pre-fix semantic red was observed for these new API scenarios.
 use super::{
     FIRST, SECOND,
     fixture::{PROJECT, RuntimeFixture},
@@ -78,16 +79,25 @@ impl DirectRuntime {
             endpoint_id: "codex-local".to_owned().try_into().unwrap(),
         };
         let gate = collaboration_runtime::NativeGenerationGate::default();
-        gate.activate(
+        let generation: CodexGeneration =
             serde_json::from_value(json!({"serviceEpoch":endpoint.service_id,"generation":1}))
+                .unwrap();
+        let schemas = Arc::new(
+            codex_native_integration::NativePayloadSchemas::from_bundle(native.export.bundle())
                 .unwrap(),
+        );
+        gate.activate(
+            generation.clone(),
             fixture.root.path().join("backend.sock"),
-            Some(Arc::new(
-                codex_native_integration::NativePayloadSchemas::from_bundle(native.export.bundle())
-                    .unwrap(),
-            )),
+            Some(schemas.clone()),
         )
         .unwrap();
+        let directory = collaboration_runtime::EndpointDirectory::new(endpoint.service_id.clone());
+        directory.publish(serde_json::from_value(json!({
+            "endpoint":endpoint,"label":"native fixture",
+            "availability":{"state":"available","observedAt":"2026-11-01T00:00:00Z"},
+            "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":fixture.root.path().join("backend.sock"),"schemaDigest":schemas.schema_digest(),"generation":generation}]
+        })).unwrap()).unwrap();
         let backend = collaboration_runtime::NativeControlBackend {
             endpoint: endpoint.clone(),
             gate,
@@ -125,9 +135,7 @@ impl DirectRuntime {
         let routes = crate::session_message_route_composition::compose_session_message_routes(
             crate::session_message_route_composition::SessionMessageRouteInputs {
                 provider_endpoints: Default::default(),
-                directory: collaboration_runtime::EndpointDirectory::new(
-                    endpoint.service_id.clone(),
-                ),
+                directory,
                 native_backend: backend,
                 native_session_registration: registration,
                 approval_broker: broker.clone(),
@@ -428,6 +436,81 @@ async fn f4a_native_delivery_cold_resume_reuses_the_saved_binding_and_refuses_an
     assert!(
         matches!(refused, collaboration_contracts::RunSubmission::Rejected(_)),
         "{refused:?}"
+    );
+    assert_eq!(runtime.native.resumes.lock().unwrap().len(), 1);
+    assert_eq!(
+        runtime
+            .fixture
+            .authority
+            .registrations
+            .lock()
+            .unwrap()
+            .len(),
+        1
+    );
+    runtime.native.shutdown().await;
+}
+
+// Ordinary messages own a separate ResumeThread call from scheduled submission.
+// Catch a missing injection there through the real composed route and native wire.
+#[tokio::test]
+async fn f4a_native_delivery_ordinary_message_resumes_with_the_same_active_binding() {
+    use collaboration_contracts::SessionMessageDelivery;
+    let runtime = DirectRuntime::new(SessionRegistrationMode::MachineTokens, false).await;
+    let prepared = runtime
+        .route
+        .prepare_destination(runtime.request(false, FIRST), &Evidence::default())
+        .await
+        .unwrap();
+    let SchedulePreparationOutcome::Prepared(prepared) = prepared else {
+        panic!("native start should be prepared");
+    };
+    runtime.native.cold.store(true, Ordering::SeqCst);
+    let request = collaboration_contracts::layer_zero::DeliveryRequest {
+        payload: collaboration_contracts::layer_zero::PreparedPush {
+            push_id: FIRST.to_owned().try_into().unwrap(),
+            line: "Fixture message".to_owned().try_into().unwrap(),
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+        },
+        target: prepared.target,
+        mode: collaboration_protocol::MessageDelivery::Auto,
+        precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
+        correlation: FIRST.to_owned().try_into().unwrap(),
+        attempt: FIRST.to_owned().try_into().unwrap(),
+    };
+    let delivered = runtime
+        .route
+        .deliver(
+            request.clone(),
+            &collaboration_contracts::UnstoredAttemptEvidenceSink,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        delivered.receipt().outcome,
+        collaboration_protocol::DeliveryOutcome::Started,
+        "{:?}",
+        delivered.receipt()
+    );
+    let resumes = runtime.native.resumes.lock().unwrap().clone();
+    assert_eq!(resumes.len(), 1);
+    assert_eq!(
+        resumes[0]["params"]["config"],
+        json!({"mcp_servers":{"agent-router":{"url":runtime.fixture.repository.records.lock().unwrap()[0].preparation().binding_address.expose_address()}}})
+    );
+    let mut unregistered = request;
+    unregistered.target.session_id = "unregistered-thread".to_owned().try_into().unwrap();
+    let refused = runtime
+        .route
+        .deliver(
+            unregistered,
+            &collaboration_contracts::UnstoredAttemptEvidenceSink,
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        refused.receipt().outcome,
+        collaboration_protocol::DeliveryOutcome::Started
     );
     assert_eq!(runtime.native.resumes.lock().unwrap().len(), 1);
     assert_eq!(
