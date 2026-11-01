@@ -103,7 +103,12 @@ fn observe_store(
     let data_key = match read_existing_pooled_credential_data_key(&files, keychain)
         .map_err(|error| classify_failure(&error))?
     {
-        ExistingCredentialDataKey::BackendAbsent => return Ok(ClassifiedCredentialStore::Absent),
+        ExistingCredentialDataKey::BackendAbsent
+            if encrypted.is_empty() && legacy.is_empty() && temporary.is_empty() =>
+        {
+            return Ok(ClassifiedCredentialStore::Absent);
+        }
+        ExistingCredentialDataKey::BackendAbsent => return Err(UnusableCause::KeyMissing),
         ExistingCredentialDataKey::MissingStore
             if !marker && encrypted.is_empty() && legacy.is_empty() && temporary.is_empty() =>
         {
