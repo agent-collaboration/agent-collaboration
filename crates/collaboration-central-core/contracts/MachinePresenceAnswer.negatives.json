@@ -1,0 +1,15 @@
+[
+null,
+{"attachSequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"open","unexpectedField":true},
+{"attachSequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"unrecognizedVariant"},
+{"attachSequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silent_for_ms":1000,"state":"open"},
+{"attachSequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","open_for_ms":7000,"silentForMs":1000,"state":"open"},
+{"attachSequence":9007199254740991,"connection_id":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"open"},
+{"attachSequence":9007199254740992,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"open"},
+{"attach_sequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"open"},
+{"closedAgoMs":5000,"state":"notConnected","unexpectedField":true},
+{"closedAgoMs":5000,"state":"unrecognizedVariant"},
+{"closed_ago_ms":5000,"state":"notConnected"},
+{"state":"notConnected","unexpectedField":true},
+{"state":"unrecognizedVariant"}
+]

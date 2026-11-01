@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "AbsolutePath": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^/[^\\u0000]*$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "CommitId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "ModelName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "RepositoryLocator": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 2048
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "commit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommitId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelName"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepositoryLocator"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workingDirectory": {
+      "$ref": "#/$defs/AbsolutePath"
+    }
+  },
+  "required": [
+    "workingDirectory"
+  ],
+  "title": "LaunchContext",
+  "type": "object"
+}

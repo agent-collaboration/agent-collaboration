@@ -1,0 +1,4 @@
+[
+{"workingDirectory":"/work/item-two"},
+{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","model":"configured-model","repository":"https://example.invalid/repository.git","workingDirectory":"/work/item-two"}
+]

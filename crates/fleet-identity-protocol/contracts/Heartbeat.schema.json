@@ -1,0 +1,36 @@
+{
+  "$defs": {
+    "MachineCapability": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "remoteStart",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/MachineCapability"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "capabilities"
+  ],
+  "title": "Heartbeat",
+  "type": "object"
+}

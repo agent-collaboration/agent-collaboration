@@ -1,0 +1,6 @@
+[
+{"kind":"notOwner"},
+{"kind":"machineInAnotherOrganization"},
+{"kind":"unknownWorkspace"},
+{"kind":"secondFactorRequired","withinSeconds":900}
+]

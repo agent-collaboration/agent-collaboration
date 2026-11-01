@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "maxLength": 256,
+  "minLength": 1,
+  "pattern": "^[^\\u0000]+$",
+  "title": "ModelName",
+  "type": "string",
+  "x-maxUtf8Bytes": 256
+}

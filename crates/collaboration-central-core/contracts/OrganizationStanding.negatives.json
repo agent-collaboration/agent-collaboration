@@ -1,0 +1,10 @@
+[
+null,
+{"result":"admitted","role":"member","unexpectedField":true},
+{"result":"admitted","role":"owner","unexpectedField":true},
+{"result":"awaitingOwner","unexpectedField":true},
+{"result":"notAdmitted","unexpectedField":true},
+{"result":"unrecognizedVariant","role":"member"},
+{"result":"unrecognizedVariant","role":"owner"},
+{"result":"unrecognizedVariant"}
+]

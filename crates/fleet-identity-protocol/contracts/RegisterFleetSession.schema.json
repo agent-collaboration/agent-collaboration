@@ -1,0 +1,264 @@
+{
+  "$defs": {
+    "AbsolutePath": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^/[^\\u0000]*$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "AgentIsolation": {
+      "additionalProperties": false,
+      "properties": {
+        "instanceId": {
+          "$ref": "#/$defs/IsolationInstanceId"
+        },
+        "kind": {
+          "$ref": "#/$defs/IsolationKind"
+        }
+      },
+      "required": [
+        "kind",
+        "instanceId"
+      ],
+      "type": "object"
+    },
+    "CommitId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "IsolationInstanceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "IsolationKind": {
+      "enum": [
+        "host",
+        "processSandbox",
+        "container",
+        "vm"
+      ],
+      "type": "string"
+    },
+    "LaunchContext": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommitId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepositoryLocator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workingDirectory": {
+          "$ref": "#/$defs/AbsolutePath"
+        }
+      },
+      "required": [
+        "workingDirectory"
+      ],
+      "type": "object"
+    },
+    "MachineEnvironment": {
+      "enum": [
+        "physical",
+        "cloudVm"
+      ],
+      "type": "string"
+    },
+    "ModelName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "ProjectId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RemoteStartId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RepositoryLocator": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 2048
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    },
+    "StartedBy": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "routerOperator",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "session",
+              "type": "string"
+            },
+            "session": {
+              "$ref": "#/$defs/SessionRef"
+            }
+          },
+          "required": [
+            "kind",
+            "session"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "remoteSession",
+              "type": "string"
+            },
+            "requestId": {
+              "$ref": "#/$defs/RemoteStartId"
+            },
+            "session": {
+              "$ref": "#/$defs/SessionRef"
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "requestId"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "isolation": {
+      "$ref": "#/$defs/AgentIsolation"
+    },
+    "launchContext": {
+      "$ref": "#/$defs/LaunchContext"
+    },
+    "machineEnvironment": {
+      "$ref": "#/$defs/MachineEnvironment"
+    },
+    "projectId": {
+      "$ref": "#/$defs/ProjectId"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionRef"
+    },
+    "startedBy": {
+      "$ref": "#/$defs/StartedBy"
+    }
+  },
+  "required": [
+    "session",
+    "projectId",
+    "startedBy",
+    "isolation",
+    "launchContext",
+    "machineEnvironment"
+  ],
+  "title": "RegisterFleetSession",
+  "type": "object"
+}

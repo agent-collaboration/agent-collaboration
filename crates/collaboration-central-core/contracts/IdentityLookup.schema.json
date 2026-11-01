@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "organizationId": {
+          "$ref": "#/$defs/OrganizationId"
+        },
+        "personId": {
+          "$ref": "#/$defs/PersonId"
+        },
+        "subject": {
+          "const": "person",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "organizationId",
+        "personId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "organizationId": {
+          "$ref": "#/$defs/OrganizationId"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionRef"
+        },
+        "subject": {
+          "const": "session",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "organizationId",
+        "session"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "IdentityLookup"
+}

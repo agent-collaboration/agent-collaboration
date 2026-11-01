@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "StandingRole": {
+      "enum": [
+        "member",
+        "owner"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "admitted",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/StandingRole"
+        }
+      },
+      "required": [
+        "result",
+        "role"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "awaitingOwner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "notAdmitted",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "OrganizationStanding"
+}

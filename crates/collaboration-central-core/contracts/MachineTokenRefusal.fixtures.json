@@ -1,0 +1,6 @@
+[
+{"kind":"enrollmentNotActive"},
+{"kind":"superseded"},
+{"kind":"wrongClient"},
+{"kind":"idleExpired"}
+]

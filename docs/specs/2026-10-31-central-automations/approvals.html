@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How approvals work · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="mental-model.html">How it all fits</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Clock, firing and delivery</a>
+    <a href="runs.html">The receiving machine</a>
+    <a href="remote-sessions.html">Sessions on other machines</a>
+    <a href="notifications.html">Notifications</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="database.html">Database cleanup (PR 1)</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+    <a href="firing-options.html">Firing options and cost</a>
+    <a href="history.html">How we got here</a>
+    <a href="delivery-plan.html">Delivery plan</a>
+    <a href="approvals.html">How approvals work</a>
+    <a href="decisions.html">Your decisions</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1 id="heading-how-approvals-work">How approvals work</h1>
+
+<p><strong>Approvals stay on the machine where the session runs. Nothing is sent to central or to another machine.</strong> A session's permission prompt is recorded in that machine's <code>interaction.sqlite</code>, delivered to the approver session on the same machine, and answered there. The database PR also moves the last approval data out of two JSON files into <code>interaction.sqlite</code>. Routing approvals across machines is a separate design for later.</p>
+
+<h2 id="today">One approval today, step by step</h2>
+<ex-mermaid id="approval-flow" label="A local approval"><script type="text/plain">
+sequenceDiagram
+  participant S as Session (needs permission)
+  participant R as Router on the same machine
+  participant DB as interaction.sqlite
+  participant A as Approver session
+  Note over R: when the session was created, its route was saved (who created it, who approves)
+  S->>R: permission prompt
+  R->>R: look up the route
+  R->>DB: record the request (typed_interaction_history)
+  R->>DB: add an Approval push (router_pushes)
+  R->>A: deliver the push, like a direct message
+  A->>R: approval decide
+  R->>S: the decision; the session continues
+  Note over R: after 5 minutes with no answer, the prompt is cancelled
+</script></ex-mermaid>
+<p>The route check refuses an approver or creator on another machine (<code>native_approval.rs:18–22</code>). That refusal is why approvals can't cross machines yet.</p>
+
+<h2 id="where">What's stored where</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Data</th><th>Today</th><th>After the database PR</th></tr></thead>
+<tbody>
+<tr><td>Routes: who created each session and who approves it</td><td><code>approval-routes.json</code>, rewritten whole on every new session and never pruned (1.3 MB on your machine)</td><td>an <code>approval_routes</code> table in <code>interaction.sqlite</code>, pruned after 2 months unused. The JSON file is imported once, then deleted</td></tr>
+<tr><td>Approval requests and decisions</td><td><code>typed_interaction_history</code> in <code>interaction.sqlite</code></td><td>unchanged</td></tr>
+<tr><td>The notice to the approver</td><td>a push row in <code>router_pushes</code></td><td>unchanged, and approvals stay immediate (never held for the 10-minute notification window)</td></tr>
+<tr><td>Old approval history</td><td><code>approval-history.json</code>, frozen since 26 September</td><td>deleted, along with the code that read it</td></tr>
+</tbody>
+</table>
+</div>
+<p>Nothing deletes or rewrites the files on your machine until you upgrade. The production Router is never restarted by an agent.</p>
+
+<h2 id="steps">The plan, in three steps</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Step</th><th>Where</th><th>What</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Database PR</td><td>Approval data lives only in <code>interaction.sqlite</code>; both JSON files go</td><td>Implemented; its new tests pass. The full test run is in progress</td></tr>
+<tr><td>2</td><td>Automations PR</td><td><strong>Interim, named:</strong> a session created on another machine with no approver named gets that machine's Chief of Staff. If none is named there, the create is refused before anything happens. The route accepts the requester from the other machine as creator only because central has verified who it is</td><td>Designed; being built in lane 2 (M3b)</td></tr>
+<tr><td>3</td><td><strong>PR 3, next after this stack</strong>, with its own design</td><td>Central owns the routes. Prompts and decisions travel through central to whichever machine the approver is on, and the requester becomes the default approver</td><td>Next: PR 3, as you decided on 31 October</td></tr>
+</tbody>
+</table>
+</div>
+</ex-document>
+
+<script type="application/json" data-ex-search-index="">[{"kind":"page","title":"Central automations","pageTitle":"Central automations","ancestors":[],"href":"index.html#heading-central-automations"},{"kind":"heading","title":"The systems","pageTitle":"Central automations","ancestors":[],"href":"index.html#map"},{"kind":"heading","title":"Read one island at a time","pageTitle":"Central automations","ancestors":[],"href":"index.html#islands"},{"kind":"heading","title":"Your decisions so far","pageTitle":"Central automations","ancestors":[],"href":"index.html#decisions"},{"kind":"walkthrough","title":"Read the design","pageTitle":"Central automations","ancestors":[],"href":"index.html#read-design","description":"The main islands in order, one stop each."},{"kind":"page","title":"How it all fits","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#heading-how-it-all-fits"},{"kind":"heading","title":"The picture","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#picture"},{"kind":"heading","title":"A worked example: 3 machines, 24 automations","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#example"},{"kind":"heading","title":"How a wake reaches a session","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#wake-push"},{"kind":"heading","title":"Why dozens, or hundreds, stay cheap","pageTitle":"How it all fits","ancestors":[],"href":"mental-model.html#scale"},{"kind":"page","title":"The central list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#heading-the-central-list"},{"kind":"heading","title":"Where it lives","pageTitle":"The central list","ancestors":[],"href":"definitions.html#where"},{"kind":"heading","title":"What central stores","pageTitle":"The central list","ancestors":[],"href":"definitions.html#records"},{"kind":"heading","title":"Rules, checked once against the whole list","pageTitle":"The central list","ancestors":[],"href":"definitions.html#rules"},{"kind":"heading","title":"The limits are part of the contract","pageTitle":"The central list","ancestors":[],"href":"definitions.html#limits"},{"kind":"page","title":"Clock, firing and delivery","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#heading-clock-firing-and-delivery"},{"kind":"heading","title":"One grid point, end to end","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#sequence"},{"kind":"heading","title":"The grid","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#grid"},{"kind":"heading","title":"The batch","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#batch"},{"kind":"heading","title":"Pause, cancel and change: central only","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#cancel"},{"kind":"heading","title":"Firing states","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#states"},{"kind":"heading","title":"How the clock works (Cloudflare and Tokio)","pageTitle":"Clock, firing and delivery","ancestors":[],"href":"firing.html#clock"},{"kind":"page","title":"The receiving machine","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#heading-the-receiving-machine"},{"kind":"heading","title":"From inbox to session","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#path"},{"kind":"heading","title":"Schedule runs","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#runs"},{"kind":"heading","title":"What stays local","pageTitle":"The receiving machine","ancestors":[],"href":"runs.html#local"},{"kind":"page","title":"Sessions on other machines","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#heading-sessions-on-other-machines"},{"kind":"heading","title":"How it works","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#flow"},{"kind":"heading","title":"Who creates, who approves","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#who"},{"kind":"heading","title":"What you get back: two parts","pageTitle":"Sessions on other machines","ancestors":[],"href":"remote-sessions.html#answers"},{"kind":"page","title":"Notifications: once every 10 minutes","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#heading-notifications-once-every-10-minutes"},{"kind":"heading","title":"What counts as a notification","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#which"},{"kind":"heading","title":"The window","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#window"},{"kind":"heading","title":"Where it runs","pageTitle":"Notifications: once every 10 minutes","ancestors":[],"href":"notifications.html#where"},{"kind":"page","title":"Moving to central","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#heading-moving-to-central"},{"kind":"heading","title":"The handover, per automation","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#handover"},{"kind":"heading","title":"Converting timing to the new rules","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#fit"},{"kind":"heading","title":"Why it's safe","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#why-safe"},{"kind":"heading","title":"Storage changes","pageTitle":"Moving to central","ancestors":[],"href":"migration.html#schema"},{"kind":"page","title":"Database cleanup (PR 1)","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#heading-database-cleanup-pr-1"},{"kind":"heading","title":"What's kept, and for how long","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#table"},{"kind":"heading","title":"Getting space back","pageTitle":"Database cleanup (PR 1)","ancestors":[],"href":"database.html#space"},{"kind":"page","title":"Fixing the published design","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#heading-fixing-the-published-design"},{"kind":"heading","title":"Why not copy the branch","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#why-not-copy"},{"kind":"heading","title":"Steps","pageTitle":"Fixing the published design","ancestors":[],"href":"published-design.html#steps"},{"kind":"page","title":"How it's proven","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#heading-how-it-s-proven"},{"kind":"heading","title":"Each test has a broken build that fails it","pageTitle":"How it's proven","ancestors":[],"href":"proof.html#each-test"},{"kind":"page","title":"Firing options and cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#heading-firing-options-and-cost"},{"kind":"heading","title":"Paid-plan rates (Workers Paid)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#billing"},{"kind":"heading","title":"Cost of one firing (planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#unit"},{"kind":"heading","title":"Cost per setup per month (batched, planning model)","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#orgs"},{"kind":"heading","title":"What actually moves the cost","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#levers"},{"kind":"heading","title":"The tradeoffs that actually matter","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#tradeoffs"},{"kind":"heading","title":"Measuring it","pageTitle":"Firing options and cost","ancestors":[],"href":"firing-options.html#measure"},{"kind":"page","title":"How we got here","pageTitle":"How we got here","ancestors":[],"href":"history.html#heading-how-we-got-here"},{"kind":"page","title":"Delivery plan","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#heading-delivery-plan"},{"kind":"heading","title":"Milestones","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestones"},{"kind":"heading","title":"Order and lanes","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#order"},{"kind":"heading","title":"How each milestone is verified","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#milestone-gates"},{"kind":"heading","title":"What \"done\" means at each gate","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#gates"},{"kind":"heading","title":"Risks","pageTitle":"Delivery plan","ancestors":[],"href":"delivery-plan.html#risks"},{"kind":"page","title":"How approvals work","pageTitle":"How approvals work","ancestors":[],"href":"approvals.html#heading-how-approvals-work"},{"kind":"heading","title":"One approval today, step by step","pageTitle":"How approvals work","ancestors":[],"href":"approvals.html#today"},{"kind":"heading","title":"What's stored where","pageTitle":"How approvals work","ancestors":[],"href":"approvals.html#where"},{"kind":"heading","title":"The plan, in three steps","pageTitle":"How approvals work","ancestors":[],"href":"approvals.html#steps"},{"kind":"page","title":"Your decisions","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#heading-your-decisions"},{"kind":"heading","title":"What you decided","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#answers"},{"kind":"heading","title":"Approvals, in three steps","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#approvals"},{"kind":"heading","title":"Decided earlier","pageTitle":"Your decisions","ancestors":[],"href":"decisions.html#settled"}]</script></body></html>

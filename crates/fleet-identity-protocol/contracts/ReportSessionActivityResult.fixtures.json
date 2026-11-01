@@ -1,0 +1,5 @@
+[
+{"result":"accepted"},
+{"result":"superseded"},
+{"reason":{"kind":"notCurrentConnection"},"result":"refused"}
+]

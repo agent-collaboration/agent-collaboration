@@ -1,0 +1,9 @@
+[
+null,
+{"kind":"enrollmentNotActive","unexpectedField":true},
+{"kind":"machineInAnotherOrganization","unexpectedField":true},
+{"kind":"superseded","unexpectedField":true},
+{"kind":"unknownMachine","unexpectedField":true},
+{"kind":"unrecognizedVariant"},
+{"kind":"wrongClient","unexpectedField":true}
+]

@@ -1,0 +1,12 @@
+[
+null,
+{"reason":{"kind":"notOwner","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"notOwner"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"notOwner"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"secondFactorRequired","withinSeconds":900},"result":"refused"},
+{"reason":{"kind":"unrecognizedVariant"},"result":"refused"},
+{"result":"applied","unexpectedField":true},
+{"result":"pending","unexpectedField":true},
+{"result":"unknown","unexpectedField":true},
+{"result":"unrecognizedVariant"}
+]

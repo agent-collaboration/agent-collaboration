@@ -1,0 +1,5 @@
+[
+{"attachSequence":9007199254740991,"connectionId":"019a3dce-2000-7000-8000-000000000001","openForMs":7000,"silentForMs":1000,"state":"open"},
+{"state":"notConnected"},
+{"closedAgoMs":5000,"state":"notConnected"}
+]

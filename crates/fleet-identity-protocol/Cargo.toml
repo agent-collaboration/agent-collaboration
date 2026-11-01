@@ -1,0 +1,19 @@
+[package]
+name = "fleet-identity-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+schemars.workspace = true
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "serde"] }
+message-board = { path = "../message-board", version = "0.1.118" }
+
+[dev-dependencies]
+serde_json.workspace = true
+jsonschema.workspace = true

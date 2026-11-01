@@ -3,6 +3,7 @@ use crate::{
     EndpointId, GenerationNumber, NonEmptyText, ObservationTimestamp, SchemaDigest, SessionId,
     UuidIdentity,
 };
+use message_board::{CANONICAL_UUID_PATTERN, ENDPOINT_ID_PATTERN, OPAQUE_ID_PATTERN};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use std::borrow::Cow;
 
@@ -20,23 +21,23 @@ macro_rules! validated_schema {
 }
 validated_schema!(
     UuidIdentity,
-    json_schema!({"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"})
+    json_schema!({"type":"string","pattern":CANONICAL_UUID_PATTERN})
 );
 validated_schema!(
     EndpointId,
     json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::ENDPOINT_ID_MAX_BYTES,
         "x-maxUtf8Bytes":crate::limits::ENDPOINT_ID_MAX_BYTES,
         "description":format!("ENDPOINT_ID_MAX_BYTES: 1..={} ASCII bytes; lowercase letters, digits and hyphens, starting with a letter.", crate::limits::ENDPOINT_ID_MAX_BYTES),
-        "pattern":format!("^[a-z][a-z0-9-]{{0,{}}}$", crate::limits::ENDPOINT_ID_MAX_BYTES - 1)})
+        "pattern":ENDPOINT_ID_PATTERN})
 );
 validated_schema!(
     SessionId,
-    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::SESSION_ID_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::SESSION_ID_MAX_BYTES,
+    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::SESSION_ID_MAX_BYTES,"pattern":OPAQUE_ID_PATTERN,"x-maxUtf8Bytes":crate::limits::SESSION_ID_MAX_BYTES,
         "description":format!("SESSION_ID_MAX_BYTES: 1..={} UTF-8 bytes; nonempty and NUL-free. maxLength is a character pre-check; entry enforces the byte bound.", crate::limits::SESSION_ID_MAX_BYTES)})
 );
 validated_schema!(
     NonEmptyText,
-    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::TEXT_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::TEXT_MAX_BYTES,
+    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::TEXT_MAX_BYTES,"pattern":OPAQUE_ID_PATTERN,"x-maxUtf8Bytes":crate::limits::TEXT_MAX_BYTES,
         "description":format!("TEXT_MAX_BYTES: 1..={} UTF-8 bytes; nonempty and NUL-free. maxLength is a character pre-check; entry enforces the byte bound.", crate::limits::TEXT_MAX_BYTES)})
 );
 validated_schema!(

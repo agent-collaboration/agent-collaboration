@@ -1,0 +1,459 @@
+{
+  "$defs": {
+    "AdmittedPersonRow": {
+      "additionalProperties": false,
+      "properties": {
+        "personId": {
+          "$ref": "#/$defs/PersonId"
+        }
+      },
+      "required": [
+        "personId"
+      ],
+      "type": "object"
+    },
+    "ConnectionView": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "lastHeardAt": {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            "since": {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            "state": {
+              "const": "connected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "since",
+            "lastHeardAt"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "lastSeenAt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnixMillis"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "const": "notConnected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EndpointId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]{0,63}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 64
+    },
+    "EnrollmentView": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "approvedAt": {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            "approvedBy": {
+              "$ref": "#/$defs/PersonId"
+            },
+            "state": {
+              "const": "enrolled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "approvedBy",
+            "approvedAt"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "approvedAt": {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            "approvedBy": {
+              "$ref": "#/$defs/PersonId"
+            },
+            "state": {
+              "const": "revoked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "approvedBy",
+            "approvedAt"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "approvedAt": {
+              "$ref": "#/$defs/UnixMillis"
+            },
+            "approvedBy": {
+              "$ref": "#/$defs/PersonId"
+            },
+            "state": {
+              "const": "expired",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "approvedBy",
+            "approvedAt"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "IsolationKind": {
+      "enum": [
+        "host",
+        "processSandbox",
+        "container",
+        "vm"
+      ],
+      "type": "string"
+    },
+    "MachineLabel": {
+      "allOf": [
+        {
+          "pattern": "^[^\\u0000-\\u0008\\u000b-\\u001f]*$(?![\\s\\S])"
+        }
+      ],
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "MachineRow": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionView"
+        },
+        "enrollment": {
+          "$ref": "#/$defs/EnrollmentView"
+        },
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "label": {
+          "$ref": "#/$defs/MachineLabel"
+        },
+        "mayServe": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceRef"
+          },
+          "type": "array"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "installation",
+        "label",
+        "enrollment",
+        "mayServe",
+        "connection",
+        "sessions"
+      ],
+      "type": "object"
+    },
+    "OwnerRefusal": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notOwner",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notFound",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflict",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "recordUnwritable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ProjectId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ProjectRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ResourceName"
+        },
+        "projectId": {
+          "$ref": "#/$defs/ProjectId"
+        }
+      },
+      "required": [
+        "projectId",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ResourceName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "ServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "SessionEndpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpointId": {
+          "$ref": "#/$defs/EndpointId"
+        },
+        "serviceId": {
+          "$ref": "#/$defs/ServiceId"
+        }
+      },
+      "required": [
+        "serviceId",
+        "endpointId"
+      ],
+      "type": "object"
+    },
+    "SessionId": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 4096
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/SessionEndpointRef"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      },
+      "required": [
+        "endpoint",
+        "sessionId"
+      ],
+      "type": "object"
+    },
+    "SessionRow": {
+      "additionalProperties": false,
+      "properties": {
+        "isolationKind": {
+          "$ref": "#/$defs/IsolationKind"
+        },
+        "project": {
+          "$ref": "#/$defs/ProjectRef"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionRef"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "state": {
+          "$ref": "#/$defs/SessionStateView"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceRef"
+        }
+      },
+      "required": [
+        "session",
+        "project",
+        "workspace",
+        "isolationKind",
+        "startedAt",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SessionStateView": {
+      "enum": [
+        "working",
+        "idle",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "UnixMillis": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "WorkspaceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ResourceName"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/WorkspaceId"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "asOf": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "machines": {
+          "items": {
+            "$ref": "#/$defs/MachineRow"
+          },
+          "type": "array"
+        },
+        "people": {
+          "items": {
+            "$ref": "#/$defs/AdmittedPersonRow"
+          },
+          "type": "array"
+        },
+        "result": {
+          "const": "snapshot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "asOf",
+        "machines",
+        "people"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/OwnerRefusal"
+        },
+        "result": {
+          "const": "refused",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "WhoIsLoggedInResult"
+}

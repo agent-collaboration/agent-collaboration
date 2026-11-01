@@ -12,6 +12,8 @@ workspace = true
 conformance = []
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
+schemars.workspace = true
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 axum = { workspace = true, features = ["json", "query"] }
 http.workspace = true
@@ -43,3 +45,4 @@ uuid = { version = "=1.26.0", features = ["v7", "js"] }
 fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
+jsonschema.workspace = true

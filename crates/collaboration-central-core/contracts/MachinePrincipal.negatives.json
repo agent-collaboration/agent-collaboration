@@ -1,0 +1,9 @@
+[
+null,
+{"enrollmentId":"019a3dce-2000-7000-8000-000000000002","installationId":"019a3dce-2000-7000-8000-000000000001","kind":"machine"},
+{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"019A3DCE-2000-7000-8000-000000000001","kind":"machine"},
+{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"019a3dce-2000-7000-8000-000000000001","kind":"machine","unexpectedField":true},
+{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"019a3dce-2000-7000-8000-000000000001","kind":"unrecognizedVariant"},
+{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF","kind":"machine"},
+{"enrollment_id":"019a3dce-2000-7000-8000-000000000002","installation_id":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","kind":"machine"}
+]

@@ -1,0 +1,15 @@
+[
+null,
+{"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","unexpectedField":true,"verifiedEmail":"fixture@example.invalid"},
+{"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","unexpectedField":true},
+{"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verified_email":"fixture@example.invalid"},
+{"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","person_id":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"},
+{"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","person_id":"019a3dce-2000-7000-8000-000000000002"},
+{"operation":"admitSignIn","organization_id":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"},
+{"operation":"admitSignIn","organization_id":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"},
+{"operation":"standing","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","unexpectedField":true},
+{"operation":"standing","organizationId":"019a3dce-2000-7000-8000-000000000001","person_id":"019a3dce-2000-7000-8000-000000000002"},
+{"operation":"standing","organization_id":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"},
+{"operation":"unrecognizedVariant","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"},
+{"operation":"unrecognizedVariant","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}
+]

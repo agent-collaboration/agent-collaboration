@@ -1,0 +1,6 @@
+[
+{"result":"pending"},
+{"result":"applied"},
+{"result":"unknown"},
+{"reason":{"kind":"notOwner"},"result":"refused"}
+]
