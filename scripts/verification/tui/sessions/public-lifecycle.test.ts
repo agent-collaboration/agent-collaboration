@@ -44,7 +44,7 @@ function fixture(
 	const executable = controlledExecutable(
 		root,
 		'owned-cua-driver',
-		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const stop=path.join(root,${JSON.stringify(marker)});${preexistingStop ? "fs.watch=()=>{throw new Error('preexisting stop must not install a watcher');};" : ''}let watcher;let finished=false;const finishIfStopped=()=>{if(finished)return true;if(!fs.existsSync(stop))return false;finished=true;watcher?.close();process.disconnect();return true;};if(!finishIfStopped()){watcher=fs.watch(path.dirname(stop),finishIfStopped);if(!finishIfStopped())process.send('ready');}`,
+		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const stop=path.join(root,${JSON.stringify(marker)});fs.watch=()=>{throw new Error('CUA lifecycle must use owned messages');};let finished=false;const finishIfStopped=()=>{if(finished)return true;if(!fs.existsSync(stop))return false;finished=true;process.disconnect();return true;};if(!finishIfStopped()){process.on('message',finishIfStopped);process.send('ready');}`,
 	);
 	const stdout = openSync(join(root, 'stdout'), 'wx');
 	const stderr = openSync(join(root, 'stderr'), 'wx');
@@ -65,6 +65,7 @@ test('public timeout requests its own CUA stop and remains failure after coopera
 		waitPublicDriver(child, root, { workSeconds: 0.03, cleanupSeconds: 1 }),
 	).rejects.toThrow('public CUA failed');
 	await vi.advanceTimersByTimeAsync(30);
+	child.process.send('inspect-stop');
 	expect(await child.completion).toBe(0);
 	await waiting;
 	expect(readFileSync(join(root, 'cua-sessions/cua-stop'), 'utf8')).toBe('stop\n');
@@ -91,6 +92,7 @@ test('public timeout preserves unsettled exact child without signaling', async (
 		driver_settled: false,
 	});
 	writeFileSync(join(root, 'fixture-release'), 'release');
+	child.process.send('inspect-stop');
 	expect(await child.completion).toBe(0);
 });
 test('fixture CUA timeout uses declared CUA marker instead of static capture marker', async () => {
@@ -106,6 +108,7 @@ test('fixture CUA timeout uses declared CUA marker instead of static capture mar
 		),
 	).rejects.toThrow('static capture deadline');
 	await vi.advanceTimersByTimeAsync(30);
+	child.process.send('inspect-stop');
 	expect(await child.completion).toBe(0);
 	await waiting;
 	expect(existsSync(join(root, 'capture-stop'))).toBe(false);

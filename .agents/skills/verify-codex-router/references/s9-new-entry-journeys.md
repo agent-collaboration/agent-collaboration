@@ -297,9 +297,12 @@ a quota B window is requested. No product/native run follows from this draft.
 `quota-event-journal.ts` reads the actual `{sequence,event}` envelopes from an
 explicit owned regular file. It rejects file replacement, rewritten byte prefixes,
 invalid complete UTF-8/JSON and skipped sequences. Parent-directory and file
-notifications trigger the same exact-file read, with an immediate read after both
-subscriptions are armed. A retained pre-input sequence floor excludes stale facts;
-the caller owns the abort/deadline and a strict decoder for the selected event.
+notifications are hints for the same exact-file read. `waitFor` requires an
+`awaitCompletion(signal)` callback from the real writer or input: arm first, await
+that completion, then re-read even if notifications were dropped. Buffered facts
+cannot bypass the callback, and a failed callback cannot supply a pass. A retained
+pre-input sequence floor excludes stale facts; the caller owns the abort/deadline
+and a strict decoder for the selected event.
 Final producer settlement must reject a partial last line. These file-reader
 controls establish no native input, parent wait or preference persistence proof.
 
