@@ -11,7 +11,8 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
     SignatureValidity,
     organization_authority::{
-        ParsedPersonToken, PersonTokenAudience, PersonTokenPolicy, PersonTokenRefusal,
+        ParsedPersonToken, PersonConfirmationRefusal, PersonConfirmationWindow,
+        PersonSessionConfirmation, PersonTokenAudience, PersonTokenPolicy, PersonTokenRefusal,
     },
 };
 use fleet_identity_protocol::UnixMillis;
@@ -242,7 +243,7 @@ fn organization_authority_token_parser_refuses_wrong_headers_and_extra_segments(
 }
 
 #[test]
-fn organization_authority_person_claims_allow_registered_extras_and_no_factor_for_a_read()
+fn organization_authority_person_policy_accepts_registered_extensions_and_absent_factor()
 -> TestResult {
     let mut body = claims();
     body.as_object_mut()
@@ -256,5 +257,111 @@ fn organization_authority_person_claims_allow_registered_extras_and_no_factor_fo
         NOW,
     )?;
     assert_eq!(verified.second_factor_at(), None);
+    Ok(())
+}
+
+fn confirmation() -> Result<PersonSessionConfirmation, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(PersonSessionConfirmation::Active {
+        person_id: PERSON.to_owned().try_into()?,
+        session_ref: "issuer-owned-session".to_owned().try_into()?,
+        audience: ADMIN.into(),
+        organization_id: ORGANIZATION.to_owned().try_into()?,
+        expires_at: fleet_identity_protocol::UnixSeconds(1_800_000_300),
+    })
+}
+
+#[test]
+fn organization_authority_confirmation_measures_its_own_receipt_to_apply_window() -> TestResult {
+    for (elapsed_ms, accepted) in [(4_999, true), (5_001, false), (-1, false)] {
+        let verified = person_token(&claims())?.verified(
+            SignatureValidity::Valid,
+            &policy()?,
+            PersonTokenAudience::Admin,
+            NOW,
+        )?;
+        let confirmed = verified.confirmed(confirmation()?, NOW)?;
+        let applied_at = UnixMillis(
+            NOW.0
+                .checked_add(elapsed_ms)
+                .ok_or("fixture clock overflow")?,
+        );
+        assert_eq!(
+            confirmed
+                .require_fresh(applied_at, PersonConfirmationWindow::default())
+                .is_ok(),
+            accepted,
+            "receipt-to-apply elapsed {elapsed_ms} ms",
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn organization_authority_confirmation_refuses_inactive_or_mismatched_subjects() -> TestResult {
+    for changed_field in [
+        "inactive",
+        "person",
+        "session",
+        "audience",
+        "organization",
+        "expiry",
+    ] {
+        let answer = match changed_field {
+            "inactive" => PersonSessionConfirmation::Inactive {},
+            field => PersonSessionConfirmation::Active {
+                person_id: (if field == "person" {
+                    ORGANIZATION
+                } else {
+                    PERSON
+                })
+                .to_owned()
+                .try_into()?,
+                session_ref: (if field == "session" {
+                    "another-person-session"
+                } else {
+                    "issuer-owned-session"
+                })
+                .to_owned()
+                .try_into()?,
+                audience: (if field == "audience" { OPERATOR } else { ADMIN }).into(),
+                organization_id: (if field == "organization" {
+                    PERSON
+                } else {
+                    ORGANIZATION
+                })
+                .to_owned()
+                .try_into()?,
+                expires_at: fleet_identity_protocol::UnixSeconds(if field == "expiry" {
+                    1_800_000_301
+                } else {
+                    1_800_000_300
+                }),
+            },
+        };
+        let verified = person_token(&claims())?.verified(
+            SignatureValidity::Valid,
+            &policy()?,
+            PersonTokenAudience::Admin,
+            NOW,
+        )?;
+        assert!(
+            matches!(
+                verified.confirmed(answer, NOW),
+                Err(PersonConfirmationRefusal::Inactive
+                    | PersonConfirmationRefusal::MismatchedProof)
+            ),
+            "confirmation mismatch in {changed_field} was admitted"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn organization_authority_confirmation_window_requires_a_positive_setting() -> TestResult {
+    assert!(matches!(
+        PersonConfirmationWindow::from_millis(0),
+        Err(PersonConfirmationRefusal::InvalidWindow)
+    ));
+    PersonConfirmationWindow::from_millis(5_000)?;
     Ok(())
 }
