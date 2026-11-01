@@ -161,20 +161,8 @@ impl CollaborationLifecycle {
         }
         if self.runtime.is_none() {
             let inputs_started_at = std::time::Instant::now();
-            let router_root = self.router_root.clone();
-            let use_legacy = self.machine_login.is_none();
-            let board_session = if use_legacy {
-                tokio::task::spawn_blocking(move || {
-                    crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
-                })
-                .await
-                .map_err(io::Error::other)??
-            } else {
-                match &self.machine_login {
-                    Some(login) => login.session_inputs()?,
-                    None => None,
-                }
-            };
+            let board_session =
+                load_board_session_inputs(&self.router_root, self.machine_login.as_deref()).await?;
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
                 .mode(0o700)
@@ -316,6 +304,23 @@ impl CollaborationLifecycle {
     }
 }
 
+async fn load_board_session_inputs(
+    router_root: &std::path::Path,
+    machine_login: Option<&crate::fleet_machine_login::HostMachineLogin>,
+) -> io::Result<Option<board_fleet_sync::BoardSessionInputs>> {
+    match machine_login {
+        Some(login) => login.session_inputs(),
+        None => {
+            let router_root = router_root.to_owned();
+            tokio::task::spawn_blocking(move || {
+                crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
+            })
+            .await
+            .map_err(io::Error::other)?
+        }
+    }
+}
+
 fn load_machine_edge_reference(
     root: &std::path::Path,
 ) -> io::Result<crate::fleet_machine_login::MachineEdgeAccess> {
@@ -365,4 +370,45 @@ fn timestamp() -> io::Result<collaboration_protocol::ObservationTimestamp> {
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         .try_into()
         .map_err(io::Error::other)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_board_session_inputs;
+    use codex_router_fleet_state::test_support::MemoryFleetLoginRepository;
+    use std::{os::unix::fs::PermissionsExt, sync::Arc};
+
+    // Oracle: explicit modes, Lead01a197a4. A row-based fallback would read
+    // this real private legacy file and fail instead of staying logged out.
+    // Access is the positive read control. No pre-fix red observed.
+    #[tokio::test]
+    async fn fleet_machine_login_empty_tokens_never_read_the_access_enrollment() {
+        // Arrange
+        let root = tempfile::tempdir().unwrap();
+        let path = crate::router_fleet_enrollment_file(root.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let legacy_bytes = b"invalid legacy enrollment inputs";
+        std::fs::write(&path, legacy_bytes).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let login = crate::fleet_machine_login::empty_machine_token_login_fixture(Arc::new(
+            MemoryFleetLoginRepository::new(),
+        ));
+
+        // Act
+        let token_inputs = load_board_session_inputs(root.path(), Some(&login)).await;
+        let access_inputs = load_board_session_inputs(root.path(), None).await;
+
+        // Assert: no pump can be prepared in empty token mode, while Access
+        // still follows its existing file reader and reports invalid inputs.
+        assert!(token_inputs.unwrap().is_none());
+        assert!(
+            access_inputs
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("invalid fleet enrollment inputs")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), legacy_bytes);
+        login.shutdown().await.unwrap();
+    }
 }

@@ -261,4 +261,4 @@ fn read_edge_credential(
 
 #[cfg(test)]
 #[path = "startup_tests.rs"]
-mod tests;
+pub(super) mod tests;

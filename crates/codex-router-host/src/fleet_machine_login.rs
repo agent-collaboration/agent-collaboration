@@ -28,3 +28,6 @@ pub(crate) use startup::{
     start_machine_login,
 };
 pub(crate) use token_renewal::MachineRenewalConnection;
+
+#[cfg(test)]
+pub(crate) use startup::tests::empty_machine_token_login_fixture;

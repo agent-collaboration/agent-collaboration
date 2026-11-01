@@ -51,6 +51,22 @@ async fn fleet_machine_login_empty_token_repository_prepares_no_enrollment_sessi
     let inputs = selected.resolve().unwrap().unwrap();
     let saved = inputs.repository.load_fleet_login().await.unwrap();
     assert!(saved.is_none());
+    let login = empty_machine_token_login_fixture(inputs.repository);
+
+    // Act / Assert: no SessionPump inputs exist, so no old enrollment
+    // connection can be prepared through this owner. Root startup is separate.
+    assert_eq!(
+        login.binding().source().machine_login_state(),
+        MachineLoginState::NotLoggedIn
+    );
+    assert!(matches!(login.route(), MachineLoginRoute::AwaitingLogin));
+    assert!(login.session_inputs().unwrap().is_none());
+    login.shutdown().await.unwrap();
+}
+
+pub(crate) fn empty_machine_token_login_fixture(
+    repository: Arc<dyn FleetLoginRepository>,
+) -> HostMachineLogin {
     let clock: Arc<dyn FleetLoginClock> = Arc::new(FixedClock);
     let peer =
         serde_json::from_value(serde_json::json!("019f0000-0000-7000-8000-000000000003")).unwrap();
@@ -69,26 +85,16 @@ async fn fleet_machine_login_empty_token_repository_prepares_no_enrollment_sessi
             }),
             clock,
             publication: Arc::new(MachineLoginPublication {
-                repository: inputs.repository,
+                repository,
                 credentials: Arc::new(RefreshCredentialStore::MemoryOnly),
                 after_commit: None,
             }),
         },
-        saved,
+        None,
     );
-    let login = HostMachineLogin {
+    HostMachineLogin {
         owner,
         edge: EdgeCredential::Ready(AccessServiceToken::NoEdgeCredentials),
         peer,
-    };
-
-    // Act / Assert: no SessionPump inputs exist, so no old enrollment
-    // connection can be prepared through this owner. Root startup is separate.
-    assert_eq!(
-        login.binding().source().machine_login_state(),
-        MachineLoginState::NotLoggedIn
-    );
-    assert!(matches!(login.route(), MachineLoginRoute::AwaitingLogin));
-    assert!(login.session_inputs().unwrap().is_none());
-    login.shutdown().await.unwrap();
+    }
 }
