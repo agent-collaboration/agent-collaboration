@@ -151,6 +151,11 @@ where
         return Ok(AutomationAnswer::Faulted(faulted));
     }
     let record = catalog::decode(row)?;
+    if matches!(record.definition, StoredAutomationDefinition::Suspended(_)) {
+        return Ok(AutomationAnswer::Suspended(
+            crate::automation_suspended_store::snapshot(&record)?,
+        ));
+    }
     if !matches!(record.definition, StoredAutomationDefinition::Wake(_)) {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     }

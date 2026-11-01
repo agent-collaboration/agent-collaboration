@@ -50,6 +50,9 @@ where
         }
         let record = catalog::decode(row)?;
         let snapshot = match &record.definition {
+            StoredAutomationDefinition::Suspended(_) => {
+                CatalogAutomation::Suspended(crate::automation_suspended_store::snapshot(&record)?)
+            }
             StoredAutomationDefinition::Schedule(_) => {
                 CatalogAutomation::Schedule(crate::automation_schedule_store::snapshot(&record)?)
             }

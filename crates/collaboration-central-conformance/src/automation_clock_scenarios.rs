@@ -16,7 +16,7 @@ mod expired_lease_cases;
 mod expiry_cases;
 mod external_cases;
 mod failure_cases;
-mod fixture;
+pub(crate) mod fixture;
 mod large_batch_cases;
 mod limit_cases;
 mod restart_cases;

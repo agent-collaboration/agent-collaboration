@@ -6,6 +6,16 @@
   "metadata": "automation-catalog-query-metadata.json",
   "queries": [
     {
+      "name": "write_automation_legacy_timing",
+      "sql": "sql/automations/write_automation_legacy_timing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {"name":"legacy_timing_json","kind":"text","nullable":true},
+        {"name":"automation_id","kind":"text","nullable":false}
+      ]
+    },
+    {
       "name": "read_automation",
       "sql": "sql/automations/read_automation.sql",
       "row": "StoredAutomation",
@@ -178,6 +188,78 @@
         },
         {
           "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_automation_imports",
+      "sql": "sql/automations/read_automation_imports.sql",
+      "row": "StoredAutomationImport",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_automation_import",
+      "sql": "sql/automations/insert_automation_import.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "automation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_automation_import_progress",
+      "sql": "sql/automations/write_automation_import_progress.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "progress_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_carried_automation_firing",
+      "sql": "sql/automations/insert_carried_automation_firing.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "firing_json",
           "kind": "text",
           "nullable": false
         }

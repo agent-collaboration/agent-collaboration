@@ -6,6 +6,28 @@ use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, query::query, row::Row, types::Type,
 };
+pub(crate) fn write_automation_legacy_timing<S>(
+    scope: &mut S,
+    legacy_timing_json: Option<String>,
+    automation_id: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/write_automation_legacy_timing.sql"
+        )))
+        .bind(legacy_timing_json)
+        .bind(automation_id);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct StoredAutomation {
@@ -360,6 +382,109 @@ where
         .bind(anchor_at_ms)
         .bind(imported_continuity_json)
         .bind(automation_id);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredAutomationImport {
+    pub import_id: Option<String>,
+    pub service_id: Option<String>,
+    pub automation_id: Option<String>,
+    pub digest: Option<String>,
+}
+pub(crate) fn read_automation_imports<S>(
+    scope: &mut S,
+    import_id: String,
+    automation_id: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredAutomationImport>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/read_automation_imports.sql"
+        )))
+        .bind(import_id)
+        .bind(automation_id);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAutomationImport {
+                    import_id: row.try_get("import_id")?,
+                    service_id: row.try_get("service_id")?,
+                    automation_id: row.try_get("automation_id")?,
+                    digest: row.try_get("digest")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn insert_automation_import<S>(
+    scope: &mut S,
+    import_id: String,
+    service_id: String,
+    automation_id: String,
+    digest: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/insert_automation_import.sql"
+        )))
+        .bind(import_id)
+        .bind(service_id)
+        .bind(automation_id)
+        .bind(digest);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn write_automation_import_progress<S>(
+    scope: &mut S,
+    progress_json: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/write_automation_import_progress.sql"
+        )))
+        .bind(progress_json);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn insert_carried_automation_firing<S>(
+    scope: &mut S,
+    firing_json: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/insert_carried_automation_firing.sql"
+        )))
+        .bind(firing_json);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

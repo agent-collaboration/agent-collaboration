@@ -421,6 +421,7 @@ async fn read_list_page(
             CatalogAutomation::Schedule(record) => record.schedule_id.as_str().to_owned(),
             CatalogAutomation::Wake(record) => record.definition.wakeup_id.as_str().to_owned(),
             CatalogAutomation::Faulted(record) => record.automation_id.as_str().to_owned(),
+            CatalogAutomation::Suspended(record) => record.automation_id.as_str().to_owned(),
         }),
         (_, other) => Err(format!("list cursor scenario returned the wrong answer family or refused a valid page: {other:?}").into()),
     }
@@ -464,6 +465,9 @@ pub(super) async fn run(
         }
         for automation in automations {
             let id = match automation {
+                CatalogAutomation::Suspended(snapshot) => {
+                    snapshot.automation_id.as_str().to_owned()
+                }
                 CatalogAutomation::Wake(snapshot) => {
                     if String::from(
                         snapshot

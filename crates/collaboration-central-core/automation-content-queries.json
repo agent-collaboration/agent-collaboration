@@ -78,6 +78,24 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_imported_content_revision",
+      "sql": "sql/automations/read_imported_content_revision.sql",
+      "row": "StoredContentRevision",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "owner_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "revision_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }
