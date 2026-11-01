@@ -61,6 +61,7 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
             relation,
             None,
             prepared,
+            crate::collaboration_runtime::registrar_composition::RegistrarStartupInput::AccessEnrollment,
         ),
     )
     .await;

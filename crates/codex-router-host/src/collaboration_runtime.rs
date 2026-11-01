@@ -251,8 +251,15 @@ mod board_composition;
 mod lifecycle;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+#[path = "collaboration_runtime/registrar_composition.rs"]
+mod registrar_composition;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
+#[cfg(feature = "runtime-test-support")]
+pub use registrar_composition::RuntimeTestRegistrarCapabilities;
+#[cfg(test)]
+#[path = "collaboration_runtime/registrar_runtime_tests.rs"]
+mod registrar_runtime_tests;
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_contract_tests.rs"]
 mod startup_contract_tests;

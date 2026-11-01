@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            super::registrar_composition::RegistrarStartupInput::AccessEnrollment,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            super::registrar_composition::RegistrarStartupInput::AccessEnrollment,
         ))
         .await
     }
@@ -68,6 +70,7 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        registrar_startup: super::registrar_composition::RegistrarStartupInput,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
@@ -224,12 +227,14 @@ impl CollaborationRuntime {
             BoundCollaborationApi::bind(inputs.mcp_bind, proxy_authority).await?;
         let exposure_backend = collaboration_api.local_address();
         let mcp_url = collaboration_api.url();
+        let registrar = registrar_startup.compose(&service_id, inputs.mcp_bind, &mcp_url)?;
         let startup = crate::provider_startup_composition::compose_provider_startup(
             provider_launches,
             provider_store.clone(),
             &service_id,
             &service_epoch,
             &mcp_url,
+            registrar.provider_admission(),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();
@@ -579,6 +584,7 @@ impl CollaborationRuntime {
             unmaterialized_threads,
             crate::codex_conversation_recording_composition::adapter_recorder(codex_recorder),
         )?
+        .with_harness_admission(registrar.native_admission(&native_backend.endpoint))
         .with_connection_budget(permits);
         let mut provider_app_servers = Vec::new();
         if !provider_face_endpoints.is_empty() && external_provider_supervisor.is_some() {
@@ -722,8 +728,8 @@ impl CollaborationRuntime {
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
-                bound_conversation_preparation: None,
-                session_registrar: None,
+                bound_conversation_preparation: registrar.bound_preparation(),
+                session_registrar: registrar.registrar(),
                 application,
                 service_directory: inputs.directory.clone(),
                 native_definitions,

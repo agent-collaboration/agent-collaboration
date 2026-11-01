@@ -54,6 +54,7 @@ pub(crate) async fn compose_provider_startup(
     service_id: &UuidIdentity,
     service_epoch: &UuidIdentity,
     mcp_url: &str,
+    launch_admission: crate::ProviderSessionLaunchAdmission,
 ) -> io::Result<ProviderStartupComposition> {
     let hub = store
         .as_ref()
@@ -215,7 +216,7 @@ pub(crate) async fn compose_provider_startup(
                 bindings,
                 store,
                 hub.clone(),
-                crate::ProviderSessionLaunchAdmission::AccessEnrollment,
+                launch_admission,
             )
             .map_err(io::Error::other)?,
         )),

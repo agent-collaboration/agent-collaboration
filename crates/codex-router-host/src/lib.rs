@@ -16,6 +16,8 @@ mod codex_conversation_recording_composition;
 mod harness_launch_composition;
 mod harness_launch_facts;
 pub use bound_conversation_preparation_composition::HostBoundConversationPreparation;
+#[cfg(feature = "runtime-test-support")]
+pub use collaboration_runtime::RuntimeTestRegistrarCapabilities;
 pub use harness_launch_composition::{HostHarnessMcpServer, HostHarnessSessionLaunchPort};
 mod provider_session_setup_composition;
 pub use provider_session_setup_composition::prepare_provider_session_setup;
