@@ -115,12 +115,18 @@ On this macOS Node 26.12.1/libuv 1.53 host, an immediate same-turn synchronous
 write after fs.watch creation could be missed even under an 8-second diagnostic
 guard. A separate controlled process produced a native event in 64 ms. The
 [libuv implementation](https://github.com/libuv/libuv/blob/v1.53.0/src/unix/fsevents.c)
-queues CF stream rescheduling asynchronously in uv__fsevents_init. The permanent
-notification control uses a separate producer, matching the process boundary;
-its empty post-injection read is observed through a passthrough IO fact, not a
-sleep or call-count assertion. Actual S6b injection timing remains unqualified.
-A missed wake is an observer-readiness gap, never a product failure. No polling,
-extra timeout padding or alternate engine was added.
+queues CF stream rescheduling asynchronously in uv__fsevents_init. Notifications
+are hints, never writer completion. The separate-producer control now awaits the
+actual writer's exit inside injection and deliberately suppresses every file
+notification. Continuing S9 option-navigation, main Esc/Help and measured Details
+inputs await their exact dispatch frame marker inside injection, then re-read the
+journal. Loop-ending Quit awaits actual EOF and driver finish before that read;
+it never promises a frame marker. Route, event, action, measured redraw and final
+exact-count assertions remain independent. Buffered valid receipts cannot bypass
+failed frame completion. These controlled tests qualify apparatus only; actual
+product behavior requires the separately declared native run. A missed wake is
+an observer-readiness gap, never a product failure. No polling, extra timeout
+padding or alternate engine was added.
 
 U4 return-path drafts now use same-ID HostedCodex rows across service and endpoint
 variants, per Lead push 01a18e4a-bb03-7553-bb56-b784c5ad45e3. HostedProvider Open

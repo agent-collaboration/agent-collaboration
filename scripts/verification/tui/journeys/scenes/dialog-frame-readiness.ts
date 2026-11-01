@@ -18,6 +18,7 @@ export async function openMeasuredDetails(
 	const receipts = InputConsumptionReadback.open(
 		join(directory, 'session-receipts', 'input-dispatch.jsonl'),
 	);
+	const sequence = receipts.sequence + 1;
 	const [acknowledgement] = await receipts.observeInput({
 		expected: [
 			{
@@ -32,7 +33,10 @@ export async function openMeasuredDetails(
 				action: 'details',
 			},
 		],
-		inject: () => driver.send(encodeJourneyKey('Enter', keys)),
+		inject: async () => {
+			await driver.send(encodeJourneyKey('Enter', keys));
+			await driver.waitForDispatchFrame(sequence);
+		},
 		timeoutMs: 8_000,
 	});
 	if (acknowledgement === undefined) throw new Error('Details input acknowledgement absent');

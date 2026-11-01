@@ -3,13 +3,23 @@ import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { detailsActionCell } from '../../capture/input-journeys.ts';
 import { controlledExecutable } from '../../fixtures/controlled-child-fixtures.ts';
 import { PtyGridDriver } from '../../terminal/pty-grid-driver.ts';
 import type { KeyProtocol } from '../../terminal/pty-grid-driver.ts';
 import { openMeasuredDetails } from './dialog-frame-readiness.ts';
+
+// Writer completion must suffice when every filesystem notification is lost.
+vi.mock('node:fs', async (importOriginal) => {
+	const original = await importOriginal<typeof import('node:fs')>();
+	return {
+		...original,
+		watch: (path: string, options: { persistent: boolean }) =>
+			original.watch(path, options, () => {}),
+	};
+});
 
 async function bridge(options: {
 	readonly keys: KeyProtocol;
@@ -33,7 +43,7 @@ let queue=[frame('Codex Alpha')];const flush=()=>{for(const bytes of queue)emit(
 createInterface({input:process.stdin}).on('line',line=>{
 if(line.startsWith('write ')){
 fs.appendFileSync(receipt,JSON.stringify({sequence:1,event:{kind:'key',code:{kind:'fixed',name:'Return'},modifiers:[],phase:'press'},surface:{kind:'screen'},target:${options.badTarget === true ? 'null' : "'sessions-list'"},action:'details'})+'\\n');
-const draws=[frame('Codex Alpha pending main draw'),frame(dialog(6)),...(${options.missingRedraw === true}?[]:[frame(dialog(5))])];queue.push(...(${options.coalesced === true}?[draws.join('')]:draws));emit('OK');flush();if(${options.missingRedraw === true})emit('READ_ERROR missing redraw');
+const draws=[frame('Codex Alpha pending main draw'),frame(dialog(6)),...(${options.missingRedraw === true}?[]:[frame(dialog(5))])];queue.push(...(${options.coalesced === true}?[draws.join('')]:draws));queue.push('\\x1b]7770;dispatch=1\\x1b\\\\');emit('OK');flush();if(${options.missingRedraw === true})emit('READ_ERROR missing redraw');
 }else if(line.startsWith('read ')){emit('OK');}
 else if(line==='finish'||line==='stop'){emit(line==='finish'?'FINISHED 0':'STOPPED 0');process.exit(0);}
 else emit('OK');});`,
@@ -166,3 +176,21 @@ test.each([false, true])(
 		}
 	},
 );
+
+test('a buffered Details receipt cannot bypass failed frame completion', async () => {
+	const { driver, directory } = await bridge({ keys: 'legacy' });
+	const completion = vi
+		.spyOn(driver, 'waitForDispatchFrame')
+		.mockRejectedValueOnce(new Error('controlled Details completion failed'));
+	try {
+		await expect(openMeasuredDetails(driver, directory, 'legacy')).rejects.toThrow(
+			'controlled Details completion failed',
+		);
+		expect(
+			JSON.parse(readFileSync(join(directory, 'session-receipts', 'input-dispatch.jsonl'), 'utf8')),
+		).toMatchObject({ sequence: 1, action: 'details' });
+	} finally {
+		completion.mockRestore();
+		await driver.stop();
+	}
+});

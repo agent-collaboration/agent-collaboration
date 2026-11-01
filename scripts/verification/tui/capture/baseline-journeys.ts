@@ -189,12 +189,20 @@ export async function observeMainEscape(
 				// acknowledgement, not a delay or a transport write, separates them.
 				await receipts.observeInput({
 					expected: [fixedKeyAcknowledgement('Esc', { kind: 'screen' }, { action: 'escape' })],
-					inject: () => driver.send(keyBytes(keys, 'escape')),
+					inject: async () => {
+						const sequence = receipts.sequence + 1;
+						await driver.send(keyBytes(keys, 'escape'));
+						await driver.waitForDispatchFrame(sequence);
+					},
 					timeoutMs: 8_000,
 				});
 				await receipts.observeInput({
 					expected: [fixedKeyAcknowledgement('F1', { kind: 'screen' }, { action: helpActionId })],
-					inject: () => driver.send(keyBytes(keys, 'help')),
+					inject: async () => {
+						const sequence = receipts.sequence + 1;
+						await driver.send(keyBytes(keys, 'help'));
+						await driver.waitForDispatchFrame(sequence);
+					},
 					timeoutMs: 8_000,
 				});
 			}
@@ -214,7 +222,11 @@ export async function observeMainEscape(
 							{ action: null, target: childTarget(`action:${helpActionId}`, 'help-body') },
 						),
 					],
-					inject: () => driver.send(keyBytes(keys, 'escape')),
+					inject: async () => {
+						const sequence = receipts.sequence + 1;
+						await driver.send(keyBytes(keys, 'escape'));
+						await driver.waitForDispatchFrame(sequence);
+					},
 					timeoutMs: 8_000,
 				});
 			await driver.waitForGrid(
@@ -227,6 +239,7 @@ export async function observeMainEscape(
 			saveCheckpoint(driver, directory, 'after-escape');
 			const quit = (): Promise<void> =>
 				driver.send(Buffer.from(keys === 'legacy' ? '\x03' : '\x1b[99;5u'));
+			let exitCode: number | null = null;
 			if (receipts === null) await quit();
 			else
 				await receipts.observeInput({
@@ -243,15 +256,15 @@ export async function observeMainEscape(
 							action: 'quit',
 						},
 					],
-					inject: quit,
+					inject: async () => {
+						await quit();
+						exitCode = await driver.drainUntilExit();
+					},
 					timeoutMs: 8_000,
 				});
-			const readExit = async (): Promise<void> => {
-				if ((await driver.receive()) !== 'eof') await readExit();
-			};
-			await readExit();
+			if (receipts === null) exitCode = await driver.drainUntilExit();
 			const transcript = driver.bytes().toString('utf8');
-			const exited = (await driver.finish()) === 0;
+			const exited = exitCode === 0;
 			receipts?.assertComplete();
 			const outcomes = transcript.match(/SESSION_PICKER_OUTCOME [^\r\n]*/gu) ?? [];
 			const cancelled =
