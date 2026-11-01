@@ -28,6 +28,26 @@ struct ScrollContext {
     scroll: ScrollHandle,
     layout_offset: u16,
 }
+#[derive(Clone)]
+pub(crate) struct ScrollRevealPrefix {
+    target: TargetId,
+    top: Ref<Option<i16>>,
+}
+struct PrefixMeasure(ScrollRevealPrefix);
+impl Hook for PrefixMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        self.0.top.set(Some(drawer.canvas_position().y));
+    }
+}
+pub(crate) fn use_scroll_reveal_prefix(
+    hooks: &mut Hooks<'_, '_>,
+    target: TargetId,
+) -> ScrollRevealPrefix {
+    let top = hooks.use_ref(|| None);
+    let prefix = ScrollRevealPrefix { target, top };
+    hooks.use_hook(|| PrefixMeasure(prefix.clone())).0 = prefix.clone();
+    prefix
+}
 #[derive(Props)]
 struct ScrollContentProps<'a> {
     #[iocraft(required)]
@@ -153,6 +173,7 @@ fn ScrollBar(props: &ScrollBarProps, mut hooks: Hooks) -> impl Into<AnyElement<'
 }
 struct RevealHook {
     context: Option<ScrollContext>,
+    prefix: Option<ScrollRevealPrefix>,
     focused: bool,
     target_id: Option<TargetId>,
     last_target: Option<ScrollRevealTarget>,
@@ -168,6 +189,15 @@ impl Hook for RevealHook {
         let target = ScrollRevealTarget {
             target_id: self.target_id.clone(),
             logical_top,
+            heading_top: self
+                .prefix
+                .as_ref()
+                .filter(|prefix| self.target_id.as_ref() == Some(&prefix.target))
+                .and_then(|prefix| prefix.top.get())
+                .map(|top| {
+                    i32::from(top) - i32::from(position.viewport_top)
+                        + i32::from(context.layout_offset)
+                }),
             height: drawer.size().height,
             viewport_height: position.viewport_height,
         };
@@ -192,13 +222,18 @@ pub(crate) fn use_scroll_reveal(
     let context = hooks
         .try_use_context::<ScrollContext>()
         .map(|context| context.clone());
+    let prefix = hooks
+        .try_use_context::<ScrollRevealPrefix>()
+        .map(|prefix| prefix.clone());
     let hook = hooks.use_hook(|| RevealHook {
         context: context.clone(),
+        prefix: prefix.clone(),
         focused,
         target_id: target_id.clone(),
         last_target: None,
     });
     hook.context = context;
+    hook.prefix = prefix;
     hook.focused = focused;
     hook.target_id = target_id;
 }

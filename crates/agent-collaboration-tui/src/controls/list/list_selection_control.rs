@@ -274,8 +274,16 @@ impl ListSelectionControl {
             }
             let mut next = control.binding.value.read().clone();
             let changed = control.navigate(&mut next, code);
+            let reveal_first_group = code == KeyCode::Home && next.is_grouped();
+            if reveal_first_group {
+                control.scroll.reset();
+            }
             if changed {
                 control.publish_selection(next, SelectionReveal::FollowSelection);
+            } else if reveal_first_group && let Some(selected) = next.selected() {
+                control
+                    .scroll
+                    .reveal_measured(&control.row_target(selected));
             }
             if wheel && changed {
                 InputUse::Scrolled
@@ -389,3 +397,14 @@ mod typeahead_test;
 #[cfg(test)]
 #[path = "list_ungrouped_layout_test.rs"]
 mod ungrouped_layout_test;
+
+#[cfg(test)]
+#[path = "list_content_scroll_layout_test.rs"]
+mod content_scroll_layout_test;
+
+#[cfg(test)]
+#[path = "list_grouped_content_scroll_test.rs"]
+mod grouped_content_scroll_test;
+#[cfg(test)]
+#[path = "list_heading_reveal_test.rs"]
+mod heading_reveal_test;
