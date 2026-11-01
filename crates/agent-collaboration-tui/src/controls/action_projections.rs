@@ -26,3 +26,10 @@ impl ActionProjections {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "action_controls_test.rs"]
+mod action_controls_test;
+#[cfg(test)]
+#[path = "live_actions_test.rs"]
+mod live_actions_test;

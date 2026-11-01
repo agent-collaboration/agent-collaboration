@@ -14,27 +14,34 @@ crossterm's public color override cannot affect it. Product code continues to
 honor `NO_COLOR`. The harness changes no process environment. A negative run with
 `NO_COLOR=1` must fail at setup with the actionable precondition message.
 
-`support/frame_grid.rs` reads the actual `Canvas::write_ansi` bytes at their known
+`../src/test_support/frame_grid.rs` reads the actual `Canvas::write_ansi` bytes at their known
 dimensions. Its grammar is printable text, SGR, CRLF and CSI K (erase to row end).
 Every other escape, including OSC 8, is rejected. It measures text using current
 Unicode widths. The glyph contract separately checks the renderer's 0.1.14 table.
 This layer observes complete serialized frames, not backend diff/resize writes.
 Those remain the independent PTY observation's responsibility.
 
-`support/recording_backend.rs` mirrors the pin's mock backend: the same event
+`../src/test_support/recording_backend.rs` mirrors the pin's mock backend: the same event
 channel supplies input, and each output is a cloned `Canvas`. It uses the public
 `ui.render_loop().backend(recording_backend).ignore_ctrl_c()` entry because the
 pin's `mock_terminal_render_loop` has no Ctrl+C opt-in. The parity self-test uses
 the original mock as its reference and compares serialized frames in both input
 modes without Ctrl+C. Removing the public opt-in must fail the Ctrl+C rows.
-This adapter exists only in the integration test crate under `cfg(test)`.
+This adapter is shared by unit and integration tests under `cfg(test)`.
 
-The component A scenarios share `component_contract.rs` and this recording
-driver. Legacy library characterization tests retain the original mock while
+Component scenarios live beside their owning modules as `<module>_test.rs` and
+share the helpers in `../src/test_support/`. `component_contract.rs` indexes the
+cross-module backend-parity and subprocess-frame integration tests; each file in
+`integration/` states why it needs that boundary. Representative UI matrices use
+`../src/test_support/grids.rs`: 120×36, 76×30, 48×12 and 32×24. Tiny-view and exact
+threshold tests retain the sizes needed to exercise their boundary. Native
+dialog baselines live in `../src/dialog/test_fixtures/`.
+
+Legacy library characterization tests retain the original mock while
 their input path is retired in S8; they exercise no new Ctrl+C row and contribute
 no claim about that row. Pure model tests need no terminal driver.
 
-`support/event_driver.rs` drains the initial frame, queues an entire burst before
+`../src/test_support/event_driver.rs` drains the initial frame, queues an entire burst before
 polling the render loop, and records an acknowledgement for every processed event.
 The acknowledgement includes the draw count, per-surface bytes and handler log.
 An ignored event is proved by that acknowledgement without awaiting a redraw.
