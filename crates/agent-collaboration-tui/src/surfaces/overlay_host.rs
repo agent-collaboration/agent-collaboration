@@ -7,6 +7,7 @@ use crate::surfaces::{
     surface_stack::{OverlayPlacement, SurfaceId},
 };
 use iocraft::{ComponentDrawer, Hook, prelude::*};
+use unicode_width::UnicodeWidthStr;
 
 /// The host owns the resolved bounds; dialog chrome uses the same sizing axes.
 #[derive(Clone, Copy)]
@@ -31,6 +32,20 @@ impl Hook for SurfacePaintHook {
         let left = if gutter { -1 } else { 0 };
         let width = usize::from(size.width) + usize::from(gutter);
         let mut canvas = drawer.canvas();
+        if gutter {
+            for row in 0..usize::from(size.height) {
+                let row = isize::try_from(row).unwrap_or(isize::MAX);
+                // A wide span ending in the gutter must lose its leading text,
+                // while the background outside the one-cell gutter stays intact.
+                if canvas
+                    .cell(-2, row)
+                    .and_then(|cell| cell.text())
+                    .is_some_and(|text| text.width() > 1)
+                {
+                    canvas.clear_text(-2, row, 1, 1);
+                }
+            }
+        }
         canvas.clear_text(left, 0, width, usize::from(size.height));
         canvas.set_background_color(left, 0, width, usize::from(size.height), self.background);
     }
@@ -248,7 +263,7 @@ fn AnchoredPanel<'a>(
     match placement {
         Some(placement) => {
             let above = anchor.is_some_and(|anchor| placement.top < anchor.top);
-            element!(View(position:Position::Absolute,left:placement.left,top:placement.top,width:placement.width,height:placement.height,flex_direction:FlexDirection::Column,justify_content:if above {JustifyContent::End}else{JustifyContent::Start},overflow:Overflow::Hidden) {
+            element!(View(position:Position::Absolute,left:placement.left,top:placement.top,width:placement.width,height:placement.height,flex_direction:FlexDirection::Column,justify_content:if above {JustifyContent::End}else{JustifyContent::Start},overflow:Overflow::Hidden,overflow_x:Overflow::Visible) {
                 SurfacePanel(context:props.context,width:Size::Length(u32::from(placement.width)),height:Size::Auto,max_width:placement.width,max_height:placement.height,position:Position::Relative,overlay:true,children)
             }).into_any()
         }
