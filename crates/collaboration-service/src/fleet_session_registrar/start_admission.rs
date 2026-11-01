@@ -1,11 +1,15 @@
 //! Start admission reads live authority before minting a prepared binding or creating anything.
-use std::sync::Arc;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use codex_router_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionPreparation, FleetSessionRegistrationRecord,
     PreparedFleetSession, PreparedSessionCreation, SessionBindingOrigin,
 };
-use collaboration_contracts::HarnessSessionLaunch;
+use collaboration_contracts::{HarnessLaunchIdentity, HarnessSessionLaunch};
+use collaboration_protocol::OperationId;
 use fleet_identity_protocol::{
     CheckSessionStart, InstallationId, SessionStartCheck, SessionStartRefusal,
 };
@@ -54,6 +58,7 @@ pub struct FleetSessionRegistrar {
     mode: Arc<dyn SessionRegistrationModeSource>,
     ids: Arc<dyn IdSource + Send + Sync>,
     entropy: Arc<dyn SessionBindingEntropy>,
+    pub(super) prepared_identities: Mutex<BTreeMap<OperationId, HarnessLaunchIdentity>>,
 }
 
 #[derive(Debug)]
@@ -104,13 +109,14 @@ impl FleetSessionRegistrar {
             mode: props.mode,
             ids: props.ids,
             entropy: props.entropy,
+            prepared_identities: Mutex::new(BTreeMap::new()),
         }
     }
 
     pub async fn prepare(
         &self,
         intent: &HarnessSessionLaunch,
-        _identity: &collaboration_contracts::HarnessLaunchIdentity,
+        identity: &HarnessLaunchIdentity,
     ) -> Result<PrepareSessionStart, RegistrarFailure> {
         if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
             return Ok(PrepareSessionStart::AccessEnrollment);
@@ -125,6 +131,7 @@ impl FleetSessionRegistrar {
         }
         if let Some(record) = self.repository.operation(&intent.operation_id).await? {
             self.require_record_context(&record)?;
+            self.require_prepared_identity(&record, identity)?;
             if !matches_intent(&record, intent) {
                 return Err(RegistrarFailure::OperationConflict);
             }
@@ -181,15 +188,90 @@ impl FleetSessionRegistrar {
         )
         .map_err(|_| RegistrarFailure::Unavailable)?;
         match self.repository.insert(&record).await? {
-            RegistrationInsert::Inserted => Ok(PrepareSessionStart::Prepared(Box::new(record))),
+            RegistrationInsert::Inserted => {
+                self.prepared_identities
+                    .lock()
+                    .map_err(|_| RegistrarFailure::Unavailable)?
+                    .insert(intent.operation_id.clone(), identity.clone());
+                Ok(PrepareSessionStart::Prepared(Box::new(record)))
+            }
             RegistrationInsert::Existing(existing) => {
                 self.require_record_context(&existing)?;
+                self.require_prepared_identity(&existing, identity)?;
                 if !matches_intent(&existing, intent) {
                     return Err(RegistrarFailure::OperationConflict);
                 }
                 Ok(PrepareSessionStart::Existing(existing))
             }
         }
+    }
+
+    /// A retained prepared row carries the trusted starter and immutable F1 facts.
+    /// This is an internal harness handoff, never a session or capability lookup tool.
+    pub async fn prepare_harness_start(
+        &self,
+        intent: &HarnessSessionLaunch,
+        identity: &HarnessLaunchIdentity,
+    ) -> Result<PrepareSessionStart, RegistrarFailure> {
+        if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
+            return Ok(PrepareSessionStart::AccessEnrollment);
+        }
+        let Some(record) = self.repository.operation(&intent.operation_id).await? else {
+            let mut operator_launch = intent.clone();
+            // Permission-routing metadata cannot supply starter authority without a prepared handoff.
+            operator_launch.started_by = fleet_identity_protocol::StartedBy::RouterOperator {};
+            return self.prepare(&operator_launch, identity).await;
+        };
+        self.require_record_context(&record)?;
+        if !matches!(
+            record.lifecycle(),
+            FleetSessionBindingLifecycle::Prepared {
+                creation: PreparedSessionCreation::NotDispatched {}
+            }
+        ) {
+            return Err(RegistrarFailure::InvalidTransition);
+        }
+        self.require_prepared_identity(&record, identity)?;
+        let retained = &record.preparation().launch;
+        if retained.endpoint != intent.endpoint
+            || Some(&retained.project_id) != intent.project_id.as_ref()
+        {
+            return Err(RegistrarFailure::OperationConflict);
+        }
+        Ok(PrepareSessionStart::Existing(Box::new(record)))
+    }
+
+    fn require_prepared_identity(
+        &self,
+        record: &FleetSessionRegistrationRecord,
+        identity: &HarnessLaunchIdentity,
+    ) -> Result<(), RegistrarFailure> {
+        if matches!(
+            record.lifecycle(),
+            FleetSessionBindingLifecycle::Prepared {
+                creation: PreparedSessionCreation::NotDispatched {}
+            }
+        ) && self
+            .prepared_identities
+            .lock()
+            .map_err(|_| RegistrarFailure::Unavailable)?
+            .get(&record.preparation().operation_id)
+            != Some(identity)
+        {
+            return Err(RegistrarFailure::OperationConflict);
+        }
+        Ok(())
+    }
+
+    pub(super) fn forget_prepared_identity(
+        &self,
+        operation: &OperationId,
+    ) -> Result<(), RegistrarFailure> {
+        self.prepared_identities
+            .lock()
+            .map_err(|_| RegistrarFailure::Unavailable)?
+            .remove(operation);
+        Ok(())
     }
 
     pub(super) fn require_record_context(

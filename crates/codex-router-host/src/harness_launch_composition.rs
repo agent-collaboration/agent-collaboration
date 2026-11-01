@@ -53,12 +53,12 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
         identity: &'a collaboration_contracts::HarnessLaunchIdentity,
     ) -> HarnessLaunchFuture<'a, HarnessStartAdmission> {
         Box::pin(async move {
-            match self
+            let admission = self
                 .registrar
-                .prepare(launch, identity)
+                .prepare_harness_start(launch, identity)
                 .await
-                .map_err(launch_failure)?
-            {
+                .map_err(launch_failure)?;
+            match admission {
                 PrepareSessionStart::AccessEnrollment => {
                     Ok(HarnessStartAdmission::AccessEnrollment)
                 }

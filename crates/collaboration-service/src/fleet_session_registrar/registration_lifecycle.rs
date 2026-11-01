@@ -39,6 +39,7 @@ impl FleetSessionRegistrar {
             })
             .map_err(|_| RegistrarFailure::InvalidTransition)?;
         self.replace(&current, &next).await?;
+        self.forget_prepared_identity(operation)?;
         Ok(next.preparation().binding_address.clone())
     }
 
@@ -59,7 +60,8 @@ impl FleetSessionRegistrar {
                 creation: AbandonedSessionCreation::NotCreated {},
             })
             .map_err(|_| RegistrarFailure::InvalidTransition)?;
-        self.replace(&current, &next).await
+        self.replace(&current, &next).await?;
+        self.forget_prepared_identity(operation)
     }
 
     /// Records the actual provider identity and immutable request before any registration I/O.
