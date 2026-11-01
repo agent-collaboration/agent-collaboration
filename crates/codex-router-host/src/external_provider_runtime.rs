@@ -699,3 +699,7 @@ mod bound_helper_preparation_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/bound_helper_native_path_tests.rs"]
 mod bound_helper_native_path_tests;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/creator_permission_routing_tests.rs"]
+mod creator_permission_routing_tests;
