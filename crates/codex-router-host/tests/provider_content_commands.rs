@@ -72,6 +72,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -193,6 +194,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

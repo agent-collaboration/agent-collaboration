@@ -75,6 +75,7 @@ async fn unknown_agent_stop_reason_settles_with_typed_value() {
             runtime,
         }],
         store,
+        crate::ProviderSessionLaunchAdmission::AccessEnrollment,
     )
     .expect("supervisor");
     let operation_id = OperationId::generate();

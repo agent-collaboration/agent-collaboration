@@ -51,6 +51,14 @@ use tokio::sync::{Mutex, Notify, mpsc, watch};
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
 
+#[derive(Clone)]
+pub enum ProviderSessionLaunchAdmission {
+    AccessEnrollment,
+    MachineTokens {
+        port: Arc<dyn collaboration_contracts::HarnessSessionLaunchPort>,
+    },
+}
+
 pub struct ExternalProviderBinding {
     pub identity: ProviderBindingIdentity,
     pub runtime: ExternalProviderRuntime,
@@ -62,6 +70,7 @@ pub struct ExternalProviderSupervisor {
 }
 
 struct SupervisorInner {
+    launch_admission: ProviderSessionLaunchAdmission,
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
@@ -153,14 +162,16 @@ impl ExternalProviderSupervisor {
     pub fn new(
         bindings: Vec<ExternalProviderBinding>,
         store: Arc<Mutex<ProviderOperationStore>>,
+        launch_admission: ProviderSessionLaunchAdmission,
     ) -> Result<Self, &'static str> {
-        Self::new_with_hub(bindings, store, None)
+        Self::new_with_hub(bindings, store, None, launch_admission)
     }
 
     pub(crate) fn new_with_hub(
         bindings: Vec<ExternalProviderBinding>,
         store: Arc<Mutex<ProviderOperationStore>>,
         hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
+        launch_admission: ProviderSessionLaunchAdmission,
     ) -> Result<Self, &'static str> {
         let mut runtimes = HashMap::with_capacity(bindings.len());
         let mut model_catalogs = HashMap::with_capacity(bindings.len());
@@ -209,6 +220,7 @@ impl ExternalProviderSupervisor {
         }
         Ok(Self {
             inner: Arc::new(SupervisorInner {
+                launch_admission,
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
@@ -741,3 +753,6 @@ mod provider_delivery_submission;
 #[cfg(test)]
 mod tests;
 pub(crate) use provider_delivery_submission::ProviderPromptDispatch;
+
+#[cfg(test)]
+mod provider_registration_tests;

@@ -169,6 +169,7 @@ async fn supervisor_with_binding(
             runtime,
         }],
         Arc::new(Mutex::new(store)),
+        codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
     )?)
 }
 

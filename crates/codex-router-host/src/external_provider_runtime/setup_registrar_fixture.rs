@@ -30,7 +30,7 @@ const PROJECT: &str = "019f0000-0000-7000-8000-000000000002";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000003";
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-000000000004";
 
-pub(super) struct FixtureSessionAuthority {
+pub(crate) struct FixtureSessionAuthority {
     pub registrations: Mutex<Vec<RegisterFleetSession>>,
 }
 impl FleetSessionConnection for FixtureSessionAuthority {
@@ -81,7 +81,7 @@ impl SessionBindingEntropy for SequenceBindingEntropy {
     }
 }
 
-pub(super) struct ProviderRegistrarFixture {
+pub(crate) struct ProviderRegistrarFixture {
     pub registrar: Arc<FleetSessionRegistrar>,
     pub repository: Arc<MemoryRegistrationRepository>,
     pub authority: Arc<FixtureSessionAuthority>,
@@ -129,6 +129,9 @@ impl ProviderRegistrarFixture {
                 .to_owned()
                 .try_into()?,
         })
+    }
+    pub fn provider_launch_port(&self) -> Arc<dyn HarnessSessionLaunchPort> {
+        Arc::clone(&self.launch_port)
     }
     pub fn native_launch_port(&self) -> Arc<dyn HarnessSessionLaunchPort> {
         Arc::new(crate::HostHarnessSessionLaunchPort::new(

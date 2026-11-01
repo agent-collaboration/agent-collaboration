@@ -82,6 +82,7 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -158,6 +159,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -297,7 +299,12 @@ async fn router_queued_reconciliation_uses_only_the_operation_store() {
             .expect("store"),
     ));
     let supervisor = Arc::new(
-        ExternalProviderSupervisor::new(Vec::new(), Arc::clone(&store)).expect("supervisor"),
+        ExternalProviderSupervisor::new(
+            Vec::new(),
+            Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
+        )
+        .expect("supervisor"),
     );
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
@@ -414,6 +421,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -540,6 +548,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -666,6 +675,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
                     runtime,
                 }],
                 Arc::clone(&store),
+                codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
             )
             .expect("supervisor"),
         );

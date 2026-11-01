@@ -204,7 +204,12 @@ mod tests {
             })
             .expect("endpoint publication");
         let supervisor = Arc::new(
-            ExternalProviderSupervisor::new(Vec::new(), Arc::clone(&store)).expect("supervisor"),
+            ExternalProviderSupervisor::new(
+                Vec::new(),
+                Arc::clone(&store),
+                crate::ProviderSessionLaunchAdmission::AccessEnrollment,
+            )
+            .expect("supervisor"),
         );
         let claim = ProviderAcpRouteClaim::new(
             service_id,

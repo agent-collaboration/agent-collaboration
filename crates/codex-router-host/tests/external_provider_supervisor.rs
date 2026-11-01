@@ -371,6 +371,7 @@ async fn supervisor(
             .map(|(identity, runtime)| ExternalProviderBinding { identity, runtime })
             .collect(),
         Arc::new(Mutex::new(store)),
+        codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
     )?)
 }
 

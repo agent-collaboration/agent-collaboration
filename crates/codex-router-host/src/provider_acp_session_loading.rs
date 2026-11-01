@@ -370,6 +370,7 @@ mod tests {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor");
 
@@ -430,6 +431,7 @@ mod tests {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor");
 
@@ -484,6 +486,7 @@ mod tests {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor");
 

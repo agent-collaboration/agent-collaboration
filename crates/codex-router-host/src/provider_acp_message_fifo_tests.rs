@@ -146,6 +146,7 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -328,6 +329,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

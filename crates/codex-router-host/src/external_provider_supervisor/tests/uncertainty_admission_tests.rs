@@ -72,6 +72,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
             runtime,
         }],
         Arc::clone(&store),
+        crate::ProviderSessionLaunchAdmission::AccessEnrollment,
     )
     .unwrap();
     let requested_id = OperationId::generate();

@@ -185,6 +185,7 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
             runtime,
         }],
         Arc::new(Mutex::new(store)),
+        crate::ProviderSessionLaunchAdmission::AccessEnrollment,
     )
     .expect("supervisor initializes");
     let operation_id = OperationId::generate();
@@ -230,6 +231,7 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
             runtime,
         }],
         Arc::new(Mutex::new(store)),
+        crate::ProviderSessionLaunchAdmission::AccessEnrollment,
     )
     .expect("supervisor");
 
@@ -290,6 +292,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor initializes"),
     );
@@ -396,6 +399,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -494,6 +498,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
                 runtime,
             }],
             Arc::clone(&store),
+            crate::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -590,6 +595,7 @@ async fn concurrent_admission_precedes_reconcile_live_state_check() {
             runtime,
         }],
         Arc::new(Mutex::new(store)),
+        crate::ProviderSessionLaunchAdmission::AccessEnrollment,
     )
     .expect("supervisor initializes");
     let operation_id = OperationId::generate();

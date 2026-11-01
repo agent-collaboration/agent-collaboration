@@ -53,6 +53,7 @@ async fn provider_process_transport_failure_remains_retryable() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -138,6 +139,7 @@ async fn live_peer_recheck_prevents_provider_load() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

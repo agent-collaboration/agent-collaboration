@@ -67,6 +67,7 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
                 runtime,
             }],
             store.clone(),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

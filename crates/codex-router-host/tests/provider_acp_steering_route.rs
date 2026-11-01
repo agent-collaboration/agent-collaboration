@@ -163,6 +163,7 @@ async fn prepared_route(
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

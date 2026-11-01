@@ -82,6 +82,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         &self,
         request: ConversationCreateRequest,
     ) -> ProviderConversationFuture<'_, ConversationOperationSubmission> {
+        let _declared_launch_admission = &self.inner.launch_admission;
         let operation_id = request.operation_id.clone();
         let backend = self.clone();
         retain_operation(operation_id, None, async move {

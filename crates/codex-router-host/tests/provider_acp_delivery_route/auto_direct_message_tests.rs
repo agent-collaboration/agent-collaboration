@@ -94,6 +94,7 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
                 runtime,
             }],
             store.clone(),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );

@@ -263,6 +263,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
                 runtime,
             }],
             Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
         )
         .expect("supervisor"),
     );
@@ -547,8 +548,12 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         "scheduled provider returned unexpected settlement: {settlement:?}"
     );
     let restarted_supervisor = Arc::new(
-        ExternalProviderSupervisor::new(Vec::new(), Arc::clone(&store))
-            .expect("restarted supervisor"),
+        ExternalProviderSupervisor::new(
+            Vec::new(),
+            Arc::clone(&store),
+            codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
+        )
+        .expect("restarted supervisor"),
     );
     let restarted_route = Arc::new(ProviderAcpDeliveryRoute::new(
         service_id,

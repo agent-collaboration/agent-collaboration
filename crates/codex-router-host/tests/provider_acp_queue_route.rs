@@ -144,6 +144,7 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
                     runtime,
                 }],
                 Arc::clone(&store),
+                codex_router_host::ProviderSessionLaunchAdmission::AccessEnrollment,
             )
             .expect("supervisor"),
         );
