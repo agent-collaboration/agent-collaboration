@@ -69,6 +69,7 @@ pub struct ScheduleSnapshot {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ScheduleCreateRequest {
     pub operation_id: OperationId,
+    #[schemars(schema_with = "central_schedule_schema")]
     pub definition: ScheduleDefinition,
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -77,7 +78,13 @@ pub struct ScheduleUpdateRequest {
     pub operation_id: OperationId,
     pub schedule_id: ScheduleId,
     pub expected_change_id: ChangeId,
+    #[schemars(schema_with = "central_schedule_schema")]
     pub definition: ScheduleDefinition,
+}
+
+fn central_schedule_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"allOf":[generator.subschema_for::<ScheduleDefinition>()],
+        "properties":{"timing":crate::automation_timing_contract::central_timing_schema(generator)}})
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -142,17 +142,18 @@ fn prepare_message_input(
         } else {
             Box::new(std::fs::File::open(path).map_err(|_| "Message file unavailable")?)
         };
-        let mut text = String::new();
+        let mut bytes = Vec::new();
         reader
             .by_ref()
-            .take((collaboration_client::protocol::MAX_CONTROL_FRAME_BYTES + 1) as u64)
-            .read_to_string(&mut text)
-            .map_err(|_| "Cannot read UTF-8 message")?;
-        text
+            .take(collaboration_client::protocol::limits::WAKE_MESSAGE_MAX_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "Cannot read message")?;
+        collaboration_client::protocol::limits::LimitName::WakeMessageMaxBytes
+            .validate(bytes.len() as u64)
+            .map_err(|error| error.to_string())?;
+        String::from_utf8(bytes).map_err(|_| "Cannot read UTF-8 message")?
     };
-    let text = text
-        .try_into()
-        .map_err(|_| "Invalid or oversized message text")?;
+    let text = MessageText::try_from(text).map_err(|error| error.to_string())?;
     let content = if options.human_user {
         PreparedMessageContent::HumanUser { text }
     } else {

@@ -51,6 +51,13 @@ macro_rules! automation_identity {
     )+};
 }
 automation_identity!(
+    AutomationId => "automationId",
+    FiringId => "firingId",
+    BatchId => "batchId",
+    ContentId => "contentId",
+    WorkItemId => "workItemId",
+    ImportId => "importId",
+    ReportId => "reportId",
     ScheduleId => "scheduleId",
     InstructionId => "instructionId",
     RunId => "runId",

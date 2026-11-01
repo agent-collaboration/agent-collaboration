@@ -16,7 +16,8 @@ use std::{
 #[derive(Parser)]
 #[command(
     name = "agent-collaboration schedule",
-    bin_name = "agent-collaboration schedule"
+    bin_name = "agent-collaboration schedule",
+    long_about = collaboration_client::protocol::limits::description()
 )]
 struct ScheduleArguments {
     #[arg(long, global = true)]
@@ -53,6 +54,7 @@ enum ScheduleAction {
     /// Prepare a fresh, forked or explicitly adopted native thread without enabling its schedule.
     Prepare(PreparationArguments),
     /// Save schedule configuration. An unprepared destination must be disabled.
+    #[command(long_about = collaboration_client::protocol::limits::description())]
     Create {
         /// UTF-8 ScheduleDefinition JSON; '-' reads stdin. See the schedule_create tool schema.
         #[arg(long)]
@@ -61,6 +63,7 @@ enum ScheduleAction {
         operation_id: Option<String>,
     },
     /// Update future configuration within the fixed execution mode; admitted runs retain their inputs.
+    #[command(long_about = collaboration_client::protocol::limits::description())]
     Update {
         #[arg(long)]
         schedule_id: String,
@@ -392,6 +395,7 @@ fn read_definition(path: PathBuf) -> Result<ScheduleDefinition, String> {
     serde_json::from_str(&text).map_err(|_|"Definition must be closed ScheduleDefinition JSON with instructionId, timing, enabled, destination, model, effort, and nullable executionTimeoutSeconds; inspect the schedule_create tool schema.".into())
 }
 fn read_document(path: PathBuf, field: &str) -> Result<String, String> {
+    let maximum_bytes = collaboration_client::protocol::MAX_CONTROL_FRAME_BYTES;
     let mut reader: Box<dyn Read> = if path.as_os_str() == "-" {
         Box::new(io::stdin())
     } else {
@@ -400,12 +404,12 @@ fn read_document(path: PathBuf, field: &str) -> Result<String, String> {
     let mut text = String::new();
     reader
         .by_ref()
-        .take(1_048_577)
+        .take(maximum_bytes as u64 + 1)
         .read_to_string(&mut text)
         .map_err(|_| format!("{field} must be readable UTF-8"))?;
-    if text.len() > 1_048_576 {
+    if text.len() > maximum_bytes {
         return Err(format!(
-            "{field} exceeds the 1048576-byte message size limit before envelope encoding"
+            "{field} exceeds the {maximum_bytes}-byte message size limit before envelope encoding"
         ));
     }
     Ok(text)

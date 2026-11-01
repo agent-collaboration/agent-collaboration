@@ -35,8 +35,9 @@ impl ExternalProviderStartup {
     ) -> Result<Self, &'static str> {
         Ok(Self::Unavailable {
             provider,
-            reason: NonEmptyText::try_from(reason)?,
-            fix: NonEmptyText::try_from(fix)?,
+            reason: NonEmptyText::try_from(reason)
+                .map_err(|_| "invalid provider unavailability reason")?,
+            fix: NonEmptyText::try_from(fix).map_err(|_| "invalid provider unavailability fix")?,
         })
     }
 }
@@ -362,6 +363,34 @@ fn provider_capabilities(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_provider_metadata_obeys_the_shared_text_limit() {
+        assert!(
+            ExternalProviderStartup::unavailable(
+                ProviderKind::ClaudeCode,
+                "x".repeat(4096),
+                "repair".into()
+            )
+            .is_ok()
+        );
+        assert!(
+            ExternalProviderStartup::unavailable(
+                ProviderKind::ClaudeCode,
+                "x".repeat(4097),
+                "repair".into()
+            )
+            .is_err()
+        );
+        assert!(
+            ExternalProviderStartup::unavailable(
+                ProviderKind::ClaudeCode,
+                "unavailable".into(),
+                "x".repeat(4097)
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn endpoint_startup_reason_preserves_sanitized_failure_metadata() {

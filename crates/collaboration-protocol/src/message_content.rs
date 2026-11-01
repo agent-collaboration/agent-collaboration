@@ -9,21 +9,22 @@ use std::borrow::Cow;
 pub struct MessageText(String);
 
 #[derive(Debug, thiserror::Error)]
-#[error(
-    "message text must be nonempty, free of C0 controls other than newline and tab, and within the message size limit"
-)]
-pub struct MessageTextError;
+pub enum MessageTextError {
+    #[error(transparent)]
+    LimitExceeded(#[from] crate::limits::LimitExceeded),
+    #[error("message text must be free of C0 controls other than newline and tab")]
+    InvalidText,
+}
 
 impl TryFrom<String> for MessageText {
     type Error = MessageTextError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty()
-            || value
-                .chars()
-                .any(|character| character <= '\u{001f}' && !matches!(character, '\n' | '\t'))
-            || value.len() > MAX_CONTROL_FRAME_BYTES
+        crate::limits::LimitName::WakeMessageMaxBytes.validate(value.len() as u64)?;
+        if value
+            .chars()
+            .any(|character| character <= '\u{001f}' && !matches!(character, '\n' | '\t'))
         {
-            Err(MessageTextError)
+            Err(MessageTextError::InvalidText)
         } else {
             Ok(Self(value))
         }
@@ -65,8 +66,8 @@ impl JsonSchema for MessageText {
         "MessageText".into()
     }
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        json_schema!({"type":"string","minLength":1,"maxLength":1048576,
-            "pattern":"^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]+$","x-maxUtf8Bytes":1048576})
+        json_schema!({"type":"string","minLength":1,"maxLength":MAX_CONTROL_FRAME_BYTES,
+            "pattern":"^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]+$","x-maxUtf8Bytes":MAX_CONTROL_FRAME_BYTES})
     }
 }
 

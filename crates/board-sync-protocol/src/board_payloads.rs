@@ -102,6 +102,9 @@ pub enum BoardReadCursor {
     deny_unknown_fields
 )]
 pub enum BoardNotice {
+    AutomationBatchReady {
+        batch_id: agent_automation::BatchId,
+    },
     MailWaiting {
         stream: fleet_sync_protocol::DeliveryStream,
     },

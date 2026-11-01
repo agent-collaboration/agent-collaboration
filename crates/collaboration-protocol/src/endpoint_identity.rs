@@ -3,8 +3,12 @@ use serde::{Deserialize, Serialize};
 
 /// Invalid public identity, without including caller-supplied content.
 #[derive(Debug, thiserror::Error)]
-#[error("invalid {0}")]
-pub struct IdentityError(&'static str);
+pub enum IdentityError {
+    #[error("invalid {0}")]
+    Invalid(&'static str),
+    #[error(transparent)]
+    LimitExceeded(#[from] crate::limits::LimitExceeded),
+}
 
 /// Canonical lowercase UUID identity; not a process ID or network locator.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
@@ -25,7 +29,7 @@ impl TryFrom<String> for UuidIdentity {
         if valid {
             Ok(Self(value))
         } else {
-            Err(IdentityError("UUID"))
+            Err(IdentityError::Invalid("UUID"))
         }
     }
 }
@@ -45,15 +49,15 @@ pub struct EndpointId(String);
 impl TryFrom<String> for EndpointId {
     type Error = IdentityError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        let valid = (1..=64).contains(&value.len())
-            && value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+        crate::limits::LimitName::EndpointIdMaxBytes.validate(value.len() as u64)?;
+        let valid = value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
             && value
                 .bytes()
                 .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
         if valid {
             Ok(Self(value))
         } else {
-            Err(IdentityError("endpoint ID"))
+            Err(IdentityError::Invalid("endpoint ID"))
         }
     }
 }
@@ -70,10 +74,11 @@ pub struct SessionId(String);
 impl TryFrom<String> for SessionId {
     type Error = IdentityError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if (1..=4096).contains(&value.len()) && !value.contains('\0') {
+        crate::limits::LimitName::SessionIdMaxBytes.validate(value.len() as u64)?;
+        if !value.contains('\0') {
             Ok(Self(value))
         } else {
-            Err(IdentityError("session ID"))
+            Err(IdentityError::Invalid("session ID"))
         }
     }
 }

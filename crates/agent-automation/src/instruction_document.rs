@@ -3,8 +3,14 @@ use crate::{InstructionId, RevisionId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
-#[error("instruction text must be nonempty, NUL-free and at most 1048576 UTF-8 bytes")]
-pub struct InstructionTextError;
+pub enum InstructionTextError {
+    #[error(
+        "limitExceeded: INSTRUCTION_MAX_BYTES: {value}; allowed 1..={maximum}, step 1 UTF-8 bytes"
+    )]
+    LimitExceeded { value: usize, maximum: usize },
+    #[error("instruction text must be NUL-free")]
+    InvalidText,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
@@ -12,8 +18,14 @@ pub struct InstructionText(String);
 impl TryFrom<String> for InstructionText {
     type Error = InstructionTextError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty() || value.contains('\0') || value.len() > 1_048_576 {
-            return Err(InstructionTextError);
+        if value.is_empty() || value.len() > Self::MAX_BYTES {
+            return Err(InstructionTextError::LimitExceeded {
+                value: value.len(),
+                maximum: Self::MAX_BYTES,
+            });
+        }
+        if value.contains('\0') {
+            return Err(InstructionTextError::InvalidText);
         }
         Ok(Self(value))
     }
@@ -24,6 +36,7 @@ impl From<InstructionText> for String {
     }
 }
 impl InstructionText {
+    pub const MAX_BYTES: usize = 1_048_576;
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
@@ -44,6 +57,6 @@ impl schemars::JsonSchema for InstructionText {
         "InstructionText".into()
     }
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({"type":"string","minLength":1,"maxLength":1048576,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":1048576})
+        schemars::json_schema!({"type":"string","minLength":1,"maxLength":Self::MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":Self::MAX_BYTES})
     }
 }

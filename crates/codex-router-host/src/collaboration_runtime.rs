@@ -73,7 +73,8 @@ impl ExternalProviderLaunchBinding {
         Ok(Self {
             endpoint_id: EndpointId::try_from(endpoint_id.to_owned())
                 .map_err(|_| "invalid external provider endpoint ID")?,
-            label: NonEmptyText::try_from(label.to_owned())?,
+            label: NonEmptyText::try_from(label.to_owned())
+                .map_err(|_| "invalid external provider label")?,
             provider,
             launch: crate::ExternalProviderLaunch {
                 persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,

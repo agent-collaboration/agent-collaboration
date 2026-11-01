@@ -1,8 +1,23 @@
 //! Public communication contracts without process, storage or transport ownership.
+mod automation_cron;
+mod automation_grid;
+mod central_timing;
+pub mod limits;
+pub use automation_cron::GridCron;
+pub use automation_grid::{AutomationValidationError, GRID_STEP_MS, GridPeriod, GridTime};
+pub use central_timing::{AutomationKind, AutomationTiming};
+mod automation_calls;
+mod automation_custody;
+pub use agent_automation::{
+    AutomationId, BatchId, ContentId, FiringId, ImportId, ReportId, WorkItemId,
+};
+pub use automation_calls::*;
+pub use automation_custody::*;
 mod wake_authority;
 pub use wake_authority::{WakeCreator, WakeRefusal};
 mod mail_boundary_conversions;
-pub use mail_boundary_conversions::MailBoundaryConversionError;
+mod mail_boundary_error;
+pub use mail_boundary_error::MailBoundaryConversionError;
 mod thread_subscription_contract;
 mod thread_subscription_wait;
 pub use thread_subscription_contract::{
@@ -58,13 +73,15 @@ mod access_contract;
 mod approval_contract;
 mod interaction_actor;
 mod permission_diagnostic;
+mod provider_history_availability;
 mod provider_session_inspect;
 mod provider_session_list;
 mod session_observation_contract;
+pub use provider_history_availability::ProviderHistoryAvailability;
 pub use provider_session_inspect::{
-    ProviderConfigOptionView, ProviderConfigValueView, ProviderHistoryAvailability,
-    ProviderInspectFailure, ProviderInspectFailureKind, ProviderSessionInspectRequest,
-    ProviderSessionInspectResult, ProviderSettingChoiceView, ProviderSettingsCatalogView,
+    ProviderConfigOptionView, ProviderConfigValueView, ProviderInspectFailure,
+    ProviderInspectFailureKind, ProviderSessionInspectRequest, ProviderSessionInspectResult,
+    ProviderSettingChoiceView, ProviderSettingsCatalogView,
 };
 mod question_contract;
 pub use access_contract::{
@@ -191,10 +208,10 @@ pub use router_executable_relation::{RouterExecutableRelation, router_build_warn
 mod endpoint_description;
 pub use endpoint_description::{
     AcpCarrier, ChannelDescription, EndpointAvailability, EndpointDescription, NativeCarrier,
-    ObservationTimestamp, SchemaDigest,
 };
 
-pub use endpoint_description::NonEmptyText;
+mod identity_values;
+pub use identity_values::{NonEmptyText, ObservationTimestamp, SchemaDigest};
 
 mod service_manifest;
 pub use service_manifest::{
