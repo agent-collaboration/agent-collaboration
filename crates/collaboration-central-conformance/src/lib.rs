@@ -14,6 +14,13 @@ pub use automation_clock_scenarios::{
 mod automation_clock_controls;
 #[cfg(debug_assertions)]
 pub use automation_clock_controls::*;
+#[cfg(all(feature = "client", debug_assertions))]
+mod remote_session_create_scenarios;
+#[cfg(all(feature = "client", debug_assertions))]
+pub use remote_session_create_scenarios::{
+    RemoteCreateRestartCase, prepare_remote_create_restart, resume_remote_create_restart,
+    run_remote_session_create_conformance,
+};
 #[cfg(feature = "client")]
 mod automation_catalog_scenarios;
 #[cfg(feature = "client")]

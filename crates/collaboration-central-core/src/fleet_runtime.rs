@@ -3,6 +3,7 @@
 mod automation_calls;
 mod automation_catalog_step;
 mod automation_clock_step;
+mod remote_session_create;
 
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
@@ -103,7 +104,8 @@ where
             call.kind == crate::conformance_fleet::FleetReceiptProbe::KIND
                 && matches!(
                     serde_json::from_value::<crate::StepControl>(call.request.clone()),
-                    Ok(crate::StepControl::AutomationFixture { .. })
+                    Ok(crate::StepControl::AutomationFixture { .. }
+                        | crate::StepControl::MachineWorkFixture { .. })
                 )
         });
         #[cfg(not(all(feature = "conformance", debug_assertions)))]
