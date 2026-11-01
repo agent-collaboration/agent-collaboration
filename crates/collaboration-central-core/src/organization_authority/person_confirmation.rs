@@ -148,6 +148,8 @@ impl ConfirmedPersonToken {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PersonConfirmationRefusal {
+    #[error("the person confirmation reply is malformed")]
+    MalformedReply,
     #[error("the person session is inactive")]
     Inactive,
     #[error("the confirmation names a different person proof")]

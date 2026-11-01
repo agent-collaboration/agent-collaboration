@@ -8,8 +8,9 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
     SignatureValidity,
     organization_authority::{
-        ParsedPersonToken, PersonTokenAudience, PersonTokenPolicy, PersonTokenRefusal,
-        VerifiedPersonToken,
+        ParsedPersonToken, PersonConfirmationWindow, PersonSessionConfirmation,
+        PersonTokenAudience, PersonTokenPolicy, PersonTokenRefusal, VerifiedPersonToken,
+        decode_person_session_confirmation,
     },
 };
 use fleet_identity_protocol::UnixMillis;
@@ -160,5 +161,128 @@ fn organization_authority_k6_refuses_invalid_sessions_times_and_methods() -> Tes
         accepted.is_empty(),
         "Rust accepted invalid producer shapes: {accepted:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn organization_authority_k5_reads_both_staged_reply_states_and_active_extensions() -> TestResult {
+    let fixtures = examples(include_str!("fixtures/person-identity/K5.fixtures.json"))?;
+    assert_eq!(fixtures.contract, "K5SessionConfirmation");
+    let inactive = fixtures
+        .examples
+        .get("inactive")
+        .ok_or("inactive producer example")?;
+    assert!(matches!(
+        decode_person_session_confirmation(&serde_json::to_vec(inactive)?),
+        Ok(PersonSessionConfirmation::Inactive {})
+    ));
+    let mut active = fixtures
+        .examples
+        .get("active")
+        .ok_or("active producer example")?
+        .clone();
+    active
+        .as_object_mut()
+        .ok_or("active example object")?
+        .extend([("registered_extra".into(), json!("allowed"))]);
+    let decoded = decode_person_session_confirmation(&serde_json::to_vec(&active)?)?;
+    let PersonSessionConfirmation::Active {
+        person_id,
+        session_ref,
+        organization_id,
+        audience,
+        expires_at,
+    } = decoded
+    else {
+        return Err("active producer example became inactive".into());
+    };
+    assert_eq!(person_id.as_str(), "11111111-1111-7111-8111-111111111111");
+    assert_eq!(session_ref.as_str(), "22222222-2222-7222-8222-222222222222");
+    assert_eq!(
+        organization_id.as_str(),
+        "33333333-3333-7333-8333-333333333333"
+    );
+    assert_eq!(audience, "https://central.example.invalid/admin");
+    assert_eq!(expires_at.0, 2_208_989_400);
+    Ok(())
+}
+
+#[test]
+fn organization_authority_k5_refuses_inactive_disclosure_and_malformed_active_values() -> TestResult
+{
+    let schema: Value =
+        serde_json::from_str(include_str!("fixtures/person-identity/K5.schema.json"))?;
+    let validator = jsonschema::options().build(&schema)?;
+    let fixtures = examples(include_str!("fixtures/person-identity/K5.fixtures.json"))?;
+    let active = fixtures
+        .examples
+        .get("active")
+        .ok_or("active producer example")?;
+    let mut missing = active.clone();
+    missing
+        .as_object_mut()
+        .ok_or("active example object")?
+        .remove("checkedAt");
+    let mut invalid = vec![
+        json!({"active":false,"sub":"11111111-1111-7111-8111-111111111111"}),
+        json!({"active":true}),
+        missing,
+    ];
+    for (field, value) in [
+        ("checkedAt", json!(-1)),
+        ("checkedAt", json!(9_007_199_254_740_992_i64)),
+        ("exp", json!(-1)),
+        ("sid", json!("opaque-session")),
+        ("aud", json!(["https://central.example.invalid/admin"])),
+        ("active", json!(false)),
+    ] {
+        let mut value_with_bad_field = active.clone();
+        value_with_bad_field
+            .as_object_mut()
+            .ok_or("active example object")?
+            .extend([(field.into(), value)]);
+        invalid.push(value_with_bad_field);
+    }
+    for invalid_reply in invalid {
+        assert!(
+            !validator.is_valid(&invalid_reply),
+            "invalid reply fixture did not reach a forbidden producer shape"
+        );
+        assert!(
+            decode_person_session_confirmation(&serde_json::to_vec(&invalid_reply)?).is_err(),
+            "malformed confirmation was accepted: {invalid_reply}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn organization_authority_k5_checked_at_does_not_replace_central_receipt_time() -> TestResult {
+    let fixtures = examples(include_str!("fixtures/person-identity/K5.fixtures.json"))?;
+    let active = fixtures
+        .examples
+        .get("active")
+        .ok_or("active producer example")?;
+    let claims = k6_examples()?
+        .examples
+        .remove("providerSession")
+        .ok_or("person token example")?;
+    for checked_at in [0_i64, 9_007_199_254_740_991_i64] {
+        let mut changed = active.clone();
+        changed
+            .as_object_mut()
+            .ok_or("active example object")?
+            .extend([("checkedAt".into(), json!(checked_at))]);
+        let answer = decode_person_session_confirmation(&serde_json::to_vec(&changed)?)?;
+        let proof = k6_reader(&claims)?.confirmed(answer, UnixMillis(2_208_988_800_000))?;
+        assert!(
+            proof
+                .require_fresh(
+                    UnixMillis(2_208_988_804_999),
+                    PersonConfirmationWindow::default()
+                )
+                .is_ok()
+        );
+    }
     Ok(())
 }

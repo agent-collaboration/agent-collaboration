@@ -12,6 +12,7 @@ pub const ADMIN: &str = "https://central.example.invalid/v1/admin";
 pub const OPERATOR: &str = "https://central.example.invalid/v1/operator";
 pub const PERSON: &str = "019a3dce-2000-7000-8000-000000000001";
 pub const ORGANIZATION: &str = "019a3dce-2000-7000-8000-000000000002";
+pub const SIGN_IN_SESSION: &str = "019a3dce-2000-7000-8000-000000000003";
 pub const NOW: UnixMillis = UnixMillis(1_800_000_000_000);
 
 pub fn claims() -> Value {
@@ -19,7 +20,7 @@ pub fn claims() -> Value {
         "iss": ISSUER, "sub": PERSON, "aud": ADMIN,
         "exp": 1_800_000_300, "iat": 1_800_000_000,
         "scope": "central:admin", "client_id": "sign-in-app",
-        "azp": "sign-in-app", "sid": "issuer-owned-session",
+        "azp": "sign-in-app", "sid": SIGN_IN_SESSION,
         "jti": "issuer-owned-token", "organization_id": ORGANIZATION,
         "second_factor_at": 1_799_999_950, "amr": ["otp"],
     })

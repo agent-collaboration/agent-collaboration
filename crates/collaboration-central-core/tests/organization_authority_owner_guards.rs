@@ -19,7 +19,7 @@ use collaboration_central_core::{
 };
 use fleet_identity_protocol::{OrganizationId, UnixMillis, UnixSeconds};
 use person_token_fixture::{
-    ADMIN, NOW, OPERATOR, ORGANIZATION, PERSON, claims, person_token, policy,
+    ADMIN, NOW, OPERATOR, ORGANIZATION, PERSON, SIGN_IN_SESSION, claims, person_token, policy,
 };
 use serde_json::json;
 
@@ -55,7 +55,7 @@ fn confirmed_with_expiry(
         .confirmed(
             PersonSessionConfirmation::Active {
                 person_id: PERSON.to_owned().try_into()?,
-                session_ref: "issuer-owned-session".to_owned().try_into()?,
+                session_ref: SIGN_IN_SESSION.to_owned().try_into()?,
                 audience: audience.into(),
                 organization_id: ORGANIZATION.to_owned().try_into()?,
                 expires_at: UnixSeconds(expires_at),

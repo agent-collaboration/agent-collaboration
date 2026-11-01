@@ -1,8 +1,10 @@
 //! Parse person proofs without treating parsed claims as authenticated callers.
 
+use super::person_wire_values::PersonWireSeconds;
 use crate::{SignatureValidity, identity_contract::PersonId};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use fleet_identity_protocol::{OrganizationId, UnixMillis, UnixSeconds};
+use message_board::RecordId;
 use serde::Deserialize;
 
 const SERVICE_CLOCK_SKEW_SECONDS: i64 = 60;
@@ -18,25 +20,25 @@ pub enum PersonSignatureAlgorithm {
     EdDsa,
 }
 
-/// The issuer owns this reference; it is distinct from a Fleet harness session.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SignInSessionRef(String);
+/// The issuer's UUIDv7 session identity, distinct from a Fleet harness session.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(transparent)]
+pub struct SignInSessionRef(RecordId);
 
 impl TryFrom<String> for SignInSessionRef {
     type Error = PersonTokenRefusal;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            return Err(PersonTokenRefusal::NotAPerson);
-        }
-        Ok(Self(value))
+        RecordId::try_from(value)
+            .map(Self)
+            .map_err(|_| PersonTokenRefusal::NotAPerson)
     }
 }
 
 impl SignInSessionRef {
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -150,15 +152,26 @@ struct PersonClaims {
     iss: String,
     sub: PersonId,
     aud: TokenAudience,
-    exp: UnixSeconds,
-    iat: UnixSeconds,
+    exp: PersonWireSeconds,
+    iat: PersonWireSeconds,
     scope: String,
     client_id: String,
     azp: String,
     sid: Option<String>,
     jti: String,
     organization_id: Option<OrganizationId>,
-    second_factor_at: Option<UnixSeconds>,
+    second_factor_at: Option<PersonWireSeconds>,
+    amr: Option<Vec<PersonAuthenticationMethod>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum PersonAuthenticationMethod {
+    Otp,
+    Hwk,
+    Swk,
+    User,
+    Mfa,
 }
 
 impl ParsedPersonToken {
@@ -225,11 +238,12 @@ impl ParsedPersonToken {
             return Err(PersonTokenRefusal::WrongAudience);
         }
         let now_seconds = now.0.div_euclid(1_000);
-        validate_token_expiry(claims.exp, now)?;
+        let expires_at = claims.exp.into_unix_seconds();
+        validate_token_expiry(expires_at, now)?;
         let latest_issue = now_seconds
             .checked_add(SERVICE_CLOCK_SKEW_SECONDS)
             .ok_or(PersonTokenRefusal::NotYetValid)?;
-        if claims.iat.0 > latest_issue {
+        if claims.iat.into_unix_seconds().0 > latest_issue {
             return Err(PersonTokenRefusal::NotYetValid);
         }
         if claims.client_id.is_empty() || claims.azp.is_empty() || claims.jti.is_empty() {
@@ -247,14 +261,17 @@ impl ParsedPersonToken {
             .organization_id
             .ok_or(PersonTokenRefusal::NoOrganization)?;
         let _ = claims.scope;
+        let _ = claims.amr;
         Ok(VerifiedPersonToken {
             bearer_token: self.bearer_token,
             person_id: claims.sub,
             organization_id,
             session_ref,
             audience: policy.audience(purpose).to_owned(),
-            expires_at: claims.exp,
-            second_factor_at: claims.second_factor_at,
+            expires_at,
+            second_factor_at: claims
+                .second_factor_at
+                .map(PersonWireSeconds::into_unix_seconds),
             purpose,
         })
     }

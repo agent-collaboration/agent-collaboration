@@ -29,6 +29,7 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 const PERSON: &str = "019a3dce-2000-7000-8000-000000000001";
 const ORGANIZATION: &str = "019a3dce-2000-7000-8000-000000000002";
+const SIGN_IN_SESSION: &str = "019a3dce-2000-7000-8000-000000000003";
 const ADMIN: &str = "https://central.example.invalid/v1/admin";
 const NOW_MS: i64 = 1_800_000_000_000;
 
@@ -64,7 +65,7 @@ fn bearer() -> Result<String, serde_json::Error> {
     let claims = json!({
         "iss":"https://signin.example.invalid", "sub":PERSON, "aud":ADMIN,
         "exp":1_800_000_300, "iat":1_800_000_000, "scope":"central:admin",
-        "client_id":"sign-in-app", "azp":"sign-in-app", "sid":"issuer-session",
+        "client_id":"sign-in-app", "azp":"sign-in-app", "sid":SIGN_IN_SESSION,
         "jti":"issuer-token", "organization_id":ORGANIZATION,
     });
     Ok(format!(
@@ -81,7 +82,7 @@ fn active_confirmation() -> Result<PersonSessionConfirmation, SignInUnavailable>
             .to_owned()
             .try_into()
             .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?,
-        session_ref: "issuer-session"
+        session_ref: SIGN_IN_SESSION
             .to_owned()
             .try_into()
             .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?,

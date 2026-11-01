@@ -22,7 +22,8 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 #[path = "support/person_token_fixture.rs"]
 mod person_token_fixture;
 use person_token_fixture::{
-    ADMIN, NOW, OPERATOR, ORGANIZATION, PERSON, claims, person_token, policy, token,
+    ADMIN, NOW, OPERATOR, ORGANIZATION, PERSON, SIGN_IN_SESSION, claims, person_token, policy,
+    token,
 };
 
 #[test]
@@ -51,7 +52,7 @@ fn organization_authority_person_policy_accepts_a_person_and_preserves_signed_by
     )?;
     assert_eq!(verified.person_id().as_str(), PERSON);
     assert_eq!(verified.organization_id().as_str(), ORGANIZATION);
-    assert_eq!(verified.session_ref().as_str(), "issuer-owned-session");
+    assert_eq!(verified.session_ref().as_str(), SIGN_IN_SESSION);
     assert_eq!(
         verified.second_factor_at().map(|at| at.0),
         Some(1_799_999_950)
@@ -223,7 +224,7 @@ fn organization_authority_person_policy_accepts_registered_extensions_and_absent
 fn confirmation() -> Result<PersonSessionConfirmation, Box<dyn std::error::Error + Send + Sync>> {
     Ok(PersonSessionConfirmation::Active {
         person_id: PERSON.to_owned().try_into()?,
-        session_ref: "issuer-owned-session".to_owned().try_into()?,
+        session_ref: SIGN_IN_SESSION.to_owned().try_into()?,
         audience: ADMIN.into(),
         organization_id: ORGANIZATION.to_owned().try_into()?,
         expires_at: fleet_identity_protocol::UnixSeconds(1_800_000_300),
@@ -277,9 +278,9 @@ fn organization_authority_confirmation_refuses_inactive_or_mismatched_subjects()
                 .to_owned()
                 .try_into()?,
                 session_ref: (if field == "session" {
-                    "another-person-session"
+                    "019a3dce-2000-7000-8000-000000000004"
                 } else {
-                    "issuer-owned-session"
+                    SIGN_IN_SESSION
                 })
                 .to_owned()
                 .try_into()?,
