@@ -1,0 +1,10 @@
+[
+null,
+{"reason":{"kind":"notCurrentConnection","unexpectedField":true},"result":"refused"},
+{"reason":{"kind":"notCurrentConnection"},"result":"refused","unexpectedField":true},
+{"reason":{"kind":"notCurrentConnection"},"result":"unrecognizedVariant"},
+{"reason":{"kind":"unrecognizedVariant"},"result":"refused"},
+{"result":"accepted","unexpectedField":true},
+{"result":"superseded","unexpectedField":true},
+{"result":"unrecognizedVariant"}
+]

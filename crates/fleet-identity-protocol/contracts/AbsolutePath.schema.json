@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "maxLength": 4096,
+  "minLength": 1,
+  "pattern": "^/[^\\u0000]*$",
+  "title": "AbsolutePath",
+  "type": "string",
+  "x-maxUtf8Bytes": 4096
+}

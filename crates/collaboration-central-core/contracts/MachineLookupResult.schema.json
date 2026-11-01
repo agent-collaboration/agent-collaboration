@@ -1,0 +1,407 @@
+{
+  "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "DeviceLoginRequestId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollmentAuthorization": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "deviceCodeApproval",
+              "type": "string"
+            },
+            "personId": {
+              "$ref": "#/$defs/PersonId"
+            },
+            "requestId": {
+              "$ref": "#/$defs/DeviceLoginRequestId"
+            }
+          },
+          "required": [
+            "kind",
+            "personId",
+            "requestId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollmentRevocationReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "owner",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "superseded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InstallationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 36
+    },
+    "MachineEnrollment": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "authorizedBy": {
+              "$ref": "#/$defs/EnrollmentAuthorization"
+            },
+            "endsAt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnixSeconds"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "enrollmentId": {
+              "$ref": "#/$defs/EnrollmentId"
+            },
+            "installation": {
+              "$ref": "#/$defs/InstallationId"
+            },
+            "machineClientId": {
+              "$ref": "#/$defs/ClientId"
+            },
+            "state": {
+              "const": "enrolled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "enrollmentId",
+            "installation",
+            "authorizedBy",
+            "machineClientId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "authorizedBy": {
+              "$ref": "#/$defs/EnrollmentAuthorization"
+            },
+            "endsAt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnixSeconds"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "enrollmentId": {
+              "$ref": "#/$defs/EnrollmentId"
+            },
+            "installation": {
+              "$ref": "#/$defs/InstallationId"
+            },
+            "machineClientId": {
+              "$ref": "#/$defs/ClientId"
+            },
+            "reason": {
+              "$ref": "#/$defs/EnrollmentRevocationReason"
+            },
+            "state": {
+              "const": "revoked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "enrollmentId",
+            "installation",
+            "authorizedBy",
+            "machineClientId",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "authorizedBy": {
+              "$ref": "#/$defs/EnrollmentAuthorization"
+            },
+            "endsAt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnixSeconds"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "enrollmentId": {
+              "$ref": "#/$defs/EnrollmentId"
+            },
+            "installation": {
+              "$ref": "#/$defs/InstallationId"
+            },
+            "machineClientId": {
+              "$ref": "#/$defs/ClientId"
+            },
+            "state": {
+              "const": "expired",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "enrollmentId",
+            "installation",
+            "authorizedBy",
+            "machineClientId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "MachineLabel": {
+      "allOf": [
+        {
+          "pattern": "^[^\\u0000-\\u0008\\u000b-\\u001f]*$(?![\\s\\S])"
+        }
+      ],
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "OwnerRefusal": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notOwner",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notFound",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflict",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "recordUnwritable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PersonId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ResourceName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "UnixMillis": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "UnixSeconds": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "WorkspaceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ResourceName"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/WorkspaceId"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "allowedWorkspaces": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceRef"
+          },
+          "type": "array"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/UnixMillis"
+        },
+        "enrollment": {
+          "$ref": "#/$defs/MachineEnrollment"
+        },
+        "installation": {
+          "$ref": "#/$defs/InstallationId"
+        },
+        "label": {
+          "$ref": "#/$defs/MachineLabel"
+        },
+        "organizationId": {
+          "$ref": "#/$defs/OrganizationId"
+        },
+        "result": {
+          "const": "machine",
+          "type": "string"
+        },
+        "sharedBucket": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceRef"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "result",
+        "installation",
+        "organizationId",
+        "label",
+        "enrollment",
+        "approvedAt",
+        "allowedWorkspaces",
+        "sharedBucket"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "unknown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/OwnerRefusal"
+        },
+        "result": {
+          "const": "refused",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "MachineLookupResult"
+}
