@@ -1,8 +1,8 @@
 //! Explicit debug receipt route. No environment discovery and no production writer.
 use super::sample_model::{CompletionKind, SampleData};
 use agent_collaboration_tui::{
-    input_dispatch_receipt::InputDispatchReceiptSink, surface_handle::SurfaceStackHandle,
-    surface_stack::SurfaceId,
+    input::input_dispatch_receipt::InputDispatchReceiptSink,
+    surfaces::surface_handle::SurfaceStackHandle, surfaces::surface_stack::SurfaceId,
 };
 use std::{
     fs::{self, File, OpenOptions},
@@ -100,7 +100,7 @@ impl SampleReceipts {
     }
     pub fn observe(
         &self,
-        help: &agent_collaboration_tui::controls::HelpControl,
+        help: &agent_collaboration_tui::dialog::help::HelpControl,
         data: &SampleData,
         stack: SurfaceStackHandle,
         cause: ObservationCause,
@@ -171,10 +171,10 @@ impl SampleReceipts {
                 .map(|target| FocusTargetReadback {
                     target_id: target.id.as_str().to_owned(),
                     role: match target.role {
-                        agent_collaboration_tui::focus_model::TargetRole::Focusable => {
+                        agent_collaboration_tui::surfaces::focus_model::TargetRole::Focusable => {
                             TargetRoleReadback::Focusable
                         }
-                        agent_collaboration_tui::focus_model::TargetRole::PointerOnly => {
+                        agent_collaboration_tui::surfaces::focus_model::TargetRole::PointerOnly => {
                             TargetRoleReadback::PointerOnly
                         }
                     },

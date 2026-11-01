@@ -11,14 +11,13 @@ use super::{
 };
 use agent_collaboration_tui::{
     SurfaceHeader, UiText, UiTextRole,
-    controls::{
-        self, FilterField, ListRow, ListSelectionControl, MenuButton, ScrollList, SegmentedSwitch,
-        TextFieldState, Toolbar,
-    },
-    focus_model::TargetId,
-    input_owner::InputOwner,
-    overlay_host::OverlayHost,
-    surface_handle::{SurfaceContext, use_surface_stack},
+    controls::fields::{FilterField, MenuButton, SegmentedSwitch, TextFieldState},
+    controls::list::{ListRow, ListSelectionControl, ScrollList},
+    controls::{self, Toolbar},
+    input::input_owner::InputOwner,
+    surfaces::focus_model::TargetId,
+    surfaces::overlay_host::OverlayHost,
+    surfaces::surface_handle::{SurfaceContext, use_surface_stack},
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -163,7 +162,7 @@ fn ScreenBody(props: &ScreenBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
         SurfaceHeader(title:"Component showcase".to_owned()) {UiText(content:format!("{} rows · {}",list.rows().len(),data.model.read().effects.last().map_or("Ready".to_owned(),|effect|format!("{} {}",effect.action,effect.target.as_deref().unwrap_or("none")))),role:UiTextRole::Secondary)}
         Toolbar(available_width:context.stack.viewport().0.saturating_sub(12)) {MenuButton(id:TargetId::for_action(&action_id("menu")),action:action_id("menu"))}
         View(width:100pct,column_gap:FILTER_SETTINGS_GAP,flex_shrink:0.0_f32) {View(flex_grow:1.0_f32,min_width:FILTER_OUTER_MINIMUM_WIDTH) {FilterField(id:target_id("filter"),value:data.filter,placeholder:"Filter rows / 界".to_owned())} SegmentedSwitch(actions:vec![action_id("all"),action_id("local")],available_width:settings_switch_width(context.stack.viewport().0))}
-        controls::ComboBox(id:target_id("screen-choice"),value:data.choices)
+        controls::combo::ComboBox(id:target_id("screen-choice"),value:data.choices)
         ScrollList(id:list.scroll_target(),keyboard_target:Some(target_id("sample-list")),scroll:list.scroll(),grow:true) {
             #(list.rows().into_iter().map(|key|{let row=visible_row(&data,&key);element!(ListRow(key:key.as_str().to_owned(),control:list.clone(),row:key.clone()) {View(column_gap:1,width:100pct) {View(width:13,flex_shrink:0.0_f32) UiText(content:row.glyph.to_owned(),role:UiTextRole::Body) UiText(content:format!("{} · {}",row.title,row.key.as_str()),role:UiTextRole::Body)}}).into_any()}))
             #((list.rows().is_empty()).then(||element!(UiText(content:"No match".to_owned(),role:UiTextRole::Secondary))))
@@ -174,10 +173,10 @@ fn ScreenBody(props: &ScreenBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
 
 #[cfg(all(feature = "test-support", debug_assertions))]
 struct SampleDrawReceipt {
-    help: agent_collaboration_tui::controls::HelpControl,
+    help: agent_collaboration_tui::dialog::help::HelpControl,
     receipts: Option<super::sample_receipts::SampleReceipts>,
     data: SampleData,
-    stack: agent_collaboration_tui::surface_handle::SurfaceStackHandle,
+    stack: agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,
 }
 #[cfg(all(feature = "test-support", debug_assertions))]
 impl iocraft::Hook for SampleDrawReceipt {

@@ -2,8 +2,8 @@
 use super::sample_model::{ClippingCase, SampleData, action, action_id};
 use agent_collaboration_tui::{
     actions::{ActionDef, ActionTitle, Placement},
-    controls::Button,
-    focus_model::TargetId,
+    controls::fields::Button,
+    surfaces::focus_model::TargetId,
 };
 use iocraft::prelude::*;
 

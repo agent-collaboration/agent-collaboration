@@ -10,13 +10,13 @@ use agent_collaboration_tui::{
     actions::{
         ActionRegistry, ActionTitle, Availability, AvailabilityFn, Checked, Placement, ScopeId,
     },
-    controls::{
-        self, HelpControl, ListNavigationPolicy, ListSelectionBinding, ListSelectionControl,
-        TextFieldState, button_target, toolbar_target,
-    },
-    focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
-    surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::{SurfaceId, SurfaceModel},
+    controls::fields::{TextFieldState, button_target},
+    controls::list::{ListNavigationPolicy, ListSelectionBinding, ListSelectionControl},
+    controls::{self, toolbar_target},
+    dialog::help::HelpControl,
+    surfaces::focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
+    surfaces::surface_handle::{SurfaceContext, SurfaceStackHandle},
+    surfaces::surface_stack::{SurfaceId, SurfaceModel},
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -221,7 +221,7 @@ pub fn build_screen(
             section: "Demonstrations",
         },
         move |()| {
-            controls::ComboBoxControl::new(controls::ComboBoxBinding {
+            controls::combo::ComboBoxControl::new(controls::combo::ComboBoxBinding {
                 parent: SurfaceContext {
                     stack,
                     surface: SurfaceId::Screen,
@@ -289,7 +289,7 @@ pub fn build_screen(
             ))
             .with_activation(action_id("details")),
     );
-    targets.extend(controls::segmented_targets(
+    targets.extend(controls::fields::segmented_targets(
         &actions
             .iter()
             .filter(|action| action.id == action_id("all") || action.id == action_id("local"))

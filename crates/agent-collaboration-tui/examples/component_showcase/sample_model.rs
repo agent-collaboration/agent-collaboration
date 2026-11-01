@@ -1,13 +1,14 @@
 //! Sample-owned values and recording effects; controls own editing and navigation.
-use agent_collaboration_tui::controls::{
-    HelpContent, HelpContextLine, HelpControl, HelpInputConvention, ListSelectionControl,
+use agent_collaboration_tui::controls::list::ListSelectionControl;
+use agent_collaboration_tui::dialog::help::{
+    HelpContent, HelpContextLine, HelpControl, HelpInputConvention,
 };
 use agent_collaboration_tui::{
-    actions::{ActionDef, ActionId, AvailabilityFn, Placement},
-    controls::{
-        ComboBoxState, ListRowKey, ListSelectionState, OptionKey, SelectOption, TextFieldState,
-    },
-    focus_model::TargetId,
+    actions::{ActionDef, ActionId, ActionRisk, AvailabilityFn, Placement},
+    controls::combo::ComboBoxState,
+    controls::fields::TextFieldState,
+    controls::list::{ListRowKey, ListSelectionState, OptionKey, SelectOption},
+    surfaces::focus_model::TargetId,
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -71,6 +72,7 @@ pub fn action(
         availability: AvailabilityFn::default(),
         choice: None,
         placement,
+        risk: ActionRisk::Ordinary,
         run: Handler::from(run),
     }
 }
@@ -244,10 +246,10 @@ pub struct SampleData {
     pub selected: State<ListSelectionState>,
     pub detail_selected: State<ListSelectionState>,
     pub committed: State<String>,
-    pub main_scroll: State<Option<agent_collaboration_tui::controls::ScrollHandle>>,
-    pub dialog_scroll: State<Option<agent_collaboration_tui::controls::ScrollHandle>>,
+    pub main_scroll: State<Option<agent_collaboration_tui::controls::list::ScrollHandle>>,
+    pub dialog_scroll: State<Option<agent_collaboration_tui::controls::list::ScrollHandle>>,
     pub detail_control: State<Option<ListSelectionControl>>,
-    pub last_overlay: State<Option<agent_collaboration_tui::surface_stack::OverlayId>>,
+    pub last_overlay: State<Option<agent_collaboration_tui::surfaces::surface_stack::OverlayId>>,
 }
 impl SampleData {
     pub fn update(self, update: impl FnOnce(&mut SampleModel)) {

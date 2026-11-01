@@ -1,8 +1,8 @@
 //! Wire projections of public observations, separate from sample domain state.
 use agent_collaboration_tui::{
     actions::{ActionRegistry, Availability},
-    hit_regions::{HitMapSnapshot, HitRegionKind},
-    surface_stack::{OverlayKind, SurfaceId, SurfaceModel},
+    surfaces::hit_regions::{HitMapSnapshot, HitRegionKind},
+    surfaces::surface_stack::{OverlayKind, SurfaceId, SurfaceModel},
 };
 use serde::Serialize;
 #[derive(Clone, Copy, Eq, PartialEq, Serialize)]

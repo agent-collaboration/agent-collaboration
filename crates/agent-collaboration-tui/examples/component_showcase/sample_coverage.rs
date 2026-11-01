@@ -7,9 +7,11 @@ use super::{
 };
 use agent_collaboration_tui::{
     actions::{ActionDef, ActionRegistry, Placement},
-    controls::{self, ComboBoxBinding, ComboBoxControl, HelpControl},
-    surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::{OverlayLayout, SurfaceId},
+    controls,
+    controls::combo::{ComboBoxBinding, ComboBoxControl},
+    dialog::help::HelpControl,
+    surfaces::surface_handle::{SurfaceContext, SurfaceStackHandle},
+    surfaces::surface_stack::{OverlayLayout, SurfaceId},
 };
 use iocraft::prelude::*;
 #[expect(

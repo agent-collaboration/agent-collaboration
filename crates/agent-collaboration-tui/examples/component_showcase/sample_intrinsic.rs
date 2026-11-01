@@ -3,10 +3,11 @@ use super::sample_model::{action, target_id};
 use agent_collaboration_tui::{
     DialogAxisSize, DialogMargins, DialogPresentation, UiText, UiTextRole,
     actions::{ActionDef, ActionRegistry, Placement, ScopeId},
-    controls::{DialogFrame, ScrollHandle},
-    focus_model::{FocusModel, TargetSpec},
-    surface_handle::SurfaceStackHandle,
-    surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    controls::list::ScrollHandle,
+    dialog::DialogFrame,
+    surfaces::focus_model::{FocusModel, TargetSpec},
+    surfaces::surface_handle::SurfaceStackHandle,
+    surfaces::surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
 };
 use iocraft::prelude::*;
 

@@ -9,16 +9,20 @@ use agent_collaboration_tui::{
     DialogAxisSize, DialogMargins, DialogPresentation, UiColumnHeading, UiHeading, UiHeadingLevel,
     UiText, UiTextRole,
     actions::{ActionRegistry, Availability, AvailabilityFn, ScopeId},
-    controls::{
-        Button, ComboBox, ComboBoxBinding, ComboBoxControl, DialogFrame, DialogKeyHints,
-        DialogSection, DialogSections, FormField, FormFields, HelpControl, HelpDialog,
-        ListNavigationPolicy, ListRow, ListSelectionBinding, ListSelectionControl, PinnedContext,
-        ScrollHandle, ScrollList, SelectOption, StatusKind, StatusValue, TextField, TextFieldState,
+    controls::combo::{ComboBox, ComboBoxBinding, ComboBoxControl},
+    controls::fields::{
+        Button, FormField, FormFields, StatusKind, StatusValue, TextField, TextFieldState,
         button_target,
     },
-    focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
-    surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::{
+    controls::list::{
+        ListNavigationPolicy, ListRow, ListSelectionBinding, ListSelectionControl, ScrollHandle,
+        ScrollList, SelectOption,
+    },
+    dialog::help::{HelpControl, HelpDialog},
+    dialog::{DialogFrame, DialogKeyHints, DialogSection, DialogSections, PinnedContext},
+    surfaces::focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
+    surfaces::surface_handle::{SurfaceContext, SurfaceStackHandle},
+    surfaces::surface_stack::{
         OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceId, SurfaceModel,
     },
 };
@@ -460,7 +464,7 @@ fn SampleDialog(props: &SampleDialogProps, hooks: Hooks) -> impl Into<AnyElement
                 #(data.model.read().draft_visible.then(||element!(FormField(label:"Directory".to_owned(),has_focus:context.is_focused(&target_id("draft"))) {TextField(id:target_id("draft"),value:data.draft)})))
                 FormField(label:"Option".to_owned(),has_focus:context.is_focused(&target_id("choice"))) {ComboBox(id:target_id("choice"),value:data.choices)}
             }}
-            DialogSection(heading:"Tinted status 界".to_owned(),surface:Some(agent_collaboration_tui::theme::SurfaceRole::Alternate)) {FormFields(minimum_label_width:Some(shared_width)) {FormField(label:"Long section label 界".to_owned()) {StatusValue(status:StatusKind::Available,detail:Some("Local recording only".into()))}}
+            DialogSection(heading:"Tinted status 界".to_owned(),surface:Some(agent_collaboration_tui::foundation::theme::SurfaceRole::Alternate)) {FormFields(minimum_label_width:Some(shared_width)) {FormField(label:"Long section label 界".to_owned()) {StatusValue(status:StatusKind::Available,detail:Some("Local recording only".into()))}}
                 StatusValue(status:StatusKind::Warning,detail:Some("Sample warning".into()))
                 StatusValue(status:StatusKind::Error,detail:Some("Sample error".into()))
             }
