@@ -580,6 +580,29 @@ impl NativeObjects {
     }
 
     #[cfg(feature = "conformance")]
+    pub(crate) async fn holder_deadline(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<Option<collaboration_central_core::RegistryTime>, StoreError> {
+        let slot = self
+            .slots
+            .lock()
+            .await
+            .get(&format!("connection-{}", service.as_str()))
+            .cloned();
+        match slot
+            .as_ref()
+            .and_then(|slot| slot.runtime.get())
+            .map(Arc::as_ref)
+        {
+            Some(RuntimeFace::Session(runtime)) => runtime.conformance_holder_deadline(),
+            _ => Err(StoreError::Aborted {
+                reason: "connection runtime missing".into(),
+            }),
+        }
+    }
+
+    #[cfg(feature = "conformance")]
     pub(crate) async fn socket_origins(
         &self,
         service: &message_board::ServiceId,

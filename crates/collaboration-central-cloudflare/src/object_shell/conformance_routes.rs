@@ -181,6 +181,13 @@ impl ShellActor {
             return Response::from_json(&runtime.conformance_holder_observation().map_err(error)?)
                 .map(Some);
         }
+        if request.path() == "/test/holder-observation/deadline" {
+            let RuntimeFace::Session(runtime) = runtime else {
+                return Err(error("not a connection runtime"));
+            };
+            return Response::from_json(&runtime.conformance_holder_deadline().map_err(error)?)
+                .map(Some);
+        }
         Ok(None)
     }
 }

@@ -22,8 +22,16 @@ where
     Observe: FnMut() -> Observed,
     Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
 {
+    use collaboration_central_core::{ObjectAddress, RegistryTime};
+    let clock = ConformanceClient::new(base)?;
+    let started = collaboration_central_conformance::fixture_time()?;
     let copy = CopyClient::new(base)?;
     let database = database("911")?;
+    let connection =
+        ObjectAddress::Connection(message_board::ServiceId::try_from(SERVICE.to_owned())?);
+    for address in [ObjectAddress::Registry, ObjectAddress::Copy(database)] {
+        clock.set_object_time(address, started).await?;
+    }
     copy.create(database).await?;
     let mut peer = enroll_admitted_peer(
         &ConformanceClient::new(base)?,
@@ -33,6 +41,7 @@ where
         "019f0000-0000-7000-8000-000000000912",
     )
     .await?;
+    clock.set_object_time(connection.clone(), started).await?;
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(75))
@@ -50,16 +59,16 @@ where
     start(&http, base, &mut callers, input.clone());
     let result = async {
         let (frame, first) = received(&mut peer.socket).await?;
-        let started = tokio::time::Instant::now();
         let ServerCall::Release { call, request } = first else {
             return Err("sequential caller did not send Release".into());
         };
         if request.database != database || observe().await? != vec![frame] {
             return Err("sequential Release did not own exactly its expected waiter".into());
         }
-        // These clock boundaries choose the scenario's elapsed lease time;
-        // observed calls and store results, not sleeps, establish readiness.
-        tokio::time::sleep_until(started + Duration::from_secs(18)).await;
+        let release_at = RegistryTime(started.0 + chrono::TimeDelta::seconds(18));
+        for address in [ObjectAddress::Registry, ObjectAddress::Copy(database), connection.clone()] {
+            clock.set_object_time(address, release_at).await?;
+        }
         send(
             &mut peer.socket,
             frame,
@@ -71,12 +80,20 @@ where
         let first = copy
             .observed(database, |state| state.attempts == 1 && state.waiting == 1)
             .await?;
-        let wait_started = tokio::time::Instant::now();
+        let armed = first.deadlines.first().ok_or("Copy wait has no actual armed deadline")?;
+        if armed.armed_at != release_at
+            || armed.deadline.0 - armed.armed_at.0 != chrono::TimeDelta::seconds(20)
+        {
+            return Err("the actual armed Copy deadline differs from the configured 20 seconds".into());
+        }
         if !matches!(first.calls.as_slice(), [identity]
             if identity.operation == call.operation && identity.step.as_str() == "copy_request") {
             return Err("Copy wait did not follow Release in the same real operation".into());
         }
-        tokio::time::sleep_until(started + Duration::from_secs(31)).await;
+        let replay_at = RegistryTime(started.0 + chrono::TimeDelta::seconds(31));
+        for address in [ObjectAddress::Registry, ObjectAddress::Copy(database), connection.clone()] {
+            clock.set_object_time(address, replay_at).await?;
+        }
         let before = copy.control(database, "observe").await?;
         if before.attempts != 1 || before.waiting != 1 || before.calls != first.calls {
             return Err("the original drive lost its single Copy waiter before replay".into());
@@ -105,10 +122,18 @@ where
         }
         // Only expiry of the original full Copy attempt releases the live drive.
         // The next attempt must replay the saved Release and retain its CallId.
+        for address in [ObjectAddress::Registry, connection.clone(), ObjectAddress::Copy(database)] {
+            clock.set_object_time(address, armed.deadline).await?;
+        }
+        // The HTTP response follows recording this attempt's outcome. Only
+        // then wake the durable caller again at the same controlled instant.
+        callers.join_next().await.ok_or("Copy caller task disappeared")???;
+        clock.set_object_time(ObjectAddress::Registry, armed.deadline).await?;
         let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await?;
-        let elapsed = started.elapsed();
-        if elapsed < Duration::from_secs(37)
-            || wait_started.elapsed() < Duration::from_millis(19_900)
+        let elapsed = armed.deadline.0 - started.0;
+        let waited = armed.deadline.0 - armed.armed_at.0;
+        if elapsed < chrono::TimeDelta::seconds(37)
+            || waited < chrono::TimeDelta::milliseconds(19_900)
         {
             return Err("the Copy attempt ended before its full configured wait".into());
         }
@@ -138,7 +163,7 @@ where
         println!(
             "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={} terminal=retired passed",
             rejected.iter().filter(|id| **id == call.operation).count(),
-            elapsed.as_millis()
+            elapsed.num_milliseconds()
         );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }

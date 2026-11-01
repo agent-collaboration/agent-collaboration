@@ -222,6 +222,14 @@ impl TokioCentralPlatform {
         self.objects.holder_frames(service).await
     }
 
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_holder_deadline(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<Option<collaboration_central_core::RegistryTime>, durable_steps::StoreError> {
+        self.objects.holder_deadline(service).await
+    }
+
     /// Read-only observation of attachments created by the real HTTP upgrade.
     #[cfg(feature = "conformance")]
     pub async fn conformance_socket_origins(

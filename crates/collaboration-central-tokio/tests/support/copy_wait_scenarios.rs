@@ -27,6 +27,7 @@ pub(super) struct Observation {
     notifications: u64,
     read_gap_reached: bool,
     pub(super) calls: Vec<durable_steps::CallId>,
+    pub(super) deadlines: Vec<collaboration_central_core::CopyWaitDeadline>,
 }
 
 #[derive(Clone)]
@@ -100,7 +101,6 @@ impl CopyClient {
                 }
                 // This observer has no mutation or drive. Its next authoritative
                 // snapshot establishes readiness, never the backoff itself.
-                // The next authoritative response, not a pacing timer, advances this observer.
             }
         })
         .await?
@@ -121,7 +121,7 @@ impl CopyClient {
                 if reply.get("kind").and_then(Value::as_str) != Some("pending") {
                     return Err(format!("copy operation did not return its typed answer: {reply}; expected {expected}").into());
                 }
-                // The next authoritative response, not a pacing timer, advances this observer.
+
             }
         }).await?
     }
@@ -165,7 +165,7 @@ impl CopyClient {
                         return Ok(step);
                     }
                 }
-                // The next authoritative response, not a pacing timer, advances this observer.
+
             }
         }).await?
     }

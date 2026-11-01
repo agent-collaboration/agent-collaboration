@@ -15,7 +15,7 @@ pub async fn native_platform(
     let directory = tempfile::tempdir()?;
     let platform = collaboration_central_tokio::TokioCentralPlatform::new(
         key_source,
-        Arc::new(runtime_primitives::SystemClock),
+        Arc::new(collaboration_central_core::ConformanceAccessClock::new()),
         |_| {},
         directory.path(),
         registry_config()?,

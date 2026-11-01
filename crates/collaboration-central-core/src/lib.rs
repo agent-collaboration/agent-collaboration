@@ -27,6 +27,8 @@ mod conformance_clock;
 #[cfg(feature = "conformance")]
 pub use conformance_clock::ConformanceAccessClock;
 #[cfg(feature = "conformance")]
+pub use conformance_copy_wait::CopyWaitDeadline;
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;

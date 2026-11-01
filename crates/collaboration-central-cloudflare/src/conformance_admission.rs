@@ -22,6 +22,9 @@ enum Command {
     HolderObservation {
         service: message_board::ServiceId,
     },
+    HolderDeadline {
+        service: message_board::ServiceId,
+    },
     HolderSessionIdentity {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
@@ -87,6 +90,11 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
         Command::HolderObservation { service } => (
             ObjectAddress::Connection(service),
             "/test/holder-observation",
+            None,
+        ),
+        Command::HolderDeadline { service } => (
+            ObjectAddress::Connection(service),
+            "/test/holder-observation/deadline",
             None,
         ),
         Command::HolderSessionIdentity {

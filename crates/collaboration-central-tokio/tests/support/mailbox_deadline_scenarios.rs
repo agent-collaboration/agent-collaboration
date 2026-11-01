@@ -30,7 +30,6 @@ async fn latest(socket: &mut WebSocket, item: ItemId, expected: Value) -> Confor
             {
                 return Ok(event.clone());
             }
-            // The next authoritative response, not a pacing timer, advances this observer.
         }
     })
     .await?

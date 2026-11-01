@@ -101,12 +101,21 @@ async fn full_holder_attempt_finishes_inside_the_original_drive_lease_without_wa
     })
     .await?;
     let service = message_board::ServiceId::try_from(holder_full_wait::SERVICE.to_owned())?;
-    let result = holder_full_wait::run(server.base_url(), || async {
-        Ok(server
-            .conformance_platform()
-            .conformance_holder_frames(&service)
-            .await?)
-    })
+    let result = holder_full_wait::run(
+        server.base_url(),
+        || async {
+            Ok(server
+                .conformance_platform()
+                .conformance_holder_frames(&service)
+                .await?)
+        },
+        || async {
+            Ok(server
+                .conformance_platform()
+                .conformance_holder_deadline(&service)
+                .await?)
+        },
+    )
     .await;
     let stopped = server.shutdown().await;
     let fixture = jwks.shutdown().await;

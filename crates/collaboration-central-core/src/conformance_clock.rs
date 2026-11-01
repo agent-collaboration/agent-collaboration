@@ -30,3 +30,12 @@ impl Clock for ConformanceAccessClock {
         SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
     }
 }
+
+pub(crate) fn observed_time(time: SyncTime) -> Result<RegistryTime, durable_steps::StoreError> {
+    chrono::DateTime::from_timestamp_millis(time.unix_millis())
+        .map(RegistryTime)
+        .ok_or_else(|| durable_steps::StoreError::Corrupt {
+            field: "conformance.waitDeadline".into(),
+            message: "the actual armed time is outside the timestamp range".into(),
+        })
+}
