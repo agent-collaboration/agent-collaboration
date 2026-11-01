@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
     ClientAssertionLifetime, ClientAssertionRefusal, Ed25519ClientSigner,
     PersonIntrospectionClient, PersonSessionConfirmer, PrivateKeyJwtClient, ServiceClientId,
-    ServiceForm, ServiceFormFailure, ServiceFormTransport,
+    ServiceForm, ServiceFormTransport, ServiceHttpFailure,
     identity_contract::ResourceUri,
     organization_authority::{PersonSessionConfirmation, SignInUnavailable},
 };
@@ -233,14 +233,14 @@ fn assertion_configuration_refuses_empty_key_ids_and_excess_lifetime() {
 
 struct RecordingTransport {
     calls: Arc<Mutex<Vec<(String, String)>>>,
-    answer: Result<Vec<u8>, ServiceFormFailure>,
+    answer: Result<Vec<u8>, ServiceHttpFailure>,
 }
 impl ServiceFormTransport for RecordingTransport {
     async fn post_service_form(
         &self,
         endpoint: &ResourceUri,
         form: &ServiceForm,
-    ) -> Result<Vec<u8>, ServiceFormFailure> {
+    ) -> Result<Vec<u8>, ServiceHttpFailure> {
         self.calls
             .lock()
             .unwrap()
@@ -287,9 +287,9 @@ async fn confirmation_authenticates_each_call_and_decodes_the_actual_k5_shape() 
 #[tokio::test(start_paused = true)]
 async fn confirmation_refuses_unavailable_or_malformed_replies_without_guessing_inactive() {
     for answer in [
-        Err(ServiceFormFailure::Unreachable),
-        Err(ServiceFormFailure::InvalidReply),
-        Err(ServiceFormFailure::Refused { status: 401 }),
+        Err(ServiceHttpFailure::Unreachable),
+        Err(ServiceHttpFailure::InvalidReply),
+        Err(ServiceHttpFailure::Refused { status: 401 }),
         Ok(b"{}".to_vec()),
     ] {
         let confirmer = PersonIntrospectionClient::new(

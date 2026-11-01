@@ -1,5 +1,5 @@
 //! The signing key is RFC8032's public test key, never a deployment secret.
-use crate::{CloudflareEd25519ClientSigner, CloudflareServiceFormTransport};
+use crate::{CloudflareEd25519ClientSigner, CloudflareServiceHttpTransport};
 use collaboration_central_core::{
     ClientAuthenticationProbe, IssuerKeyId, ServiceClientId, identity_contract::ResourceUri,
     observe_client_authentication,
@@ -24,7 +24,7 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
     let input: ClientAuthenticationProbe = request.json().await?;
     let outcomes = observe_client_authentication(
         signer,
-        CloudflareServiceFormTransport,
+        CloudflareServiceHttpTransport,
         client_id,
         endpoint,
         input,

@@ -103,6 +103,24 @@ pub struct ClientAssertionAuthentication {
     assertion: String,
 }
 impl ClientAssertionAuthentication {
+    #[must_use]
+    pub fn service_token_form(
+        &self,
+        resource: &ResourceUri,
+        operation: crate::ServiceOperation,
+    ) -> ServiceForm {
+        let mut form = url::form_urlencoded::Serializer::new(String::new());
+        form.append_pair("grant_type", "client_credentials")
+            .append_pair("resource", resource.as_str())
+            .append_pair("scope", operation.scope())
+            .append_pair("client_id", self.client_id.as_str())
+            .append_pair(
+                "client_assertion_type",
+                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            )
+            .append_pair("client_assertion", &self.assertion);
+        ServiceForm(form.finish())
+    }
     /// RFC7662 plus RFC7523 client authentication; the person token remains the
     /// token form field, never an Authorization bearer credential for this call.
     #[must_use]

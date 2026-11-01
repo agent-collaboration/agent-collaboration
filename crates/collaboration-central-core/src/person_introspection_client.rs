@@ -13,11 +13,11 @@ pub trait ServiceFormTransport: Send + Sync {
         &self,
         endpoint: &ResourceUri,
         form: &ServiceForm,
-    ) -> impl Future<Output = Result<Vec<u8>, ServiceFormFailure>> + Send;
+    ) -> impl Future<Output = Result<Vec<u8>, ServiceHttpFailure>> + Send;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ServiceFormFailure {
+pub enum ServiceHttpFailure {
     #[error("the service could not be reached")]
     Unreachable,
     #[error("the service refused the request")]

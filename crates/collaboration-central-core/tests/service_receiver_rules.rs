@@ -295,3 +295,132 @@ fn a_pinned_client_identifier_is_nonempty_and_need_not_be_a_generated_machine_uu
     assert!(ServiceClientId::try_from(String::new()).is_err());
     assert_eq!(client("pinned-directory").as_str(), "pinned-directory");
 }
+
+fn body_literal(operation: ServiceOperation) -> serde_json::Value {
+    use serde_json::json;
+    let organization = organization("01").as_str().to_owned();
+    let person = "019f0000-0000-7000-8000-000000000002";
+    let request = "019f0000-0000-7000-8000-000000000003";
+    let decision = json!({"organizationId":organization,"approver":person,"requestId":request,
+        "installation":"019f0000-0000-7000-8000-000000000004",
+        "peer":"019f0000-0000-7000-8000-000000000005","label":"fixture machine","allowedWorkspaces":[]});
+    match operation {
+        ServiceOperation::AdmitSignIn => {
+            json!({"operation":"admitSignIn","organizationId":organization,"personId":person,"verifiedEmail":"owner@example.invalid"})
+        }
+        ServiceOperation::PersonStanding => {
+            json!({"operation":"standing","organizationId":organization,"personId":person})
+        }
+        ServiceOperation::CentralLookup => json!({"organizationId":organization}),
+        ServiceOperation::DeviceLoginDecisions => decision,
+        ServiceOperation::MachineTokenDecisions => json!({"organizationId":organization,
+            "enrollmentId":"019f0000-0000-7000-8000-000000000006","clientId":"019f0000-0000-7000-8000-000000000007"}),
+        ServiceOperation::DeviceApprovalAuthorize => json!({"decision":decision}),
+        ServiceOperation::DeviceApprovalActivate | ServiceOperation::DeviceApprovalCancel => {
+            json!({"organizationId":organization,"requestId":request})
+        }
+        ServiceOperation::InitializeOrganization => {
+            json!({"organizationId":organization,"ownerEmail":"owner@example.invalid","commandId":"019f0000-0000-7000-8000-000000000008"})
+        }
+    }
+}
+
+fn decode_body(
+    operation: ServiceOperation,
+    body: &serde_json::Value,
+) -> Result<collaboration_central_core::AuthorizedServiceRequest, ServiceReceiverRefusal> {
+    policy(operation)
+        .authorize(
+            SignatureValidity::Valid,
+            facts(operation),
+            UnixSeconds(1_000),
+        )
+        .unwrap()
+        .decode_body(&serde_json::to_vec(body).unwrap())
+}
+
+// Real common DTOs stay at this boundary. K7 authentication remains a named
+// stand-in, while the credential-selected decoder and organization guard run.
+#[test]
+fn each_credential_decodes_only_its_selected_body_and_never_falls_back() {
+    use collaboration_central_core::ServiceRequestBody;
+    for operation in OPERATIONS {
+        let expected = body_literal(operation);
+        let body = decode_body(operation, &expected).unwrap().into_body();
+        assert!(matches!(
+            (operation, body),
+            (
+                ServiceOperation::AdmitSignIn,
+                ServiceRequestBody::AdmitSignIn(_)
+            ) | (
+                ServiceOperation::PersonStanding,
+                ServiceRequestBody::PersonStanding(_)
+            ) | (
+                ServiceOperation::CentralLookup,
+                ServiceRequestBody::CentralLookup(_)
+            ) | (
+                ServiceOperation::DeviceLoginDecisions,
+                ServiceRequestBody::DeviceLoginDecisions(_)
+            ) | (
+                ServiceOperation::MachineTokenDecisions,
+                ServiceRequestBody::MachineTokenDecisions(_)
+            ) | (
+                ServiceOperation::DeviceApprovalAuthorize,
+                ServiceRequestBody::DeviceApprovalAuthorize(_)
+            ) | (
+                ServiceOperation::DeviceApprovalActivate,
+                ServiceRequestBody::DeviceApprovalActivate(_)
+            ) | (
+                ServiceOperation::DeviceApprovalCancel,
+                ServiceRequestBody::DeviceApprovalCancel(_)
+            ) | (
+                ServiceOperation::InitializeOrganization,
+                ServiceRequestBody::InitializeOrganization(_)
+            )
+        ));
+        for other in OPERATIONS {
+            let candidate = body_literal(other);
+            // Activate and cancel intentionally share SettleDeviceApproval.
+            // Their distinct credential fixes which action the handler sees.
+            if candidate == expected {
+                continue;
+            }
+            assert!(
+                matches!(
+                    decode_body(operation, &candidate),
+                    Err(ServiceReceiverRefusal::WrongOperation)
+                ),
+                "{operation:?} accepted {other:?}'s different body"
+            );
+        }
+        let mut extra = expected;
+        extra
+            .as_object_mut()
+            .unwrap()
+            .insert("operationOverride".into(), serde_json::json!("cancel"));
+        assert!(matches!(
+            decode_body(operation, &extra),
+            Err(ServiceReceiverRefusal::WrongOperation)
+        ));
+    }
+}
+
+#[test]
+fn the_selected_body_checks_organization_before_becoming_a_handler_request() {
+    for operation in OPERATIONS {
+        let mut body = body_literal(operation);
+        if operation == ServiceOperation::DeviceApprovalAuthorize {
+            body["decision"]["organizationId"] = serde_json::json!(organization("02").as_str());
+        } else {
+            body["organizationId"] = serde_json::json!(organization("02").as_str());
+        }
+        let result = decode_body(operation, &body);
+        match home(operation) {
+            ServiceReceiverHome::Central { .. } => assert!(matches!(
+                result,
+                Err(ServiceReceiverRefusal::NotThisCentral)
+            )),
+            ServiceReceiverHome::FleetDirectory => assert!(result.is_ok()),
+        }
+    }
+}

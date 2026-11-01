@@ -262,7 +262,7 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
             )?;
             let endpoint = ResourceUri::try_from(format!("{}{path}", receiver.base))?;
             let confirmer =
-                PersonIntrospectionClient::new(client, platform.service_form_transport(), endpoint);
+                PersonIntrospectionClient::new(client, platform.service_http_transport(), endpoint);
             let answer = confirmer.confirm_person_session(PERSON_TOKEN).await;
             if path == "/introspect" {
                 if !matches!(answer, Ok(PersonSessionConfirmation::Active { .. })) {

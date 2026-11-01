@@ -59,16 +59,24 @@ pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerif
 mod issuer_person_client;
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
+mod directory_service_client;
 mod platform_capabilities;
 mod private_key_client_assertion;
 mod service_receiver_policy;
+mod service_request_bodies;
+pub use directory_service_client::{
+    DirectoryServiceClient, ServiceBearerCredential, ServiceJsonTransport,
+};
 pub use private_key_client_assertion::{
     ClientAssertionAuthentication, ClientAssertionLifetime, ClientAssertionRefusal,
     Ed25519ClientSigner, PrivateKeyJwtClient, ServiceForm,
 };
+pub use service_request_bodies::{
+    AdmitSignInBody, AuthorizedServiceRequest, PersonStandingBody, ServiceRequestBody,
+};
 mod person_introspection_client;
 pub use person_introspection_client::{
-    PersonIntrospectionClient, ServiceFormFailure, ServiceFormTransport, service_reply_is_json,
+    PersonIntrospectionClient, ServiceFormTransport, ServiceHttpFailure, service_reply_is_json,
 };
 mod service_token_time;
 pub use issuer_key_cache::{

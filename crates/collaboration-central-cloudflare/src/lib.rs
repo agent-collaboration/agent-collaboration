@@ -20,8 +20,8 @@ mod conformance_issuer_signature;
 mod conformance_person_proof;
 mod issuer_crypto;
 pub use client_assertion_signer::CloudflareEd25519ClientSigner;
-mod service_form_transport;
-pub use service_form_transport::CloudflareServiceFormTransport;
+mod service_http_transport;
+pub use service_http_transport::CloudflareServiceHttpTransport;
 mod issuer_key_source;
 #[cfg(feature = "conformance")]
 pub use conformance_bootstrap::BootstrapObject;
