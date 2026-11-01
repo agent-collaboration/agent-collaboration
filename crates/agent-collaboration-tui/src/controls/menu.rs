@@ -9,7 +9,10 @@ use crate::{
     actions::{ActionError, ActionPresentation, ActionRegistry, Availability, Placement},
     foundation::theme::{SurfaceRole, TextRole, UiGlyph, UiTextRole},
     surfaces::{
-        focus_model::{FocusError, FocusModel, GroupId, TargetId, TargetSpec},
+        focus_model::{
+            FocusDirection, FocusError, FocusModel, GroupId, InputUse, TargetId,
+            TargetInputHandler, TargetSpec,
+        },
         hit_regions::{HitRegionKind, use_target_geometry},
         overlay_host::SurfaceSizing,
         surface_handle::{SurfaceContext, SurfaceStackHandle},
@@ -77,6 +80,50 @@ impl std::fmt::Display for MenuModelError {
     }
 }
 impl std::error::Error for MenuModelError {}
+
+fn menu_navigation(stack: SurfaceStackHandle, scroll: ScrollHandle) -> TargetInputHandler {
+    TargetInputHandler::new(move |event| {
+        let TerminalEvent::Key(key) = event else {
+            return InputUse::Unused;
+        };
+        let (direction, within_group) = match key.code {
+            KeyCode::Tab if key.modifiers.is_empty() => (FocusDirection::Next, false),
+            KeyCode::BackTab => (FocusDirection::Previous, false),
+            KeyCode::Tab if key.modifiers == KeyModifiers::SHIFT => {
+                (FocusDirection::Previous, false)
+            }
+            KeyCode::Down | KeyCode::Right if key.modifiers.is_empty() => {
+                (FocusDirection::Next, true)
+            }
+            KeyCode::Up | KeyCode::Left if key.modifiers.is_empty() => {
+                (FocusDirection::Previous, true)
+            }
+            _ => return InputUse::Unused,
+        };
+        if !stack
+            .snapshot()
+            .overlays()
+            .last()
+            .is_some_and(|overlay| overlay.kind == OverlayKind::Menu)
+        {
+            return InputUse::Unused;
+        }
+        let target = stack.update(|stack| {
+            if within_group {
+                stack.top_mut().focus.traverse_group(direction);
+            } else {
+                stack.top_mut().focus.traverse(direction);
+            }
+            stack.top().focus.current().cloned()
+        });
+        if let Some(target) = target {
+            // Existing geometry keeps focus, content and thumb in the same frame.
+            scroll.reveal_measured(&target);
+        }
+        InputUse::Used
+    })
+}
+
 pub fn menu_overlay(
     stack: SurfaceStackHandle,
     registry: &ActionRegistry,
@@ -110,6 +157,7 @@ pub fn menu_overlay(
         .collect::<Vec<_>>();
     let group = GroupId::new("menu-items").map_err(MenuModelError::Identity)?;
     let scroll = ScrollHandle::new(stack);
+    let navigation = menu_navigation(stack, scroll.clone());
     let scroll_id = TargetId::new("menu-scroll").map_err(MenuModelError::Identity)?;
     let overlay_registry = ActionRegistry::new(registry.scope().clone(), actions)
         .map_err(MenuModelError::Actions)?
@@ -126,7 +174,9 @@ pub fn menu_overlay(
                 .find(|action| action.id == item.id)
         })
         .map(|action| {
-            button_target(TargetId::for_action(&action.id), action).in_group(group.clone())
+            button_target(TargetId::for_action(&action.id), action)
+                .in_group(group.clone())
+                .with_input(navigation.clone())
         })
         .collect::<Vec<_>>();
     targets.push(

@@ -295,6 +295,69 @@ async fn grouped_pages_use_physical_viewports_and_variable_record_heights() {
     }
 }
 #[tokio::test]
+async fn regroup_reveals_retained_selection_and_heading_without_another_input_at_all_grids() {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        for (width, height) in STANDARD_GRIDS {
+            let handle = ListHandle::default();
+            let (mut driver, config, journal) = EventDriver::new();
+            let initial = (0..20)
+                .map(|index| row(&format!("Record {index:02}")))
+                .collect();
+            let others = (1..20)
+                .map(|index| format!("Record {index:02}"))
+                .collect::<Vec<_>>();
+            let grouped = ListRows::Grouped(vec![
+                group(
+                    "Others",
+                    &others.iter().map(String::as_str).collect::<Vec<_>>(),
+                ),
+                group("Chosen", &["Record 00"]),
+            ]);
+            let mut ui = element!(ListScene(journal,handle:handle.clone(),width:Some(width),height:Some(height),viewport_rows:Some(height-4),row_heights:Some(vec![2;20]),initial_rows:Some(ListRows::Ungrouped(initial)),regroup_rows:Some(grouped)));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.get();
+                assert_eq!(fixture.control.selected(), Some(row("Record 00")));
+                let target = fixture.control.row_target(&row("Record 00"));
+                let map = fixture.stack.hit_regions().published().unwrap();
+                let (column, line) = map.targets.iter().find(|region|region.target==target).unwrap().cells[0];
+                driver.drive(&mut frames,mode,vec![(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left),column,line)),false)],false).await;
+                let before = driver.frames.len();
+                let acknowledgements = driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::F(6)), true)],
+                        true,
+                        |ack| assert_eq!(selected_at(ack), "Record 00", "atomic regroup retains the selected key"),
+                    )
+                    .await;
+                assert_eq!(acknowledgements.len(),1);
+                assert_eq!(acknowledgements[0].sequence,2,"only the initial pointer selection and F6 were sent");
+                let first = &driver.frames[before];
+                let first_text = (0..first.height)
+                    .map(|line| first.row_text(line))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                eprintln!("REGROUP_FIRST_FRAME {width}x{height} {mode:?}: selected_visible={}, heading_visible={}\n{first_text}",first_text.contains("Record 00"),first_text.contains("Chosen"));
+                let settled = driver.frames.last().unwrap();
+                let text = (0..settled.height).map(|line|settled.row_text(line)).collect::<Vec<_>>().join("\n");
+                assert!(
+                    text.contains("Record 00") && text.contains("Chosen") && text.contains('❯'),
+                    "regroup settles without another input and reveals selection and its fitting heading at {width}x{height} {mode:?}\n{text}"
+                );
+                let map = fixture.stack.hit_regions().published().unwrap();
+                let visible_rows=map.targets.iter().find(|region|region.target==target).unwrap().cells.iter().map(|(_,line)|*line).collect::<std::collections::HashSet<_>>();
+                assert_eq!(visible_rows.len(),2,"the whole two-row selected record is visible");
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+
+#[tokio::test]
 async fn regroup_preserves_and_reveals_selection_and_pages_new_projection_before_draw() {
     for (width, height) in STANDARD_GRIDS {
         let handle = ListHandle::default();
