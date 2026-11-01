@@ -31,6 +31,9 @@ pub(super) async fn run(
         }
         for automation in automations {
             let id = match automation {
+                CatalogAutomation::Suspended(snapshot) => {
+                    snapshot.automation_id.as_str().to_owned()
+                }
                 CatalogAutomation::Wake(snapshot) => {
                     if String::from(
                         snapshot

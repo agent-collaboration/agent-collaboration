@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-catalog-queries.json": "b28138c98c07935b6aa8f208eb0d9c348adeff851e5c7fee28f47ddf6c1539bc",
+    "automation-catalog-queries.json": "bf5a9a8ce893faede14074169a56e5ecd4ddd9dee6b89d07e67be1f25e0f9e88",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -67,19 +67,29 @@
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/automations/find_wake_slot.sql": "7e4b176cad256b9de8ac89523560be2d51005d1c5965086b18d582d1fd2a3a8c",
-    "sql/automations/insert_automation.sql": "c8454f1b967d965b30cad499bdc962244a87a55ae9d3f42c4b3af275b140e54b",
+    "sql/automations/insert_automation.sql": "302693d5ba2d623b5912b41879b0cea185574c8e7d192f5f4f8268d7f92befec",
+    "sql/automations/insert_automation_import.sql": "a711ab4323d566413a36e99bb85729d46ef96596f6f8c71edaf5726f218db040",
     "sql/automations/insert_automation_timing.sql": "208e47207b09d8036866709bf445305c921e2c3fc88aff4f7356180970bf8c18",
-    "sql/automations/list_automation_deadlines.sql": "90e3a0f97ae89fc34e68013d92fa4fa212e144efd9f4a4383ba55866723fa28d",
+    "sql/automations/insert_carried_automation_firing.sql": "24b51a47ef9319ae9416fcce7fd14763f3f7b8310505606d28df97d3e262c849",
+    "sql/automations/list_automation_deadlines.sql": "dcb2ead7325cab3c00232f263d73aef8e018a6a7f85cc3998272de1900fe6500",
     "sql/automations/list_automations.sql": "a2b901a99862581e15d5412bd63ea6d91dc557db614c4d38081ece435e06db75",
     "sql/automations/list_schedule_instruction_references.sql": "083cddd7d2ff406a803a0c53b96709db88269281be57679fcdc2b2bae9b47caf",
     "sql/automations/read_automation.sql": "8916925e47c1c1c761899b91d8a10cdc5813141ebffea094b3ca701cabd692ed",
+    "sql/automations/read_automation_imports.sql": "e1f91f57660a1e3d975eae576b01dc70cd64c46e0aa1ae042dd49209ae570e6a",
     "sql/automations/update_automation.sql": "62b8543bb274d80ee39cffa0468430214d9ad609124032287bfafc9ccfba6fe0",
     "sql/automations/update_automation_deadline.sql": "17772c6ed6767af9ca6da19f087c18130121d4addbe48b66116c8a68869f42fc",
     "sql/automations/update_schedule_import_header.sql": "96e656606c002fc645f5db82a819bdf807a497e31cc450a5ccb22f659d1c157b",
-    "src/generated_automation_catalog.rs": "5dce5a9a5ee721d428043c4b566e77c16faa76fae27105063f2b5f94de14db73"
+    "sql/automations/write_automation_import_progress.sql": "71e1e841de1f07c01258150daaddfaa08fc9df2fee90f7d470b3f93fc51254f3",
+    "sql/automations/write_automation_legacy_timing.sql": "c5252f3425c25fd87bf49caefe63d50d18d0d2cc58798f9661f5a96eb6f34479",
+    "src/generated_automation_catalog.rs": "c1bc511c0d81fcbd88ac5c2cbf57582623e474f4245ccde4400c52906a7f2742"
   },
-  "queries_digest": "1406d650bb62809465ae57c058c0c255562f8962fd63d258dde25dd1030f9bc0",
+  "queries_digest": "50de4143c2d4e6c0bb7ec8ba0e6c2efe3c8cb31b5a7e1c94af6265611d3ddba3",
   "queries": [
+    {
+      "name": "write_automation_legacy_timing",
+      "bind_slots": 2,
+      "columns": []
+    },
     {
       "name": "read_automation",
       "bind_slots": 1,
@@ -637,6 +647,55 @@
     {
       "name": "update_schedule_import_header",
       "bind_slots": 3,
+      "columns": []
+    },
+    {
+      "name": "read_automation_imports",
+      "bind_slots": 2,
+      "columns": [
+        {
+          "name": "import_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "service_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "automation_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "digest",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "insert_automation_import",
+      "bind_slots": 4,
+      "columns": []
+    },
+    {
+      "name": "write_automation_import_progress",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "insert_carried_automation_firing",
+      "bind_slots": 1,
       "columns": []
     }
   ]

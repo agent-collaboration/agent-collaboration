@@ -47,16 +47,43 @@ pub(crate) fn decode(row: queries::StoredAutomation) -> AutomationStoreResult<Au
     let expires_at = optional_timestamp(row.expires_at_ms, "expires_at_ms")?
         .map(timestamp)
         .transpose()?;
-    let raw: serde_json::Value =
+    let mut raw: serde_json::Value =
         serde_json::from_str(&required(row.definition_json, "definition_json")?)
             .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?;
     crate::automation_request_decode::identity_limits(&raw)?;
     crate::automation_request_decode::counter_limits(&raw)?;
+    match (
+        raw.get("kind").and_then(serde_json::Value::as_str),
+        row.legacy_timing_json.as_ref(),
+    ) {
+        (Some("suspended"), Some(legacy)) => {
+            let legacy: collaboration_protocol::TimingRequest = serde_json::from_str(legacy)
+                .map_err(|_| AutomationStoreError::InvalidRecord("legacy_timing_json"))?;
+            if !matches!(legacy, collaboration_protocol::TimingRequest::Cron { .. }) {
+                return Err(AutomationStoreError::InvalidRecord("legacy_timing_json"));
+            }
+            let value = raw
+                .get_mut("value")
+                .and_then(serde_json::Value::as_object_mut)
+                .ok_or(AutomationStoreError::InvalidRecord("definition_json"))?;
+            if value.contains_key("legacyTiming") {
+                return Err(AutomationStoreError::InvalidRecord(
+                    "definition.legacyTiming",
+                ));
+            }
+            value.insert(
+                "legacyTiming".into(),
+                serde_json::to_value(legacy)
+                    .map_err(|_| AutomationStoreError::InvalidRecord("legacy_timing_json"))?,
+            );
+        }
+        (Some("suspended"), None) | (_, Some(_)) => {
+            return Err(AutomationStoreError::InvalidRecord("legacy_timing_json"));
+        }
+        (_, None) => {}
+    }
     let definition: StoredAutomationDefinition = serde_json::from_value(raw)
         .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?;
-    if row.legacy_timing_json.is_some() {
-        return Err(AutomationStoreError::InvalidRecord("legacy_timing_json"));
-    }
     let state: CatalogState =
         serde_json::from_value(serde_json::Value::String(required(row.state, "state")?))
             .map_err(|_| AutomationStoreError::InvalidRecord("state"))?;
@@ -115,7 +142,7 @@ pub(crate) fn decode(row: queries::StoredAutomation) -> AutomationStoreResult<Au
                 &schedule.timing,
                 AutomationKind::Schedule,
             )?;
-            crate::automation_schedule_validation::definition(&schedule.definition)?;
+            crate::automation_schedule_validation::retained_definition(&schedule.definition)?;
             if state != CatalogState::Enabled && next_due.is_some() {
                 return Err(AutomationStoreError::InvalidRecord("next_due_ms"));
             }
@@ -124,7 +151,10 @@ pub(crate) fn decode(row: queries::StoredAutomation) -> AutomationStoreResult<Au
             if kind != AutomationKind::Wake
                 || matches!(
                     state,
-                    CatalogState::Enabled | CatalogState::Disabled | CatalogState::Deleted
+                    CatalogState::Enabled
+                        | CatalogState::Disabled
+                        | CatalogState::Deleted
+                        | CatalogState::Suspended
                 )
             {
                 return Err(AutomationStoreError::InvalidRecord("wake.state"));
@@ -151,6 +181,17 @@ pub(crate) fn decode(row: queries::StoredAutomation) -> AutomationStoreResult<Au
             if state != CatalogState::Active && next_due.is_some() {
                 return Err(AutomationStoreError::InvalidRecord("next_due_ms"));
             }
+        }
+        StoredAutomationDefinition::Suspended(suspended) => {
+            crate::automation_suspended_store::validate(
+                suspended,
+                kind,
+                state,
+                &header,
+                next_due,
+                expires_at.as_ref(),
+                row.slot_session_key.as_deref(),
+            )?;
         }
     }
     Ok(AutomationRecord {
@@ -253,8 +294,20 @@ where
         let raw: serde_json::Value =
             serde_json::from_str(&required(row.definition_json, "definition_json")?)
                 .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?;
+        let pointer = match raw.get("kind").and_then(serde_json::Value::as_str) {
+            Some("schedule") => "/value/definition/instructionId",
+            Some("suspended")
+                if raw
+                    .pointer("/value/configuration/kind")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("schedule") =>
+            {
+                "/value/configuration/value/instructionId"
+            }
+            _ => return Err(AutomationStoreError::InvalidRecord("definition_json")),
+        };
         let referenced: InstructionId = serde_json::from_value(
-            raw.pointer("/value/definition/instructionId")
+            raw.pointer(pointer)
                 .cloned()
                 .ok_or(AutomationStoreError::InvalidRecord("definition_json"))?,
         )
@@ -301,11 +354,9 @@ where
     let input = AutomationInsert {
         automation_id: record.id.as_str(),
         revision: record.revision.as_str(),
-        kind: match record.definition {
-            StoredAutomationDefinition::Schedule(_) => AutomationKind::Schedule,
-            StoredAutomationDefinition::Wake(_) => AutomationKind::Wake,
-        },
+        kind: record.definition.kind(),
         definition_json: definition,
+        legacy_timing_json: legacy_timing_json(&record.definition)?,
         creator_json: creator,
         state: record.state,
         slot_session_key: slot(record)?,
@@ -358,6 +409,12 @@ where
         record.id.as_str().into(),
     )
     .await?;
+    queries::write_automation_legacy_timing(
+        scope,
+        legacy_timing_json(&record.definition)?,
+        record.id.as_str().into(),
+    )
+    .await?;
     queries::update_automation_deadline(
         scope,
         record.next_due.map(|due| due.unix_millis().to_string()),
@@ -374,6 +431,7 @@ struct AutomationInsert<'record> {
     kind: AutomationKind,
     revision: &'record str,
     definition_json: String,
+    legacy_timing_json: Option<String>,
     state: CatalogState,
     creator_json: String,
     slot_session_key: Option<String>,
@@ -381,13 +439,48 @@ struct AutomationInsert<'record> {
     header: HeaderColumnValues,
 }
 fn encode(definition: &StoredAutomationDefinition) -> AutomationStoreResult<String> {
-    serde_json::to_string(definition)
+    if !matches!(definition, StoredAutomationDefinition::Suspended(_)) {
+        return serde_json::to_string(definition)
+            .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"));
+    }
+    let mut value = serde_json::to_value(definition)
+        .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))?;
+    if matches!(definition, StoredAutomationDefinition::Suspended(_)) {
+        value
+            .get_mut("value")
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or(AutomationStoreError::InvalidRecord("definition_json"))?
+            .remove("legacyTiming");
+    }
+    serde_json::to_string(&value)
         .map_err(|_| AutomationStoreError::InvalidRecord("definition_json"))
+}
+fn legacy_timing_json(
+    definition: &StoredAutomationDefinition,
+) -> AutomationStoreResult<Option<String>> {
+    match definition {
+        StoredAutomationDefinition::Suspended(suspended) => {
+            serde_json::to_string(&suspended.legacy_timing)
+                .map(Some)
+                .map_err(|_| AutomationStoreError::InvalidRecord("legacy_timing_json"))
+        }
+        _ => Ok(None),
+    }
 }
 fn slot(record: &AutomationRecord) -> AutomationStoreResult<Option<String>> {
     match &record.definition {
         StoredAutomationDefinition::Wake(wake) if record.state.owns_wake_slot() => {
             Ok(Some(wake_slot(&wake.target)?))
+        }
+        StoredAutomationDefinition::Suspended(suspended) if record.state.owns_wake_slot() => {
+            match &suspended.configuration {
+                crate::automation_catalog_record::StoredSuspendedConfiguration::Wake(wake) => {
+                    Ok(Some(wake_slot(&wake.target)?))
+                }
+                crate::automation_catalog_record::StoredSuspendedConfiguration::Schedule(_) => {
+                    Ok(None)
+                }
+            }
         }
         _ => Ok(None),
     }

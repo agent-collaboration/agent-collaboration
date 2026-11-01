@@ -50,7 +50,7 @@ where
     Ok(Some(content))
 }
 
-fn decode(
+pub(crate) fn decode(
     row: queries::StoredContentRevision,
     limit: LimitName,
 ) -> AutomationStoreResult<ContentRevision> {

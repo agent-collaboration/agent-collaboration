@@ -113,3 +113,37 @@ where
             .collect()
     }
 }
+pub(crate) fn read_imported_content_revision<S>(
+    scope: &mut S,
+    owner_id: String,
+    revision_id: String,
+) -> impl std::future::Future<Output = Result<Option<StoredContentRevision>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/read_imported_content_revision.sql"
+        )))
+        .bind(owner_id)
+        .bind(revision_id);
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredContentRevision {
+                    content_id: row.try_get("content_id")?,
+                    owner_id: row.try_get("owner_id")?,
+                    revision_id: row.try_get("revision_id")?,
+                    recorded_at_ms: row.try_get("recorded_at_ms")?,
+                    digest: row.try_get("digest")?,
+                    text: row.try_get("text")?,
+                })
+            })
+            .transpose()
+    }
+}

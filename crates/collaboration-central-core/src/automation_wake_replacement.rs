@@ -62,7 +62,10 @@ pub(crate) fn prepare(
     if target != request.message.target
         || required(row.timing_automation_id, "automation_timing.automation_id")?
             != fault.automation_id.as_str()
-        || !matches!(row.state.as_deref(), Some("active" | "paused"))
+        || !matches!(
+            row.state.as_deref(),
+            Some("active" | "paused" | "suspended")
+        )
     {
         return Err(AutomationStoreError::InvalidRecord("slot_session_key"));
     }
@@ -140,14 +143,25 @@ fn authorize_healthy(
     let Some(mut previous) = previous else {
         return Ok(None);
     };
-    let StoredAutomationDefinition::Wake(wake) = &previous.definition else {
-        return Err(AutomationStoreError::InvalidRecord("slot_session_key"));
+    let target = match &previous.definition {
+        StoredAutomationDefinition::Wake(wake) => &wake.target,
+        StoredAutomationDefinition::Suspended(definition) => match &definition.configuration {
+            crate::automation_catalog_record::StoredSuspendedConfiguration::Wake(wake) => {
+                &wake.target
+            }
+            crate::automation_catalog_record::StoredSuspendedConfiguration::Schedule(_) => {
+                return Err(AutomationStoreError::InvalidRecord("slot_session_key"));
+            }
+        },
+        StoredAutomationDefinition::Schedule(_) => {
+            return Err(AutomationStoreError::InvalidRecord("slot_session_key"));
+        }
     };
     if timestamp_millis(previous.wake_expiry()?)? <= now_ms {
         previous.state = CatalogState::Expired;
     } else {
         let is_target =
-            matches!(&request.requested_by,WakeCreator::Session(session) if *session==wake.target);
+            matches!(&request.requested_by,WakeCreator::Session(session) if session==target);
         let is_creator = match &previous.creator.declared {
             WakeCreator::Unrecorded {} => false,
             WakeCreator::Router {} => {

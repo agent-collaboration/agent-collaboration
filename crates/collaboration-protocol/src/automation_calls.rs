@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
     deny_unknown_fields
 )]
 pub enum AutomationCall {
+    AutomationImport(crate::AutomationImportRequest),
     InstructionCreate(crate::InstructionCreateParams),
     InstructionUpdate(crate::InstructionUpdateParams),
     InstructionShow(crate::InstructionShowParams),
@@ -54,6 +55,7 @@ pub enum AutomationCall {
     deny_unknown_fields
 )]
 pub enum CatalogAutomation {
+    Suspended(crate::SuspendedAutomationSnapshot),
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Faulted(crate::FaultedAutomationSnapshot),
@@ -106,6 +108,9 @@ pub struct FiringSnapshot {
     deny_unknown_fields
 )]
 pub enum AutomationAnswer {
+    Imported(crate::AutomationImportIdentity),
+    AlreadyImported(crate::AutomationImportIdentity),
+    Suspended(crate::SuspendedAutomationSnapshot),
     Instruction(crate::InstructionSnapshot),
     Instructions(crate::AutomationPage<crate::InstructionSnapshot>),
     Revisions(crate::AutomationPage<crate::RevisionRecord>),

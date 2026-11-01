@@ -36,7 +36,9 @@ where
             let rows = reads::list_automations(scope, String::new(), i64::MAX.to_string())
                 .await
                 .map_err(StoreError::backend)?;
-            let mut ready = Vec::new();
+            let mut ready = crate::automation_waiting_release::due(scope, self.now_ms)
+                .await
+                .map_err(StoreError::backend)?;
             for row in rows {
                 let id = required(row.automation_id.clone(), "automation_id")
                     .map_err(StoreError::backend)?;
@@ -45,7 +47,10 @@ where
                 // The independently stored expiry runs before definition decode
                 // and eligibility, including for a paused or faulted Wake.
                 if row.kind.as_deref() == Some("wake")
-                    && matches!(row.state.as_deref(), Some("active" | "paused"))
+                    && matches!(
+                        row.state.as_deref(),
+                        Some("active" | "paused" | "suspended")
+                    )
                 {
                     match timestamp_millis(row.expires_at_ms.clone(), "expires_at_ms") {
                         Ok(expiry) if expiry <= self.now_ms => {

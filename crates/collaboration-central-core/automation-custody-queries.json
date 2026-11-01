@@ -6,6 +6,13 @@
   "metadata": "automation-custody-query-metadata.json",
   "queries": [
     {
+      "name":"list_due_automation_occupants",
+      "sql":"sql/automations/list_due_automation_occupants.sql",
+      "row":"StoredDueAutomationOccupant",
+      "result":"many",
+      "parameters":[{"name":"now_ms","kind":"text","nullable":false}]
+    },
+    {
       "name": "list_automation_batches",
       "sql": "sql/automations/list_automation_batches.sql",
       "row": "StoredCustodyBatch",

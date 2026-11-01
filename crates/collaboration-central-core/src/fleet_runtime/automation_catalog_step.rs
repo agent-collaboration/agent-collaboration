@@ -39,7 +39,10 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            crate::automation_batch_retention::prune(scope, self.now_ms).await?;
+            let importing = matches!(self.call, AutomationCall::AutomationImport(_));
+            if !importing {
+                crate::automation_batch_retention::prune(scope, self.now_ms).await?;
+            }
             let mutation = mutation_id(&self.call)
                 .map(|operation_id| {
                     operations::request_digest(&self.call).map(|digest| (operation_id, digest))
@@ -67,6 +70,16 @@ where
             }
             let result: AutomationStoreResult<AutomationAnswer> = async {
                 match &self.call {
+                    AutomationCall::AutomationImport(request) => {
+                        crate::automation_import_store::import::<Store, Driver>(
+                            scope,
+                            request,
+                            &self.installation,
+                            self.now_ms,
+                            &mut self.row_ids,
+                        )
+                        .await
+                    }
                     AutomationCall::InstructionCreate(request) => {
                         let snapshot = instructions::create(
                             scope,
@@ -289,7 +302,9 @@ where
                     .await
                     .map_err(StoreError::backend)?;
             }
-            crate::automation_clock_deadline::request_next(scope).await?;
+            if !importing || matches!(answer, AutomationAnswer::Imported(_)) {
+                crate::automation_clock_deadline::request_next(scope).await?;
+            }
             Ok((answer, Vec::new()))
         })
     }
