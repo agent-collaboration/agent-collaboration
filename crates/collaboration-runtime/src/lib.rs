@@ -152,13 +152,21 @@ pub mod observation_timestamp;
 #[path = "../tests/support/native_worker_faults.rs"]
 mod native_worker_faults;
 
+mod central_automation_receiver;
+mod central_automation_transport;
+mod central_report_worker;
 /// Test-only schedule execution fixtures shared with application inspection tests.
 #[cfg(any(test, feature = "test-support"))]
 pub mod scheduled_route_fixture;
 /// Test-only hooks for causal runtime steps observed through the application.
 #[cfg(feature = "test-support")]
 pub mod test_support;
-
+pub use central_automation_receiver::CentralAutomationReceiver;
+pub use central_automation_transport::{
+    CentralAutomationClock, CentralAutomationError, CentralAutomationTransport,
+    SystemAutomationClock,
+};
+pub use central_report_worker::CentralReportWorker;
 #[cfg(debug_assertions)]
 mod debug_automation_faults;
 #[cfg(debug_assertions)]
@@ -167,3 +175,7 @@ pub use automation_storage::AutomationFaultPoint;
 pub use debug_automation_faults::{
     AutomationFaultSelector, DebugAutomationFaultController, HeldAutomationFault,
 };
+#[cfg(all(test, debug_assertions))]
+mod central_receiver_tests;
+#[cfg(test)]
+mod central_report_worker_tests;

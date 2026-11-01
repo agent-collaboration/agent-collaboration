@@ -148,7 +148,15 @@ impl AutomationStore {
             serde_json::json!({"kind":"deliveryAttempt","attempt":attempt,"receipt":event_receipt});
         sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'delivery',?,'attemptCompleted',?,?)")
         .bind(EventId::generate().as_str()).bind(completion.delivery_id.as_str()).bind(event.to_string()).bind(now_ms).execute(&mut *transaction).await?;
+        crate::central_work_transitions::report_delivery_phase(
+            &mut transaction,
+            &completion.delivery_id,
+            next_status,
+            (self.central_report_clock)(),
+        )
+        .await?;
         transaction.commit().await?;
+        self.central_reports_changed.notify_one();
         Ok(true)
     }
 }

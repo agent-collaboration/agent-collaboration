@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT authority FROM wakeup_definitions WHERE wakeup_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "authority",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "wakeup_definitions",
+            "name": "authority"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "148bac11088e6e6d957c0e778fdcffbf2c80ed32ecfdeb927b14348892f16094"
+}

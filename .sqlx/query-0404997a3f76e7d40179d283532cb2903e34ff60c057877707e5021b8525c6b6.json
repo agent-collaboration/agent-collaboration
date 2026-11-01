@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE firing_receipts SET state=?,report_seq=? WHERE firing_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0404997a3f76e7d40179d283532cb2903e34ff60c057877707e5021b8525c6b6"
+}

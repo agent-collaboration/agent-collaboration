@@ -99,7 +99,16 @@ impl AutomationStore {
         let event = serde_json::json!({"kind":"stateChange","before":record.phase,"after":phase});
         sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'run',?,'workerStopped',?,?)")
             .bind(agent_automation::EventId::generate().as_str()).bind(request.run_id.as_str()).bind(event.to_string()).bind(completed).execute(&mut *transaction).await?;
+        crate::central_work_transitions::report_run_phase(
+            &mut transaction,
+            &request.run_id,
+            phase,
+            None,
+            (self.central_report_clock)(),
+        )
+        .await?;
         transaction.commit().await?;
+        self.central_reports_changed.notify_one();
         Ok(true)
     }
 }

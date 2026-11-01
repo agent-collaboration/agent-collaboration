@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO instruction_revisions(revision_id,instruction_id,instruction_text,recorded_at_ms) VALUES (?,?,?,?) ON CONFLICT(revision_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "6b252054c624620275a16c8729fad09318cd6d0f8040d42d051336af295656be"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT firing_id FROM firing_receipts WHERE json_extract(local_work_ref,'$.deliveryId')=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "firing_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "firing_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "60c8982ee6f52cf2f9fe0730910ab8619d6a909d3da448f9b59d50bbee473cfa"
+}

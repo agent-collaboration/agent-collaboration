@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT state,report_seq FROM firing_receipts WHERE firing_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "state",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "report_seq",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "report_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "bcf1f8ba27d9aae6a259022fdcf85607844b2b2c98358ea7ce75b2bb18956767"
+}

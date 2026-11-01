@@ -277,7 +277,16 @@ impl AutomationStore {
             .bind(timing.map(|value| i64::from(value.effective_timeout_seconds)))
             .bind(completed_at_ms)
             .bind(request.run_id.as_str()).execute(&mut *transaction).await?;
+        crate::central_work_transitions::report_run_phase(
+            &mut transaction,
+            &request.run_id,
+            phase,
+            None,
+            (self.central_report_clock)(),
+        )
+        .await?;
         transaction.commit().await?;
+        self.central_reports_changed.notify_one();
         Ok(())
     }
 }

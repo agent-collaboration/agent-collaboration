@@ -1,116 +1,17 @@
 //! Database connection lifecycle; schema setup precedes every repository operation.
+use crate::{StorageError, central_firing_receipts, central_report_outbox};
 use sqlx::{
     Connection, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
 };
 use std::{path::Path, time::Duration};
 
-#[derive(Debug, thiserror::Error)]
-pub enum StorageError {
-    #[error("wake request refused: {0:?}")]
-    WakeRefused(collaboration_protocol::WakeRefusal),
-    #[error("automation storage unavailable")]
-    Database(#[from] sqlx::Error),
-    #[error("automation database has unsupported schema version {0}")]
-    UnsupportedVersion(i64),
-    #[error("automation database contains an unexpected schema; existing data was not replaced")]
-    InvalidSchema,
-    #[error(
-        "legacy message rows remain in {tables:?}; stop the Router and run codex-router-board-upgrade before starting it"
-    )]
-    MessageUpgradeRequired { tables: Vec<&'static str> },
-    #[error(
-        "mail_items contains {rows} rows of pre-release state; clear this development-only state by hand before running codex-router-board-upgrade or starting the Router"
-    )]
-    PreReleaseMailPresent { rows: u64 },
-    #[error("operation identity already belongs to a different request")]
-    OperationConflict,
-    #[error(
-        "operation was not found; absence of a receipt does not establish native non-execution"
-    )]
-    OperationNotFound,
-    #[error("automation record is invalid or inconsistent")]
-    InvalidRecord,
-    #[error("event cursor must reference a retained sequence with a consistent observation time")]
-    InvalidEventCursor,
-    #[error(
-        "attempt cursor must preserve its observation time, latest attempt and last emitted identity"
-    )]
-    InvalidAttemptCursor,
-    #[error("push identity already belongs to different content")]
-    PushContentConflict,
-    // Workflow operations translate these failures from their message-store boundary.
-    #[error("push record id already exists")]
-    PushAlreadyExists,
-    #[error("push record was not found in message storage")]
-    PushNotFound,
-    #[error("push record delivery state does not permit this transition")]
-    PushStateConflict,
-    #[error("push record is not permitted for this caller")]
-    PushNotPermitted,
-    #[error("workflow Run was not found in this automation database")]
-    RunNotFound,
-    #[error("delivery was not found in this automation database")]
-    DeliveryNotFound,
-    #[error("instruction was not found in this automation database")]
-    InstructionNotFound,
-    #[error("instruction changed; inspect the current revision before editing")]
-    RevisionConflict {
-        current_revision_id: agent_automation::RevisionId,
-    },
-    #[error("schedule was not found in this automation database")]
-    ScheduleNotFound,
-    #[error("schedule UUID already exists; pass --overwrite for an intentional replacement")]
-    ScheduleImportExists,
-    #[error(
-        "imported instruction differs from existing shared instruction {instruction_id:?}; explicitly edit it or use a new instruction identity"
-    )]
-    InstructionImportConflict {
-        instruction_id: agent_automation::InstructionId,
-        schedule_ids: Vec<agent_automation::ScheduleId>,
-    },
-    #[error(transparent)]
-    InvalidPackage(#[from] agent_automation::PackageError),
-    #[error("schedule changed; inspect the latest change identity before editing")]
-    ScheduleChangeConflict,
-    #[error(
-        "native endpoint or execution capabilities unavailable; inspect endpoint before enabling this schedule"
-    )]
-    ActivationUnavailable,
-    #[error("native thread is already owned by schedule {schedule_id:?}")]
-    ThreadOwnershipConflict {
-        schedule_id: agent_automation::ScheduleId,
-    },
-    #[error("multiple conflicting Runs prevent safe admission")]
-    RunInvariantConflict {
-        run_ids: Vec<agent_automation::RunId>,
-    },
-    #[error("the previous Run has no required continuity summary; inspect summary recovery")]
-    MissingContinuity,
-    #[error("invalid schedule {field}: {reason}")]
-    InvalidSchedule {
-        field: &'static str,
-        reason: &'static str,
-    },
-    #[error(transparent)]
-    InvalidTiming(#[from] agent_automation::TimingError),
-    #[error("wake-up was not found in this automation database")]
-    WakeNotFound,
-    #[error(
-        "wake-up lifecycle does not permit this action in state {state:?}; inspect or create another reminder"
-    )]
-    WakeLifecycleConflict { state: agent_automation::WakeState },
-    #[error("invalid wake-up {field}: {reason}")]
-    InvalidWake {
-        field: &'static str,
-        reason: &'static str,
-    },
-}
-
 pub struct AutomationStore {
     pub(crate) connection: SqliteConnection,
     #[cfg(debug_assertions)]
     pub(crate) automation_faults: Option<std::sync::Arc<dyn crate::AutomationFaultObserver>>,
+    pub(crate) central_reports_changed: std::sync::Arc<tokio::sync::Notify>,
+    pub(crate) central_report_clock: std::sync::Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
@@ -120,6 +21,8 @@ impl AutomationStore {
             connection,
             #[cfg(debug_assertions)]
             automation_faults: None,
+            central_reports_changed: std::sync::Arc::new(tokio::sync::Notify::new()),
+            central_report_clock: std::sync::Arc::new(|| chrono::Utc::now().timestamp_millis()),
         })
     }
     #[cfg(debug_assertions)]
@@ -132,6 +35,61 @@ impl AutomationStore {
     #[cfg(debug_assertions)]
     pub fn automation_faults(&self) -> Option<std::sync::Arc<dyn crate::AutomationFaultObserver>> {
         self.automation_faults.clone()
+    }
+    pub fn central_report_changes(&self) -> std::sync::Arc<tokio::sync::Notify> {
+        std::sync::Arc::clone(&self.central_reports_changed)
+    }
+    pub fn set_central_report_clock(
+        &mut self,
+        clock: std::sync::Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) {
+        self.central_report_clock = clock;
+    }
+    pub async fn central_report_batch(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<crate::CentralReportBatch, StorageError> {
+        central_report_outbox::central_report_batch(&mut self.connection, now_ms).await
+    }
+    pub async fn acknowledge_central_reports(
+        &mut self,
+        accepted: &[collaboration_protocol::AcceptedWorkReport],
+    ) -> Result<(), StorageError> {
+        central_report_outbox::acknowledge_central_reports(&mut self.connection, accepted).await
+    }
+    pub async fn read_central_firing(
+        &mut self,
+        firing_id: &collaboration_protocol::FiringId,
+    ) -> Result<Option<crate::CentralFiringReceipt>, StorageError> {
+        central_firing_receipts::read_receipt(&mut self.connection, firing_id).await
+    }
+    pub async fn admit_central_firing(
+        &mut self,
+        request: &crate::CentralFiringRequest,
+    ) -> Result<crate::CentralFiringReceipt, StorageError> {
+        central_firing_receipts::admit_central_firing(
+            &mut self.connection,
+            request,
+            &self.central_reports_changed,
+            #[cfg(debug_assertions)]
+            self.automation_faults.as_deref(),
+        )
+        .await
+    }
+    #[cfg(debug_assertions)]
+    pub async fn central_run_fault_evidence(
+        &mut self,
+        run_id: &agent_automation::RunId,
+    ) -> Result<Option<crate::AutomationFaultEvidence>, StorageError> {
+        central_firing_receipts::central_run_fault_evidence(&mut self.connection, run_id).await
+    }
+    #[cfg(debug_assertions)]
+    pub async fn central_delivery_fault_evidence(
+        &mut self,
+        delivery_id: &agent_automation::DeliveryId,
+    ) -> Result<Option<crate::AutomationFaultEvidence>, StorageError> {
+        central_firing_receipts::central_delivery_fault_evidence(&mut self.connection, delivery_id)
+            .await
     }
     pub async fn close(self) -> Result<(), StorageError> {
         self.connection.close().await?;

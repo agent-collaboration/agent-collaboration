@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO wakeup_definitions(wakeup_id,change_id,wakeup_status,definition_json,anchor_at_ms,evaluated_through_ms,next_due_at_ms,expires_at_ms,first_fire_json,pending_delivery_id,created_at_ms,updated_at_ms,authority) VALUES (?,?,'active',?,?,?,NULL,?,?,?, ?,?,'central') ON CONFLICT(wakeup_id) DO UPDATE SET change_id=excluded.change_id,wakeup_status='active',definition_json=excluded.definition_json,expires_at_ms=excluded.expires_at_ms,first_fire_json=coalesce(wakeup_definitions.first_fire_json,excluded.first_fire_json),pending_delivery_id=excluded.pending_delivery_id,updated_at_ms=excluded.updated_at_ms",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "0741617cea00242aeaea306bd1a07c92f6ffff2b90fd00992797b835e2015b26"
+}

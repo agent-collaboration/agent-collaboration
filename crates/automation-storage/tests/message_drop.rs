@@ -242,9 +242,15 @@ async fn verified_copy_entry_drops_once_and_preserves_all_retained_automation_ro
         insert_opaque_source_row(&path, table).await?;
     }
     let mut expected = retained_rows(snapshot(&path).await?);
-    // The owning migrator also creates the B3r request table after the drop.
-    // It must start empty; every previously retained table keeps its exact rows.
-    expected.push(("remote_wake_requests".to_owned(), Vec::new()));
+    // Later migrations add request and central-custody tables after the drop.
+    // Each must start empty; every previously retained table keeps its exact rows.
+    for table in [
+        "remote_wake_requests",
+        "firing_receipts",
+        "central_report_outbox",
+    ] {
+        expected.push((table.to_owned(), Vec::new()));
+    }
     expected.sort_by(|left, right| left.0.cmp(&right.0));
     // The verified copy is a caller precondition here; D4 owns its actual two-file proof.
     apply_message_drop_migration(&path).await?;

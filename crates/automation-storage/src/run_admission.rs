@@ -102,7 +102,7 @@ impl AutomationStore {
     }
 }
 
-async fn select_continuity<TTarget: DeserializeOwned>(
+pub(crate) async fn select_continuity<TTarget: DeserializeOwned>(
     connection: &mut SqliteConnection,
     schedule_id: &ScheduleId,
     imported: ContinuityInput<TTarget>,

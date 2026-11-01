@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO workflow_runs(run_id,schedule_id,due_at_ms,run_status,captured_inputs_json,execution_evidence_json) VALUES (?,?,?,'preparing',?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "43023b3fae49139fc0dec82a55969adc4216bb8309d5d8881f07a85aeaace46b"
+}

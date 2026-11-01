@@ -32,7 +32,16 @@ impl AutomationStore {
         }
         record.evidence.route = Some(request.effects.into());
         sqlx::query("UPDATE workflow_runs SET run_status='uncertain',execution_evidence_json=? WHERE run_id=?").bind(serde_json::to_string(&record.evidence).map_err(|_|StorageError::InvalidRecord)?).bind(request.run_id.as_str()).execute(&mut *transaction).await?;
+        crate::central_work_transitions::report_run_phase(
+            &mut transaction,
+            &request.run_id,
+            "uncertain",
+            None,
+            (self.central_report_clock)(),
+        )
+        .await?;
         transaction.commit().await?;
+        self.central_reports_changed.notify_one();
         Ok(())
     }
 }

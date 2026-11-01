@@ -22,7 +22,17 @@ pub(crate) async fn has_domain_objects(
 pub(crate) async fn validate_target_schema(
     transaction: &mut Transaction<'_, Sqlite>,
 ) -> Result<(), StorageError> {
-    validate_schema(transaction, false).await
+    validate_schema(transaction, false).await?;
+    let authorities: Vec<String> = sqlx::query_scalar(
+        "SELECT authority FROM schedule_definitions UNION SELECT authority FROM wakeup_definitions",
+    )
+    .fetch_all(&mut **transaction)
+    .await?;
+    for authority in authorities {
+        crate::automation_authority::AutomationAuthority::try_from(authority.as_str())
+            .map_err(|_| StorageError::InvalidRecord)?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn validate_legacy_schema(
@@ -37,7 +47,14 @@ async fn validate_schema(
 ) -> Result<(), StorageError> {
     validate_object_inventory(transaction, legacy).await?;
     for table in TABLE_SPECS.iter().filter(|table| {
-        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+        !legacy
+            || !matches!(
+                table.name,
+                "owed_push_operations"
+                    | "remote_wake_requests"
+                    | "firing_receipts"
+                    | "central_report_outbox"
+            )
     }) {
         validate_columns(transaction, table, legacy).await?;
         validate_foreign_keys(transaction, table).await?;
@@ -70,7 +87,14 @@ async fn validate_object_inventory(
     let expected_tables: Vec<&str> = TABLE_SPECS
         .iter()
         .filter(|table| {
-            !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+            !legacy
+                || !matches!(
+                    table.name,
+                    "owed_push_operations"
+                        | "remote_wake_requests"
+                        | "firing_receipts"
+                        | "central_report_outbox"
+                )
         })
         .map(|table| table.name)
         .collect();
@@ -131,6 +155,12 @@ async fn validate_columns(
     } else {
         table.columns.to_owned()
     };
+    let expected = if !legacy && matches!(table.name, "schedule_definitions" | "wakeup_definitions")
+    {
+        format!("{expected};authority,TEXT,1,'local',0")
+    } else {
+        expected
+    };
     if actual != expected {
         return Err(StorageError::InvalidSchema);
     }
@@ -176,7 +206,14 @@ async fn validate_indexes(
 ) -> Result<(), StorageError> {
     let mut actual = Vec::new();
     for table in TABLE_SPECS.iter().filter(|table| {
-        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+        !legacy
+            || !matches!(
+                table.name,
+                "owed_push_operations"
+                    | "remote_wake_requests"
+                    | "firing_receipts"
+                    | "central_report_outbox"
+            )
     }) {
         let indexes = sqlx::query(
             "SELECT name,\"unique\",origin,partial FROM pragma_index_list(?1) ORDER BY seq",
@@ -222,7 +259,9 @@ async fn validate_indexes(
         .iter()
         .filter(|index| {
             !legacy
-                || (!index.starts_with("remote_wake_requests,")
+                || (!index.starts_with("central_report_outbox,")
+                    && !index.starts_with("firing_receipts,")
+                    && !index.starts_with("remote_wake_requests,")
                     && !index.starts_with("owed_push_operations,")
                     && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
         })
@@ -240,7 +279,14 @@ async fn validate_known_definitions(
     legacy: bool,
 ) -> Result<(), StorageError> {
     for table in TABLE_SPECS.iter().filter(|table| {
-        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+        !legacy
+            || !matches!(
+                table.name,
+                "owed_push_operations"
+                    | "remote_wake_requests"
+                    | "firing_receipts"
+                    | "central_report_outbox"
+            )
     }) {
         let sql: String =
             sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='table' AND name=?1")
@@ -257,7 +303,9 @@ async fn validate_known_definitions(
         .iter()
         .filter(|index| {
             !legacy
-                || (!index.starts_with("remote_wake_requests,")
+                || (!index.starts_with("central_report_outbox,")
+                    && !index.starts_with("firing_receipts,")
+                    && !index.starts_with("remote_wake_requests,")
                     && !index.starts_with("owed_push_operations,")
                     && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
         })
@@ -290,6 +338,20 @@ fn expected_definition_tokens(
         CURRENT_TARGET_DEFINITION_SOURCE.to_owned()
     } else {
         CURRENT_TARGET_DEFINITION_SOURCE.replace("accepted_receipt_json", "outcome_receipt_json")
+    };
+    let source = if legacy {
+        source
+    } else {
+        let source = source.replace(
+            "WHERE wakeup_status IN ('active','paused');",
+            "WHERE authority = 'local' AND wakeup_status IN ('active','paused');",
+        );
+        let source = source.replace("updated_at_ms INTEGER NOT NULL -- Last configuration edit time.", "updated_at_ms INTEGER NOT NULL, authority TEXT NOT NULL DEFAULT 'local' -- Last configuration edit time.")
+            .replace("updated_at_ms INTEGER NOT NULL, -- Latest definition edit time.", "updated_at_ms INTEGER NOT NULL, authority TEXT NOT NULL DEFAULT 'local', -- Latest definition edit time.");
+        format!(
+            "{source}\n{}",
+            include_str!("../migrations/20261031000100_central_firing_receipts.sql")
+        )
     };
     let tokens = tokenize_schema_definition(&source)?;
     let index_is_unique = if object_type == "index" {

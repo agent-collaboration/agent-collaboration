@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO firing_receipts(firing_id,batch_id,local_work_ref,state,report_seq) VALUES (?,?,?,?,1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "4218ca0800e20b94fc74911d9b4be63fd99b4770ea42178085de4b968fc7b4b6"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM central_report_outbox WHERE subject_kind=? AND subject_id=? AND report_seq=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d8e4f760545bc1a64144752724dc36f9ddb26953a035b9f75b5a89bc57ea2626"
+}

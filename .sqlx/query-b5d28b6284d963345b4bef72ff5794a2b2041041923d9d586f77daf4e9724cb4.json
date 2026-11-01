@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT authority FROM schedule_definitions WHERE schedule_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "authority",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedule_definitions",
+            "name": "authority"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b5d28b6284d963345b4bef72ff5794a2b2041041923d9d586f77daf4e9724cb4"
+}
