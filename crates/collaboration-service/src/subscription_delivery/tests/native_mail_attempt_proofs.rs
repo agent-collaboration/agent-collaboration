@@ -507,5 +507,25 @@ async fn debug_clock_control_refuses_a_failed_reader_scan_instead_of_reporting_c
         "a refused stored window cannot be a completed scan"
     );
     assert!(runtime.calls.try_recv().is_err());
+    let service = runtime.service.clone();
+    let healthy = tokio::spawn(async move {
+        service
+            .attempt_mail_once(
+                PushKind::BoardNotification,
+                request("reader-b", MessageDelivery::Auto),
+            )
+            .await
+    });
+    let call = runtime.next_call().await;
+    assert_eq!(
+        call.request.target,
+        request("reader-b", MessageDelivery::Auto).target
+    );
+    call.reply.send(started()).unwrap();
+    assert_eq!(
+        healthy.await.unwrap().receipt().outcome,
+        DeliveryOutcome::Started,
+        "one damaged recipient must not stop a healthy reader"
+    );
     runtime.close().await;
 }

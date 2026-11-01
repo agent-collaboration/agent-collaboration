@@ -3,6 +3,7 @@ pub mod collaboration_application;
 pub mod collaboration_rejection;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
 mod board_views;
+mod notification_listing_content;
 mod notification_publisher;
 mod project_admission;
 pub use notification_publisher::NotificationPublisher;

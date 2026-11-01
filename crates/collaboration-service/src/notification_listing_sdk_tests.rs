@@ -51,6 +51,206 @@ async fn admit_local_notification(
 }
 
 #[tokio::test]
+async fn a_fresh_sdk_attempt_on_a_new_reader_is_not_a_previous_process_attempt() {
+    let clock = Arc::new(DebugSubscriptionClock::new(recorded_at()));
+    let runtime = Runtime::new_with_clock(Some(clock.clone())).await;
+    let mail = Arc::new(runtime.local_mail_runtime());
+    mail.attach_reader_readiness().unwrap();
+    let item = follow(&runtime, 2, 10);
+    let id = item.id();
+    runtime.client.script(id, vec![accepted()]);
+    admit_local_notification(&runtime, item).await;
+    mail.drive_due_for_test().await.unwrap();
+    assert_eq!(
+        runtime.client.calls(id),
+        1,
+        "a fresh notification must reach native I/O immediately"
+    );
+    assert_eq!(
+        mail.local_outcome_for_test(id).await.unwrap(),
+        Some(RecipientOutcome::Delivered {
+            acceptance: collaboration_mail_protocol::CarrierAcceptance::Started
+        })
+    );
+    assert_eq!(
+        clock.now(),
+        recorded_at(),
+        "the first effect needs no clock advance"
+    );
+    drop(mail);
+    runtime.close().await;
+}
+
+#[tokio::test]
+async fn reservation_excludes_a_cancelled_member_and_refreezes_the_remaining_listing() {
+    assert_reservation_refreezes_after_cancellations(1).await;
+}
+
+#[tokio::test]
+async fn reservation_with_no_deliverable_members_is_known_unsent_without_native_io() {
+    assert_reservation_refreezes_after_cancellations(2).await;
+}
+
+async fn assert_reservation_refreezes_after_cancellations(cancelled: usize) {
+    let clock = Arc::new(DebugSubscriptionClock::new(recorded_at()));
+    let runtime = Runtime::new_with_clock(Some(clock)).await;
+    let mail = Arc::new(runtime.local_mail_runtime());
+    mail.attach_reader_readiness().unwrap();
+    let first = follow(&runtime, 2, 10);
+    let second = follow(&runtime, 20, 30);
+    let ids = [first.id(), second.id()];
+    let target: collaboration_protocol::SessionRef =
+        first.recipient().address.clone().try_into().unwrap();
+    let cancels = [&first, &second].map(|item| {
+        DeliveryCancel::new(
+            ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+            item.sender().clone(),
+            item.recipient().clone(),
+            None,
+            CancelBody { target: item.id() },
+        )
+        .unwrap()
+    });
+    runtime
+        .fixture
+        .owner
+        .record_notification_delivery(&target, recorded_at())
+        .await
+        .unwrap();
+    admit_local_notification(&runtime, first).await;
+    admit_local_notification(&runtime, second).await;
+    mail.drive_due_for_test().await.unwrap();
+    let member_ids =
+        ids.map(|id| collaboration_protocol::PushId::try_from(id.as_uuid().to_string()).unwrap());
+    let listing_id =
+        collaboration_protocol::PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
+    let listing = runtime
+        .fixture
+        .owner
+        .freeze_notification_listing(
+            collaboration_protocol::PushRecordDraft {
+                push_id: listing_id.clone(),
+                kind: PushKind::NotificationListing,
+                origin: collaboration_protocol::PushOrigin::Router(PushKind::NotificationListing),
+                origin_router_ref: Some(
+                    collaboration_protocol::RouterOriginRef::NotificationListing {
+                        target: target.clone(),
+                        listing_id: listing_id.clone(),
+                    }
+                    .canonical_string()
+                    .unwrap(),
+                ),
+                target: target.clone(),
+                mode: None,
+                guard: None,
+                reply_to_push_id: None,
+                header_facts: PushHeaderFacts::NotificationListing { item_count: 2 },
+                body: Some(format!(
+                    "{}\n{}",
+                    member_ids[0].as_str(),
+                    member_ids[1].as_str()
+                )),
+                activity: None,
+                created_at: recorded_at(),
+            },
+            &member_ids,
+        )
+        .await
+        .unwrap();
+    // The freeze committed, but the public SDK cancellation wins before reservation.
+    for cancel in cancels.into_iter().take(cancelled) {
+        mail.cancel_local(
+            cancel,
+            collaboration_mail_protocol::CancelCause::ByRequester {
+                by: serde_json::from_value(
+                    serde_json::json!({"kind":"human","humanId":"reservation-proof"}),
+                )
+                .unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+    assert!(matches!(
+        mail.local_outcome_for_test(ids[0]).await.unwrap(),
+        Some(RecipientOutcome::Prevented { .. })
+    ));
+    let reserved = mail.reserve_notification_listing(&listing).await;
+    assert!(
+        reserved.is_ok(),
+        "a non-Deliver member must be excluded without aborting eligible members: {reserved:?}"
+    );
+    let current = runtime
+        .fixture
+        .owner
+        .get_push_record(&listing_id)
+        .await
+        .unwrap()
+        .unwrap();
+    if cancelled == 1 {
+        assert!(matches!(
+            current.header_facts,
+            PushHeaderFacts::NotificationListing { item_count: 1 }
+        ));
+        assert!(reserved.unwrap().is_some());
+    } else {
+        assert!(reserved.unwrap().is_none());
+        assert_eq!(
+            current.delivery_state,
+            collaboration_protocol::PushDeliveryState::Rejected
+        );
+        assert!(matches!(
+            current.last_outcome.as_ref().unwrap().outcome,
+            DeliveryOutcome::NotSubmitted { .. }
+        ));
+    }
+    let (members, next) = runtime
+        .fixture
+        .owner
+        .notification_listing_members(&target, &listing_id, None, 50)
+        .await
+        .unwrap();
+    assert!(next.is_none());
+    assert_eq!(
+        members
+            .iter()
+            .map(|record| record.push_id.clone())
+            .collect::<Vec<_>>(),
+        member_ids
+            .iter()
+            .skip(cancelled)
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    if cancelled == 1 {
+        assert!(
+            !current
+                .body
+                .as_ref()
+                .unwrap()
+                .contains(member_ids[0].as_str())
+        );
+        assert!(
+            current
+                .body
+                .as_ref()
+                .unwrap()
+                .contains(member_ids[1].as_str())
+        );
+    }
+    assert!(
+        runtime.client.all_calls().is_empty(),
+        "refreeze precedes native I/O"
+    );
+    assert!(matches!(
+        mail.local_outcome_for_test(ids[0]).await.unwrap(),
+        Some(RecipientOutcome::Prevented { .. })
+    ));
+    drop(mail);
+    runtime.close().await;
+}
+
+#[tokio::test]
 async fn listing_reserves_sdk_members_before_native_io_and_replays_one_receipt_to_each_callback() {
     let clock = Arc::new(DebugSubscriptionClock::new(recorded_at()));
     let runtime = Runtime::new_with_clock(Some(clock.clone())).await;

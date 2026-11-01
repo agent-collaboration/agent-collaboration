@@ -26,3 +26,5 @@ pub use subscription_wait::{SubscriptionWaitFilter, SubscriptionWaitResult};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::owner_fixture::TestClock as TestSubscriptionClock;

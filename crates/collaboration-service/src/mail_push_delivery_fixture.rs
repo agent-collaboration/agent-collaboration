@@ -55,7 +55,6 @@ pub(super) struct NativeClient {
     >,
 }
 impl NativeClient {
-    #[cfg(debug_assertions)]
     pub(super) fn pause_next_unlisted_result(
         &self,
         result: collaboration_contracts::NativeDeliveryResult,
@@ -71,7 +70,6 @@ impl NativeClient {
             release,
         }
     }
-    #[cfg(debug_assertions)]
     pub(super) fn all_calls(&self) -> Vec<collaboration_contracts::layer_zero::DeliveryRequest> {
         self.calls.lock().unwrap().clone()
     }

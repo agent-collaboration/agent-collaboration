@@ -215,8 +215,10 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
         .consume_project_intents(&fixture.project)
         .await
         .unwrap();
-    // Another publisher pass can already own delivery after custody commits.
-    // Observe both real requests before checking their identities.
+    // Both intents commit custody in this pass; the second native effect waits
+    // for this recipient's rolling window and covers the same frozen identity.
+    runtime.owner_barrier(&fixture.reader).await;
+    fixture.clock.advance_without_tokio_time(600);
     let delivered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         let mut requests = runtime.requests.lock().await;
         let first = requests.recv().await.unwrap();
@@ -228,18 +230,14 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
     .expect("both addressed intent requests must reach the native client");
     let mut delivered_intents = BTreeSet::new();
     for request in delivered {
-        let push = fixture
-            .interactions
-            .get_push_record(&request.payload.push_id)
-            .await
-            .unwrap()
-            .unwrap();
-        let collaboration_protocol::PushHeaderFacts::BoardNotification { intent, .. } =
-            push.header_facts
-        else {
-            panic!("board notification");
-        };
-        delivered_intents.insert(intent);
+        for push in fixture.notification_records_for_request(&request).await {
+            let collaboration_protocol::PushHeaderFacts::BoardNotification { intent, .. } =
+                push.header_facts
+            else {
+                panic!("board notification");
+            };
+            delivered_intents.insert(intent);
+        }
     }
     assert_eq!(delivered_intents, BTreeSet::from([first, second]));
     runtime

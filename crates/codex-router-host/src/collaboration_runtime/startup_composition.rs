@@ -313,35 +313,19 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> = {
-            #[cfg(debug_assertions)]
-            {
-                match std::env::var("CODEX_ROUTER_DEBUG_NOTIFICATION_CLOCK_MS") {
-                    Ok(value) => {
-                        let millis = value.parse::<i64>().map_err(|_|io::Error::other("CODEX_ROUTER_DEBUG_NOTIFICATION_CLOCK_MS must be UTC epoch milliseconds"))?;
-                        let now =
-                            chrono::DateTime::from_timestamp_millis(millis).ok_or_else(|| {
-                                io::Error::other(
-                                    "debug notification clock is outside the UTC timestamp range",
-                                )
-                            })?;
-                        std::sync::Arc::new(collaboration_service::DebugSubscriptionClock::new(now))
-                    }
-                    Err(std::env::VarError::NotPresent) => {
-                        std::sync::Arc::new(collaboration_service::SystemSubscriptionClock)
-                    }
-                    Err(std::env::VarError::NotUnicode(_)) => {
-                        return Err(io::Error::other(
-                            "debug notification clock setting is not UTF-8",
-                        ));
-                    }
-                }
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                std::sync::Arc::new(collaboration_service::SystemSubscriptionClock)
-            }
+        #[cfg(debug_assertions)]
+        let controlled_notification_clock = super::debug_notification_control::configured_clock()?;
+        #[cfg(debug_assertions)]
+        let subscription_clock: std::sync::Arc<
+            dyn collaboration_service::SubscriptionClock,
+        > = match &controlled_notification_clock {
+            Some(clock) => clock.clone(),
+            None => std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
         };
+        #[cfg(not(debug_assertions))]
+        let subscription_clock: std::sync::Arc<
+            dyn collaboration_service::SubscriptionClock,
+        > = std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
@@ -376,6 +360,12 @@ impl CollaborationRuntime {
         let mail_session = prepared_board
             .as_ref()
             .and_then(|board| board.mail_session());
+        if let Some(service) = &subscription_delivery {
+            service
+                .capture_notification_startup_snapshot()
+                .await
+                .map_err(|error| io::Error::other(error.message))?;
+        }
         let mail_delivery = subscription_delivery
             .as_ref()
             .map(|actors| {
@@ -601,7 +591,12 @@ impl CollaborationRuntime {
             collaboration_api.with_service_socket(&inputs.directory.join("control.sock"))?;
         #[cfg(debug_assertions)]
         let collaboration_api = collaboration_api.with_debug_verification_controls(
-            collaboration_mcp::DebugVerificationControls { automation_faults },
+            collaboration_mcp::DebugVerificationControls {
+                automation_faults,
+                verification_clock: controlled_notification_clock
+                    .as_ref()
+                    .and(subscription_delivery.clone()),
+            },
         );
         let native = NativeRelayListener::bind(
             &inputs.directory.join("codex-native.sock"),

@@ -63,7 +63,7 @@ async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn activity_in_one_root_never_delays_another_root() {
+async fn activity_windows_stay_independent_while_recipient_delivery_obeys_cooldown() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let other = fixture.add_root().await;
     for root in [&fixture.root, &other] {
@@ -91,7 +91,36 @@ async fn activity_in_one_root_never_delays_another_root() {
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(60).await;
-    runtime.requests.lock().await.recv().await.unwrap();
+    let held = fixture.held_native_pushes(1).await;
+    assert_eq!(
+        held[0].activity.as_ref().unwrap().ranges[0].thread_id,
+        other,
+        "the second root allocates at its own quiet deadline"
+    );
+    runtime.owner_barrier(&fixture.reader).await;
+    assert!(
+        runtime.requests.lock().await.try_recv().is_err(),
+        "allocation does not bypass the recipient cooldown"
+    );
+    fixture.clock.advance(540).await;
+    let listing = runtime.requests.lock().await.recv().await.unwrap();
+    assert_eq!(
+        fixture
+            .interactions
+            .get_push_record(&listing.payload.push_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .kind,
+        collaboration_protocol::PushKind::NotificationListing
+    );
+    let records = fixture.notification_records_for_request(&listing).await;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].push_id, held[0].push_id);
+    assert_eq!(
+        records[0].activity.as_ref().unwrap().ranges[0].thread_id,
+        other
+    );
     runtime.await_settled().await;
     runtime.close().await;
 }

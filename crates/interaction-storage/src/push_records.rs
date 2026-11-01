@@ -1,9 +1,29 @@
 //! Durable push snapshots, delivery transitions, DM queries, and bounded pruning.
+#[path = "notification_windows.rs"]
+pub(crate) mod notification_windows;
+pub use notification_windows::NotificationWindow;
+#[path = "notification_listings.rs"]
+pub(crate) mod notification_listings;
+pub use notification_listings::is_notification_kind;
+#[path = "notification_references.rs"]
+pub(crate) mod notification_references;
+#[path = "notification_refreeze.rs"]
+pub(crate) mod notification_refreeze;
+pub use notification_refreeze::refreeze_notification_listing_in_scope;
+#[path = "notification_settlement.rs"]
+pub(crate) mod notification_settlement;
+#[path = "notification_startup_snapshot.rs"]
+pub(crate) mod notification_startup_snapshot;
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
     RouterOriginRef, SessionRef,
+};
+pub use notification_references::{
+    NotificationListingMember, notification_listing_for_member_in_scope,
+    prepare_notification_listing_in_scope, record_notification_reference_in_scope,
+    release_unsent_notification_member_in_scope,
 };
 use sqlx::Connection;
 use sqlx_turso::TursoConnection;

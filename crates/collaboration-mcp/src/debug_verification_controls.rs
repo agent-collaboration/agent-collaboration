@@ -5,19 +5,25 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 mod automation_faults;
+mod verification_clock;
 
 /// Controllers supplied by debug Host composition. Missing controllers expose no routes.
 /// The verification-clock owner adds its optional controller alongside the fault controller.
 #[derive(Default)]
 pub struct DebugVerificationControls {
     pub automation_faults: Option<Arc<DebugAutomationFaultController>>,
+    pub verification_clock: Option<collaboration_service::SubscriptionDeliveryService>,
 }
 
 pub(crate) fn router(controls: DebugVerificationControls, shutdown: CancellationToken) -> Router {
-    match controls.automation_faults {
-        Some(faults) => automation_faults::router(faults, shutdown),
-        None => Router::new(),
+    let mut router = Router::new();
+    if let Some(faults) = controls.automation_faults {
+        router = router.merge(automation_faults::router(faults, shutdown.clone()));
     }
+    if let Some(clock) = controls.verification_clock {
+        router = router.merge(verification_clock::router(clock, shutdown));
+    }
+    router
 }
 
 #[cfg(test)]

@@ -124,6 +124,15 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
     let mut received = std::collections::BTreeSet::new();
     let mut timed_out = false;
     for completed in 1..=2 {
+        if completed == 2 {
+            wait_held(&native, &fixture, 1).await;
+            runtime.owner_barrier(&fixture.reader).await;
+            assert!(
+                runtime.requests.lock().await.try_recv().is_err(),
+                "recipient cooldown keeps the second item held"
+            );
+            fixture.clock.advance_without_tokio_time(600);
+        }
         let request = tokio::time::timeout(Duration::from_secs(6), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })
@@ -132,7 +141,24 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
             timed_out = true;
             break;
         };
-        received.insert(request.payload.push_id.as_str().to_owned());
+        if completed == 2 {
+            assert_eq!(
+                fixture
+                    .interactions
+                    .get_push_record(&request.payload.push_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .kind,
+                PushKind::NotificationListing
+            );
+        }
+        for record in fixture.notification_records_for_request(&request).await {
+            assert!(
+                received.insert(record.push_id.as_str().to_owned()),
+                "an original notification was covered twice"
+            );
+        }
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;
     }
@@ -153,7 +179,7 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
     fixture.close_native(native).await;
     assert!(
         !timed_out,
-        "a running reader left its second membership behind a staggered presence deadline"
+        "the recipient deadline left its second membership undelivered"
     );
     assert_eq!(
         received,
@@ -215,12 +241,38 @@ async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost
         .unwrap();
     let mut received = std::collections::BTreeSet::new();
     for completed in 1..=2 {
+        if completed == 2 {
+            wait_held(&native, &fixture, 1).await;
+            runtime.owner_barrier(&fixture.reader).await;
+            assert!(
+                runtime.requests.lock().await.try_recv().is_err(),
+                "recipient cooldown keeps the second item held"
+            );
+            fixture.clock.advance_without_tokio_time(600);
+        }
         let request = tokio::time::timeout(Duration::from_secs(6), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })
         .await
-        .expect("remaining due roots did not drain immediately");
-        received.insert(request.payload.push_id.as_str().to_owned());
+        .expect("remaining allocated roots did not drain at the recipient deadline");
+        if completed == 2 {
+            assert_eq!(
+                fixture
+                    .interactions
+                    .get_push_record(&request.payload.push_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .kind,
+                PushKind::NotificationListing
+            );
+        }
+        for record in fixture.notification_records_for_request(&request).await {
+            assert!(
+                received.insert(record.push_id.as_str().to_owned()),
+                "an original notification was covered twice"
+            );
+        }
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;
     }

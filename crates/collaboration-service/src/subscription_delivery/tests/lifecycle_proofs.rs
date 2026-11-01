@@ -38,33 +38,48 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
     fixture.clock.advance_without_tokio_time(1);
     let mut received = std::collections::BTreeSet::new();
     let mut covered = Vec::new();
-    for _ in 0..3 {
+    for native_index in 0..2 {
+        if native_index == 1 {
+            fixture.held_native_pushes(2).await;
+            runtime.owner_barrier(&fixture.reader).await;
+            assert!(
+                runtime.requests.lock().await.try_recv().is_err(),
+                "remaining arrivals are held during the recipient cooldown"
+            );
+            fixture.clock.advance_without_tokio_time(600);
+        }
         let request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })
         .await
         .unwrap();
-        assert!(
-            received.insert(request.payload.push_id.as_str().to_owned()),
-            "one frozen item was delivered twice"
-        );
         assert_eq!(request.payload.load_policy, LoadPolicy::LoadedOnly);
-        assert!(request.payload.line.as_str().contains("held since"));
-        let record = fixture
-            .interactions
-            .get_push_record(&request.payload.push_id)
-            .await
-            .unwrap()
-            .unwrap();
-        let activity = record.activity.unwrap();
-        assert!(activity.held);
-        assert_eq!(activity.ranges.len(), 1);
-        assert_eq!(activity.ranges[0].from, activity.ranges[0].through);
-        covered.push(activity.ranges[0].through);
-        runtime
-            .completions
-            .send(collaboration_protocol::DeliveryOutcome::Started)
-            .unwrap();
+        if native_index == 0 {
+            assert!(request.payload.line.as_str().contains("held since"));
+        } else {
+            assert_eq!(
+                fixture
+                    .interactions
+                    .get_push_record(&request.payload.push_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .kind,
+                collaboration_protocol::PushKind::NotificationListing
+            );
+        }
+        for record in fixture.notification_records_for_request(&request).await {
+            assert!(
+                received.insert(record.push_id.as_str().to_owned()),
+                "one frozen item was covered twice"
+            );
+            let activity = record.activity.unwrap();
+            assert!(activity.held);
+            assert_eq!(activity.ranges.len(), 1);
+            assert_eq!(activity.ranges[0].from, activity.ranges[0].through);
+            covered.push(activity.ranges[0].through);
+        }
+        runtime.await_settled().await;
     }
     for record in &held {
         assert!(received.contains(record.push_id.as_str()));
@@ -87,7 +102,7 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
         runtime
             .completed_native_calls
             .load(std::sync::atomic::Ordering::SeqCst),
-        3
+        2
     );
     runtime.close().await;
 }
@@ -112,8 +127,15 @@ async fn wake_uses_may_load_only_for_a_wakeable_target() {
     runtime.await_settled().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.post(&fixture.root, "Running").await;
+    let held = fixture.held_native_pushes(1).await;
+    runtime.owner_barrier(&fixture.reader).await;
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    fixture.clock.advance(600).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert_eq!(request.payload.load_policy, LoadPolicy::LoadedOnly);
+    let originals = fixture.notification_records_for_request(&request).await;
+    assert_eq!(originals.len(), 1);
+    assert_eq!(originals[0].push_id, held[0].push_id);
     runtime.await_settled().await;
     runtime.close().await;
 }

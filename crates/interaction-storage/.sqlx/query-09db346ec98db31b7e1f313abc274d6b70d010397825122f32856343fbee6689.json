@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE kind='notification-listing' AND delivery_state='attempted' ORDER BY push_id",
+  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE delivery_state='attempted' ORDER BY push_id",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       null
     ]
   },
-  "hash": "2f5cd6b9960df088cb9c3bd116a7488cd2663719b1edd6b6d7d1d95e3613f285"
+  "hash": "09db346ec98db31b7e1f313abc274d6b70d010397825122f32856343fbee6689"
 }

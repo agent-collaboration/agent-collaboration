@@ -83,6 +83,84 @@ impl Runtime {
         self.service.start().await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn a_reader_recovers_its_interrupted_listing_before_a_fresh_native_effect() {
+    let clock = Arc::new(crate::DebugSubscriptionClock::new(at(0)));
+    let mut runtime = Runtime::with_clock(clock.clone()).await;
+    let member = held_expiry(&runtime).await;
+    let target = request("reader-a", MessageDelivery::Auto).target;
+    let id = PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
+    runtime
+        .store
+        .freeze_notification_listing(
+            PushRecordDraft {
+                push_id: id.clone(),
+                kind: PushKind::NotificationListing,
+                origin: PushOrigin::Router(PushKind::NotificationListing),
+                origin_router_ref: Some(
+                    RouterOriginRef::NotificationListing {
+                        target: target.clone(),
+                        listing_id: id.clone(),
+                    }
+                    .canonical_string()
+                    .unwrap(),
+                ),
+                target,
+                mode: None,
+                guard: None,
+                reply_to_push_id: None,
+                header_facts: PushHeaderFacts::NotificationListing { item_count: 1 },
+                body: Some("one frozen member".into()),
+                activity: None,
+                created_at: at(0),
+            },
+            std::slice::from_ref(&member),
+        )
+        .await
+        .unwrap();
+    runtime.store.mark_push_attempted(&id).await.unwrap();
+    runtime.restart_reader_service(clock).await;
+    let receipt = runtime
+        .service
+        .attempt_mail_once(
+            PushKind::BoardNotification,
+            request("reader-a", MessageDelivery::Auto),
+        )
+        .await;
+    assert!(matches!(
+        receipt.receipt().outcome,
+        DeliveryOutcome::NotSubmitted {
+            retryable: true,
+            ..
+        }
+    ));
+    assert!(
+        runtime.calls.try_recv().is_err(),
+        "recovery must precede this reader's first native effect"
+    );
+    assert_eq!(
+        runtime
+            .store
+            .get_push_record(&id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_state,
+        collaboration_protocol::PushDeliveryState::OutcomeUnknown
+    );
+    assert_eq!(
+        runtime
+            .store
+            .get_push_record(&member)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_state,
+        collaboration_protocol::PushDeliveryState::OutcomeUnknown
+    );
+    runtime.close().await;
+}
 #[tokio::test]
 async fn one_listing_covers_overflow_and_the_next_rolling_window_survives_reader_restart() {
     let clock = Arc::new(crate::DebugSubscriptionClock::new(at(0)));

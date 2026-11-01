@@ -276,9 +276,35 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
     fixture.clock.advance(60).await; // Cap from the first residual has elapsed while the first push was in flight.
     assert!(runtime.requests.lock().await.try_recv().is_err());
     runtime.await_settled().await;
+    let held = fixture.held_native_pushes(1).await;
+    assert!(
+        matches!(
+            held[0].header_facts,
+            collaboration_protocol::PushHeaderFacts::SubscriptionActivity {
+                message_count: 7,
+                ..
+            }
+        ),
+        "the residual still allocates at its own elapsed cap"
+    );
+    runtime.owner_barrier(&fixture.reader).await;
+    assert!(
+        runtime.requests.lock().await.try_recv().is_err(),
+        "the first actual delivery starts the recipient cooldown"
+    );
+    fixture.clock.advance(600).await;
     let second = runtime.requests.lock().await.recv().await.unwrap();
     assert_ne!(first.payload.push_id, second.payload.push_id);
-    assert!(second.payload.line.as_str().contains("7 messages"));
+    let originals = fixture.notification_records_for_request(&second).await;
+    assert_eq!(originals.len(), 1);
+    assert_eq!(originals[0].push_id, held[0].push_id);
+    assert!(matches!(
+        originals[0].header_facts,
+        collaboration_protocol::PushHeaderFacts::SubscriptionActivity {
+            message_count: 7,
+            ..
+        }
+    ));
     runtime.await_settled().await;
     runtime.close().await;
 }

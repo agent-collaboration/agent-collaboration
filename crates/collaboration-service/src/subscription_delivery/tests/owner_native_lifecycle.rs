@@ -68,6 +68,38 @@ impl OwnerRuntime {
 }
 
 impl OwnerFixture {
+    /// Reads originals through the same authorized member page the recipient uses.
+    /// One native listing covers these records without changing their SDK identities.
+    pub async fn notification_records_for_request(
+        &self,
+        request: &collaboration_contracts::layer_zero::DeliveryRequest,
+    ) -> Vec<collaboration_protocol::PushRecord> {
+        let record = self
+            .interactions
+            .get_push_record(&request.payload.push_id)
+            .await
+            .unwrap()
+            .unwrap();
+        if record.kind != collaboration_protocol::PushKind::NotificationListing {
+            return vec![record];
+        }
+        let mut records = Vec::new();
+        let mut after = None;
+        loop {
+            let (page, next) = self
+                .interactions
+                .notification_listing_members(&request.target, &record.push_id, after.as_ref(), 50)
+                .await
+                .unwrap();
+            records.extend(page);
+            match next {
+                Some(next) => after = Some(next),
+                None => break,
+            }
+        }
+        records
+    }
+
     pub async fn await_push_state(
         &self,
         push: &collaboration_protocol::PushId,

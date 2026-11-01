@@ -583,15 +583,48 @@ impl CallRouter for MailCallRouter {
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         let item = resolved.item();
-        let delivery = if let Some(listing) = listing {
-            crate::mail_push_outcome::local_message_outcome(
-                self.consumer
-                    .reader_actors
-                    .notification_listing_result(listing.target.clone(), listing.push_id.clone())
-                    .await,
-                true,
-            )
-            .map_err(|_| CallFailure::AnswerLost)?
+        let listing_result = if let Some(listing) = listing {
+            let result = self
+                .consumer
+                .reader_actors
+                .notification_listing_result(listing.target.clone(), listing.push_id.clone())
+                .await;
+            let push_id = item
+                .id()
+                .as_uuid()
+                .to_string()
+                .try_into()
+                .map_err(|_| CallFailure::AnswerLost)?;
+            let still_member = store
+                .transaction(move |scope| {
+                    Box::pin(async move {
+                        let current =
+                            interaction_storage::notification_listing_for_member_in_scope(
+                                scope, &push_id,
+                            )
+                            .await
+                            .map_err(StoreError::backend)?;
+                        let still_member =
+                            current.is_some_and(|current| current.push_id == listing.push_id);
+                        if !still_member {
+                            // Reservation may have excluded this already-running callback.
+                            // It keeps its own SDK attempt; it cannot inherit another item's receipt.
+                            mark_mail_push_attempted_in_scope(scope, &push_id)
+                                .await
+                                .map_err(StoreError::backend)?;
+                        }
+                        Ok(still_member)
+                    })
+                })
+                .await
+                .map_err(|_| CallFailure::AnswerLost)?;
+            still_member.then_some(result)
+        } else {
+            None
+        };
+        let delivery = if let Some(listing_result) = listing_result {
+            crate::mail_push_outcome::local_message_outcome(listing_result, true)
+                .map_err(|_| CallFailure::AnswerLost)?
         } else if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
             self.consumer.deliver_wake(item, body).await
         } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {

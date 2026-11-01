@@ -6,9 +6,8 @@ use collaboration_contracts::{
     DeliveryPrecondition, LoadPolicy, NativeDeliveryResult, NativeRefusalCode, UnsentCause,
 };
 use collaboration_protocol::{
-    DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageDelivery, MessageText,
-    PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordDraft,
-    RouterLink, RouterOriginRef, render_push_line,
+    DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageDelivery, MessageText, PushId,
+    PushKind, PushLineInput, PushRecord, PushRecordDraft, RouterLink, render_push_line,
 };
 use message_board::BoardError;
 
@@ -31,10 +30,29 @@ fn receipt_consumes_window(receipt: &collaboration_protocol::DeliveryReceipt) ->
     )
 }
 impl ReaderDeliveryOwner {
+    pub(super) async fn ensure_notification_recovery(&mut self) -> Result<(), BoardError> {
+        if !self.notification_recovery_complete {
+            if let Ok(target) = target_session(&self.reader) {
+                self.push
+                    .store
+                    .recover_interrupted_notification_listings(
+                        &target,
+                        &self.notification_startup_attempts,
+                        self.clock.now(),
+                    )
+                    .await
+                    .map_err(unavailable)?;
+            }
+            self.notification_recovery_complete = true;
+        }
+        Ok(())
+    }
+
     pub(super) async fn deliver_stored_notification(
         &mut self,
         record: &PushRecord,
     ) -> Result<PushRecord, BoardError> {
+        self.ensure_notification_recovery().await?;
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
                 MachineId::from(self.push.machine.service_id().clone()),
@@ -75,6 +93,16 @@ impl ReaderDeliveryOwner {
         kind: PushKind,
         request: DeliveryRequest,
     ) -> Result<NativeDeliveryResult, BoardError> {
+        if let Err(error) = self.ensure_notification_recovery().await {
+            self.record_pass_error(&error);
+            return Ok(NativeDeliveryResult::not_submitted(
+                "recipient recovery has not completed; no native attempt was made",
+                true,
+                UnsentCause::Holdable {
+                    otherwise: NativeRefusalCode::CarrierUnavailable,
+                },
+            ));
+        }
         if !interaction_storage::is_notification_kind(kind) {
             return self.push.dispatch_mail_attempt(kind, request).await;
         }
@@ -161,12 +189,35 @@ impl ReaderDeliveryOwner {
                 .await?;
             return Ok(true);
         }
-        let window = self
+        let mut window = self
             .push
             .store
             .notification_window(&target)
             .await
             .map_err(unavailable)?;
+        if window
+            .as_ref()
+            .is_some_and(|window| window.flush_due_at.is_none())
+            && !self
+                .push
+                .store
+                .held_notification_candidates(&target)
+                .await
+                .map_err(unavailable)?
+                .is_empty()
+        {
+            self.push
+                .store
+                .hold_notification_window(&target)
+                .await
+                .map_err(unavailable)?;
+            window = self
+                .push
+                .store
+                .notification_window(&target)
+                .await
+                .map_err(unavailable)?;
+        }
         self.notification_flush_deadline = window
             .as_ref()
             .and_then(|window| window.flush_due_at)
@@ -317,53 +368,13 @@ impl ReaderDeliveryOwner {
     ) -> Result<PushRecordDraft, BoardError> {
         let id = PushId::try_from(uuid::Uuid::now_v7().to_string())
             .map_err(|_| BoardError::board_unavailable())?;
-        let max = collaboration_protocol::limits::NOTIFICATION_LISTING_MAX_ENTRIES;
-        let mut body = String::new();
-        for member in members.iter().take(max) {
-            let label = match member.kind {
-                PushKind::BoardNotification => "Board activity",
-                PushKind::SubscriptionActivity => "Thread activity",
-                PushKind::SubscriptionExpiry => "Subscription expired",
-                _ => return Err(BoardError::board_unavailable()),
-            };
-            body.push_str(&format!(
-                "- {label}: {}\n",
-                RouterLink::new(
-                    MachineId::from(self.push.machine.service_id().clone()),
-                    member.push_id.clone()
-                )
-            ));
-        }
-        if members.len() > max {
-            let after = members
-                .get(max - 1)
-                .ok_or_else(BoardError::board_unavailable)?;
-            body.push_str(&format!("{} notifications total. Read the rest with notification_members: listingId={}, after={}, limit={max}.",members.len(),id.as_str(),after.push_id.as_str()));
-        }
-        Ok(PushRecordDraft {
-            push_id: id.clone(),
-            kind: PushKind::NotificationListing,
-            origin: PushOrigin::Router(PushKind::NotificationListing),
-            origin_router_ref: Some(
-                RouterOriginRef::NotificationListing {
-                    target: target.clone(),
-                    listing_id: id,
-                }
-                .canonical_string()
-                .map_err(|_| BoardError::board_unavailable())?,
-            ),
-            target: target.clone(),
-            mode: None,
-            guard: None,
-            reply_to_push_id: None,
-            header_facts: PushHeaderFacts::NotificationListing {
-                item_count: u64::try_from(members.len())
-                    .map_err(|_| BoardError::board_unavailable())?,
-            },
-            body: Some(body),
-            activity: None,
-            created_at: self.clock.now(),
-        })
+        crate::notification_listing_content::draft_for_members(
+            MachineId::from(self.push.machine.service_id().clone()),
+            target,
+            id,
+            members,
+            self.clock.now(),
+        )
     }
     async fn deliver_notification_listing(
         &mut self,
@@ -441,7 +452,8 @@ impl ReaderDeliveryOwner {
             .mark_push_attempted(&listing.push_id)
             .await
             .map_err(unavailable)?;
-        self.push
+        let members = self
+            .push
             .store
             .settle_notification_listing(
                 &listing.push_id,
@@ -450,21 +462,50 @@ impl ReaderDeliveryOwner {
             )
             .await
             .map_err(unavailable)?;
+        if let Some(mail) = self.native_mail.get().and_then(std::sync::Weak::upgrade) {
+            // A reservation rollback admitted no callbacks. Release the public
+            // Held items so they consume this known-unsent receipt and unlink.
+            mail.release_held_mail(members)
+                .await
+                .map_err(|_| BoardError::board_unavailable())?;
+            mail.wake_notification_callbacks()
+                .await
+                .map_err(|_| BoardError::board_unavailable())?;
+        }
         tracing::debug!(%reason,"notification listing was not sent; members released");
         Ok(())
     }
     async fn deliver_listing_with_policy(
         &mut self,
-        listing: PushRecord,
+        mut listing: PushRecord,
         mail: Option<&crate::MailDeliveryRuntime>,
-        load_policy: LoadPolicy,
+        mut load_policy: LoadPolicy,
     ) -> Result<(), BoardError> {
         if let Some(mail) = mail {
-            if let Err(error) = mail.reserve_notification_listing(&listing).await {
-                tracing::warn!(%error,"listing reservation made no native call");
-                return self
-                    .reject_pending_listing(&listing, "notification reservation refused")
-                    .await;
+            match mail.reserve_notification_listing(&listing).await {
+                Ok(Some(reserved)) => {
+                    let changed = reserved.header_facts != listing.header_facts;
+                    listing = reserved;
+                    if changed {
+                        load_policy = self.refrozen_listing_load_policy(&listing).await?;
+                    }
+                }
+                Ok(None) => {
+                    mail.wake_notification_callbacks()
+                        .await
+                        .map_err(|_| BoardError::board_unavailable())?;
+                    self.notification_flush_deadline = Some(
+                        self.clock.monotonic_now()
+                            + crate::subscription_delivery::subscription_facts::PRESENCE_INTERVAL,
+                    );
+                    return Ok(());
+                }
+                Err(error) => {
+                    tracing::warn!(%error,"listing reservation made no native call");
+                    return self
+                        .reject_pending_listing(&listing, "notification reservation refused")
+                        .await;
+                }
             }
         } else {
             self.push
@@ -536,5 +577,49 @@ impl ReaderDeliveryOwner {
             )
         };
         Ok(())
+    }
+
+    async fn refrozen_listing_load_policy(
+        &self,
+        listing: &PushRecord,
+    ) -> Result<LoadPolicy, BoardError> {
+        let mail = self
+            .native_mail
+            .get()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(BoardError::board_unavailable)?;
+        let mut policy = LoadPolicy::LoadedOnly;
+        let mut after = None;
+        loop {
+            let (members, next) = self
+                .push
+                .store
+                .notification_listing_members(&listing.target, &listing.push_id, after.as_ref(), 50)
+                .await
+                .map_err(unavailable)?;
+            for member in members {
+                if let Some(reference) = self
+                    .push
+                    .store
+                    .notification_item_reference(&member.push_id)
+                    .await
+                    .map_err(unavailable)?
+                {
+                    let (_, preparation) = mail
+                        .prepare_notification_for_listing(reference)
+                        .await
+                        .map_err(|_| BoardError::board_unavailable())?;
+                    if matches!(preparation, collaboration_runtime::MailPushPreparation::Attempt { request, .. } if request.payload.load_policy == LoadPolicy::MayLoad)
+                    {
+                        policy = LoadPolicy::MayLoad;
+                    }
+                }
+            }
+            match next {
+                Some(next) => after = Some(next),
+                None => break,
+            }
+        }
+        Ok(policy)
     }
 }

@@ -104,8 +104,12 @@ pub(super) enum ReaderDeliveryCommand {
 }
 
 pub(super) struct ReaderDeliveryOwnerProps {
+    pub notification_startup_attempts: Arc<std::collections::HashSet<PushId>>,
     #[cfg(test)]
     pub poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
+    #[cfg(test)]
+    pub idle_owner_close_probe:
+        super::subscription_service::idle_owner_close_probe::IdleOwnerCloseProbeSlot,
     pub native_mail: super::subscription_service::NativeMailReadiness,
     pub follow_admission: super::subscription_service::FollowAdmissionSlot,
     pub reader: Identity,
@@ -122,13 +126,18 @@ pub(super) struct ReaderDeliveryOwnerProps {
 }
 
 pub(super) struct ReaderDeliveryOwner {
+    notification_startup_attempts: Arc<std::collections::HashSet<PushId>>,
     #[cfg(test)]
     poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
+    #[cfg(test)]
+    idle_owner_close_probe:
+        super::subscription_service::idle_owner_close_probe::IdleOwnerCloseProbeSlot,
     native_mail: super::subscription_service::NativeMailReadiness,
     follow_admission: super::subscription_service::FollowAdmissionSlot,
     native_checked_presence: HashMap<PushId, Instant>,
     membership_expiry_deadline: Option<Instant>,
     notification_flush_deadline: Option<Instant>,
+    notification_recovery_complete: bool,
     reader: Identity,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
@@ -160,8 +169,11 @@ pub(super) struct ReaderDeliveryOwner {
 impl ReaderDeliveryOwner {
     pub(super) fn new(props: ReaderDeliveryOwnerProps) -> Self {
         let ReaderDeliveryOwnerProps {
+            notification_startup_attempts,
             #[cfg(test)]
             poll_handover_probe,
+            #[cfg(test)]
+            idle_owner_close_probe,
             native_mail,
             follow_admission,
             reader,
@@ -177,13 +189,17 @@ impl ReaderDeliveryOwner {
             observations,
         } = props;
         Self {
+            notification_startup_attempts,
             #[cfg(test)]
             poll_handover_probe,
+            #[cfg(test)]
+            idle_owner_close_probe,
             native_mail,
             follow_admission,
             native_checked_presence: HashMap::new(),
             membership_expiry_deadline: None,
             notification_flush_deadline: None,
+            notification_recovery_complete: false,
             reader,
             board_availability,
             push,
@@ -233,6 +249,15 @@ impl ReaderDeliveryOwner {
         self.observe(OwnerObservation::Started);
         while !self.shutdown.is_cancelled() {
             self.expire_waiters();
+            if let Err(error) = self.ensure_notification_recovery().await {
+                self.record_pass_error(&error);
+                self.answer_reconcile_requests(&Err(error));
+                self.refuse_expired_pending_waiters();
+                if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    break;
+                }
+                continue;
+            }
             while let Ok(command) = self.commands.try_recv() {
                 self.handle_command(command).await;
             }
@@ -246,7 +271,7 @@ impl ReaderDeliveryOwner {
                 continue;
             }
             self.try_pending_held_push_cleanup().await;
-            let pending_notifications = match self.flush_due_notifications().await {
+            let pending_notifications = match Box::pin(self.flush_due_notifications()).await {
                 Ok(pending) => pending,
                 Err(error) => {
                     tracing::warn!(%error,"notification listing pass failed before a new native effect");
@@ -311,6 +336,11 @@ impl ReaderDeliveryOwner {
             {
                 // Close admission, then finish every accepted carrier call once.
                 // Its effect cannot safely be requested again after a lost response.
+                #[cfg(test)]
+                super::subscription_service::idle_owner_close_probe::pause_before_close(
+                    &self.idle_owner_close_probe,
+                )
+                .await;
                 #[cfg(test)]
                 for barrier in self.barriers.drain(..) {
                     let _ = barrier.send(());

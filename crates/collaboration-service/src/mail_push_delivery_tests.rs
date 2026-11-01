@@ -84,7 +84,10 @@ mod remote_wakes;
 #[tokio::test]
 async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold_reopen() {
     // Arrange: same root and activation, disjoint items, and no sender window/project.
-    let runtime = Runtime::new().await;
+    let clock = Arc::new(crate::subscription_delivery::TestSubscriptionClock::new(
+        recorded_at(),
+    ));
+    let runtime = Runtime::new_with_clock(Some(clock.clone())).await;
     let first = follow(&runtime, 2, 10);
     let first_id = first.id();
     let second = follow(&runtime, 20, 30);
@@ -162,6 +165,7 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
         recorded_at().timestamp_millis() + 30_009
     );
     runtime.set_time(30_009);
+    clock.advance_without_tokio_time(30);
     engine.drive_due().await.unwrap();
     assert_eq!(runtime.client.calls(first_id), 2);
     assert_eq!(runtime.count(first_id).await, 2);
@@ -169,6 +173,7 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
     engine.drive_due().await.unwrap();
     assert_eq!(runtime.client.calls(first_id), 2);
     runtime.set_time(90_009);
+    clock.advance_without_tokio_time(60);
     engine.drive_due().await.unwrap();
     assert_eq!(runtime.client.calls(first_id), 3);
     // The terminal item's counter is gone. The other Held item retains its
@@ -219,13 +224,53 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
         .await
         .unwrap();
     engine.drive_due().await.unwrap();
-    // Assert: only the released item receives another effect, and terminal outcomes remove counters.
+    // Releasing SDK custody cannot bypass the recipient window opened by the
+    // first item's acceptance. Its next effect must be a listing after 600s.
     assert_eq!(
         (
             runtime.client.calls(first_id),
             runtime.client.calls(second_id)
         ),
-        (3, 2)
+        (3, 1)
+    );
+    assert_eq!(
+        runtime.fixture.local_outcome(second_id).await,
+        Some(RecipientOutcome::Held)
+    );
+    let mail = Arc::new(runtime.local_mail_runtime());
+    mail.attach_reader_readiness().unwrap();
+    let gate = runtime
+        .client
+        .pause_next_unlisted_result(collaboration_contracts::scripted_delivery_result(accepted()));
+    runtime.set_time(690_009);
+    clock.advance_without_tokio_time(600);
+    tokio::time::timeout(std::time::Duration::from_secs(10), gate.entered)
+        .await
+        .expect("released item listing reaches native I/O")
+        .unwrap();
+    let calls = runtime.client.all_calls();
+    let listing = calls.last().unwrap();
+    let target = second_id.as_uuid().to_string().try_into().unwrap();
+    let (members, next) = runtime
+        .fixture
+        .owner
+        .notification_listing_members(&listing.target, &listing.payload.push_id, None, 50)
+        .await
+        .unwrap();
+    assert!(next.is_none());
+    assert_eq!(
+        members
+            .iter()
+            .map(|record| record.push_id.clone())
+            .collect::<Vec<PushId>>(),
+        vec![target]
+    );
+    gate.release.send(()).unwrap();
+    mail.drive_due_for_test().await.unwrap();
+    assert_eq!(
+        runtime.client.calls(second_id),
+        1,
+        "the listing replaces an individual native retry"
     );
     assert!(matches!(
         runtime.fixture.local_outcome(first_id).await,
@@ -242,6 +287,7 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
         0
     );
     drop(engine);
+    drop(mail);
     runtime.close().await;
 }
 

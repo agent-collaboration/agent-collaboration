@@ -87,6 +87,89 @@ async fn held(store: &InteractionStore, recipient: &SessionRef) -> PushId {
 }
 
 #[tokio::test]
+async fn startup_attempt_snapshot_never_treats_a_new_attempt_as_interrupted() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = InteractionStore::open(directory.path().join("interaction.sqlite"))
+        .await
+        .unwrap();
+    let prior_target = target("prior-recipient");
+    let fresh_target = target("fresh-recipient");
+    let prior = store
+        .insert_push_record(expiry(&prior_target))
+        .await
+        .unwrap();
+    store.mark_push_attempted(&prior.push_id).await.unwrap();
+    store.close().await.unwrap();
+    let store = InteractionStore::open(directory.path().join("interaction.sqlite"))
+        .await
+        .unwrap();
+    let snapshot = store
+        .notification_startup_attempt_ids()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    let fresh = store
+        .insert_push_record(expiry(&fresh_target))
+        .await
+        .unwrap();
+    store.mark_push_attempted(&fresh.push_id).await.unwrap();
+    store
+        .recover_interrupted_notification_listings(&fresh_target, &snapshot, at(1_000))
+        .await
+        .unwrap();
+    assert!(
+        store
+            .notification_window(&fresh_target)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        store
+            .get_push_record(&fresh.push_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_state,
+        PushDeliveryState::Attempted
+    );
+    store
+        .recover_interrupted_notification_listings(&prior_target, &snapshot, at(1_000))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_push_record(&prior.push_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_state,
+        PushDeliveryState::OutcomeUnknown
+    );
+    let window = store
+        .notification_window(&prior_target)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(window.last_delivered_at, at(1_000));
+    store
+        .recover_interrupted_notification_listings(&prior_target, &snapshot, at(2_000))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .notification_window(&prior_target)
+            .await
+            .unwrap()
+            .unwrap(),
+        window,
+        "terminal-unknown backfill keeps its first settlement"
+    );
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_known_unsent_carrier_expiry_is_discovered_and_recovered_after_owner_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("interaction.sqlite");
@@ -240,7 +323,11 @@ async fn an_interrupted_listing_is_unknown_and_consumes_a_window_without_a_new_a
     store.close().await.unwrap();
     let store = InteractionStore::open(&path).await.unwrap();
     store
-        .recover_interrupted_notification_listings(at(700_000))
+        .recover_interrupted_notification_listings(
+            &recipient,
+            &std::collections::HashSet::new(),
+            at(700_000),
+        )
         .await
         .unwrap();
     let shown = store

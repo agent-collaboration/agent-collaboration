@@ -81,6 +81,15 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
     let mut received = std::collections::BTreeSet::new();
     let mut timed_out = false;
     for completed in 1..=2 {
+        if completed == 2 {
+            fixture.held_native_pushes(1).await;
+            runtime.owner_barrier(&fixture.reader).await;
+            assert!(
+                runtime.requests.lock().await.try_recv().is_err(),
+                "resolved backlog remains held inside the recipient cooldown"
+            );
+            fixture.clock.advance_without_tokio_time(600);
+        }
         let request = tokio::time::timeout(Duration::from_secs(6), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })
@@ -89,7 +98,12 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
             timed_out = true;
             break;
         };
-        received.insert(request.payload.push_id.as_str().to_owned());
+        for record in fixture.notification_records_for_request(&request).await {
+            assert!(
+                received.insert(record.push_id.as_str().to_owned()),
+                "resolved range was covered twice"
+            );
+        }
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;
     }

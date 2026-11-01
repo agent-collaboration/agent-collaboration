@@ -42,10 +42,18 @@ impl MailDeliveryRuntime {
     pub(crate) async fn reserve_notification_listing(
         &self,
         listing: &PushRecord,
-    ) -> Result<(), StoreError> {
+    ) -> Result<Option<PushRecord>, StoreError> {
         let id = listing.push_id.clone();
         let config = self.config;
-        let now = SyncTime::from_unix_millis(self.clock.now().timestamp_millis());
+        let reserved_at = self.clock.now();
+        let now = SyncTime::from_unix_millis(reserved_at.timestamp_millis());
+        let listing = listing.clone();
+        let machine = self
+            .service
+            .as_str()
+            .to_owned()
+            .try_into()
+            .map_err(StoreError::backend)?;
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
@@ -53,8 +61,14 @@ impl MailDeliveryRuntime {
                         interaction_storage::prepare_notification_listing_in_scope(scope, &id)
                             .await
                             .map_err(StoreError::backend)?;
+                    let mut retained = Vec::new();
                     for member in members {
                         let Some(reference) = member.reference else {
+                            if member.record.delivery_state
+                                == collaboration_protocol::PushDeliveryState::Held
+                            {
+                                retained.push(member.record);
+                            }
                             continue;
                         };
                         let admitted = Inbox::<_, RouterDeliveryTypes>::new(
@@ -64,18 +78,16 @@ impl MailDeliveryRuntime {
                         )
                         .release_held::<LocalMailTask>(reference.item, now)
                         .await
-                        .map_err(StoreError::backend)?
-                        .ok_or_else(|| {
-                            StoreError::backend("notification member is no longer held")
-                        })?;
+                        .map_err(StoreError::backend)?;
+                        let Some(admitted) = admitted else {
+                            continue;
+                        };
                         let operation = scope
                             .operation(admitted.id())
                             .await?
                             .ok_or(StoreError::MissingOperation { id: admitted.id() })?;
                         let OperationExecution::Running { input, .. } = operation.execution else {
-                            return Err(StoreError::backend(
-                                "notification reservation is already terminal",
-                            ));
+                            continue;
                         };
                         let attempt: DeliveryAttempt =
                             serde_json::from_slice(&input).map_err(StoreError::backend)?;
@@ -95,15 +107,42 @@ impl MailDeliveryRuntime {
                         {
                             DeliveryCheck::Deliver {
                                 reference: reserved,
-                            } if reserved == reference => {}
-                            _ => {
+                            } if reserved == reference => retained.push(member.record),
+                            DeliveryCheck::Deliver { .. } => {
                                 return Err(StoreError::backend(
-                                    "notification member is not eligible for native delivery",
+                                    "notification reservation reference differs",
                                 ));
                             }
+                            _ => {}
                         }
                     }
-                    Ok(())
+                    let draft = if retained.is_empty() {
+                        None
+                    } else {
+                        Some(
+                            crate::notification_listing_content::draft_for_members(
+                                machine,
+                                &listing.target,
+                                id.clone(),
+                                &retained,
+                                listing.created_at,
+                            )
+                            .map_err(StoreError::backend)?,
+                        )
+                    };
+                    let retained_ids = retained
+                        .iter()
+                        .map(|record| record.push_id.clone())
+                        .collect::<Vec<_>>();
+                    interaction_storage::refreeze_notification_listing_in_scope(
+                        scope,
+                        &id,
+                        draft,
+                        &retained_ids,
+                        reserved_at,
+                    )
+                    .await
+                    .map_err(StoreError::backend)
                 })
             })
             .await

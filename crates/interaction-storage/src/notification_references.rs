@@ -48,7 +48,7 @@ pub async fn record_notification_reference_in_scope<THost: Host>(
     let Some(record) = push_records::read_push_with_connection(scope.executor(), &id).await? else {
         return Err(StorageError::PushNotFound);
     };
-    if !crate::notification_listings::is_notification_kind(record.kind) {
+    if !crate::push_records::notification_listings::is_notification_kind(record.kind) {
         return Err(StorageError::InvalidRecord);
     }
     if let Some(existing) = notification_reference(scope.executor(), &id).await? {
@@ -65,7 +65,7 @@ pub async fn notification_listing_for_member_in_scope<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     id: &PushId,
 ) -> Result<Option<PushRecord>, StorageError> {
-    crate::notification_listings::listing_for_member(scope.executor(), id).await
+    crate::push_records::notification_listings::listing_for_member(scope.executor(), id).await
 }
 /// A known-unsent listing keeps SDK membership until that item's real callback commits.
 pub async fn release_unsent_notification_member_in_scope<THost: Host>(
@@ -73,7 +73,7 @@ pub async fn release_unsent_notification_member_in_scope<THost: Host>(
     id: &PushId,
 ) -> Result<(), StorageError> {
     if let Some(listing) =
-        crate::notification_listings::listing_for_member(scope.executor(), id).await?
+        crate::push_records::notification_listings::listing_for_member(scope.executor(), id).await?
         && listing.delivery_state == collaboration_protocol::PushDeliveryState::Rejected
     {
         sqlx_turso::query!("UPDATE router_pushes SET notification_listing_push_id=NULL WHERE push_id=? AND notification_listing_push_id=?",id.as_str(),listing.push_id.as_str()).execute(scope.executor()).await?;
@@ -104,8 +104,7 @@ pub async fn prepare_notification_listing_in_scope<THost: Host>(
             .await?
             .ok_or(StorageError::PushNotFound)?;
         if record.target != listing.target
-            || !crate::notification_listings::is_notification_kind(record.kind)
-            || record.delivery_state != collaboration_protocol::PushDeliveryState::Held
+            || !crate::push_records::notification_listings::is_notification_kind(record.kind)
         {
             return Err(StorageError::PushStateConflict);
         }
@@ -114,10 +113,6 @@ pub async fn prepare_notification_listing_in_scope<THost: Host>(
         // the listing performs native I/O, so a known-unsent listing can unlink
         // them without inventing an attempt for each original notification.
         members.push(NotificationListingMember { record, reference });
-    }
-    let changed=sqlx_turso::query!("UPDATE router_pushes SET delivery_state='attempted',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state='pending' AND kind='notification-listing'",id.as_str()).execute(scope.executor()).await?;
-    if changed.rows_affected() != 1 {
-        return Err(StorageError::PushStateConflict);
     }
     Ok(members)
 }

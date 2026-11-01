@@ -314,3 +314,6 @@ mod startup_failure_tests;
 #[cfg(debug_assertions)]
 #[path = "collaboration_runtime/debug_automation_control.rs"]
 mod debug_automation_control;
+#[cfg(debug_assertions)]
+#[path = "collaboration_runtime/debug_notification_control.rs"]
+mod debug_notification_control;
