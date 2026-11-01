@@ -107,3 +107,6 @@ fn board_endpoint(
             .map_err(|_| crate::SessionSetupError::InvalidParameters)?,
     })
 }
+
+#[cfg(test)]
+mod admission_gate_tests;
