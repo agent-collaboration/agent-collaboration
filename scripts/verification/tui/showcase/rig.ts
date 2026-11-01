@@ -148,8 +148,11 @@ export class ShowcaseRig {
 				await rig.resize(options.columns, options.rows);
 			return rig;
 		} catch (error) {
-			await driver?.stop();
-			notifications.close();
+			try {
+				await driver?.stop();
+			} finally {
+				notifications.close();
+			}
 			throw error;
 		}
 	}
@@ -641,8 +644,11 @@ export class ShowcaseRig {
 		this.completed = true;
 	}
 	public async stop(): Promise<void> {
-		await this.driver.stop();
-		this.notifications.close();
+		try {
+			await this.driver.stop();
+		} finally {
+			this.notifications.close();
+		}
 		writeFileSync(
 			join(this.directory, 'observer-receipt.json'),
 			JSON.stringify(

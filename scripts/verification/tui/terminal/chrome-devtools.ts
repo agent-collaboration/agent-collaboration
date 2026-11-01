@@ -28,6 +28,7 @@ export class ChromeDevtools {
 	private failure: Error | null = null;
 	private nextId = 0;
 	private readonly stopped: Promise<number | null>;
+	private readonly pipesClosed: Promise<void>;
 	constructor(binary: string, evidence: string) {
 		this.profile = mkdtempSync(join(evidence, 'chrome-profile-'));
 		this.input = new PassThrough();
@@ -43,8 +44,10 @@ export class ChromeDevtools {
 				`--user-data-dir=${this.profile}`,
 				'about:blank',
 			],
-			{ stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] },
+			// A private process group keeps capture helpers inside this owner's shutdown boundary.
+			{ detached: true, stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] },
 		);
+		this.pipesClosed = new Promise((resolve) => this.child.once('close', () => resolve()));
 		const pipeIn = this.child.stdio[3];
 		const pipeOut = this.child.stdio[4];
 		if (
@@ -148,6 +151,17 @@ export class ChromeDevtools {
 		} catch {
 			if (this.child.exitCode === null) this.child.kill('SIGTERM');
 		}
-		return this.stopped;
+		const code = await this.stopped;
+		// Browser.exit precedes close when a helper still owns inherited descriptors.
+		// The group belongs only to the detached browser we spawned, including its helpers.
+		if (this.child.pid !== undefined) {
+			try {
+				process.kill(-this.child.pid, 'SIGKILL');
+			} catch (error) {
+				if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
+			}
+		}
+		await this.pipesClosed;
+		return code;
 	}
 }
