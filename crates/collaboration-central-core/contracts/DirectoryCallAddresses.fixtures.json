@@ -1,0 +1,3 @@
+[
+{"approvalActivateAddress":"https://central-a.example.invalid/approval/activate","approvalAuthorizeAddress":"https://central-a.example.invalid/approval/authorize","approvalCancelAddress":"https://central-a.example.invalid/approval/cancel","initializationAddress":"https://central-a.example.invalid/initialize"}
+]

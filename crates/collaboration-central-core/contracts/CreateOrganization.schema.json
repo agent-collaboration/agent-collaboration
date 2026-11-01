@@ -1,25 +1,130 @@
 {
   "$defs": {
+    "CentralAddresses": {
+      "additionalProperties": false,
+      "properties": {
+        "adminAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "admissionAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "machineAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "machineTokenAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "receiver": {
+          "$ref": "#/$defs/RecordId"
+        },
+        "relay": {
+          "$ref": "#/$defs/RecordId"
+        },
+        "sessionEndpoint": {
+          "$ref": "#/$defs/HttpsUrl"
+        },
+        "standingAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        }
+      },
+      "required": [
+        "sessionEndpoint",
+        "machineAddress",
+        "adminAddress",
+        "admissionAddress",
+        "standingAddress",
+        "machineTokenAddress",
+        "receiver",
+        "relay"
+      ],
+      "type": "object"
+    },
+    "CentralRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "addresses": {
+          "$ref": "#/$defs/CentralAddresses"
+        },
+        "directoryCalls": {
+          "$ref": "#/$defs/DirectoryCallAddresses"
+        }
+      },
+      "required": [
+        "addresses",
+        "directoryCalls"
+      ],
+      "type": "object"
+    },
+    "DirectoryCallAddresses": {
+      "additionalProperties": false,
+      "properties": {
+        "approvalActivateAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "approvalAuthorizeAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "approvalCancelAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "initializationAddress": {
+          "$ref": "#/$defs/ResourceUri"
+        }
+      },
+      "required": [
+        "approvalAuthorizeAddress",
+        "approvalActivateAddress",
+        "approvalCancelAddress",
+        "initializationAddress"
+      ],
+      "type": "object"
+    },
+    "HttpsUrl": {
+      "pattern": "^(?:https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\\[::1\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::0*(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-Fa-f]{2})*)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 2048
+    },
     "OrganizationId": {
       "maxLength": 36,
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
+    },
+    "RecordId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ResourceUri": {
+      "pattern": "^(?:https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\\[::1\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::0*(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-Fa-f]{2})*)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 2048
+    },
+    "VerifiedEmail": {
+      "pattern": "(?=[\\x00-\\x7F]*$(?![\\s\\S]))(?:^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$)$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 254
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "central": {
+      "$ref": "#/$defs/CentralRecord"
+    },
     "organizationId": {
       "$ref": "#/$defs/OrganizationId"
     },
     "ownerVerifiedEmail": {
-      "type": "string"
+      "$ref": "#/$defs/VerifiedEmail"
     }
   },
   "required": [
     "organizationId",
-    "ownerVerifiedEmail"
+    "ownerVerifiedEmail",
+    "central"
   ],
   "title": "CreateOrganization",
   "type": "object"

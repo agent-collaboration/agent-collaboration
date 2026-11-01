@@ -1,0 +1,8 @@
+[
+null,
+{"approvalActivateAddress":"https://central-a.example.invalid/approval/activate","approvalAuthorizeAddress":"https://central-a.example.invalid/approval/authorize","approvalCancelAddress":"https://central-a.example.invalid/approval/cancel","initializationAddress":"https://central-a.example.invalid/initialize","unexpectedField":true},
+{"approvalActivateAddress":"https://central-a.example.invalid/approval/activate","approvalAuthorizeAddress":"https://central-a.example.invalid/approval/authorize","approvalCancelAddress":"https://central-a.example.invalid/approval/cancel","initialization_address":"https://central-a.example.invalid/initialize"},
+{"approvalActivateAddress":"https://central-a.example.invalid/approval/activate","approvalAuthorizeAddress":"https://central-a.example.invalid/approval/authorize","approval_cancel_address":"https://central-a.example.invalid/approval/cancel","initializationAddress":"https://central-a.example.invalid/initialize"},
+{"approvalActivateAddress":"https://central-a.example.invalid/approval/activate","approvalCancelAddress":"https://central-a.example.invalid/approval/cancel","approval_authorize_address":"https://central-a.example.invalid/approval/authorize","initializationAddress":"https://central-a.example.invalid/initialize"},
+{"approvalAuthorizeAddress":"https://central-a.example.invalid/approval/authorize","approvalCancelAddress":"https://central-a.example.invalid/approval/cancel","approval_activate_address":"https://central-a.example.invalid/approval/activate","initializationAddress":"https://central-a.example.invalid/initialize"}
+]
