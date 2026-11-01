@@ -16,6 +16,66 @@ const browserReceiptSchema = z.strictObject({
 	helper: z.number().int(),
 });
 
+test('original capture closes its actual HTTP listener even when browser teardown is denied', async () => {
+	const root = temporaryRoot();
+	const browser = controlledExecutable(
+		root,
+		'browser-with-close-denial',
+		`
+const fs=require('node:fs');const path=require('node:path');
+const profile=process.argv.find(value=>value.startsWith('--user-data-dir=')).slice('--user-data-dir='.length);
+fs.writeFileSync(path.join(path.dirname(profile),'browser-ready.json'),JSON.stringify({browser:process.pid}));
+const input=fs.createReadStream(null,{fd:3});let buffer='';
+input.on('data',bytes=>{buffer+=bytes.toString();while(buffer.includes('\\0')){
+ const end=buffer.indexOf('\\0');const command=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
+ fs.writeSync(4,JSON.stringify({id:command.id,result:{}})+'\\0');
+ if(command.method==='Browser.close')process.exit(0);
+}});
+`,
+	);
+	const fixture = fileURLToPath(
+		new URL('../fixtures/chrome-lifecycle-fixture.ts', import.meta.url),
+	);
+	const runner = spawn(process.execPath, [fixture, browser, root, 'close-error'], {
+		stdio: ['ignore', 'ignore', 'pipe'],
+	});
+	let stderr = '';
+	runner.stderr.on('data', (bytes: Buffer) => {
+		stderr += bytes.toString();
+	});
+	const completion = new Promise<{ readonly code: number | null; readonly signal: string | null }>(
+		(resolve, reject) => {
+			runner.once('error', reject);
+			runner.once('close', (code, signal) => resolve({ code, signal }));
+		},
+	);
+	const identity = runner.pid === undefined ? null : lookupProcessIdentity(runner.pid);
+	let guard: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const result = await Promise.race([
+			completion,
+			new Promise<never>((_resolve, reject) => {
+				guard = setTimeout(
+					() => reject(new Error('asset listener held runner after close denial: ' + stderr)),
+					5000,
+				);
+			}),
+		]);
+		expect(result).toEqual({ code: 1, signal: null });
+		expect(stderr).toContain('forced group kill EPERM');
+		const receipt = z
+			.strictObject({ browser: z.number().int() })
+			.parse(JSON.parse(readFileSync(join(root, 'browser-ready.json'), 'utf8')));
+		expect(lookupProcessIdentity(receipt.browser)).toBeNull();
+	} finally {
+		clearTimeout(guard);
+		if (identity !== null && sameIdentity(lookupProcessIdentity(identity.pid), identity))
+			process.kill(identity.pid, 'SIGKILL');
+		await completion;
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test.each(['cooperative', 'ignores-term'])(
 	'forced final error exits naturally with zero browser/helper processes (%s)',
 	async (helperMode) => {

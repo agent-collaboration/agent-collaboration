@@ -197,10 +197,13 @@ export async function renderOriginal(options: OriginalCapture): Promise<unknown>
 		);
 		return receipt;
 	} finally {
-		await chrome.close();
-		await new Promise<void>((resolve, reject) =>
-			server.close((error) => (error === undefined ? resolve() : reject(error))),
-		);
+		try {
+			await chrome.close();
+		} finally {
+			await new Promise<void>((resolve, reject) =>
+				server.close((error) => (error === undefined ? resolve() : reject(error))),
+			);
+		}
 	}
 }
 if (isMain(import.meta.url)) {
