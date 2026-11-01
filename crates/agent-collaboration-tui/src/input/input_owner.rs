@@ -377,7 +377,7 @@ fn route_mouse(
         return RouteDecision::ignored(surface);
     };
     if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-        handle.focus(surface, &target.id);
+        handle.focus_from_pointer(surface, &target.id);
     }
     if deliver(
         handle,

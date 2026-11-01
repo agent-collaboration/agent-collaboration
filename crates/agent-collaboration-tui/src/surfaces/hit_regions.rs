@@ -5,6 +5,7 @@ use crate::surfaces::{
     hit_regions_model::{SurfaceRegion, TargetRegion},
     surface_handle::SurfaceContext,
     surface_stack::SurfaceId,
+    target_geometry::{TargetGeometryObserver, use_geometry_observer},
 };
 use iocraft::{ComponentDrawer, Hook, prelude::*};
 
@@ -54,6 +55,15 @@ pub(crate) fn use_target_geometry(
     target: TargetId,
     kind: HitRegionKind,
 ) {
+    let observer = hooks
+        .try_use_context::<TargetGeometryObserver>()
+        .map(|observer| observer.clone());
+    use_geometry_observer(
+        hooks,
+        observer,
+        Some(target.clone()),
+        context.reveals_focus(&target),
+    );
     let hook = hooks.use_hook(|| TargetGeometryHook {
         regions: context.stack.hit_regions(),
         surface: context.surface,

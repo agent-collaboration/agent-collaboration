@@ -300,7 +300,7 @@ fn DialogBody(props: &DialogBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
     }
     element!(DialogFrame(title:"New session".to_owned(),scroll:props.scroll.clone(),scroll_target:target("dialog-scroll"),help_action,context:Some(agent_collaboration_tui::dialog::PinnedContext::new("fixture-42")),action_hints:vec![element!(DialogKeyHints(actions:vec![action("start"),action("close")])).into_any()]) {
         DialogSections {
-            DialogSection(heading:"Connection".to_owned()) {FormFields {
+            DialogSection(heading:"Connection".to_owned()) {FormFields(stacked:context.stack.viewport().0<38) {
                 FormField(label:"Client".to_owned(),has_focus:focus.current()==Some(&target("client"))) {ComboBox(id:target("client"),value:data.client)}
                 FormField(label:"Directory".to_owned(),has_focus:focus.current()==Some(&target("directory"))) {TextField(id:target("directory"),value:data.directory)}
             }}

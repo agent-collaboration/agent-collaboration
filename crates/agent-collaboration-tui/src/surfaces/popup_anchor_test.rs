@@ -12,6 +12,7 @@ use agent_collaboration_tui::{
         list::{OptionKey, SelectOption},
         menu_overlay,
     },
+    foundation::theme::TextRole,
     input::input_owner::InputOwner,
     surfaces::{
         focus_model::{FocusModel, TargetId},
@@ -92,6 +93,10 @@ struct AnchorSceneProps {
     height: u16,
     menu: bool,
     near_bottom: bool,
+    anchor_at_left: bool,
+    underlay_pattern: String,
+    underlay_offset: u16,
+    options: Option<Vec<SelectOption>>,
     handle: Arc<Mutex<Option<SurfaceStackHandle>>>,
     picks: Arc<Mutex<Vec<OptionKey>>>,
 }
@@ -99,14 +104,14 @@ struct AnchorSceneProps {
 fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     record_draw(&mut hooks, &props.journal);
     let value = hooks.use_state(|| {
-        ComboBoxState::new(
+        let options = props.options.clone().unwrap_or_else(|| {
             vec![
                 SelectOption::available(OptionKey::new("alpha").unwrap(), "First choice"),
                 SelectOption::available(OptionKey::new("beta").unwrap(), "Beta"),
-            ],
-            Some(OptionKey::new("beta").unwrap()),
-        )
-        .unwrap()
+            ]
+        });
+        let selected = options.last().map(|option| option.key.clone());
+        ComboBoxState::new(options, selected).unwrap()
     });
     let stack = use_surface_stack(&mut hooks, |stack| {
         let picks = props.picks.clone();
@@ -167,6 +172,16 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     *props.handle.lock().unwrap() = Some(stack);
     let (width, height) = stack.viewport();
     let journal = props.journal.clone();
+    let theme = SurfaceContext {
+        stack,
+        surface: SurfaceId::Screen,
+    }
+    .theme();
+    let pattern_width =
+        unicode_width::UnicodeWidthStr::width(props.underlay_pattern.as_str()).max(1);
+    let underlay = props
+        .underlay_pattern
+        .repeat(usize::from(width) / pattern_width);
     let top = if props.near_bottom {
         height.saturating_sub(2)
     } else {
@@ -174,8 +189,11 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     };
     element!(InputOwner(stack,width:props.width,height:props.height,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(Vec::new()))) {
         OverlayHost {View(width:100pct,height:100pct,position:Position::Relative) {
+            #((!props.underlay_pattern.is_empty()).then(||element!(View(position:Position::Absolute,left:props.underlay_offset,top:0,width:100pct,height:100pct,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
+                #((0..height).map(|_|element!(View(height:1,flex_shrink:0.0_f32) {Text(content:underlay.clone(),wrap:TextWrap::NoWrap,color:theme.foreground(TextRole::Text))})))
+            })))
             Text(content:"Credit usage")
-            View(position:Position::Absolute,left:width.saturating_sub(12),top,width:12) {
+            View(position:Position::Absolute,left:if props.anchor_at_left {0}else{width.saturating_sub(12)},top,width:12) {
                 #(if props.menu {
                     element!(MenuButton(id:anchor_target(true),action:action("anchor-menu"))).into_any()
                 } else {
@@ -185,6 +203,9 @@ fn AnchorScene(props: &AnchorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         }}
     })
 }
+
+#[path = "popup_gutter_test.rs"]
+mod gutter_test;
 async fn assert_placement(width: u16, height: u16, menu: bool, near_bottom: bool) {
     let (mut driver, config, journal) = EventDriver::new();
     let handle = Arc::new(Mutex::new(None));
@@ -398,4 +419,149 @@ async fn a_pointer_pick_after_resize_uses_the_new_popup_cells_once() {
     })
     .await
     .unwrap();
+}
+
+fn assert_content_height(
+    frame: &FrameGrid,
+    stack: SurfaceStackHandle,
+    rows: u16,
+    last_content: &str,
+) {
+    let popup = popup_bounds(frame);
+    let map = stack.hit_regions().published().unwrap();
+    let surface = map
+        .surfaces
+        .iter()
+        .find(|region| region.surface == stack.snapshot().top_id())
+        .unwrap();
+    assert_eq!(
+        bounds(&surface.cells),
+        popup,
+        "surface hit cells match the painted border"
+    );
+    assert_eq!(
+        popup.bottom - popup.top + 1,
+        rows,
+        "dropdown ends at its content without padding\n{}",
+        frame.round_frame_text()
+    );
+    assert!(
+        frame
+            .row_text(usize::from(popup.bottom - 1))
+            .contains(last_content),
+        "the last content row touches the bottom border\n{}",
+        frame.round_frame_text()
+    );
+}
+
+#[tokio::test]
+async fn fitting_dropdown_height_tracks_options_reasons_query_and_no_match_at_standard_grids() {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        for (width, height) in crate::test_support::grids::STANDARD_GRIDS {
+            for near_bottom in [false, true] {
+                for (count, reason) in [(1, false), (3, false), (1, true)] {
+                    let options = (1..=count)
+                        .map(|index| {
+                            let mut option = SelectOption::available(
+                                OptionKey::new(format!("option-{index}")).unwrap(),
+                                format!("Option {index}"),
+                            );
+                            if reason {
+                                option.availability =
+                                    agent_collaboration_tui::actions::Availability::Unavailable {
+                                        reason: "Unavailable here".into(),
+                                    };
+                            }
+                            option
+                        })
+                        .collect();
+                    let handle = Arc::new(Mutex::new(None));
+                    let picks = Arc::new(Mutex::new(Vec::new()));
+                    let (mut driver, config, journal) = EventDriver::new();
+                    let mut ui = element!(AnchorScene(journal,width,height,near_bottom,options:Some(options),handle:handle.clone(),picks:picks.clone()));
+                    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+                    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                        driver.initial(&mut frames).await;
+                        let stack = handle.lock().unwrap().unwrap();
+                        driver
+                            .drive(&mut frames, mode, vec![(key(KeyCode::F(3)), true)], true)
+                            .await;
+                        let frame = driver.frames.last().unwrap();
+                        let popup = popup_bounds(frame);
+                        let anchor = published_anchor(stack, false);
+                        if near_bottom {
+                            assert_eq!(popup.bottom + 1, anchor.top);
+                        } else {
+                            assert_eq!(popup.top, anchor.bottom + 1);
+                        }
+                        assert_content_height(
+                            frame,
+                            stack,
+                            count + 3 + u16::from(reason),
+                            if reason {
+                                "Unavailable here"
+                            } else if count == 1 {
+                                "Option 1"
+                            } else {
+                                "Option 3"
+                            },
+                        );
+                        if count == 3 {
+                            driver
+                                .drive(
+                                    &mut frames,
+                                    mode,
+                                    vec![(key(KeyCode::Char('1')), true)],
+                                    true,
+                                )
+                                .await;
+                            assert_content_height(
+                                driver.frames.last().unwrap(),
+                                stack,
+                                4,
+                                "Option 1",
+                            );
+                            driver
+                                .drive(
+                                    &mut frames,
+                                    mode,
+                                    vec![(key(KeyCode::Char('x')), true)],
+                                    true,
+                                )
+                                .await;
+                            assert_content_height(
+                                driver.frames.last().unwrap(),
+                                stack,
+                                4,
+                                "No match",
+                            );
+                            driver
+                                .drive(
+                                    &mut frames,
+                                    mode,
+                                    vec![
+                                        (key(KeyCode::Backspace), true),
+                                        (key(KeyCode::Backspace), true),
+                                    ],
+                                    true,
+                                )
+                                .await;
+                            assert_content_height(
+                                driver.frames.last().unwrap(),
+                                stack,
+                                6,
+                                "Option 3",
+                            );
+                        }
+                        assert!(
+                            picks.lock().unwrap().is_empty(),
+                            "sizing and query changes do not select an option"
+                        );
+                    })
+                    .await
+                    .unwrap();
+                }
+            }
+        }
+    }
 }

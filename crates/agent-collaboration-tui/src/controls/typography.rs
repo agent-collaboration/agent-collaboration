@@ -103,6 +103,26 @@ pub fn UiColumnHeading(
     }
 }
 
+/// Shared non-interactive group labels for record lists and menu sections.
+#[derive(Props)]
+pub(crate) struct GroupHeadingProps {
+    pub name: String,
+    pub count: Option<usize>,
+    pub summary: Option<String>,
+}
+#[component]
+pub(crate) fn GroupHeading(
+    props: &GroupHeadingProps,
+    hooks: Hooks,
+) -> impl Into<AnyElement<'static>> {
+    let theme = typography_theme(hooks);
+    element!(View(width:100pct,flex_shrink:0.0_f32,column_gap:1,flex_wrap:FlexWrap::Wrap) {
+        Text(content:props.name.clone(),weight:Weight::Bold,color:theme.foreground_color(UiTextRole::Prominent.color()),wrap:TextWrap::Wrap)
+        #(props.count.map(|count|element!(Text(content:format!("({count})"),color:theme.foreground_color(UiTextRole::Secondary.color()),wrap:TextWrap::NoWrap))))
+        #(props.summary.as_ref().map(|summary|element!(Text(content:summary.clone(),color:theme.foreground_color(UiTextRole::Secondary.color()),wrap:TextWrap::Wrap))))
+    })
+}
+
 #[cfg(test)]
 #[path = "typography_coverage_test.rs"]
 mod coverage_test;

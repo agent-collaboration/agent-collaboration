@@ -11,9 +11,23 @@ use crate::{
     },
 };
 use iocraft::prelude::*;
+use std::sync::Arc;
+
+struct SurfaceStackSlot {
+    stack: SurfaceStack,
+    write_token: Arc<()>,
+}
+impl SurfaceStackSlot {
+    fn new(stack: SurfaceStack) -> Self {
+        Self {
+            stack,
+            write_token: Arc::new(()),
+        }
+    }
+}
 
 pub struct SurfaceStackHandle {
-    stack: State<SurfaceStack>,
+    slot: State<SurfaceStackSlot>,
     regions: HitRegions,
     viewport: State<(u16, u16)>,
     hovered: State<Option<(SurfaceId, TargetId)>>,
@@ -26,7 +40,7 @@ impl Clone for SurfaceStackHandle {
 }
 impl SurfaceStackHandle {
     pub fn snapshot(self) -> SurfaceStack {
-        self.stack.read().clone()
+        self.slot.read().stack.clone()
     }
     pub fn hit_regions(self) -> HitRegions {
         self.regions
@@ -47,13 +61,26 @@ impl SurfaceStackHandle {
         }
     }
     pub(crate) fn update<TResult>(
-        mut self,
+        self,
         update: impl FnOnce(&mut SurfaceStack) -> TResult,
     ) -> TResult {
         let mut next = self.snapshot();
         let result = update(&mut next);
-        self.stack.set(next);
+        self.publish_stack(next, None);
         result
+    }
+    /// The only interaction-model publication point. A retained token also
+    /// protects a conditional commit from intervening writes during preparation.
+    fn publish_stack(mut self, next_stack: SurfaceStack, expected_token: Option<&Arc<()>>) -> bool {
+        let mut current_slot = self.slot.write();
+        if expected_token.is_some_and(|token| !Arc::ptr_eq(token, &current_slot.write_token)) {
+            return false;
+        }
+        let previous_slot =
+            std::mem::replace(&mut *current_slot, SurfaceStackSlot::new(next_stack));
+        drop(current_slot);
+        drop(previous_slot);
+        true
     }
     pub fn open_overlay(self, spec: OverlaySpec) -> Result<OverlayId, OverlayIdentityExhausted> {
         self.update(|stack| stack.open_overlay(spec))
@@ -65,27 +92,48 @@ impl SurfaceStackHandle {
     /// While Help replaces a dialog, the update applies to its suspended base model.
     /// Current and displaced focus intent survive replacement; only the active
     /// surface reconciles eligibility while covered models keep their intent.
+    /// The updater runs once with no stack borrow held. Any interaction-stack
+    /// publication during it, including a no-op reentrant write, takes precedence:
+    /// this returns false and leaves that live state in place. A closed target
+    /// also returns false, without invoking the updater.
     pub fn update_overlay_if_open(
-        mut self,
+        self,
         overlay: OverlayId,
         update: impl FnOnce(&mut SurfaceModel),
     ) -> bool {
-        let mut next = self.snapshot();
+        let (mut candidate, observed_token) = {
+            let current_slot = self.slot.read();
+            let Some(model) = current_slot.stack.overlay_base_model(overlay) else {
+                return false;
+            };
+            (model.clone(), Arc::clone(&current_slot.write_token))
+        };
+        let previous_focus = candidate.focus.clone();
+        update(&mut candidate);
+        let mut next = {
+            let current_slot = self.slot.read();
+            if !Arc::ptr_eq(&observed_token, &current_slot.write_token) {
+                return false;
+            }
+            current_slot.stack.clone()
+        };
+        candidate.focus.inherit_focus_intent(&previous_focus);
         let Some(model) = next.overlay_base_model_mut(overlay) else {
             return false;
         };
-        let previous_focus = model.focus.clone();
-        update(model);
-        model.focus.inherit_focus_intent(&previous_focus);
+        *model = candidate;
         next.top_mut().reconcile_focus();
-        self.regions.invalidate();
-        self.stack.set(next);
-        true
+        if self.publish_stack(next, Some(&observed_token)) {
+            self.regions.invalidate();
+            true
+        } else {
+            false
+        }
     }
-    pub(crate) fn reconcile_active_focus(mut self) {
+    pub(crate) fn reconcile_active_focus(self) {
         let mut next = self.snapshot();
         if next.top_mut().reconcile_focus() {
-            self.stack.set(next);
+            self.publish_stack(next, None);
         }
     }
     pub fn focus(self, surface: SurfaceId, target: &TargetId) -> bool {
@@ -93,6 +141,13 @@ impl SurfaceStackHandle {
             stack
                 .surface_mut(surface)
                 .is_some_and(|surface| surface.focus.focus(target))
+        })
+    }
+    pub(crate) fn focus_from_pointer(self, surface: SurfaceId, target: &TargetId) -> bool {
+        self.update(|stack| {
+            stack
+                .surface_mut(surface)
+                .is_some_and(|surface| surface.focus.focus_from_pointer(target))
         })
     }
     pub fn replace_targets_if_open(
@@ -114,13 +169,13 @@ pub fn use_surface_stack(
     hooks: &mut Hooks<'_, '_>,
     build: impl FnOnce(SurfaceStackHandle) -> SurfaceModel,
 ) -> SurfaceStackHandle {
-    let stack = hooks.use_state(SurfaceStack::empty);
+    let slot = hooks.use_state(|| SurfaceStackSlot::new(SurfaceStack::empty()));
     let regions = HitRegions::new(hooks);
     let viewport = hooks.use_state(|| (0, 0));
     let hovered = hooks.use_state(|| None);
     let mut initialized = hooks.use_ref(|| false);
     let handle = SurfaceStackHandle {
-        stack,
+        slot,
         regions,
         viewport,
         hovered,
@@ -163,6 +218,9 @@ impl SurfaceContext {
         let stack = self.stack.snapshot();
         stack.top_id() == self.surface && stack.top().focus.current() == Some(target)
     }
+    pub(crate) fn reveals_focus(self, target: &TargetId) -> bool {
+        self.is_focused(target) && self.stack.snapshot().top().focus.reveals_focus()
+    }
     pub fn is_hovered(self, target: &TargetId) -> bool {
         self.stack
             .hovered()
@@ -170,3 +228,7 @@ impl SurfaceContext {
             .is_some_and(|(surface, id)| *surface == self.surface && id == target)
     }
 }
+
+#[cfg(test)]
+#[path = "surface_handle_reentry_test.rs"]
+mod reentry_test;

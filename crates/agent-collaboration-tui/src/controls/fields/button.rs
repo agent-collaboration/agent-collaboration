@@ -8,8 +8,20 @@ use crate::{
         surface_handle::SurfaceContext,
     },
 };
-use iocraft::prelude::*;
+use iocraft::{ComponentDrawer, Hook, prelude::*};
 use unicode_width::UnicodeWidthStr;
+struct ButtonWidth {
+    measured: State<(usize, u16)>,
+    requested: usize,
+}
+impl Hook for ButtonWidth {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        let measurement = (self.requested, drawer.size().width);
+        if self.measured.get() != measurement {
+            self.measured.set(measurement);
+        }
+    }
+}
 /// Width of a registry-driven button, including its native padding and gaps.
 pub(crate) fn action_button_width(action: &ActionPresentation, show_key: bool) -> usize {
     let label = action
@@ -67,6 +79,7 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
     let Some(action) = presentation(context, &props.action) else {
         return element!(View).into_any();
     };
+    let width = hooks.use_state(|| (0usize, 0u16));
     let theme = context.theme();
     let available = action.availability.is_available();
     let focused = context.is_focused(&props.id);
@@ -77,6 +90,25 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         .snapshot()
         .surface(context.surface)
         .is_some_and(|surface| surface.primary_action.as_ref() == Some(&props.action));
+    let natural_width = action_button_width(&action, props.show_key.unwrap_or(true))
+        + props.glyph.map_or(0, |glyph| glyph.text().width() + 1)
+        + usize::from(primary) * 2;
+    // Reasons yield to siblings; the intact label row keeps its marks, key and padding.
+    let minimum_label_width = natural_width.saturating_sub(match &action.availability {
+        Availability::Available => 0,
+        Availability::Unavailable { reason } => reason.width() + 1,
+    });
+    let measurement = hooks.use_hook(|| ButtonWidth {
+        measured: width,
+        requested: natural_width,
+    });
+    measurement.measured = width;
+    measurement.requested = natural_width;
+    let (measured_request, available_width) = width.get();
+    let stacked = !available
+        && measured_request == natural_width
+        && available_width > 0
+        && natural_width > usize::from(available_width);
     let role = if !available {
         TextRole::Disabled
     } else if focused || checked {
@@ -90,13 +122,15 @@ pub fn Button(props: &ButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'st
         Availability::Available => None,
         Availability::Unavailable { reason } => Some(reason),
     };
-    element! {View(padding_left:1,padding_right:1,flex_shrink:0.0_f32,column_gap:1,background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+    element! {View(padding_left:1,padding_right:1,width:if stacked {Size::Percent(100.0)}else{Size::Auto},max_width:100pct,min_width:if available {0}else{u32::try_from(minimum_label_width).unwrap_or(u32::MAX)},flex_shrink:if available {0.0_f32}else{1.0_f32},column_gap:1,flex_direction:if stacked {FlexDirection::Column}else{FlexDirection::Row},background_color:theme.background(if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
+        View(flex_shrink:0.0_f32,column_gap:1) {
         #((action.checked==Some(true)).then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Accent)))))
         #(props.glyph.map(|glyph|element!(Text(content:glyph.text(),color:theme.foreground(role)))))
         #(primary.then(||element!(Text(content:UiGlyph::Current.text(),color:theme.foreground(TextRole::Primary)))))
         Text(content:action.toolbar_label.unwrap_or(action.title),color:theme.foreground(role),weight:if label_emphasized {Weight::Bold}else{Weight::Normal},decoration:if focused {TextDecoration::Underline}else{TextDecoration::None})
         #(action.keys.first().filter(|_|props.show_key.unwrap_or(true)).map(|key|element!(Text(content:key.to_string(),color:theme.foreground(TextRole::Muted)))))
-        #(reason.map(|content|element!(Text(content,color:theme.foreground(TextRole::Disabled)))))
+        }
+        #(reason.map(|content|if stacked {element!(super::wrapped_reason::WrappedReason(content,color:theme.foreground(TextRole::Disabled))).into_any()}else{element!(Text(content,color:theme.foreground(TextRole::Disabled))).into_any()}))
     }}.into_any()
 }
 #[component]
@@ -110,3 +144,6 @@ mod focus_style_test;
 #[cfg(test)]
 #[path = "button_key_hint_test.rs"]
 mod key_hint_test;
+#[cfg(test)]
+#[path = "button_reason_layout_test.rs"]
+mod reason_layout_test;

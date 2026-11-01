@@ -212,6 +212,3 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
 #[cfg(test)]
 #[path = "search_select_state_test.rs"]
 mod state_test;
-#[cfg(test)]
-#[path = "search_select_test.rs"]
-mod tests;

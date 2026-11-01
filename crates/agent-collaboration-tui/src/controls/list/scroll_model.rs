@@ -24,8 +24,15 @@ impl ScrollPosition {
 pub(super) struct ScrollRevealTarget {
     pub target_id: Option<TargetId>,
     pub logical_top: i32,
+    pub heading_top: Option<i32>,
     pub height: u16,
     pub viewport_height: u16,
+}
+#[derive(Default)]
+enum RevealIntent {
+    #[default]
+    FollowFocus,
+    UserScrolled(Option<TargetId>),
 }
 #[derive(Clone)]
 pub struct ScrollHandle {
@@ -33,6 +40,7 @@ pub struct ScrollHandle {
     last_reveal: Arc<Mutex<Option<ScrollRevealTarget>>>,
     measured_targets: Arc<Mutex<HashMap<TargetId, ScrollRevealTarget>>>,
     pending_reveal: Arc<Mutex<Option<TargetId>>>,
+    reveal_intent: Arc<Mutex<RevealIntent>>,
     stack: SurfaceStackHandle,
 }
 impl ScrollHandle {
@@ -42,6 +50,7 @@ impl ScrollHandle {
             last_reveal: Arc::new(Mutex::new(None)),
             measured_targets: Arc::new(Mutex::new(HashMap::new())),
             pending_reveal: Arc::new(Mutex::new(None)),
+            reveal_intent: Arc::new(Mutex::new(RevealIntent::FollowFocus)),
             stack,
         }
     }
@@ -51,7 +60,59 @@ impl ScrollHandle {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+    pub(crate) fn invalidate_target_geometry(&self) {
+        self.follow_focus();
+        self.measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+        *self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+    /// A keyed destination one drawn viewport away, counting intervening layout.
+    pub(crate) fn page_destination(
+        &self,
+        targets: &[TargetId],
+        current: usize,
+        forward: bool,
+    ) -> Option<usize> {
+        let height = self.position().viewport_height;
+        if height == 0 {
+            return None;
+        }
+        let measured = self
+            .measured_targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tops = targets
+            .iter()
+            .map(|id| {
+                measured
+                    .get(id)
+                    .filter(|target| target.height > 0)
+                    .map(|target| target.logical_top)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let start = *tops.get(current)?;
+        let last = tops.len().saturating_sub(1);
+        Some(if forward {
+            let end = start.saturating_add(i32::from(height));
+            tops.iter()
+                .rposition(|top| *top <= end)
+                .unwrap_or(current)
+                .max(current.saturating_add(1).min(last))
+        } else {
+            let end = start.saturating_sub(i32::from(height));
+            tops.iter()
+                .position(|top| *top >= end)
+                .unwrap_or(current)
+                .min(current.saturating_sub(1))
+        })
+    }
     pub fn reset(&self) {
+        self.follow_focus();
         *self
             .pending_reveal
             .lock()
@@ -106,6 +167,7 @@ impl ScrollHandle {
     }
     /// Reveal with drawn geometry, retaining unmeasured intent until that target appears.
     pub(crate) fn reveal_measured(&self, target_id: &TargetId) {
+        self.follow_focus();
         *self
             .pending_reveal
             .lock()
@@ -147,9 +209,45 @@ impl ScrollHandle {
             *previous = None;
         }
     }
+    pub(super) fn forget_target_reveal(&self, target: Option<&TargetId>) {
+        let mut previous = self
+            .last_reveal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if previous
+            .as_ref()
+            .is_some_and(|previous| previous.target_id.as_ref() == target)
+        {
+            *previous = None;
+            self.follow_focus();
+        }
+    }
+    fn follow_focus(&self) {
+        *self
+            .reveal_intent
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = RevealIntent::FollowFocus;
+    }
     pub(super) fn reveal(&self, target: ScrollRevealTarget) {
-        let logical_top = target.logical_top;
-        let height = target.height;
+        {
+            let mut intent = self
+                .reveal_intent
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if matches!(&*intent,RevealIntent::UserScrolled(id) if *id==target.target_id) {
+                return;
+            }
+            *intent = RevealIntent::FollowFocus;
+        }
+        let target_bottom = target.logical_top + i32::from(target.height);
+        let logical_top = target
+            .heading_top
+            .filter(|top| {
+                *top <= target.logical_top
+                    && target_bottom - *top <= i32::from(target.viewport_height)
+            })
+            .unwrap_or(target.logical_top);
+        let height = target_bottom - logical_top;
         {
             let mut previous = self
                 .last_reveal
@@ -163,11 +261,10 @@ impl ScrollHandle {
         self.update(|position| {
             let top = i32::from(position.offset);
             let bottom = top + i32::from(position.viewport_height);
-            let target_bottom = logical_top + i32::from(height);
             let next = if logical_top < top {
                 logical_top
             } else if target_bottom > bottom {
-                if height > position.viewport_height {
+                if height > i32::from(position.viewport_height) {
                     logical_top
                 } else {
                     target_bottom - i32::from(position.viewport_height)
@@ -207,6 +304,18 @@ impl ScrollHandle {
             }
         });
         if scrolled {
+            if let Some(target) = self
+                .last_reveal
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_ref()
+            {
+                *self
+                    .reveal_intent
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    RevealIntent::UserScrolled(target.target_id.clone());
+            }
             InputUse::Scrolled
         } else {
             InputUse::Used
@@ -264,6 +373,9 @@ pub(crate) fn navigation_code(key: &KeyEvent) -> Option<KeyCode> {
     }
 }
 
+#[cfg(test)]
+#[path = "scroll_intent_test.rs"]
+mod intent_test;
 #[cfg(test)]
 #[path = "popup_pending_reveal_test.rs"]
 mod pending_reveal_test;

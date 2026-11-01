@@ -7,6 +7,7 @@ use crate::{
         focus_model::TargetId,
         hit_regions::{HitRegionKind, use_target_geometry},
         surface_handle::SurfaceContext,
+        target_geometry::{TargetGeometryObserver, use_geometry_observer},
     },
 };
 use iocraft::{ComponentDrawer, Hook, prelude::*};
@@ -28,6 +29,26 @@ struct ScrollContext {
     scroll: ScrollHandle,
     layout_offset: u16,
 }
+#[derive(Clone)]
+pub(crate) struct ScrollRevealPrefix {
+    target: TargetId,
+    top: Ref<Option<i16>>,
+}
+struct PrefixMeasure(ScrollRevealPrefix);
+impl Hook for PrefixMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        self.0.top.set(Some(drawer.canvas_position().y));
+    }
+}
+pub(crate) fn use_scroll_reveal_prefix(
+    hooks: &mut Hooks<'_, '_>,
+    target: TargetId,
+) -> ScrollRevealPrefix {
+    let top = hooks.use_ref(|| None);
+    let prefix = ScrollRevealPrefix { target, top };
+    hooks.use_hook(|| PrefixMeasure(prefix.clone())).0 = prefix.clone();
+    prefix
+}
 #[derive(Props)]
 struct ScrollContentProps<'a> {
     #[iocraft(required)]
@@ -42,8 +63,13 @@ fn ScrollContent<'a>(
 ) -> impl Into<AnyElement<'a>> {
     hooks.use_hook(|| ContentMeasure(props.scroll.clone())).0 = props.scroll.clone();
     let children = std::mem::take(&mut props.children);
+    let context = ScrollContext {
+        scroll: props.scroll.clone(),
+        layout_offset: props.offset,
+    };
+    let observer = scroll_observer(Some(context.clone()), None);
     element!(View(position:Position::Relative,top:-i32::from(props.offset),width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
-        ContextProvider(value:Context::owned(ScrollContext {scroll:props.scroll.clone(),layout_offset:props.offset})) {#(children)}
+        ContextProvider(value:Context::owned(context)) {ContextProvider(value:Context::owned(observer)) {#(children)}}
     })
 }
 #[derive(Props)]
@@ -151,38 +177,47 @@ fn ScrollBar(props: &ScrollBarProps, mut hooks: Hooks) -> impl Into<AnyElement<'
     paint.color = props.color;
     element!(View(position:Position::Absolute,right:0,top:0,width:1,height:100pct))
 }
-struct RevealHook {
+fn scroll_observer(
     context: Option<ScrollContext>,
-    focused: bool,
-    target_id: Option<TargetId>,
-    last_target: Option<ScrollRevealTarget>,
-}
-impl Hook for RevealHook {
-    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
-        let Some(context) = self.context.as_ref() else {
+    prefix: Option<ScrollRevealPrefix>,
+) -> TargetGeometryObserver {
+    TargetGeometryObserver::new(move |geometry, previous| {
+        let Some(context) = context.as_ref() else {
             return;
         };
         let position = context.scroll.position();
-        let logical_top = i32::from(drawer.canvas_position().y) - i32::from(position.viewport_top)
-            + i32::from(context.layout_offset);
+        let logical_top = |top: i16| {
+            i32::from(top) - i32::from(position.viewport_top) + i32::from(context.layout_offset)
+        };
         let target = ScrollRevealTarget {
-            target_id: self.target_id.clone(),
-            logical_top,
-            height: drawer.size().height,
+            target_id: geometry.target.clone(),
+            logical_top: logical_top(geometry.top),
+            heading_top: prefix
+                .as_ref()
+                .filter(|prefix| geometry.target.as_ref() == Some(&prefix.target))
+                .and_then(|prefix| prefix.top.get())
+                .map(logical_top),
+            height: geometry.height,
             viewport_height: position.viewport_height,
         };
         context.scroll.measure_target(target.clone());
-        if !self.focused {
-            if let Some(previous) = self.last_target.take()
-                && let Some(context) = self.context.as_ref()
-            {
-                context.scroll.forget_reveal(previous);
-            }
-            return;
+        if geometry.focused {
+            context.scroll.reveal(target);
+        } else if let Some(previous) = previous {
+            context
+                .scroll
+                .forget_target_reveal(previous.target.as_ref());
         }
-        self.last_target = Some(target.clone());
-        context.scroll.reveal(target);
-    }
+    })
+}
+pub(crate) fn prefixed_geometry_observer(
+    hooks: &Hooks<'_, '_>,
+    prefix: ScrollRevealPrefix,
+) -> TargetGeometryObserver {
+    let context = hooks
+        .try_use_context::<ScrollContext>()
+        .map(|context| context.clone());
+    scroll_observer(context, Some(prefix))
 }
 pub(crate) fn use_scroll_reveal(
     hooks: &mut Hooks<'_, '_>,
@@ -192,15 +227,22 @@ pub(crate) fn use_scroll_reveal(
     let context = hooks
         .try_use_context::<ScrollContext>()
         .map(|context| context.clone());
-    let hook = hooks.use_hook(|| RevealHook {
-        context: context.clone(),
+    let prefix = hooks
+        .try_use_context::<ScrollRevealPrefix>()
+        .map(|prefix| prefix.clone());
+    let focused = focused
+        && hooks
+            .try_use_context::<SurfaceContext>()
+            .is_none_or(|context| {
+                let stack = context.stack.snapshot();
+                stack.top_id() == context.surface && stack.top().focus.reveals_focus()
+            });
+    use_geometry_observer(
+        hooks,
+        Some(scroll_observer(context, prefix)),
+        target_id,
         focused,
-        target_id: target_id.clone(),
-        last_target: None,
-    });
-    hook.context = context;
-    hook.focused = focused;
-    hook.target_id = target_id;
+    );
 }
 #[derive(Props)]
 pub struct ScrollRevealProps<'a> {
@@ -255,3 +297,6 @@ pub(crate) fn TargetScrollReveal<'a>(
 #[cfg(test)]
 #[path = "scroll_geometry_test.rs"]
 mod geometry_test;
+#[cfg(test)]
+#[path = "shared_focus_reveal_test.rs"]
+mod shared_focus_test;

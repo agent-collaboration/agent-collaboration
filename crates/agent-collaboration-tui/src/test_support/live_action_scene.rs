@@ -65,6 +65,8 @@ pub struct LiveActionSceneProps {
     #[iocraft(required)]
     pub journal: EventJournal,
     pub projection: ProjectionKind,
+    pub width: Option<u16>,
+    pub height: Option<u16>,
     pub handle: LiveFixtureHandle,
 }
 fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
@@ -224,7 +226,7 @@ pub fn LiveActionScene(
         }
         _ => element!(View).into_any(),
     };
-    element!(InputOwner(stack,width:76u16,height:28u16,quit_action:action("quit"),on_routed:move |_|{let snapshot=stack.snapshot();journal.processed(SurfaceSnapshot(vec![(snapshot.top_id(),format!("{}|{}",ui.logins.get(),snapshot.top().focus.current().map_or("-",TargetId::as_str)).into_bytes())]));}) {
+    element!(InputOwner(stack,width:props.width.unwrap_or(76),height:props.height.unwrap_or(28),quit_action:action("quit"),on_routed:move |_|{let snapshot=stack.snapshot();journal.processed(SurfaceSnapshot(vec![(snapshot.top_id(),format!("{}|{}",ui.logins.get(),snapshot.top().focus.current().map_or("-",TargetId::as_str)).into_bytes())]));}) {
         OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
             Text(content:format!("Revision {} / logins {}",ui.revision.get(),ui.logins.get()))
             #(Some(projection))
