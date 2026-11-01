@@ -296,6 +296,8 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
     let result = tokio::time::timeout(
         Duration::from_secs(5),
         dispatch_message(NativeMessageRequest {
+            session_registration:
+                &collaboration_runtime::NativeSessionRegistration::AccessEnrollment,
             attempt_evidence: None,
             params: NativeMessageParams {
                 target: target(),

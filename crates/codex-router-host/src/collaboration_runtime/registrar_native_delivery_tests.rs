@@ -12,8 +12,8 @@ use collaboration_contracts::{
 };
 use collaboration_protocol::{CodexGeneration, DestinationPreparation, EndpointRef, SessionRef};
 use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
-use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
+use serde_json::json;
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 #[derive(Default)]
 struct Evidence(Mutex<Vec<agent_automation::RouteEffectEvidence<SessionRef, CodexGeneration>>>);
@@ -174,6 +174,15 @@ impl DirectRuntime {
             effort: "medium".to_owned(),
         }
     }
+
+    fn fresh_run_request(&self) -> collaboration_contracts::FreshSessionRequest {
+        collaboration_contracts::FreshSessionRequest {
+            run_id: SECOND.to_owned().try_into().unwrap(), endpoint: self.endpoint.clone(),
+            working_directory: self.fixture.root.path().to_str().unwrap().to_owned(),
+            project_id: Some(PROJECT.to_owned().try_into().unwrap()), message: "Fixture task".to_owned().try_into().unwrap(),
+            inputs: serde_json::from_value(json!({"scheduleChangeId":FIRST,"instructionRevisionId":FIRST,"instructionText":"Fixture task","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"freshEachRun","endpoint":self.endpoint,"cwd":self.fixture.root.path(),"projectId":PROJECT},"executionTimeoutSeconds":null,"model":"fixture-native-model","effort":"medium"}})).unwrap(),
+        }
+    }
 }
 
 // Catch an unwired direct route, registration before the actual ID, policy
@@ -307,12 +316,7 @@ async fn f4a_native_delivery_access_keeps_the_original_unbound_config() {
 #[tokio::test]
 async fn f4a_native_delivery_fresh_run_uses_its_durable_run_id_and_never_replays() {
     let runtime = DirectRuntime::new(SessionRegistrationMode::MachineTokens, false).await;
-    let request = collaboration_contracts::FreshSessionRequest {
-        run_id: SECOND.to_owned().try_into().unwrap(), endpoint: runtime.endpoint.clone(),
-        working_directory: runtime.fixture.root.path().to_str().unwrap().to_owned(),
-        project_id: Some(PROJECT.to_owned().try_into().unwrap()), message: "Fixture task".to_owned().try_into().unwrap(),
-        inputs: serde_json::from_value(json!({"scheduleChangeId":FIRST,"instructionRevisionId":FIRST,"instructionText":"Fixture task","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"freshEachRun","endpoint":runtime.endpoint,"cwd":runtime.fixture.root.path(),"projectId":PROJECT},"executionTimeoutSeconds":null,"model":"fixture-native-model","effort":"medium"}})).unwrap(),
-    };
+    let request = runtime.fresh_run_request();
     runtime
         .route
         .prepare_fresh_session(request.clone(), &Evidence::default())
@@ -343,6 +347,91 @@ async fn f4a_native_delivery_fresh_run_uses_its_durable_run_id_and_never_replays
             .operation_id
             .as_str(),
         SECOND
+    );
+    runtime.native.shutdown().await;
+}
+
+// Catch a global/unbound cold resume or re-registration during restore. The
+// cold native state is controlled by an event fact, without timing or polling.
+#[tokio::test]
+async fn f4a_native_delivery_cold_resume_reuses_the_saved_binding_and_refuses_an_unregistered_target()
+ {
+    let runtime = DirectRuntime::new(SessionRegistrationMode::MachineTokens, false).await;
+    let prepared = runtime
+        .route
+        .prepare_destination(runtime.request(false, FIRST), &Evidence::default())
+        .await
+        .unwrap();
+    let SchedulePreparationOutcome::Prepared(prepared) = prepared else {
+        panic!("native start should be prepared");
+    };
+    runtime.native.cold.store(true, Ordering::SeqCst);
+    let run = collaboration_contracts::ScheduledRunSubmission {
+        run_id: SECOND.to_owned().try_into().unwrap(),
+        target: prepared.target,
+        payload: collaboration_contracts::ScheduledRunPayload::Fresh {
+            task_input: "Fixture task".to_owned().try_into().unwrap(),
+        },
+        precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
+        inputs: runtime.fresh_run_request().inputs,
+        recorded: prepared.evidence,
+    };
+    let outcome = runtime
+        .route
+        .submit_run(run.clone(), &Evidence::default())
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            outcome,
+            collaboration_contracts::RunSubmission::NotStartedBusy
+        ),
+        "{outcome:?}"
+    );
+    let resumes = runtime.native.resumes.lock().unwrap().clone();
+    assert_eq!(resumes.len(), 1);
+    assert_eq!(resumes[0]["params"]["threadId"], "runtime-native-1");
+    assert_eq!(
+        resumes[0]["params"]["config"],
+        json!({"mcp_servers":{"agent-router":{"url":runtime.fixture.repository.records.lock().unwrap()[0].preparation().binding_address.expose_address()}}})
+    );
+    assert_eq!(
+        runtime
+            .fixture
+            .authority
+            .registrations
+            .lock()
+            .unwrap()
+            .len(),
+        1
+    );
+    let mut unregistered = run;
+    unregistered.target.session_id = "unregistered-thread".to_owned().try_into().unwrap();
+    let agent_automation::RouteEffectEvidence::CodexAppServer(evidence) =
+        &mut unregistered.recorded
+    else {
+        panic!("native evidence");
+    };
+    evidence.target = Some(unregistered.target.clone());
+    let refused = runtime
+        .route
+        .submit_run(unregistered, &Evidence::default())
+        .await
+        .unwrap();
+    assert!(
+        matches!(refused, collaboration_contracts::RunSubmission::Rejected(_)),
+        "{refused:?}"
+    );
+    assert_eq!(runtime.native.resumes.lock().unwrap().len(), 1);
+    assert_eq!(
+        runtime
+            .fixture
+            .authority
+            .registrations
+            .lock()
+            .unwrap()
+            .len(),
+        1
     );
     runtime.native.shutdown().await;
 }

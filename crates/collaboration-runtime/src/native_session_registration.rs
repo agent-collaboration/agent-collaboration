@@ -18,6 +18,36 @@ pub enum NativeSessionRegistration {
 }
 
 impl NativeSessionRegistration {
+    pub(crate) async fn binding_for_restore(
+        &self,
+        target: &collaboration_protocol::SessionRef,
+    ) -> Result<Option<collaboration_contracts::HarnessSessionBinding>, HarnessLaunchFailure> {
+        let port = match self {
+            Self::AccessEnrollment => return Ok(None),
+            Self::MachineTokensUnavailable => return Err(HarnessLaunchFailure::Unavailable),
+            Self::MachineTokens { port } => port,
+        };
+        let session = message_board::SessionRef {
+            endpoint: message_board::SessionEndpointRef {
+                service_id: String::from(target.endpoint.service_id.clone())
+                    .try_into()
+                    .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
+                endpoint_id: String::from(target.endpoint.endpoint_id.clone())
+                    .try_into()
+                    .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
+            },
+            session_id: String::from(target.session_id.clone())
+                .try_into()
+                .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
+        };
+        match port.binding_for_restore(&session).await? {
+            collaboration_contracts::HarnessRestoreAdmission::Bound(binding) => Ok(Some(binding)),
+            collaboration_contracts::HarnessRestoreAdmission::AccessEnrollment => {
+                Err(HarnessLaunchFailure::Unavailable)
+            }
+        }
+    }
+
     pub(crate) async fn prepare_start(
         &self,
         operation: Option<&OperationId>,

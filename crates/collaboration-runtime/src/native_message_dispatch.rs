@@ -117,6 +117,7 @@ pub(crate) async fn read_native_thread_status(
 }
 
 pub struct NativeMessageRequest<'a> {
+    pub session_registration: &'a crate::NativeSessionRegistration,
     pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     pub params: NativeMessageParams,
     pub id: Value,
@@ -165,6 +166,18 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
     let mut effects = MessageEffects::new(request.id);
     let load_policy = request.load_policy;
     let params = request.params;
+    let binding = match request
+        .session_registration
+        .binding_for_restore(&params.target)
+        .await
+    {
+        Ok(binding) => binding,
+        Err(_) => {
+            return NativeMessageOutcome::Failed(
+                effects.failure(NativeFailureKind::Unavailable, "inspect"),
+            );
+        }
+    };
     if &params.target.endpoint.service_id != request.service_id {
         return NativeMessageOutcome::Failed(
             effects.failure(NativeFailureKind::WrongService, "inspect"),
@@ -304,6 +317,7 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         held_unmaterialized: held,
         load_policy,
         recorded_route: &recorded_route,
+        session_binding: binding.as_ref(),
     };
     let result = session.deliver(&delivery_context).await;
     let acceptance = match result {
@@ -345,6 +359,7 @@ struct MessageSession<'a> {
 }
 
 struct NativeMessageDeliveryContext<'a> {
+    session_binding: Option<&'a collaboration_contracts::HarnessSessionBinding>,
     thread_id: &'a str,
     params: &'a NativeMessageParams,
     correlation: &'a str,
@@ -525,7 +540,7 @@ impl MessageSession<'_> {
                 .await?
         };
         if status == NativeThreadStatus::NotLoaded || prepared.is_some() {
-            let parameters = prepared.as_ref().map_or_else(
+            let mut parameters = prepared.as_ref().map_or_else(
                 || json!({"threadId":request.thread_id,"excludeTurns":true}),
                 |prepared| {
                     if status == NativeThreadStatus::NotLoaded {
@@ -535,6 +550,27 @@ impl MessageSession<'_> {
                     }
                 },
             );
+            if let Some(binding) = request.session_binding {
+                let config = parameters
+                    .as_object_mut()
+                    .ok_or_else(|| {
+                        self.effects
+                            .failure(NativeFailureKind::Unavailable, "resume")
+                    })?
+                    .entry("config")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .ok_or_else(|| {
+                        self.effects
+                            .failure(NativeFailureKind::Unavailable, "resume")
+                    })?;
+                codex_acp_adapter::insert_session_binding_config(config, binding).map_err(
+                    |_| {
+                        self.effects
+                            .failure(NativeFailureKind::Unavailable, "resume")
+                    },
+                )?;
+            }
             let resumed = self
                 .call(NativeOperation::ResumeThread, parameters, "resume")
                 .await?;

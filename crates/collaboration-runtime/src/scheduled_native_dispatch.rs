@@ -21,6 +21,7 @@ use collaboration_protocol::{
 use serde_json::{Value, json};
 
 pub(crate) struct ScheduledNativeDispatchInputs<'a> {
+    pub session_registration: &'a crate::NativeSessionRegistration,
     pub backend: &'a NativeControlBackend,
     pub run: ScheduledRunSubmission,
     pub sink: &'a dyn RunEvidenceSink,
@@ -32,12 +33,17 @@ pub(crate) async fn dispatch(
     inputs: ScheduledNativeDispatchInputs<'_>,
 ) -> Result<RunSubmission, DeliveryContractError> {
     let ScheduledNativeDispatchInputs {
+        session_registration,
         backend,
         run,
         sink,
         held_connection,
         approval_broker,
     } = inputs;
+    let binding = match session_registration.binding_for_restore(&run.target).await {
+        Ok(binding) => binding,
+        Err(_) => return Ok(policy_rejected()),
+    };
     let run_id = run.run_id.clone();
     let (message_text, client_user_message_id, load_policy) = match run.payload {
         ScheduledRunPayload::Existing { prepared } => (
@@ -129,7 +135,7 @@ pub(crate) async fn dispatch(
             }
         };
         if cold || prepared.is_some() {
-            let parameters = prepared.as_ref().map_or_else(
+            let mut parameters = prepared.as_ref().map_or_else(
                 || json!({"threadId":thread_id,"excludeTurns":true}),
                 |profile| {
                     if cold {
@@ -139,6 +145,17 @@ pub(crate) async fn dispatch(
                     }
                 },
             );
+            if let Some(binding) = &binding {
+                let config = parameters
+                    .as_object_mut()
+                    .ok_or(DeliveryContractError::InvalidEvidence)?
+                    .entry("config")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .ok_or(DeliveryContractError::InvalidEvidence)?;
+                codex_acp_adapter::insert_session_binding_config(config, binding)
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?;
+            }
             effects.resume = PreparationEffect::Unknown;
             if matches!(
                 sink.record(RouteEffectEvidence::CodexAppServer(effects.clone()))

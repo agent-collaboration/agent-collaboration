@@ -193,6 +193,7 @@ impl CodexAppServerDeliveryRoute {
                     .await?;
                 let mut response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
+                        session_registration: &self.session_registration,
                         attempt_evidence: Some(
                             crate::message_effect_state::NativeMessageAttemptEvidence {
                                 effects: &mut effects,
@@ -259,6 +260,7 @@ impl CodexAppServerDeliveryRoute {
             HeldBindingCheckout::Missing => {
                 let response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
+                        session_registration: &self.session_registration,
                         attempt_evidence: Some(
                             crate::message_effect_state::NativeMessageAttemptEvidence {
                                 effects: &mut effects,

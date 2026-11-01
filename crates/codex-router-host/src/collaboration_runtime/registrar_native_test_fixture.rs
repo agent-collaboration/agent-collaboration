@@ -6,7 +6,7 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 use tokio::{
@@ -19,6 +19,8 @@ use tokio_util::sync::CancellationToken;
 pub(super) struct NativeFixture {
     pub export: Arc<codex_native_integration::NativeSchemaExport>,
     pub creates: Arc<Mutex<Vec<Value>>>,
+    pub resumes: Arc<Mutex<Vec<Value>>>,
+    pub cold: Arc<AtomicBool>,
     stop: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -59,9 +61,13 @@ impl NativeFixture {
         );
         let listener = UnixListener::bind(root.join("backend.sock")).unwrap();
         let creates = Arc::new(Mutex::new(Vec::new()));
+        let resumes = Arc::new(Mutex::new(Vec::new()));
+        let cold = Arc::new(AtomicBool::new(false));
         let stop = CancellationToken::new();
         let cancellation = stop.clone();
         let recorded = creates.clone();
+        let recorded_resumes = resumes.clone();
+        let read_cold = cold.clone();
         let ids = Arc::new(AtomicU64::new(1));
         let task = tokio::spawn(async move {
             let mut connections = JoinSet::new();
@@ -72,6 +78,7 @@ impl NativeFixture {
                     accepted=listener.accept()=>{
                         let (stream,_)=accepted.unwrap();
                         let recorded=recorded.clone(); let ids=ids.clone();
+                        let recorded_resumes=recorded_resumes.clone(); let read_cold=read_cold.clone();
                         connections.spawn(async move {
                             let mut socket=tokio_tungstenite::accept_async(stream).await.unwrap();
                             while let Some(Ok(Message::Text(frame)))=socket.next().await {
@@ -86,7 +93,15 @@ impl NativeFixture {
                                         let session=format!("runtime-native-{}",ids.fetch_add(1,Ordering::SeqCst));
                                         thread_result(&request,&session)
                                     },
-                                    "thread/read"|"thread/resume"=>thread_result(&request,request["params"]["threadId"].as_str().unwrap()),
+                                    "thread/read"=>{
+                                        let mut result=thread_result(&request,request["params"]["threadId"].as_str().unwrap());
+                                        if read_cold.load(Ordering::SeqCst) { result["thread"]["status"]["type"]=json!("notLoaded"); }
+                                        result
+                                    },
+                                    "thread/resume"=>{
+                                        recorded_resumes.lock().unwrap().push(request.clone());
+                                        thread_result(&request,request["params"]["threadId"].as_str().unwrap())
+                                    },
                                     _=>json!({}),
                                 };
                                 if socket.send(Message::Text(json!({"id":id,"result":result}).to_string().into())).await.is_err(){break;}
@@ -101,6 +116,8 @@ impl NativeFixture {
         Self {
             export,
             creates,
+            resumes,
+            cold,
             stop,
             task,
         }

@@ -558,6 +558,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                     effects.permission_differences = binding.permission_differences().to_vec();
                     let result = crate::scheduled_native_dispatch::dispatch(
                         crate::scheduled_native_dispatch::ScheduledNativeDispatchInputs {
+                            session_registration: &self.session_registration,
                             backend: &self.backend,
                             run,
                             sink,
@@ -579,6 +580,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                 HeldBindingCheckout::Missing => {
                     crate::scheduled_native_dispatch::dispatch(
                         crate::scheduled_native_dispatch::ScheduledNativeDispatchInputs {
+                            session_registration: &self.session_registration,
                             backend: &self.backend,
                             run,
                             sink,

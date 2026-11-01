@@ -62,6 +62,8 @@ impl RecordedPolicyFixture {
         broker: &'a std::sync::Weak<dyn ApprovalBroker>,
     ) -> NativeMessageRequest<'a> {
         NativeMessageRequest {
+            session_registration:
+                &collaboration_runtime::NativeSessionRegistration::AccessEnrollment,
             attempt_evidence: None,
             params: NativeMessageParams {
                 target: target(),
