@@ -6,7 +6,9 @@ use crate::session_picker::{
     source_reload_port::SessionRecordsReloadPort,
 };
 use agent_collaboration_tui::{
-    actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
+    actions::{
+        ActionDef, ActionId, ActionRegistry, ActionRisk, AvailabilityFn, Placement, ScopeId,
+    },
     controls::{
         combo::ComboBoxState,
         fields::TextFieldState,
@@ -252,6 +254,7 @@ pub(super) fn action(
         availability: AvailabilityFn::default(),
         choice: None,
         placement,
+        risk: ActionRisk::Ordinary,
         run: Handler::from(run),
     })
 }

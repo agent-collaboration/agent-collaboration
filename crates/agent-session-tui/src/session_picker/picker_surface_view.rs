@@ -463,7 +463,7 @@ mod retry_hint_tests {
         test_support::picker_request,
     };
     use agent_collaboration_tui::actions::{
-        ActionDef, ActionId, Availability, AvailabilityFn, Placement, ScopeId,
+        ActionDef, ActionId, ActionRisk, Availability, AvailabilityFn, Placement, ScopeId,
     };
     use agent_session_inventory::source_inventory_request::{
         PickerSourceContext, SourceInventoryRejection,
@@ -480,6 +480,7 @@ mod retry_hint_tests {
                 availability: AvailabilityFn::new(move || availability.clone()),
                 choice: None,
                 placement: Placement::Hidden,
+                risk: ActionRisk::Ordinary,
                 run: Handler::from(|()| {}),
             }],
         )
