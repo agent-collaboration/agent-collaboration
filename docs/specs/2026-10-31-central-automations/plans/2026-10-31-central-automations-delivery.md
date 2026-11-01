@@ -137,6 +137,12 @@ These run on Sunclaw, never on Sunbook.
   - both PRs merged together, PR 2 as **one squash commit** (V17 part 2 scanned on it), then the tag, release and Homebrew steps per AGENTS.md.
   - The production Router is never restarted by the agent.
 
+## Follow-up PRs (owner, 2026-11-01)
+
+- **PR 2b, mechanical split of interactions** (stacked after PR 2): a new crate owns typed interactions (approval and question history, approval routes) on the same `interaction.sqlite`, while `interaction-storage` keeps delivery. It's a mechanical move with no behavior change, and no stored data moves. It's kept out of PR 1 because PR 2's lanes change `interaction-storage`.
+- **Library follow-up** (owner approved the pin changes): `agent-fleet-sync` install-attempt pruning and journal mode for its stores, and `sqlx-turso` vacuum.
+- **PR 3, routed approvals through central:** its own design cycle.
+
 ## Obligation-to-proof map
 
 | V | Slice that earns it | Command or observation |
