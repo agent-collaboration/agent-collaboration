@@ -310,9 +310,9 @@ async fn fleet_machine_login_background_refresh_failure_withdraws_gate_and_requi
 async fn fleet_machine_login_unusable_store_refuses_before_authorization_without_writes() {
     use codex_router_secret_store::classified_store_open::UnusableCause;
     for cause in [
-        UnusableCause::KeychainUnavailable,
-        UnusableCause::InvalidCredentialData,
-        UnusableCause::MigrationIncomplete,
+        UnusableCause::KeychainUnavailable {},
+        UnusableCause::InvalidCredentialData {},
+        UnusableCause::MigrationIncomplete {},
     ] {
         let fixture = Fixture::new();
         let credentials = Arc::new(RefreshCredentialStore::Unusable { cause });

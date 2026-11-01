@@ -38,17 +38,17 @@ impl fmt::Debug for ClassifiedCredentialStore {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum UnusableCause {
-    KeychainUnavailable,
-    KeychainServiceRejected,
-    KeyMissing,
-    InvalidDataKey,
-    InvalidStoreMetadata,
-    MigrationIncomplete,
-    InvalidCredentialData,
-    MetadataUnavailable,
-    UnsafeStoreRoot,
-    DebugPlaintextConfigured,
-    TestKeychainAccessForbidden,
+    KeychainUnavailable {},
+    KeychainServiceRejected {},
+    KeyMissing {},
+    InvalidDataKey {},
+    InvalidStoreMetadata {},
+    MigrationIncomplete {},
+    InvalidCredentialData {},
+    MetadataUnavailable {},
+    UnsafeStoreRoot {},
+    DebugPlaintextConfigured {},
+    TestKeychainAccessForbidden {},
 }
 
 impl ClassifiedCredentialStore {
@@ -78,12 +78,12 @@ fn observe_store(
     keychain: &dyn KeychainAccess,
 ) -> Result<ClassifiedCredentialStore, UnusableCause> {
     match std::fs::symlink_metadata(root) {
-        Ok(metadata) if !metadata.is_dir() => return Err(UnusableCause::UnsafeStoreRoot),
+        Ok(metadata) if !metadata.is_dir() => return Err(UnusableCause::UnsafeStoreRoot {}),
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(ClassifiedCredentialStore::Absent);
         }
-        Err(_) => return Err(UnusableCause::MetadataUnavailable),
+        Err(_) => return Err(UnusableCause::MetadataUnavailable {}),
     }
     let files = FileSecretStore::open_read_only(root).map_err(|error| classify_failure(&error))?;
     FileSecretStore::reject_debug_plaintext_declaration(root)
@@ -108,17 +108,19 @@ fn observe_store(
         {
             return Ok(ClassifiedCredentialStore::Absent);
         }
-        ExistingCredentialDataKey::BackendAbsent => return Err(UnusableCause::KeyMissing),
+        ExistingCredentialDataKey::BackendAbsent => return Err(UnusableCause::KeyMissing {}),
         ExistingCredentialDataKey::MissingStore
             if !marker && encrypted.is_empty() && legacy.is_empty() && temporary.is_empty() =>
         {
             return Ok(ClassifiedCredentialStore::Absent);
         }
-        ExistingCredentialDataKey::MissingStore => return Err(UnusableCause::InvalidStoreMetadata),
+        ExistingCredentialDataKey::MissingStore => {
+            return Err(UnusableCause::InvalidStoreMetadata {});
+        }
         ExistingCredentialDataKey::Ready(key) => key,
     };
     if !marker || !legacy.is_empty() || !temporary.is_empty() {
-        return Err(UnusableCause::MigrationIncomplete);
+        return Err(UnusableCause::MigrationIncomplete {});
     }
     let store = EncryptedCredentialStore::new(files, data_key);
     for key in encrypted {
@@ -133,25 +135,27 @@ fn observe_store(
 
 fn classify_failure(error: &SecretStoreError) -> UnusableCause {
     match error {
-        SecretStoreError::KeyUnavailable => UnusableCause::KeychainUnavailable,
-        SecretStoreError::KeyMissing => UnusableCause::KeyMissing,
-        SecretStoreError::InvalidDataKey => UnusableCause::InvalidDataKey,
-        SecretStoreError::KeychainServiceRejected => UnusableCause::KeychainServiceRejected,
-        SecretStoreError::TestKeychainAccessForbidden => UnusableCause::TestKeychainAccessForbidden,
-        SecretStoreError::InvalidCredentialStoreMarker { .. } => {
-            UnusableCause::InvalidStoreMetadata
+        SecretStoreError::KeyUnavailable => UnusableCause::KeychainUnavailable {},
+        SecretStoreError::KeyMissing => UnusableCause::KeyMissing {},
+        SecretStoreError::InvalidDataKey => UnusableCause::InvalidDataKey {},
+        SecretStoreError::KeychainServiceRejected => UnusableCause::KeychainServiceRejected {},
+        SecretStoreError::TestKeychainAccessForbidden => {
+            UnusableCause::TestKeychainAccessForbidden {}
         }
-        SecretStoreError::StoreUnavailable(_) => UnusableCause::MigrationIncomplete,
+        SecretStoreError::InvalidCredentialStoreMarker { .. } => {
+            UnusableCause::InvalidStoreMetadata {}
+        }
+        SecretStoreError::StoreUnavailable(_) => UnusableCause::MigrationIncomplete {},
         SecretStoreError::CodexHomePath { .. } | SecretStoreError::SymlinkPath { .. } => {
-            UnusableCause::UnsafeStoreRoot
+            UnusableCause::UnsafeStoreRoot {}
         }
         SecretStoreError::DebugPlaintextUnavailable
         | SecretStoreError::DebugPlaintextRootRejected
         | SecretStoreError::InvalidDebugPlaintextDeclaration => {
-            UnusableCause::DebugPlaintextConfigured
+            UnusableCause::DebugPlaintextConfigured {}
         }
         SecretStoreError::Filesystem { .. } | SecretStoreError::CredentialStoreLock { .. } => {
-            UnusableCause::MetadataUnavailable
+            UnusableCause::MetadataUnavailable {}
         }
         SecretStoreError::InvalidCentralSecretKey
         | SecretStoreError::InvalidFleetSecretKey
@@ -168,6 +172,6 @@ fn classify_failure(error: &SecretStoreError) -> UnusableCause {
         | SecretStoreError::CipherInitializationFailed
         | SecretStoreError::CredentialAuthenticationFailed
         | SecretStoreError::InvalidCredentialEncoding
-        | SecretStoreError::InvalidSecretPayload { .. } => UnusableCause::InvalidCredentialData,
+        | SecretStoreError::InvalidSecretPayload { .. } => UnusableCause::InvalidCredentialData {},
     }
 }

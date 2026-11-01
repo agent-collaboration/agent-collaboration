@@ -13,6 +13,47 @@ use codex_router_core::redaction::SecretString;
 
 const STORE_ID: &str = "019f0000-0000-7000-8000-000000000001";
 
+#[test]
+fn classified_open_causes_are_closed_kind_objects_without_backend_payloads() {
+    for (cause, kind) in [
+        (UnusableCause::KeychainUnavailable {}, "keychainUnavailable"),
+        (
+            UnusableCause::KeychainServiceRejected {},
+            "keychainServiceRejected",
+        ),
+        (UnusableCause::KeyMissing {}, "keyMissing"),
+        (UnusableCause::InvalidDataKey {}, "invalidDataKey"),
+        (
+            UnusableCause::InvalidStoreMetadata {},
+            "invalidStoreMetadata",
+        ),
+        (UnusableCause::MigrationIncomplete {}, "migrationIncomplete"),
+        (
+            UnusableCause::InvalidCredentialData {},
+            "invalidCredentialData",
+        ),
+        (UnusableCause::MetadataUnavailable {}, "metadataUnavailable"),
+        (UnusableCause::UnsafeStoreRoot {}, "unsafeStoreRoot"),
+        (
+            UnusableCause::DebugPlaintextConfigured {},
+            "debugPlaintextConfigured",
+        ),
+        (
+            UnusableCause::TestKeychainAccessForbidden {},
+            "testKeychainAccessForbidden",
+        ),
+    ] {
+        let mut wire = serde_json::json!({"kind":kind});
+        assert_eq!(serde_json::to_value(cause).unwrap(), wire);
+        assert_eq!(
+            serde_json::from_value::<UnusableCause>(wire.clone()).unwrap(),
+            cause
+        );
+        wire["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<UnusableCause>(wire).is_err());
+    }
+}
+
 struct RecordedKeychain {
     response: Result<Option<Vec<u8>>, KeychainAccessError>,
     calls: Mutex<Vec<&'static str>>,
@@ -113,7 +154,11 @@ fn classified_open_denied_keychain_is_unusable_without_writes() {
         response: Err(KeychainAccessError::Unavailable),
         calls: Mutex::new(Vec::new()),
     };
-    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeychainUnavailable);
+    assert_unusable_untouched(
+        root.path(),
+        &keychain,
+        UnusableCause::KeychainUnavailable {},
+    );
 }
 
 #[test]
@@ -122,7 +167,7 @@ fn classified_open_invalid_key_keeps_its_cause_without_writes() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 31]),
-        UnusableCause::InvalidDataKey,
+        UnusableCause::InvalidDataKey {},
     );
 }
 
@@ -133,7 +178,7 @@ fn classified_open_missing_key_is_not_absent_storage() {
         response: Ok(None),
         calls: Mutex::new(Vec::new()),
     };
-    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeyMissing);
+    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeyMissing {});
 }
 
 #[test]
@@ -146,7 +191,7 @@ fn classified_open_rejected_service_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &keychain,
-        UnusableCause::KeychainServiceRejected,
+        UnusableCause::KeychainServiceRejected {},
     );
 }
 
@@ -160,7 +205,7 @@ fn classified_open_test_guard_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &keychain,
-        UnusableCause::TestKeychainAccessForbidden,
+        UnusableCause::TestKeychainAccessForbidden {},
     );
 }
 
@@ -198,7 +243,7 @@ fn classified_open_absent_backend_does_not_hide_existing_encrypted_credentials()
         response: Err(KeychainAccessError::BackendAbsent),
         calls: Mutex::new(Vec::new()),
     };
-    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeyMissing);
+    assert_unusable_untouched(root.path(), &keychain, UnusableCause::KeyMissing {});
 }
 
 #[test]
@@ -208,7 +253,7 @@ fn classified_open_unreadable_metadata_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::MetadataUnavailable,
+        UnusableCause::MetadataUnavailable {},
     );
 }
 
@@ -223,7 +268,7 @@ fn classified_open_debug_plaintext_declaration_is_not_an_encrypted_store() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::DebugPlaintextConfigured,
+        UnusableCause::DebugPlaintextConfigured {},
     );
 }
 
@@ -238,7 +283,7 @@ fn classified_open_unsafe_root_is_never_absent() {
         assert!(matches!(
             ClassifiedCredentialStore::open_read_only_with_keychain(&unsafe_root, &keychain),
             ClassifiedCredentialStore::Unusable {
-                cause: UnusableCause::UnsafeStoreRoot
+                cause: UnusableCause::UnsafeStoreRoot {}
             }
         ));
         assert_eq!(snapshot(parent.path()), before);
@@ -253,7 +298,7 @@ fn classified_open_invalid_marker_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::InvalidStoreMetadata,
+        UnusableCause::InvalidStoreMetadata {},
     );
 }
 
@@ -264,7 +309,7 @@ fn classified_open_invalid_store_id_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::InvalidStoreMetadata,
+        UnusableCause::InvalidStoreMetadata {},
     );
 }
 
@@ -275,7 +320,7 @@ fn classified_open_half_migrated_store_is_not_repaired() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::MigrationIncomplete,
+        UnusableCause::MigrationIncomplete {},
     );
 }
 
@@ -290,7 +335,7 @@ fn classified_open_damaged_envelope_is_unusable() {
     assert_unusable_untouched(
         root.path(),
         &RecordedKeychain::key(vec![0x42; 32]),
-        UnusableCause::InvalidCredentialData,
+        UnusableCause::InvalidCredentialData {},
     );
 }
 

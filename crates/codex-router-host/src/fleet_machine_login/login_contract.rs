@@ -248,7 +248,7 @@ mod tests {
                     .unwrap(),
             },
             FleetLoginRefusal::StoreUnusable {
-                cause: UnusableCause::InvalidDataKey,
+                cause: UnusableCause::InvalidDataKey {},
             },
         ] {
             let event = FleetLoginEvent::Refused { reason };

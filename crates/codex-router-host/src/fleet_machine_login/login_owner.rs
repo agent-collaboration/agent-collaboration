@@ -10,6 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::instrument::WithSubscriber;
 
 use super::{
     device_code_flow::{
@@ -86,7 +87,7 @@ impl RunningMachineLogin {
         let stop = CancellationToken::new();
         let owner = MachineLoginOwner::new(identity, issuer, clock, publication, saved, token);
         let task_stop = stop.clone();
-        let task = tokio::spawn(owner.run(receiver, task_stop));
+        let task = tokio::spawn(owner.run(receiver, task_stop).with_current_subscriber());
         Self {
             handle: MachineLoginHandle { commands, source },
             stop,
@@ -441,7 +442,7 @@ fn credential_refusal(error: RefreshCredentialError) -> FleetLoginRefusal {
         cause: match error {
             RefreshCredentialError::Unusable { cause } => cause,
             RefreshCredentialError::DamagedCredential | RefreshCredentialError::WriteFailed => {
-                UnusableCause::InvalidCredentialData
+                UnusableCause::InvalidCredentialData {}
             }
         },
     }

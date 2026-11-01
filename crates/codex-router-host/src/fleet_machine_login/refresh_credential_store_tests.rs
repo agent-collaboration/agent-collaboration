@@ -190,7 +190,7 @@ fn fleet_machine_login_memory_or_unusable_storage_never_writes_a_refresh_credent
             .is_none()
     );
     let unusable = RefreshCredentialStore::Unusable {
-        cause: UnusableCause::KeychainUnavailable,
+        cause: UnusableCause::KeychainUnavailable {},
     };
     assert!(unusable.write(&credential).is_err());
     assert!(unusable.read(&credential.machine_client_id).is_err());
