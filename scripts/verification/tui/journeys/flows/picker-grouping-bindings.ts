@@ -28,7 +28,10 @@ import {
 	pickerUngroupedOrder,
 } from './picker-grouping-oracle.ts';
 import type { PickerGroupingFacet } from './picker-grouping-oracle.ts';
-import { readPickerMenuViewport } from './picker-menu-observation.ts';
+import {
+	pickerMenuNavigationExpectation,
+	readPickerMenuViewport,
+} from './picker-menu-observation.ts';
 
 const facets: readonly PickerGroupingFacet[] = [
 	'none',
@@ -225,15 +228,17 @@ export function pickerGroupingBindings(
 			]);
 			const choices = new Map<string, boolean>();
 			let groupKeyShown = false;
-			const collectChoices = async (remaining: number): Promise<void> => {
+			const collectChoices = async (remaining: number, focusedIndex: number): Promise<void> => {
 				const observed = readPickerGroupingMenu(latestFrame(marked).grid);
 				for (const [label, checked] of observed.choices) choices.set(label, checked);
 				groupKeyShown ||= observed.groupKeyShown;
 				if (choices.size >= facetLabels.length || remaining === 1) return;
-				marked = await context.input.press('Down', [pickerExpectedKey('Down', menu)]);
-				await collectChoices(remaining - 1);
+				marked = await context.input.press('Down', [
+					pickerMenuNavigationExpectation({ key: 'Down', focusedIndex, surface: menu }),
+				]);
+				await collectChoices(remaining - 1, focusedIndex + 1);
 			};
-			await collectChoices(32);
+			await collectChoices(32, 0);
 			checkedFailures = [...pickerGroupingMenuFailures({ choices, groupKeyShown }, facet)];
 			await context.input.press('Escape', [pickerExpectedKey('Escape', menu)]);
 			marked = await context.input.press('F12', [pickerExpectedKey('F12', pickerScreen)]);

@@ -176,6 +176,13 @@ still reject; later unmarked frames cannot replace the bound frame. Loop-ending
 inputs settle through exact ACK, real EOF, outcome and exit status; their marker
 is optional.
 
+On the aea741ef6 menu implementation, Down and Tab are consumed by the button
+focused before navigation. Expect that action target and a null action field;
+keep every visual inventory, checked-choice, content-end and thumb assertion.
+The fixed picker fixture starts at New and wraps its 26 eligible actions in the
+independently source-qualified order. Wrong, next-focus and null owners reject
+(Lead correction 01a19760-9bdb).
+
 Async inspection/source publication waits for the exact ready scene, then uses
 a harmless F12 ACK/marker for capture. A setup ACK, arbitrary redraw or delay
 cannot supply publication proof. Capture keeps the marked native prefix, grid,
