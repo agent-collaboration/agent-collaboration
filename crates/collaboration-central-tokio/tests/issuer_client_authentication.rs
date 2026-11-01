@@ -30,6 +30,8 @@ use tokio::{net::TcpListener, sync::oneshot};
 
 #[path = "native_http/support.rs"]
 mod configuration;
+#[path = "support/paused_http_clock.rs"]
+mod paused_http_clock;
 
 const PERSON_TOKEN: &str = "public.fixture-person-proof";
 const NOW_SECONDS: i64 = 2_208_988_800;
@@ -231,7 +233,7 @@ fn hex(value: &str) -> Result<Vec<u8>, configuration::TestError> {
 // The private seed below is RFC8032's published test1 seed. No real credential,
 // provider clock or session store is involved. The receiver checks actual
 // signatures, exact endpoint audience, single-use IDs and the form channel.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
 -> Result<(), configuration::TestError> {
     let secret =
@@ -283,7 +285,7 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
     .await?;
     let ids = Arc::new(ScriptedIds::default());
     let proof = async {
-        for path in [
+        for (index, path) in [
             "/introspect",
             "/introspect",
             "/inactive",
@@ -292,7 +294,10 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
             "/refused",
             "/forbidden",
             "/wrong-media-type",
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let client = PrivateKeyJwtClient::new(
                 ServiceClientId::try_from("pinned-central".to_owned())?,
                 signer.clone(),
@@ -303,7 +308,10 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
             let endpoint = ResourceUri::try_from(format!("{}{path}", receiver.base))?;
             let confirmer =
                 PersonIntrospectionClient::new(client, platform.service_http_transport(), endpoint);
+            let case_name = format!("{}:{path}", index + 1);
+            let clock = paused_http_clock::PausedHttpClock::before_case();
             let answer = confirmer.confirm_person_session(PERSON_TOKEN).await;
+            clock.require_no_advance(&case_name)?;
             if path == "/introspect" {
                 if !matches!(answer, Ok(PersonSessionConfirmation::Active { .. })) {
                     return Err("valid authenticated introspection refused".into());

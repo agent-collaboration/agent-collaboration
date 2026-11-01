@@ -9,11 +9,14 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::{
-    DirectoryClientProbe, IssuerKeyId, ServiceClientId,
+    DirectoryClientProbe, IssuerKeyId, ServiceBearerCredential, ServiceClientId, ServiceForm,
+    ServiceFormTransport, ServiceHttpFailure, ServiceJsonTransport,
     identity_contract::{CentralRecord, ResourceUri},
     observe_directory_client,
 };
-use collaboration_central_tokio::{DeliveryConfig, TokioCentralPlatform, TokioEd25519ClientSigner};
+use collaboration_central_tokio::{
+    DeliveryConfig, TokioCentralPlatform, TokioEd25519ClientSigner, TokioServiceHttpTransport,
+};
 use ring::signature::{ED25519, UnparsedPublicKey};
 use runtime_primitives::{Clock, SyncTime};
 use serde::{Deserialize, Serialize};
@@ -27,6 +30,8 @@ use tokio::{net::TcpListener, sync::oneshot};
 
 #[path = "native_http/support.rs"]
 mod configuration;
+#[path = "support/paused_http_clock.rs"]
+mod paused_http_clock;
 struct FixedClock;
 impl Clock for FixedClock {
     fn now(&self) -> SyncTime {
@@ -116,6 +121,58 @@ struct Receiver {
     pending: Option<String>,
     requests: Vec<ObservedRequest>,
     errors: Vec<String>,
+}
+
+struct ClockCheckedTransport {
+    inner: TokioServiceHttpTransport,
+    receiver: Arc<Mutex<Receiver>>,
+}
+impl ClockCheckedTransport {
+    fn case_name(&self, channel: &str) -> String {
+        let receiver = self.receiver.lock().unwrap();
+        let name = receiver
+            .steps
+            .get(receiver.next)
+            .map_or("unexpected", |step| step.name.as_str());
+        format!("{name}/{channel}")
+    }
+    // Keep the real network result. Clock failures are recorded independently
+    // and fail the fixture before any expected-unknown comparison can pass.
+    fn record_clock_check(&self, clock: paused_http_clock::PausedHttpClock, case_name: &str) {
+        if let Err(error) = clock.require_no_advance(case_name) {
+            self.receiver.lock().unwrap().errors.push(error.to_string());
+        }
+    }
+}
+impl ServiceFormTransport for ClockCheckedTransport {
+    async fn post_service_form(
+        &self,
+        endpoint: &ResourceUri,
+        form: &ServiceForm,
+    ) -> Result<Vec<u8>, ServiceHttpFailure> {
+        let case_name = self.case_name("token");
+        let clock = paused_http_clock::PausedHttpClock::before_case();
+        let answer = self.inner.post_service_form(endpoint, form).await;
+        self.record_clock_check(clock, &case_name);
+        answer
+    }
+}
+impl ServiceJsonTransport for ClockCheckedTransport {
+    async fn post_service_json(
+        &self,
+        destination: &ResourceUri,
+        bearer: &ServiceBearerCredential,
+        body: &[u8],
+    ) -> Result<Vec<u8>, ServiceHttpFailure> {
+        let case_name = self.case_name("central");
+        let clock = paused_http_clock::PausedHttpClock::before_case();
+        let answer = self
+            .inner
+            .post_service_json(destination, bearer, body)
+            .await;
+        self.record_clock_check(clock, &case_name);
+        answer
+    }
 }
 
 // An independent RFC7523 wire oracle: each required assertion claim has its
@@ -349,7 +406,7 @@ fn central(base: &str) -> Result<CentralRecord, configuration::TestError> {
 
 // Actual native signing and HTTP remain real. The scripted issuer and central
 // are stand-ins; no K7 mint, durable authority or SO7 is claimed by this run.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn directory_service_calls_match_the_shared_real_http_corpus()
 -> Result<(), configuration::TestError> {
     let corpus: Corpus =
@@ -396,14 +453,14 @@ async fn directory_service_calls_match_the_shared_real_http_corpus()
     )
     .await?;
     let proof=async {
-        let observations=observe_directory_client(signer,platform.service_http_transport(),ServiceClientId::try_from("pinned-directory".to_owned())?,
+        let observations=observe_directory_client(signer,ClockCheckedTransport {inner:platform.service_http_transport(),receiver:receiver.clone()},ServiceClientId::try_from("pinned-directory".to_owned())?,
             ResourceUri::try_from(format!("{base}/oauth/token"))?,&central,corpus.input).await?;
         let observed=serde_json::to_value(observations)?;
-        if observed!=corpus.expected {return Err(format!("directory outcomes differ: {observed}").into());}
         let receiver=receiver.lock().map_err(|_|"receiver poisoned")?;
         if !receiver.errors.is_empty() || receiver.next!=receiver.steps.len() || receiver.pending.is_some() {
             return Err(format!("directory HTTP errors: {:?}; completed {}/{}",receiver.errors,receiver.next,receiver.steps.len()).into());
         }
+        if observed!=corpus.expected {return Err(format!("directory outcomes differ: {observed}").into());}
         let mut token_ids=BTreeSet::new();let mut token_count=0;let mut operation_count=0;
         let mut authorize_body:Option<&str>=None;
         for request in &receiver.requests {

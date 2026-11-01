@@ -23,6 +23,8 @@ use tokio::{net::TcpListener, sync::oneshot};
 
 #[path = "native_http/support.rs"]
 mod configuration;
+#[path = "support/paused_http_clock.rs"]
+mod paused_http_clock;
 
 struct FixedClock;
 impl Clock for FixedClock {
@@ -109,7 +111,7 @@ async fn serve_keys(
 // RFC8032 signatures and the named PD boundaries in the shared JSON corpus.
 // Actual HTTP, host crypto, common parser and policy remain real. Introspection
 // alone is a named stand-in, so this does not claim authenticated SO7.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn native_person_proofs_match_the_shared_host_corpus() -> Result<(), configuration::TestError>
 {
     let corpus: Corpus = serde_json::from_str(include_str!("fixtures/issuer_person_cases.json"))?;
@@ -155,6 +157,7 @@ async fn native_person_proofs_match_the_shared_host_corpus() -> Result<(), confi
                 state.requests.clear();
                 state.responses = case.key_responses.into();
             }
+            let clock = paused_http_clock::PausedHttpClock::before_case();
             let observation = observe_person_proof(
                 platform.clone(),
                 platform.issuer_key_source(address.clone()),
@@ -162,6 +165,7 @@ async fn native_person_proofs_match_the_shared_host_corpus() -> Result<(), confi
                 case.input,
             )
             .await;
+            clock.require_no_advance(&case.name)?;
             let state = state.lock().map_err(|_| "fixture state poisoned")?;
             if observation != case.expected {
                 return Err(format!(
