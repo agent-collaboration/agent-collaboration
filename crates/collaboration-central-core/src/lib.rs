@@ -53,6 +53,7 @@ mod issuer_person_client;
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
 mod platform_capabilities;
+mod service_receiver_policy;
 mod service_token_time;
 pub use issuer_key_cache::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
@@ -60,6 +61,11 @@ pub use issuer_key_cache::{
 pub use platform_capabilities::{
     CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
     RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+};
+pub use service_receiver_policy::{
+    AuthorizedServiceOperation, PinnedServiceCaller, RegisteredServiceClientKind,
+    ServiceCallerIdentity, ServiceClientId, ServiceOperation, ServiceOperationTrust,
+    ServiceReceiverHome, ServiceReceiverPolicy, ServiceReceiverRefusal, ServiceTokenFacts,
 };
 pub use service_token_time::{
     ServiceTokenTimeRefusal, ServiceTokenTimeRule, grant_deadline_is_current,
