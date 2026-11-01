@@ -1,6 +1,9 @@
-//! Public central discovery and the directory's private initialization contract.
-use super::{CommandId, HttpsUrl, ResourceUri, VerifiedEmail};
-use fleet_identity_protocol::OrganizationId;
+//! Public discovery and the directory's private requests to a central.
+use super::{
+    CommandId, DecideDeviceLogin, DeviceLoginRefusal, DeviceLoginRequestId, HttpsUrl, ResourceUri,
+    VerifiedEmail,
+};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId};
 use fleet_sync_protocol::{PeerId, ReceiverId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -53,6 +56,55 @@ pub struct DirectoryCallAddresses {
     pub approval_activate_address: ResourceUri,
     pub approval_cancel_address: ResourceUri,
     pub initialization_address: ResourceUri,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthorizeDeviceApproval {
+    pub decision: DecideDeviceLogin,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "result",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ApprovalAuthorization {
+    Reserved {},
+    Refused { reason: DeviceLoginRefusal },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SettleDeviceApproval {
+    pub organization_id: OrganizationId,
+    pub request_id: DeviceLoginRequestId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "result",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ApprovalActivation {
+    Activated { enrollment_id: EnrollmentId },
+    NotReserved {},
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "result",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ApprovalCancellation {
+    Cancelled {},
+    NotReserved {},
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
