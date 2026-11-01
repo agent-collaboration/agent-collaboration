@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::super::{
     device_code_flow::run_device_code_login,
-    login_contract::{FleetLoginEvent, RefreshCredentialKeeping},
+    login_contract::RefreshCredentialKeeping,
 };
 use super::*;
 
