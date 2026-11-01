@@ -7,19 +7,12 @@ use codex_native_integration::{
     NativePayloadSchemas, NativeProtocolConnection, NativeSchemaBundle,
 };
 use collaboration_contracts::{
-    HarnessLaunchFailure, HarnessLaunchFuture, HarnessLocalSetupRefusal,
-    HarnessRegistrationOutcome, HarnessRestoreAdmission, HarnessSessionBinding,
-    HarnessSessionLaunch, HarnessSessionLaunchPort, HarnessStartAdmission,
+    HarnessLocalSetupRefusal, HarnessRegistrationOutcome, HarnessSessionBinding,
 };
 use collaboration_protocol::OperationId;
 use futures_util::{SinkExt, StreamExt};
-use message_board::SessionRef;
 use serde_json::{Value, json};
-use std::{
-    collections::BTreeMap,
-    os::unix::fs::PermissionsExt,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, os::unix::fs::PermissionsExt, sync::Arc};
 use tokio_tungstenite::{
     WebSocketStream,
     tungstenite::{Message, protocol::Role},
@@ -30,15 +23,12 @@ mod conversation_operation_recorder;
 #[path = "support/native_permission_echo.rs"]
 mod native_permission_echo;
 
+#[path = "support/recording_harness_launch.rs"]
+mod recording_harness_launch;
+use recording_harness_launch::RecordingLaunch;
+
 const ADDRESS: &str = "http://127.0.0.1:43210/mcp/session/11111111111111111111111111111111";
 const INSTALLATION: &str = "019f0000-0000-7000-8000-000000000003";
-
-struct RecordingLaunch {
-    completion: HarnessRegistrationOutcome,
-    events: Mutex<Vec<&'static str>>,
-    created: Mutex<Vec<SessionRef>>,
-    refused: Mutex<Vec<HarnessLocalSetupRefusal>>,
-}
 
 #[tokio::test]
 async fn session_launch_binding_cold_resume_uses_the_original_admitted_address() {
@@ -80,86 +70,6 @@ async fn session_launch_binding_cold_resume_uses_the_original_admitted_address()
     assert_eq!(result.0.session_id(), "native-returned-conversation");
     assert!(result.1.is_empty());
 }
-impl Default for RecordingLaunch {
-    fn default() -> Self {
-        Self {
-            completion: HarnessRegistrationOutcome::Registered,
-            events: Mutex::new(Vec::new()),
-            created: Mutex::new(Vec::new()),
-            refused: Mutex::new(Vec::new()),
-        }
-    }
-}
-impl RecordingLaunch {
-    fn event(&self, event: &'static str) -> Result<(), HarnessLaunchFailure> {
-        self.events
-            .lock()
-            .map_err(|_| HarnessLaunchFailure::Unavailable)?
-            .push(event);
-        Ok(())
-    }
-}
-impl HarnessSessionLaunchPort for RecordingLaunch {
-    fn prepare_start<'a>(
-        &'a self,
-        _launch: &'a HarnessSessionLaunch,
-        _identity: &'a collaboration_contracts::HarnessLaunchIdentity,
-    ) -> HarnessLaunchFuture<'a, HarnessStartAdmission> {
-        Box::pin(async { Err(HarnessLaunchFailure::AlreadyPrepared) })
-    }
-    fn mark_dispatched<'a>(&'a self, _operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()> {
-        Box::pin(async move { self.event("dispatched") })
-    }
-    fn record_created<'a>(
-        &'a self,
-        _operation: &'a OperationId,
-        session: &'a SessionRef,
-    ) -> HarnessLaunchFuture<'a, ()> {
-        Box::pin(async move {
-            self.created
-                .lock()
-                .map_err(|_| HarnessLaunchFailure::Unavailable)?
-                .push(session.clone());
-            self.event("created")
-        })
-    }
-    fn creation_refused<'a>(&'a self, _operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()> {
-        Box::pin(async move { self.event("notCreated") })
-    }
-    fn complete_setup<'a>(
-        &'a self,
-        _operation: &'a OperationId,
-    ) -> HarnessLaunchFuture<'a, HarnessRegistrationOutcome> {
-        Box::pin(async move {
-            self.event(match &self.completion {
-                HarnessRegistrationOutcome::Registered => "registered",
-                HarnessRegistrationOutcome::Pending => "registrationPending",
-                HarnessRegistrationOutcome::Refused(_) => "registrationRefused",
-            })?;
-            Ok(self.completion.clone())
-        })
-    }
-    fn refuse_setup<'a>(
-        &'a self,
-        _operation: &'a OperationId,
-        cause: HarnessLocalSetupRefusal,
-    ) -> HarnessLaunchFuture<'a, ()> {
-        Box::pin(async move {
-            self.refused
-                .lock()
-                .map_err(|_| HarnessLaunchFailure::Unavailable)?
-                .push(cause);
-            self.event("setupRefused")
-        })
-    }
-    fn binding_for_restore<'a>(
-        &'a self,
-        _session: &'a SessionRef,
-    ) -> HarnessLaunchFuture<'a, HarnessRestoreAdmission> {
-        Box::pin(async { Err(HarnessLaunchFailure::InactiveBinding) })
-    }
-}
-
 fn payload_schemas() -> Result<Arc<NativePayloadSchemas>, Box<dyn std::error::Error>> {
     let mut definitions = serde_json::Map::new();
     for name in [

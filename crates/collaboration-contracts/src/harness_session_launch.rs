@@ -122,8 +122,8 @@ pub type HarnessLaunchFuture<'a, TOutcome> =
 pub trait HarnessSessionLaunchPort: Send + Sync {
     fn prepare_start<'a>(
         &'a self,
-        launch: &'a HarnessSessionLaunch,
-        identity: &'a crate::HarnessLaunchIdentity,
+        operation: &'a OperationId,
+        declared: &'a crate::HarnessDeclaredLaunchInput,
     ) -> HarnessLaunchFuture<'a, HarnessStartAdmission>;
     /// Must finish before the native/provider create RPC can be dispatched.
     fn mark_dispatched<'a>(&'a self, operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()>;

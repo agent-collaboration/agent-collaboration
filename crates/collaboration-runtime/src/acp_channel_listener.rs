@@ -14,6 +14,7 @@ use tokio::{sync::Semaphore, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 pub struct AcpChannelListener {
+    harness: codex_acp_adapter::CodexHarnessAdmission,
     socket: PrivateSocketListener,
     generations: NativeGenerationGate,
     stored_sessions: Arc<dyn AcpStoredSessions>,
@@ -37,6 +38,7 @@ impl AcpChannelListener {
     ) -> io::Result<Self> {
         let _schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
         Ok(Self {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             socket: PrivateSocketListener::bind(path)?,
             generations,
             stored_sessions,
@@ -49,6 +51,14 @@ impl AcpChannelListener {
             #[cfg(test)]
             fail_accept: false,
         })
+    }
+    #[must_use]
+    pub fn with_harness_admission(
+        mut self,
+        admission: codex_acp_adapter::CodexHarnessAdmission,
+    ) -> Self {
+        self.harness = admission;
+        self
     }
     #[must_use]
     pub fn with_connection_budget(mut self, permits: Arc<Semaphore>) -> Self {
@@ -90,6 +100,7 @@ impl AcpChannelListener {
                     let (stream, _) = match accepted { Ok(pair) => pair, Err(error) => break Err(error) };
                     let Ok(permit) = Arc::clone(&self.permits).try_acquire_owned() else { continue; };
                     let admission = GateCodexAdmissionSource {
+                        harness: self.harness.clone(),
                         generations: self.generations.clone(),
                         stored_sessions: Arc::clone(&self.stored_sessions),
                         approval_broker: Arc::clone(&self.approval_broker),
@@ -131,6 +142,7 @@ struct ProviderRouteBackend {
 }
 
 struct GateCodexAdmissionSource {
+    harness: codex_acp_adapter::CodexHarnessAdmission,
     generations: NativeGenerationGate,
     stored_sessions: Arc<dyn AcpStoredSessions>,
     approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
@@ -146,6 +158,7 @@ impl CodexAdmissionSource for GateCodexAdmissionSource {
             .filter(|schemas| schemas.supports_server_messages())
             .ok_or_else(|| io::Error::other("Codex payload schemas unavailable"))?;
         Ok(AcpConnectionInputs {
+            harness: self.harness.clone(),
             backend_path: admission.backend_path().to_owned(),
             generation: admission.generation().clone(),
             schemas,

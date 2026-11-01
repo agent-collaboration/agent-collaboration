@@ -83,6 +83,7 @@ async fn pending_catalog_does_not_block_connection_routing_or_shutdown() {
     let task = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             backend_path: "/unused-native-fixture".into(),
             generation: serde_json::from_value(
                 json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
@@ -248,6 +249,7 @@ async fn public_connection_routes_discovery_and_receipt_guarded_loads_to_native_
     let task = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             backend_path: socket.clone(),
             generation,
             schemas,
@@ -469,6 +471,7 @@ async fn detached_create_finishes_and_holds_its_empty_thread()
     let serving = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             backend_path: socket.clone(),
             generation: serde_json::from_value(
                 json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
@@ -606,6 +609,7 @@ async fn closed_create_connection_loads_held_binding_without_native_resume_and_p
     }))?;
     let holder = Arc::new(TestBindingHolder::default());
     let new_connection = |holder: Arc<TestBindingHolder>| AcpConnectionInputs {
+        harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
         backend_path: socket.clone(),
         generation: generation.clone(),
         schemas: Arc::clone(&schemas),

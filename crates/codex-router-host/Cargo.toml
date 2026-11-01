@@ -26,6 +26,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }

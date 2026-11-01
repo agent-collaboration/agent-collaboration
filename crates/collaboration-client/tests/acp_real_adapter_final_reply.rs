@@ -302,6 +302,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
         serve_acp_connection(
             stream,
             AcpConnectionInputs {
+                harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
                 backend_path: adapter_root.join("native.sock"),
                 generation: serde_json::from_value(json!({
                     "serviceEpoch":adapter_service_epoch,

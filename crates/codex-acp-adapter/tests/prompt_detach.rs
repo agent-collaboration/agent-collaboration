@@ -233,6 +233,7 @@ async fn frontend_eof_detaches_active_turn_and_reconnect_is_busy_until_native_id
     .unwrap();
     let holder = Arc::new(TestBindingHolder::default());
     let connection_inputs = || AcpConnectionInputs {
+        harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
         backend_path: socket.clone(),
         generation: generation.clone(),
         schemas: Arc::clone(&schemas),
@@ -517,6 +518,7 @@ async fn native_callback_after_frontend_eof_interrupts_turn_and_finishes_actor()
     )
     .unwrap();
     let inputs = AcpConnectionInputs {
+        harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
         backend_path: socket.clone(),
         generation,
         schemas,
@@ -628,6 +630,7 @@ async fn session_load_without_native_thread_status_fails_closed() {
     .unwrap();
     let holder = Arc::new(TestBindingHolder::default());
     let inputs = AcpConnectionInputs {
+        harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
         backend_path: socket.clone(),
         generation,
         schemas,

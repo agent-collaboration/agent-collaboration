@@ -257,6 +257,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     let serving_acp = tokio::spawn(serve_acp_connection(
         acp_server,
         AcpConnectionInputs {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             backend_path: socket_path.clone(),
             generation,
             schemas,

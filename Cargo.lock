@@ -1403,6 +1403,7 @@ dependencies = [
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
+ "fleet-identity-protocol",
  "fleet-sync-delivery",
  "fleet-sync-lease",
  "fleet-sync-protocol",

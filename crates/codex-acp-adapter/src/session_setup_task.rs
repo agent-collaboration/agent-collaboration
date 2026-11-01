@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
 
 pub(crate) struct SetupTaskInputs {
+    pub harness: crate::CodexHarnessAdmission,
     pub known_session: Option<AcpSessionBinding>,
     pub adopt_unmaterialized: bool,
     pub backend_path: PathBuf,
@@ -26,6 +27,7 @@ pub(crate) struct SetupTaskOutput {
     pub outcome: Result<(Vec<Value>, Value), SessionSetupError>,
 }
 pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutput {
+    let _declared_admission = &inputs.harness;
     let mut catalog = match AcpSchemaCatalog::load() {
         Ok(catalog) => catalog,
         Err(_) => {
@@ -211,7 +213,7 @@ mod tests {
         tungstenite::{Message, protocol::Role},
     };
 
-    struct AcceptingRecorder;
+    pub(super) struct AcceptingRecorder;
 
     impl ConversationOperationRecorder for AcceptingRecorder {
         fn admit_create<'a>(
@@ -246,7 +248,7 @@ mod tests {
         }
     }
 
-    fn native_schemas() -> Arc<NativePayloadSchemas> {
+    pub(super) fn native_schemas() -> Arc<NativePayloadSchemas> {
         let definitions: serde_json::Map<String, Value> = [
             "ThreadFork",
             "ThreadLoadedList",
@@ -350,6 +352,7 @@ mod tests {
         });
 
         let resumed = run_session_setup(SetupTaskInputs {
+            harness: crate::CodexHarnessAdmission::AccessEnrollment,
             known_session: Some(binding),
             adopt_unmaterialized: false,
             backend_path: PathBuf::new(),
@@ -374,6 +377,7 @@ mod tests {
         let mut binding = resumed.binding.unwrap();
         binding.materialized = false;
         let adopted = run_session_setup(SetupTaskInputs {
+            harness: crate::CodexHarnessAdmission::AccessEnrollment,
             known_session: Some(binding),
             adopt_unmaterialized: true,
             backend_path: PathBuf::new(),
@@ -396,3 +400,7 @@ mod tests {
         fixture.await.unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "session_setup_task_harness_tests.rs"]
+mod harness_tests;

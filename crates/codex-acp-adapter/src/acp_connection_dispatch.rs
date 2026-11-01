@@ -17,6 +17,7 @@ pub trait AcpStoredSessions: Send + Sync {
     fn list(&self, params: Value) -> Pin<Box<dyn Future<Output = io::Result<Value>> + Send + '_>>;
 }
 pub struct AcpConnectionInputs {
+    pub harness: crate::CodexHarnessAdmission,
     pub backend_path: PathBuf,
     pub generation: CodexGeneration,
     pub schemas: Arc<NativePayloadSchemas>,
@@ -170,7 +171,7 @@ pub(crate) async fn route_codex_sessions(
                         }
                     }
                     let cancellation_barrier=requested_session.as_ref().and_then(|session| sessions.cancellation_barrier(session));
-                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), approval_broker:Arc::clone(&inputs.approval_broker) };
+                    let setup=SetupTaskInputs { harness:inputs.harness.clone(), cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), approval_broker:Arc::clone(&inputs.approval_broker) };
                     let holder=Arc::clone(&inputs.holder);
                     if create_new {
                         let (result_sender,result_receiver)=tokio::sync::oneshot::channel();

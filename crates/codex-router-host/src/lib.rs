@@ -13,6 +13,7 @@ mod claude_code_peer_delivery_route;
 mod claude_provider_launch_environment;
 mod codex_conversation_recording_composition;
 mod harness_launch_composition;
+mod harness_launch_facts;
 pub use harness_launch_composition::HostHarnessSessionLaunchPort;
 #[cfg(test)]
 mod host_manifest_publication_tests;

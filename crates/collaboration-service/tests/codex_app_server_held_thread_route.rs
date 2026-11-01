@@ -350,6 +350,7 @@ async fn exercise_held_empty_thread(
     let serving = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            harness: codex_acp_adapter::CodexHarnessAdmission::AccessEnrollment,
             backend_path: socket_path.clone(),
             generation,
             schemas: Arc::clone(&schemas),

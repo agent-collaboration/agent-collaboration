@@ -5,7 +5,7 @@ use codex_router_state::fleet_session_registration::{
 use collaboration_contracts::{
     HarnessLaunchFailure, HarnessLaunchFuture, HarnessLocalSetupRefusal,
     HarnessRegistrationOutcome, HarnessRestoreAdmission, HarnessSessionBinding,
-    HarnessSessionLaunch, HarnessSessionLaunchPort, HarnessStartAdmission,
+    HarnessSessionLaunchPort, HarnessStartAdmission,
 };
 use collaboration_protocol::{NonEmptyText, OperationId};
 use collaboration_service::fleet_session_registrar::{
@@ -19,11 +19,21 @@ const NATIVE_COLLABORATION_MCP_SERVER_NAME: &str = "agent-router";
 
 pub struct HostHarnessSessionLaunchPort {
     registrar: Arc<FleetSessionRegistrar>,
+    confirmed_machine_environment: fleet_identity_protocol::MachineEnvironment,
+    ids: Arc<dyn runtime_primitives::IdSource + Send + Sync>,
 }
 impl HostHarnessSessionLaunchPort {
     #[must_use]
-    pub fn new(registrar: Arc<FleetSessionRegistrar>) -> Self {
-        Self { registrar }
+    pub fn new(
+        registrar: Arc<FleetSessionRegistrar>,
+        confirmed_machine_environment: fleet_identity_protocol::MachineEnvironment,
+        ids: Arc<dyn runtime_primitives::IdSource + Send + Sync>,
+    ) -> Self {
+        Self {
+            registrar,
+            confirmed_machine_environment,
+            ids,
+        }
     }
 
     /// Finish before opening launch admission; reconnecting a live machine is not a restart.
@@ -49,13 +59,26 @@ fn binding(address: &str) -> Result<HarnessSessionBinding, HarnessLaunchFailure>
 impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
     fn prepare_start<'a>(
         &'a self,
-        launch: &'a HarnessSessionLaunch,
-        identity: &'a collaboration_contracts::HarnessLaunchIdentity,
+        operation: &'a OperationId,
+        declared: &'a collaboration_contracts::HarnessDeclaredLaunchInput,
     ) -> HarnessLaunchFuture<'a, HarnessStartAdmission> {
         Box::pin(async move {
+            if self.registrar.registration_mode() == SessionRegistrationMode::AccessEnrollment {
+                return Ok(HarnessStartAdmission::AccessEnrollment);
+            }
+            let launch = super::harness_launch_facts::declared_host_launch(
+                operation,
+                declared,
+                &self.confirmed_machine_environment,
+                self.ids.as_ref(),
+            )
+            .await?;
+            let identity = declared
+                .identity()
+                .map_err(|_| HarnessLaunchFailure::Unavailable)?;
             let admission = self
                 .registrar
-                .prepare_harness_start(launch, identity)
+                .prepare_harness_start(&launch, &identity)
                 .await
                 .map_err(launch_failure)?;
             match admission {
