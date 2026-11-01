@@ -8,9 +8,10 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 #[path = "support/contract_artifacts.rs"]
+#[cfg(test)]
 mod contract_artifacts;
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+#[cfg(test)]
+use contract_artifacts::schema_validation;
 
 fn central_record_literal() -> Value {
     json!({
@@ -163,6 +164,7 @@ fn fleet_directory_scalar_wire_contracts() {
     );
 }
 
+#[cfg(test)]
 fn assert_scalar_cases<T: JsonSchema + DeserializeOwned>(cases: Vec<(String, bool)>) {
     let schema = serde_json::to_value(
         SchemaSettings::draft2020_12()
