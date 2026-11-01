@@ -212,3 +212,92 @@ fn compiled_sessions_atomic_paste_searches_literal_id_and_restores_terminal_mode
     }
     Ok(())
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn compiled_sessions_settled_unbound_keys_flush_only_their_acknowledged_frames() -> TestResult<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    // Arrange: the actual picker with its existing dispatch receipt/flush owner.
+    // This fixture has no record loader, so the three-second reload task has no
+    // source publication to confound the input-bounded observation.
+    let directory = std::env::temp_dir().join(format!(
+        "sessions-unbound-frame-receipts-{}",
+        std::process::id()
+    ));
+    fs::DirBuilder::new().mode(0o700).create(&directory)?;
+    let result: TestResult<()> = (|| {
+        let mut terminal = TerminalDriver::spawn_with_environment(
+            Path::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness")),
+            ["--sessions-picker", "--provider-filter-storyboard"],
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[("TUI_SESSIONS_FIXTURE_RECEIPT_DIR", directory.as_os_str())],
+        )?;
+        terminal.wait_for_text("Codex Alpha", SEMANTIC_WAIT)?;
+
+        // Act: each next F12 is sent only after the previous real flush marker.
+        // F12 is unbound; no sleeps, polling interval, or timing threshold.
+        for sequence in 1..=8 {
+            terminal.send(b"\x1b[24~")?;
+            terminal.wait_for_text(
+                &format!("\x1b]7770;dispatch={sequence}\x1b\\"),
+                SEMANTIC_WAIT,
+            )?;
+        }
+        terminal.send(&[0x04])?;
+        let transcript = terminal.finish(SEMANTIC_WAIT)?;
+        if let Some(capture) = std::env::var_os("CODEX_ROUTER_PTY_CAPTURE_DIR") {
+            let capture = PathBuf::from(capture);
+            fs::create_dir_all(&capture)?;
+            fs::write(capture.join("picker-unbound-frame-probe.ansi"), &transcript)?;
+        }
+
+        // Assert: between consecutive ACKs there is exactly one native frame,
+        // the marker producer's intentional flush for the next unbound input.
+        let text = String::from_utf8_lossy(&transcript);
+        let mut frames_between_acks = Vec::new();
+        for sequence in 1..8 {
+            let previous = format!("\x1b]7770;dispatch={sequence}\x1b\\");
+            let next = format!("\x1b]7770;dispatch={}\x1b\\", sequence + 1);
+            let start =
+                text.find(&previous).ok_or("previous dispatch ACK absent")? + previous.len();
+            let end = text.find(&next).ok_or("next dispatch ACK absent")?;
+            let between = text.get(start..end).ok_or("dispatch ACK order changed")?;
+            frames_between_acks.push(between.matches("\x1b[?2026l").count());
+        }
+        println!("picker_unbound_frames_between_acks={frames_between_acks:?}");
+        ensure(
+            frames_between_acks == vec![1; 7],
+            "settled picker painted extra frames between unbound-key ACKs",
+        )?;
+        let receipts = fs::read_to_string(directory.join("input-dispatch.jsonl"))?
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        ensure(receipts.len() == 9, "unbound probe input count changed")?;
+        for (index, receipt) in receipts.iter().take(8).enumerate() {
+            ensure(
+                receipt["sequence"] == index + 1
+                    && receipt["event"]["code"]["name"] == "F12"
+                    && receipt["surface"]["kind"] == "screen"
+                    && receipt["action"].is_null(),
+                "probe key was not an acknowledged unbound screen input",
+            )?;
+        }
+        ensure(
+            text.contains("SESSION_PICKER_OUTCOME canceled")
+                && text.contains("\x1b[?1006l")
+                && text.contains("\x1b[?1049l"),
+            "frame probe changed cancellation or terminal restoration",
+        )?;
+        Ok(())
+    })();
+    for name in ["input-dispatch.jsonl", "picker-outcome.json"] {
+        let path = directory.join(name);
+        if path.exists() {
+            fs::remove_file(path)?;
+        }
+    }
+    fs::remove_dir(directory)?;
+    result
+}

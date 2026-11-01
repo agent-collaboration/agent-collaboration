@@ -329,12 +329,13 @@ mod quota_reset_pty_test {
         terminal.resize(24, 160)?;
 
         stage(
-            terminal.wait_for_text("Sessions", SEMANTIC_WAIT),
+            terminal.wait_for_text("3/3 sessions", SEMANTIC_WAIT),
             "initial sessions picker",
         )?;
         let pointer_focus_start = terminal.transcript_len();
-        // The sealed real component draw pins beta at zero-based (7, 9).
-        terminal.send_sgr_mouse_left_down(7, 9)?;
+        // R13 (design 1c21613c/e3f989d0): the toolbar replaces title rows.
+        // The retained 160x24 native grid pins beta at zero-based (7, 7).
+        terminal.send_sgr_mouse_left_down(7, 7)?;
         stage(
             terminal.wait_for_text_after(
                 "BETA_CONVERSATION_ACTIVE",
@@ -393,16 +394,19 @@ mod quota_reset_pty_test {
         terminal.resize(24, 160)?;
 
         stage(
-            terminal.wait_for_text("Sessions", SEMANTIC_WAIT),
+            terminal.wait_for_text("3/3 sessions", SEMANTIC_WAIT),
             "initial sessions picker",
         )?;
-        terminal.send_sgr_mouse_left_down(140, 1)?;
+        // R13 (design 2307e307): + New sits immediately after Menu.
+        terminal.send_sgr_mouse_left_down(17, 1)?;
         terminal.wait_for_text("New session", SEMANTIC_WAIT)?;
         ensure(
             terminal.child_is_running()?,
             "New must only open a form before explicit Start",
         )?;
-        terminal.send(b"\r")?;
+        // R9/R14 (design 1c21613c): Enter opens the focused Client
+        // dropdown; Ctrl+Enter explicitly invokes the form primary action.
+        terminal.send(b"\x1b[13;5u")?;
 
         let transcript = terminal.finish(SEMANTIC_WAIT)?;
         let transcript = String::from_utf8_lossy(&transcript);

@@ -11,7 +11,7 @@ fn fresh_compiled_no_color_child_keeps_details_and_input_without_color_sequences
             Path::new(env!("CARGO_MANIFEST_DIR")),
             no_color,
         )?;
-        terminal.wait_for_text("Sessions", SEMANTIC_WAIT)?;
+        terminal.wait_for_text("3/3 sessions", SEMANTIC_WAIT)?;
         let start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Session details", start, SEMANTIC_WAIT)?;
