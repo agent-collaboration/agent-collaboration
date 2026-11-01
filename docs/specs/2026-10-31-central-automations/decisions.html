@@ -29,21 +29,11 @@
 <ex-document id="content">
 <h1 id="heading-your-decisions">Your decisions</h1>
 
-<p><strong>Two things are waiting on you: the database PR's library gaps, and a model login for the test rig.</strong> Everything else you answered on 31 October. This page records each answer and what it changed in the design.</p>
+<p><strong>Nothing is waiting on you right now.</strong> Everything else you answered on 31 October. This page records each answer and what it changed in the design.</p>
 
-<ex-callout title="Waiting on you: the database PR's library gaps" tone="question" icon="database">
-  <p>The Verifier supports everything PR 1 implements for the stores the Router controls: retention windows, WAL, the one-time vacuum, and approvals moving into <code>interaction.sqlite</code>. Three things sit in pinned libraries the Router doesn't control:</p>
-  <ul>
-    <li>finished install attempts are never pruned, because pinned <code>agent-fleet-sync</code> has no delete call and no timestamp;</li>
-    <li>the journal mode of the library-owned install and read-copy stores is being observed now;</li>
-    <li>the Turso stores (<code>interaction.sqlite</code>, fleet, project files) can't be vacuumed, because pinned <code>sqlx-turso</code> disables it.</li>
-  </ul>
-  <p><strong>I've provisionally taken option A</strong>, which is reversible because nothing merges before both PRs are ready: accept PR 1 for what the Router controls, and change the libraries in a follow-up PR. That follow-up changes library pins, which needs your approval. <strong>Option B</strong> holds PR 1 until the library changes land. Tell me if you want B, and whether you approve the pin changes.</p>
-</ex-callout>
-
-<ex-callout title="Waiting on you: a model login for the Sunclaw test rig" tone="question" icon="users">
-  <p>The Verifier's test rig on Sunclaw runs isolated debug Routers, and to prove the notification milestone (M6), and later M3, it has to deliver to a real session, which starts a short Haiku turn. The rig has no model account of its own, and it's correctly barred from reading <code>~/.codex-router</code> and <code>~/.codex-router-debug</code>.</p>
-  <p><strong>What I need:</strong> a Claude login made for the rig only, in a private config directory the Verifier owns on Sunclaw. Its budget stays small, Haiku only, as your rule says. It needs your sign-in on Sunclaw; the Verifier will give you the exact command. Until then it proves everything up to the model step.</p>
+<ex-callout title="Decided: database library gaps and the test rig's model" tone="decision" icon="database">
+  <p><strong>Option A, with the library pins approved (1 November).</strong> PR 1 ships retention, WAL and vacuum for the stores the Router controls. A follow-up PR changes the pinned <code>agent-fleet-sync</code> (install-attempt pruning, journal mode for its stores) and <code>sqlx-turso</code> (vacuum).</p>
+  <p><strong>The Sunclaw test rig uses Codex Luna, not Haiku</strong>, through Sunclaw's existing Codex login, at a small budget.</p>
 </ex-callout>
 
 <h2 id="answers">What you decided</h2>
