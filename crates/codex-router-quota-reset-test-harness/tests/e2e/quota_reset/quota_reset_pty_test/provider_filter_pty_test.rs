@@ -105,7 +105,8 @@ async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections
         let chooser_start = terminal.transcript_len();
         terminal.send(&[0x06])?;
         terminal.wait_for_text_after("Account provider", chooser_start, SEMANTIC_WAIT)?;
-        terminal.send(b"\r\x1b[B\x1b[B\r\t\t")?;
+        // Design a3439a93 R19 adds Group by between Disabled accounts and Apply.
+        terminal.send(b"\r\x1b[B\x1b[B\r\t\t\t")?;
         let apply_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Filters: Claude ▾", apply_start, SEMANTIC_WAIT)?;
@@ -119,7 +120,8 @@ async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections
         let disabled_pick_start = terminal.transcript_len();
         terminal.send(b"\x1b[B\r")?;
         terminal.wait_for_styled_text_after("Hidden ▾", disabled_pick_start, SEMANTIC_WAIT)?;
-        terminal.send(b"\t")?;
+        // Design a3439a93 R19: pass Group by before the unchanged Apply action.
+        terminal.send(b"\t\t")?;
         let intersection_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         if let Err(error) = terminal.wait_for_text_after(count, intersection_start, SEMANTIC_WAIT) {

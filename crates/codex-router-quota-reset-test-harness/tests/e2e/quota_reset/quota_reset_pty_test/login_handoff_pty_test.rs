@@ -80,9 +80,17 @@ async fn real_login_child_inherits_restored_terminal_and_returns_after_each_exit
         let menu_start = terminal.transcript_len();
         terminal.send(b"\x1b[21~")?;
         terminal.wait_for_text_after("Log in again", menu_start, SEMANTIC_WAIT)?;
-        for _ in 0..5 {
+        // Design a3439a93 R19 and 281d3352 T2 add three grouping choices
+        // before Log in again; headings/separators are not focus targets.
+        let login_selection_start = terminal.transcript_len();
+        for _ in 0..8 {
             terminal.send(b"\x1b[B")?;
         }
+        terminal.wait_for_styled_text_after(
+            "❯ Log in again",
+            login_selection_start,
+            SEMANTIC_WAIT,
+        )?;
         let login_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after(notice, login_start, SEMANTIC_WAIT)?;

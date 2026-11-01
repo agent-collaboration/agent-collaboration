@@ -49,7 +49,8 @@ async fn compiled_credit_refresh_reports_focused_responses_failure_despite_parti
         "partial-refresh inspection requests",
     )?;
     let credits_tab_start = terminal.transcript_len();
-    terminal.send(b"\t\x1b[C\r")?;
+    // Design 1c21613c R3/R9: the pinned Credits segment precedes the domain body.
+    terminal.send(b"\x1b[Z\r")?;
     stage(
         terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "partial-refresh tab cancellation acknowledgement",
@@ -173,7 +174,8 @@ async fn compiled_pending_refresh_tab_can_return_to_browse_and_exit_before_provi
         "initial reset inspection requests",
     )?;
     let credits_tab_start = terminal.transcript_len();
-    terminal.send(b"\t\x1b[C\r")?;
+    // Design 1c21613c R3/R9: the pinned Credits segment precedes the domain body.
+    terminal.send(b"\x1b[Z\r")?;
     stage(
         terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "initial switch to Credits",
@@ -275,7 +277,8 @@ async fn compiled_disabled_account_refresh_reports_unavailable_without_provider_
         "disabled focused account options",
     )?;
     let credits_tab_start = terminal.transcript_len();
-    terminal.send(b"\t\x1b[C\r")?;
+    // Design 1c21613c R3/R9: the pinned Credits segment precedes the domain body.
+    terminal.send(b"\x1b[Z\r")?;
     stage(
         terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "disabled-account tab switch acknowledgement",

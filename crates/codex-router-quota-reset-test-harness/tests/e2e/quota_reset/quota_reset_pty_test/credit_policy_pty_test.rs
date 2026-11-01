@@ -44,7 +44,8 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
     )?;
 
     let credits_tab_start = terminal.transcript_len();
-    terminal.send(b"\t\x1b[C\r")?;
+    // Design 1c21613c R3/R9: the pinned Credits segment precedes the domain body.
+    terminal.send(b"\x1b[Z\r")?;
     stage(
         terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "inspection-only cancellation acknowledgement before Credits",
@@ -167,7 +168,8 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
         "reopened reset inspection loopback requests",
     )?;
     let reopen_credits_start = terminal.transcript_len();
-    terminal.send(b"\t\x1b[C\r")?;
+    // Design 1c21613c R3/R9: the pinned Credits segment precedes the domain body.
+    terminal.send(b"\x1b[Z\r")?;
     stage(
         terminal.wait_for_text_after("Options · Credits", reopen_credits_start, SEMANTIC_WAIT),
         "reopened Credits tab reads saved policy",
