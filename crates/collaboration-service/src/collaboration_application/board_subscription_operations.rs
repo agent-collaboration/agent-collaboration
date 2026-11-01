@@ -23,6 +23,7 @@ impl BoardOperations {
         &self,
         request: ThreadRenewRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.subscription_project(&request.scope).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -40,6 +41,7 @@ impl BoardOperations {
         &self,
         request: ThreadSubscribeRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.subscription_project(&request.scope).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -58,6 +60,7 @@ impl BoardOperations {
         &self,
         request: ThreadUnsubscribeRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.subscription_project(&request.scope).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -75,6 +78,7 @@ impl BoardOperations {
         &self,
         request: ThreadSubscriptionsRequest,
     ) -> Result<ThreadSubscriptionsResult, BoardError> {
+        self.ensure_machine_login()?;
         // The owner returns the snapshot from the same pass that reconciled the reader.
         let records = if let Some(delivery) = &self.subscription_delivery {
             delivery.reader_subscriptions(request.actor.clone()).await?
@@ -111,6 +115,7 @@ impl BoardOperations {
         request: ThreadSubscriptionWaitRequest,
         maximum_root_notice_bytes: usize,
     ) -> Result<ThreadSubscriptionWaitResult, BoardError> {
+        self.ensure_machine_login()?;
         request
             .validate()
             .map_err(|error| BoardError::invalid_field("request", error.to_string()))?;

@@ -45,7 +45,8 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         .additional_machine(&second_origin, PeerId::new(durable_steps::Uuid::now_v7())?)
         .await?;
     let mut gate = central.hold_granted_notice(project.clone(), Epoch::new(2)?)?;
-    let board = open_board_admission(&root, identity()?, Some(central.session_inputs()?)).await?;
+    let board =
+        open_board_admission(&root, identity()?, Some(central.session_inputs()?), None).await?;
     let projects = board.session.as_ref().ok_or("session")?.projects.clone();
     let welcomed = projects.welcomed.clone();
     let registry = projects.registry()?;
@@ -63,6 +64,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
             Some("later-notice-target"),
         )?,
         Some(second_machine.session_inputs()?),
+        None,
     )
     .await?;
     let second_welcome = second_board

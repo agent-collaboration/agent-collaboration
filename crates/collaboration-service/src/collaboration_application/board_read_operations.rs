@@ -16,6 +16,7 @@ impl BoardOperations {
         &self,
         request: ProjectShowRequest,
     ) -> Result<ProjectShowResult, BoardError> {
+        self.ensure_machine_login()?;
         match self.fleet_record(request.project_id.clone().into()).await? {
             Record::DirectoryEntry(project) => {
                 let state = match self
@@ -60,6 +61,7 @@ impl BoardOperations {
         &self,
         request: WorkspaceShowRequest,
     ) -> Result<WorkspaceShowResult, BoardError> {
+        self.ensure_machine_login()?;
         match self.fleet_record(request.workspace_id.into()).await? {
             Record::Workspace(workspace) => Ok(WorkspaceShowResult { workspace }),
             _ => Err(BoardError::invalid_field(
@@ -72,6 +74,7 @@ impl BoardOperations {
         &self,
         request: BoardShowRequest,
     ) -> Result<BoardShowResult, BoardError> {
+        self.ensure_machine_login()?;
         match self.fleet_record(request.board_id.into()).await? {
             Record::Board(board) => Ok(BoardShowResult { board }),
             _ => Err(BoardError::invalid_field("boardId", "is not a board")),
@@ -81,6 +84,7 @@ impl BoardOperations {
         &self,
         request: BoardListRequest,
     ) -> Result<BoardListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let page = self
             .fleet_list_page(
@@ -111,6 +115,7 @@ impl BoardOperations {
         &self,
         request: WorkspaceListRequest,
     ) -> Result<WorkspaceListResult, BoardError> {
+        self.ensure_machine_login()?;
         if let Some(repository) = &request.repository {
             self.require_local_repository(repository)?;
         }
@@ -143,6 +148,7 @@ impl BoardOperations {
         &self,
         request: ProjectListRequest,
     ) -> Result<ProjectListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let page = self
             .fleet_list_page(
@@ -195,6 +201,7 @@ impl BoardOperations {
         record.ok_or_else(|| super::missing_record(reference))
     }
     pub async fn post_show(&self, request: PostShowRequest) -> Result<PostShowResult, BoardError> {
+        self.ensure_machine_login()?;
         let reference = request.post_id.clone().into();
         let projects = self
             .admission()?
@@ -221,6 +228,7 @@ impl BoardOperations {
         &self,
         request: ThreadShowRequest,
     ) -> Result<ThreadShowResult, BoardError> {
+        self.ensure_machine_login()?;
         let project = self.thread_project(&request.thread).await?;
         let store = self
             .admission()?

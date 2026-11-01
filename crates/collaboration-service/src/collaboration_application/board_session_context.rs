@@ -33,6 +33,7 @@ impl BoardOperations {
         &self,
         request: SessionContextRequest,
     ) -> Result<SessionContext, BoardError> {
+        self.ensure_machine_login()?;
         self.context_payload(&request.session)
             .await
             .map_err(|_| BoardError::board_unavailable())

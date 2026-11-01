@@ -26,6 +26,7 @@ impl BoardOperations {
         &self,
         request: ThreadListRequest,
     ) -> Result<ThreadListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let after = self
             .metadata_after(&request.page, "thread_list", &filter)

@@ -101,6 +101,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         &directory.path().join("router"),
         identity()?,
         Some(central.session_inputs()?),
+        None,
     )
     .await?;
     let registry = board

@@ -10,6 +10,7 @@ use message_board::{
 };
 impl BoardOperations {
     pub async fn adr_create(&self, request: AdrCreateRequest) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             protocol_version: request.protocol_version,
@@ -34,6 +35,7 @@ impl BoardOperations {
         &self,
         request: AdrTransitionRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             protocol_version: request.protocol_version,
@@ -52,6 +54,7 @@ impl BoardOperations {
         .await
     }
     pub async fn adr_show(&self, request: FleetRecordShowRequest) -> Result<Record, BoardError> {
+        self.ensure_machine_login()?;
         if request.record.kind != RecordKind::Adr {
             return Err(BoardError::invalid_field("record.kind", "must be adr"));
         }
@@ -61,6 +64,7 @@ impl BoardOperations {
         &self,
         request: FleetRecordListRequest,
     ) -> Result<RecordListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let page = self
             .fleet_list_page(

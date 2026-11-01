@@ -16,6 +16,7 @@ use crate::credential_key::{
 use crate::credential_store_lock::CredentialStoreLock;
 use crate::credential_store_lock::CredentialStoreLockMode;
 use crate::file_backend::FileSecretStore;
+use crate::fleet_secret_key::{FleetSecretKey, FleetSecretKind};
 use crate::keychain_data_key::KeychainAccess;
 use crate::keychain_data_key::PooledCredentialDataKey;
 use crate::keychain_data_key::load_or_create_pooled_credential_data_key;
@@ -60,6 +61,50 @@ enum CredentialStoreState {
 }
 
 impl EncryptedCredentialStore {
+    /// Retires earlier machine credentials after the active credential and metadata are published.
+    /// Other installations, protected purposes and provider credentials remain untouched.
+    pub fn remove_retired_machine_credentials(
+        &self,
+        active: &FleetSecretKey,
+    ) -> Result<(), SecretStoreError> {
+        self.remove_retired_machine_credentials_with_sync(active, |directory| {
+            std::fs::File::open(directory)?.sync_all()
+        })
+    }
+
+    fn remove_retired_machine_credentials_with_sync(
+        &self,
+        active: &FleetSecretKey,
+        sync_directory: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
+    ) -> Result<(), SecretStoreError> {
+        let _ = self.ready_data_key()?;
+        if active.kind() != FleetSecretKind::MachineCredential {
+            return Err(SecretStoreError::InvalidFleetSecretKey);
+        }
+        let _store_lock = CredentialStoreLock::acquire(
+            self.file_store.root(),
+            CredentialStoreLockMode::Exclusive,
+        )?;
+        // Validate the complete inventory before deleting any file. The active
+        // envelope must exist and authenticate before older generations retire.
+        let keys = self.file_store.encrypted_keys_for_validation()?;
+        let active_key = active.secret_key()?;
+        self.read_secret(&active_key)?;
+        for secret_key in keys {
+            if let Some(key) = FleetSecretKey::parse(&secret_key)?
+                && key.kind() == FleetSecretKind::MachineCredential
+                && key.installation() == active.installation()
+                && key != *active
+            {
+                self.file_store.delete_credential_envelope(&secret_key)?;
+            }
+        }
+        sync_directory(self.file_store.root()).map_err(|source| SecretStoreError::Filesystem {
+            path: self.file_store.root().to_path_buf(),
+            source,
+        })
+    }
+
     /// Removes every generation for one provider account while retaining the shared data key.
     /// The caller holds the account credential lock and has checked its disabled state.
     pub fn remove_account_credentials(
@@ -301,6 +346,10 @@ impl EncryptedCredentialStore {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "machine_credential_retirement_tests.rs"]
+mod machine_credential_retirement_tests;
 
 impl SecretStore for EncryptedCredentialStore {
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {

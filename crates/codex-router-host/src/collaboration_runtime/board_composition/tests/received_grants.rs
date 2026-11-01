@@ -108,6 +108,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
             Some("receiving Router"),
         )?,
         Some(second_machine.session_inputs()?),
+        None,
     )
     .await?;
     let session = second_board.session.as_ref().ok_or("second session")?;
@@ -325,6 +326,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
             Some("intervening Router"),
         )?,
         Some(second_machine.session_inputs()?),
+        None,
     )
     .await?;
     let second_projects = second_board
@@ -508,6 +510,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
             Some(target_origin.machine.as_str()),
         )?,
         Some(target.session_inputs()?),
+        None,
     )
     .await?;
     let projects = board

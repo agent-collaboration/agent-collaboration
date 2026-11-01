@@ -49,6 +49,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
             Some(second_origin.machine.as_str()),
         )?,
         Some(second_machine.session_inputs()?),
+        None,
     )
     .await?;
     let second_projects = second_board

@@ -13,6 +13,7 @@ impl BoardOperations {
         &self,
         request: FeedReadRequest,
     ) -> Result<BoardReadReply<FeedRead>, BoardError> {
+        self.ensure_machine_login()?;
         let store = self
             .admission()?
             .registry
@@ -63,6 +64,7 @@ impl BoardOperations {
         &self,
         request: WorkTrailShowRequest,
     ) -> Result<BoardReadReply<WorkTrailReadResult>, BoardError> {
+        self.ensure_machine_login()?;
         let store = self
             .admission()?
             .registry

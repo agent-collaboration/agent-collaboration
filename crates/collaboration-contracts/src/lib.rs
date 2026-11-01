@@ -13,6 +13,8 @@ pub use project_replication_position::{
 };
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
+mod machine_login_gate;
+pub use machine_login_gate::{MachineLoginGate, MachineLoginState};
 mod native_delivery_result;
 mod provider_conversation_backend;
 mod scheduled_run_contract;

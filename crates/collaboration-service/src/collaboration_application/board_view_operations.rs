@@ -13,6 +13,7 @@ impl BoardOperations {
         &self,
         request: ContinuationCardRequest,
     ) -> Result<ContinuationCard, BoardError> {
+        self.ensure_machine_login()?;
         let snapshot = ViewSnapshot::load(
             self.registry.as_ref(),
             self.project_replication.as_ref(),
@@ -29,6 +30,7 @@ impl BoardOperations {
         Ok(card)
     }
     pub async fn view_owner(&self, _request: OwnerViewRequest) -> Result<OwnerView, BoardError> {
+        self.ensure_machine_login()?;
         let mut waiting = Vec::new();
         let mut unavailable_projects = Vec::new();
         for project in self.view_projects().await? {
@@ -61,6 +63,7 @@ impl BoardOperations {
         })
     }
     pub async fn view_lead_load(&self, request: LeadLoadRequest) -> Result<LeadLoad, BoardError> {
+        self.ensure_machine_login()?;
         let mut owed = Vec::new();
         let mut unavailable_projects = Vec::new();
         if let Some(reader) = request.lead.declared_identity() {
@@ -96,6 +99,7 @@ impl BoardOperations {
             .map_err(|error| super::admission_error(error.into()))
     }
     pub async fn view_work(&self, request: ProjectViewRequest) -> Result<WorkView, BoardError> {
+        self.ensure_machine_login()?;
         let snapshot = ViewSnapshot::load(
             self.registry.as_ref(),
             self.project_replication.as_ref(),

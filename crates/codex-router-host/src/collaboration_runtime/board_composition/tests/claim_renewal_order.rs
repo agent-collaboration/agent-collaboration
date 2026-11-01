@@ -61,6 +61,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         &directory.path().join("router"),
         identity()?,
         Some(central.session_inputs()?),
+        None,
     )
     .await?;
     let projects = board.session.as_ref().ok_or("session")?.projects.clone();

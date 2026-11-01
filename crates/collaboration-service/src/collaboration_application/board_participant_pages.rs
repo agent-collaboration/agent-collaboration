@@ -37,6 +37,7 @@ impl BoardOperations {
         &self,
         request: ThreadParticipantListRequest,
     ) -> Result<ThreadParticipantListResult, BoardError> {
+        self.ensure_machine_login()?;
         const OPERATION: &str = "thread_participant_list";
         let filter = fingerprint(&request)?;
         let registry = &self.admission()?.registry;

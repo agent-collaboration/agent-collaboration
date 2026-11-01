@@ -93,6 +93,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
         &directory.path().join("router"),
         identity()?,
         Some(central.inputs()?),
+        None,
     )
     .await?;
     let session = board.session.as_ref().ok_or("resumed session")?;

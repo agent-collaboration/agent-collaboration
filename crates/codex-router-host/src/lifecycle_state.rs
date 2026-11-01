@@ -195,6 +195,8 @@ pub struct LifecycleOutcome {
 /// Orthogonal live status returned through the operator boundary.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HostSnapshot {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    operator_capabilities: Vec<HostOperatorCapability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     port_selection: Option<crate::HostPortSelection>,
     phase: HostPhase,
@@ -209,6 +211,13 @@ pub struct HostSnapshot {
     // The operator channel spans installed CLI versions; older Hosts omit this observation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_login_reload: Option<crate::login_reload_outcome::LoginReloadOutcome>,
+}
+
+/// Additive capabilities let a newer CLI recognize an older running Host.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HostOperatorCapability {
+    FleetLogin,
 }
 
 /// Independently owned dimensions captured in one host snapshot.
@@ -238,6 +247,7 @@ impl HostSnapshot {
     #[must_use]
     pub fn new(dimensions: HostSnapshotDimensions) -> Self {
         Self {
+            operator_capabilities: vec![HostOperatorCapability::FleetLogin],
             port_selection: None,
             phase: dimensions.phase,
             router: dimensions.router,
@@ -250,6 +260,12 @@ impl HostSnapshot {
             last_lifecycle_outcome: dimensions.last_lifecycle_outcome,
             last_login_reload: None,
         }
+    }
+
+    #[must_use]
+    pub fn supports_fleet_login(&self) -> bool {
+        self.operator_capabilities
+            .contains(&HostOperatorCapability::FleetLogin)
     }
 
     /// Attaches the startup selections reported by the owning Host.

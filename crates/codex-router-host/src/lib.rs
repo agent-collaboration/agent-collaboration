@@ -44,6 +44,7 @@ pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
 mod fleet_enrollment_file;
+pub mod fleet_machine_login;
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
     FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
@@ -131,6 +132,7 @@ pub use lifecycle_owner::PreExecTelemetry;
 pub use lifecycle_state::AppServerCondition;
 pub use lifecycle_state::ExecutableRelation;
 pub use lifecycle_state::HostOperation;
+pub use lifecycle_state::HostOperatorCapability;
 pub use lifecycle_state::HostPhase;
 pub use lifecycle_state::HostSnapshot;
 pub use lifecycle_state::HostSnapshotDimensions;

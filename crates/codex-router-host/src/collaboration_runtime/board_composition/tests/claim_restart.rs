@@ -380,6 +380,6 @@ async fn claim_restart_child() -> TestResult {
         relay: inputs.relay,
         receiver: inputs.receiver,
     };
-    let board = open_board_admission(&inputs.root, identity()?, Some(session)).await?;
+    let board = open_board_admission(&inputs.root, identity()?, Some(session), None).await?;
     snapshot_install_child::run(inputs, &phase, board).await
 }

@@ -107,7 +107,7 @@ async fn absent_enrollment_constructs_no_machine_session_or_resume_file() -> Tes
     // E26 requires no session for None. A constructor that starts an anonymous
     // client or mints enrollment would create this file and fail the oracle.
     let directory = tempfile::tempdir()?;
-    let board = open_board_admission(directory.path(), identity()?, None).await?;
+    let board = open_board_admission(directory.path(), identity()?, None, None).await?;
     assert!(board.session.is_none());
     assert!(board.replication.is_none());
     assert!(!directory.path().join("machine-session").exists());
@@ -199,7 +199,7 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
     let root = directory.path().join("router");
     let mut service =
         TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
-    let board = open_board_admission(&root, identity()?, Some(service.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(service.inputs()?), None).await?;
     let ready = board
         .session
         .as_ref()
@@ -225,7 +225,7 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
         .close()
         .await?;
 
-    let board = open_board_admission(&root, identity()?, Some(service.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(service.inputs()?), None).await?;
     let ready = board
         .session
         .as_ref()
@@ -266,7 +266,7 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
     let mut service =
         TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
     service.hold_registration().await?;
-    let board = open_board_admission(&root, identity()?, Some(service.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(service.inputs()?), None).await?;
     let projects = board
         .session
         .as_ref()
@@ -458,7 +458,7 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
     )
     .await?;
     service.hold_registration().await?;
-    let board = open_board_admission(&root, identity()?, Some(service.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(service.inputs()?), None).await?;
     let projects = board
         .session
         .as_ref()
@@ -552,7 +552,7 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
         .close()
         .await?;
     drop(projects);
-    let board = open_board_admission(&root, identity()?, Some(service.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(service.inputs()?), None).await?;
     assert_eq!(
         board.admission.create_project(&request).await?.result,
         expected

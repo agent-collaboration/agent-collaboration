@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BoardFailureKind {
+    NotLoggedIn,
     RoleRequired,
     ArchivedBoard,
     #[serde(rename = "postCooldown")]
@@ -54,6 +55,7 @@ pub enum BoardFailureStage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BoardNextAction {
+    RunFleetLogin,
     CorrectRequest,
     InspectResource,
     SelectDifferentName,

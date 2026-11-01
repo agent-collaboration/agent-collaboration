@@ -35,6 +35,7 @@ impl ClaimFixture {
             &directory.path().join("router"),
             identity()?,
             Some(central.session_inputs()?),
+            None,
         )
         .await?;
         #[cfg(feature = "runtime-test-support")]

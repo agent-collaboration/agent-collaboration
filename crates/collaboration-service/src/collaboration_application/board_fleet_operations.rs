@@ -59,6 +59,7 @@ impl BoardOperations {
         &self,
         request: WorkspaceCreateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             workspace: request.workspace_id,
@@ -79,6 +80,7 @@ impl BoardOperations {
         &self,
         request: WorkspaceArchiveRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             workspace: request.workspace_id,
@@ -93,6 +95,7 @@ impl BoardOperations {
         &self,
         request: WorkspaceUpdateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             workspace: request.workspace_id,
@@ -113,6 +116,7 @@ impl BoardOperations {
         &self,
         request: RepositoryAttachRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         self.require_local_repository(&request.repository)?;
         let header = FleetHeader {
             request_id: request.request_id,
@@ -133,6 +137,7 @@ impl BoardOperations {
         &self,
         request: RepositoryDetachRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         self.require_local_repository(&request.repository)?;
         let header = FleetHeader {
             request_id: request.request_id,
@@ -167,6 +172,7 @@ impl BoardOperations {
         &self,
         request: BoardCreateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let header = FleetHeader {
             request_id: request.request_id,
             workspace: request.workspace_id,
@@ -189,6 +195,7 @@ impl BoardOperations {
         &self,
         request: BoardUpdateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let Record::Board(board) = self.fleet_record(request.board_id.clone().into()).await? else {
             return Err(BoardError::invalid_field("boardId", "is not a board"));
         };
@@ -210,6 +217,7 @@ impl BoardOperations {
         .await
     }
     pub async fn board_close(&self, request: BoardCloseRequest) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let Record::Board(board) = self.fleet_record(request.board_id.clone().into()).await? else {
             return Err(BoardError::invalid_field("boardId", "is not a board"));
         };
@@ -232,6 +240,7 @@ impl BoardOperations {
         &self,
         request: BoardArchiveRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let Record::Board(board) = self.fleet_record(request.board_id.clone().into()).await? else {
             return Err(BoardError::invalid_field("boardId", "is not a board"));
         };
@@ -254,6 +263,7 @@ impl BoardOperations {
         &self,
         request: ProjectCreateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let reply = self
             .admission()?
             .create_project(&request)
@@ -272,6 +282,7 @@ impl BoardOperations {
         &self,
         request: ProjectUpdateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let Record::DirectoryEntry(project) =
             self.fleet_record(request.project_id.clone().into()).await?
         else {

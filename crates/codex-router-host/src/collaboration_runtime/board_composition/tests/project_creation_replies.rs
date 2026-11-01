@@ -10,7 +10,7 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     let root = directory.path().join("fresh-router");
     let mut central =
         TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
-    let board = open_board_admission(&root, identity()?, Some(central.inputs()?)).await?;
+    let board = open_board_admission(&root, identity()?, Some(central.inputs()?), None).await?;
     let session = board.session.as_ref().ok_or("session")?;
     let ready = session.welcomed.subscribe();
     let projects = session.projects.clone();

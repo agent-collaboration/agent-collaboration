@@ -169,6 +169,7 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     let mut active_status = None;
     let (sender, mut receiver) = tokio::sync::mpsc::channel(16);
     let (_ack, reexecuting_ack) = tokio::sync::oneshot::channel();
+    let mut connection_tasks = tokio::task::JoinSet::new();
     handle_operator_work(
         OperatorWork {
             request: if scenario == AdmissionCase::MalformedRouterOnly {
@@ -182,6 +183,8 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
             reexecuting_ack,
         },
         OperatorRuntimeContext {
+            machine_login: None,
+            connection_tasks: &mut connection_tasks,
             state: &mut state,
             app_server: &mut app_server,
             router_child: &mut router_child,

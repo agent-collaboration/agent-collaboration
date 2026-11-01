@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            host_inputs.machine_login,
         ))
         .await
     }
@@ -68,6 +70,7 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        machine_login: Option<crate::fleet_machine_login::MachineLoginBinding>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
@@ -153,11 +156,20 @@ impl CollaborationRuntime {
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
+            machine_login.as_ref().map(|login| login.source()),
         )
         .await;
         let mut prepared_board = None;
         let project_admission = match opened_board {
             Ok(board) => {
+                if let Some(login) = machine_login.as_ref().and_then(|login| login.handle()) {
+                    login.attach_connection(board.mail_session().map(|session| {
+                        crate::fleet_machine_login::MachineRenewalConnection {
+                            requests: session.requests,
+                            welcomed: session.welcomed,
+                        }
+                    }));
+                }
                 let admission = board.admission.clone();
                 if let Some(claim) = &board.claim {
                     project_claim = Some(claim.clone());
@@ -480,7 +492,7 @@ impl CollaborationRuntime {
                 provider_inventory,
                 journal_operations,
             );
-            let board = collaboration_service::collaboration_application::BoardOperations::new(
+            let mut board = collaboration_service::collaboration_application::BoardOperations::new(
                 identity.clone(),
                 project_admission.clone(),
                 project_claim,
@@ -497,6 +509,9 @@ impl CollaborationRuntime {
                     .as_ref()
                     .map(|admission| admission.project_registry()),
             );
+            if let Some(login) = &machine_login {
+                board = board.with_machine_login_gate(std::sync::Arc::new(login.source()));
+            }
             let messages = collaboration_service::collaboration_application::MessageOperations::new(
                 identity.clone(),
                 Some(interactions.clone()),

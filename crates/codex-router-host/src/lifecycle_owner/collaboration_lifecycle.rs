@@ -23,6 +23,7 @@ pub(super) struct CollaborationLifecycle {
     runtime: Option<CollaborationRuntime>,
     published_child: Option<u32>,
     schema_digest: Option<[u8; 32]>,
+    machine_login: Option<crate::fleet_machine_login::HostMachineLogin>,
 }
 impl CollaborationLifecycle {
     pub(super) async fn start(
@@ -33,12 +34,40 @@ impl CollaborationLifecycle {
         router_executable_relation: tokio::sync::watch::Receiver<
             collaboration_protocol::RouterExecutableRelation,
         >,
+        login_dependencies: Option<crate::fleet_machine_login::FleetLoginDependencies>,
     ) -> io::Result<Option<Self>> {
         let Some(directory) = config.collaboration_directory() else {
             return Ok(None);
         };
         let preparation_started_at = std::time::Instant::now();
         let router_secret_root = config.coordination_paths().router_secret_root();
+        use std::os::unix::fs::DirBuilderExt;
+        match std::fs::DirBuilder::new().mode(0o700).create(directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+        let router_root = config
+            .coordination_paths()
+            .router_root()
+            .ok_or_else(|| io::Error::other("fleet enrollment requires a Router root"))?
+            .to_owned();
+        let secret_root = router_secret_root
+            .as_ref()
+            .ok_or_else(|| io::Error::other("machine login requires a Router secret root"))?
+            .clone();
+        let login_root = router_root.clone();
+        let login_directory = directory.to_owned();
+        let machine_login = tokio::task::spawn_blocking(move || {
+            crate::fleet_machine_login::start_machine_login(
+                &login_root,
+                &secret_root,
+                &login_directory,
+                login_dependencies,
+            )
+        })
+        .await
+        .map_err(io::Error::other)??;
         let external_provider_startups =
             crate::claude_provider_launch_environment::configure_claude_provider_launches(
                 config.external_provider_startups().to_vec(),
@@ -53,11 +82,7 @@ impl CollaborationLifecycle {
         let mut owner = Self {
             owner_human_id: config.owner_human_id().cloned(),
             directory: directory.to_owned(),
-            router_root: config
-                .coordination_paths()
-                .router_root()
-                .ok_or_else(|| io::Error::other("fleet enrollment requires a Router root"))?
-                .to_owned(),
+            router_root,
             codex_home: config
                 .collaboration_codex_home()
                 .ok_or_else(|| io::Error::other("collaboration requires explicit Codex home"))?
@@ -76,6 +101,7 @@ impl CollaborationLifecycle {
             runtime: None,
             published_child: None,
             schema_digest: None,
+            machine_login,
         };
         if let Err(error) = owner.synchronize(instance, Some(child)).await {
             let cleanup = owner.shutdown().await;
@@ -116,16 +142,19 @@ impl CollaborationLifecycle {
         if self.runtime.is_some() && digest != self.schema_digest {
             // The manifest's native schema digest and the tool schemas bound to it are fixed for
             // a runtime; a changed native schema starts a new one.
-            self.shutdown().await?;
+            self.shutdown_runtime().await?;
         }
         if self.runtime.is_none() {
             let inputs_started_at = std::time::Instant::now();
             let router_root = self.router_root.clone();
-            let board_session = tokio::task::spawn_blocking(move || {
-                crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
-            })
-            .await
-            .map_err(io::Error::other)??;
+            let board_session = match &self.machine_login {
+                Some(login) => login.session_inputs()?,
+                None => tokio::task::spawn_blocking(move || {
+                    crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
+                })
+                .await
+                .map_err(io::Error::other)??,
+            };
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
                 .mode(0o700)
@@ -159,6 +188,7 @@ impl CollaborationLifecycle {
                     },
                     router_proxy_endpoint: self.router_proxy_endpoint,
                     remote_access: self.remote_access,
+                    machine_login: self.machine_login.as_ref().map(|login| login.binding()),
                 },
                 self.external_provider_startups.clone(),
                 self.router_executable_relation.clone(),
@@ -217,6 +247,26 @@ impl CollaborationLifecycle {
     }
 
     pub(super) async fn shutdown(&mut self) -> io::Result<()> {
+        let runtime = self.shutdown_runtime().await;
+        let login = match self.machine_login.take() {
+            Some(login) => login.shutdown().await,
+            None => Ok(()),
+        };
+        runtime.and(login)
+    }
+
+    pub(super) fn machine_login_handle(
+        &self,
+    ) -> Option<crate::fleet_machine_login::MachineLoginHandle> {
+        self.machine_login
+            .as_ref()
+            .and_then(|login| login.binding().handle())
+    }
+
+    pub(super) async fn shutdown_runtime(&mut self) -> io::Result<()> {
+        if let Some(handle) = self.machine_login_handle() {
+            handle.attach_connection(None);
+        }
         self.published_child = None;
         if let Some(runtime) = self.runtime.take() {
             runtime.shutdown().await?;

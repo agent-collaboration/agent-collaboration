@@ -58,6 +58,7 @@ async fn snapshot_baseline_is_repaired_before_offline_admission_without_waiting_
             relay: "0192a1b2-c3d4-7000-8000-000000000003".parse()?,
             receiver: ReceiverId::new(durable_steps::Uuid::now_v7())?,
         }),
+        None,
     )
     .await?;
     // Do not start the pump or call ensure from this test: either would hide a

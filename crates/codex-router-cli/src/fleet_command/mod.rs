@@ -6,6 +6,7 @@ mod enrollment_prepare;
 #[cfg(test)]
 mod enrollment_prepare_tests;
 mod enrollment_publish;
+mod login_command;
 pub(crate) use arguments::FleetCommand;
 
 use crate::CliContext;
@@ -20,6 +21,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum FleetCommandError {
+    #[error(transparent)]
+    Login(#[from] login_command::FleetLoginCommandError),
     #[error(transparent)]
     CredentialFile(#[from] codex_router_secret_store::central_credentials::CredentialFileError),
     #[error("{0}")]
@@ -81,6 +84,9 @@ pub(crate) async fn run_fleet_command(
     stdout: &mut (impl Write + Send),
 ) -> Result<(), FleetCommandError> {
     match command {
+        FleetCommand::Login(arguments) => login_command::run(arguments, stdout)
+            .await
+            .map_err(FleetCommandError::Login),
         FleetCommand::Help(help) => stdout
             .write_all(help.as_bytes())
             .map_err(|_| FleetCommandError::Output),

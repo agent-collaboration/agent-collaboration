@@ -3,6 +3,7 @@ use reqwest::header::HeaderValue;
 
 #[derive(Clone)]
 pub enum AccessServiceToken {
+    NoEdgeCredentials,
     Cloudflare {
         client_id: HeaderValue,
         client_secret: HeaderValue,
@@ -26,6 +27,7 @@ impl AccessServiceToken {
     }
     pub(crate) fn apply(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         match self {
+            Self::NoEdgeCredentials => request,
             Self::Cloudflare {
                 client_id,
                 client_secret,
@@ -57,6 +59,14 @@ pub(crate) fn sensitive_header(value: &str) -> Result<HeaderValue, ConnectFailur
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_local_machine_token_connection_does_not_invent_edge_credentials() {
+        let request = AccessServiceToken::NoEdgeCredentials
+            .apply(reqwest::Client::new().get("http://127.0.0.1:1/v1/session"))
+            .build()
+            .unwrap();
+        assert!(request.headers().is_empty());
+    }
     #[test]
     fn cloudflare_headers_remain_exact_and_self_hosted_uses_only_the_assertion_header() {
         let request = reqwest::Client::new().get("http://127.0.0.1:1/v1/session");

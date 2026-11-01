@@ -32,6 +32,7 @@ impl BoardOperations {
         }
     }
     pub async fn post_list(&self, request: PostListRequest) -> Result<PostListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         self.read_post_page(request, "post_list", filter).await
     }
@@ -72,6 +73,7 @@ impl BoardOperations {
         &self,
         request: PostSearchRequest,
     ) -> Result<PostSearchResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         if matches!(request.scope, PostListScope::Thread { .. })
             && request.kind == SearchPostKind::TopLevel

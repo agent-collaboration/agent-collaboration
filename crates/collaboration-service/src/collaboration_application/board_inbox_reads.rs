@@ -20,6 +20,7 @@ impl BoardOperations {
         &self,
         request: InboxFetchRequest,
     ) -> Result<InboxFetchResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&InboxReadFilter {
             scope: &request.scope,
             reader: &request.reader,
@@ -148,6 +149,7 @@ impl BoardOperations {
         &self,
         request: InboxWorkspacesRequest,
     ) -> Result<InboxWorkspacesResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let mut after = self
             .metadata_after(&request.page, "inbox_workspaces", &filter)

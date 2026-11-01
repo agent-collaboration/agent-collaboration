@@ -23,6 +23,7 @@ impl BoardOperations {
         &self,
         request: public::RequestEffectsRequest,
     ) -> Result<public::RequestEffectsRead, BoardError> {
+        self.ensure_machine_login()?;
         let continuation = if let Some(after) = &request.after {
             let key = self.receipt_signing_key().await?;
             let decoded: ReceiptContinuation = match decode_board_cursor(key, after) {

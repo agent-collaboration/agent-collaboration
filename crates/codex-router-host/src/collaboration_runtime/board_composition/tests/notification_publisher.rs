@@ -67,7 +67,8 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
             .try_into()?,
         Some("notice fixture"),
     )?;
-    let mut board = open_board_admission(&root, machine.clone(), Some(central.inputs()?)).await?;
+    let mut board =
+        open_board_admission(&root, machine.clone(), Some(central.inputs()?), None).await?;
     let projects = board.session.as_ref().ok_or("session")?.projects.clone();
     let welcomed = board
         .session

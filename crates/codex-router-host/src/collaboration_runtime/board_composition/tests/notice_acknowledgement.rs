@@ -100,6 +100,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
             Some("record-failure Router"),
         )?,
         Some(second_machine.session_inputs()?),
+        None,
     )
     .await?;
     let second_projects = second_board
@@ -259,6 +260,7 @@ async fn recovered_prefix(
             Some(origin.machine.as_str()),
         )?,
         Some(inputs),
+        None,
     )
     .await?;
     let projects = board

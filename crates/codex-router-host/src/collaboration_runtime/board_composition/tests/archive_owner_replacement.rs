@@ -21,7 +21,7 @@ impl ArchiveOwner {
         identity: MachineIdentity,
         inputs: board_fleet_sync::BoardSessionInputs,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let mut board = open_board_admission(root, identity, Some(inputs)).await?;
+        let mut board = open_board_admission(root, identity, Some(inputs), None).await?;
         let session = board.session.take().ok_or("archive session absent")?;
         let projects = session.projects.clone();
         let registry = projects.registry()?;

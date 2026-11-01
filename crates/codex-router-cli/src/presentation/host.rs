@@ -25,6 +25,11 @@ impl HostProgressPresenter {
         frame: &OperatorFrame,
     ) -> std::io::Result<()> {
         match frame {
+            OperatorFrame::FleetLogin(_) => {
+                return Err(std::io::Error::other(
+                    "unexpected Fleet login frame in Host lifecycle response",
+                ));
+            }
             OperatorFrame::Progress(progress) => {
                 if is_phase_completion(*progress) {
                     self.finish(

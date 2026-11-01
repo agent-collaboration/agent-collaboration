@@ -32,8 +32,13 @@ impl RuleMachine {
             UuidIdentity::try_from(origin.installation.as_str().to_owned())?,
             Some(origin.machine.as_str()),
         )?;
-        let mut board =
-            open_board_admission(&root, identity.clone(), Some(machine.session_inputs()?)).await?;
+        let mut board = open_board_admission(
+            &root,
+            identity.clone(),
+            Some(machine.session_inputs()?),
+            None,
+        )
+        .await?;
         let session = board.session.as_ref().ok_or("successor session")?;
         let projects = session.projects.clone();
         let registry = projects.registry()?;

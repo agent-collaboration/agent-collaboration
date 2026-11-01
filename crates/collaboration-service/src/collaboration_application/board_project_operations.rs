@@ -16,6 +16,7 @@ impl BoardOperations {
         &self,
         request: board_sync_protocol::ProjectClaimRequest,
     ) -> Result<board_sync_protocol::ProjectClaimReply, BoardError> {
+        self.ensure_machine_login()?;
         if request.protocol_version != ProtocolVersion::CURRENT {
             return Err(BoardError::invalid_field(
                 "protocolVersion",
@@ -46,6 +47,7 @@ impl BoardOperations {
             })
     }
     pub async fn project_write(&self, request: ProjectRequest) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         if let Some(reply) = self.forward_non_holder_post(&request).await? {
             return Ok(reply);
         }
@@ -74,6 +76,7 @@ impl BoardOperations {
         &self,
         request: ThreadCreateRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
             project_id: request.project_id,
@@ -96,6 +99,7 @@ impl BoardOperations {
         &self,
         request: ThreadRefileRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -111,6 +115,7 @@ impl BoardOperations {
         .await
     }
     pub async fn thread_post(&self, request: ThreadPostRequest) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let (project_id, operation) = match request.placement {
             PostTarget::Thread { thread } => (
                 self.thread_project(&thread).await?,
@@ -137,6 +142,7 @@ impl BoardOperations {
         &self,
         request: ThreadResolveRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -155,6 +161,7 @@ impl BoardOperations {
         &self,
         request: ThreadUnresolveRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -169,6 +176,7 @@ impl BoardOperations {
         .await
     }
     pub async fn thread_join(&self, request: ThreadJoinRequest) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -192,6 +200,7 @@ impl BoardOperations {
         &self,
         request: ThreadLeaveRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -210,6 +219,7 @@ impl BoardOperations {
         &self,
         request: ThreadWatchRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -227,6 +237,7 @@ impl BoardOperations {
         &self,
         request: ThreadUnwatchRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         let project_id = self.thread_project(&request.thread).await?;
         self.project_write(ProjectRequest {
             request_id: request.request_id,
@@ -244,12 +255,14 @@ impl BoardOperations {
         &self,
         request: ProjectWatchRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         self.project_watch_choice(request, true).await
     }
     pub async fn project_unwatch(
         &self,
         request: ProjectWatchRequest,
     ) -> Result<WriteReply, BoardError> {
+        self.ensure_machine_login()?;
         self.project_watch_choice(request, false).await
     }
     async fn project_watch_choice(
@@ -275,6 +288,7 @@ impl BoardOperations {
         &self,
         request: InboxAcknowledgeRequest,
     ) -> Result<InboxAcknowledgeReply, BoardError> {
+        self.ensure_machine_login()?;
         let mut outcomes = Vec::with_capacity(request.entries().len());
         for entry in request.entries() {
             let project = match &entry.scope {

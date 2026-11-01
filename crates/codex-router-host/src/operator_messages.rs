@@ -24,6 +24,11 @@ pub const MAX_OPERATOR_FRAME_BYTES: usize = 64 * 1024;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OperatorRequest {
+    /// Ask this running Host to approve and keep its own machine login.
+    FleetLogin {
+        organization_id: fleet_identity_protocol::OrganizationId,
+        label: message_board::MachineLabel,
+    },
     /// Observe current state.
     Status,
     /// Wait for this host lifetime's startup terminal state.
@@ -166,6 +171,8 @@ impl HostTerminalResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "frame", content = "payload", rename_all = "snake_case")]
 pub enum OperatorFrame {
+    /// Device-code display followed by one login terminal event.
+    FleetLogin(crate::fleet_machine_login::FleetLoginEvent),
     /// Nonterminal operation progress.
     Progress(HostProgress),
     /// Exactly one terminal result.
@@ -173,6 +180,14 @@ pub enum OperatorFrame {
 }
 
 impl OperatorFrame {
+    #[must_use]
+    pub const fn is_terminal(&self) -> bool {
+        match self {
+            Self::Terminal(_) => true,
+            Self::FleetLogin(event) => event.is_terminal(),
+            Self::Progress(_) => false,
+        }
+    }
     /// Creates the exactly-one terminal result for an operator exchange.
     #[must_use]
     pub const fn terminal(response: HostTerminalResponse) -> Self {

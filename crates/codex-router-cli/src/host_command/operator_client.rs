@@ -188,7 +188,7 @@ async fn send_operator_request_with_connect_retry(
             return Err(OperatorClientError::FramesAfterTerminal);
         }
         let frame = decode_operator_frame(&response_line)?;
-        terminal_seen = matches!(frame, OperatorFrame::Terminal(_));
+        terminal_seen = frame.is_terminal();
         on_frame(&frame);
         frames.push(frame);
     }

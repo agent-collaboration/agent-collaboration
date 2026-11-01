@@ -117,7 +117,8 @@ async fn imported_claim_seeds_verifies_renews_then_publishes_before_first_board_
     let project = ProjectId::generate();
     let (prefix, expected) =
         imported_snapshot(&central, &directory.path().join("source.sqlite"), &project).await?;
-    let board = open_board_admission(&root, identity()?, Some(central.session_inputs()?)).await?;
+    let board =
+        open_board_admission(&root, identity()?, Some(central.session_inputs()?), None).await?;
     let registry = board
         .session
         .as_ref()

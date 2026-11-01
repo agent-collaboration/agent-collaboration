@@ -842,6 +842,7 @@ commands:
   host app-server restart        Restart managed Codex without updating it
   host app-server update         Update managed Codex and activate it if changed
   host router restart            Restart the router when host-owned
+  fleet login                   Log this machine in through the running Host
   fleet enroll                  Enroll this installation; active at the next Router start
   fleet status                  Inspect enrollment metadata without restarting
   central serve                 Run a self-hosted Tokio central

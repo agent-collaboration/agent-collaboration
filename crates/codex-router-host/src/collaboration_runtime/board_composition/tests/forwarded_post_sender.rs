@@ -45,6 +45,7 @@ impl SenderFixture {
                 Some(origin.machine.as_str()),
             )?,
             Some(machine.session_inputs()?),
+            None,
         )
         .await?;
         let welcomed = board
@@ -529,7 +530,7 @@ async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
 )]
 async fn non_holder_sender_without_a_machine_session_refuses_without_queuing() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let board = open_board_admission(directory.path(), identity()?, None).await?;
+    let board = open_board_admission(directory.path(), identity()?, None, None).await?;
     let admission = board.admission.clone();
     assert!(board.start().is_none());
     let application = (ApplicationFixture::new(

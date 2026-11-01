@@ -4,6 +4,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum FleetCommand {
+    Login(LoginArguments),
     Enroll(EnrollArguments),
     Status(StatusArguments),
     Help(String),
@@ -14,6 +15,7 @@ impl FleetCommand {
         match FleetParser::try_parse_from(std::iter::once(OsString::from("fleet")).chain(arguments))
         {
             Ok(parser) => Ok(match parser.action {
+                FleetAction::Login(args) => Self::Login(args),
                 FleetAction::Enroll(args) => Self::Enroll(args),
                 FleetAction::Status(args) => Self::Status(args),
             }),
@@ -33,7 +35,7 @@ impl FleetCommand {
 #[derive(Parser)]
 #[command(
     name = "fleet",
-    about = "Configure this Router's central enrollment. Takes effect at the next Router start; never restarts or reloads it."
+    about = "Log in through the running Host, or inspect and configure this Router's central enrollment."
 )]
 struct FleetParser {
     #[command(subcommand)]
@@ -42,10 +44,22 @@ struct FleetParser {
 
 #[derive(Subcommand)]
 enum FleetAction {
+    /// Ask the running Host to log this machine in with an owner-approved device code.
+    Login(LoginArguments),
     /// Enroll through the owner's Access sign-in and save local secret references.
     Enroll(EnrollArguments),
     /// Inspect the enrollment file without an owner request or a Router restart.
     Status(StatusArguments),
+}
+
+#[derive(Args, Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LoginArguments {
+    #[arg(long)]
+    pub organization: String,
+    #[arg(long)]
+    pub label: String,
+    #[arg(long)]
+    pub router_root: Option<PathBuf>,
 }
 
 #[derive(Args, Clone, Debug, Eq, PartialEq)]

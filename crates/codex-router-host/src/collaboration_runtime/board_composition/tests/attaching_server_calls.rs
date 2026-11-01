@@ -127,7 +127,8 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
     let root = directory.path().join("router");
     let mut fleet_service =
         TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
-    let board = open_board_admission(&root, identity()?, Some(fleet_service.inputs()?)).await?;
+    let board =
+        open_board_admission(&root, identity()?, Some(fleet_service.inputs()?), None).await?;
     let projects = board
         .session
         .as_ref()
@@ -205,7 +206,7 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
     });
 
     // Act through the reopened Host factory and its real session pump.
-    let board = open_board_admission(&root, identity()?, Some(inputs)).await?;
+    let board = open_board_admission(&root, identity()?, Some(inputs), None).await?;
     let ready = board
         .session
         .as_ref()

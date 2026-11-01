@@ -39,9 +39,10 @@ const fn classify_operator_request(
         OperatorRequest::RestartAppServer => HostOperation::RestartAppServer,
         OperatorRequest::UpdateCodex => HostOperation::UpdateCodex,
         OperatorRequest::RestartRouter => HostOperation::RestartRouter,
-        OperatorRequest::Status | OperatorRequest::AwaitHostStart | OperatorRequest::StopHost => {
-            HostOperation::Status
-        }
+        OperatorRequest::Status
+        | OperatorRequest::AwaitHostStart
+        | OperatorRequest::StopHost
+        | OperatorRequest::FleetLogin { .. } => HostOperation::Status,
     };
     MutationAdmission::StartMutation(operation)
 }
@@ -119,6 +120,8 @@ pub(super) struct OperatorRuntimeContext<'a> {
     pub(super) update_drain_active: bool,
     pub(super) router_executable_observer:
         std::sync::Arc<tokio::sync::Mutex<crate::RouterExecutableObserver>>,
+    pub(super) machine_login: Option<crate::fleet_machine_login::MachineLoginHandle>,
+    pub(super) connection_tasks: &'a mut tokio::task::JoinSet<()>,
 }
 
 pub(super) fn spawn_operator_connection(
@@ -151,7 +154,7 @@ pub(super) fn spawn_operator_connection(
         }
         let mut reexecuting_ack_sender = Some(reexecuting_ack_sender);
         while let Some(frame) = response_receiver.recv().await {
-            let terminal = matches!(frame, OperatorFrame::Terminal(_));
+            let terminal = frame.is_terminal();
             let write_deadline_at = tokio::time::Instant::now() + request_deadline;
             if crate::operator_connection::write_frame_to_stream(
                 &mut stream,
@@ -219,6 +222,35 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
         return;
     }
     match work.request {
+        OperatorRequest::FleetLogin {
+            organization_id,
+            label,
+        } => match context.machine_login {
+            Some(login) => {
+                let mut events = login.observe(organization_id, label);
+                context.connection_tasks.spawn(async move {
+                    while let Some(event) = events.recv().await {
+                        let terminal = event.is_terminal();
+                        if work
+                            .response
+                            .send(OperatorFrame::FleetLogin(event))
+                            .await
+                            .is_err()
+                            || terminal
+                        {
+                            break;
+                        }
+                    }
+                });
+            }
+            None => {
+                let _sent = work.response.try_send(OperatorFrame::FleetLogin(
+                    crate::fleet_machine_login::FleetLoginEvent::Refused {
+                        reason: crate::fleet_machine_login::FleetLoginRefusal::NotConfigured {},
+                    },
+                ));
+            }
+        },
         OperatorRequest::StopHost => {
             // A stop interrupts active work exactly as the owning terminal's SIGTERM
             // does. The signal handler remains the only owner of shutdown convergence.

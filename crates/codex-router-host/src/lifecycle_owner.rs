@@ -210,6 +210,7 @@ impl HostRuntime {
             instance,
             startup_started_at,
             None,
+            None,
         )
         .await
     }
@@ -230,6 +231,7 @@ impl HostRuntime {
             update_inputs,
             instance,
             startup_started_at,
+            None,
             None,
         )
         .await
@@ -266,6 +268,28 @@ impl HostRuntime {
             instance,
             tokio::time::Instant::now(),
             progress,
+            None,
+        )
+        .await
+    }
+
+    /// Runs an isolated Host with an explicit clock and Keychain test boundary.
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn run_acquired_with_fleet_login_dependencies(
+        config: HostConfig,
+        child_launch_plans: ManagedChildLaunchPlans,
+        update_inputs: ManagedUpdateInputs,
+        instance: HostInstance,
+        dependencies: crate::fleet_machine_login::FleetLoginDependencies,
+    ) -> Result<HostExit, HostError> {
+        Self::run_owned(
+            config,
+            child_launch_plans,
+            update_inputs,
+            instance,
+            tokio::time::Instant::now(),
+            None,
+            Some(dependencies),
         )
         .await
     }
@@ -277,6 +301,7 @@ impl HostRuntime {
         instance: HostInstance,
         startup_started_at: tokio::time::Instant,
         progress: Option<HostProgressCallback<'_>>,
+        login_dependencies: Option<crate::fleet_machine_login::FleetLoginDependencies>,
     ) -> Result<HostExit, HostError> {
         let running_version = std::env::var("CODEX_ROUTER_DEBUG_RUNNING_VERSION")
             .ok()
@@ -347,6 +372,7 @@ impl HostRuntime {
             &app_server,
             readiness.remote_control_server_name().cloned(),
             router_executable_relation,
+            login_dependencies,
         )
         .await
         {
@@ -404,7 +430,7 @@ impl HostRuntime {
                 };
                 if let Err(error) = result {
                     tracing::error!("collaboration lifecycle synchronization failed");
-                    let cleanup = owner.shutdown().await;
+                    let cleanup = owner.shutdown_runtime().await;
                     if config.remote_access().is_some() {
                         let error = match cleanup {
                             Ok(()) => error,
@@ -440,7 +466,7 @@ impl HostRuntime {
                         crate::CollaborationFailure::LocalListener(error) => {
                             tracing::error!("collaboration listener failed");
                             let _failure = error;
-                            if let Some(owner) = &mut collaboration { let _closed = owner.shutdown().await; }
+                            if let Some(owner) = &mut collaboration { let _closed = owner.shutdown_runtime().await; }
                         }
                         crate::CollaborationFailure::TailnetExposure(error) => {
                             let cleanup = match &mut collaboration {
@@ -498,6 +524,8 @@ impl HostRuntime {
                         active_status: &mut active_status,
                         update_drain_active,
                         router_executable_observer: std::sync::Arc::clone(&router_executable_observer),
+                        machine_login: collaboration.as_ref().and_then(|owner| owner.machine_login_handle()),
+                        connection_tasks: &mut connection_tasks,
                     }).await;
                 }
                 _ = router_executable_check.tick() => {

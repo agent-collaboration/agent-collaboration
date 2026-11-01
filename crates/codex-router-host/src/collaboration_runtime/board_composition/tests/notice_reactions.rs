@@ -46,7 +46,7 @@ impl Runtime {
         let root = directory.path().join("router");
         let mut central =
             TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
-        let board = open_board_admission(&root, identity()?, Some(central.inputs()?)).await?;
+        let board = open_board_admission(&root, identity()?, Some(central.inputs()?), None).await?;
         let session = board.session.as_ref().ok_or("session missing")?;
         let projects = session.projects.clone();
         let requests = session.requests.clone();

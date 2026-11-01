@@ -84,8 +84,13 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         UuidIdentity::try_from(reader_origin.installation.as_str().to_owned())?,
         Some(reader_origin.machine.as_str()),
     )?;
-    let board =
-        open_board_admission(&root, reader_identity, Some(enrolled.session_inputs()?)).await?;
+    let board = open_board_admission(
+        &root,
+        reader_identity,
+        Some(enrolled.session_inputs()?),
+        None,
+    )
+    .await?;
     let session = board.session.as_ref().ok_or("reader session")?;
     let registry = session.projects.registry()?;
     let requests = session.requests.clone();

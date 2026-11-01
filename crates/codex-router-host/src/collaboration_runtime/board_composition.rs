@@ -127,6 +127,7 @@ pub(super) async fn open_board_admission(
     directory: &Path,
     identity: MachineIdentity,
     session_inputs: Option<BoardSessionInputs>,
+    token_source: Option<crate::fleet_machine_login::MachineTokenSource>,
 ) -> io::Result<BoardComposition> {
     let registry = Arc::new(ProjectStoreRegistry::new(
         directory,
@@ -138,7 +139,10 @@ pub(super) async fn open_board_admission(
             // Keep nested native startup out of every Host caller's future layout.
             Some(
                 Box::pin(PreparedMachineSession::prepare(
-                    directory, inputs, &registry,
+                    directory,
+                    inputs,
+                    &registry,
+                    token_source,
                 ))
                 .await?,
             )

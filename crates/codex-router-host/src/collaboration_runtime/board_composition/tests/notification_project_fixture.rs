@@ -49,7 +49,7 @@ async fn seed_notification_for_recipient(
         installation: String::from(machine.service_id().clone()).try_into()?,
         machine: machine.machine_label().as_str().to_owned().try_into()?,
     };
-    let board = open_board_admission(root, machine, Some(central.inputs()?)).await?;
+    let board = open_board_admission(root, machine, Some(central.inputs()?), None).await?;
     let projects = board.session.as_ref().ok_or("session")?.projects.clone();
     let welcomed = board
         .session

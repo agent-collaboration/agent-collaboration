@@ -16,6 +16,7 @@ struct EntityListSelection<'operation> {
 macro_rules! project_operation {
     ($name:ident,$selector:ident) => {
         pub async fn $name(&self, request: ProjectRequest) -> Result<WriteReply, BoardError> {
+            self.ensure_machine_login()?;
             if !ProjectTool::$selector.accepts(&request.operation) {
                 return Err(BoardError::invalid_field(
                     "operation",
@@ -29,6 +30,7 @@ macro_rules! project_operation {
 macro_rules! entity_read_operation {
     (show $name:ident, $kind:ident) => {
         pub async fn $name(&self, request: ProjectRecordShowRequest) -> Result<Record, BoardError> {
+            self.ensure_machine_login()?;
             self.entity_show(request, RecordKind::$kind).await
         }
     };
@@ -37,6 +39,7 @@ macro_rules! entity_read_operation {
             &self,
             request: ProjectRecordListRequest,
         ) -> Result<RecordListResult, BoardError> {
+            self.ensure_machine_login()?;
             self.entity_list(request, ProjectReadKind::$kind, stringify!($name))
                 .await
         }
@@ -86,6 +89,7 @@ impl BoardOperations {
         request: ProjectRecordShowRequest,
         kind: RecordKind,
     ) -> Result<Record, BoardError> {
+        self.ensure_machine_login()?;
         if request.record.kind != kind {
             return Err(BoardError::invalid_field(
                 "record.kind",
@@ -118,6 +122,7 @@ impl BoardOperations {
         kind: ProjectReadKind,
         operation: &str,
     ) -> Result<RecordListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         self.entity_list_filtered(
             request,
@@ -134,6 +139,7 @@ impl BoardOperations {
         &self,
         request: SubtaskListRequest,
     ) -> Result<RecordListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         self.entity_list_filtered(
             ProjectRecordListRequest {

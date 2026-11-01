@@ -34,6 +34,7 @@ pub(crate) struct HostCollaborationInputs {
     pub collaboration_runtime: CollaborationRuntimeInputs,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
+    pub machine_login: Option<crate::fleet_machine_login::MachineLoginBinding>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalProviderLaunchBinding {

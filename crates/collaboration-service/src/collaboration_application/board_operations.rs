@@ -65,6 +65,7 @@ mod board_trail_reads;
 mod board_view_operations;
 
 pub struct BoardOperations {
+    machine_login: BoardMachineLogin,
     pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
     pub(super) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -78,6 +79,10 @@ pub struct BoardOperations {
         std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     pub(super) session_context: crate::collaboration_application::SessionContextReader,
     pub(super) registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
+}
+enum BoardMachineLogin {
+    LegacyStepOne,
+    DeviceCode(Arc<dyn collaboration_contracts::MachineLoginGate>),
 }
 impl BoardOperations {
     #[expect(
@@ -102,6 +107,7 @@ impl BoardOperations {
         registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
     ) -> Self {
         Self {
+            machine_login: BoardMachineLogin::LegacyStepOne,
             identity,
             project_admission,
             project_claim,
@@ -113,6 +119,30 @@ impl BoardOperations {
             project_replication,
             session_context,
             registry,
+        }
+    }
+    #[must_use]
+    pub fn with_machine_login_gate(
+        mut self,
+        gate: Arc<dyn collaboration_contracts::MachineLoginGate>,
+    ) -> Self {
+        self.machine_login = BoardMachineLogin::DeviceCode(gate);
+        self
+    }
+
+    pub(super) fn ensure_machine_login(&self) -> Result<(), BoardError> {
+        match &self.machine_login {
+            BoardMachineLogin::LegacyStepOne => Ok(()),
+            BoardMachineLogin::DeviceCode(gate) => match gate.machine_login_state() {
+                collaboration_contracts::MachineLoginState::LoggedIn => Ok(()),
+                collaboration_contracts::MachineLoginState::NotLoggedIn => Err(BoardError {
+                    kind: BoardFailureKind::NotLoggedIn,
+                    stage: BoardFailureStage::Admission,
+                    message: "This Router is not logged in. Run: codex-router fleet login --organization <id> --label <label>".to_owned(),
+                    next_action: BoardNextAction::RunFleetLogin,
+                    details: BoardErrorDetails::None,
+                }),
+            },
         }
     }
     pub(super) fn admission(&self) -> Result<&Arc<crate::ProjectAdmission>, BoardError> {
@@ -213,6 +243,7 @@ impl CollaborationRejection for BoardError {
             | BoardFailureKind::ResourceNotFound
             | BoardFailureKind::ResourceAlreadyExists
             | BoardFailureKind::OutcomeUnknown
+            | BoardFailureKind::NotLoggedIn
             | BoardFailureKind::BoardUnavailable
             | BoardFailureKind::ThreadResolved
             | BoardFailureKind::InvalidRecord

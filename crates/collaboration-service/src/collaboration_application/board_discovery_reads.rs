@@ -10,6 +10,7 @@ impl BoardOperations {
         &self,
         request: RepositoryListRequest,
     ) -> Result<RepositoryListResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let workspace = self
             .workspace_show(WorkspaceShowRequest {
@@ -33,6 +34,7 @@ impl BoardOperations {
         &self,
         request: DiscoverySearchRequest,
     ) -> Result<DiscoverySearchResult, BoardError> {
+        self.ensure_machine_login()?;
         let filter = fingerprint(&request)?;
         let after = self
             .metadata_after(&request.page, "discovery_search", &filter)
