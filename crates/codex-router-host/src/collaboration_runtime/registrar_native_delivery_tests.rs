@@ -232,6 +232,10 @@ async fn f4a_native_delivery_create_and_fork_bind_and_register_once_without_chan
             fleet_identity_protocol::StartedBy::RouterOperator {}
         ));
         assert_eq!(
+            registrations[index].machine_environment,
+            fleet_identity_protocol::MachineEnvironment::CloudVm
+        );
+        assert_eq!(
             create["params"]["config"],
             json!({"model_reasoning_effort":"medium","mcp_servers":{"agent-router":{"url":record.preparation().binding_address.expose_address()}}})
         );
@@ -284,7 +288,7 @@ async fn f4a_native_delivery_access_keeps_the_original_unbound_config() {
     let runtime = DirectRuntime::new(SessionRegistrationMode::AccessEnrollment, false).await;
     let mut request = runtime.request(false, FIRST);
     let DestinationPreparation::Fresh { project_id, .. } = &mut request.destination else {
-        unreachable!()
+        panic!("fresh native fixture destination")
     };
     *project_id = None;
     let result = runtime
