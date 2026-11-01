@@ -33,8 +33,8 @@ mod native_permission_echo;
 const ADDRESS: &str = "http://127.0.0.1:43210/mcp/session/11111111111111111111111111111111";
 const INSTALLATION: &str = "019f0000-0000-7000-8000-000000000003";
 
-#[derive(Default)]
 struct RecordingLaunch {
+    completion: HarnessRegistrationOutcome,
     events: Mutex<Vec<&'static str>>,
     created: Mutex<Vec<SessionRef>>,
     refused: Mutex<Vec<HarnessLocalSetupRefusal>>,
@@ -80,6 +80,16 @@ async fn session_launch_binding_cold_resume_uses_the_original_admitted_address()
     assert_eq!(result.0.session_id(), "native-returned-conversation");
     assert!(result.1.is_empty());
 }
+impl Default for RecordingLaunch {
+    fn default() -> Self {
+        Self {
+            completion: HarnessRegistrationOutcome::Registered,
+            events: Mutex::new(Vec::new()),
+            created: Mutex::new(Vec::new()),
+            refused: Mutex::new(Vec::new()),
+        }
+    }
+}
 impl RecordingLaunch {
     fn event(&self, event: &'static str) -> Result<(), HarnessLaunchFailure> {
         self.events
@@ -121,8 +131,12 @@ impl HarnessSessionLaunchPort for RecordingLaunch {
         _operation: &'a OperationId,
     ) -> HarnessLaunchFuture<'a, HarnessRegistrationOutcome> {
         Box::pin(async move {
-            self.event("registered")?;
-            Ok(HarnessRegistrationOutcome::Registered)
+            self.event(match &self.completion {
+                HarnessRegistrationOutcome::Registered => "registered",
+                HarnessRegistrationOutcome::Pending => "registrationPending",
+                HarnessRegistrationOutcome::Refused(_) => "registrationRefused",
+            })?;
+            Ok(self.completion.clone())
         })
     }
     fn refuse_setup<'a>(
@@ -378,3 +392,6 @@ async fn session_launch_binding_local_refusals_record_the_returned_id_before_aba
         );
     }
 }
+
+#[path = "session_launch_binding/registration_outcomes.rs"]
+mod registration_outcomes;

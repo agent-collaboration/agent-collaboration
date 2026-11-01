@@ -136,6 +136,9 @@ impl MessageEffects {
             Error::SchemaUnavailable => UnsentCause::Refused(NativeRefusalCode::Rejection(
                 DeliveryRejectionReason::UnsupportedCapability,
             )),
+            Error::RegistrationRefused => UnsentCause::Refused(NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::PermissionDenied,
+            )),
             Error::NativeRejected => UnsentCause::Refused(NativeRefusalCode::Rejection(
                 DeliveryRejectionReason::Unknown,
             )),

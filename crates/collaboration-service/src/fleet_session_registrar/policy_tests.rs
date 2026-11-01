@@ -16,6 +16,9 @@ use fixture::*;
 #[path = "handoff_identity_tests.rs"]
 mod handoff_identity_tests;
 
+#[path = "identity_disclosure_tests.rs"]
+mod identity_disclosure_tests;
+
 #[tokio::test]
 async fn fleet_session_registrar_restart_abandons_a_prepared_launch_before_dispatch() {
     let fixture = Fixture::new();
