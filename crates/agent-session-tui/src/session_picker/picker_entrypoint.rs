@@ -91,19 +91,26 @@ fn render_picker(
         component.props.dispatch_receipt = support.dispatch_receipt.clone();
         component.props.grouping_clock = support.grouping_clock.clone();
     }
-    let render_result = (|| {
-        let render_loop = component
-            .render_loop()
-            .enable_bracketed_paste()
-            .fullscreen()
-            .ignore_ctrl_c();
-        #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
-        let render_loop = match support.dispatch_receipt {
-            Some(sink) => render_loop.stdout(sink.frame_writer(io::stdout())?),
-            None => render_loop,
-        };
-        runtime.block_on(render_loop)
-    })();
+    let render_loop = component
+        .render_loop()
+        .enable_bracketed_paste()
+        .fullscreen()
+        .ignore_ctrl_c();
+    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+    let render_result = match support
+        .dispatch_receipt
+        .map(|sink| sink.frame_writer(io::stdout()))
+        .transpose()
+    {
+        Ok(Some(writer)) => runtime.block_on(render_loop.stdout(writer)),
+        Ok(None) => runtime.block_on(render_loop),
+        Err(error) => {
+            drop(render_loop);
+            Err(error)
+        }
+    };
+    #[cfg(not(all(feature = "quota-reset-test-harness", debug_assertions)))]
+    let render_result = runtime.block_on(render_loop);
     drop(component);
     if let Some(writer) = writer {
         runtime.block_on(writer).map_err(io::Error::other)?;

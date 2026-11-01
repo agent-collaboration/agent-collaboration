@@ -188,16 +188,101 @@ async fn toolbar_exposes_menu_new_filter_and_folder_scope() {
 
 #[tokio::test]
 async fn menu_is_a_surface_and_never_lists_itself_or_input_conventions() {
-    let (canvases, bounds) = render_anchored_picker_canvases(
-        picker_request(),
-        120,
-        36,
-        vec![key(KeyCode::F(10))],
-        None,
-        agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Menu,
-    )
-    .await;
-    let frame = dialog_text(&canvases.last().unwrap().to_string(), bounds);
+    use agent_collaboration_tui::{
+        controls::ActionProjections,
+        surfaces::{surface_handle::SurfaceStackHandle, surface_stack::OverlayKind},
+    };
+    let observed = Arc::new(Mutex::new(None));
+    let observer = observed.clone();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    sender.send(key(KeyCode::F(10))).unwrap();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker = element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize,
+        surface_observer:move |(stack,_): (SurfaceStackHandle,State<SessionsPickerModel>)|{*observer.lock().unwrap()=Some(stack)}));
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut frame = String::new();
+    let mut navigated = false;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(canvas) = frames.next().await {
+            let stack = observed.lock().unwrap().unwrap();
+            let snapshot = stack.snapshot();
+            if !snapshot
+                .overlays()
+                .last()
+                .is_some_and(|overlay| overlay.kind == OverlayKind::Menu)
+            {
+                continue;
+            }
+            let Some(map) = stack.hit_regions().published() else {
+                continue;
+            };
+            let Some(region) = map
+                .surfaces
+                .iter()
+                .find(|region| region.surface == snapshot.top_id() && !region.cells.is_empty())
+            else {
+                continue;
+            };
+            let bounds = DialogBounds {
+                top: region
+                    .cells
+                    .iter()
+                    .map(|(_, row)| usize::from(*row))
+                    .min()
+                    .unwrap(),
+                bottom: region
+                    .cells
+                    .iter()
+                    .map(|(_, row)| usize::from(*row))
+                    .max()
+                    .unwrap(),
+                left: region
+                    .cells
+                    .iter()
+                    .map(|(column, _)| usize::from(*column))
+                    .min()
+                    .unwrap(),
+                right: region
+                    .cells
+                    .iter()
+                    .map(|(column, _)| usize::from(*column))
+                    .max()
+                    .unwrap(),
+            };
+            let interior = dialog_text(&canvas.to_string(), bounds);
+            frame.push_str(&interior);
+            frame.push('\n');
+            if !navigated {
+                let item_count = ActionProjections::from_registry(&snapshot.top().actions)
+                    .menu
+                    .len();
+                for _ in 1..item_count {
+                    sender.send(key(KeyCode::Down)).unwrap();
+                }
+                navigated = true;
+            } else if snapshot
+                .top()
+                .focus
+                .current()
+                .is_some_and(|target| target.as_str() == "action:quit")
+                && interior.contains("Quit")
+            {
+                return;
+            }
+        }
+        panic!("menu ended before its actual bottom viewport");
+    })
+    .await
+    .expect("real menu top and bottom viewports publish");
+    sender.send(ctrl_key('d')).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while frames.next().await.is_some() {}
+    })
+    .await
+    .expect("Quit follows menu observations");
     for label in [
         "New session",
         "Details",

@@ -478,20 +478,28 @@ async fn tab_and_enter_open_machine_control_while_control_enter_resumes() {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     sender.send(key(KeyCode::Tab)).unwrap();
     sender.send(key(KeyCode::Enter)).unwrap();
-    // R13: machine control is reached through the menu.
-    for _ in 0..7 {
-        sender.send(key(KeyCode::Down)).unwrap();
-    }
-    sender.send(key(KeyCode::Enter)).unwrap();
+    // R13/T2: resolve Machine's current order after the real menu opens.
+    let observed_stack = Arc::new(Mutex::new(
+        None::<agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle>,
+    ));
+    let stack_observer = observed_stack.clone();
+    let mut menu_navigated = false;
     let input = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
     let mut outcome: Option<SessionsPickerOutcome> = None;
     let observed=tokio::time::timeout(Duration::from_secs(2),async {
-        let mut picker=element! {SessionsPickerComponent(request:picker_request(),width:130usize,height:40usize,selected_outcome_out:&mut outcome)};
+        let mut picker=element! {SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(stack,_)|*stack_observer.lock().unwrap()=Some(stack))};
         let frames=picker.mock_terminal_render_loop(MockTerminalConfig::with_events(input));tokio::pin!(frames);
         let mut observed=false;
         while let Some(canvas)=frames.next().await {
+            let stack=observed_stack.lock().unwrap().unwrap();
+            if !menu_navigated&&stack.snapshot().overlays().last().is_some_and(|overlay|overlay.kind==agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Menu) {
+                let distance=agent_collaboration_tui::controls::ActionProjections::from_registry(&stack.snapshot().top().actions).menu.iter().position(|item|item.id.as_str()=="machine").expect("actual Machine menu position");
+                for _ in 0..distance {sender.send(key(KeyCode::Down)).unwrap();}
+                sender.send(key(KeyCode::Enter)).unwrap();
+                menu_navigated=true;
+            }
             if !observed&&canvas.to_string().contains("Choose machine") {
                 sender.send(key(KeyCode::Enter)).unwrap();
                 observed=true;sender.send(key(KeyCode::Esc)).unwrap();sender.send(control_key('c')).unwrap();

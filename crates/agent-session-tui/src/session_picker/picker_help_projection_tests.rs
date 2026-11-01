@@ -15,6 +15,7 @@ async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
     });
     let mut component = element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize,surface_observer:move |(stack,_)|*sink.lock().unwrap()=Some(stack)));
     let mut phase = 0;
+    let mut menu_scrolled = false;
     let mut expected = Vec::<String>::new();
     let mut seen = std::collections::HashSet::new();
     let mut section_style_checked = false;
@@ -84,7 +85,12 @@ async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
                     sender.send(click(&frame, "Menu")).unwrap();
                     phase = 1;
                 }
-                1 if frame.contains("Help") => {
+                1 if !menu_scrolled && stack.snapshot().overlays().last().is_some_and(|overlay|overlay.kind == agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Menu) => {
+                    let distance = agent_collaboration_tui::controls::ActionProjections::from_registry(&stack.snapshot().top().actions).menu.iter().position(|item|item.id.as_str() == "help").expect("actual Help menu position");
+                    for _ in 0..distance {sender.send(key(KeyCode::Down)).unwrap();}
+                    menu_scrolled = true;
+                }
+                1 if menu_scrolled && frame.contains("Help") => {
                     sender.send(click(&frame, "Help")).unwrap();
                     phase = 2;
                 }

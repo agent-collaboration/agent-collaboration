@@ -206,3 +206,81 @@ async fn large_list_fixture_spans_four_viewports_and_reaches_both_ends_at_120x36
     assert_eq!(phase, 4);
     assert_eq!(outcome, None);
 }
+
+#[tokio::test]
+async fn claude_new_success_fixture_returns_the_background_then_attach_handoff() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut phase = 0;
+    let outcome =
+        exercise(
+            "claude-new-success",
+            directory.path(),
+            vec![ctrl(KeyCode::Char('n'))],
+            |canvas, stack, model| {
+                let text = canvas.to_string();
+                if phase == 0
+                    && text.contains("New session")
+                    && model.read().new_session.as_ref().is_some_and(|draft| {
+                        matches!(draft.client_inventory, NewClientInventoryState::Ready(_))
+                    })
+                {
+                    phase = 1;
+                    return vec![key(KeyCode::Enter)].into();
+                }
+                if phase == 1 && dropdown_open(stack) {
+                    phase = 2;
+                    return vec![
+                        TerminalEvent::BracketedPaste("Claude".into()),
+                        key(KeyCode::Enter),
+                    ]
+                    .into();
+                }
+                if phase == 2
+                    && !dropdown_open(stack)
+                    && model.read().new_session.as_ref().is_some_and(|draft| {
+                        draft.client == NewSessionClient::ClaudeNativeForeground
+                    })
+                {
+                    phase = 3;
+                    return vec![key(KeyCode::Tab), key(KeyCode::Tab), key(KeyCode::Enter)].into();
+                }
+                if phase == 3 && dropdown_open(stack) {
+                    phase = 4;
+                    return vec![
+                        TerminalEvent::BracketedPaste("Background".into()),
+                        key(KeyCode::Enter),
+                    ]
+                    .into();
+                }
+                if phase == 4
+                    && !dropdown_open(stack)
+                    && model.read().new_session.as_ref().is_some_and(|draft| {
+                        draft.client == NewSessionClient::ClaudeNativeBackground
+                    })
+                {
+                    assert!(text.contains("Background"));
+                    phase = 5;
+                    return vec![ctrl(KeyCode::Enter)].into();
+                }
+                FixtureStep::default()
+            },
+        )
+        .await;
+    assert_eq!(phase, 5);
+    let Some(SessionsPickerOutcome::LaunchNativeClaude(captured, mode)) = outcome else {
+        panic!("expected captured background Claude New handoff")
+    };
+    assert_eq!(mode, ClaudeTerminalMode::BackgroundThenAttach);
+    assert_eq!(captured.source, PickerSourceContext::DefaultHosted);
+    assert!(
+        matches!(&captured.effect,SessionClientEffect::Native{action:SourceNativeClaudeAction::New{directory,arguments},..} if directory.as_str()=="/repo/project-a"&&arguments.is_empty())
+    );
+    let receipt: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join("picker-outcome.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        receipt,
+        serde_json::json!({"kind":"new","request":{"client":"claudeCode","machine":"defaultHosted","directory":"/repo/project-a","runMode":"backgroundThenAttach"}})
+    );
+}
