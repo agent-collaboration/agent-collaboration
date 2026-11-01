@@ -106,6 +106,13 @@ pub enum Placement {
     Hidden,
 }
 
+/// Ordered menu metadata; the referenced action owns the live heading and key.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MenuSectionSpec {
+    pub section: &'static str,
+    pub heading_action: Option<ActionId>,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 /// Declared effect risk used to prioritize automatic focus, without invoking an action.
 pub enum ActionRisk {
@@ -171,6 +178,10 @@ pub struct ActionPresentation {
 pub enum ActionError {
     DuplicateId(ActionId),
     DuplicateKey(KeyChord),
+    BlankMenuSection,
+    DuplicateMenuSection(&'static str),
+    MissingMenuHeading(ActionId),
+    DuplicateMenuHeading(ActionId),
 }
 impl fmt::Display for ActionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -183,12 +194,14 @@ impl std::error::Error for ActionError {}
 pub struct ActionRegistry {
     scope: ScopeId,
     actions: Vec<ActionDef>,
+    menu_sections: Vec<MenuSectionSpec>,
 }
 impl ActionRegistry {
     pub(crate) fn empty() -> Self {
         Self {
             scope: ScopeId::screen(),
             actions: Vec::new(),
+            menu_sections: Vec::new(),
         }
     }
     pub fn new(scope: ScopeId, actions: Vec<ActionDef>) -> Result<Self, ActionError> {
@@ -204,7 +217,39 @@ impl ActionRegistry {
                 }
             }
         }
-        Ok(Self { scope, actions })
+        Ok(Self {
+            scope,
+            actions,
+            menu_sections: Vec::new(),
+        })
+    }
+    pub fn with_menu_sections(
+        mut self,
+        sections: Vec<MenuSectionSpec>,
+    ) -> Result<Self, ActionError> {
+        let mut names = std::collections::HashSet::new();
+        let mut headings = std::collections::HashSet::new();
+        for section in &sections {
+            if section.section.trim().is_empty() {
+                return Err(ActionError::BlankMenuSection);
+            }
+            if !names.insert(section.section) {
+                return Err(ActionError::DuplicateMenuSection(section.section));
+            }
+            if let Some(id) = &section.heading_action {
+                if !self.actions.iter().any(|action| action.id == *id) {
+                    return Err(ActionError::MissingMenuHeading(id.clone()));
+                }
+                if !headings.insert(id) {
+                    return Err(ActionError::DuplicateMenuHeading(id.clone()));
+                }
+            }
+        }
+        self.menu_sections = sections;
+        Ok(self)
+    }
+    pub(crate) fn menu_sections(&self) -> &[MenuSectionSpec] {
+        &self.menu_sections
     }
     pub fn scope(&self) -> &ScopeId {
         &self.scope
@@ -237,3 +282,7 @@ impl ActionRegistry {
 #[cfg(test)]
 #[path = "actions_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "menu_sections_test.rs"]
+mod menu_sections_test;
