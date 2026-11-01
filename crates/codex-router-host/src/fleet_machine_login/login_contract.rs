@@ -262,6 +262,9 @@ mod tests {
             wire["reason"]["unexpected"] = json!(true);
             assert!(serde_json::from_value::<FleetLoginEvent>(wire).is_err());
         }
+        assert!(serde_json::from_value::<FleetLoginEvent>(json!({
+            "state":"refused","reason":{"kind":"storeUnusable","cause":{"kind":"invalidDataKey","unexpected":true}}
+        })).is_err());
         assert!(
             serde_json::from_value::<FleetLoginEvent>(
                 json!({"state":"refused","reason":{"kind":"futureRefusal"}})

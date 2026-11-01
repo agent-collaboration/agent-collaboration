@@ -24,6 +24,9 @@ const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000011";
 const PROJECT: &str = "019f0000-0000-7000-8000-000000000012";
 const REQUEST: &str = "019f0000-0000-7000-8000-000000000013";
 
+#[path = "board_machine_login_writes.rs"]
+mod writes;
+
 struct ControlledClock;
 impl Clock for ControlledClock {
     fn now(&self) -> SyncTime {

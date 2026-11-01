@@ -238,24 +238,23 @@ impl MachineLoginOwner {
         let bound = self
             .saved
             .metadata()
-            .map(|metadata| &metadata.organization_id)
-            .or_else(|| self.pending.as_ref().map(|login| &login.organization_id));
+            .map(|metadata| &metadata.organization_id);
         if let Some(bound) = bound
             && *bound != organization_id
         {
-            let _sent = events.try_send(FleetLoginEvent::Refused {
-                reason: FleetLoginRefusal::AlreadyInOrganization {
+            self.refuse_observer(
+                events,
+                FleetLoginRefusal::AlreadyInOrganization {
                     organization_id: bound.clone(),
                 },
-            });
+                &organization_id,
+            );
             return;
         }
         let keeping = match &self.keeping {
             Ok(keeping) => *keeping,
             Err(reason) => {
-                let _sent = events.try_send(FleetLoginEvent::Refused {
-                    reason: reason.clone(),
-                });
+                self.refuse_observer(events, reason.clone(), &organization_id);
                 return;
             }
         };
@@ -279,6 +278,7 @@ impl MachineLoginOwner {
             peer: self.identity.peer,
             label,
         };
+        tracing::info!(event = "machineLogin", outcome = "started", organization_id = request.organization_id.as_str(), installation = request.installation.as_str(), peer = %request.peer, "machine login started");
         let issuer = self.issuer.clone();
         let clock = self.clock.clone();
         let (codes, receiver) = mpsc::unbounded_channel();
@@ -317,6 +317,7 @@ impl MachineLoginOwner {
         let Some(login) = self.pending.take() else {
             return;
         };
+        let requested_organization = login.organization_id.clone();
         let event = match result {
             Err(DeviceCodeFailure::Refused(reason)) => FleetLoginEvent::Refused { reason },
             Err(DeviceCodeFailure::OutcomeUnknown(context)) => {
@@ -354,19 +355,53 @@ impl MachineLoginOwner {
         for observer in login.observers {
             let _sent = observer.try_send(event.clone());
         }
-        tracing::info!(
-            outcome = match event {
-                FleetLoginEvent::LoggedIn { .. } => "loggedIn",
-                FleetLoginEvent::Refused { .. } => "refused",
-                _ => "outcomeUnknown",
-            },
-            "machine login ended"
-        );
+        self.record_login_ending(&event, &requested_organization);
+    }
+
+    fn refuse_observer(
+        &self,
+        events: mpsc::Sender<FleetLoginEvent>,
+        reason: FleetLoginRefusal,
+        organization_id: &OrganizationId,
+    ) {
+        let event = FleetLoginEvent::Refused { reason };
+        self.record_login_ending(&event, organization_id);
+        let _sent = events.try_send(event);
+    }
+
+    fn record_login_ending(
+        &self,
+        event: &FleetLoginEvent,
+        requested_organization: &OrganizationId,
+    ) {
+        match event {
+            FleetLoginEvent::LoggedIn {
+                organization_id,
+                enrollment_id,
+                keeping,
+            } => {
+                tracing::info!(event = "machineLogin", outcome = "loggedIn", organization_id = organization_id.as_str(), enrollment_id = enrollment_id.as_str(), installation = self.identity.installation.as_str(), keeping = ?keeping, "machine login ended")
+            }
+            FleetLoginEvent::Refused { reason } => {
+                tracing::info!(event = "machineLogin", outcome = "refused", reason = ?reason, organization_id = requested_organization.as_str(), installation = self.identity.installation.as_str(), "machine login ended")
+            }
+            FleetLoginEvent::OutcomeUnknown { context } => {
+                tracing::warn!(event = "machineLogin", outcome = "outcomeUnknown", context = ?context, organization_id = requested_organization.as_str(), installation = self.identity.installation.as_str(), "machine login ended")
+            }
+            FleetLoginEvent::Code { .. } => {}
+        }
     }
 
     fn start_renewal(&mut self) {
         self.renew_at = None;
         if let SavedLogin::Refreshable { credential, .. } = &self.saved {
+            tracing::info!(
+                event = "machineTokenRenewal",
+                outcome = "started",
+                enrollment_id = credential.machine_client_id.as_str(),
+                installation = self.identity.installation.as_str(),
+                "machine token refresh started"
+            );
             self.renewal = Some(Box::pin(renew_machine_token(
                 self.issuer.clone(),
                 self.publication.clone(),

@@ -183,6 +183,18 @@ async fn fleet_machine_login_reattaches_the_same_code_and_only_opens_gate_after_
     );
     let mut second = fixture.observe(&running);
     assert_eq!(second.recv().await.unwrap(), code);
+    let mut attached = running.handle.observe(
+        "019f0000-0000-7000-8000-000000000099"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+        "Other CLI parameters".to_owned().try_into().unwrap(),
+    );
+    assert_eq!(
+        attached.recv().await.unwrap(),
+        code,
+        "an unsaved pending request is reattached, never treated as a saved organization"
+    );
     assert_eq!(fixture.issuer.authorizations.load(Ordering::SeqCst), 1);
 
     fixture.issue();
@@ -196,6 +208,7 @@ async fn fleet_machine_login_reattaches_the_same_code_and_only_opens_gate_after_
         }
     ));
     assert_eq!(second.recv().await.unwrap(), terminal);
+    assert_eq!(attached.recv().await.unwrap(), terminal);
     assert_eq!(
         running.handle.source.machine_login_state(),
         MachineLoginState::LoggedIn
@@ -437,4 +450,138 @@ async fn fleet_machine_login_failed_retirement_sync_is_unknown_after_real_deleti
         ENROLLMENT
     );
     running.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn fleet_machine_login_unusable_store_refuses_before_authorization_without_writes() {
+    use codex_router_secret_store::classified_store_open::UnusableCause;
+    for cause in [
+        UnusableCause::KeychainUnavailable,
+        UnusableCause::InvalidCredentialData,
+        UnusableCause::MigrationIncomplete,
+    ] {
+        let fixture = Fixture::new();
+        let credentials = Arc::new(RefreshCredentialStore::Unusable { cause });
+        let running = fixture.start_with_credentials(sync_directory, credentials);
+        let mut events = fixture.observe(&running);
+
+        assert_eq!(
+            events.recv().await,
+            Some(FleetLoginEvent::Refused {
+                reason: FleetLoginRefusal::StoreUnusable { cause }
+            })
+        );
+
+        assert_eq!(fixture.issuer.authorizations.load(Ordering::SeqCst), 0);
+        assert_eq!(fixture.issuer.polls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            running.handle.source.machine_login_state(),
+            MachineLoginState::NotLoggedIn
+        );
+        assert_eq!(std::fs::read_dir(fixture.root.path()).unwrap().count(), 0);
+        running.shutdown().await.unwrap();
+    }
+}
+
+struct TraceCapture(Arc<std::sync::Mutex<Vec<u8>>>);
+
+#[tokio::test]
+async fn fleet_machine_login_cli_disconnect_does_not_cancel_the_host_owned_attempt() {
+    let fixture = Fixture::new();
+    let running = fixture.start(sync_directory);
+    let mut events = fixture.observe(&running);
+    assert!(matches!(
+        events.recv().await,
+        Some(FleetLoginEvent::Code { .. })
+    ));
+    let mut token = running.handle.source.token.clone();
+    token.borrow_and_update();
+
+    drop(events);
+    fixture.issue();
+    token.changed().await.unwrap();
+
+    assert_eq!(
+        running.handle.source.machine_login_state(),
+        MachineLoginState::LoggedIn
+    );
+    assert_eq!(fixture.issuer.authorizations.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.issuer.polls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        read_metadata(fixture.root.path())
+            .unwrap()
+            .unwrap()
+            .enrollment_id
+            .as_str(),
+        ENROLLMENT
+    );
+    running.shutdown().await.unwrap();
+}
+impl std::io::Write for TraceCapture {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .map_err(|_| std::io::Error::other("trace capture lock poisoned"))?
+            .extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn fleet_machine_login_records_public_outcomes_and_ids_without_codes_or_credentials() {
+    let bytes = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let output = bytes.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .without_time()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::TRACE)
+        .with_writer(move || TraceCapture(output.clone()))
+        .finish();
+    let trace_guard = tracing::subscriber::set_default(subscriber);
+    let fixture = Fixture::new();
+    let running = fixture.start(sync_directory);
+    let mut events = fixture.observe(&running);
+    assert!(matches!(
+        events.recv().await,
+        Some(FleetLoginEvent::Code { .. })
+    ));
+    fixture.issue();
+    assert!(matches!(
+        events.recv().await,
+        Some(FleetLoginEvent::LoggedIn { .. })
+    ));
+    running.shutdown().await.unwrap();
+    let fixture = Fixture::new();
+    let running = fixture.start(sync_directory);
+    let mut events = fixture.observe(&running);
+    assert!(matches!(
+        events.recv().await,
+        Some(FleetLoginEvent::Code { .. })
+    ));
+    fixture.answers.send(Err(IssuerFailure::Timeout)).unwrap();
+    fixture.clock.0.send_replace(5_000);
+    assert!(matches!(
+        events.recv().await,
+        Some(FleetLoginEvent::OutcomeUnknown { .. })
+    ));
+    running.shutdown().await.unwrap();
+    drop(trace_guard);
+
+    let text = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+    assert!(text.contains("machineLogin"));
+    assert!(text.contains("loggedIn"));
+    assert!(text.contains("outcomeUnknown"));
+    assert!(text.contains(ORGANIZATION));
+    assert!(text.contains(ENROLLMENT));
+    for secret in [
+        "ABCD-EFGH",
+        "device-secret-canary",
+        "access-secret-canary",
+        "refresh-secret-canary",
+    ] {
+        assert!(!text.contains(secret));
+    }
 }

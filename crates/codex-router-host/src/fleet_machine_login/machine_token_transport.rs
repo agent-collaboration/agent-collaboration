@@ -216,3 +216,7 @@ impl TransportConnection for HostMachineSessionConnection {
 #[cfg(test)]
 #[path = "machine_token_transport_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "machine_token_transport_http_tests.rs"]
+mod http_tests;
