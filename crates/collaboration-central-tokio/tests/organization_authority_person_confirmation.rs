@@ -196,37 +196,34 @@ impl PersonSignInPort for HeldConfirmationPort {
         ready(Ok(SignatureValidity::Valid))
     }
 
-    fn confirm_person_session<'request>(
+    async fn confirm_person_session<'request>(
         &'request self,
         bearer_token: &'request str,
-    ) -> impl Future<Output = Result<PersonSessionConfirmation, SignInUnavailable>> + Send + 'request
-    {
-        async move {
-            if bearer_token != self.expected_bearer {
-                return Ok(PersonSessionConfirmation::Inactive {});
-            }
-            let entered = {
-                self.entered
-                    .lock()
-                    .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?
-                    .take()
-                    .ok_or(SignInUnavailable::ConfirmationUnreachable)?
-            };
-            let release = {
-                self.release
-                    .lock()
-                    .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?
-                    .take()
-                    .ok_or(SignInUnavailable::ConfirmationUnreachable)?
-            };
-            entered
-                .send(())
-                .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?;
-            release
-                .await
-                .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?;
-            active_confirmation()
+    ) -> Result<PersonSessionConfirmation, SignInUnavailable> {
+        if bearer_token != self.expected_bearer {
+            return Ok(PersonSessionConfirmation::Inactive {});
         }
+        let entered = {
+            self.entered
+                .lock()
+                .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?
+                .take()
+                .ok_or(SignInUnavailable::ConfirmationUnreachable)?
+        };
+        let release = {
+            self.release
+                .lock()
+                .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?
+                .take()
+                .ok_or(SignInUnavailable::ConfirmationUnreachable)?
+        };
+        entered
+            .send(())
+            .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?;
+        release
+            .await
+            .map_err(|_| SignInUnavailable::ConfirmationUnreachable)?;
+        active_confirmation()
     }
 }
 
