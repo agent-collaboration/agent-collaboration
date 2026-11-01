@@ -4,9 +4,10 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 #[path = "support/contract_artifacts.rs"]
+#[cfg(test)]
 mod contract_artifacts;
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+#[cfg(test)]
+use contract_artifacts::schema_validation;
 
 #[test]
 fn fleet_directory_scalar_wire_contracts() {
