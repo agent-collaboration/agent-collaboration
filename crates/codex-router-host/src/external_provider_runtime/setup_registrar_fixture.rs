@@ -88,6 +88,12 @@ pub(super) struct ProviderRegistrarFixture {
 }
 impl ProviderRegistrarFixture {
     pub fn new(mode: SessionRegistrationMode) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::at_origin(mode, "http://127.0.0.1:43210")
+    }
+    pub fn at_origin(
+        mode: SessionRegistrationMode,
+        origin: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let repository = Arc::new(MemoryRegistrationRepository::new(Arc::new(Mutex::new(
             Vec::new(),
         ))));
@@ -97,9 +103,7 @@ impl ProviderRegistrarFixture {
         let ids = Arc::new(SequenceLaunchIds(AtomicU64::new(0)));
         let registrar = Arc::new(FleetSessionRegistrar::new(FleetSessionRegistrarProps {
             installation: INSTALLATION.to_owned().try_into()?,
-            listener: SessionBindingListener::Stable(
-                "http://127.0.0.1:43210".to_owned().try_into()?,
-            ),
+            listener: SessionBindingListener::Stable(origin.to_owned().try_into()?),
             repository: repository.clone(),
             connection: authority.clone(),
             mode: Arc::new(FixedRegistrationMode(mode)),

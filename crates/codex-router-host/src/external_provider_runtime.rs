@@ -691,3 +691,7 @@ mod setup_registrar_fixture;
 #[cfg(test)]
 #[path = "external_provider_runtime/setup_refusal_matrix_tests.rs"]
 mod setup_refusal_matrix_tests;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/bound_helper_preparation_tests.rs"]
+mod bound_helper_preparation_tests;

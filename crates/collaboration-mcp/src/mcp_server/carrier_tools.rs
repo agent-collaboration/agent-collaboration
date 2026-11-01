@@ -23,6 +23,7 @@ impl CollaborationMcpServer {
         Parameters(mut request): Parameters<ConversationCreateToolRequest>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
+        let _declared_bound_preparation = &self.bound_conversation_preparation;
         request.create.default_approver();
         if let Some(refusal) = self.creator_claim_refusal(&request.create.created_by) {
             return refusal;

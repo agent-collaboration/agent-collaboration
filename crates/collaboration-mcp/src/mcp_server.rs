@@ -134,6 +134,7 @@ pub(crate) struct CollaborationMcpServer {
     session_registrar:
         Option<Arc<collaboration_service::fleet_session_registrar::FleetSessionRegistrar>>,
     call_session: session_binding::CallSessionAdmission,
+    bound_conversation_preparation: Option<Arc<dyn crate::BoundConversationPreparation>>,
 }
 
 impl CollaborationMcpServer {
@@ -149,6 +150,7 @@ impl CollaborationMcpServer {
             router_executable_relation: config.router_executable_relation.clone(),
             tool_calls,
             session_registrar: config.session_registrar.clone(),
+            bound_conversation_preparation: config.bound_conversation_preparation.clone(),
             call_session: session_binding::CallSessionAdmission::AccessEnrollment,
         }
     }
@@ -168,6 +170,7 @@ impl CollaborationMcpServer {
                 tokio_util::sync::CancellationToken::new(),
             ),
             session_registrar: None,
+            bound_conversation_preparation: None,
             call_session: session_binding::CallSessionAdmission::AccessEnrollment,
         }
     }

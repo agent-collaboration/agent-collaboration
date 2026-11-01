@@ -45,6 +45,7 @@ const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 /// What every listener's copy of the collaboration API serves from.
 #[derive(Clone)]
 pub struct CollaborationApiConfig {
+    pub bound_conversation_preparation: Option<Arc<dyn crate::BoundConversationPreparation>>,
     pub application: CollaborationApplication,
     pub session_registrar:
         Option<Arc<collaboration_service::fleet_session_registrar::FleetSessionRegistrar>>,

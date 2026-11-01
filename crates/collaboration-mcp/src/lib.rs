@@ -1,7 +1,11 @@
 //! The collaboration API: one stateless MCP server over the typed collaboration application,
 //! served on every listener the Host holds.
 
+mod bound_conversation_preparation;
 mod collaboration_api_router;
+pub use bound_conversation_preparation::{
+    BoundConversationPreparation, BoundConversationPreparationFuture, BoundConversationPrepared,
+};
 mod local_collaboration;
 mod loopback_bind_address;
 mod mcp_server;

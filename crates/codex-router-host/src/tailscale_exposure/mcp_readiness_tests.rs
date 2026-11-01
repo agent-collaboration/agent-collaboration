@@ -309,6 +309,7 @@ async fn actual_mcp_readiness(
         tokio::sync::watch::channel(collaboration_protocol::RouterExecutableRelation::Match);
     let shutdown = CancellationToken::new();
     let config = CollaborationApiConfig {
+        bound_conversation_preparation: None,
         session_registrar: None,
         application: (identity).build(),
         service_directory: directory.path().to_owned(),

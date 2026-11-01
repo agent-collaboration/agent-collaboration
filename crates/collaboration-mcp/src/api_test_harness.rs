@@ -52,6 +52,7 @@ pub(crate) fn api_config(
 ) -> CollaborationApiConfig {
     let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
     CollaborationApiConfig {
+        bound_conversation_preparation: None,
         session_registrar: None,
         application,
         service_directory: service_directory.to_owned(),
