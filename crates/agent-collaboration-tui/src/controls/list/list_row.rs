@@ -19,7 +19,20 @@ pub struct ListRowProps<'a> {
     pub children: Vec<AnyElement<'a>>,
 }
 #[component]
-pub fn ListRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<AnyElement<'a>> {
+pub fn ListRow<'a>(props: &mut ListRowProps<'a>) -> impl Into<AnyElement<'a>> {
+    let heading = props.control.heading_before(&props.row);
+    let children = std::mem::take(&mut props.children);
+    let record = element!(ListRecordRow(control:props.control.clone(),row:props.row.clone(),marker_offset:props.marker_offset,children)).into_any();
+    match heading {
+        None => record,
+        Some(heading) => element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+            crate::controls::typography::GroupHeading(name:heading.name,count:Some(heading.count),summary:heading.summary)
+            #(Some(record))
+        }).into_any(),
+    }
+}
+#[component]
+fn ListRecordRow<'a>(props: &mut ListRowProps<'a>, mut hooks: Hooks) -> impl Into<AnyElement<'a>> {
     let context = *hooks.use_context::<SurfaceContext>();
     let selected = props.control.selected().as_ref() == Some(&props.row);
     let focused = selected && context.is_focused(props.control.id());

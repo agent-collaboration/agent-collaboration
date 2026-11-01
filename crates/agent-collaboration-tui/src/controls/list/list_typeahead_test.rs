@@ -42,6 +42,22 @@ fn record_keys(query: &str) -> Vec<ListRowKey> {
         .map(|(key, _)| ListRowKey::new(*key).unwrap())
         .collect()
 }
+fn record_rows(query: &str, grouped: bool) -> crate::controls::list::ListRows {
+    use crate::controls::list::{ListGroup, ListGroupHeading, ListRows};
+    let keys = record_keys(query);
+    if grouped {
+        ListRows::Grouped(vec![ListGroup {
+            heading: ListGroupHeading {
+                name: "Heading only".into(),
+                count: keys.len(),
+                summary: None,
+            },
+            keys,
+        }])
+    } else {
+        ListRows::Ungrouped(keys)
+    }
+}
 fn record_label(key: &ListRowKey) -> &'static str {
     RECORDS
         .iter()
@@ -76,6 +92,9 @@ struct TypeaheadSceneProps {
     #[iocraft(required)]
     journal: EventJournal,
     enabled: bool,
+    grouped: bool,
+    width: Option<u16>,
+    height: Option<u16>,
     handle: Arc<Mutex<Option<TypeaheadFixture>>>,
     activated: Arc<Mutex<Vec<String>>>,
 }
@@ -83,9 +102,10 @@ struct TypeaheadSceneProps {
 fn TypeaheadScene(props: &TypeaheadSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     record_draw(&mut hooks, &props.journal);
     let filter = hooks.use_state(TextFieldState::default);
+    let grouped = props.grouped;
     let value = hooks.use_state(|| {
         ListSelectionState::new(
-            record_keys(""),
+            record_rows("", grouped),
             Some(ListRowKey::new("claude-beta").unwrap()),
         )
         .unwrap()
@@ -99,7 +119,11 @@ fn TypeaheadScene(props: &TypeaheadSceneProps, mut hooks: Hooks) -> impl Into<An
             filter,
             Handler::from(move |query: String| {
                 let control = retained.read().as_ref().unwrap().clone();
-                control.replace_rows(record_keys(&query)).unwrap();
+                control
+                    .replace_rows(crate::controls::list::ListRows::Ungrouped(record_keys(
+                        &query,
+                    )))
+                    .unwrap();
             }),
         );
         let control = ListSelectionControl::new(ListSelectionBinding {
@@ -183,10 +207,10 @@ fn TypeaheadScene(props: &TypeaheadSceneProps, mut hooks: Hooks) -> impl Into<An
         filter,
     });
     let journal = props.journal.clone();
-    element!(InputOwner(stack,width:80u16,height:20u16,quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,filter.read().text().as_bytes().to_vec()),(SurfaceId::Screen,stack.snapshot().top().focus.current().unwrap().as_str().as_bytes().to_vec()),(SurfaceId::Screen,canceled.get().to_le_bytes().to_vec())]))) {
+    element!(InputOwner(stack,width:props.width.unwrap_or(80),height:props.height.unwrap_or(20),quit_action:action("quit"),on_routed:move |_|journal.processed(SurfaceSnapshot(vec![(SurfaceId::Screen,filter.read().text().as_bytes().to_vec()),(SurfaceId::Screen,stack.snapshot().top().focus.current().unwrap().as_str().as_bytes().to_vec()),(SurfaceId::Screen,canceled.get().to_le_bytes().to_vec())]))) {
         OverlayHost {View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
             FilterField(id:target("filter"),value:filter,placeholder:"Filter sessions".to_owned())
-            View(height:5) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("sessions")),scroll:control.scroll(),grow:true) {
+            View(height:props.height.map_or(5,|height|height-4)) {ScrollList(id:control.scroll_target(),keyboard_target:Some(target("sessions")),scroll:control.scroll(),grow:true) {
                 #(control.rows().into_iter().map(|row|element!(ListRow(key:row.as_str().to_owned(),control:control.clone(),row:row.clone()) {Text(content:record_label(&row))}).into_any()))
             }}
             Text(content:format!("Opened {} Canceled {}",calls.get(),canceled.get()))
@@ -408,4 +432,92 @@ async fn a_list_without_typeahead_does_not_edit_the_filter() {
     tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn grouped_typeahead_matches_only_domain_records_and_keeps_list_focus() {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        for (width, height) in crate::test_support::grids::STANDARD_GRIDS {
+            let handle = Arc::new(Mutex::new(None));
+            let activated = Arc::new(Mutex::new(Vec::new()));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(TypeaheadScene(journal,enabled:true,grouped:true,width:Some(width),height:Some(height),handle:handle.clone(),activated:activated.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.lock().unwrap().clone().unwrap();
+                assert!((0..driver.frames.last().unwrap().height).any(|line| {
+                    driver
+                        .frames
+                        .last()
+                        .unwrap()
+                        .row_text(line)
+                        .contains("Heading only")
+                }));
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(TerminalEvent::BracketedPaste("Heading only".into()), true)],
+                        true,
+                        |ack| {
+                            assert_eq!(ack.snapshot.0[0].1, b"Heading only");
+                            assert_eq!(ack.snapshot.0[1].1, b"sessions");
+                            assert!(
+                                fixture.control.rows().is_empty(),
+                                "heading text cannot create a filter match"
+                            );
+                            assert!(fixture.control.selected().is_none());
+                        },
+                    )
+                    .await;
+                assert!(
+                    !(1..driver.frames.last().unwrap().height).any(|line| driver
+                        .frames
+                        .last()
+                        .unwrap()
+                        .row_text(line)
+                        .contains("Heading only")),
+                    "an empty group is not painted"
+                );
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::Enter), false)], false)
+                    .await;
+                assert!(activated.lock().unwrap().is_empty());
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::Esc), true)], true)
+                    .await;
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(TerminalEvent::BracketedPaste("Codex".into()), true)],
+                        true,
+                        |ack| {
+                            assert_eq!(ack.snapshot.0[1].1, b"sessions");
+                            assert_eq!(
+                                fixture.control.rows(),
+                                vec![
+                                    ListRowKey::new("codex-alpha").unwrap(),
+                                    ListRowKey::new("codex-gamma").unwrap()
+                                ]
+                            );
+                        },
+                    )
+                    .await;
+                driver
+                    .drive(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::Down), true), (key(KeyCode::Enter), true)],
+                        true,
+                    )
+                    .await;
+                assert_eq!(*activated.lock().unwrap(), vec!["codex-gamma"]);
+                assert_eq!(fixture.control.selected().unwrap().as_str(), "codex-gamma");
+            })
+            .await
+            .unwrap();
+        }
+    }
 }
