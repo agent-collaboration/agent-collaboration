@@ -234,7 +234,8 @@ fn AnchoredPanel<'a>(
     observation.parent = parent;
     observation.target = props.target.clone();
     observation.bounds = bounds;
-    let placement = bounds.get().and_then(|anchor| {
+    let anchor = bounds.get();
+    let placement = anchor.and_then(|anchor| {
         anchored_bounds(
             anchor,
             props.preferred_width,
@@ -245,9 +246,14 @@ fn AnchoredPanel<'a>(
     });
     let children = std::mem::take(&mut props.children);
     match placement {
-        Some(placement)=>element!(SurfacePanel(context:props.context,left:placement.left,top:placement.top,width:Size::Length(u32::from(placement.width)),height:Size::Length(u32::from(placement.height)),max_width:placement.width,max_height:placement.height,position:Position::Absolute,overlay:true,children)).into_any(),
+        Some(placement) => {
+            let above = anchor.is_some_and(|anchor| placement.top < anchor.top);
+            element!(View(position:Position::Absolute,left:placement.left,top:placement.top,width:placement.width,height:placement.height,flex_direction:FlexDirection::Column,justify_content:if above {JustifyContent::End}else{JustifyContent::Start},overflow:Overflow::Hidden) {
+                SurfacePanel(context:props.context,width:Size::Length(u32::from(placement.width)),height:Size::Auto,max_width:placement.width,max_height:placement.height,position:Position::Relative,overlay:true,children)
+            }).into_any()
+        }
         // A newly opened parent or Resize may not have published its field yet.
-        None=>element!(View(width:0,height:0)).into_any(),
+        None => element!(View(width:0,height:0)).into_any(),
     }
 }
 
