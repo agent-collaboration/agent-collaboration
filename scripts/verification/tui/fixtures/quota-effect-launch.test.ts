@@ -21,6 +21,7 @@ import {
 } from '../journeys/flows/quota-fixture-contract.ts';
 import type { QuotaEffectScenario } from '../journeys/flows/quota-fixture-contract.ts';
 import { quotaEffectLaunch } from './quota-effect-launch.ts';
+import { shortTemporaryRoot } from './short-temporary-root.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -28,7 +29,7 @@ afterEach(() => {
 });
 
 function launchRecord(scenario: QuotaEffectScenario): Readonly<Record<string, string>> {
-	const output = realpathSync(mkdtempSync('/private/tmp/2026-11-qb-'));
+	const output = realpathSync(mkdtempSync(join(shortTemporaryRoot(), '2026-11-qb-')));
 	roots.push(output);
 	const binary = join(output, 'declared-libtest');
 	writeFileSync(binary, 'not executed by this test');

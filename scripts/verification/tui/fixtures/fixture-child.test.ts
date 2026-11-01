@@ -25,6 +25,7 @@ import {
 	verifyComponentCompletion,
 } from './fixture-child.ts';
 import type { FixtureCommand } from './fixture-child.ts';
+import { shortTemporaryRoot } from './short-temporary-root.ts';
 
 const roots: string[] = [];
 function temporaryDirectory(): string {
@@ -45,7 +46,7 @@ const COMPONENT_ARGUMENTS = [
 ];
 
 test('effectful admission checks the exact config without starting the declared child', () => {
-	const output = realpathSync(mkdtempSync('/private/tmp/2026-11-quota-bind-'));
+	const output = realpathSync(mkdtempSync(join(shortTemporaryRoot(), '2026-11-quota-bind-')));
 	roots.push(output);
 	const binary = join(output, 'declared-effect-libtest');
 	const sentinel = join(output, 'must-not-launch');
@@ -105,7 +106,7 @@ test('effectful admission checks the exact config without starting the declared 
 		'--test-threads=1',
 	]);
 	expect(launch.environment['QUOTA_EFFECT_FIXTURE_CONFIG']).toBe(effectConfiguration);
-	expect(launch.environment['TMPDIR']).toBe('/private/tmp');
+	expect(launch.environment['TMPDIR']).toBe(shortTemporaryRoot());
 	expect(launch.environment).not.toHaveProperty('NO_COLOR');
 	writeFileSync(effectConfiguration, JSON.stringify({ ...config, scenario: 'captured-actions' }));
 	const changed = invoke();

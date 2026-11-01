@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import { COMPONENT_SCENARIOS, COMPONENT_TEST } from '../../fixtures/component-fixture-contract.ts';
+import { shortTemporaryRoot } from '../../fixtures/short-temporary-root.ts';
 import { admitQuotaArgumentProfile, quotaArgumentAdmission } from './quota-argument-admission.ts';
 import { quotaEffectArguments, quotaEffectScenarioSchema } from './quota-fixture-contract.ts';
 
@@ -61,7 +62,7 @@ function offlinePacket(): unknown {
 			],
 			releaseBytes: 'settle\n',
 		},
-		commonChildEnvironment: { NO_COLOR: 'absent', TMPDIR: '/private/tmp' },
+		commonChildEnvironment: { NO_COLOR: 'absent', TMPDIR: shortTemporaryRoot() },
 		r19: { status: 'unbound placeholder; no grouped projection or persisted reopen' },
 	};
 }

@@ -12,6 +12,7 @@ import {
 	quotaRequiresPrivateGuard,
 } from '../journeys/flows/quota-fixture-contract.ts';
 import type { ChildLaunch, FixtureCommand } from './fixture-child.ts';
+import { shortTemporaryRoot } from './short-temporary-root.ts';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const launchRecordSchema = z.strictObject({
@@ -53,8 +54,11 @@ export function quotaEffectLaunch(configuration: FixtureCommand): ChildLaunch {
 	const record = launchRecordSchema.parse(configuration);
 	requireDirectory(record.output);
 	requireDirectory(record.approved_cwd);
-	if ((lstatSync(record.output).mode & 0o077) !== 0 || !record.output.startsWith('/private/tmp/'))
-		throw new Error('quota fixture output must be private mode 0700 under /private/tmp');
+	if (
+		(lstatSync(record.output).mode & 0o077) !== 0 ||
+		!record.output.startsWith(`${shortTemporaryRoot()}/`)
+	)
+		throw new Error(`quota fixture output must be private mode 0700 under ${shortTemporaryRoot()}`);
 	if (
 		dirname(record.effect_configuration) !== record.output ||
 		realpathSync(record.effect_configuration) !== record.effect_configuration ||
@@ -82,7 +86,7 @@ export function quotaEffectLaunch(configuration: FixtureCommand): ChildLaunch {
 	const environment: Record<string, string> = {
 		TERM: 'xterm-256color',
 		LANG: 'C.UTF-8',
-		TMPDIR: '/private/tmp',
+		TMPDIR: shortTemporaryRoot(),
 		QUOTA_EFFECT_FIXTURE_CONFIG: record.effect_configuration,
 	};
 	for (const name of ['HOME', 'PATH', 'LC_ALL', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH']) {
