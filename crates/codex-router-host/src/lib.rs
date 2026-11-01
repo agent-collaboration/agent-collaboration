@@ -12,6 +12,8 @@ mod child_diagnostics;
 mod claude_code_peer_delivery_route;
 mod claude_provider_launch_environment;
 mod codex_conversation_recording_composition;
+mod harness_launch_composition;
+pub use harness_launch_composition::HostHarnessSessionLaunchPort;
 #[cfg(test)]
 mod host_manifest_publication_tests;
 pub use claude_code_peer_delivery_route::ClaudeCodePeerDeliveryRoute;
