@@ -334,9 +334,8 @@ fn decode_body(
             SignatureValidity::Valid,
             facts(operation),
             UnixSeconds(1_000),
-        )
-        .unwrap()
-        .decode_body(&serde_json::to_vec(body).unwrap())
+        )?
+        .decode_body(&serde_json::to_vec(body).map_err(|_| ServiceReceiverRefusal::WrongOperation)?)
 }
 
 // Real common DTOs stay at this boundary. K7 authentication remains a named

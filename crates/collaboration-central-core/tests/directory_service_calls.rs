@@ -58,22 +58,47 @@ enum RequestObservation {
 }
 #[derive(Clone)]
 struct ScriptedTransport {
-    replies: Arc<Mutex<VecDeque<Result<Vec<u8>, ServiceHttpFailure>>>>,
-    requests: Arc<Mutex<Vec<RequestObservation>>>,
+    state: Arc<Mutex<ScriptedTransportState>>,
+}
+struct ScriptedTransportState {
+    replies: VecDeque<Result<Vec<u8>, ServiceHttpFailure>>,
+    requests: Vec<RequestObservation>,
+    unexpected_calls: usize,
 }
 impl ScriptedTransport {
     fn new(replies: Vec<Result<Vec<u8>, ServiceHttpFailure>>) -> Self {
         Self {
-            replies: Arc::new(Mutex::new(replies.into())),
-            requests: Arc::default(),
+            state: Arc::new(Mutex::new(ScriptedTransportState {
+                replies: replies.into(),
+                requests: Vec::new(),
+                unexpected_calls: 0,
+            })),
         }
     }
     fn answer(&self) -> Result<Vec<u8>, ServiceHttpFailure> {
-        self.replies
+        let mut state = self
+            .state
             .lock()
-            .unwrap()
-            .pop_front()
-            .expect("unexpected service request")
+            .map_err(|_| ServiceHttpFailure::Unreachable)?;
+        match state.replies.pop_front() {
+            Some(answer) => answer,
+            None => {
+                state.unexpected_calls += 1;
+                Err(ServiceHttpFailure::Unreachable)
+            }
+        }
+    }
+    fn record(&self, request: RequestObservation) {
+        self.state.lock().unwrap().requests.push(request);
+    }
+    fn assert_finished(&self, expected_requests: usize) {
+        let state = self.state.lock().unwrap();
+        assert_eq!(state.requests.len(), expected_requests);
+        assert!(state.replies.is_empty(), "scripted replies were unused");
+        assert_eq!(
+            state.unexpected_calls, 0,
+            "unexpected service request exhausted the script"
+        );
     }
 }
 impl ServiceFormTransport for ScriptedTransport {
@@ -82,15 +107,12 @@ impl ServiceFormTransport for ScriptedTransport {
         endpoint: &ResourceUri,
         form: &ServiceForm,
     ) -> Result<Vec<u8>, ServiceHttpFailure> {
-        self.requests
-            .lock()
-            .unwrap()
-            .push(RequestObservation::Form {
-                uri: endpoint.as_str().into(),
-                fields: url::form_urlencoded::parse(form.as_str().as_bytes())
-                    .into_owned()
-                    .collect(),
-            });
+        self.record(RequestObservation::Form {
+            uri: endpoint.as_str().into(),
+            fields: url::form_urlencoded::parse(form.as_str().as_bytes())
+                .into_owned()
+                .collect(),
+        });
         self.answer()
     }
 }
@@ -101,14 +123,11 @@ impl ServiceJsonTransport for ScriptedTransport {
         bearer: &ServiceBearerCredential,
         body: &[u8],
     ) -> Result<Vec<u8>, ServiceHttpFailure> {
-        self.requests
-            .lock()
-            .unwrap()
-            .push(RequestObservation::Json {
-                uri: destination.as_str().into(),
-                bearer: bearer.as_str().into(),
-                body: serde_json::from_slice(body).unwrap(),
-            });
+        self.record(RequestObservation::Json {
+            uri: destination.as_str().into(),
+            bearer: bearer.as_str().into(),
+            body: serde_json::from_slice(body).unwrap(),
+        });
         self.answer()
     }
 }
@@ -151,7 +170,7 @@ fn initialization() -> Value {
     json!({"organizationId":"019f0000-0000-7000-8000-000000000001","ownerEmail":"owner@example.invalid","commandId":"019f0000-0000-7000-8000-000000000006"})
 }
 fn reply(value: Value) -> Result<Vec<u8>, ServiceHttpFailure> {
-    Ok(serde_json::to_vec(&value).unwrap())
+    serde_json::to_vec(&value).map_err(|_| ServiceHttpFailure::InvalidReply)
 }
 fn credential(scope: &str) -> Result<Vec<u8>, ServiceHttpFailure> {
     reply(
@@ -211,9 +230,11 @@ async fn every_directory_step_uses_its_record_address_scope_and_common_body() {
             .await,
         CallOutcome::Answered(OrganizationInitialization::AlreadyInitialized {})
     ));
-    let requests = transport.requests.lock().unwrap();
-    assert_eq!(requests.len(), 8);
-    for (pair, (path, scope, body)) in requests.chunks_exact(2).zip([
+    transport.assert_finished(8);
+    let state = transport.state.lock().unwrap();
+    let (pairs, remainder) = state.requests.as_chunks::<2>();
+    assert!(remainder.is_empty());
+    for (pair, (path, scope, body)) in pairs.iter().zip([
         ("authorize", "device-approval-authorize", decision()),
         ("activate", "device-approval-activate", settlement()),
         ("cancel", "device-approval-cancel", settlement()),
@@ -275,7 +296,7 @@ async fn a_failed_or_wrong_scope_credential_sends_no_operation() {
             answer,
             CallOutcome::Failed(durable_steps::CallFailure::NotSent { .. })
         ));
-        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        transport.assert_finished(1);
     }
 }
 
@@ -296,16 +317,17 @@ async fn an_unknown_step_answer_is_never_guessed_as_a_refusal_or_success() {
             answer,
             CallOutcome::Failed(durable_steps::CallFailure::AnswerLost)
         ));
-        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+        transport.assert_finished(2);
     }
     let transport = ScriptedTransport::new(vec![
         credential("device-approval-authorize"),
         reply(json!({"result":"refused","reason":{"kind":"notOwner"}})),
     ]);
     assert!(matches!(
-        client(transport)
+        client(transport.clone())
             .authorize_approval(&central(), serde_json::from_value(decision()).unwrap())
             .await,
         CallOutcome::Answered(ApprovalAuthorization::Refused { .. })
     ));
+    transport.assert_finished(2);
 }
