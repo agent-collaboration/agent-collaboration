@@ -1391,6 +1391,7 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-secret-store",
+ "codex-router-state",
  "codex-router-test-support",
  "collaboration-central-conformance",
  "collaboration-client",

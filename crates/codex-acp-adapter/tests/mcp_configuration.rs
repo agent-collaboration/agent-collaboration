@@ -33,6 +33,13 @@ fn stdio_mcp_configuration_preserves_arguments_and_compares_environment_by_name(
             .native_overrides()
             .is_none()
     );
+    assert!(
+        McpConfiguration::parse(&mut schema, &[])
+            .unwrap()
+            .fingerprint()
+            .unwrap()
+            == collaboration_contracts::HarnessMcpConfigurationIdentity::empty()
+    );
 }
 
 #[test]

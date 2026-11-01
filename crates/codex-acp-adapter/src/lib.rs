@@ -11,6 +11,8 @@ mod final_reply_selection;
 mod history_projection;
 mod lazy_codex_session_route;
 mod mcp_configuration;
+mod native_launch_input;
+pub use native_launch_input::{InvalidNativeLaunchInput, native_declared_launch_input};
 mod native_prompt_execution;
 mod permission_address;
 mod permission_translation;
