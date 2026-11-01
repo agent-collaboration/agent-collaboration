@@ -6,11 +6,11 @@ use std::{
     io,
     os::unix::fs::PermissionsExt,
     path::Path,
+    process::Stdio,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
-    time::Duration,
 };
 
 use axum::{
@@ -30,10 +30,11 @@ use codex_router_secret_store::{
 use collaboration_client::{BoardClientError, CollaborationClient};
 use message_board::{BoardFailureKind, BoardNextAction, PageRequest, WorkspaceListRequest};
 use serde_json::{Value, json};
+use tokio::io::AsyncReadExt;
 use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 
-#[path = "support/fleet_host.rs"]
+#[path = "support/machine_login_host.rs"]
 mod fleet_host;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -167,11 +168,6 @@ fn private_json(path: &Path, value: &Value) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
 }
 fn prepare_root(root: &Path, issuer: &Issuer, encrypted: bool) -> Option<EncryptedCredentialStore> {
-    std::fs::write(
-        root.join(fleet_host::MACHINE_LOGIN_FIXTURE_MARKER),
-        b"injected-clock-and-keychain",
-    )
-    .unwrap();
     let router = root.join("router");
     let directory = codex_router_host::router_collaboration_directory(&router);
     std::fs::create_dir(&directory).unwrap();
@@ -238,10 +234,37 @@ async fn login(router: &Path) -> TestResult<std::process::Output> {
         ])
         .arg(router)
         .env("OTEL_SDK_DISABLED", "true");
-    codex_router_test_support::owned_cli_process::run_cli_output(command, Duration::from_secs(60))
-        .await
-        .map_err(io::Error::other)
-        .map_err(Into::into)
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    let mut child = command.spawn()?;
+    let Some((mut stdout, mut stderr)) = child.stdout.take().zip(child.stderr.take()) else {
+        let _kill = child.start_kill();
+        child.wait().await?;
+        return Err(io::Error::other("CLI fixture did not publish output pipes").into());
+    };
+    let mut stdout_bytes = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    // Process exit and pipe EOF are the only completion events. F11 does not
+    // add an elapsed-time guard around the existing production exchange.
+    match tokio::try_join!(
+        child.wait(),
+        stdout.read_to_end(&mut stdout_bytes),
+        stderr.read_to_end(&mut stderr_bytes)
+    ) {
+        Ok((status, _, _)) => Ok(std::process::Output {
+            status,
+            stdout: stdout_bytes,
+            stderr: stderr_bytes,
+        }),
+        Err(error) => {
+            let _kill = child.start_kill();
+            child.wait().await?;
+            Err(error.into())
+        }
+    }
 }
 
 fn failed_cli(output: &std::process::Output, context: &str) -> Box<dyn Error> {

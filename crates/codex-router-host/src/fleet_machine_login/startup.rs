@@ -56,7 +56,7 @@ pub(crate) enum HostMachineLogin {
     },
     Configured {
         owner: RunningMachineLogin,
-        connection: Option<MachineConnectionInputs>,
+        connection: Option<Box<MachineConnectionInputs>>,
     },
 }
 pub(crate) struct MachineConnectionInputs {
@@ -148,11 +148,11 @@ pub(crate) fn start_machine_login(
     ));
     let connection = match credentials.as_ref() {
         RefreshCredentialStore::Unusable { .. } => None,
-        _ => Some(connection_inputs(
+        _ => Some(Box::new(connection_inputs(
             &configuration,
             credentials.as_ref(),
             peer,
-        )?),
+        )?)),
     };
     let issuer = Arc::new(
         HttpMachineTokenIssuer::new(
