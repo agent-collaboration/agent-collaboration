@@ -78,9 +78,10 @@ pub(super) async fn run(
             }
         }
     }
-    if replaced_wakes != 3 {
+    // Original, creator replacement, target-session replacement, Owner replacement.
+    if replaced_wakes != 4 {
         return Err(format!(
-            "organization list retained {replaced_wakes} replacement Wakes, expected 3"
+            "organization list retained {replaced_wakes} replacement Wakes, expected 4"
         )
         .into());
     }
