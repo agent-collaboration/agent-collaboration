@@ -1,7 +1,6 @@
-//! The directory contracts follow the one-central-per-organization wire oracle.
+//! Registry creation and retained object-call/scalar contracts follow the two-service PD.
 use collaboration_central_core::identity_contract::{
-    CentralAddresses, CentralLookup, CentralRecord, CreateOrganization, DirectoryCallAddresses,
-    FindCentral, HttpsUrl, InitializeOrganization, OrganizationInitialization, ResourceUri,
+    CreateOrganization, HttpsUrl, InitializeOrganization, OrganizationInitialization, ResourceUri,
     VerifiedEmail,
 };
 use schemars::{JsonSchema, generate::SchemaSettings};
@@ -13,30 +12,9 @@ mod contract_artifacts;
 #[cfg(test)]
 use contract_artifacts::schema_validation;
 
-fn central_record_literal() -> Value {
-    json!({
-        "addresses": {
-            "sessionEndpoint": "https://central-a.example.invalid/v1/session",
-            "machineAddress": "https://central-a.example.invalid/machine",
-            "adminAddress": "https://central-a.example.invalid/admin",
-            "admissionAddress": "https://central-a.example.invalid/admission",
-            "standingAddress": "https://central-a.example.invalid/standing",
-            "machineTokenAddress": "https://central-a.example.invalid/machine-token",
-            "receiver": "019a3dce-2000-7000-8000-000000000002",
-            "relay": "019a3dce-2000-7000-8000-000000000003"
-        },
-        "directoryCalls": {
-            "approvalAuthorizeAddress": "https://central-a.example.invalid/approval/authorize",
-            "approvalActivateAddress": "https://central-a.example.invalid/approval/activate",
-            "approvalCancelAddress": "https://central-a.example.invalid/approval/cancel",
-            "initializationAddress": "https://central-a.example.invalid/initialize"
-        }
-    })
-}
-
 // Wrong behavior: requiring or accepting deployment addresses when creating an
 // organization. Oracle: two-service PD cbda512d and the rewritten F2c card.
-// Exercise the actual serde boundary before changing the retired contract.
+// The pre-implementation run failed because central was still required.
 #[test]
 fn organization_registry_creation_has_no_address_contract() {
     // Arrange
@@ -52,77 +30,19 @@ fn organization_registry_creation_has_no_address_contract() {
     let parsed = parsed.expect("creation needs no central deployment addresses");
     assert_eq!(serde_json::to_value(parsed).unwrap(), request);
     let mut retired_address_input = request;
-    retired_address_input["central"] = central_record_literal();
+    retired_address_input["central"] = json!({});
     assert!(serde_json::from_value::<CreateOrganization>(retired_address_input).is_err());
 }
 
-// Wrong behavior: the operator cannot supply the central that must initialize
-// this organization. Oracle: Program Design "The new requests, exactly" and
-// the by-hand runbook's step 3. This keeps the real serde boundary.
+// These remaining shapes cross an internal object call, with their original
+// request identity and unknown-outcome semantics. No endpoint address is sent.
 #[test]
-fn fleet_directory_creation_carries_the_whole_central_record() {
-    // Arrange
-    let request = json!({
-        "organizationId": "019a3dce-2000-7000-8000-000000000001",
-        "ownerVerifiedEmail": "owner@example.invalid",
-        "central": central_record_literal()
-    });
-
-    // Act
-    let parsed = serde_json::from_value::<CreateOrganization>(request.clone());
-
-    // Assert
-    let parsed = parsed.expect("the operator supplies the whole CentralRecord");
-    assert_eq!(serde_json::to_value(parsed).unwrap(), request);
-    let mut missing_central = request;
-    missing_central.as_object_mut().unwrap().remove("central");
-    assert!(serde_json::from_value::<CreateOrganization>(missing_central).is_err());
-}
-
-// The shape names and literal tags come from PD c1f9471e. The real serde
-// serializer and schema validator must reject unknown fields and wrong tags.
-#[test]
-fn fleet_directory_lookup_wire_contracts() {
-    let addresses = central_record_literal()["addresses"].clone();
-    contract_artifacts::assert_contract::<FindCentral>(
-        "FindCentral",
-        vec![json!({"organizationId":"019a3dce-2000-7000-8000-000000000001"})],
-        false,
-    );
-    contract_artifacts::assert_contract::<CentralAddresses>(
-        "CentralAddresses",
-        vec![addresses.clone()],
-        false,
-    );
-    contract_artifacts::assert_contract::<CentralLookup>(
-        "CentralLookup",
-        vec![
-            json!({"result":"found","central":addresses}),
-            json!({"result":"creating"}),
-            json!({"result":"unknownOrganization"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn fleet_directory_creation_wire_contracts() {
-    contract_artifacts::assert_contract::<CentralRecord>(
-        "CentralRecord",
-        vec![central_record_literal()],
-        false,
-    );
-    contract_artifacts::assert_contract::<DirectoryCallAddresses>(
-        "DirectoryCallAddresses",
-        vec![central_record_literal()["directoryCalls"].clone()],
-        false,
-    );
+fn organization_registry_creation_wire_contracts() {
     contract_artifacts::assert_contract::<CreateOrganization>(
         "CreateOrganization",
         vec![json!({
             "organizationId":"019a3dce-2000-7000-8000-000000000001",
-            "ownerVerifiedEmail":"owner@example.invalid",
-            "central":central_record_literal()
+            "ownerVerifiedEmail":"owner@example.invalid"
         })],
         false,
     );
@@ -144,23 +64,6 @@ fn fleet_directory_creation_wire_contracts() {
         ],
         false,
     );
-}
-
-// A public found answer cannot carry the private addresses even when its source
-// is a complete CentralRecord. This also checks the external serde boundary.
-#[test]
-fn fleet_directory_public_lookup_excludes_directory_calls() {
-    let record: CentralRecord = serde_json::from_value(central_record_literal()).unwrap();
-    let answer = CentralLookup::Found {
-        central: record.addresses,
-    };
-    let encoded = serde_json::to_value(answer).unwrap();
-    assert_eq!(encoded["central"], central_record_literal()["addresses"]);
-    assert!(encoded["central"].get("directoryCalls").is_none());
-
-    let mut leaked = encoded;
-    leaked["central"]["directoryCalls"] = central_record_literal()["directoryCalls"].clone();
-    assert!(serde_json::from_value::<CentralLookup>(leaked).is_err());
 }
 
 #[test]

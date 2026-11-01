@@ -1,17 +1,17 @@
 //! Central-owned organization, issuer-decision and lookup contracts.
-mod directory_contracts;
 mod directory_values;
 mod enrollment_records;
 mod identity_decisions;
 mod identity_lookups;
 mod organization_commands;
+mod organization_registry_contracts;
 
-pub use directory_contracts::*;
 pub use directory_values::*;
 pub use enrollment_records::*;
 pub use identity_decisions::*;
 pub use identity_lookups::*;
 pub use organization_commands::*;
+pub use organization_registry_contracts::*;
 
 use message_board::{IdentityValidationError, RecordId};
 use schemars::JsonSchema;

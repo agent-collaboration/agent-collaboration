@@ -1,62 +1,10 @@
-//! Public discovery and the directory's private requests to a central.
+//! Object-call contracts between the Organization Registry and an authority.
 use super::{
-    CommandId, DecideDeviceLogin, DeviceLoginRefusal, DeviceLoginRequestId, HttpsUrl, ResourceUri,
-    VerifiedEmail,
+    CommandId, DecideDeviceLogin, DeviceLoginRefusal, DeviceLoginRequestId, VerifiedEmail,
 };
 use fleet_identity_protocol::{EnrollmentId, OrganizationId};
-use fleet_sync_protocol::{PeerId, ReceiverId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FindCentral {
-    pub organization_id: OrganizationId,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "result",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum CentralLookup {
-    Found { central: CentralAddresses },
-    Creating {},
-    UnknownOrganization {},
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CentralAddresses {
-    pub session_endpoint: HttpsUrl,
-    pub machine_address: ResourceUri,
-    pub admin_address: ResourceUri,
-    pub admission_address: ResourceUri,
-    pub standing_address: ResourceUri,
-    pub machine_token_address: ResourceUri,
-    #[schemars(with = "message_board::RecordId")]
-    pub receiver: ReceiverId,
-    #[schemars(with = "message_board::RecordId")]
-    pub relay: PeerId,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CentralRecord {
-    pub addresses: CentralAddresses,
-    pub directory_calls: DirectoryCallAddresses,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DirectoryCallAddresses {
-    pub approval_authorize_address: ResourceUri,
-    pub approval_activate_address: ResourceUri,
-    pub approval_cancel_address: ResourceUri,
-    pub initialization_address: ResourceUri,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

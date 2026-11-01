@@ -1,5 +1,0 @@
-[
-{"central":{"adminAddress":"https://central-a.example.invalid/admin","admissionAddress":"https://central-a.example.invalid/admission","machineAddress":"https://central-a.example.invalid/machine","machineTokenAddress":"https://central-a.example.invalid/machine-token","receiver":"019a3dce-2000-7000-8000-000000000002","relay":"019a3dce-2000-7000-8000-000000000003","sessionEndpoint":"https://central-a.example.invalid/v1/session","standingAddress":"https://central-a.example.invalid/standing"},"result":"found"},
-{"result":"creating"},
-{"result":"unknownOrganization"}
-]
