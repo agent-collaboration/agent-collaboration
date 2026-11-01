@@ -154,6 +154,24 @@ async fn scenario(
             _ => None,
         })
         .ok_or("limit Schedule Firing missing")?;
+    let admitted = fixture::automation(client, &id, None).await?;
+    let firing = admitted
+        .get("firings")
+        .and_then(Value::as_array)
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row.get("firingId") == Some(&json!(entry.firing_id)))
+        })
+        .ok_or("admitted Firing row missing")?;
+    assert_eq!(
+        firing.get("reportSeq"),
+        Some(&Value::Null),
+        "unreported Firing must persist NULL"
+    );
+    assert!(
+        matches!(call(machine, AutomationCall::FiringShow { firing_id: entry.firing_id.clone() }).await?,
+        AutomationAnswer::Firing(snapshot) if snapshot.report_seq.is_none())
+    );
     reports(machine, entry).await?;
     stored::run(
         client,

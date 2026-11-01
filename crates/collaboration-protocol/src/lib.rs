@@ -10,11 +10,13 @@ mod automation_calls;
 mod automation_fault_contract;
 pub use automation_fault_contract::*;
 mod automation_custody;
+mod remote_session_create_contract;
 pub use agent_automation::{
     AutomationId, BatchId, ContentId, FiringId, ImportId, ReportId, WorkItemId,
 };
 pub use automation_calls::*;
 pub use automation_custody::*;
+pub use remote_session_create_contract::*;
 mod wake_authority;
 pub use wake_authority::{WakeCreator, WakeRefusal};
 mod mail_boundary_conversions;

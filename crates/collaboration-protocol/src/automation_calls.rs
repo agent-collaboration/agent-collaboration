@@ -109,6 +109,7 @@ pub enum AutomationAnswer {
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
+    SessionCreate(crate::RemoteSessionCreateSnapshot),
     Faulted(crate::FaultedAutomationSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {
