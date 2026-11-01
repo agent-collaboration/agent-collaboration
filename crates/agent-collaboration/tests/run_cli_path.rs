@@ -10,6 +10,7 @@ use automation_storage::{
 };
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
+use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use serde_json::{Value, json};
 use std::os::unix::fs::DirBuilderExt;
 #[tokio::test]
@@ -17,6 +18,9 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
     let root = std::path::PathBuf::from("/tmp")
         .join(format!("run-cli-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    let schedule_created_at_ms = chrono::Utc::now().timestamp_millis();
+    let run_due_at_ms = schedule_created_at_ms + 1_000;
+    let run_completed_at_ms = schedule_created_at_ms + 2_000;
     let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
     let target: SessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"}),
@@ -47,15 +51,15 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
                 effort: Some("medium".into()),
             },
             imported_continuity: ContinuityInput::None,
-            now_ms: 0,
+            now_ms: schedule_created_at_ms,
         })
         .await?;
     let run = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
+        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
         .await?
         .ok_or("missing fixture run")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
+        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, run_due_at_ms)
         .await?;
     let mut effects = NativeEffectEvidence {
         permission_differences: Vec::new(),
@@ -84,7 +88,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
             run_id: run.clone(),
             effects: effects.clone().into(),
             configured_timeout_seconds: 3600,
-            now_ms: 1000,
+            now_ms: run_due_at_ms,
         })
         .await?;
     effects.submission = SubmissionEffect::Accepted;
@@ -108,7 +112,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("fixture-turn".into()),
                 outcome: agent_automation::WorkerOutcome::Completed { explanation: None },
-                now_ms: 2000,
+                now_ms: run_completed_at_ms,
             },
         )
         .await?;
@@ -141,7 +145,9 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         .await?;
     if !output.status.success() {
         return Err(format!(
-            "run CLI failed: {}",
+            "run CLI failed with {}; stdout={}; stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         )
         .into());
@@ -241,13 +247,6 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         return Err("reconciling finished Run changed its original outcome".into());
     }
     runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected fixture entry".into());
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
     Ok(())
 }

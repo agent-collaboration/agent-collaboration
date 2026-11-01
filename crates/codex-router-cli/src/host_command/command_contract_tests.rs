@@ -116,15 +116,20 @@ fn provider_launch_arguments_require_and_retain_explicit_executables() {
 }
 
 #[test]
-fn provider_operation_retention_is_positive_configurable_and_defaults_to_sixty_days() {
+fn provider_operation_retention_defaults_to_storage_policy_and_keeps_day_override() {
     let default = HostCommand::parse(Vec::new()).expect("default host command");
-    assert_eq!(default.provider_operation_retention_days().get(), 60);
+    assert_eq!(default.provider_operation_retention_days(), None);
     let custom = HostCommand::parse(vec![
         OsString::from("--provider-operation-retention-days"),
         OsString::from("7"),
     ])
     .expect("custom retention");
-    assert_eq!(custom.provider_operation_retention_days().get(), 7);
+    assert_eq!(
+        custom
+            .provider_operation_retention_days()
+            .map(|days| days.get()),
+        Some(7)
+    );
     assert!(
         HostCommand::parse(vec![
             OsString::from("--provider-operation-retention-days"),

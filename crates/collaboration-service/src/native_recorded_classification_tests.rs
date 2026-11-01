@@ -110,13 +110,17 @@ async fn policy_captured_recorded_owner_expiry_refuses_before_resume_or_input() 
     assert!(matches!(first, NativeMessageOutcome::Accepted(_)));
     let captured = classify_recorded_native_route(Some(&weak), &target()).await;
     drop(broker);
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(
+            fixture.directory.path().join("interaction.sqlite"),
+        )
+        .await
+        .unwrap(),
+    );
     fixture.broker = ServiceInteractionBroker::load(
         fixture.backend.endpoint.service_id.clone(),
         fixture.backend.clone(),
-        fixture
-            .directory
-            .path()
-            .join("replacement-owner-routes.json"),
+        interaction_store,
     )
     .await
     .unwrap();

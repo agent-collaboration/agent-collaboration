@@ -1,11 +1,10 @@
 //! Durable push snapshots, delivery transitions, DM queries, and bounded pruning.
 use crate::{InteractionStore, StorageError, push_record_rows};
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Utc};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
     RouterOriginRef, SessionRef,
 };
-use sqlx::Connection;
 use sqlx_turso::TursoConnection;
 use std::time::Duration;
 
@@ -313,55 +312,7 @@ impl InteractionStore {
         now: DateTime<Utc>,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        let mut connection = self.writer.lock().await;
-        if !(1..=MAX_PUSH_PRUNE_BATCH).contains(&batch_size) {
-            return Err(StorageError::InvalidRecord);
-        }
-        let cutoff = now
-            .checked_sub_signed(ChronoDuration::days(30))
-            .ok_or(StorageError::InvalidRecord)?;
-        let cutoff = push_record_rows::serialize_timestamp(cutoff);
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-        let pruned = async {
-            let candidates = sqlx_turso::query!(
-                "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
-                cutoff, cutoff, i64::from(batch_size)
-            ).fetch_all(&mut *transaction).await?;
-            let mut pruned = 0;
-            for candidate in candidates {
-                let retention: crate::push_retention::PushRetention =
-                    serde_json::from_value(serde_json::Value::String(candidate.retention))
-                        .map_err(|_| StorageError::InvalidRecord)?;
-                let state = push_record_rows::decode_delivery_state(&candidate.delivery_state)?;
-                retention.validate_clock(state, candidate.settled_at.as_deref())?;
-                let age_from = match retention {
-                    crate::push_retention::PushRetention::CreationAge => candidate.created_at,
-                    crate::push_retention::PushRetention::MailTerminalAge => {
-                        candidate.settled_at.ok_or(StorageError::InvalidRecord)?
-                    }
-                };
-                // Validate the stored clock before the destructive operation.
-                crate::push_record_rows::decode_timestamp(age_from)?;
-                let id: PushId = candidate
-                    .push_id
-                    .try_into()
-                    .map_err(|_| StorageError::InvalidRecord)?;
-                pruned += sqlx_turso::query!("DELETE FROM router_pushes WHERE push_id=?", id.as_str())
-                    .execute(&mut *transaction)
-                    .await?
-                    .rows_affected();
-            }
-            Ok::<_, StorageError>(pruned)
-        }.await;
-        let pruned = match pruned {
-            Ok(pruned) => pruned,
-            Err(error) => {
-                transaction.rollback().await?;
-                return Err(error);
-            }
-        };
-        transaction.commit().await?;
-        Ok(pruned)
+        crate::interaction_retention::prune(self, now, batch_size).await
     }
 }
 

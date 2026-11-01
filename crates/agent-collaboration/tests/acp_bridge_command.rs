@@ -15,7 +15,7 @@ mod tests {
         },
         time::Duration,
     };
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
     const INITIALIZE: &str = "{\"jsonrpc\":\"2.0\",\"id\":9007199254740993,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1,\"clientCapabilities\":{}}}\n";
     const CALLBACK: &str = "{\"jsonrpc\":\"2.0\",\"id\":9007199254740995,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"fixture\",\"options\":[]}}\n";
@@ -120,7 +120,13 @@ mod tests {
         if child.try_wait().unwrap().is_none() {
             child.kill().await.unwrap();
         }
-        let _status = child.wait().await;
+        let child_status = child.wait().await;
+        let mut child_stderr = String::new();
+        if timeout_observation.is_some()
+            && let Some(mut stderr) = child.stderr.take()
+        {
+            stderr.read_to_string(&mut child_stderr).await.unwrap();
+        }
         served.stop().await.unwrap();
         let peer_passed = peer.is_finished();
         if !peer_passed {
@@ -132,7 +138,7 @@ mod tests {
         // Assert: whole executable carrier exchange completed and the peer's exact checks passed.
         if let Some((phase, provider_connected, peer_finished)) = timeout_observation {
             panic!(
-                "ACP bridge timed out while {phase}; provider_connected={provider_connected}; peer_finished={peer_finished}"
+                "ACP bridge timed out while {phase}; provider_connected={provider_connected}; peer_finished={peer_finished}; child_status={child_status:?}; child_stderr={child_stderr:?}"
             );
         }
         flow.unwrap().unwrap();

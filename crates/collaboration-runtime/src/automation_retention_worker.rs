@@ -51,6 +51,18 @@ impl AutomationRetentionWorker {
                     "operation receipts",
                     store.prune_operation_receipts(now_ms, 500).await,
                 ),
+                (
+                    "completed workflow runs",
+                    store.prune_completed_workflow_runs(now_ms, 500).await,
+                ),
+                (
+                    "expired or cancelled wakes",
+                    store.prune_terminal_wakeups(now_ms, 500).await,
+                ),
+                (
+                    "old instruction revisions",
+                    store.prune_old_instruction_revisions(now_ms, 500).await,
+                ),
             ] {
                 match result {
                     Ok(count) => add_pruned_total(&mut pruned_total, count)?,
@@ -59,13 +71,13 @@ impl AutomationRetentionWorker {
                     }
                 }
             }
-            if pruned_total > 0 {
-                if let Err(error) = store.incremental_vacuum_step().await {
-                    tracing::warn!(
-                        error = %error,
-                        "automation incremental-vacuum step failed; the next prune will retry"
-                    );
-                }
+            if pruned_total > 0
+                && let Err(error) = store.incremental_vacuum_step().await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "automation incremental-vacuum step failed; the next prune will retry"
+                );
             }
         }
         if let Some(broker) = self.interaction_broker.as_ref() {
@@ -137,6 +149,7 @@ mod tests {
         EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, SessionId,
         SessionRef, UuidIdentity,
     };
+    use sqlx_turso::{TursoConnectOptions, TursoConnection};
     use std::sync::Arc;
     use tokio_util::sync::CancellationToken;
 
@@ -343,6 +356,11 @@ mod tests {
 
     fn expired_push(now_ms: i64) -> PushRecordDraft {
         let sender = session("claude-local", "sender");
+        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+            .expect("valid retention clock")
+            .checked_sub_months(chrono::Months::new(2))
+            .expect("valid calendar cutoff")
+            - chrono::Duration::milliseconds(1);
         PushRecordDraft {
             mode: Some(collaboration_protocol::MessageDelivery::Auto),
             guard: None,
@@ -357,10 +375,7 @@ mod tests {
             },
             body: Some("expired push body".to_owned()),
             activity: None,
-            created_at: chrono::DateTime::<chrono::Utc>::from_timestamp_millis(
-                now_ms - 31_i64 * 24 * 60 * 60 * 1000,
-            )
-            .expect("valid old timestamp"),
+            created_at,
         }
     }
 
@@ -368,15 +383,14 @@ mod tests {
     async fn retention_worker_prunes_expired_push_records() {
         let directory = tempfile::tempdir().expect("retention fixture");
         let path = directory.path().join("automation.sqlite");
+        let interaction_path = directory.path().join("interaction.sqlite");
         let store = AutomationStore::open(&path)
             .await
             .expect("automation store");
         let interactions = Arc::new(
-            interaction_storage::InteractionStore::open(
-                directory.path().join("interaction.sqlite"),
-            )
-            .await
-            .expect("native push owner"),
+            interaction_storage::InteractionStore::open(&interaction_path)
+                .await
+                .expect("native push owner"),
         );
         let now_ms = chrono::Utc::now().timestamp_millis();
         let draft = expired_push(now_ms);
@@ -385,6 +399,21 @@ mod tests {
             .insert_push_record(draft)
             .await
             .expect("insert expired push");
+        let mut interaction_writer =
+            TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_path))
+                .await
+                .expect("interaction fixture writer");
+        sqlx::query::<sqlx_turso::Turso>(
+            "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
+        )
+        .bind(push_id.as_str())
+        .execute(&mut interaction_writer)
+        .await
+        .expect("old fixture push is terminal");
+        interaction_writer
+            .close()
+            .await
+            .expect("close fixture writer");
         let shared_store = Arc::new(Mutex::new(store));
         assert_eq!(
             AutomationRetentionWorker::new(shared_store.clone())

@@ -90,6 +90,8 @@ mod mail_observations;
 mod mail_retention;
 #[path = "pending_poll_mail_tests.rs"]
 mod pending_poll;
+#[path = "interaction_retention_tests.rs"]
+mod retention_tests;
 type NativeSubmit =
     SubmitItem<NativeStore, sqlx_turso::Turso, BoardDeliveryTypes, NoDeliveryConsumer>;
 

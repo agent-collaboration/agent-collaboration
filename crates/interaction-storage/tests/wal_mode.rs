@@ -25,7 +25,12 @@ async fn fresh_interaction_database_uses_wal() -> TestResult {
     let path = directory.path().join("interaction.sqlite");
     InteractionStore::open(&path).await?.close().await?;
 
-    assert_eq!(stored_journal_mode(&path).await?, "wal");
+    let journal_mode = stored_journal_mode(&path).await?;
+    if journal_mode != "wal" {
+        return Err(
+            format!("fresh interaction journal mode was {journal_mode}; expected wal").into(),
+        );
+    }
     Ok(())
 }
 
@@ -45,10 +50,19 @@ async fn existing_delete_mode_interaction_database_reopens_in_wal() -> TestResul
         .fetch_one(&mut legacy)
         .await?;
     legacy.close().await?;
-    assert_eq!(legacy_mode, "delete");
+    if legacy_mode != "delete" {
+        return Err(
+            format!("legacy interaction journal mode was {legacy_mode}; expected delete").into(),
+        );
+    }
 
     InteractionStore::open(&path).await?.close().await?;
 
-    assert_eq!(stored_journal_mode(&path).await?, "wal");
+    let journal_mode = stored_journal_mode(&path).await?;
+    if journal_mode != "wal" {
+        return Err(
+            format!("reopened interaction journal mode was {journal_mode}; expected wal").into(),
+        );
+    }
     Ok(())
 }

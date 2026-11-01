@@ -107,6 +107,10 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let endpoint: SessionEndpointRef = provider.endpoint.clone();
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -116,7 +120,7 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("codex-acp.sock");
@@ -287,6 +291,10 @@ async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResu
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -296,7 +304,7 @@ async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResu
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("codex-acp.sock");

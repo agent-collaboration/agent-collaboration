@@ -20,6 +20,8 @@ pub enum RouterLocalStorageError {
     InvalidCursor,
     #[error("request identity has different content")]
     ConflictingRequest,
+    #[error("fleet outbox state and settled timestamp disagree for request {request_id}")]
+    InvalidOutboxRetentionState { request_id: String },
     #[error("fleet cache page leaves a position gap")]
     PositionGap,
     #[error("Router-local data cannot be encoded: {0}")]

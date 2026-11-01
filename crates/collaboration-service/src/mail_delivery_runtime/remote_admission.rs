@@ -123,9 +123,14 @@ impl MailDeliveryRuntime {
                             )
                             .await
                             .map_err(StoreError::backend)?;
-                            record_message_send_outcome(scope, &item_id, &answer)
-                                .await
-                                .map_err(StoreError::backend)?;
+                            record_message_send_outcome(
+                                scope,
+                                &item_id,
+                                &answer,
+                                now.timestamp_millis(),
+                            )
+                            .await
+                            .map_err(StoreError::backend)?;
                             Ok(answer)
                         }
                         OutboxAdmission::Replayed { .. } => {

@@ -132,10 +132,16 @@ async fn a_frozen_local_intent_uses_native_custody_and_replay_does_not_recreate_
         matches!(shown.record.header_facts, PushHeaderFacts::BoardNotification { intent: ref delivered, .. } if delivered == &intent.intent_id)
     );
     fixture.assert_no_legacy_message_tables().await;
+    let prune_at = fixture
+        .clock
+        .now()
+        .checked_add_months(chrono::Months::new(2))
+        .unwrap()
+        + chrono::Duration::milliseconds(1);
     assert_eq!(
         native
             .interactions
-            .prune_push_records(fixture.clock.now() + chrono::Duration::days(40), 500)
+            .prune_push_records(prune_at, 500)
             .await
             .unwrap(),
         1

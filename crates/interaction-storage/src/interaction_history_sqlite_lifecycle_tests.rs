@@ -93,7 +93,7 @@ async fn retention_removes_oldest_then_id_in_bounded_batches_and_keeps_exact_cut
     let now = chrono::DateTime::parse_from_rfc3339("2026-10-08T00:00:00.000000000Z")
         .expect("clock")
         .with_timezone(&Utc);
-    let cutoff = now - Duration::days(30);
+    let cutoff = now.checked_sub_months(chrono::Months::new(2)).unwrap();
     let fixtures = [
         ("old-z", cutoff - Duration::nanoseconds(2)),
         ("old-a", cutoff - Duration::nanoseconds(1)),

@@ -26,13 +26,15 @@ async fn project_writer_opens_fresh_files_in_wal_mode() -> TestResult {
     let path = directory.path().join("project.sqlite");
     let project = ProjectId::generate();
     let store = ProjectStore::open(&path, project).await?;
-    assert!(matches!(
-        store.schema_state(),
-        StoreSchemaState::Ready { .. }
-    ));
+    if !matches!(store.schema_state(), StoreSchemaState::Ready { .. }) {
+        return Err("fresh project store was not ready".into());
+    }
     store.close().await;
 
-    assert_eq!(stored_project_journal_mode(&path).await?, "wal");
+    let journal_mode = stored_project_journal_mode(&path).await?;
+    if journal_mode != "wal" {
+        return Err(format!("fresh project journal mode was {journal_mode}; expected wal").into());
+    }
     Ok(())
 }
 
@@ -56,16 +58,24 @@ async fn project_writer_converts_existing_delete_mode_files_to_wal() -> TestResu
         .fetch_one(&mut legacy)
         .await?;
     legacy.close().await?;
-    assert_eq!(legacy_mode, "delete");
+    if legacy_mode != "delete" {
+        return Err(
+            format!("legacy project journal mode was {legacy_mode}; expected delete").into(),
+        );
+    }
 
     let reopened = ProjectStore::open(&path, project).await?;
-    assert!(matches!(
-        reopened.schema_state(),
-        StoreSchemaState::Ready { .. }
-    ));
+    if !matches!(reopened.schema_state(), StoreSchemaState::Ready { .. }) {
+        return Err("reopened project store was not ready".into());
+    }
     reopened.close().await;
 
-    assert_eq!(stored_project_journal_mode(&path).await?, "wal");
+    let journal_mode = stored_project_journal_mode(&path).await?;
+    if journal_mode != "wal" {
+        return Err(
+            format!("reopened project journal mode was {journal_mode}; expected wal").into(),
+        );
+    }
     Ok(())
 }
 

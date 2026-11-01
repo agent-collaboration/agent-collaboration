@@ -82,12 +82,19 @@ async fn new_database_enables_incremental_auto_vacuum_before_first_table()
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(mode, 2);
+    if mode != 2 {
+        return Err(format!("new database auto-vacuum mode was {mode}; expected 2").into());
+    }
     create_rows(&mut connection).await?;
     let mode_after_schema: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(mode_after_schema, 2);
+    if mode_after_schema != 2 {
+        return Err(format!(
+            "auto-vacuum mode after schema creation was {mode_after_schema}; expected 2"
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -105,7 +112,9 @@ async fn existing_database_converts_once_and_skips_space_probe_afterward()
     let checkpoint_busy: i64 = sqlx::query_scalar("PRAGMA wal_checkpoint(TRUNCATE)")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(checkpoint_busy, 0);
+    if checkpoint_busy != 0 {
+        return Err(format!("pre-conversion WAL checkpoint was busy: {checkpoint_busy}").into());
+    }
     let main_file_before = std::fs::metadata(&database_path)?.len();
     let database_and_wal_before = crate::sqlite_database_and_wal_size(&database_path)?;
     let required_bytes = database_and_wal_before.saturating_mul(2);
@@ -113,35 +122,59 @@ async fn existing_database_converts_once_and_skips_space_probe_afterward()
 
     let first_preparation =
         prepare_existing_database_with_probe(&mut connection, &database_path, &probe).await?;
-    assert!(
-        matches!(
-            &first_preparation,
-            ExistingDatabasePreparation::Converted {
-                before_bytes,
-                after_bytes: Some(after_bytes),
-                post_checkpoint: crate::WalCheckpointOutcome::Completed,
-                ..
-            } if *before_bytes == database_and_wal_before
-                && *after_bytes < *before_bytes
-        ),
-        "expected conversion to shrink main+WAL after TRUNCATE, observed {first_preparation:?}"
-    );
-    assert!(std::fs::metadata(&database_path)?.len() < main_file_before);
-    assert_eq!(probe.calls(), 1);
+    if !matches!(
+        &first_preparation,
+        ExistingDatabasePreparation::Converted {
+            before_bytes,
+            after_bytes: Some(after_bytes),
+            post_checkpoint: crate::WalCheckpointOutcome::Completed,
+            ..
+        } if *before_bytes == database_and_wal_before
+            && *after_bytes < *before_bytes
+    ) {
+        return Err(format!(
+            "expected conversion to shrink main+WAL after TRUNCATE, observed {first_preparation:?}"
+        )
+        .into());
+    }
+    let main_file_after = std::fs::metadata(&database_path)?.len();
+    if main_file_after >= main_file_before {
+        return Err(format!(
+            "conversion did not shrink the main file: before={main_file_before}, after={main_file_after}"
+        )
+        .into());
+    }
+    if probe.calls() != 1 {
+        return Err(format!(
+            "available-space probe called {} times; expected once",
+            probe.calls()
+        )
+        .into());
+    }
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(mode, 2);
+    if mode != 2 {
+        return Err(format!("converted database auto-vacuum mode was {mode}; expected 2").into());
+    }
 
     let second_probe = FixedAvailableSpaceProbe::with_space(u64::MAX);
     let second_preparation =
         prepare_existing_database_with_probe(&mut connection, &database_path, &second_probe)
             .await?;
-    assert_eq!(
-        second_preparation,
-        ExistingDatabasePreparation::AlreadyIncremental
-    );
-    assert_eq!(second_probe.calls(), 0);
+    if second_preparation != ExistingDatabasePreparation::AlreadyIncremental {
+        return Err(format!(
+            "second preparation was {second_preparation:?}; expected AlreadyIncremental"
+        )
+        .into());
+    }
+    if second_probe.calls() != 0 {
+        return Err(format!(
+            "second available-space probe called {} times; expected zero",
+            second_probe.calls()
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -160,18 +193,30 @@ async fn existing_database_conversion_defers_when_space_is_below_twice_file_size
 
     let preparation =
         prepare_existing_database_with_probe(&mut connection, &database_path, &probe).await?;
-    assert_eq!(
-        preparation,
+    let expected_preparation =
         ExistingDatabasePreparation::Deferred(DatabasePreparationDeferral::InsufficientSpace {
             required_bytes,
             available_bytes,
-        })
-    );
-    assert_eq!(probe.calls(), 1);
+        });
+    if preparation != expected_preparation {
+        return Err(format!(
+            "low-space preparation was {preparation:?}; expected {expected_preparation:?}"
+        )
+        .into());
+    }
+    if probe.calls() != 1 {
+        return Err(format!(
+            "available-space probe called {} times; expected once",
+            probe.calls()
+        )
+        .into());
+    }
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(mode, 0);
+    if mode != 0 {
+        return Err(format!("deferred database auto-vacuum mode was {mode}; expected 0").into());
+    }
     Ok(())
 }
 
@@ -188,17 +233,28 @@ async fn existing_database_conversion_defers_when_space_probe_fails() -> Result<
 
     let preparation =
         prepare_existing_database_with_probe(&mut connection, &database_path, &probe).await?;
-    assert_eq!(
-        preparation,
-        ExistingDatabasePreparation::Deferred(
-            DatabasePreparationDeferral::AvailableSpaceUnavailable
-        )
+    let expected_preparation = ExistingDatabasePreparation::Deferred(
+        DatabasePreparationDeferral::AvailableSpaceUnavailable,
     );
-    assert_eq!(probe.calls(), 1);
+    if preparation != expected_preparation {
+        return Err(format!(
+            "failed-probe preparation was {preparation:?}; expected {expected_preparation:?}"
+        )
+        .into());
+    }
+    if probe.calls() != 1 {
+        return Err(format!(
+            "available-space probe called {} times; expected once",
+            probe.calls()
+        )
+        .into());
+    }
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(mode, 0);
+    if mode != 0 {
+        return Err(format!("deferred database auto-vacuum mode was {mode}; expected 0").into());
+    }
     Ok(())
 }
 
@@ -232,19 +288,36 @@ async fn busy_preconversion_checkpoint_defers_without_failing_or_waiting()
     let preparation =
         prepare_existing_database_with_probe(&mut writer, &database_path, &probe).await?;
 
-    assert_eq!(
-        preparation,
-        ExistingDatabasePreparation::Deferred(DatabasePreparationDeferral::WalCheckpointBusy)
-    );
-    assert_eq!(probe.calls(), 0);
+    let expected_preparation =
+        ExistingDatabasePreparation::Deferred(DatabasePreparationDeferral::WalCheckpointBusy);
+    if preparation != expected_preparation {
+        return Err(format!(
+            "busy-checkpoint preparation was {preparation:?}; expected {expected_preparation:?}"
+        )
+        .into());
+    }
+    if probe.calls() != 0 {
+        return Err(format!(
+            "available-space probe called {} times; expected zero",
+            probe.calls()
+        )
+        .into());
+    }
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut writer)
         .await?;
-    assert_eq!(mode, 0);
+    if mode != 0 {
+        return Err(format!("deferred database auto-vacuum mode was {mode}; expected 0").into());
+    }
     let busy_timeout_after: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
         .fetch_one(&mut writer)
         .await?;
-    assert_eq!(busy_timeout_after, busy_timeout_before);
+    if busy_timeout_after != busy_timeout_before {
+        return Err(format!(
+            "conversion changed busy timeout: before={busy_timeout_before}, after={busy_timeout_after}"
+        )
+        .into());
+    }
     read_transaction.rollback().await?;
     Ok(())
 }
@@ -265,12 +338,20 @@ async fn incremental_vacuum_removes_at_most_one_bounded_page_batch() -> Result<(
     let checkpoint_busy: i64 = sqlx::query_scalar("PRAGMA wal_checkpoint(TRUNCATE)")
         .fetch_one(&mut connection)
         .await?;
-    assert_eq!(checkpoint_busy, 0);
+    if checkpoint_busy != 0 {
+        return Err(format!("pre-vacuum WAL checkpoint was busy: {checkpoint_busy}").into());
+    }
     let main_file_before = std::fs::metadata(&database_path)?.len();
     let freelist_before: i64 = sqlx::query_scalar("PRAGMA freelist_count")
         .fetch_one(&mut connection)
         .await?;
-    assert!(freelist_before > i64::from(crate::INCREMENTAL_VACUUM_PAGE_LIMIT));
+    if freelist_before <= i64::from(crate::INCREMENTAL_VACUUM_PAGE_LIMIT) {
+        return Err(format!(
+            "vacuum fixture freelist had {freelist_before} pages; expected more than {}",
+            crate::INCREMENTAL_VACUUM_PAGE_LIMIT
+        )
+        .into());
+    }
     let page_count_before: i64 = sqlx::query_scalar("PRAGMA page_count")
         .fetch_one(&mut connection)
         .await?;
@@ -284,9 +365,31 @@ async fn incremental_vacuum_removes_at_most_one_bounded_page_batch() -> Result<(
         .fetch_one(&mut connection)
         .await?;
     let pages_removed = page_count_before - page_count_after;
-    assert!(pages_removed > 0);
-    assert!(pages_removed <= i64::from(crate::INCREMENTAL_VACUUM_PAGE_LIMIT));
-    assert!(freelist_after > 0);
-    assert!(std::fs::metadata(&database_path)?.len() < main_file_before);
+    if pages_removed <= 0 {
+        return Err(format!(
+            "incremental vacuum removed {pages_removed} pages; expected a positive count"
+        )
+        .into());
+    }
+    if pages_removed > i64::from(crate::INCREMENTAL_VACUUM_PAGE_LIMIT) {
+        return Err(format!(
+            "incremental vacuum removed {pages_removed} pages; limit is {}",
+            crate::INCREMENTAL_VACUUM_PAGE_LIMIT
+        )
+        .into());
+    }
+    if freelist_after <= 0 {
+        return Err(format!(
+            "incremental vacuum left {freelist_after} free pages; expected a remainder"
+        )
+        .into());
+    }
+    let main_file_after = std::fs::metadata(&database_path)?.len();
+    if main_file_after >= main_file_before {
+        return Err(format!(
+            "incremental vacuum did not shrink the main file: before={main_file_before}, after={main_file_after}"
+        )
+        .into());
+    }
     Ok(())
 }

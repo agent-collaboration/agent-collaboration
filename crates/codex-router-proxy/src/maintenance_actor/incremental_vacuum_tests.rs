@@ -36,7 +36,12 @@ async fn state_retention_hint_releases_one_bounded_page_batch() -> Result<(), Bo
             .await?;
         (page_count, freelist_count)
     };
-    assert!(freelist_before > 64);
+    if freelist_before <= 64 {
+        return Err(format!(
+            "vacuum fixture freelist had {freelist_before} pages; expected more than 64"
+        )
+        .into());
+    }
 
     store
         .run_maintenance_hint(MaintenanceHint::CleanupStaleSessionAccountAffinities {
@@ -49,8 +54,15 @@ async fn state_retention_hint_releases_one_bounded_page_batch() -> Result<(), Bo
         .fetch_one(&mut *connection)
         .await?;
     let pages_released = page_count_before - page_count_after;
-    assert!(pages_released > 0);
-    assert!(pages_released <= 64);
+    if pages_released <= 0 {
+        return Err(format!(
+            "maintenance released {pages_released} pages; expected a positive count"
+        )
+        .into());
+    }
+    if pages_released > 64 {
+        return Err(format!("maintenance released {pages_released} pages; limit is 64").into());
+    }
     drop(connection);
     store.close().await?;
     Ok(())

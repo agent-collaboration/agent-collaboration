@@ -118,6 +118,11 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("automation maintenance shutdown failed"));
         }
+        if let Some(task) = self.fleet_outbox_maintenance.take()
+            && task.await.is_err()
+        {
+            failure.get_or_insert(io::Error::other("fleet outbox maintenance shutdown failed"));
+        }
         if let Some(task) = self.provider_retention.take()
             && task.await.is_err()
         {

@@ -9,7 +9,7 @@ use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef};
 mod interruption;
 
 #[tokio::test]
-async fn settled_local_answer_replays_after_pruning_without_resurrecting_a_push_or_call() {
+async fn settled_local_answer_replays_inside_two_months_without_resurrecting_a_push_or_call() {
     let runtime = Runtime::new().await;
     let mail = runtime.local_mail_runtime();
     let draft = runtime.fixture.draft();
@@ -28,14 +28,18 @@ async fn settled_local_answer_replays_after_pruning_without_resurrecting_a_push_
         .unwrap()
         .unwrap();
     assert_eq!(runtime.client.calls(id), 1);
+    let last_window_day = recorded_at()
+        .checked_add_months(chrono::Months::new(2))
+        .unwrap()
+        - chrono::Duration::days(1);
     assert_eq!(
         runtime
             .fixture
             .owner
-            .prune_push_records(recorded_at() + chrono::Duration::days(31), 10)
+            .prune_push_records(last_window_day, 10)
             .await
             .unwrap(),
-        1
+        0
     );
     drop(mail);
     let runtime = runtime.reopen().await;
@@ -47,7 +51,8 @@ async fn settled_local_answer_replays_after_pruning_without_resurrecting_a_push_
             .get_push_record(&push)
             .await
             .unwrap()
-            .is_none()
+            .is_some(),
+        "the original push remains during the replay window"
     );
     let replay = mail
         .send_local(draft.clone(), "later target label".into())
@@ -64,7 +69,7 @@ async fn settled_local_answer_replays_after_pruning_without_resurrecting_a_push_
             .get_push_record(&push)
             .await
             .unwrap()
-            .is_none()
+            .is_some()
     );
     let after = runtime
         .fixture

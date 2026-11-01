@@ -85,9 +85,16 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
             )
             .into());
         }
-        let delivery: DeliveryId =
-            serde_json::from_slice(&std::fs::read(root.join("delivery-id.json"))?)?;
-        let push_id: PushId = serde_json::from_slice(&std::fs::read(root.join("push-id.json"))?)?;
+        let delivery_path = root.join("delivery-id.json");
+        let delivery: DeliveryId = serde_json::from_slice(
+            &std::fs::read(&delivery_path)
+                .map_err(|error| format!("{stage}: read {}: {error}", delivery_path.display()))?,
+        )?;
+        let push_path = root.join("push-id.json");
+        let push_id: PushId = serde_json::from_slice(
+            &std::fs::read(&push_path)
+                .map_err(|error| format!("{stage}: read {}: {error}", push_path.display()))?,
+        )?;
         let witness_path = root.join("native-receipt.json");
         if witness_path.exists() != (stage != "intent-persisted") {
             return Err(
@@ -185,14 +192,24 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
             .map_err(|_| "crash fixture interaction owner remained shared")?
             .close()
             .await?;
-        for entry in std::fs::read_dir(&root)? {
+        for entry in std::fs::read_dir(&root)
+            .map_err(|error| format!("{stage}: list {}: {error}", root.display()))?
+        {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 return Err("unexpected fixture directory".into());
             }
-            std::fs::remove_file(entry.path())?;
+            let path = entry.path();
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(format!("{stage}: remove {}: {error}", path.display()).into());
+                }
+            }
         }
-        std::fs::remove_dir(root)?;
+        std::fs::remove_dir(&root)
+            .map_err(|error| format!("{stage}: remove {}: {error}", root.display()))?;
     }
     Ok(())
 }
@@ -202,7 +219,10 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
 -> TestResult<()> {
     let fixture_id = OperationId::generate();
     let root = native_delivery_crash_root(&fixture_id);
-    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .map_err(|error| format!("create crash fixture root {}: {error}", root.display()))?;
     let output = tokio::time::timeout(
         Duration::from_secs(15),
         tokio::process::Command::new(std::env::current_exe()?)
@@ -218,7 +238,9 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
             .kill_on_drop(true)
             .output(),
     )
-    .await??;
+    .await
+    .map_err(|error| format!("fire-committed child timed out: {error}"))?
+    .map_err(|error| format!("fire-committed child could not start: {error}"))?;
     if output.status.code() != Some(CRASH_EXIT) {
         return Err(format!(
             "fire-committed: checkpoint not reached: {:?}; {}; {}",
@@ -228,10 +250,22 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         )
         .into());
     }
+    let delivery_path = root.join("delivery-id.json");
     let delivery_id: DeliveryId =
-        serde_json::from_slice(&std::fs::read(root.join("delivery-id.json"))?)?;
+        serde_json::from_slice(&std::fs::read(&delivery_path).map_err(|error| {
+            format!(
+                "fire-committed child omitted {}: {error}",
+                delivery_path.display()
+            )
+        })?)?;
+    let push_path = root.join("push-id.json");
     let expected_push_id: PushId =
-        serde_json::from_slice(&std::fs::read(root.join("push-id.json"))?)?;
+        serde_json::from_slice(&std::fs::read(&push_path).map_err(|error| {
+            format!(
+                "fire-committed child omitted {}: {error}",
+                push_path.display()
+            )
+        })?)?;
     let witness_path = root.join("native-receipt.json");
     if witness_path.exists() {
         return Err("fire-committed child dispatched before exiting".into());
@@ -328,7 +362,11 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         if entry.file_type()?.is_dir() {
             return Err("unexpected fixture directory".into());
         }
-        std::fs::remove_file(entry.path())?;
+        match std::fs::remove_file(entry.path()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
     }
     std::fs::remove_dir(root)?;
     Ok(())
@@ -550,10 +588,13 @@ async fn identity(
         gate,
         codex_home: root.to_owned(),
     };
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let broker = collaboration_runtime::ServiceInteractionBroker::load(
         SERVICE.to_owned().try_into()?,
         backend.clone(),
-        root.join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let identity = crate::ApplicationFixture::new(SERVICE, epoch)

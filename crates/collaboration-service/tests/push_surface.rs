@@ -11,9 +11,9 @@ pub mod board_fixture;
 use automation_storage::AutomationStore;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_protocol::{
-    DeliveryOutcome, EndpointId, EndpointRef, MessageContent, MessageDelivery, PushActivityRange,
-    PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
-    PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
+    DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, MessageContent, MessageDelivery,
+    PushActivityRange, PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
+    PushOrigin, PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
     UuidIdentity,
 };
 use collaboration_service::ApplicationFixture;
@@ -339,7 +339,7 @@ async fn foreign_and_missing_links_have_distinct_errors() {
         missing["error"]["message"]
             .as_str()
             .expect("not-found message")
-            .contains("expired after 30 days")
+            .contains("expired after two calendar months")
     );
     drop(store);
     drop(delivery);

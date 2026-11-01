@@ -81,10 +81,22 @@ async fn a_local_reply_keeps_its_reference_after_parent_pruning_and_reopen() {
             recipient.clone(),
             PushOrigin::Session(sender.clone()),
             "Original local message",
-            now - Duration::days(31),
+            now.checked_sub_months(chrono::Months::new(2)).unwrap() - Duration::nanoseconds(1),
         ))
         .await
         .unwrap();
+    let mut writer =
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&database.path))
+            .await
+            .unwrap();
+    sqlx::query::<sqlx_turso::Turso>(
+        "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
+    )
+    .bind(parent.as_str())
+    .execute(&mut writer)
+    .await
+    .unwrap();
+    writer.close().await.unwrap();
     let child = push_id();
     let mut reply = push_draft(
         child.clone(),

@@ -13,7 +13,7 @@ use sqlx::{
     migrate::MigrateError,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
 };
-use std::{collections::HashSet, path::Path, time::Duration};
+use std::{collections::HashSet, num::NonZeroU32, path::Path, time::Duration};
 
 use sqlite_storage_maintenance::{
     configure_new_database_options, incremental_vacuum_step, prepare_existing_database,
@@ -21,6 +21,33 @@ use sqlite_storage_maintenance::{
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 const RETENTION_BATCH_LIMIT: i64 = 1_000;
+
+/// Default terminal provider-operation retention is two calendar months.
+pub const PROVIDER_OPERATION_RETENTION_MONTHS: u32 = 2;
+
+/// Uses the default calendar-month window unless the CLI supplies a day override.
+pub fn provider_operation_retention_cutoff_ms(
+    now_ms: i64,
+    retention_days_override: Option<NonZeroU32>,
+) -> Result<i64, ProviderOperationStoreError> {
+    if now_ms < 0 {
+        return Err(ProviderOperationStoreError::InvalidRecord);
+    }
+    if let Some(days) = retention_days_override {
+        let duration_ms = i64::from(days.get())
+            .checked_mul(24 * 60 * 60 * 1_000)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        return now_ms
+            .checked_sub(duration_ms)
+            .ok_or(ProviderOperationStoreError::InvalidRecord);
+    }
+    let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    let cutoff = now
+        .checked_sub_months(chrono::Months::new(PROVIDER_OPERATION_RETENTION_MONTHS))
+        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    Ok(cutoff.timestamp_millis())
+}
 const EXPECTED_COLUMNS: [&str; 14] = [
     "operation_id",
     "operation_kind",

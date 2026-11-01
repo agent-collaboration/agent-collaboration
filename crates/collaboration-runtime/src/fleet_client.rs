@@ -12,8 +12,9 @@ use message_board_storage::{
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 #[path = "fleet_client/cache_refresh.rs"]
 mod cache_refresh;
@@ -129,9 +130,49 @@ impl FleetClient {
             .request(request)
             .await?
             .ok_or(RouterLocalStorageError::InvalidRecord)?;
-        self.outbox.mark_decided(request, decision).await?;
+        self.outbox
+            .mark_decided(request, decision, chrono::Utc::now().timestamp_millis())
+            .await?;
         self.start_accepted_directory_registration(&queued.request, decision)
             .await
+    }
+
+    /// Prunes one bounded batch from the owning FleetOutbox store.
+    pub async fn prune_outbox_batch(
+        &self,
+        now_ms: i64,
+        batch_size: u32,
+    ) -> Result<u64, FleetClientError> {
+        Ok(self.outbox.prune_expired(now_ms, batch_size).await?)
+    }
+
+    /// Keeps terminal fleet request replay history within the owner's retention window.
+    pub async fn run_outbox_retention(&self, shutdown: CancellationToken) {
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                biased;
+                () = shutdown.cancelled() => return,
+                _ = interval.tick() => {},
+            }
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            loop {
+                let result = tokio::select! {
+                    biased;
+                    () = shutdown.cancelled() => return,
+                    result = self.prune_outbox_batch(now_ms, 500) => result,
+                };
+                match result {
+                    Ok(0) => break,
+                    Ok(_) => tokio::task::yield_now().await,
+                    Err(error) => {
+                        tracing::warn!(error = %error, "fleet outbox retention failed; the next maintenance pass will retry");
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     pub async fn recover_project_registrations(&self) -> Result<(), FleetClientError> {

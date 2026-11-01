@@ -1,14 +1,17 @@
 //! Host-owned provider operation retention and its shutdown-bound maintenance task.
 use super::{CollaborationRuntime, io, unix_seconds};
+use collaboration_runtime::provider_operation_retention_cutoff_ms;
 
 impl CollaborationRuntime {
     pub async fn configure_provider_operation_retention(
         &mut self,
-        retention_days: std::num::NonZeroU32,
+        retention_days: Option<std::num::NonZeroU32>,
     ) -> io::Result<u64> {
-        let cutoff_ms = unix_seconds()?
-            .saturating_mul(1_000)
-            .saturating_sub(i64::from(retention_days.get()).saturating_mul(24 * 60 * 60 * 1_000));
+        let now_ms = unix_seconds()?
+            .checked_mul(1_000)
+            .ok_or_else(|| io::Error::other("provider-retention clock exceeded range"))?;
+        let cutoff_ms = provider_operation_retention_cutoff_ms(now_ms, retention_days)
+            .map_err(io::Error::other)?;
         let protected = self
             .external_provider_supervisor
             .as_ref()
@@ -41,9 +44,11 @@ impl CollaborationRuntime {
                 tokio::select! {
                     () = shutdown.cancelled() => break,
                     _ = interval.tick() => {
-                        let cutoff_ms = chrono::Utc::now().timestamp_millis().saturating_sub(
-                            i64::from(retention_days.get()).saturating_mul(24 * 60 * 60 * 1_000),
-                        );
+                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        let Ok(cutoff_ms) = provider_operation_retention_cutoff_ms(now_ms, retention_days) else {
+                            tracing::warn!("provider-operation retention clock is outside the supported range");
+                            continue;
+                        };
                         let protected = supervisor.as_ref().map(|value| value.live_operation_ids()).unwrap_or_default();
                         let mut store = store.lock().await;
                         if store.prune_terminal_before(cutoff_ms, &protected).await.is_ok() {

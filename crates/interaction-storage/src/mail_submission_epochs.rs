@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use collaboration_protocol::MailItemId;
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use message_board::{EpochNumber, ProjectId};
-use sqlx_turso::TursoConnection;
+use sqlx::Transaction;
+use sqlx_turso::{Turso, TursoConnection};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSubmissionEpoch {
@@ -14,6 +15,7 @@ pub struct MailSubmissionEpoch {
     pub recorded_at: DateTime<Utc>,
 }
 
+#[derive(sqlx::FromRow)]
 struct SubmissionEpochRow {
     item_id: String,
     project: String,
@@ -51,6 +53,29 @@ async fn read_epoch(
         item.as_str())
         .fetch_optional(connection).await?
         .map(SubmissionEpochRow::decode).transpose()
+}
+
+pub(crate) async fn delete_submission_epoch_for_pruned_push(
+    transaction: &mut Transaction<'_, Turso>,
+    push_id: &str,
+) -> Result<u64, StorageError> {
+    let Some(row) = sqlx::query_as::<sqlx_turso::Turso, SubmissionEpochRow>(
+        "SELECT item_id,project,epoch,recorded_at FROM mail_submission_epochs WHERE item_id=?",
+    )
+    .bind(push_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    else {
+        return Ok(0);
+    };
+    row.decode()?;
+    Ok(
+        sqlx::query::<sqlx_turso::Turso>("DELETE FROM mail_submission_epochs WHERE item_id=?")
+            .bind(push_id)
+            .execute(&mut **transaction)
+            .await?
+            .rows_affected(),
+    )
 }
 
 impl InteractionStore {

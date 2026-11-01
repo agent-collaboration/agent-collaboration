@@ -5,7 +5,43 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode},
 };
 
-use super::ProviderOperationStore;
+use super::{
+    PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationStore,
+    provider_operation_retention_cutoff_ms,
+};
+
+#[test]
+fn provider_operation_retention_defaults_to_two_calendar_months_and_keeps_day_override()
+-> Result<(), Box<dyn Error>> {
+    let now = chrono::DateTime::parse_from_rfc3339("2026-10-31T12:30:00Z")?.timestamp_millis();
+    let default_cutoff = provider_operation_retention_cutoff_ms(now, None)?;
+    let expected_default =
+        chrono::DateTime::parse_from_rfc3339("2026-08-31T12:30:00Z")?.timestamp_millis();
+    if PROVIDER_OPERATION_RETENTION_MONTHS != 2 {
+        return Err(format!(
+            "provider operation retention months was {PROVIDER_OPERATION_RETENTION_MONTHS}; expected 2"
+        )
+        .into());
+    }
+    if default_cutoff != expected_default {
+        return Err(format!(
+            "default retention cutoff was {default_cutoff}; expected {expected_default}"
+        )
+        .into());
+    }
+
+    let override_days = std::num::NonZeroU32::new(7).ok_or("positive fixture")?;
+    let override_cutoff = provider_operation_retention_cutoff_ms(now, Some(override_days))?;
+    let expected_override =
+        chrono::DateTime::parse_from_rfc3339("2026-10-24T12:30:00Z")?.timestamp_millis();
+    if override_cutoff != expected_override {
+        return Err(format!(
+            "day override cutoff was {override_cutoff}; expected {expected_override}"
+        )
+        .into());
+    }
+    Ok(())
+}
 
 #[tokio::test]
 async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Result<(), Box<dyn Error>>
@@ -20,8 +56,14 @@ async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Resul
     let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&mut store.connection)
         .await?;
-    assert_eq!(mode, 2);
-    assert_eq!(journal_mode, "wal");
+    if mode != 2 {
+        return Err(format!("expected PRAGMA auto_vacuum mode 2, got {mode}").into());
+    }
+    if journal_mode != "wal" {
+        return Err(
+            format!("provider operation journal mode was {journal_mode}; expected wal").into(),
+        );
+    }
     store.close().await?;
     Ok(())
 }
@@ -46,13 +88,23 @@ async fn existing_delete_mode_provider_database_reopens_in_wal_mode() -> Result<
         .fetch_one(&mut legacy)
         .await?;
     legacy.close().await?;
-    assert_eq!(legacy_mode, "delete");
+    if legacy_mode != "delete" {
+        return Err(format!(
+            "legacy provider operation journal mode was {legacy_mode}; expected delete"
+        )
+        .into());
+    }
 
     let mut store = ProviderOperationStore::open(&database_path).await?;
     let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&mut store.connection)
         .await?;
-    assert_eq!(journal_mode, "wal");
+    if journal_mode != "wal" {
+        return Err(format!(
+            "reopened provider operation journal mode was {journal_mode}; expected wal"
+        )
+        .into());
+    }
     store.close().await?;
     Ok(())
 }

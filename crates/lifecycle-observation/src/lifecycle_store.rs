@@ -244,6 +244,7 @@ const fn lifecycle_maintenance_error_class(error: &JournalError) -> &'static str
         JournalError::Storage(_) => "storage",
         JournalError::InvalidRecord => "invalid_record",
         JournalError::InvalidStorage => "invalid_storage",
+        JournalError::InvalidCheckpointAddress { .. } => "invalid_checkpoint_address",
         JournalError::Capacity => "capacity",
         JournalError::StorageMaintenance(_) => "storage_maintenance",
     }

@@ -1,11 +1,16 @@
 //! One Turso transaction owner for typed interactions and local message delivery.
 mod interaction_store;
 pub use interaction_store::{InteractionStore, StorageError};
+mod approval_routes;
+pub use approval_routes::StoredApprovalRoute;
+/// Retention shared by settled interaction records in `interaction.sqlite`.
+pub const INTERACTION_RETENTION_MONTHS: u32 = 2;
 #[cfg(feature = "runtime-test-support")]
 mod mail_store_test_faults;
 #[cfg(feature = "runtime-test-support")]
 pub use mail_store_test_faults::MailStoreTestFault;
 mod interaction_atomic_store;
+mod interaction_retention;
 pub use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordDraft};
 pub use interaction_atomic_store::InteractionAtomicStore;
 mod interaction_history;
