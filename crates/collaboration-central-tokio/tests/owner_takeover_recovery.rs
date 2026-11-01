@@ -431,7 +431,7 @@ async fn takeover_replays_committed_lost_fence_after_owning_reopen_without_secon
     let root = tempfile::tempdir()?;
     let keys = JwksFixtureServer::start().await?;
     let proof = async {
-        let server = TokioServer::start(settings(root.path(), &keys)?).await?;
+        let server = TokioServer::start_conformance(settings(root.path(), &keys)?).await?;
         let interrupted = arrange_and_interrupt(server.base_url()).await;
         let stopped = server.shutdown().await;
         let interrupted = interrupted?;

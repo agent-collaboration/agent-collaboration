@@ -17,11 +17,17 @@ pub(crate) struct CloudflareCentralPlatform {
     labels: InvocationLabels,
     layer: VerificationLayer,
     clock: CloudflareClock,
+    #[cfg(feature = "conformance")]
+    access_clock: Option<&'static collaboration_central_core::ConformanceAccessClock>,
     env: Arc<SendWrapper<Env>>,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct CloudflareClock;
+
+#[cfg(feature = "conformance")]
+static ACCESS_CLOCK: collaboration_central_core::ConformanceAccessClock =
+    collaboration_central_core::ConformanceAccessClock::new();
 
 impl Clock for CloudflareClock {
     fn now(&self) -> SyncTime {
@@ -40,14 +46,28 @@ impl CloudflareCentralPlatform {
         labels: InvocationLabels,
         layer: VerificationLayer,
         env: Env,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, collaboration_central_core::AccessRefusal> {
+        #[cfg(feature = "conformance")]
+        let access_clock = match env.var("_cf_composed_clock") {
+            Ok(value)
+                if value.to_string()
+                    == collaboration_central_core::ConformanceAccessClock::INITIAL_MILLIS
+                        .to_string() =>
+            {
+                Some(&ACCESS_CLOCK)
+            }
+            Ok(_) => return Err(collaboration_central_core::AccessRefusal::InvalidCaller),
+            Err(_) => None,
+        };
+        Ok(Self {
             key_source,
             labels,
             layer,
             clock: CloudflareClock,
+            #[cfg(feature = "conformance")]
+            access_clock,
             env: Arc::new(SendWrapper::new(env)),
-        }
+        })
     }
 }
 
@@ -56,7 +76,23 @@ impl CentralPlatform for CloudflareCentralPlatform {
         collaboration_central_core::CoreHost<crate::object_shell::CloudflareObjectIo>,
     >;
     fn clock(&self) -> &dyn Clock {
-        &self.clock
+        #[cfg(feature = "conformance")]
+        {
+            match self.access_clock {
+                Some(clock) => clock,
+                None => &self.clock,
+            }
+        }
+        #[cfg(not(feature = "conformance"))]
+        {
+            &self.clock
+        }
+    }
+    #[cfg(feature = "conformance")]
+    fn conformance_access_clock(
+        &self,
+    ) -> Option<&collaboration_central_core::ConformanceAccessClock> {
+        self.access_clock
     }
     fn ids(&self) -> &dyn runtime_primitives::IdSource {
         &self.clock

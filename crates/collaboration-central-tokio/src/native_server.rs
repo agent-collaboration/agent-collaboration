@@ -84,8 +84,30 @@ impl TokioServer {
     }
 
     #[cfg(feature = "conformance")]
+    pub async fn start_conformance(settings: TokioSettings) -> Result<Self, TokioServerError> {
+        Self::start_with_controls(settings, Vec::new()).await
+    }
+
+    #[cfg(feature = "conformance")]
+    pub async fn start_conformance_on(
+        settings: TokioSettings,
+        listen: SocketAddr,
+    ) -> Result<Self, TokioServerError> {
+        Self::start_controls_on(settings, listen, Vec::new()).await
+    }
+
+    #[cfg(feature = "conformance")]
     pub async fn start_with_controls(
         settings: TokioSettings,
+        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+    ) -> Result<Self, TokioServerError> {
+        Self::start_controls_on(settings, SocketAddr::from(([127, 0, 0, 1], 0)), controls).await
+    }
+
+    #[cfg(feature = "conformance")]
+    async fn start_controls_on(
+        settings: TokioSettings,
+        listen: SocketAddr,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Self, TokioServerError> {
         let platform = TokioCentralPlatform::new_with_controls(
@@ -100,13 +122,7 @@ impl TokioServer {
             controls,
         )
         .await?;
-        Self::serve_platform(
-            settings,
-            SocketAddr::from(([127, 0, 0, 1], 0)),
-            platform,
-            None,
-        )
-        .await
+        Self::serve_platform(settings, listen, platform, None).await
     }
 
     async fn serve_platform(

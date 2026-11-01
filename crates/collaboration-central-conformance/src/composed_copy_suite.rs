@@ -164,6 +164,13 @@ where
     equal(copy.first_page(client).await?.rows.len(), 2)?;
     for cleanup in [false, true] {
         let copy = CopyFixture::create(client).await?;
+        let started = crate::fixture_time()?;
+        control(
+            client,
+            copy.address()?,
+            RuntimeControl::SetTime { now: started },
+        )
+        .await?;
         let fragments = parts(copy.database, 3)?;
         copy.apply(client, fragments.first().ok_or("first")?.clone())
             .await?;
@@ -173,7 +180,7 @@ where
                 copy.address()?,
                 RuntimeControl::SetTime {
                     now: collaboration_central_core::RegistryTime(
-                        chrono::Utc::now() + chrono::TimeDelta::days(2),
+                        started.0 + chrono::TimeDelta::days(2),
                     ),
                 },
             )

@@ -56,7 +56,7 @@ async fn the_reopened_central_retries_its_stored_call_against_the_reopened_relea
         })
     };
     let writer_path = root.path().join("writer.db");
-    let first = TokioServer::start(settings()?).await?;
+    let first = TokioServer::start_conformance(settings()?).await?;
     let prepared = freeze_and_lose_answer(first.base_url(), &writer_path).await;
     let stopped = first.shutdown().await;
     stopped?;
@@ -69,7 +69,7 @@ async fn the_reopened_central_retries_its_stored_call_against_the_reopened_relea
     };
     // This creates fresh CentralPlatform, NativeObjects, ObjectRuntime, wake
     // owners and session attachments against the same committed files.
-    let second = TokioServer::start(settings()?).await?;
+    let second = TokioServer::start_conformance(settings()?).await?;
     let proof = resume(second.base_url(), &writer_path, prepared).await;
     let stopped = second.shutdown().await;
     let fixture = jwks.shutdown().await;

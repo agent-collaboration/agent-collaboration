@@ -256,7 +256,7 @@ async fn pin_fleet_clock(
     client: &ConformanceClient,
     socket: &mut WebSocket,
 ) -> ConformanceResult<()> {
-    let now = RegistryTime(chrono::Utc::now() + chrono::TimeDelta::hours(1));
+    let now = RegistryTime(crate::fixture_time()?.0 + chrono::TimeDelta::hours(1));
     // Both runtimes' clock capability has millisecond precision.
     let now = RegistryTime(
         chrono::DateTime::from_timestamp_millis(now.0.timestamp_millis()).ok_or("clock fixture")?,

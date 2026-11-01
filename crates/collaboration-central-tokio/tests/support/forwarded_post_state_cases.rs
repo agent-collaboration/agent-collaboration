@@ -34,6 +34,14 @@ async fn observe(base: &str, holder: bool) -> ConformanceResult<Value> {
         .await?)
 }
 
+pub(super) async fn wake_deadline(
+    base: &str,
+) -> ConformanceResult<Option<collaboration_central_core::UnixMillis>> {
+    let observed: collaboration_central_core::ForwardStateObservation =
+        serde_json::from_value(observe(base, false).await?)?;
+    Ok(observed.wake_deadline)
+}
+
 pub(super) async fn overlap(
     base: &str,
     sender: &mut WebSocket,

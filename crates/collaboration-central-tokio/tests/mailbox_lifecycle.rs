@@ -174,7 +174,7 @@ async fn normal_revocation_completes_only_after_its_physical_mailbox_has_closed(
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let service = ServiceId::try_from("550e8400-e29b-41d4-a716-4466554400ef".to_owned())?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

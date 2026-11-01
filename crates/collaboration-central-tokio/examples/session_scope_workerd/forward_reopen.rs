@@ -3,8 +3,8 @@
 use super::{
     forwarded_post_lifecycle_oracles as lifecycle,
     forwarded_post_scenarios::{
-        HOLDER_CREDENTIAL, RegisteredForwardingPeers, SENDER_CREDENTIAL, control,
-        registered_forwarding_peers,
+        HOLDER_CREDENTIAL, HOLDER_SERVICE, RegisteredForwardingPeers, SENDER_CREDENTIAL,
+        SENDER_SERVICE, control, registered_forwarding_peers,
     },
     forwarded_post_wire as wire,
     workerd_process::{WorkerdProcess, WorkerdSettings},
@@ -14,16 +14,13 @@ use collaboration_central_conformance::{ConformanceResult, RuntimeControl};
 use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest};
 use reqwest_websocket::WebSocket;
-use std::{
-    path::Path,
-    time::{Duration, SystemTime},
-};
+use std::{path::Path, time::Duration};
 
 struct PendingBeforeRestart {
     database: DatabaseId,
     request_frames: Vec<FrameId>,
     holder_frames: Vec<FrameId>,
-    started: SystemTime,
+    started: chrono::DateTime<chrono::Utc>,
 }
 
 pub(super) async fn run(settings: &WorkerdSettings) -> ConformanceResult<()> {
@@ -52,17 +49,19 @@ async fn pending_before_restart(base: &str) -> ConformanceResult<PendingBeforeRe
         database,
         sender_socket: mut sender,
         holder_socket: mut holder,
-    } = registered_forwarding_peers(base).await?;
+    } = registered_forwarding_peers(
+        base,
+        Some(collaboration_central_conformance::fixture_time()?),
+    )
+    .await?;
     let proof = async {
-        // A pinned future time would defer Hello's absolute platform alarm.
-        // Start in the past, then retain a real logical interval across restart.
-        let started = SystemTime::now()
-            .checked_sub(Duration::from_secs(10))
-            .ok_or("reopen fixture clock cannot precede the system epoch")?;
+        // Registry admission and both connection clocks share this instant,
+        // so Hello's lease remains valid across the controlled restart interval.
+        let started = collaboration_central_conformance::fixture_time()?.0;
         control(
             base,
             RuntimeControl::SetTime {
-                now: RegistryTime(started.into()),
+                now: RegistryTime(started),
             },
         )
         .await?;
@@ -72,12 +71,12 @@ async fn pending_before_restart(base: &str) -> ConformanceResult<PendingBeforeRe
             request_frames.push(lifecycle::post(&mut sender, database).await?);
             holder_frames.push(lifecycle::holder_frame(&mut holder).await?);
         }
-        // A real elapsed interval before restart distinguishes retaining the
+        // A controlled interval before restart distinguishes retaining the
         // original deadline from silently granting a fresh thirty seconds.
         control(
             base,
             RuntimeControl::SetTime {
-                now: RegistryTime((started + Duration::from_secs(10)).into()),
+                now: RegistryTime(started + chrono::TimeDelta::seconds(10)),
             },
         )
         .await?;
@@ -136,18 +135,33 @@ fn inspect_stopped_storage(root: &Path, requests: &[FrameId]) -> ConformanceResu
 }
 
 async fn after_restart(base: &str, pending: PendingBeforeRestart) -> ConformanceResult<()> {
-    let mut sender = wire::connect(base, SENDER_CREDENTIAL).await?;
-    let mut holder = wire::connect(base, HOLDER_CREDENTIAL).await?;
+    let restored_sender_time = RegistryTime(pending.started + chrono::TimeDelta::seconds(10));
+    let mut sender = super::normal_session_support::reconnect_forwarding_peer(
+        base,
+        SENDER_SERVICE,
+        SENDER_CREDENTIAL,
+        restored_sender_time,
+    )
+    .await
+    .map_err(|error| format!("reopened sender Welcome was not observed: {error}"))?;
+    let mut holder = super::normal_session_support::reconnect_forwarding_peer(
+        base,
+        HOLDER_SERVICE,
+        HOLDER_CREDENTIAL,
+        RegistryTime(pending.started),
+    )
+    .await
+    .map_err(|error| format!("reopened holder Welcome was not observed: {error}"))?;
     let proof = async {
         control(base, RuntimeControl::SetTime {
-            now: RegistryTime((pending.started + Duration::from_secs(10)).into()),
+            now: restored_sender_time,
         }).await?;
         let overflow = lifecycle::post(&mut sender, pending.database).await?;
         if lifecycle::outcome(&mut sender, overflow).await? != ForwardOutcome::Overloaded {
             return Err("reopened Worker lost its sixteen persisted pending slots".into());
         }
         control(base, RuntimeControl::SetTime {
-            now: RegistryTime((pending.started + Duration::from_secs(30)).into()),
+            now: RegistryTime(pending.started + chrono::TimeDelta::seconds(30)),
         }).await?;
         // Public capacity is the observation: with a pinned clock before all
         // fresh deadlines, sixteen unanswered fresh deliveries leave no old slot.

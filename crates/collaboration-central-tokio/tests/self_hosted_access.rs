@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{Duration, Utc};
-use collaboration_central_conformance::JwksFixtureServer;
+use chrono::Duration;
+use collaboration_central_conformance::{JwksFixtureServer, fixture_time};
 use collaboration_central_core::{
     AccessCaller, AccessClientId, AccessKeyCache, AccessPolicy, AccessRefusal, CentralApplication,
 };
@@ -55,7 +55,7 @@ async fn check(
 
 #[tokio::test]
 async fn self_hosted_owner_and_machine_claims_pass_real_native_crypto() -> TestResult {
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let owner_token = issuer(policy())?.mint(&owner(), now, now + Duration::minutes(15))?;
     check(&owner_token, policy(), "/admin/v1/copies", Ok(owner())).await?;
     let machine = AccessCaller::Machine {
@@ -68,7 +68,7 @@ async fn self_hosted_owner_and_machine_claims_pass_real_native_crypto() -> TestR
 async fn self_hosted_wrong_issuer_is_refused() -> TestResult {
     let mut different = policy();
     different.issuer = "http://127.0.0.1:19844".into();
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let token = issuer(different)?.mint(&owner(), now, now + Duration::minutes(15))?;
     check(
         &token,
@@ -80,7 +80,7 @@ async fn self_hosted_wrong_issuer_is_refused() -> TestResult {
 }
 #[tokio::test]
 async fn self_hosted_admin_audience_cannot_open_a_machine_session() -> TestResult {
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let token = issuer(policy())?.mint(&owner(), now, now + Duration::minutes(15))?;
     check(
         &token,
@@ -92,7 +92,7 @@ async fn self_hosted_admin_audience_cannot_open_a_machine_session() -> TestResul
 }
 #[tokio::test]
 async fn self_hosted_expired_assertion_is_refused() -> TestResult {
-    let now = Utc::now() - Duration::hours(2);
+    let now = fixture_time()?.0 - Duration::hours(2);
     let token = issuer(policy())?.mint(&owner(), now, now + Duration::minutes(15))?;
     check(
         &token,
@@ -104,7 +104,7 @@ async fn self_hosted_expired_assertion_is_refused() -> TestResult {
 }
 #[tokio::test]
 async fn self_hosted_unknown_key_is_refused() -> TestResult {
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let token = issuer(policy())?.mint(&owner(), now, now + Duration::minutes(15))?;
     let (_, body) = token.split_once('.').ok_or("token header")?;
     let unknown = format!(
@@ -122,7 +122,7 @@ async fn self_hosted_unknown_key_is_refused() -> TestResult {
 }
 #[tokio::test]
 async fn self_hosted_owner_must_match_after_signature_verification() -> TestResult {
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let token = issuer(policy())?.mint(&owner(), now, now + Duration::minutes(15))?;
     let mut different = policy();
     different.owner_identity = "other-owner".into();
@@ -151,7 +151,7 @@ async fn generated_key_roundtrips_through_pkcs8_and_issues_verifiable_rs256() ->
         policy(),
         Arc::new(AccessKeyCache::default()),
     )?;
-    let now = Utc::now();
+    let now = fixture_time()?.0;
     let token = issuer.mint(&owner(), now, now + Duration::minutes(15))?;
     let observed = app.verify_access(Some(&token), "/admin/v1/copies").await;
     platform.shutdown().await?;

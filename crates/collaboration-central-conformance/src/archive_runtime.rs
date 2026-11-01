@@ -93,7 +93,7 @@ where
     UpdateClock: FnMut(RegistryTime) -> UpdateFuture,
     UpdateFuture: std::future::Future<Output = ConformanceResult<()>>,
 {
-    let future = chrono::Utc::now() + chrono::TimeDelta::minutes(2);
+    let future = crate::fixture_time()?.0 + chrono::TimeDelta::minutes(2);
     let at = RegistryTime(
         chrono::DateTime::from_timestamp_millis(future.timestamp_millis()).ok_or("fixture time")?,
     );

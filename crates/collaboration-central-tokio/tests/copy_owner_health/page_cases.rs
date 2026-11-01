@@ -26,7 +26,7 @@ async fn owner_page_orders_and_bounds_real_directory_entries_and_continues_exclu
     arranged?;
     drop(fixture);
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let client = OwnerClient::new(server.base_url())?;
         let expected = [

@@ -130,6 +130,7 @@ async fn owner_gate(client: &Client) -> ConformanceResult<()> {
                 client_id: access_client_id("bootstrap-non-owner")?,
             },
             true,
+            collaboration_central_conformance::fixture_time()?,
         ),
         FIXTURE_KID,
     )?;

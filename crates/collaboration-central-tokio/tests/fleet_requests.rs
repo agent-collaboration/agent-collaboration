@@ -36,7 +36,7 @@ async fn archiving_nine_empty_boards_returns_all_ten_exact_effect_identities()
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let client = ConformanceClient::new(server.base_url())?;
         let mut peer = enroll_admitted_peer(
@@ -228,7 +228,7 @@ async fn normal_fleet_request_keeps_its_decision_and_admitted_origin_after_reope
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let client = ConformanceClient::new(server.base_url())?;
         let mut peer = enroll_admitted_peer(&client,SERVICE,"019f0000-0000-7000-8000-000000001010","fleet-frame-origin","019f0000-0000-7000-8000-000000000f42").await?;
@@ -276,7 +276,7 @@ async fn normal_fleet_request_keeps_its_decision_and_admitted_origin_after_reope
     server.shutdown().await?;
     let proof = async {
         let (offered, first) = proof?;
-        let reopened = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+        let reopened = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
         let replay = async {
             let client = ConformanceClient::new(reopened.base_url())?;
             let mut peer = enroll_admitted_peer(

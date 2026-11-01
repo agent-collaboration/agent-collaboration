@@ -2,7 +2,30 @@
 // Redirect exactly the fixture issuer's certs fetch to the owned HTTP server.
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import publicTemplate from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
+import { z } from "zod";
+import type * as MiniflareTypes from "miniflare";
+
+// This fixture consumes the public template's binding view. Runtime validation
+// preserves its own module scope while the SDK types use this package's owner.
+const templateBindingSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), value: z.string() }),
+  z.object({
+    type: z.literal("durable-object"),
+    worker: z.string(),
+    exportName: z.string(),
+  }),
+]);
+const templateModuleSchema = z.object({
+  default: z.object({
+    worker: z.object({ env: z.record(z.string(), templateBindingSchema) }),
+  }),
+});
+const { default: publicTemplate } = templateModuleSchema.parse(
+  await import(
+    new URL("../../crates/collaboration-central-cloudflare/cloudflare.config.ts", import.meta.url)
+      .href
+  ),
+);
 
 const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
   process.argv.slice(2);
@@ -25,7 +48,7 @@ if (fixture.protocol !== "http:" || fixture.hostname !== "127.0.0.1") {
 }
 // Fill the shipped template, so a missing public binding cannot be masked by
 // the harness's own independent list of production settings.
-const replacements = {
+const replacements: Readonly<Record<string, string>> = {
   ACCESS_TEAM_DOMAIN: "conformance-test.cloudflareaccess.com",
   ACCESS_SESSION_AUD: "test-session-aud",
   ACCESS_ADMIN_AUD: "test-admin-aud",
@@ -41,17 +64,17 @@ const replacements = {
   CENTRAL_DELIVERY_CONFIG: relayPeer.startsWith("{") ? relayPeer : JSON.stringify({ relayPeer }),
 };
 const templateBindings = Object.fromEntries(
-  Object.entries(publicTemplate.worker.env)
-    .filter(([, binding]) => binding.type === "text")
-    .map(([name, binding]) => [name, replacements[name] ?? binding.value]),
+  Object.entries(publicTemplate.worker.env).flatMap(([name, binding]): Array<[string, string]> => {
+    if (binding.type !== "text") return [];
+    return [[name, replacements[name] ?? binding.value]];
+  }),
 );
 for (const name of Object.keys(replacements)) {
   if (!(name in templateBindings))
     throw new Error(`public central template missing required ${name}`);
 }
-const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions } = await import(
-  pathToFileURL(miniflareEntrypoint).href
-);
+const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: typeof MiniflareTypes =
+  await import(pathToFileURL(miniflareEntrypoint).href);
 const runtime = new Miniflare(
   convertV4MiniflareOptions({
     host: "127.0.0.1",
@@ -82,9 +105,11 @@ const runtime = new Miniflare(
           MAILBOXES: { className: "MailboxObject", useSQLite: true },
           SCHEMA_PROBES: { className: "BootstrapObject", useSQLite: true },
         },
-        bindings: templateBindings,
+        bindings: { ...templateBindings, _cf_composed_clock: "1900000000000" },
         cacheAPI: true,
-        outboundService: async (request) => {
+        outboundService: async (
+          request: MiniflareTypes.Request,
+        ): Promise<MiniflareTypes.Response> => {
           if (
             request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
           ) {
@@ -93,7 +118,7 @@ const runtime = new Miniflare(
           const response = await fetch(fixture);
           return new Response(await response.arrayBuffer(), {
             status: response.status,
-            headers: response.headers,
+            headers: Array.from(response.headers.entries()),
           });
         },
       },
@@ -101,7 +126,7 @@ const runtime = new Miniflare(
   }),
 );
 
-async function stop() {
+async function stop(): Promise<void> {
   await runtime.dispose();
   process.exitCode = 0;
 }

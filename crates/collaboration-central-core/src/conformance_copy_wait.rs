@@ -49,6 +49,14 @@ pub(crate) struct CopyWaitObservation {
     pub notifications: u64,
     pub read_gap_reached: bool,
     pub calls: Vec<durable_steps::CallId>,
+    pub deadlines: Vec<CopyWaitDeadline>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CopyWaitDeadline {
+    pub armed_at: fleet_identity_protocol::UnixMillis,
+    pub deadline: fleet_identity_protocol::UnixMillis,
 }
 
 #[derive(Default)]
@@ -56,6 +64,7 @@ struct ProbeState {
     reads: u64,
     attempts: u64,
     calls: Vec<durable_steps::CallId>,
+    deadlines: Vec<CopyWaitDeadline>,
     read_gap_reached: bool,
     read_gap: Option<oneshot::Receiver<()>>,
     release: Option<oneshot::Sender<()>>,
@@ -74,9 +83,18 @@ impl CopyWaitProbe {
             .push(identity);
         Ok(())
     }
-    pub(crate) fn enter_attempt(&self) -> Result<(), StoreError> {
+    pub(crate) fn enter_attempt(
+        &self,
+        armed_at: runtime_primitives::SyncTime,
+        deadline: runtime_primitives::SyncTime,
+    ) -> Result<(), StoreError> {
+        let actual = CopyWaitDeadline {
+            armed_at: crate::conformance_clock::observed_time(armed_at),
+            deadline: crate::conformance_clock::observed_time(deadline),
+        };
         let mut state = self.state.lock().map_err(StoreError::backend)?;
         state.attempts = state.attempts.saturating_add(1);
+        state.deadlines.push(actual);
         Ok(())
     }
 
@@ -134,6 +152,7 @@ impl CopyWaitProbe {
             notifications,
             read_gap_reached: state.read_gap_reached,
             calls: state.calls.clone(),
+            deadlines: state.deadlines.clone(),
         };
         drop(state);
         if let Some(release) = release {

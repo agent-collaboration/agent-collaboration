@@ -173,7 +173,6 @@ async fn observed(
             if ready(&value) {
                 return Ok(value);
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await?

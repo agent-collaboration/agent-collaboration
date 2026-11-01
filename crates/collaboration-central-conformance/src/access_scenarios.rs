@@ -10,23 +10,42 @@ use collaboration_central_core::{AccessCaller, AccessRefusal};
 
 /// The same signed assertion must stop being valid at its own expiry.
 pub async fn run_access_expiry_conformance(client: &ConformanceClient) -> ConformanceResult<()> {
+    use AccessVerificationOutcome::{Accepted, Refused};
+    let now = crate::fixture_time()?;
     let mut short = fixture_claims(
         AccessCaller::Machine {
             client_id: access_client_id("expiry-row-machine")?,
         },
         false,
+        now,
     );
-    set_claim(
-        &mut short,
-        "exp",
-        (chrono::Utc::now().timestamp() + 3).into(),
+    set_claim(&mut short, "exp", (now.0.timestamp() + 3).into())?;
+    let inner = sign_assertion(&short, FIXTURE_KID)?;
+    equal(
+        client
+            .verify_access_assertion_at(inner.clone(), "/v1/session", now)
+            .await?,
+        Accepted(AccessCallerClass::Machine),
     )?;
-    crate::run_staging_expiry_row(
-        client,
-        sign_assertion(&short, FIXTURE_KID)?,
-        owner_assertion()?,
-    )
-    .await
+    println!("STAGING A6 session token accepted; it expires in 3s (controlled clock)");
+    equal(
+        client
+            .verify_access_assertion_at(
+                inner,
+                "/v1/session",
+                collaboration_central_core::RegistryTime(now.0 + chrono::TimeDelta::seconds(3)),
+            )
+            .await?,
+        Refused(AccessRefusal::Expired),
+    )?;
+    equal(
+        client
+            .verify_access_assertion(owner_assertion()?, "/admin/v1/machines/enroll")
+            .await?,
+        Accepted(AccessCallerClass::Owner),
+    )?;
+    println!("STAGING A6 same token after its expiry refused Expired, live token accepted: passed");
+    Ok(())
 }
 
 /// A successful verification cannot extend a key source's zero cache lifetime.
@@ -131,6 +150,7 @@ pub(crate) fn refused_assertions(
             email: fixture_policy().owner_identity,
         },
         true,
+        crate::fixture_time()?,
     );
     cases.push((
         "admin audience on session",
@@ -209,6 +229,7 @@ pub async fn run_access_verifier_control_conformance(
             client_id: access_client_id(token)?,
         },
         false,
+        crate::fixture_time()?,
     );
     set_claim(&mut expired, "exp", serde_json::json!(0))?;
     use AccessVerificationOutcome::{Accepted, Refused};

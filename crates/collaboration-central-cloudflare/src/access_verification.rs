@@ -88,7 +88,7 @@ pub(crate) fn application(
     layer: VerificationLayer,
 ) -> Result<CentralApplication<CloudflareCentralPlatform>, AccessRefusal> {
     let policy = policy(env).map_err(|_| AccessRefusal::InvalidCaller)?;
-    let platform = CloudflareCentralPlatform::new(policy.certs_url(), labels, layer, env.clone());
+    let platform = CloudflareCentralPlatform::new(policy.certs_url(), labels, layer, env.clone())?;
     CentralApplication::new(platform, policy, Arc::clone(&ACCESS_KEYS))
 }
 

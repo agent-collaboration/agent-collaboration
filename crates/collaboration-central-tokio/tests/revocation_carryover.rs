@@ -12,7 +12,7 @@ async fn revocation_gates_readmission_and_a_late_duplicate_cannot_end_its_new_se
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -39,7 +39,7 @@ async fn a_saved_activation_cannot_undo_revocation_while_enrollment_finish_was_p
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -69,7 +69,7 @@ async fn two_real_readmissions_hold_open_and_keep_overlapping_credentials_inacti
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

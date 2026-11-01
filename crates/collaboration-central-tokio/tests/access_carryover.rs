@@ -34,7 +34,7 @@ async fn run_case(case: AccessCase) -> ConformanceResult<()> {
         }
     };
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

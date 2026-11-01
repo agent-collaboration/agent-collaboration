@@ -37,7 +37,7 @@ impl Fixture {
     pub(super) async fn open() -> ConformanceResult<Self> {
         let root = tempfile::tempdir()?;
         let keys = JwksFixtureServer::start().await?;
-        let server = TokioServer::start(TokioSettings {
+        let server = TokioServer::start_conformance(TokioSettings {
             root: root.path().into(),
             access_policy: fixture_policy(),
             jwks_url: keys.url.clone(),
