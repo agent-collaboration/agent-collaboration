@@ -24,7 +24,7 @@ where
     Observe: FnMut() -> Observed,
     Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
     Deadline: FnMut() -> Armed,
-    Armed: Future<Output = ConformanceResult<Option<collaboration_central_core::RegistryTime>>>,
+    Armed: Future<Output = ConformanceResult<Option<collaboration_central_core::UnixMillis>>>,
 {
     let client = ConformanceClient::new(base)?;
     let started = collaboration_central_conformance::fixture_time()?;
@@ -59,17 +59,20 @@ where
         let ServerCall::Release { call: original_call, request: original_request } = first else { return Err("full-wait caller did not send Release".into()); };
         if observe().await? != vec![original_frame] { return Err("full-wait first call did not own exactly one waiter".into()); }
         let armed = deadline().await?.ok_or("full-wait call has no armed deadline")?;
-        let elapsed = armed.0 - started.0;
-        if elapsed < chrono::TimeDelta::milliseconds(19_999) || elapsed >= chrono::TimeDelta::seconds(30) {
+        let elapsed = armed.0 - started.0.timestamp_millis();
+        if !(19_999..30_000).contains(&elapsed) {
             return Err(format!("full configured wait did not finish inside the original 30-second drive lease: {elapsed:?}").into());
         }
-        if elapsed != chrono::TimeDelta::seconds(20) {
+        if elapsed != 20_000 {
             return Err("the actual armed holder deadline differs from the configured 20 seconds".into());
         }
         // No answer is sent. The real wake owner must end the entire configured
         // 20-second attempt before a replacement drive is needed at 30 seconds.
-        client.set_object_time(collaboration_central_core::ObjectAddress::Registry, armed).await?;
-        client.set_object_time(connection.clone(), armed).await?;
+        let expires_at = collaboration_central_core::RegistryTime(
+            chrono::DateTime::from_timestamp_millis(armed.0).ok_or("holder fixture deadline")?,
+        );
+        client.set_object_time(collaboration_central_core::ObjectAddress::Registry, expires_at).await?;
+        client.set_object_time(connection.clone(), expires_at).await?;
         let (retry_frame, retry) = received_within(&mut peer.socket, Duration::from_secs(30)).await?;
         let ServerCall::Release { call, request } = retry else { return Err("full-wait retry did not send Release".into()); };
         if call != original_call || request != original_request || retry_frame == original_frame { return Err("full-wait retry changed its durable call or reused a frame".into()); }
@@ -95,7 +98,7 @@ where
             }
         }).await??;
         if !observe().await?.is_empty() { return Err("completed full-wait call leaked its waiter".into()); }
-        println!("HOLDER_FULL_WAIT_CASE configured_20s_attempt_inside_30s_drive calls=2 observed_live_waiters=1 obsolete_waiters=0 original_drive_expiry_crossed=true first_attempt_ms={} passed", elapsed.num_milliseconds());
+        println!("HOLDER_FULL_WAIT_CASE configured_20s_attempt_inside_30s_drive calls=2 observed_live_waiters=1 obsolete_waiters=0 original_drive_expiry_crossed=true first_attempt_ms={} passed", elapsed);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
     tasks.abort_all();

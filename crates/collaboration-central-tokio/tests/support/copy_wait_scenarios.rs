@@ -334,9 +334,16 @@ async fn cases(client: &CopyClient, caller: &mut Caller) -> ConformanceResult<()
     let expiring = database("905")?;
     client.create(expiring).await?;
     client.start_wait(caller, expiring, position(1)?);
-    client
+    let pending_attempt = client
         .observed(expiring, |state| state.attempts == 1 && state.waiting == 1)
         .await?;
+    let deadline = pending_attempt
+        .deadlines
+        .first()
+        .ok_or("the real Copy wait has no armed deadline")?;
+    if deadline.deadline.0 - deadline.armed_at.0 != 2_000 {
+        return Err("the real Copy wait did not arm its configured two-second deadline".into());
+    }
     let operation = pending_operation(&reply(caller).await?)?;
     let step = client
         .pending_reach(operation, CallReach::MayHaveReached)

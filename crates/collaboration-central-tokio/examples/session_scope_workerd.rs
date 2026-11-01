@@ -457,7 +457,7 @@ async fn main() -> ConformanceResult<()> {
                 Ok(client.http.post(format!("{base}/__conformance/admission"))
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"kind":"holderDeadline","value":{"service":holder_full_wait::SERVICE}}))
-                    .send().await?.error_for_status()?.json::<Option<collaboration_central_core::RegistryTime>>().await?)
+                    .send().await?.error_for_status()?.json::<Option<collaboration_central_core::UnixMillis>>().await?)
             }).await
         }
         Scenario::Holder => {

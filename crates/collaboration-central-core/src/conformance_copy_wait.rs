@@ -55,8 +55,8 @@ pub(crate) struct CopyWaitObservation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CopyWaitDeadline {
-    pub armed_at: crate::RegistryTime,
-    pub deadline: crate::RegistryTime,
+    pub armed_at: fleet_identity_protocol::UnixMillis,
+    pub deadline: fleet_identity_protocol::UnixMillis,
 }
 
 #[derive(Default)]
@@ -89,8 +89,8 @@ impl CopyWaitProbe {
         deadline: runtime_primitives::SyncTime,
     ) -> Result<(), StoreError> {
         let actual = CopyWaitDeadline {
-            armed_at: crate::conformance_clock::observed_time(armed_at)?,
-            deadline: crate::conformance_clock::observed_time(deadline)?,
+            armed_at: crate::conformance_clock::observed_time(armed_at),
+            deadline: crate::conformance_clock::observed_time(deadline),
         };
         let mut state = self.state.lock().map_err(StoreError::backend)?;
         state.attempts = state.attempts.saturating_add(1);

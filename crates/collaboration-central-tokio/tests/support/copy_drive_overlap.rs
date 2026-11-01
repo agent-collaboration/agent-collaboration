@@ -81,8 +81,8 @@ where
             .observed(database, |state| state.attempts == 1 && state.waiting == 1)
             .await?;
         let armed = first.deadlines.first().ok_or("Copy wait has no actual armed deadline")?;
-        if armed.armed_at != release_at
-            || armed.deadline.0 - armed.armed_at.0 != chrono::TimeDelta::seconds(20)
+        if armed.armed_at.0 != release_at.0.timestamp_millis()
+            || armed.deadline.0 - armed.armed_at.0 != 20_000
         {
             return Err("the actual armed Copy deadline differs from the configured 20 seconds".into());
         }
@@ -122,18 +122,20 @@ where
         }
         // Only expiry of the original full Copy attempt releases the live drive.
         // The next attempt must replay the saved Release and retain its CallId.
+        let expires_at = RegistryTime(
+            chrono::DateTime::from_timestamp_millis(armed.deadline.0).ok_or("Copy fixture deadline")?,
+        );
         for address in [ObjectAddress::Registry, connection.clone(), ObjectAddress::Copy(database)] {
-            clock.set_object_time(address, armed.deadline).await?;
+            clock.set_object_time(address, expires_at).await?;
         }
         // The HTTP response follows recording this attempt's outcome. Only
         // then wake the durable caller again at the same controlled instant.
         callers.join_next().await.ok_or("Copy caller task disappeared")???;
-        clock.set_object_time(ObjectAddress::Registry, armed.deadline).await?;
+        clock.set_object_time(ObjectAddress::Registry, expires_at).await?;
         let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await?;
-        let elapsed = armed.deadline.0 - started.0;
+        let elapsed = armed.deadline.0 - started.0.timestamp_millis();
         let waited = armed.deadline.0 - armed.armed_at.0;
-        if elapsed < chrono::TimeDelta::seconds(37)
-            || waited < chrono::TimeDelta::milliseconds(19_900)
+        if elapsed < 37_000 || waited < 19_900
         {
             return Err("the Copy attempt ended before its full configured wait".into());
         }
@@ -163,7 +165,7 @@ where
         println!(
             "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={} terminal=retired passed",
             rejected.iter().filter(|id| **id == call.operation).count(),
-            elapsed.num_milliseconds()
+            elapsed
         );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }

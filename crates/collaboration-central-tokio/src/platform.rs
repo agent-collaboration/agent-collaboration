@@ -226,7 +226,7 @@ impl TokioCentralPlatform {
     pub async fn conformance_holder_deadline(
         &self,
         service: &message_board::ServiceId,
-    ) -> Result<Option<collaboration_central_core::RegistryTime>, durable_steps::StoreError> {
+    ) -> Result<Option<collaboration_central_core::UnixMillis>, durable_steps::StoreError> {
         self.objects.holder_deadline(service).await
     }
 

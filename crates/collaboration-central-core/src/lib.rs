@@ -29,6 +29,8 @@ pub use conformance_clock::ConformanceAccessClock;
 #[cfg(feature = "conformance")]
 pub use conformance_copy_wait::CopyWaitDeadline;
 #[cfg(feature = "conformance")]
+pub use fleet_identity_protocol::UnixMillis;
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;

@@ -114,16 +114,15 @@ where
 
     /// The real correlation hub's armed deadline, without changing its waiter.
     #[cfg(feature = "conformance")]
-    pub fn conformance_holder_deadline(&self) -> Result<Option<crate::RegistryTime>, StoreError> {
+    pub fn conformance_holder_deadline(&self) -> Result<Option<crate::UnixMillis>, StoreError> {
         let ObjectWork::Session { replies, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             });
         };
-        replies
+        Ok(replies
             .next_deadline()
-            .map(crate::conformance_clock::observed_time)
-            .transpose()
+            .map(crate::conformance_clock::observed_time))
     }
 
     #[cfg(feature = "conformance")]

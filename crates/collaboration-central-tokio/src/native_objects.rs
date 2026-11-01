@@ -583,7 +583,7 @@ impl NativeObjects {
     pub(crate) async fn holder_deadline(
         &self,
         service: &message_board::ServiceId,
-    ) -> Result<Option<collaboration_central_core::RegistryTime>, StoreError> {
+    ) -> Result<Option<collaboration_central_core::UnixMillis>, StoreError> {
         let slot = self
             .slots
             .lock()
