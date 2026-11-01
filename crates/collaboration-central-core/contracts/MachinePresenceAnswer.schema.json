@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "SequenceNumber": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "attachSequence": {
+          "$ref": "#/$defs/SequenceNumber"
+        },
+        "connectionId": {
+          "not": {
+            "const": "00000000-0000-0000-0000-000000000000"
+          },
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "openForMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silentForMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "const": "open",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "connectionId",
+        "attachSequence",
+        "openForMs",
+        "silentForMs"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "closedAgoMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "const": "notConnected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "MachinePresenceAnswer"
+}

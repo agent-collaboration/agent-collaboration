@@ -1,0 +1,23 @@
+{
+  "$defs": {
+    "RemoteLaunchAccess": {
+      "enum": [
+        "write-restricted",
+        "workspace-write"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "access": {
+      "$ref": "#/$defs/RemoteLaunchAccess"
+    }
+  },
+  "required": [
+    "access"
+  ],
+  "title": "RemoteLaunchPolicy",
+  "type": "object"
+}
