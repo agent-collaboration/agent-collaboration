@@ -198,3 +198,96 @@ async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_
     }
     runtime.shutdown().await;
 }
+
+#[tokio::test]
+async fn provider_setup_good_settings_register_the_actual_conversation_only_in_the_new_mode() {
+    use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
+    for mode in [
+        SessionRegistrationMode::AccessEnrollment,
+        SessionRegistrationMode::MachineTokens,
+    ] {
+        let directory = tempfile::tempdir_in("/tmp").unwrap();
+        let registrar_fixture =
+            super::setup_registrar_fixture::ProviderRegistrarFixture::new(mode).unwrap();
+        let settings = RequestedProviderSettings {
+            mode: Some("ask".to_owned()),
+            ..Default::default()
+        };
+        let setup = registrar_fixture
+            .create_setup(directory.path(), &settings)
+            .await
+            .unwrap();
+        let servers = match mode {
+            SessionRegistrationMode::AccessEnrollment => json!([]),
+            SessionRegistrationMode::MachineTokens => {
+                json!([{"type":"http","name":"router-collaboration","url":"http://127.0.0.1:43210/mcp/session/35353535353535353535353535353535"}])
+            }
+        };
+        let fixture = AcpFixtureScript::new()
+            .expect_request("initialize", "initialize", json!({"protocolVersion":1}))
+            .respond("initialize", json!({"protocolVersion":1,"agentCapabilities":{"mcpCapabilities":{"http":true}}}))
+            .expect_request("create", "session/new", json!({"mcpServers":servers}))
+            .respond("create", json!({"sessionId":"actual-provider-conversation","modes":{"currentModeId":"ask","availableModes":[{"id":"ask","name":"Ask"}]}}))
+            .expect_request("mode", "session/set_mode", json!({"sessionId":"actual-provider-conversation","modeId":"ask"}))
+            .respond("mode", json!({}))
+            .launch();
+        let runtime = ExternalProviderRuntime::initialize(fixture).await.unwrap();
+
+        let created = runtime
+            .create_session_with_settings(directory.path().into(), settings, setup)
+            .await
+            .unwrap();
+
+        assert_eq!(created.provider_session_id, "actual-provider-conversation");
+        if mode == SessionRegistrationMode::AccessEnrollment {
+            assert!(
+                registrar_fixture
+                    .repository
+                    .records
+                    .lock()
+                    .unwrap()
+                    .is_empty()
+            );
+            assert!(
+                registrar_fixture
+                    .authority
+                    .registrations
+                    .lock()
+                    .unwrap()
+                    .is_empty()
+            );
+        } else {
+            let registrations = registrar_fixture
+                .authority
+                .registrations
+                .lock()
+                .unwrap()
+                .clone();
+            assert_eq!(registrations.len(), 1);
+            assert_eq!(
+                registrations[0].session.session_id.as_str(),
+                "actual-provider-conversation"
+            );
+            assert_eq!(
+                registrations[0].isolation.kind,
+                fleet_identity_protocol::IsolationKind::Host
+            );
+            assert_eq!(
+                registrations[0].machine_environment,
+                fleet_identity_protocol::MachineEnvironment::CloudVm
+            );
+            assert_eq!(
+                registrations[0].started_by,
+                fleet_identity_protocol::StartedBy::RouterOperator {}
+            );
+            assert!(
+                registrar_fixture
+                    .registrar
+                    .resolve_binding_capability("35353535353535353535353535353535")
+                    .await
+                    .is_ok()
+            );
+        }
+        runtime.shutdown().await;
+    }
+}
