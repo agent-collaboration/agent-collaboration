@@ -20,14 +20,22 @@ async fn fleet_session_registrar_refuses_changed_effort_and_access_under_a_prepa
         .clone();
     for change_effort in [true, false] {
         let mut changed = fixture.declared_input(&intent);
-        let collaboration_contracts::HarnessDeclaredSettings::Native { effort, access, .. } =
-            &mut changed.settings
+        let collaboration_contracts::HarnessDeclaredSettings::Native {
+            effort,
+            permissions,
+            ..
+        } = &mut changed.settings
         else {
             panic!("native fixture settings");
         };
         if change_effort {
             *effort = Some("high".to_owned().try_into().unwrap());
         } else {
+            let collaboration_contracts::HarnessNativePermissions::Explicit { access, .. } =
+                permissions
+            else {
+                panic!("explicit native permissions");
+            };
             *access = collaboration_protocol::RouterAccess::WriteRestricted;
         }
         let identity = changed.identity().unwrap();

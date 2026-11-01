@@ -26,6 +26,7 @@ pub enum ScheduleDestination {
 
 #[derive(Clone, Debug)]
 pub struct FreshSessionRequest {
+    pub run_id: RunId,
     pub endpoint: EndpointRef,
     pub working_directory: String,
     pub project_id: Option<message_board::ProjectId>,

@@ -52,9 +52,9 @@ impl ProviderCreateAdmission {
                         .transpose()
                         .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
                     access: request.requested_policy.access,
+                    created_by: request.created_by.clone(),
+                    approver: request.approver.clone(),
                 },
-                created_by: request.created_by.clone(),
-                approver: request.approver.clone(),
                 user_mcp: HarnessMcpConfigurationIdentity::empty(),
             };
             let endpoint = board_endpoint(&request.endpoint)?;

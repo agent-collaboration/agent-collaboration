@@ -117,13 +117,15 @@ impl Fixture {
             settings: collaboration_contracts::HarnessDeclaredSettings::Native {
                 model: intent.launch_context.model.clone(),
                 effort: Some("low".to_owned().try_into().unwrap()),
-                access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                permissions: collaboration_contracts::HarnessNativePermissions::Explicit {
+                    access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                    created_by: caller.clone().into(),
+                    approver: caller.into(),
+                },
                 additional_directories: Vec::new(),
                 fork: None,
                 root_message_id: None,
             },
-            created_by: caller.clone().into(),
-            approver: caller.into(),
             user_mcp: collaboration_contracts::HarnessMcpConfigurationIdentity::empty(),
         }
     }

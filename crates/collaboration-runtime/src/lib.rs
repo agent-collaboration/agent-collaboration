@@ -21,6 +21,8 @@ pub use native_channel_relay::{
 };
 mod native_generation_gate;
 pub use native_generation_gate::{NativeAdmission, NativeGenerationGate};
+mod native_session_registration;
+pub use native_session_registration::NativeSessionRegistration;
 mod native_relay_listener;
 mod pending_snapshot_interactions;
 mod private_socket_listener;

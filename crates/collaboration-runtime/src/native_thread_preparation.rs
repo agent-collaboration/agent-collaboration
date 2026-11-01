@@ -12,6 +12,8 @@ pub(crate) struct NativePreparationInput<'a> {
     pub instruction_text: &'a str,
     pub model: Option<&'a str>,
     pub effort: &'a str,
+    pub registration: &'a crate::NativeSessionRegistration,
+    pub operation: Option<&'a collaboration_protocol::OperationId>,
 }
 pub(crate) struct NativePreparationFailure {
     pub explanation: &'static str,
@@ -73,7 +75,7 @@ pub(crate) async fn prepare(
     let mut effects = initial_effects(input.destination);
     effects.generation = Some(input.admission.generation().clone());
     let allocation = !matches!(input.destination, DestinationPreparation::Existing { .. });
-    let (operation, params) = match input.destination {
+    let (operation, mut params) = match input.destination {
         DestinationPreparation::Fresh { cwd, .. } => (
             NativeOperation::StartThread,
             json!({"cwd":cwd,"developerInstructions":input.instruction_text,"model":input.model,"config":{"model_reasoning_effort":input.effort},"allowProviderModelFallback":false,"threadSource":"user"}),
@@ -99,6 +101,35 @@ pub(crate) async fn prepare(
             uncertain: false,
         });
     };
+    let prepared = input
+        .registration
+        .prepare_start(
+            input.operation,
+            input.destination,
+            input.model,
+            input.effort,
+        )
+        .await
+        .map_err(|_| NativePreparationFailure {
+            explanation: "Session launch admission refused; no native mutation dispatched.",
+            effects: Box::new(effects.clone()),
+            uncertain: false,
+        })?;
+    if let Some(prepared) = &prepared {
+        let config = params
+            .get_mut("config")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| NativePreparationFailure {
+                explanation: "Native start configuration unavailable; no allocation dispatched.",
+                effects: Box::new(effects.clone()),
+                uncertain: false,
+            })?;
+        codex_acp_adapter::insert_session_binding_config(config, &prepared.binding)
+            .map_err(|_| NativePreparationFailure {
+                explanation: "Native session binding configuration invalid; no allocation dispatched.",
+                effects: Box::new(effects.clone()), uncertain: false,
+            })?;
+    }
     let retired = input.admission.retirement();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
     let connection=tokio::time::timeout_at(deadline,async{tokio::select!{biased;_=retired.cancelled()=>Err(NativeConnectionError::Unavailable),result=NativeProtocolConnection::connect(input.admission.backend_path())=>result}}).await.unwrap_or(Err(NativeConnectionError::Unavailable));
@@ -112,6 +143,12 @@ pub(crate) async fn prepare(
             });
         }
     };
+    if let Some(prepared) = &prepared {
+        prepared.port.mark_dispatched(&prepared.operation_id).await.map_err(|_| NativePreparationFailure {
+            explanation: "Session launch could not be consumed; no native allocation dispatched.",
+            effects: Box::new(effects.clone()), uncertain: false,
+        })?;
+    }
     if allocation {
         effects.allocation = PreparationEffect::Unknown;
     }
@@ -119,6 +156,25 @@ pub(crate) async fn prepare(
     let response = match result {
         Ok(response) => response,
         Err(error) => {
+            if let Some(prepared) = &prepared
+                && matches!(
+                    error,
+                    NativeConnectionError::Rejected { .. }
+                        | NativeConnectionError::InvalidInput
+                        | NativeConnectionError::Unavailable
+                )
+                && prepared
+                    .port
+                    .creation_refused(&prepared.operation_id)
+                    .await
+                    .is_err()
+            {
+                return Err(NativePreparationFailure {
+                    explanation: "Native creation refusal could not be retained; inspect before retrying.",
+                    effects: Box::new(effects),
+                    uncertain: true,
+                });
+            }
             let uncertain = allocation
                 && !matches!(
                     error,
@@ -164,6 +220,19 @@ pub(crate) async fn prepare(
         effects.allocation = PreparationEffect::Accepted;
     }
     effects.target = target.clone();
+    if let Some(prepared) = &prepared {
+        let session = id.and_then(|id| id.to_owned().try_into().ok())
+            .map(|session_id| message_board::SessionRef { endpoint: prepared.endpoint.clone(), session_id })
+            .ok_or_else(|| NativePreparationFailure {
+                explanation: "Native allocation returned no valid identity; inspect before retrying.",
+                effects: Box::new(effects.clone()), uncertain: true,
+            })?;
+        prepared.port.record_created(&prepared.operation_id, &session).await
+            .map_err(|_| NativePreparationFailure {
+                explanation: "Created native identity could not be retained; no registration attempted.",
+                effects: Box::new(effects.clone()), uncertain: true,
+            })?;
+    }
     let matches_existing = match (input.destination, &target) {
         (
             DestinationPreparation::Existing {
@@ -181,6 +250,10 @@ pub(crate) async fn prepare(
         || !matches_existing
         || target.is_none()
     {
+        if let Some(prepared) = &prepared {
+            let _ = prepared.port.refuse_setup(&prepared.operation_id,
+                collaboration_contracts::HarnessLocalSetupRefusal::EffectiveWorkingDirectoryMismatch).await;
+        }
         return Err(NativePreparationFailure {
             explanation: "Native response did not establish the requested identity/workspace; inspect retained effects before retrying.",
             effects: Box::new(effects),
@@ -188,11 +261,32 @@ pub(crate) async fn prepare(
         });
     }
     if allocation && response.get("model").and_then(Value::as_str) != input.model {
+        if let Some(prepared) = &prepared {
+            let _ = prepared
+                .port
+                .refuse_setup(
+                    &prepared.operation_id,
+                    collaboration_contracts::HarnessLocalSetupRefusal::ModelMismatch,
+                )
+                .await;
+        }
         return Err(NativePreparationFailure {
             explanation: "Native response did not confirm the requested model.",
             effects: Box::new(effects),
             uncertain: true,
         });
+    }
+    if let Some(prepared) = &prepared {
+        match prepared.port.complete_setup(&prepared.operation_id).await {
+            Ok(collaboration_contracts::HarnessRegistrationOutcome::Registered) => {}
+            _ => {
+                return Err(NativePreparationFailure {
+                    explanation: "Native session registration is not active; no work may be submitted.",
+                    effects: Box::new(effects),
+                    uncertain: true,
+                });
+            }
+        }
     }
     Ok((
         target.ok_or_else(|| NativePreparationFailure {

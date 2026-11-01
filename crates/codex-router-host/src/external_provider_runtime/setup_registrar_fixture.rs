@@ -173,9 +173,9 @@ impl ProviderRegistrarFixture {
                 model: settings.model.clone().map(TryInto::try_into).transpose()?,
                 effort: settings.effort.clone().map(TryInto::try_into).transpose()?,
                 access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                created_by: actor.clone().into(),
+                approver: actor.into(),
             },
-            created_by: actor.clone().into(),
-            approver: actor.into(),
             user_mcp: HarnessMcpConfigurationIdentity::empty(),
         };
         match self

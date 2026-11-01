@@ -289,6 +289,7 @@ impl CollaborationRuntime {
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
+                    native_session_registration: registrar.direct_native_registration(),
                     provider_endpoints,
                     directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),

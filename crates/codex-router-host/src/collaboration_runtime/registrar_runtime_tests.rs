@@ -1,6 +1,8 @@
 //! Public in-process caller composition; stand-ins earn no storage or restart proof.
 #[path = "registrar_runtime_test_fixture.rs"]
 mod fixture;
+#[path = "registrar_native_delivery_tests.rs"]
+mod native_delivery;
 #[path = "registrar_native_test_fixture.rs"]
 mod native_fixture;
 use crate::external_provider_runtime::acp_scripted_fixture::AcpFixtureScript;

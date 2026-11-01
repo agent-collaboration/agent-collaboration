@@ -36,6 +36,7 @@ pub struct CodexAppServerScheduledRuns {
     backend: NativeControlBackend,
     holder: std::sync::Arc<crate::UnmaterializedThreadHolder>,
     approval_broker: Option<std::sync::Weak<dyn codex_acp_adapter::ApprovalBroker>>,
+    session_registration: crate::NativeSessionRegistration,
 }
 
 fn native_effects_into_automation(
@@ -60,7 +61,17 @@ impl CodexAppServerScheduledRuns {
             backend,
             holder,
             approval_broker: None,
+            session_registration: crate::NativeSessionRegistration::AccessEnrollment,
         }
+    }
+
+    #[must_use]
+    pub fn with_session_registration(
+        mut self,
+        registration: crate::NativeSessionRegistration,
+    ) -> Self {
+        self.session_registration = registration;
+        self
     }
 
     pub(crate) fn with_approval_broker(
@@ -73,6 +84,7 @@ impl CodexAppServerScheduledRuns {
 
     async fn prepare_native(
         &self,
+        operation: Option<&collaboration_protocol::OperationId>,
         destination: DestinationPreparation,
         instruction_text: &str,
         model: Option<&str>,
@@ -103,6 +115,8 @@ impl CodexAppServerScheduledRuns {
                 instruction_text,
                 model,
                 effort,
+                registration: &self.session_registration,
+                operation,
             },
         )
         .await;
@@ -296,6 +310,8 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                     instruction_text: &request.instruction_text,
                     model: request.model.as_deref(),
                     effort: &request.effort,
+                    registration: &self.session_registration,
+                    operation: Some(&request.operation_id),
                 },
             )
             .await;
@@ -448,6 +464,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                 return Ok(PreparedTarget { target, evidence });
             }
             self.prepare_native(
+                None,
                 DestinationPreparation::Existing {
                     target,
                     cwd: declared_cwd,
@@ -467,7 +484,14 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {
         Box::pin(async move {
+            let operation = request
+                .run_id
+                .as_str()
+                .to_owned()
+                .try_into()
+                .map_err(|_| DeliveryContractError::InvalidEvidence)?;
             self.prepare_native(
+                Some(&operation),
                 DestinationPreparation::Fresh {
                     endpoint: request.endpoint,
                     cwd: request.working_directory,

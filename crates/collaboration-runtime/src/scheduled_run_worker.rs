@@ -608,6 +608,7 @@ impl ScheduledRunWorker {
                 self.execution
                     .prepare_fresh_session(
                         collaboration_contracts::FreshSessionRequest {
+                            run_id: record.run_id.clone(),
                             project_id,
                             endpoint,
                             working_directory: cwd,

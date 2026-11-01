@@ -19,6 +19,7 @@ pub(crate) struct SessionMessageRouteInputs {
     pub(crate) provider_endpoints: HashSet<EndpointRef>,
     pub(crate) directory: EndpointDirectory,
     pub(crate) native_backend: NativeControlBackend,
+    pub(crate) native_session_registration: collaboration_runtime::NativeSessionRegistration,
     pub(crate) approval_broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
     pub(crate) unmaterialized_threads: Arc<collaboration_runtime::UnmaterializedThreadHolder>,
     pub(crate) provider_supervisor: Option<Arc<ExternalProviderSupervisor>>,
@@ -33,6 +34,7 @@ pub(crate) fn compose_session_message_routes(
         provider_endpoints,
         directory,
         native_backend,
+        native_session_registration,
         approval_broker,
         unmaterialized_threads,
         provider_supervisor,
@@ -47,6 +49,7 @@ pub(crate) fn compose_session_message_routes(
             native_backend,
             unmaterialized_threads,
         )
+        .with_session_registration(native_session_registration)
         .with_approval_broker(&approval_broker),
     );
     let peer_route = Arc::new(ClaudeCodePeerDeliveryRoute::new(

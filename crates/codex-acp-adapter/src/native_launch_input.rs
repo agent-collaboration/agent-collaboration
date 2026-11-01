@@ -67,13 +67,15 @@ pub fn native_declared_launch_input(
         settings: HarnessDeclaredSettings::Native {
             model: optional(router, "model")?,
             effort: optional(router, "effort")?,
-            access: required(router, "access")?,
+            permissions: collaboration_contracts::HarnessNativePermissions::Explicit {
+                access: required(router, "access")?,
+                created_by: created_by.into(),
+                approver: approver.into(),
+            },
             additional_directories: optional(fields, "additionalDirectories")?.unwrap_or_default(),
             fork,
             root_message_id: optional(router, "rootMessageId")?,
         },
-        created_by: created_by.into(),
-        approver: approver.into(),
         user_mcp: configuration
             .fingerprint()
             .map_err(|_| InvalidNativeLaunchInput)?,

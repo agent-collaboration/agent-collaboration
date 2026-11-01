@@ -105,7 +105,11 @@ pub(crate) fn declared_conversation_launch_input(
                 .map(TryInto::try_into)
                 .transpose()
                 .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
-            access: input.access,
+            permissions: collaboration_contracts::HarnessNativePermissions::Explicit {
+                access: input.access,
+                created_by,
+                approver,
+            },
             additional_directories: Vec::new(),
             fork: input.fork.as_ref().map(|session_id| HarnessForkInput {
                 source: collaboration_protocol::SessionRef {
@@ -140,6 +144,8 @@ pub(crate) fn declared_conversation_launch_input(
                 .transpose()
                 .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
             access: input.access,
+            created_by,
+            approver,
         }
     };
     Ok(HarnessDeclaredLaunchInput {
@@ -153,8 +159,6 @@ pub(crate) fn declared_conversation_launch_input(
             .try_into()
             .map_err(|_| HarnessLaunchFailure::InvalidInput)?,
         settings,
-        created_by,
-        approver,
         user_mcp: HarnessMcpConfigurationIdentity::empty(),
     })
 }

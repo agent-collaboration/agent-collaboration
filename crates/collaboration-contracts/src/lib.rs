@@ -17,7 +17,7 @@ mod harness_launch_identity;
 mod harness_session_launch;
 pub use harness_launch_identity::{
     HarnessDeclaredLaunchInput, HarnessDeclaredSettings, HarnessForkInput, HarnessLaunchIdentity,
-    HarnessLaunchIdentityEncoding, HarnessMcpConfigurationIdentity,
+    HarnessLaunchIdentityEncoding, HarnessMcpConfigurationIdentity, HarnessNativePermissions,
 };
 mod native_delivery_result;
 mod provider_conversation_backend;

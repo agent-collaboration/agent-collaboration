@@ -36,11 +36,26 @@ pub struct HarnessForkInput {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
+pub enum HarnessNativePermissions {
+    InheritBackend,
+    Explicit {
+        access: RouterAccess,
+        created_by: ProviderIdentity,
+        approver: ProviderIdentity,
+    },
+}
+
+#[derive(Clone, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum HarnessDeclaredSettings {
     Native {
         model: Option<ModelName>,
         effort: Option<NonEmptyText>,
-        access: RouterAccess,
+        permissions: HarnessNativePermissions,
         additional_directories: Vec<AbsolutePath>,
         fork: Option<HarnessForkInput>,
         root_message_id: Option<UuidIdentity>,
@@ -50,6 +65,8 @@ pub enum HarnessDeclaredSettings {
         effort: Option<NonEmptyText>,
         access: RouterAccess,
         mode: Option<NonEmptyText>,
+        created_by: ProviderIdentity,
+        approver: ProviderIdentity,
     },
 }
 
@@ -60,8 +77,6 @@ pub struct HarnessDeclaredLaunchInput {
     pub endpoint: EndpointRef,
     pub working_directory: AbsolutePath,
     pub settings: HarnessDeclaredSettings,
-    pub created_by: ProviderIdentity,
-    pub approver: ProviderIdentity,
     pub user_mcp: HarnessMcpConfigurationIdentity,
 }
 
@@ -76,8 +91,6 @@ struct CanonicalLaunchInput<'input> {
     endpoint: &'input EndpointRef,
     working_directory: &'input AbsolutePath,
     settings: &'input HarnessDeclaredSettings,
-    created_by: &'input ProviderIdentity,
-    approver: &'input ProviderIdentity,
     user_mcp_fingerprint: &'input [u8; 32],
 }
 
@@ -88,8 +101,6 @@ impl HarnessDeclaredLaunchInput {
             endpoint: &self.endpoint,
             working_directory: &self.working_directory,
             settings: &self.settings,
-            created_by: &self.created_by,
-            approver: &self.approver,
             user_mcp_fingerprint: &self.user_mcp.0,
         };
         let bytes = serde_json::to_vec(&canonical).map_err(|_| HarnessLaunchIdentityEncoding)?;

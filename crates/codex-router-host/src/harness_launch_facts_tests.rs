@@ -42,13 +42,15 @@ async fn host_launch_facts_keep_the_confirmed_environment_and_assert_host_with_f
         settings: HarnessDeclaredSettings::Native {
             model: Some("fixture-model".to_owned().try_into().unwrap()),
             effort: None,
-            access: collaboration_protocol::RouterAccess::WriteRestricted,
+            permissions: collaboration_contracts::HarnessNativePermissions::Explicit {
+                access: collaboration_protocol::RouterAccess::WriteRestricted,
+                created_by: actor.clone().into(),
+                approver: actor.clone().into(),
+            },
             additional_directories: Vec::new(),
             fork: None,
             root_message_id: None,
         },
-        created_by: actor.clone().into(),
-        approver: actor.into(),
         user_mcp: HarnessMcpConfigurationIdentity::empty(),
     };
     let operation = "019f0000-0000-7000-8000-000000000020"
@@ -65,6 +67,8 @@ async fn host_launch_facts_keep_the_confirmed_environment_and_assert_host_with_f
         effort: None,
         access: collaboration_protocol::RouterAccess::WorkspaceWrite,
         mode: Some("provider-mode".to_owned().try_into().unwrap()),
+        created_by: actor.clone().into(),
+        approver: actor.into(),
     };
     let cloud = declared_host_launch(&operation, &declared, &MachineEnvironment::CloudVm, &ids)
         .await

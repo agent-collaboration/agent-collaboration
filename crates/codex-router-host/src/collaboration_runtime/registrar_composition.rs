@@ -109,6 +109,29 @@ impl RegistrarStartupInput {
 }
 
 impl RegistrarRuntime {
+    pub(super) fn direct_native_registration(
+        &self,
+    ) -> collaboration_runtime::NativeSessionRegistration {
+        match self {
+            Self::AccessEnrollment => {
+                collaboration_runtime::NativeSessionRegistration::AccessEnrollment
+            }
+            #[cfg(feature = "runtime-test-support")]
+            Self::MachineTokens {
+                registrar,
+                confirmed_machine_environment,
+                ids,
+            } => collaboration_runtime::NativeSessionRegistration::MachineTokens {
+                port: Self::launch_port(
+                    registrar,
+                    confirmed_machine_environment,
+                    ids,
+                    crate::HostHarnessMcpServer::Native,
+                ),
+            },
+        }
+    }
+
     #[cfg(feature = "runtime-test-support")]
     fn launch_port(
         registrar: &Arc<FleetSessionRegistrar>,
