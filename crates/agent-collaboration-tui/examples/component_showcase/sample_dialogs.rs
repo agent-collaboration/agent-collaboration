@@ -15,8 +15,8 @@ use agent_collaboration_tui::{
         button_target,
     },
     controls::list::{
-        ListNavigationPolicy, ListRow, ListSelectionBinding, ListSelectionControl, ScrollHandle,
-        ScrollList, SelectOption,
+        ListNavigationPolicy, ListRow, ListRows, ListSelectionBinding, ListSelectionControl,
+        ScrollHandle, ScrollList, SelectOption,
     },
     dialog::help::{HelpControl, HelpDialog},
     dialog::{DialogFrame, DialogKeyHints, DialogSection, DialogSections, PinnedContext},
@@ -396,7 +396,9 @@ pub fn complete_fixture(stack: SurfaceStackHandle, data: &SampleData, bindings: 
             }
             bindings
                 .list
-                .replace_rows(data.visible_keys().into_iter().rev().collect())
+                .replace_rows(ListRows::Ungrouped(
+                    data.visible_keys().into_iter().rev().collect(),
+                ))
                 .expect("suspended list update");
         }
         _ => {

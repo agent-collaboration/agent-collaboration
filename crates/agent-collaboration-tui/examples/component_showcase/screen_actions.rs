@@ -11,7 +11,7 @@ use agent_collaboration_tui::{
         ActionRegistry, ActionTitle, Availability, AvailabilityFn, Checked, Placement, ScopeId,
     },
     controls::fields::{TextFieldState, button_target},
-    controls::list::{ListNavigationPolicy, ListSelectionBinding, ListSelectionControl},
+    controls::list::{ListNavigationPolicy, ListRows, ListSelectionBinding, ListSelectionControl},
     controls::{self, toolbar_target},
     dialog::help::HelpControl,
     surfaces::focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
@@ -170,7 +170,7 @@ pub fn build_screen(
                 let mut filter = data.filter;
                 filter.set(TextFieldState::default());
                 list_filter
-                    .replace_rows(data.visible_keys())
+                    .replace_rows(ListRows::Ungrouped(data.visible_keys()))
                     .expect("valid filter rows");
             } else {
                 data.update(|model| model.setting = SampleSetting::All);
@@ -283,7 +283,7 @@ pub fn build_screen(
                 data.filter,
                 Handler::from(move |_: String| {
                     filter_list
-                        .replace_rows(data.visible_keys())
+                        .replace_rows(ListRows::Ungrouped(data.visible_keys()))
                         .expect("unique filtered rows");
                 }),
             ))
@@ -506,7 +506,7 @@ fn fixture_actions(
             let mut stored = data.rows;
             stored.set(rows);
             reorder
-                .replace_rows(data.visible_keys())
+                .replace_rows(ListRows::Ungrouped(data.visible_keys()))
                 .expect("reordered keys");
         },
     ));
@@ -525,7 +525,7 @@ fn fixture_actions(
             let mut stored = data.rows;
             stored.set(rows);
             remove
-                .replace_rows(data.visible_keys())
+                .replace_rows(ListRows::Ungrouped(data.visible_keys()))
                 .expect("remaining keys");
         },
     ));
@@ -539,7 +539,8 @@ fn fixture_actions(
         move |()| {
             let mut rows = data.rows;
             rows.set(Vec::new());
-            list.replace_rows(Vec::new()).expect("empty keys");
+            list.replace_rows(ListRows::Ungrouped(Vec::new()))
+                .expect("empty keys");
         },
     ));
     actions.push(action(

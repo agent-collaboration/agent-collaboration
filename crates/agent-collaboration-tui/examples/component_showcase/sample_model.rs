@@ -7,7 +7,7 @@ use agent_collaboration_tui::{
     actions::{ActionDef, ActionId, ActionRisk, AvailabilityFn, Placement},
     controls::combo::ComboBoxState,
     controls::fields::TextFieldState,
-    controls::list::{ListRowKey, ListSelectionState, OptionKey, SelectOption},
+    controls::list::{ListRowKey, ListRows, ListSelectionState, OptionKey, SelectOption},
     surfaces::focus_model::TargetId,
 };
 use iocraft::prelude::*;
@@ -334,7 +334,7 @@ pub fn initial_choices() -> ComboBoxState {
 )]
 pub fn initial_list() -> ListSelectionState {
     ListSelectionState::new(
-        fixture_rows().into_iter().map(|row| row.key).collect(),
+        ListRows::Ungrouped(fixture_rows().into_iter().map(|row| row.key).collect()),
         None,
     )
     .expect("unique fixed rows")
