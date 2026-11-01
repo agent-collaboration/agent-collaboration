@@ -416,12 +416,13 @@ impl MachineLoginOwner {
             return;
         };
         self.renew_at = Some(renewal_deadline(self.clock.now(), issued.valid_until));
+        let enrollment_id = metadata.enrollment_id.clone();
         self.saved = SavedLogin::Refreshable {
-            metadata: metadata.clone(),
+            metadata,
             credential: issued.credential,
         };
         self.token.send_replace(MachineAccessToken::Granted {
-            enrollment_id: metadata.enrollment_id.clone(),
+            enrollment_id,
             token: issued.token,
             expires_at: issued.valid_until,
         });

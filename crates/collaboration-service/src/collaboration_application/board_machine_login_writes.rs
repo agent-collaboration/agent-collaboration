@@ -19,7 +19,7 @@ async fn held_project(
     fixture: &Fixture,
 ) -> std::sync::Arc<collaboration_runtime::NativeProjectStore> {
     let registry = fixture.board.registry.as_ref().unwrap();
-    let project = PROJECT.to_owned().try_into().unwrap();
+    let project: message_board::ProjectId = PROJECT.to_owned().try_into().unwrap();
     let store = registry.open_project(&project).await.unwrap();
     let now = runtime_primitives::SyncTime::from_unix_millis(1_000);
     registry
@@ -80,7 +80,7 @@ async fn held_project(
         .unwrap();
     write.commit().await.unwrap();
     let mut write = store.begin_admission(origin()).await.unwrap();
-    let assignment_id = "019f0000-0000-7000-8000-000000000017"
+    let assignment_id: message_board::RoleAssignmentId = "019f0000-0000-7000-8000-000000000017"
         .to_owned()
         .try_into()
         .unwrap();

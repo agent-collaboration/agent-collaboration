@@ -19,8 +19,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::super::{
-    device_code_flow::run_device_code_login,
-    login_contract::RefreshCredentialKeeping,
+    device_code_flow::run_device_code_login, login_contract::RefreshCredentialKeeping,
 };
 use super::*;
 

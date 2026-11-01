@@ -243,6 +243,32 @@ async fn login(router: &Path) -> TestResult<std::process::Output> {
         .map_err(io::Error::other)
         .map_err(Into::into)
 }
+
+fn failed_cli(output: &std::process::Output, context: &str) -> Box<dyn Error> {
+    // The executable speaks only public display events/errors here. Redact all
+    // fixture canaries anyway so a failing privacy assertion never prints one.
+    let redact = |bytes: &[u8]| {
+        let mut text = String::from_utf8_lossy(bytes).into_owned();
+        for canary in [
+            ACCESS,
+            DEVICE,
+            "ABCD-EFGH",
+            "f11-refresh-secret-canary",
+            "full-url-secret-canary",
+            "old-enrollment-secret-canary",
+        ] {
+            text = text.replace(canary, "[REDACTED]");
+        }
+        text.chars().take(4_096).collect::<String>()
+    };
+    io::Error::other(format!(
+        "{context}: status={}; stdout={:?}; stderr={:?}",
+        output.status,
+        redact(&output.stdout),
+        redact(&output.stderr)
+    ))
+    .into()
+}
 async fn require_gate(client: &CollaborationClient, logged_in: bool) -> TestResult {
     let result = client
         .workspace_list(WorkspaceListRequest {
@@ -305,7 +331,7 @@ async fn fleet_machine_login_actual_cli_host_encryption_and_saved_identity_survi
         if !output.status.success()
             || !String::from_utf8_lossy(&output.stdout).contains("ABCD-EFGH")
         {
-            return Err("actual CLI login failed".into());
+            return Err(failed_cli(&output, "actual CLI login failed"));
         }
         if !String::from_utf8_lossy(&output.stdout).contains("encrypted store") {
             return Err("CLI did not report encrypted keeping".into());
@@ -390,7 +416,7 @@ async fn fleet_machine_login_actual_cli_memory_only_restart_requires_a_fresh_dev
                 || !String::from_utf8_lossy(&output.stdout)
                     .contains("approve this machine again after a restart")
             {
-                return Err("memory-only CLI login failed".into());
+                return Err(failed_cli(&output, "memory-only CLI login failed"));
             }
             require_gate(&client, true).await?;
             Ok(())
