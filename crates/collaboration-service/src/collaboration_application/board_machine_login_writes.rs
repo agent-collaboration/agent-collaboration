@@ -242,9 +242,7 @@ async fn machine_login_gate_is_local_to_board_families_and_never_enters_typed_fo
     assert!(!wire.contains("notLoggedIn"));
     assert!(!wire.contains("runFleetLogin"));
     let decoded: BoardClientAnswer = serde_json::from_str(&wire).unwrap();
-    let BoardClientAnswer::ForwardedPost(payload) = decoded else {
-        panic!("forwarded-post answer");
-    };
+    let BoardClientAnswer::ForwardedPost(payload) = decoded;
     let restored: message_board::WriteReply = payload.decode().unwrap();
     assert_eq!(restored, reply);
 }

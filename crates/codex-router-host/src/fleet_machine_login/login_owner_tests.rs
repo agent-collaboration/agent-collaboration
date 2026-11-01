@@ -269,67 +269,6 @@ async fn fleet_machine_login_unknown_redemption_never_replays_or_opens_gate() {
 }
 
 #[tokio::test]
-async fn fleet_machine_login_unconfirmed_publication_keeps_real_file_and_gate_closed_across_restart()
- {
-    let fixture = Fixture::new();
-    let running = fixture.start(|_| Err(std::io::Error::other("injected directory sync failure")));
-    let mut events = fixture.observe(&running);
-    assert!(matches!(
-        events.recv().await,
-        Some(FleetLoginEvent::Code { .. })
-    ));
-    fixture.issue();
-
-    assert!(matches!(
-        events.recv().await,
-        Some(FleetLoginEvent::OutcomeUnknown {
-            context: FleetLoginUnknown::CredentialPublication {
-                keeping: RefreshCredentialKeeping::MemoryOnly,
-                ..
-            }
-        })
-    ));
-    assert_eq!(
-        running.handle.source.machine_login_state(),
-        MachineLoginState::NotLoggedIn
-    );
-    assert_eq!(
-        read_metadata(fixture.root.path())
-            .unwrap()
-            .unwrap()
-            .enrollment_id
-            .as_str(),
-        ENROLLMENT
-    );
-    running.shutdown().await.unwrap();
-    let restarted = fixture.start(sync_directory);
-    assert_eq!(
-        restarted.handle.source.machine_login_state(),
-        MachineLoginState::NotLoggedIn
-    );
-    let mut other = restarted.handle.observe(
-        "019f0000-0000-7000-8000-000000000099"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-        "Other organization".to_owned().try_into().unwrap(),
-    );
-    assert!(matches!(
-        other.recv().await,
-        Some(FleetLoginEvent::Refused {
-            reason: FleetLoginRefusal::AlreadyInOrganization { .. }
-        })
-    ));
-    let mut fresh = fixture.observe(&restarted);
-    assert!(matches!(
-        fresh.recv().await,
-        Some(FleetLoginEvent::Code { .. })
-    ));
-    assert_eq!(fixture.issuer.authorizations.load(Ordering::SeqCst), 2);
-    restarted.shutdown().await.unwrap();
-}
-
-#[tokio::test]
 async fn fleet_machine_login_background_refresh_failure_withdraws_gate_and_requires_new_code() {
     let fixture = Fixture::new();
     let running = fixture.start(sync_directory);
@@ -364,91 +303,6 @@ async fn fleet_machine_login_background_refresh_failure_withdraws_gate_and_requi
         Some(FleetLoginEvent::Code { .. })
     ));
     assert_eq!(fixture.issuer.authorizations.load(Ordering::SeqCst), 2);
-    running.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn fleet_machine_login_failed_retirement_sync_is_unknown_after_real_deletion_and_keeps_gate_closed()
- {
-    use codex_router_secret_store::{
-        SecretStore,
-        encrypted_credential_store::EncryptedCredentialStore,
-        file_backend::FileSecretStore,
-        fleet_secret_key::{FleetSecretKey, FleetSecretKind},
-        keychain_data_key::PooledCredentialDataKey,
-    };
-    let fixture = Fixture::new();
-    let files = FileSecretStore::open(fixture.root.path().join("secrets")).unwrap();
-    let encrypted =
-        EncryptedCredentialStore::new(files, PooledCredentialDataKey::from_bytes([0x54; 32]));
-    let installation = "019f0000-0000-7000-8000-000000000002";
-    let old = FleetSecretKey::new(
-        FleetSecretKind::MachineCredential,
-        installation,
-        "019f0000-0000-7000-8000-000000000009",
-    )
-    .unwrap()
-    .secret_key()
-    .unwrap();
-    encrypted
-        .write_staged(&old, &SecretString::new("old-enrollment-canary"))
-        .unwrap();
-    let failing = codex_router_secret_store::test_support::with_machine_retirement_sync_failure(
-        encrypted.clone(),
-    );
-    let credentials = Arc::new(RefreshCredentialStore::Encrypted {
-        store: Arc::new(failing),
-        installation: installation.to_owned().try_into().unwrap(),
-    });
-    let running = fixture.start_with_credentials(sync_directory, credentials);
-    let mut events = fixture.observe(&running);
-    assert!(matches!(
-        events.recv().await,
-        Some(FleetLoginEvent::Code { .. })
-    ));
-    fixture.issue();
-
-    assert!(matches!(
-        events.recv().await,
-        Some(FleetLoginEvent::OutcomeUnknown {
-            context: FleetLoginUnknown::CredentialPublication {
-                keeping: RefreshCredentialKeeping::EncryptedStore,
-                ..
-            }
-        })
-    ));
-
-    assert_eq!(
-        running.handle.source.machine_login_state(),
-        MachineLoginState::NotLoggedIn
-    );
-    assert!(
-        !fixture
-            .root
-            .path()
-            .join("secrets")
-            .join(format!("{}.v2", old.as_str()))
-            .exists()
-    );
-    let active = FleetSecretKey::new(FleetSecretKind::MachineCredential, installation, ENROLLMENT)
-        .unwrap()
-        .secret_key()
-        .unwrap();
-    assert!(
-        encrypted
-            .read_secret(&active)
-            .unwrap()
-            .expose_secret()
-            .contains("refresh-secret-canary")
-    );
-    assert_eq!(
-        read_metadata(fixture.root.path())
-            .unwrap()
-            .unwrap()
-            .enrollment_id
-            .as_str(),
-        ENROLLMENT
-    );
     running.shutdown().await.unwrap();
 }
 
@@ -585,3 +439,6 @@ async fn fleet_machine_login_records_public_outcomes_and_ids_without_codes_or_cr
         assert!(!text.contains(secret));
     }
 }
+
+#[path = "login_owner_storage_tests.rs"]
+mod storage;

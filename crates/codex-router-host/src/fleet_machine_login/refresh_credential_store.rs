@@ -111,7 +111,7 @@ impl RefreshCredentialStore {
                 let encoded = serde_json::to_string(&wire)
                     .map_err(|_| RefreshCredentialError::WriteFailed)?;
                 store
-                    .write_staged(
+                    .write_staged_confirmed(
                         &credential_key(installation, &credential.machine_client_id)?,
                         &SecretString::new(encoded),
                     )

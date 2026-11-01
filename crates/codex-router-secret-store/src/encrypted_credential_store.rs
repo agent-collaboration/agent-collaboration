@@ -50,6 +50,8 @@ pub struct EncryptedCredentialStore {
     state: CredentialStoreState,
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) retirement_sync: Option<fn(&std::path::Path) -> std::io::Result<()>>,
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) confirmed_write_sync: Option<fn(&std::path::Path) -> std::io::Result<()>>,
 }
 
 #[derive(Clone, Debug)]
@@ -283,6 +285,8 @@ impl EncryptedCredentialStore {
             state: CredentialStoreState::Ready(data_key),
             #[cfg(any(test, feature = "test-support"))]
             retirement_sync: None,
+            #[cfg(any(test, feature = "test-support"))]
+            confirmed_write_sync: None,
         }
     }
 
@@ -294,6 +298,8 @@ impl EncryptedCredentialStore {
             state: CredentialStoreState::KeyUnavailable,
             #[cfg(any(test, feature = "test-support"))]
             retirement_sync: None,
+            #[cfg(any(test, feature = "test-support"))]
+            confirmed_write_sync: None,
         }
     }
 
@@ -311,6 +317,8 @@ impl EncryptedCredentialStore {
             state: CredentialStoreState::MigrationIncomplete { accounts, failure },
             #[cfg(any(test, feature = "test-support"))]
             retirement_sync: None,
+            #[cfg(any(test, feature = "test-support"))]
+            confirmed_write_sync: None,
         }
     }
 
@@ -357,11 +365,37 @@ impl EncryptedCredentialStore {
             ),
         }
     }
+
+    /// Publishes an encrypted credential and confirms its directory update before returning.
+    /// F11 uses this for refresh rotation; existing staged-write callers keep their contract.
+    pub fn write_staged_confirmed(
+        &self,
+        key: &SecretKey,
+        secret: &SecretString,
+    ) -> Result<(), SecretStoreError> {
+        require_encrypted_secret_key(key)?;
+        let data_key = self.ready_data_key()?;
+        let envelope = encrypt_envelope(data_key, key, secret.expose_secret().as_bytes())?;
+        let _store_lock =
+            CredentialStoreLock::acquire(self.file_store.root(), CredentialStoreLockMode::Shared)?;
+        self.file_store.write_credential_envelope(key, &envelope)?;
+        let sync = |directory: &std::path::Path| std::fs::File::open(directory)?.sync_all();
+        #[cfg(any(test, feature = "test-support"))]
+        let sync = self.confirmed_write_sync.unwrap_or(sync);
+        sync(self.file_store.root()).map_err(|source| SecretStoreError::Filesystem {
+            path: self.file_store.root().to_path_buf(),
+            source,
+        })
+    }
 }
 
 #[cfg(test)]
 #[path = "machine_credential_retirement_tests.rs"]
 mod machine_credential_retirement_tests;
+
+#[cfg(test)]
+#[path = "confirmed_credential_write_tests.rs"]
+mod confirmed_credential_write_tests;
 
 impl SecretStore for EncryptedCredentialStore {
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {

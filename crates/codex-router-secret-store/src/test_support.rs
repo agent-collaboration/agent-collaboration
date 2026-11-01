@@ -35,6 +35,29 @@ pub fn with_machine_retirement_sync_failure(
     store
 }
 
+/// Fails confirmed-write directory sync after the real encrypted-envelope rename.
+#[must_use]
+pub fn with_confirmed_credential_sync_failure(
+    mut store: EncryptedCredentialStore,
+) -> EncryptedCredentialStore {
+    store.confirmed_write_sync = Some(|_| {
+        Err(std::io::Error::other(
+            "injected credential directory sync failure",
+        ))
+    });
+    store
+}
+
+/// Injects only the final confirmed-write directory sync, retaining real file I/O.
+#[must_use]
+pub fn with_confirmed_credential_directory_sync(
+    mut store: EncryptedCredentialStore,
+    sync: fn(&Path) -> std::io::Result<()>,
+) -> EncryptedCredentialStore {
+    store.confirmed_write_sync = Some(sync);
+    store
+}
+
 impl KeychainAccess for DeterministicTestKeychainAccess {
     fn read_secret(
         &self,

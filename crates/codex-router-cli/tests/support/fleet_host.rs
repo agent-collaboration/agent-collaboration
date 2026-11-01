@@ -131,7 +131,9 @@ impl OwnedHost {
             .spawn()?;
         Ok(Self {
             child,
-            operator: root.join("router/operator.sock"),
+            operator: HostCoordinationPaths::for_router_root(&root.join("router"))
+                .operator_socket()
+                .to_owned(),
         })
     }
 
@@ -203,10 +205,7 @@ async fn host_child() -> TestResult {
         .with_environment("CODEX_ENROLLMENT_PROCESS_LOG", root.join("native-pids.log"))
         .with_output(ChildOutput::Null);
     let config = HostConfig::new(HostConfigInputs {
-        coordination_paths: HostCoordinationPaths::new(
-            root.join("router/operator.sock"),
-            root.join("router/instance.lock"),
-        ),
+        coordination_paths: HostCoordinationPaths::for_router_root(&root.join("router")),
         router_endpoint: router,
         mcp_bind: ([127, 0, 0, 1], 0).into(),
         app_server_socket: native,
