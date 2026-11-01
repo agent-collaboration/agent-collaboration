@@ -233,6 +233,12 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     _ => ProviderOperationCompletion::Failure(failure),
                                 }
                             }
+                            Err(ExternalProviderRuntimeError::SessionSetupFailed { provider_session_id, failure: setup_failure }) => {
+                                let target = SessionId::try_from(provider_session_id.clone()).ok()
+                                    .map(|session_id| SessionRef { endpoint, session_id });
+                                ProviderOperationCompletion::Failure(runtime_failure(operation_id, target,
+                                    ExternalProviderRuntimeError::SessionSetupFailed { provider_session_id, failure: setup_failure }))
+                            }
                             Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
                                 operation_id,
                                 None,

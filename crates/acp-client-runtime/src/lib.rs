@@ -49,8 +49,8 @@ mod provider_session_actor;
 mod provider_session_mcp;
 mod provider_session_setup;
 pub use provider_session_setup::{
-    ProviderSessionCreateSetup, ProviderSessionSetupFuture, ProviderSessionSetupPort,
-    ProviderSessionSetupReadiness, ProviderSessionSetupUnavailable,
+    ProviderSessionCreateSetup, ProviderSessionSetupFailure, ProviderSessionSetupFuture,
+    ProviderSessionSetupPort, ProviderSessionSetupReadiness, ProviderSessionSetupUnavailable,
 };
 mod provider_session_setting_update;
 mod provider_session_settings;

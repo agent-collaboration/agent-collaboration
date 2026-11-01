@@ -142,7 +142,6 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         #[cfg(any(test, feature = "test-observation"))]
         test_tool_calls,
     } = inputs;
-    let _declared_setup_port = &setup_port;
     let (registration_tx, mut registration_rx) = tokio::sync::oneshot::channel::<
         Result<ProviderSessionRegistration<P>, ExternalProviderRuntimeError>,
     >();
@@ -154,11 +153,33 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
         .block_task()
         .run_until(async move |session| {
             let provider_session_id = session.session_id().to_string();
+            if let Some(port) = &setup_port
+                && port.created(&provider_session_id).await.is_err()
+            {
+                registration_tx.send(Err(ExternalProviderRuntimeError::SessionSetupFailed {
+                    provider_session_id, failure: crate::ProviderSessionSetupFailure::CreatedSaveUnconfirmed,
+                })).map_err(|_| agent_client_protocol::Error::internal_error())?;
+                return Ok(());
+            }
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response);
             let (applied, failure) =
                 apply_initial_settings(&session, &requested_settings, &mut settings_catalog).await;
+            if let Some(port) = &setup_port {
+                let failed_setting = match &failure {
+                    None => None,
+                    Some(SettingSetupFailure::Invalid { kind, .. }
+                        | SettingSetupFailure::Agent { kind, .. }
+                        | SettingSetupFailure::Uncertain { kind, .. }) => Some(*kind),
+                };
+                if let Err(failure) = finish_managed_setup(port.as_ref(), &provider_session_id, failed_setting).await {
+                    registration_tx.send(Err(ExternalProviderRuntimeError::SessionSetupFailed {
+                        provider_session_id, failure,
+                    })).map_err(|_| agent_client_protocol::Error::internal_error())?;
+                    return Ok(());
+                }
+            }
             let setup_error = match failure {
                 None => None,
                 Some(SettingSetupFailure::Invalid {
@@ -294,6 +315,31 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             () = shutdown.cancelled() => Ok(()),
             result = &mut session_future => result,
         };
+    }
+}
+
+async fn finish_managed_setup(
+    port: &dyn crate::ProviderSessionSetupPort,
+    provider_session_id: &str,
+    failed_setting: Option<crate::ProviderSettingKind>,
+) -> Result<(), crate::ProviderSessionSetupFailure> {
+    use crate::{
+        ProviderSessionSetupFailure as Failure, ProviderSessionSetupReadiness as Readiness,
+    };
+    if let Some(setting) = failed_setting {
+        port.setup_refused(provider_session_id, setting)
+            .await
+            .map_err(|_| Failure::RefusalSaveUnconfirmed { setting })?;
+        return Err(Failure::InitialSettingRefused { setting });
+    }
+    match port
+        .setup_passed(provider_session_id)
+        .await
+        .map_err(|_| Failure::ActivationUnconfirmed)?
+    {
+        Readiness::Ready => Ok(()),
+        Readiness::Pending => Err(Failure::ActivationPending),
+        Readiness::Refused => Err(Failure::ActivationRefused),
     }
 }
 

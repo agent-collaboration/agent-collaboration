@@ -8,6 +8,16 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub struct ProviderSessionSetupUnavailable;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderSessionSetupFailure {
+    CreatedSaveUnconfirmed,
+    InitialSettingRefused { setting: ProviderSettingKind },
+    RefusalSaveUnconfirmed { setting: ProviderSettingKind },
+    ActivationPending,
+    ActivationRefused,
+    ActivationUnconfirmed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderSessionSetupReadiness {
     Ready,
     Pending,

@@ -7,7 +7,7 @@ use acp_client_runtime::{
 };
 use serde_json::json;
 use std::sync::{Arc, Mutex};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 struct RecordedSetup {
     saved: tokio::net::UnixListener,
@@ -32,6 +32,12 @@ impl ProviderSessionSetupPort for RecordedSetup {
                 .push("createdSaved");
             acknowledgement
                 .write_all(b"S")
+                .await
+                .map_err(|_| ProviderSessionSetupUnavailable)?;
+            // Peer closure acknowledges that its no-setting observer has been removed.
+            let mut acknowledged = Vec::new();
+            acknowledgement
+                .read_to_end(&mut acknowledged)
                 .await
                 .map_err(|_| ProviderSessionSetupUnavailable)?;
             Ok(())
@@ -170,7 +176,11 @@ async fn provider_setup_failed_pending_save_applies_no_setting_through_the_real_
     decide
         .send(Err(FleetSessionStorageFailure::Unavailable))
         .unwrap();
-    assert!(creating.await.unwrap().is_err());
+    assert!(
+        matches!(creating.await.unwrap(), Err(acp_client_runtime::ExternalProviderRuntimeError::SessionSetupFailed {
+        provider_session_id, failure: acp_client_runtime::ProviderSessionSetupFailure::CreatedSaveUnconfirmed,
+    }) if provider_session_id == "actual-provider-conversation")
+    );
 
     assert!(
         !marker.exists(),

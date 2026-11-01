@@ -169,6 +169,42 @@ pub(super) fn runtime_failure(
     error: ExternalProviderRuntimeError,
 ) -> ConversationOperationFailure {
     match error {
+        ExternalProviderRuntimeError::SessionSetupFailed {
+            failure: setup_failure,
+            ..
+        } => {
+            use acp_client_runtime::ProviderSessionSetupFailure as SetupFailure;
+            let (kind, explanation) = match setup_failure {
+                SetupFailure::InitialSettingRefused { .. } => (
+                    ConversationOperationFailureKind::InvalidRequest,
+                    "provider initial settings were refused; the retained conversation is inactive",
+                ),
+                SetupFailure::ActivationRefused => (
+                    ConversationOperationFailureKind::PermissionRejected,
+                    "the created conversation was refused registration; its binding is inactive",
+                ),
+                SetupFailure::CreatedSaveUnconfirmed
+                | SetupFailure::RefusalSaveUnconfirmed { .. }
+                | SetupFailure::ActivationPending
+                | SetupFailure::ActivationUnconfirmed => (
+                    ConversationOperationFailureKind::OutcomeUnknown,
+                    "created conversation setup remains unconfirmed; inspect the recorded outcome before any retry",
+                ),
+            };
+            let effect = if target.is_some() {
+                ProviderOperationEffect::Applied
+            } else {
+                ProviderOperationEffect::Unknown
+            };
+            failure(
+                kind,
+                ConversationOperationFailureStage::Settlement,
+                effect,
+                explanation,
+                operation_id,
+                target,
+            )
+        }
         ExternalProviderRuntimeError::LocalBusy => failure(
             ConversationOperationFailureKind::Busy,
             ConversationOperationFailureStage::Validation,

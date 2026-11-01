@@ -239,6 +239,11 @@ pub enum ExternalProviderRuntimeError {
         failed: crate::FailedProviderSetting,
         not_applied: Box<[crate::NotAppliedProviderSetting]>,
     },
+    #[error("provider session setup did not activate ({failure:?})")]
+    SessionSetupFailed {
+        provider_session_id: String,
+        failure: crate::ProviderSessionSetupFailure,
+    },
     #[error("session history replay could not begin")]
     HistoryReplayUnavailable,
     #[error(
