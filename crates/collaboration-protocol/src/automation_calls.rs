@@ -39,6 +39,7 @@ pub enum AutomationCall {
     LocalRunSettled(crate::LocalRunSettled),
     RemoteSessionCreate(crate::RemoteSessionCreateRequest),
     RemoteSessionCreateStatus {
+        #[serde(rename = "operationId")]
         operation_id: crate::OperationId,
     },
 }
@@ -109,6 +110,7 @@ pub enum AutomationAnswer {
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
+    SessionCreate(crate::RemoteSessionCreateSnapshot),
     Faulted(crate::FaultedAutomationSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {
