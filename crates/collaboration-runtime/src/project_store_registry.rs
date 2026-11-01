@@ -558,6 +558,9 @@ impl ProjectStoreRegistry {
                 .map_err(|_| ProjectRegistryError::StillOwned { project })?;
             reader.close().await;
         }
+        if let Some(central_reads) = self.central_reads.into_inner() {
+            central_reads.close().await;
+        }
         Ok(())
     }
 }

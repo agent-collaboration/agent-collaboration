@@ -178,8 +178,13 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
     let interval_ms = i64::from(INTERVAL_SECONDS) * 1000;
     let anchor_ms = firing_now_ms - 2 * interval_ms;
     // Native delivery runs within the real bounded lifetime; maintenance takes
-    // its existing explicit clock input 31 days later (U66 / MS-10).
-    let now_ms = firing_now_ms + chrono::Duration::days(31).num_milliseconds();
+    // its existing explicit clock input just beyond two calendar months later.
+    let now_ms = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(firing_now_ms)
+        .unwrap()
+        .checked_add_months(chrono::Months::new(2))
+        .unwrap()
+        .timestamp_millis()
+        + 1;
     let wake = store
         .lock()
         .await
@@ -223,8 +228,8 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
     let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
         .ok_or("valid maintenance time")?;
     ensure(
-        old_push.created_at < now - chrono::Duration::days(30),
-        "production firing timestamp must make the first delivered push strictly older than 30 days",
+        old_push.created_at < now.checked_sub_months(chrono::Months::new(2)).unwrap(),
+        "production firing timestamp must make the first delivered push strictly older than two calendar months",
     )?;
     let old_link = RouterLink::new(
         MachineId::from(service_id.clone()),
@@ -276,7 +281,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         "new firing must deliver exactly the stored neutral wake line with fresh identity",
     )?;
     drop(observed);
-    // U66 / MS-10 retires the former same-active-wake-after-31-days oracle.
+    // U66 / MS-10 keeps the wake bounded while history ages for two months.
     let expired = store
         .lock()
         .await

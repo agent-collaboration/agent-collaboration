@@ -123,13 +123,15 @@ impl PreparedMachineSession {
         );
         let (welcomed, readiness) = watch::channel(false);
         let (stop, stopped) = watch::channel(false);
+        let central_reads = Arc::new(super::central_read_copy::CentralReadCopies::new(
+            directory,
+            requests.clone(),
+            inputs.receiver,
+            readiness.clone(),
+        ));
+        central_reads.sweep_stale_session_roots().await;
         registry
-            .attach_central_reads(Arc::new(super::central_read_copy::CentralReadCopies::new(
-                directory,
-                requests.clone(),
-                inputs.receiver,
-                readiness.clone(),
-            )))
+            .attach_central_reads(central_reads)
             .map_err(io::Error::other)?;
         let projects = Arc::new(ProjectWriters::new(
             directory,

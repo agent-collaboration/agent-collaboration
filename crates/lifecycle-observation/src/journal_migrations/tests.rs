@@ -71,7 +71,7 @@ async fn interrupted_adoption_rolls_back_native_history_and_reopens() {
                 .fetch_one(&mut connection)
                 .await
                 .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, 2);
         connection.close().await.unwrap();
         std::fs::remove_file(path).unwrap();
     }
@@ -102,17 +102,20 @@ async fn subsequent_migration_uses_current_target_without_rewriting_baseline() {
     use sqlx::migrate::{Migration, MigrationType};
     use std::borrow::Cow;
     const UPGRADE_SQL: &str = "CREATE TABLE future_journal_state (value TEXT NOT NULL);";
+    const UPGRADE_VERSION: i64 = 202610310002;
     let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
     initialize(&mut connection, identity().unwrap())
         .await
         .unwrap();
-    let baseline_checksum: Vec<u8> = sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations")
-        .fetch_one(&mut connection)
-        .await
-        .unwrap();
+    let baseline_checksum: Vec<u8> =
+        sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version=?")
+            .bind(BASELINE_VERSION)
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
     let mut migrations = MIGRATOR.iter().cloned().collect::<Vec<_>>();
     migrations.push(Migration::new(
-        BASELINE_VERSION + 1,
+        UPGRADE_VERSION,
         Cow::Borrowed("future journal state"),
         MigrationType::Simple,
         sqlx::SqlStr::from_static(UPGRADE_SQL),
@@ -130,8 +133,9 @@ async fn subsequent_migration_uses_current_target_without_rewriting_baseline() {
             .fetch_all(&mut connection)
             .await
             .unwrap();
-    assert_eq!(history.len(), 2);
+    assert_eq!(history.len(), 3);
     assert_eq!(history[0], (BASELINE_VERSION, baseline_checksum));
+    assert_eq!(history[2].0, UPGRADE_VERSION);
     sqlx::query("INSERT INTO future_journal_state VALUES ('available')")
         .execute(&mut connection)
         .await

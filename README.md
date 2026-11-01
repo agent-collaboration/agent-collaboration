@@ -21,6 +21,7 @@ do not need to invoke the CLI or depend on its argument types.
 
 Current design source of truth:
 
+- [Router database retention and space recovery](docs/architecture/data-retention.md)
 - [Greenfield product spec](docs/specs/2026-06-20-codex-router-greenfield-spec.md)
 - [Research evidence](docs/specs/references/2026-06-20-research-evidence.md)
 - [Agent communication requirements](docs/specs/2026-09-05-agent-communication-system/2026-09-05-agent-communication-system-requirements.md), [Specification](docs/specs/2026-09-05-agent-communication-system/2026-09-05-agent-communication-system-specification.md), and [Program Design](docs/specs/2026-09-05-agent-communication-system/2026-09-05-agent-communication-system-program-design.md)

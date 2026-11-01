@@ -1,5 +1,6 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::protocol::OperationId;
+use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use serde_json::Value;
 use std::os::unix::fs::DirBuilderExt;
 #[tokio::test]
@@ -117,9 +118,6 @@ async fn cli_configures_and_inspects_future_attempt_budgets()
         return Err("completed-operation reconciliation changed the original receipt".into());
     }
     runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        std::fs::remove_file(entry?.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
     Ok(())
 }

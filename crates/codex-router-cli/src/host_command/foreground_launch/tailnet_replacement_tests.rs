@@ -16,7 +16,7 @@ fn replacement_command_preserves_private_tailnet_mode_and_selected_port() {
         remote_access: Some(RemoteAccess::tailscale(
             NonZeroU16::new(9443).expect("port"),
         )),
-        provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("days"),
+        provider_operation_retention_days: Some(std::num::NonZeroU32::new(60).expect("days")),
         owner_human_id: None,
         external_provider_launches: &[],
         launch_mode: HostLaunchMode::IsolatedDebug,

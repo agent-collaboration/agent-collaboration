@@ -167,9 +167,14 @@ pub async fn project_mail_outcome<THost: Host>(
             delivery_state: record.delivery_state,
             receipt: record.last_outcome.ok_or_else(invalid_projection)?,
         };
-        record_message_send_outcome(scope, &item_id, &MessageSendResult::Local(result))
-            .await
-            .map_err(storage_error)?;
+        record_message_send_outcome(
+            scope,
+            &item_id,
+            &MessageSendResult::Local(result),
+            recorded_at.timestamp_millis(),
+        )
+        .await
+        .map_err(storage_error)?;
     }
     Ok(())
 }
@@ -193,7 +198,11 @@ pub async fn project_mail_cancel_outcome<THost: Host>(
         .try_into()
         .map_err(|_| invalid_projection())?;
     interaction_storage::record_local_cancel_outcome_in_scope(
-        scope, &cancel_id, &target_id, outcome,
+        scope,
+        &cancel_id,
+        &target_id,
+        outcome,
+        recorded_at.timestamp_millis(),
     )
     .await
     .map_err(storage_error)?;

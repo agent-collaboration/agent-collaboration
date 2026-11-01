@@ -51,7 +51,7 @@ pub(super) struct ForegroundHostInputs {
     pub ports: ResolvedHostPorts,
     pub port_overrides: HostPortOverrides,
     pub remote_access: Option<codex_router_host::RemoteAccess>,
-    pub provider_operation_retention_days: std::num::NonZeroU32,
+    pub provider_operation_retention_days: Option<std::num::NonZeroU32>,
     pub coordination_paths: HostCoordinationPaths,
     pub external_provider_launches: Vec<codex_router_host::ExternalProviderLaunchBinding>,
 }
@@ -174,8 +174,10 @@ pub(super) async fn run_foreground_host(
     })
     .with_port_selection(ports.selection())
     .with_debug_port_isolation(isolated_debug)
-    .with_provider_operation_retention_days(provider_operation_retention_days)
     .with_collaboration_directory(collaboration_directory, codex_home);
+    if let Some(retention_days) = provider_operation_retention_days {
+        config = config.with_provider_operation_retention_days(retention_days);
+    }
     if let Some(remote_access) = remote_access {
         config = config.with_remote_access(remote_access);
     }
@@ -263,7 +265,7 @@ pub(super) struct HostReplacementCommandInputs<'a> {
     pub(super) router_root: PathBuf,
     pub(super) port_overrides: HostPortOverrides,
     pub(super) remote_access: Option<codex_router_host::RemoteAccess>,
-    pub(super) provider_operation_retention_days: std::num::NonZeroU32,
+    pub(super) provider_operation_retention_days: Option<std::num::NonZeroU32>,
     pub(super) owner_human_id: Option<&'a message_board::HumanId>,
     pub(super) external_provider_launches: &'a [codex_router_host::ExternalProviderLaunchBinding],
     pub(super) launch_mode: HostLaunchMode,
@@ -296,10 +298,12 @@ pub(super) fn host_replacement_command(
             OsString::from(bind.to_string()),
         ]);
     }
-    arguments.extend([
-        OsString::from("--provider-operation-retention-days"),
-        OsString::from(provider_operation_retention_days.to_string()),
-    ]);
+    if let Some(retention_days) = provider_operation_retention_days {
+        arguments.extend([
+            OsString::from("--provider-operation-retention-days"),
+            OsString::from(retention_days.to_string()),
+        ]);
+    }
     if let Some(codex_router_host::RemoteAccess::Tailscale { .. }) = remote_access {
         arguments.extend([
             OsString::from("--remote-access"),
@@ -460,7 +464,9 @@ mod tests {
                     tailscale_https: None
                 },
                 remote_access: None,
-                provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
+                provider_operation_retention_days: Some(
+                    std::num::NonZeroU32::new(60).expect("positive"),
+                ),
                 owner_human_id: None,
                 external_provider_launches: &[],
                 launch_mode: HostLaunchMode::OwnerProduction,
@@ -498,7 +504,9 @@ mod tests {
                 tailscale_https: None,
             },
             remote_access: None,
-            provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
+            provider_operation_retention_days: Some(
+                std::num::NonZeroU32::new(60).expect("positive"),
+            ),
             owner_human_id: None,
             external_provider_launches: &[provider],
             launch_mode: HostLaunchMode::OwnerProduction,
@@ -538,7 +546,9 @@ mod tests {
                 tailscale_https: None,
             },
             remote_access: None,
-            provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
+            provider_operation_retention_days: Some(
+                std::num::NonZeroU32::new(60).expect("positive"),
+            ),
             owner_human_id: Some(&owner),
             external_provider_launches: &[],
             launch_mode: HostLaunchMode::OwnerProduction,
@@ -572,7 +582,9 @@ mod tests {
                 tailscale_https: None,
             },
             remote_access: None,
-            provider_operation_retention_days: std::num::NonZeroU32::new(60).expect("positive"),
+            provider_operation_retention_days: Some(
+                std::num::NonZeroU32::new(60).expect("positive"),
+            ),
             owner_human_id: None,
             external_provider_launches: &[],
             launch_mode: HostLaunchMode::IsolatedDebug,

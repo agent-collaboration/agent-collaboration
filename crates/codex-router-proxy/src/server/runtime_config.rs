@@ -1,3 +1,8 @@
+use crate::maintenance_actor::{
+    active_session_rollup_retention_cutoff, previous_response_affinity_owner_retention_cutoff,
+    session_account_affinity_retention_cutoff,
+};
+
 #[cfg(debug_assertions)]
 use super::ClaudeUpstreamEndpoint;
 use super::{
@@ -16,7 +21,7 @@ use super::{
     SessionAccountAffinityCache, SharedSessionAccountAffinityCache, SocketAddr,
     SqliteDbWriteRepository, StateStoreError, TaskTracker, UpstreamEndpoint,
     WebSocketQuotaFloorNotifier, WebSocketRegistrySnapshot, WebSocketRevocationRegistry,
-    WithSubscriber, active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    WithSubscriber, active_session_event_compaction_before, claim_maintenance_cleanup_utc_day,
     current_unix_seconds, store_connection_join_error, store_optional_connection_join_error,
     supervise_detached_connection_handler,
 };
@@ -246,6 +251,7 @@ pub struct LoopbackRouterRuntime {
     pub(super) db_write_actor: DbWriteActor,
     pub(super) maintenance_actor: MaintenanceActor,
     pub(super) last_session_affinity_cleanup_utc_day: AtomicU64,
+    pub(super) last_response_affinity_owner_cleanup_utc_day: Arc<AtomicU64>,
     pub(super) fixed_now_unix_seconds: Option<u64>,
     pub(super) connection_error_reporter: Arc<dyn LoopbackConnectionErrorReporter>,
     pub(super) credential_refresh_shutdown_drain: Duration,
@@ -377,13 +383,17 @@ impl LoopbackRouterRuntime {
             Arc::clone(&route_band_queue_health),
             PROVIDER_EXHAUSTION_QUEUE_CAPACITY,
         );
-        let affinity_owner_recorder =
-            Arc::new(DbWriteAffinityOwnerRecorder::new(db_write_actor.clone()));
         let maintenance_actor = MaintenanceActor::start_on_handle(
             runtime.handle(),
             Arc::new(writable_state_stores.maintenance_state_store.clone()),
             MAINTENANCE_QUEUE_CAPACITY,
         );
+        let last_response_affinity_owner_cleanup_utc_day = Arc::new(AtomicU64::new(u64::MAX));
+        let affinity_owner_recorder = Arc::new(DbWriteAffinityOwnerRecorder::new(
+            db_write_actor.clone(),
+            maintenance_actor.clone(),
+            Arc::clone(&last_response_affinity_owner_cleanup_utc_day),
+        ));
         #[cfg(test)]
         if let Some(completion_sender) = completion_sender {
             maintenance_actor.register_completion_sender(completion_sender);
@@ -418,6 +428,7 @@ impl LoopbackRouterRuntime {
             db_write_actor,
             maintenance_actor,
             last_session_affinity_cleanup_utc_day: AtomicU64::new(u64::MAX),
+            last_response_affinity_owner_cleanup_utc_day,
             credential_factory,
             fixed_now_unix_seconds,
             connection_error_reporter: Arc::new(StderrLoopbackConnectionErrorReporter),
@@ -701,17 +712,28 @@ impl LoopbackRouterRuntime {
     pub(super) fn enqueue_runtime_maintenance_hints(&self, now_unix_seconds: u64) {
         const ROLLUP_BUCKET_SECONDS: u64 = 300;
         const ACTIVE_CLIENT_STALE_AFTER_SECONDS: u64 = 600;
-        const ACTIVE_SESSION_RETENTION_SECONDS: u64 = 86_400;
-        const SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS: u64 = 7 * 86_400;
-
-        if claim_session_affinity_cleanup_day(
+        if claim_maintenance_cleanup_utc_day(
             &self.last_session_affinity_cleanup_utc_day,
             now_unix_seconds,
         ) {
             let _cleanup_result = self.maintenance_actor.try_enqueue(
                 MaintenanceHint::CleanupStaleSessionAccountAffinities {
-                    stale_before_unix_seconds: now_unix_seconds
-                        .saturating_sub(SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS),
+                    stale_before_unix_seconds: session_account_affinity_retention_cutoff(
+                        now_unix_seconds,
+                    ),
+                },
+            );
+        }
+
+        if claim_maintenance_cleanup_utc_day(
+            &self.last_response_affinity_owner_cleanup_utc_day,
+            now_unix_seconds,
+        ) {
+            let _affinity_owner_retention_result = self.maintenance_actor.try_enqueue(
+                MaintenanceHint::PrunePreviousResponseAffinityOwners {
+                    created_before_unix_seconds: previous_response_affinity_owner_retention_cutoff(
+                        now_unix_seconds,
+                    ),
                 },
             );
         }
@@ -744,8 +766,9 @@ impl LoopbackRouterRuntime {
                 self.maintenance_actor
                     .try_enqueue(MaintenanceHint::ApplyActiveSessionRetention {
                         route_band,
-                        retain_after_unix_seconds: now_unix_seconds
-                            .saturating_sub(ACTIVE_SESSION_RETENTION_SECONDS),
+                        retain_after_unix_seconds: active_session_rollup_retention_cutoff(
+                            now_unix_seconds,
+                        ),
                     });
             let _compaction_result =
                 self.maintenance_actor

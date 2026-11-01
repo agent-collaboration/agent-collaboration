@@ -212,12 +212,17 @@ async fn prune_history(
                 .ok_or("actual held push absent")?;
             assert_eq!(held_before.delivery_state, PushDeliveryState::Held);
             assert!(held_before.settled_at.is_none());
-            let future = held.created_at + chrono::Duration::days(31);
-            assert!(
-                control
-                    .settled_at
-                    .is_some_and(|settled| settled < future - chrono::Duration::days(30))
-            );
+            let retention_months =
+                chrono::Months::new(interaction_storage::INTERACTION_RETENTION_MONTHS);
+            let future = held
+                .created_at
+                .checked_add_months(retention_months)
+                .and_then(|future| future.checked_add_signed(chrono::Duration::days(1)))
+                .ok_or("interaction retention test timestamp overflow")?;
+            let cutoff = future
+                .checked_sub_months(retention_months)
+                .ok_or("interaction retention cutoff overflow")?;
+            assert!(control.settled_at.is_some_and(|settled| settled < cutoff));
             let pruned = store.prune_push_records(future, 500).await?;
             assert!(
                 pruned > 0,

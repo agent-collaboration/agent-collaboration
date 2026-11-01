@@ -1,5 +1,6 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::protocol::OperationId;
+use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use std::os::unix::fs::DirBuilderExt;
 
 #[tokio::test]
@@ -12,19 +13,25 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         .get(24..)
         .expect("generated operation id has an ASCII UUID suffix");
     let root = std::env::temp_dir().join(format!("wake-cli-{suffix}"));
-    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
-        directory: root.clone(),
-        codex_home: root.clone(),
-        backend_socket: root.join("absent.sock"),
-        mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-        native_schema: None,
-        peer_registry_directory: None,
-        remote_control_server_name: None,
-        owner_human_id: None,
-    }))
-    .await?;
+    with_wakeup_test_io_context(
+        &format!("create fixture directory {}", root.display()),
+        std::fs::DirBuilder::new().mode(0o700).create(&root),
+    )?;
+    let runtime = with_wakeup_test_io_context(
+        &format!("start collaboration runtime in {}", root.display()),
+        Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
+            board_session: None,
+            directory: root.clone(),
+            codex_home: root.clone(),
+            backend_socket: root.join("absent.sock"),
+            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            native_schema: None,
+            peer_registry_directory: None,
+            remote_control_server_name: None,
+            owner_human_id: None,
+        }))
+        .await,
+    )?;
     // Act: the documented CLI operation must reach Host-created persistent state.
     let target=serde_json::json!({"endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},"sessionId":"fixture-only-new-thread"}).to_string();
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
@@ -48,7 +55,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         ])
         .arg(&root)
         .output()
-        .await?;
+        .await;
+    let output = with_wakeup_test_io_context("spawn initial wake send CLI", output)?;
     if !output.status.success() {
         return Err(format!(
             "CLI create failed: {}",
@@ -72,7 +80,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         ])
         .arg(&root)
         .output()
-        .await?;
+        .await;
+    let read = with_wakeup_test_io_context("spawn initial wake show CLI", read)?;
     // Assert: machine-readable read returns the exact text, with no native backend involved.
     if !read.status.success() {
         return Err("CLI show failed".into());
@@ -115,7 +124,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
             ])
             .arg(&root)
             .output()
-            .await?;
+            .await;
+        let output = with_wakeup_test_io_context(&format!("spawn wake {action} CLI"), output)?;
         if !output.status.success() {
             return Err(format!(
                 "wake {action} failed: {}",
@@ -152,7 +162,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         ])
         .arg(&root)
         .output()
-        .await?;
+        .await;
+    let fire = with_wakeup_test_io_context("spawn first-fire wake CLI", fire)?;
     if !fire.status.success() {
         return Err(format!(
             "first-fire CLI failed: {}",
@@ -180,7 +191,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         ])
         .arg(&root)
         .output()
-        .await?;
+        .await;
+    let listing = with_wakeup_test_io_context("spawn wake listing CLI", listing)?;
     if !listing.status.success() {
         return Err(format!(
             "wake list failed: {}",
@@ -215,7 +227,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         ])
         .arg(&root)
         .output()
-        .await?;
+        .await;
+    let deliveries = with_wakeup_test_io_context("spawn delivery listing CLI", deliveries)?;
     if !deliveries.status.success() {
         return Err("delivery list CLI failed".into());
     }
@@ -236,7 +249,8 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
             ])
             .arg(&root)
             .output()
-            .await?;
+            .await;
+        let output = with_wakeup_test_io_context(&format!("spawn delivery {action} CLI"), output)?;
         if !output.status.success() {
             return Err(format!("delivery {action} CLI failed").into());
         }
@@ -251,15 +265,18 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         }
     }
     runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected cleanup entry".into());
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    with_wakeup_test_io_context(
+        "remove fixture store directory",
+        remove_store_directory_tolerating_sqlite_sidecars(&root),
+    )?;
     Ok(())
+}
+
+fn with_wakeup_test_io_context<T>(
+    operation: &str,
+    result: std::io::Result<T>,
+) -> std::io::Result<T> {
+    result.map_err(|error| std::io::Error::new(error.kind(), format!("{operation}: {error}")))
 }
 
 /// `wake send --wait-until-first-fire --json` keeps today's output: `result.record` is the
@@ -309,7 +326,8 @@ async fn pin_first_fire_receipt(
         ])
         .arg(root)
         .output()
-        .await?;
+        .await;
+    let shown = with_wakeup_test_io_context("spawn wake show after first fire CLI", shown)?;
     if !shown.status.success() {
         return Err("wake show after the first fire failed".into());
     }

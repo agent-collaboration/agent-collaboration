@@ -55,6 +55,10 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
         "serviceId":backend.endpoint.service_id,
         "endpointId":"claude-local"
     }))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         backend.endpoint.service_id.as_str().to_owned().try_into()?,
         NativeControlBackend {
@@ -62,7 +66,7 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
             gate: NativeGenerationGate::default(),
             codex_home: codex_home.clone(),
         },
-        directory.path().join("approvals.json"),
+        interaction_store,
     )
     .await?;
     let context = Arc::new(

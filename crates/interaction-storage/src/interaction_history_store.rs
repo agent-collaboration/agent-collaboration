@@ -5,7 +5,7 @@ use super::{
     QuestionHistoryState, QuestionRequest, QuestionResponse, RefusedTypedApproval, SessionRef,
     validate_question_response_record,
 };
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Months, Utc};
 use std::{
     collections::BTreeMap,
     ops::{Deref, DerefMut},
@@ -476,13 +476,19 @@ impl InteractionHistoryStore {
             return Err(InteractionHistoryError::Unavailable);
         }
         let cutoff = now
-            .checked_sub_signed(ChronoDuration::days(30))
+            .checked_sub_months(Months::new(crate::INTERACTION_RETENTION_MONTHS))
             .ok_or(InteractionHistoryError::Unavailable)?;
         self.mutate_history(|data| {
             let mut expired = data
                 .created_at
                 .iter()
-                .filter(|(_, created_at)| **created_at < cutoff)
+                .filter(|(request_id, created_at)| {
+                    **created_at < cutoff
+                        && data
+                            .records
+                            .get(*request_id)
+                            .is_some_and(is_settled_history_record)
+                })
                 .map(|(request_id, created_at)| (created_at.to_owned(), request_id.clone()))
                 .collect::<Vec<_>>();
             expired.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
@@ -500,6 +506,16 @@ impl InteractionHistoryStore {
             Ok((next, count))
         })
         .await
+    }
+}
+
+fn is_settled_history_record(record: &InteractionHistoryRecord) -> bool {
+    match record {
+        InteractionHistoryRecord::Approval { state, .. } => {
+            *state != InteractionHistoryState::Pending
+        }
+        InteractionHistoryRecord::Question { state, .. } => *state != QuestionHistoryState::Pending,
+        InteractionHistoryRecord::RefusedApproval { .. } => true,
     }
 }
 

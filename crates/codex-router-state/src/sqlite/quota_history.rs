@@ -1,9 +1,10 @@
 //! SQLite quota history responsibilities.
 use super::selector_windows::parse_refresh_error_class;
 use super::{
-    AccountId, AsyncSqliteStateStore, PersistedQuotaHistoryObservation, QuotaHistoryRefreshOutcome,
-    QuotaRefreshErrorClass, QuotaSnapshotSource, Row, SelectorQuotaWindowStatus, StateStoreError,
-    i64_to_u32, i64_to_u64, sqlx_error, u32_to_i64, u64_to_i64,
+    AccountId, AsyncSqliteStateStore, PersistedQuotaHistoryObservation,
+    QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE, QuotaHistoryRefreshOutcome, QuotaRefreshErrorClass,
+    QuotaSnapshotSource, Row, SelectorQuotaWindowStatus, StateStoreError, i64_to_u32, i64_to_u64,
+    sqlx_error, u32_to_i64, u64_to_i64,
 };
 
 impl AsyncSqliteStateStore {
@@ -60,16 +61,45 @@ impl AsyncSqliteStateStore {
         &self,
         observed_before_unix_seconds: u64,
     ) -> Result<(), StateStoreError> {
-        sqlx::query(
+        loop {
+            let deleted = self
+                .prune_quota_history_observations_before(
+                    observed_before_unix_seconds,
+                    QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE,
+                )
+                .await?;
+            if deleted < u64::from(QUOTA_HISTORY_OBSERVATION_PRUNE_BATCH_SIZE) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+
+        Ok(())
+    }
+
+    /// Deletes one bounded batch of quota history observations older than the cutoff.
+    pub(crate) async fn prune_quota_history_observations_before(
+        &self,
+        observed_before_unix_seconds: u64,
+        batch_size: u32,
+    ) -> Result<u64, StateStoreError> {
+        let result = sqlx::query(
             "DELETE FROM quota_history_observations
-              WHERE observed_unix_seconds < ?1",
+              WHERE rowid IN (
+                  SELECT rowid
+                    FROM quota_history_observations
+                   WHERE observed_unix_seconds < ?1
+                   ORDER BY observed_unix_seconds, id
+                   LIMIT ?2
+              )",
         )
         .bind(u64_to_i64(observed_before_unix_seconds)?)
+        .bind(i64::from(batch_size))
         .execute(&self.pool)
         .await
         .map_err(sqlx_error)?;
 
-        Ok(())
+        Ok(result.rows_affected())
     }
 }
 

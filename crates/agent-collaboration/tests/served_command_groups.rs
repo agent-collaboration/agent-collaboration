@@ -35,6 +35,13 @@ impl ServedFixture {
             SERVICE_ID.to_owned().try_into().expect("service ID");
         let endpoint: collaboration_protocol::EndpointRef =
             serde_json::from_value(codex_endpoint()).expect("endpoint");
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("interaction store"),
+        );
         let broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id,
             collaboration_runtime::NativeControlBackend {
@@ -42,7 +49,7 @@ impl ServedFixture {
                 gate: collaboration_runtime::NativeGenerationGate::default(),
                 codex_home: directory.path().to_owned(),
             },
-            directory.path().join("approval-routes.json"),
+            interaction_store,
         )
         .await
         .expect("interaction broker");

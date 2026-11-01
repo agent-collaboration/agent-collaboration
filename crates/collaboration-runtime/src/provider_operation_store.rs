@@ -13,10 +13,41 @@ use sqlx::{
     migrate::MigrateError,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
 };
-use std::{collections::HashSet, path::Path, time::Duration};
+use std::{collections::HashSet, num::NonZeroU32, path::Path, time::Duration};
+
+use sqlite_storage_maintenance::{
+    configure_new_database_options, incremental_vacuum_step, prepare_existing_database,
+};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 const RETENTION_BATCH_LIMIT: i64 = 1_000;
+
+/// Default terminal provider-operation retention is two calendar months.
+pub const PROVIDER_OPERATION_RETENTION_MONTHS: u32 = 2;
+
+/// Uses the default calendar-month window unless the CLI supplies a day override.
+pub fn provider_operation_retention_cutoff_ms(
+    now_ms: i64,
+    retention_days_override: Option<NonZeroU32>,
+) -> Result<i64, ProviderOperationStoreError> {
+    if now_ms < 0 {
+        return Err(ProviderOperationStoreError::InvalidRecord);
+    }
+    if let Some(days) = retention_days_override {
+        let duration_ms = i64::from(days.get())
+            .checked_mul(24 * 60 * 60 * 1_000)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        return now_ms
+            .checked_sub(duration_ms)
+            .ok_or(ProviderOperationStoreError::InvalidRecord);
+    }
+    let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    let cutoff = now
+        .checked_sub_months(chrono::Months::new(PROVIDER_OPERATION_RETENTION_MONTHS))
+        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    Ok(cutoff.timestamp_millis())
+}
 const EXPECTED_COLUMNS: [&str; 14] = [
     "operation_id",
     "operation_kind",
@@ -40,6 +71,8 @@ pub enum ProviderOperationStoreError {
     Database(#[from] sqlx::Error),
     #[error("provider operation migration failed")]
     Migration(#[from] MigrateError),
+    #[error("provider operation storage maintenance failed")]
+    StorageMaintenance(#[from] sqlite_storage_maintenance::SqliteStorageMaintenanceError),
     #[error("provider operation identity is invalid")]
     InvalidIdentity,
     #[error("provider operation record is invalid")]
@@ -103,19 +136,29 @@ struct StoredProviderOperationRow {
 
 impl ProviderOperationStore {
     pub async fn open(path: &Path) -> Result<Self, ProviderOperationStoreError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full)
-            .busy_timeout(Duration::from_secs(1));
+        let options = configure_new_database_options(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .foreign_keys(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Full)
+                .busy_timeout(Duration::from_secs(1)),
+            path,
+        )?;
         let mut connection = SqliteConnection::connect_with(&options).await?;
+        prepare_existing_database(&mut connection, path).await?;
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         MIGRATOR.run_direct(None, &mut *transaction, false).await?;
         transaction.commit().await?;
         validate_schema(&mut connection).await?;
         Ok(Self { connection })
+    }
+
+    /// Releases one bounded batch of free pages after provider-operation retention.
+    pub async fn incremental_vacuum_step(&mut self) -> Result<(), ProviderOperationStoreError> {
+        incremental_vacuum_step(&mut self.connection).await?;
+        Ok(())
     }
 
     pub async fn close(self) -> Result<(), ProviderOperationStoreError> {
@@ -547,3 +590,7 @@ async fn validate_schema(
         Err(ProviderOperationStoreError::InvalidRecord)
     }
 }
+
+#[cfg(test)]
+#[path = "provider_operation_store_tests.rs"]
+mod tests;

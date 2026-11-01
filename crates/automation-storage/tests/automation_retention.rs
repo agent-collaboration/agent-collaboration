@@ -96,7 +96,7 @@ async fn insert_mailbox_fixture(
 }
 
 #[tokio::test]
-async fn thirty_day_cleanup_deletes_whole_settled_mailbox_and_operation_receipts() {
+async fn two_calendar_month_cleanup_deletes_settled_mailbox_and_terminal_receipts() {
     let database = TestDatabase::new();
     let mut store = AutomationStore::open(&database.path)
         .await
@@ -108,8 +108,12 @@ async fn thirty_day_cleanup_deletes_whole_settled_mailbox_and_operation_receipts
     )
     .await
     .expect("open isolated retention observer");
-    let now_ms = 1_700_000_000_000_i64;
-    let cutoff_ms = now_ms - 30 * 24 * 60 * 60 * 1000;
+    let now_ms = chrono::DateTime::parse_from_rfc3339("2026-08-31T12:00:00Z")
+        .expect("fixed clock time")
+        .timestamp_millis();
+    let cutoff_ms = chrono::DateTime::parse_from_rfc3339("2026-06-30T12:00:00Z")
+        .expect("two calendar months before the fixed clock")
+        .timestamp_millis();
     let expired_ms = cutoff_ms - 1;
     let expired_delivery_id = uuid::Uuid::now_v7().to_string();
     let boundary_delivery_id = uuid::Uuid::now_v7().to_string();
@@ -152,6 +156,15 @@ async fn thirty_day_cleanup_deletes_whole_settled_mailbox_and_operation_receipts
         .await
         .expect("insert whole receipt fixture");
     }
+    let unresolved_receipt_id = uuid::Uuid::now_v7().to_string();
+    sqlx::query(
+        "INSERT INTO operation_receipts (operation_id,method_name,canonical_request,resource_id,operation_status,effect_evidence_json,final_result_json,final_error_json,committed_at_ms) VALUES (?,'wake/send',x'02','wake','uncertain','{}',NULL,NULL,?)",
+    )
+    .bind(&unresolved_receipt_id)
+    .bind(expired_ms)
+    .execute(&mut observer)
+    .await
+    .expect("insert unresolved operation receipt fixture");
     observer.close().await.expect("close retention observer");
 
     assert_eq!(
@@ -193,6 +206,7 @@ async fn thirty_day_cleanup_deletes_whole_settled_mailbox_and_operation_receipts
         (expired_receipt_id.as_str(), 0_i64),
         (boundary_receipt_id.as_str(), 1),
         (recent_receipt_id.as_str(), 1),
+        (unresolved_receipt_id.as_str(), 1),
     ] {
         let count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM operation_receipts WHERE operation_id=?")

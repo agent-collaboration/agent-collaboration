@@ -33,6 +33,7 @@ interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 base64.workspace = true
 sqlx = { workspace = true, features = ["sqlite"] }
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118" }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
 codex-native-integration.workspace = true
 chrono.workspace = true

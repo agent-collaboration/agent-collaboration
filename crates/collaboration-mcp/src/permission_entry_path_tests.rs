@@ -163,10 +163,17 @@ impl ApprovalFixture {
             gate: gate.clone(),
             codex_home: directory.path().to_owned(),
         };
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("interaction store"),
+        );
         let broker = ServiceInteractionBroker::load(
             service_id.clone(),
             native_backend.clone(),
-            directory.path().join("approval-routes.json"),
+            interaction_store,
         )
         .await
         .expect("approval broker");

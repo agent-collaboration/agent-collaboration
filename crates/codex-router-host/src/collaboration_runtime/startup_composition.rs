@@ -262,10 +262,30 @@ impl CollaborationRuntime {
             endpoint,
             gate: publication.admission_gate(),
         };
+        let interaction_store = std::sync::Arc::new(
+            interaction_storage::InteractionStore::open(
+                inputs.directory.join("interaction.sqlite"),
+            )
+            .await
+            .map_err(io::Error::other)?,
+        );
+        let legacy_approval_history = inputs.directory.join("approval-history.json");
+        match tokio::fs::remove_file(&legacy_approval_history).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        collaboration_runtime::ServiceInteractionBroker::import_legacy_approval_routes(
+            &interaction_store,
+            &inputs.directory.join("approval-routes.json"),
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await
+        .map_err(io::Error::other)?;
         let approval_broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id.clone(),
             native_backend.clone(),
-            inputs.directory.join("approval-routes.json"),
+            interaction_store,
         )
         .await
         .map_err(io::Error::other)?;
@@ -720,6 +740,13 @@ impl CollaborationRuntime {
             schedule_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
         let automation_maintenance =
             retention_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
+        let fleet_outbox_maintenance = prepared_board
+            .as_ref()
+            .and_then(board_composition::BoardComposition::fleet_client)
+            .map(|fleet| {
+                let shutdown = shutdown.clone();
+                tokio::spawn(async move { fleet.run_outbox_retention(shutdown).await })
+            });
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
                 application,
@@ -808,6 +835,7 @@ impl CollaborationRuntime {
             automation_task,
             schedule_task,
             automation_maintenance,
+            fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,
             collaboration_api,

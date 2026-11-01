@@ -78,7 +78,7 @@ pub(crate) struct HostCommand {
     mcp_bind: Option<SocketAddr>,
     remote_access: Option<RemoteAccessMode>,
     tailscale_https_port: Option<std::num::NonZeroU16>,
-    provider_operation_retention_days: std::num::NonZeroU32,
+    provider_operation_retention_days: Option<std::num::NonZeroU32>,
     claude_acp_executable: Option<PathBuf>,
     claude_acp_arguments: Vec<String>,
     cursor_acp_executable: Option<PathBuf>,
@@ -137,7 +137,7 @@ impl HostCommand {
         self.mcp_bind
     }
     #[cfg(test)]
-    pub(crate) const fn provider_operation_retention_days(&self) -> std::num::NonZeroU32 {
+    pub(crate) const fn provider_operation_retention_days(&self) -> Option<std::num::NonZeroU32> {
         self.provider_operation_retention_days
     }
 
@@ -167,8 +167,8 @@ struct ClapHostCommand {
     remote_access: Option<RemoteAccessMode>,
     #[arg(long, global = true, requires = "remote_access")]
     tailscale_https_port: Option<std::num::NonZeroU16>,
-    #[arg(long, global = true, default_value = "60")]
-    provider_operation_retention_days: std::num::NonZeroU32,
+    #[arg(long, global = true)]
+    provider_operation_retention_days: Option<std::num::NonZeroU32>,
     #[arg(long, global = true)]
     claude_acp_executable: Option<PathBuf>,
     #[arg(

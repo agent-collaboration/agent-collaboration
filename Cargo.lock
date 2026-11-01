@@ -631,6 +631,7 @@ dependencies = [
  "message-board",
  "serde",
  "serde_json",
+ "sqlite-storage-maintenance",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",
@@ -1589,6 +1590,7 @@ dependencies = [
  "codex-router-selection",
  "futures-util",
  "rusqlite",
+ "sqlite-storage-maintenance",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
@@ -1977,6 +1979,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session-event-model",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -4094,7 +4097,9 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
+ "sqlite-storage-maintenance",
  "sqlx",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite",
@@ -5948,6 +5953,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "sqlite-storage-maintenance"
+version = "0.1.119"
+dependencies = [
+ "fs2",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

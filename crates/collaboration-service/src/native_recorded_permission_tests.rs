@@ -171,10 +171,13 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     let (backend, generation, endpoint) = backend(root);
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let broker = ServiceInteractionBroker::load(
         SERVICE.to_owned().try_into()?,
         backend.clone(),
-        root.join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let scratch = root.join("scratch");
@@ -197,10 +200,13 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
     }
     // Reopen the real persisted route, rather than supplying an invented broker answer.
     drop(broker);
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let broker: Arc<dyn ApprovalBroker> = ServiceInteractionBroker::load(
         SERVICE.to_owned().try_into()?,
         backend.clone(),
-        root.join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let weak_broker = Arc::downgrade(&broker);
@@ -516,13 +522,15 @@ async fn native_delivery_does_not_retain_its_broker_owner() {
     let directory = tempfile::tempdir().expect("fixture directory");
     let (backend, _, _) = backend(directory.path());
     let service_id = backend.endpoint.service_id.clone();
-    let broker = ServiceInteractionBroker::load(
-        service_id.clone(),
-        backend.clone(),
-        directory.path().join("approval-routes.json"),
-    )
-    .await
-    .expect("native fixture operation");
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
+    let broker =
+        ServiceInteractionBroker::load(service_id.clone(), backend.clone(), interaction_store)
+            .await
+            .expect("native fixture operation");
     let retained_broker = Arc::downgrade(&broker);
     let broker_port: Arc<dyn ApprovalBroker> = broker.clone();
     let weak_port = Arc::downgrade(&broker_port);

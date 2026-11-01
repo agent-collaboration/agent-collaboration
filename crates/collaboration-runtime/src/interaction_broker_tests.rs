@@ -1,5 +1,6 @@
 use super::*;
 use collaboration_protocol::{CodexGeneration, EndpointId, EndpointRef};
+use std::path::PathBuf;
 
 struct FakeApprovalDelivery(DeliveryOutcome);
 
@@ -343,6 +344,11 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
     let service_id = target.endpoint.service_id.clone();
     let gate = crate::NativeGenerationGate::default();
     let endpoint = target.endpoint.clone();
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.join("interaction.sqlite"))
+            .await
+            .expect("interaction store after restart"),
+    );
     let reloaded = ServiceInteractionBroker::load(
         service_id,
         NativeControlBackend {
@@ -350,7 +356,7 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
             gate,
             codex_home: directory.clone(),
         },
-        directory.join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .expect("reload broker");
@@ -450,6 +456,11 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
     sqlx::Connection::close(observer)
         .await
         .expect("close observer");
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.join("interaction.sqlite"))
+            .await
+            .expect("interaction store after restart"),
+    );
     let reloaded = ServiceInteractionBroker::load(
         target.endpoint.service_id.clone(),
         NativeControlBackend {
@@ -457,7 +468,7 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
             gate: crate::NativeGenerationGate::default(),
             codex_home: directory.clone(),
         },
-        directory.join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .expect("reload older history");
@@ -830,6 +841,11 @@ async fn fixture_broker_with_requester_name(
     tokio::fs::create_dir_all(&directory)
         .await
         .unwrap_or_else(|error| panic!("directory: {error}"));
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.join("interaction.sqlite"))
+            .await
+            .unwrap_or_else(|error| panic!("interaction store: {error}")),
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.clone(),
         NativeControlBackend {
@@ -837,7 +853,7 @@ async fn fixture_broker_with_requester_name(
             gate,
             codex_home: directory.clone(),
         },
-        directory.join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .unwrap_or_else(|error| panic!("broker: {error}"));
@@ -887,10 +903,6 @@ async fn insert_pending(
             completion,
         },
     );
-    broker
-        .record(record)
-        .await
-        .unwrap_or_else(|error| panic!("record: {error}"));
     (
         ApprovalDecideParams {
             request_id,

@@ -82,7 +82,7 @@ async fn pending_journal_read_does_not_block_status_and_wakes_after_append() {
         .unwrap_or_else(|e| panic!("typed read: {e}"));
     assert_eq!(page.records.len(), 1);
     store
-        .maintain(40 * 86400)
+        .maintain(70 * 86400)
         .await
         .unwrap_or_else(|e| panic!("retention: {e}"));
     let error = client.read_journal(&target, after, 100, 0).await;

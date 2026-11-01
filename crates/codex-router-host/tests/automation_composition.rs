@@ -1,6 +1,7 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{InstructionCreateParams, InstructionText, OperationId};
+use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use std::os::unix::fs::DirBuilderExt;
 
 #[tokio::test]
@@ -12,6 +13,8 @@ async fn host_supplies_automation_storage_without_native_backend()
         OperationId::generate().as_str()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    let legacy_approval_history = root.join("approval-history.json");
+    std::fs::write(&legacy_approval_history, b"{malformed approval history")?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
@@ -36,17 +39,17 @@ async fn host_supplies_automation_storage_without_native_backend()
     if document.text.as_str() != "Check the repository"
         || !root.join("automation.sqlite").exists()
         || !root.join("session-registry.sqlite").exists()
+        || legacy_approval_history.exists()
     {
-        return Err("Host did not compose separate automation persistence".into());
+        return Err(
+            "Host did not compose automation persistence or remove legacy approval history".into(),
+        );
     }
-    runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected runtime cleanup entry".into());
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    runtime
+        .shutdown()
+        .await
+        .map_err(|error| format!("runtime shutdown: {error}"))?;
+    remove_store_directory_tolerating_sqlite_sidecars(&root)
+        .map_err(|error| format!("remove test root {}: {error}", root.display()))?;
     Ok(())
 }

@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use collaboration_mail_protocol::{CancelCause, CarrierAcceptance, MailItemId};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_protocol::RecipientOutcome;
-use sqlx_turso::TursoConnection;
+use sqlx::Transaction;
+use sqlx_turso::{Turso, TursoConnection};
 
 #[derive(Clone, Debug)]
 pub struct LocalCancelDelivery {
@@ -13,6 +14,7 @@ pub struct LocalCancelDelivery {
     pub attribution: CancelCause,
     pub outcome: Option<RecipientOutcome<CarrierAcceptance>>,
     pub recorded_at: DateTime<Utc>,
+    pub settled_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,12 +23,15 @@ pub enum LocalCancelPreparation {
     Kept,
 }
 
+#[derive(sqlx::FromRow)]
 struct LocalCancelRow {
     item_id: String,
     target_item: String,
     attribution_json: String,
     outcome_json: Option<String>,
     recorded_at: String,
+    settled_at_ms: Option<i64>,
+    settled_at_storage: String,
 }
 
 fn validate_outcome(
@@ -64,6 +69,18 @@ impl LocalCancelRow {
         if let Some(outcome) = &outcome {
             validate_outcome(&item_id, outcome).map_err(|_| StorageError::InvalidStoredRecord)?;
         }
+        if outcome.is_some() != self.settled_at_ms.is_some()
+            || (self.settled_at_ms.is_some() && self.settled_at_storage != "integer")
+            || (self.settled_at_ms.is_none() && self.settled_at_storage != "null")
+        {
+            return Err(StorageError::InvalidStoredRecord);
+        }
+        let settled_at = match self.settled_at_ms {
+            Some(value) => Some(
+                DateTime::from_timestamp_millis(value).ok_or(StorageError::InvalidStoredRecord)?,
+            ),
+            None => None,
+        };
         Ok(LocalCancelDelivery {
             item_id,
             target_item,
@@ -71,6 +88,7 @@ impl LocalCancelRow {
             outcome,
             recorded_at: push_record_rows::decode_timestamp(self.recorded_at)
                 .map_err(|_| StorageError::InvalidStoredRecord)?,
+            settled_at,
         })
     }
 }
@@ -79,11 +97,41 @@ async fn read_cancel(
     connection: &mut TursoConnection,
     item: &MailItemId,
 ) -> Result<Option<LocalCancelDelivery>, StorageError> {
-    sqlx_turso::query_as!(LocalCancelRow,
-        "SELECT item_id AS \"item_id!: String\",target_item AS \"target_item!: String\",attribution_json AS \"attribution_json!: String\",outcome_json,recorded_at AS \"recorded_at!: String\" FROM local_cancel_deliveries WHERE item_id=?",
-        item.as_str())
+    sqlx::query_as::<sqlx_turso::Turso, LocalCancelRow>(
+        "SELECT item_id,target_item,attribution_json,outcome_json,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM local_cancel_deliveries WHERE item_id=?",
+    )
+        .bind(item.as_str())
         .fetch_optional(connection).await?
         .map(LocalCancelRow::decode).transpose()
+}
+
+pub(crate) async fn prune_settled_local_cancels(
+    transaction: &mut Transaction<'_, Turso>,
+    cutoff_ms: i64,
+    batch_size: i64,
+) -> Result<u64, StorageError> {
+    let candidates = sqlx::query_as::<sqlx_turso::Turso, LocalCancelRow>(
+        "SELECT item_id,target_item,attribution_json,outcome_json,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM local_cancel_deliveries WHERE settled_at_ms<? AND NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item)) AND NOT EXISTS (SELECT 1 FROM message_send_answers answer WHERE answer.item_id=local_cancel_deliveries.target_item AND answer.result IS NULL) ORDER BY settled_at_ms,item_id LIMIT ?",
+    )
+        .bind(cutoff_ms)
+        .bind(batch_size)
+        .fetch_all(&mut **transaction).await?;
+    let mut pruned = 0;
+    for row in candidates {
+        let cancel = row.decode()?;
+        if cancel.outcome.is_none() || cancel.settled_at.is_none() {
+            return Err(StorageError::InvalidStoredRecord);
+        }
+        pruned += sqlx::query::<sqlx_turso::Turso>(
+            "DELETE FROM local_cancel_deliveries WHERE item_id=? AND settled_at_ms<?",
+        )
+        .bind(cancel.item_id.as_str())
+        .bind(cutoff_ms)
+        .execute(&mut **transaction)
+        .await?
+        .rows_affected();
+    }
+    Ok(pruned)
 }
 
 impl InteractionStore {
@@ -148,6 +196,7 @@ pub async fn record_local_cancel_outcome_in_scope<THost: Host>(
     item: &MailItemId,
     target: &MailItemId,
     outcome: &RecipientOutcome<CarrierAcceptance>,
+    now_ms: i64,
 ) -> Result<(), StorageError> {
     let Some(record) = read_cancel(scope.executor(), item).await? else {
         return Ok(());
@@ -156,14 +205,18 @@ pub async fn record_local_cancel_outcome_in_scope<THost: Host>(
         return Err(StorageError::InvalidStoredRecord);
     }
     validate_outcome(item, outcome)?;
+    if record.outcome.as_ref() == Some(outcome) {
+        return Ok(());
+    }
     let encoded = serde_json::to_string(outcome).map_err(|_| StorageError::InvalidRecord)?;
     let _: RecipientOutcome<CarrierAcceptance> =
         serde_json::from_str(&encoded).map_err(|_| StorageError::InvalidRecord)?;
-    sqlx_turso::query!(
-        "UPDATE local_cancel_deliveries SET outcome_json=? WHERE item_id=?",
-        encoded,
-        item.as_str()
+    sqlx::query::<sqlx_turso::Turso>(
+        "UPDATE local_cancel_deliveries SET outcome_json=?,settled_at_ms=? WHERE item_id=?",
     )
+    .bind(encoded)
+    .bind(now_ms)
+    .bind(item.as_str())
     .execute(scope.executor())
     .await?;
     Ok(())

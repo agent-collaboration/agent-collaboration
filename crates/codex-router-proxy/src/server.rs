@@ -155,6 +155,7 @@ use crate::websocket::router_websocket_config;
 
 #[cfg(test)]
 const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+/// Retains completed active-session events for one week.
 const ACTIVE_SESSION_EVENT_RETENTION_SECONDS: u64 = 7 * 86_400;
 
 #[path = "server/auth_reloader.rs"]
@@ -190,7 +191,7 @@ use protocol_handler::{
 pub(crate) use response_body::*;
 pub use runtime_config::*;
 use runtime_lifecycle::{
-    active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    active_session_event_compaction_before, claim_maintenance_cleanup_utc_day,
     store_connection_join_error, store_optional_connection_join_error,
     supervise_detached_connection_handler,
 };

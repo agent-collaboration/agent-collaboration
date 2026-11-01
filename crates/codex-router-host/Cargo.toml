@@ -15,6 +15,7 @@ bench = false
 runtime-test-support = [
     "collaboration-service/runtime-test-support",
     "collaboration-runtime/runtime-test-support",
+    "collaboration-runtime/test-support",
     "board-central-test-support/conformance",
 ]
 keychain-test-support = [

@@ -10,6 +10,7 @@ use collaboration_runtime::test_support::*;
 use serde_json::json;
 use std::sync::{Arc, atomic::AtomicUsize};
 use tokio::sync::Mutex;
+
 #[path = "scheduled_history_retention_tests.rs"]
 mod history_retention_tests;
 
@@ -154,10 +155,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         drop(application);
         drop(worker);
         drop(store);
-        for entry in std::fs::read_dir(&root)? {
-            std::fs::remove_file(entry?.path())?;
-        }
-        std::fs::remove_dir(root)?;
+        remove_store_directory_tolerating_sqlite_sidecars(&root)?;
     }
     Ok(())
 }
@@ -309,10 +307,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
     }
     drop(application);
     drop(store);
-    for entry in std::fs::read_dir(&root)? {
-        std::fs::remove_file(entry?.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
     Ok(())
 }
 

@@ -20,10 +20,35 @@ use super::MaintenanceEnqueueResult;
 use super::MaintenanceHint;
 use super::MaintenanceRepository;
 use super::MaintenanceRepositoryError;
+use super::active_session_rollup_retention_cutoff;
+use super::session_account_affinity_retention_cutoff;
 use crate::test_log_capture::capture_log_output;
 use crate::test_log_capture::capture_log_output_async;
 
 static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn state_history_retention_cutoffs_use_injected_clock_and_exact_week_windows() {
+    const NOW_UNIX_SECONDS: u64 = 8 * 86_400 + 17;
+
+    assert_eq!(
+        super::SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS,
+        7 * 86_400
+    );
+    assert_eq!(super::ACTIVE_SESSION_ROLLUP_RETENTION_SECONDS, 7 * 86_400);
+    assert_eq!(
+        session_account_affinity_retention_cutoff(NOW_UNIX_SECONDS),
+        86_417
+    );
+    assert_eq!(
+        active_session_rollup_retention_cutoff(NOW_UNIX_SECONDS),
+        86_417
+    );
+    assert_eq!(
+        NOW_UNIX_SECONDS - super::SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS,
+        86_417
+    );
+}
 
 #[tokio::test]
 async fn maintenance_hints_coalesce_without_request_admission_waiting() {
@@ -454,6 +479,7 @@ fn maintenance_actor_exposes_stale_cleanup_retention_and_compaction_hints() {
         "CleanupStaleActiveClients",
         "ApplyActiveSessionRetention",
         "CompactActiveSessionHistory",
+        "PrunePreviousResponseAffinityOwners",
     ] {
         assert!(
             hint_enum_source.contains(expected_hint_variant),

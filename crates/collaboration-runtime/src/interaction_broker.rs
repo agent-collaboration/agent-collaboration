@@ -17,7 +17,6 @@ use serde_json::Value;
 use serde_json::json;
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
     sync::{Arc, OnceLock},
     time::Duration,
 };
@@ -163,11 +162,7 @@ pub struct ServiceInteractionBroker {
     session_delivery: OnceLock<Arc<dyn SessionMessageDelivery>>,
     display_names: OnceLock<crate::SessionDisplayNameCache>,
     push_context: OnceLock<InteractionPushContext>,
-    routes_path: PathBuf,
-    routes: Mutex<BTreeMap<String, ApprovalRoute>>,
     pending: Arc<Mutex<BTreeMap<String, PendingApproval>>>,
-    history_path: PathBuf,
-    history: Arc<Mutex<Vec<ApprovalRequestRecord>>>,
     interaction_history: InteractionHistoryStore,
     interaction_store: Arc<interaction_storage::InteractionStore>,
     typed_operations: Mutex<()>,
@@ -279,33 +274,8 @@ impl ServiceInteractionBroker {
     pub async fn load(
         service_id: UuidIdentity,
         backend: NativeControlBackend,
-        routes_path: PathBuf,
+        interaction_store: Arc<interaction_storage::InteractionStore>,
     ) -> Result<Arc<Self>, ApprovalBrokerError> {
-        let routes = match tokio::fs::read(&routes_path).await {
-            Ok(bytes) => serde_json::from_slice::<Vec<ApprovalRoute>>(&bytes)
-                .map_err(|_| ApprovalBrokerError::Unavailable)?
-                .into_iter()
-                .map(|route| (route.thread_id.clone(), route))
-                .collect(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
-            Err(_) => return Err(ApprovalBrokerError::Unavailable),
-        };
-        let history_path = routes_path.with_file_name("approval-history.json");
-        // Corrupt history is a lost decision record, not an empty one: fail closed
-        // exactly as the routes file does. Only an absent file starts empty.
-        let history = match tokio::fs::read(&history_path).await {
-            Ok(bytes) => serde_json::from_slice::<Vec<ApprovalRequestRecord>>(&bytes)
-                .map_err(|_| ApprovalBrokerError::Unavailable)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(_) => return Err(ApprovalBrokerError::Unavailable),
-        };
-        let interaction_store = Arc::new(
-            interaction_storage::InteractionStore::open(
-                routes_path.with_file_name("interaction.sqlite"),
-            )
-            .await
-            .map_err(|_| ApprovalBrokerError::Unavailable)?,
-        );
         interaction_store
             .recover_interrupted_interaction_notices(chrono::Utc::now())
             .await
@@ -324,11 +294,7 @@ impl ServiceInteractionBroker {
             session_delivery: OnceLock::new(),
             display_names: OnceLock::new(),
             push_context: OnceLock::new(),
-            routes_path,
-            routes: Mutex::new(routes),
             pending: Arc::new(Mutex::new(BTreeMap::new())),
-            history_path,
-            history: Arc::new(Mutex::new(history)),
             interaction_history,
             interaction_store,
             typed_operations: Mutex::new(()),
@@ -339,6 +305,63 @@ impl ServiceInteractionBroker {
             #[cfg(test)]
             question_before_send: Mutex::new(None),
         }))
+    }
+
+    /// Imports the one-time route snapshot before the Host starts serving.
+    pub async fn import_legacy_approval_routes(
+        interaction_store: &interaction_storage::InteractionStore,
+        routes_path: &std::path::Path,
+        imported_at_ms: i64,
+    ) -> Result<(), ApprovalBrokerError> {
+        let bytes = match tokio::fs::read(routes_path).await {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err(ApprovalBrokerError::Unavailable),
+        };
+        let routes = serde_json::from_slice::<Vec<ApprovalRoute>>(&bytes)
+            .map_err(|_| ApprovalBrokerError::Unavailable)?
+            .into_iter()
+            .map(|route| (route.thread_id.clone(), route))
+            .collect::<BTreeMap<_, _>>();
+        let stored_routes = routes
+            .into_values()
+            .map(|route| {
+                Ok(interaction_storage::StoredApprovalRoute {
+                    thread_id: route.thread_id.clone(),
+                    route_json: serde_json::to_string(&route)
+                        .map_err(|_| ApprovalBrokerError::Unavailable)?,
+                })
+            })
+            .collect::<Result<Vec<_>, ApprovalBrokerError>>()?;
+        interaction_store
+            .import_approval_routes(&stored_routes, imported_at_ms)
+            .await
+            .map_err(|_| ApprovalBrokerError::Unavailable)?;
+        match tokio::fs::remove_file(routes_path).await {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(ApprovalBrokerError::Unavailable),
+        }
+    }
+
+    async fn load_approval_route(
+        &self,
+        thread_id: &str,
+    ) -> Result<Option<ApprovalRoute>, ApprovalBrokerError> {
+        let route_json = self
+            .interaction_store
+            .approval_route_json(thread_id, chrono::Utc::now().timestamp_millis())
+            .await
+            .map_err(|_| ApprovalBrokerError::Unavailable)?;
+        let Some(route_json) = route_json else {
+            return Ok(None);
+        };
+        let route = serde_json::from_str::<ApprovalRoute>(&route_json)
+            .map_err(|_| ApprovalBrokerError::Unavailable)?;
+        if route.thread_id != thread_id {
+            return Err(ApprovalBrokerError::Unavailable);
+        }
+        Ok(Some(route))
     }
 
     pub fn interaction_store(&self) -> Arc<interaction_storage::InteractionStore> {
@@ -373,27 +396,14 @@ impl ServiceInteractionBroker {
         });
     }
 
-    async fn persist_routes(&self) -> Result<(), ApprovalBrokerError> {
-        let routes = self
-            .routes
+    pub async fn list(&self, pending_only: bool) -> ApprovalListResult {
+        let mut approvals = self
+            .pending
             .lock()
             .await
             .values()
-            .cloned()
+            .map(|pending| pending.record.clone())
             .collect::<Vec<_>>();
-        let bytes =
-            serde_json::to_vec_pretty(&routes).map_err(|_| ApprovalBrokerError::Unavailable)?;
-        let temporary = self.routes_path.with_extension("json.tmp");
-        tokio::fs::write(&temporary, bytes)
-            .await
-            .map_err(|_| ApprovalBrokerError::Unavailable)?;
-        tokio::fs::rename(&temporary, &self.routes_path)
-            .await
-            .map_err(|_| ApprovalBrokerError::Unavailable)
-    }
-
-    pub async fn list(&self, pending_only: bool) -> ApprovalListResult {
-        let mut approvals = self.history.lock().await.clone();
         approvals.extend(
             self.interaction_history
                 .list_approvals(pending_only)
@@ -411,7 +421,13 @@ impl ServiceInteractionBroker {
         &self,
         pending_only: bool,
     ) -> Result<ApprovalDetailedListResult, ApprovalDecisionError> {
-        let mut legacy = self.history.lock().await.clone();
+        let mut legacy = self
+            .pending
+            .lock()
+            .await
+            .values()
+            .map(|pending| pending.record.clone())
+            .collect::<Vec<_>>();
         if pending_only {
             legacy.retain(|record| record.state == ApprovalState::PendingClientDecision);
         }
@@ -497,64 +513,8 @@ impl ServiceInteractionBroker {
         Ok(ApprovalDetailedListResult { approvals })
     }
 
-    async fn record(&self, record: ApprovalRequestRecord) -> Result<(), ApprovalBrokerError> {
-        record_history(&self.history_path, &self.history, record).await
-    }
-
-    async fn transition_pending(
-        &self,
-        request_id: &str,
-        state: ApprovalState,
-    ) -> Result<(), ApprovalBrokerError> {
-        let reason = match state {
-            ApprovalState::TimedOut => Some("approval expired before a decision"),
-            ApprovalState::Cancelled => {
-                Some("approval was cancelled because its provider generation ended")
-            }
-            _ => None,
-        };
-        self.finish_pending(request_id, state, reason)
-            .await
-            .map(|_| ())
-    }
-
-    async fn finish_pending(
-        &self,
-        request_id: &str,
-        state: ApprovalState,
-        reason: Option<&str>,
-    ) -> Result<bool, ApprovalBrokerError> {
-        let Some(mut pending) = self.pending.lock().await.remove(request_id) else {
-            return Ok(false);
-        };
-        pending.record.state = state;
-        pending.record.reason = reason.map(str::to_owned);
-        if let Err(error) = self.record(pending.record.clone()).await {
-            pending.record.reason = Some(
-                "approval ended, but its history could not be persisted; inspect Router diagnostics"
-                    .to_owned(),
-            );
-            let mut history = self.history.lock().await;
-            if let Some(existing) = history
-                .iter_mut()
-                .find(|item| item.request_id == pending.record.request_id)
-            {
-                *existing = pending.record;
-            }
-            tracing::error!(%error, request_id, "failed to persist terminal approval state");
-            return Err(error);
-        }
-        Ok(true)
-    }
-
-    async fn expire_or_cancel_stale(
-        &self,
-        request_id: &str,
-        state: ApprovalState,
-    ) -> Result<(), &'static str> {
-        self.transition_pending(request_id, state)
-            .await
-            .map_err(|_| "unavailable")
+    async fn remove_pending(&self, request_id: &str) -> bool {
+        self.pending.lock().await.remove(request_id).is_some()
     }
 }
 
@@ -614,39 +574,9 @@ fn map_native_options(
     Ok(offered)
 }
 
-async fn record_history(
-    history_path: &std::path::Path,
-    history: &Mutex<Vec<ApprovalRequestRecord>>,
-    record: ApprovalRequestRecord,
-) -> Result<(), ApprovalBrokerError> {
-    let mut history = history.lock().await;
-    let mut updated_history = history.clone();
-    if let Some(existing) = updated_history
-        .iter_mut()
-        .find(|item| item.request_id == record.request_id)
-    {
-        *existing = record;
-    } else {
-        updated_history.push(record);
-    }
-    let bytes = serde_json::to_vec_pretty(&updated_history)
-        .map_err(|_| ApprovalBrokerError::Unavailable)?;
-    let temporary = history_path.with_extension("json.tmp");
-    tokio::fs::write(&temporary, bytes)
-        .await
-        .map_err(|_| ApprovalBrokerError::Unavailable)?;
-    tokio::fs::rename(&temporary, history_path)
-        .await
-        .map_err(|_| ApprovalBrokerError::Unavailable)?;
-    *history = updated_history;
-    Ok(())
-}
-
 struct CancellationMarker {
     request_id: String,
     pending: Arc<Mutex<BTreeMap<String, PendingApproval>>>,
-    history: Arc<Mutex<Vec<ApprovalRequestRecord>>>,
-    history_path: PathBuf,
     armed: bool,
 }
 
@@ -657,30 +587,8 @@ impl Drop for CancellationMarker {
         }
         let request_id = self.request_id.clone();
         let pending = Arc::clone(&self.pending);
-        let history = Arc::clone(&self.history);
-        let history_path = self.history_path.clone();
         tokio::spawn(async move {
-            if let Some(mut request) = pending.lock().await.remove(&request_id) {
-                request.record.state = ApprovalState::Cancelled;
-                request.record.reason =
-                    Some("approval handler ended before a decision was recorded".to_owned());
-                if let Err(error) =
-                    record_history(&history_path, &history, request.record.clone()).await
-                {
-                    request.record.reason = Some(
-                        "approval ended, but its history could not be persisted; inspect Router diagnostics"
-                            .to_owned(),
-                    );
-                    let mut history = history.lock().await;
-                    if let Some(existing) = history
-                        .iter_mut()
-                        .find(|item| item.request_id == request_id)
-                    {
-                        *existing = request.record;
-                    }
-                    tracing::error!(%error, request_id, "failed to persist dropped approval state");
-                }
-            }
+            pending.lock().await.remove(&request_id);
         });
     }
 }
@@ -771,8 +679,7 @@ impl ServiceInteractionBroker {
             .unwrap_or(true)
         {
             drop(pending);
-            self.expire_or_cancel_stale(&params.request_id, ApprovalState::TimedOut)
-                .await?;
+            self.remove_pending(&params.request_id).await;
             return Err(ApprovalDecisionError::Code("expired"));
         }
         let current_generation = self
@@ -784,8 +691,7 @@ impl ServiceInteractionBroker {
             .clone();
         if current_generation != request.record.generation {
             drop(pending);
-            self.expire_or_cancel_stale(&params.request_id, ApprovalState::Cancelled)
-                .await?;
+            self.remove_pending(&params.request_id).await;
             return Err(ApprovalDecisionError::Code("oldGeneration"));
         }
         let requester = board_identity(&request.record.requester)?;
@@ -822,11 +728,6 @@ impl ServiceInteractionBroker {
                     .map(|option| option.option_id.clone())
                     .collect(),
             })?;
-        let mut record = request.record.clone();
-        record.state = ApprovalState::Decided;
-        record.reason = None;
-        record.decision = Some(decision);
-        self.record(record).await.map_err(|_| "unavailable")?;
         let request = pending
             .remove(&params.request_id)
             .ok_or("approvalNotPending")?;
