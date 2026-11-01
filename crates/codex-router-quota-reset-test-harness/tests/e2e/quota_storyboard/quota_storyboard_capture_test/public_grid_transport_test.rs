@@ -76,7 +76,7 @@ fn public_wrapper_receipt_survives_a_non_c_parent_locale() -> TestResult<()> {
     let result = std::process::Command::new(std::env::current_exe()?)
         .args([
             "--exact",
-            "public_grid_transport_test::public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child",
+            "quota_storyboard::public_grid_transport_test::public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child",
             "--nocapture",
         ])
         .env_remove("LC_ALL")

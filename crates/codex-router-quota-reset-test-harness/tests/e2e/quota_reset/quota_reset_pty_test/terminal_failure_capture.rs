@@ -104,7 +104,7 @@ impl FailureCapture {
             .join("../../scripts/verification/tui/capture/render-pty-failure-grid.ts");
         if fs::read(&script)?
             != include_bytes!(
-                "../../../../scripts/verification/tui/capture/render-pty-failure-grid.ts"
+                "../../../../../../scripts/verification/tui/capture/render-pty-failure-grid.ts"
             )
         {
             return Err("failure capture renderer differs from its compiled source binding".into());

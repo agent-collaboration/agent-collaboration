@@ -17,6 +17,7 @@ import {
 	sourceDigest,
 	verifyArtifact,
 } from '../../evidence/source-binding.ts';
+import { ptyGridDriverEntry } from '../../terminal/pty-grid-driver.ts';
 import { qualifyTerminal } from '../../terminal/terminal-qualification.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
@@ -81,12 +82,13 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 	for (const retained of preflight.retainedComparisons) verifyArtifact(retained);
 	for (const artifact of [plan.driver, plan.product])
 		execFileSync('/usr/bin/codesign', ['--verify', '--strict', artifact.path]);
-	const listing = execFileSync(
-		plan.driver.path,
-		['compiled_grid_terminal_observation', '--exact', '--list'],
-		{ encoding: 'utf8' },
-	);
-	if (!listing.split('\n').includes('compiled_grid_terminal_observation: test'))
+	const invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('authored-flow matrix is empty');
+	const entry = ptyGridDriverEntry(invocation.journey.surface);
+	const listing = execFileSync(plan.driver.path, [entry, '--exact', '--list'], {
+		encoding: 'utf8',
+	});
+	if (!listing.split('\n').includes(entry + ': test'))
 		throw new Error('streaming driver entry absent');
 	await qualifyTerminal();
 }

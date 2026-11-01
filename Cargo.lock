@@ -1522,6 +1522,7 @@ dependencies = [
  "codex-router-core",
  "codex-router-secret-store",
  "codex-router-state",
+ "nix",
  "portable-pty",
  "regex",
  "rustix 1.1.4",

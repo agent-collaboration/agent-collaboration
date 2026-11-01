@@ -20,7 +20,7 @@ pub(crate) fn verified_node_executable() -> TestResult<(PathBuf, String)> {
 pub(crate) fn permanent_adapter_source(name: &str) -> TestResult<PathBuf> {
     let (compiled, relative): (&[u8], &str) = match name {
         "fixture-child.ts" => (
-            include_bytes!("../../../../scripts/verification/tui/fixtures/fixture-child.ts"),
+            include_bytes!("../../../../../../scripts/verification/tui/fixtures/fixture-child.ts"),
             "fixtures/fixture-child.ts",
         ),
         _ => return Err("unknown permanent TypeScript adapter".into()),
