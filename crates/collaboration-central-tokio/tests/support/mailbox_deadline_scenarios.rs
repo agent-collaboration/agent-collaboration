@@ -78,6 +78,10 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         )?);
         let submitted=operation(&mut sender.socket,json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":item,"originEpoch":null}}})).await?;
         if submitted.pointer("/value/value/kind")!=Some(&json!("submitted")) {return Err(format!("quiet mail not admitted: {submitted}").into());}
+        // Wake the real alarm after admission. The pre-submit clock control
+        // can already have been consumed before this publication was queued.
+        // Keep business time unchanged so the initial Sent still precedes TTL.
+        client.set_object_time(mailbox.clone(), started).await?;
         let sent=latest(&mut sender.socket,item_id,json!({"kind":"sent","value":{"seq":1}})).await?;
         if sent.get("version")!=Some(&json!(1)) {return Err("initial offline Sent version changed".into());}
         client.set_object_time(mailbox,

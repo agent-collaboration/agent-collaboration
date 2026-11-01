@@ -84,6 +84,7 @@ impl Connection {
             self.host,
             body.len()
         );
+        let mut waiting_for = "owner capture registration";
         tokio::time::timeout(Duration::from_secs(10), async {
             let client = reqwest::Client::builder().no_proxy().build()?;
             if let Some(id) = observation.as_ref()
@@ -92,6 +93,7 @@ impl Connection {
             {
                 return Err("body-order capture was not registered before the upload".into());
             }
+            waiting_for = "request header write";
             self.socket.get_mut().write_all(head.as_bytes()).await?;
             let mut status_prefix = Vec::new();
             let early_response = if let Some(id) = observation.as_ref() {
@@ -101,6 +103,7 @@ impl Connection {
                 // Keep partially read response bytes across cancellation. The
                 // actual adapter read releases the suffix; a response wins only
                 // when its real head arrives, never by an absence interval.
+                waiting_for = "actual body prefix read or premature response head";
                 let early = tokio::select! {
                     result = self.socket.read_until(b'\n', &mut status_prefix) => {
                         if result? == 0 { return Err("HTTP connection ended before its response head".into()); }
@@ -120,15 +123,19 @@ impl Connection {
                         }
                     }
                 };
+                waiting_for = "withheld body suffix write";
                 self.socket.get_mut().write_all(suffix).await?;
                 early
             } else {
+                waiting_for = "complete body write";
                 self.socket.get_mut().write_all(body).await?;
                 false
             };
+            waiting_for = "body flush and response following body EOF";
             self.socket.get_mut().flush().await?;
             let reply = self.reply(status_prefix).await?;
             let order = if let Some(id) = observation {
+                waiting_for = "actual body EOF and response-order observation";
                 let completed = observe_body(&client, &self.host, BodyOrderCommand::Finish { request: id }).await?;
                 match completed {
                     BodyOrderObservation::ResponseBeforeEnd { .. } => BodyOrderEvidence::BeforeBody,
@@ -145,7 +152,10 @@ impl Connection {
             };
             Ok((reply, order))
         })
-        .await?
+        .await
+        .map_err(|error| {
+            format!("HTTP body request exceeded its existing bound while waiting for {waiting_for}: {error}")
+        })?
     }
     async fn line(&mut self) -> ConformanceResult<String> {
         let mut line = String::new();
