@@ -758,3 +758,6 @@ pub(crate) use provider_delivery_submission::ProviderPromptDispatch;
 
 #[cfg(test)]
 mod provider_registration_tests;
+
+#[cfg(test)]
+mod provider_launch_refusal_tests;
