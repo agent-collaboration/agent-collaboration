@@ -218,7 +218,9 @@ pub(super) async fn retire_imported_fixture(base: &str) -> ConformanceResult<()>
         let page=http.get(format!("{base}/admin/v1/copies?limit=100")).header("Cf-Access-Jwt-Assertion",owner_assertion()?).send().await?.error_for_status()?.json::<Value>().await?;
         let projected=page.get("projects").and_then(Value::as_array).and_then(|projects|projects.iter().find(|project|project.get("project")==Some(&json!(database)))).ok_or("retired project disappeared from directory")?;
         let projected_at=chrono::DateTime::from_timestamp_millis(at.unix_millis()).ok_or("retired time outside fixture display range")?;
-        if projected.get("leaseSide")!=Some(&json!({"kind":"known","value":{"lease":{"kind":"retired","value":{"retired_at":projected_at}},"asOf":projected.get("leaseSide").and_then(|side|side.pointer("/value/asOf")).ok_or("retirement projection omitted observation time")?}})) {
+        // Fresh incarnation, epoch1: initial Unheld revision1 advances once
+        // for Retiring and once for Retired. Version metadata is mandatory.
+        if projected.get("leaseSide")!=Some(&json!({"kind":"known","value":{"lease":{"kind":"retired","value":{"retired_at":projected_at}},"leaseVersion":{"epoch":1,"incarnation":1,"change":3},"asOf":projected.get("leaseSide").and_then(|side|side.pointer("/value/asOf")).ok_or("retirement projection omitted observation time")?}})) {
             return Err(format!("HTTP Retired escaped before the actual exact Fleet projection: {projected}").into());
         }
         let health_route=format!("{base}/admin/v1/copies/{database}/health");
