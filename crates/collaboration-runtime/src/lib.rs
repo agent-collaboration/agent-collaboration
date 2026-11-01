@@ -153,6 +153,11 @@ pub mod observation_timestamp;
 mod native_worker_faults;
 
 mod central_automation_receiver;
+mod remote_create_admission;
+pub use remote_create_admission::{
+    PreparedRemoteCreate, PreparedRemoteCreateActors, RemoteCreateAdmission,
+    RemoteCreateAdmissionError, RemoteCreateAdmissionInputs, RemoteCreateConfigurationError,
+};
 mod central_automation_transport;
 mod central_report_worker;
 /// Test-only schedule execution fixtures shared with application inspection tests.
