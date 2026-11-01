@@ -220,8 +220,26 @@ rules to source lines, and lists the catalogue's quota fixtures and checks.
 profiles. It reports executable admission as unbound when the packet's artifacts
 are null. Source argument matches, synthetic helper checks and reader sensitivity
 are zero product passes; they cannot replace signed-driver check-only admission.
-R19 remains an explicit placeholder until grouped rendering, summaries and
-preference reopen have their own declared target and expected outcomes.
+The current source binding has fifteen effectful scenarios, including
+`grouping-reopen`, and eleven read-only scenarios. Historical fourteen-scenario
+packets remain retained evidence; the strict current census requires a fresh
+source packet. Grouping native admission still needs its declared signed target.
+
+`quota-effect-readback.ts` requires the producer's `groupingReopen`,
+`preferenceWrites` and `storedGrouping` fields on every final receipt. Empty or
+null values are explicit for ordinary profiles. The grouping profile requires
+two genuine Quit outcomes, two ordered grouping activations, unchanged accounts
+and policies, the same actual store, consecutive mounts, checked None/Provider
+then Provider/Status poses, and exactly two successful saved choices. A planned
+facet or invented child cannot supply these facts.
+
+`LoopEndingHandoff` has explicit `child-login` and `invocation-remount` alternatives.
+The former preserves terminal restoration and the actual parent's wait result.
+The latter consumes genuine invocation-settled then invocation-started facts,
+keeps the same Rust PTY owner and store, and requires the next invocation and
+mount before one separately acknowledged F12 frame. The first Quit has no EOF
+requirement. A producer adapter must parse and correlate the real event sequence
+before normalizing these facts; controlled lifecycle tests are not quota proof.
 
 `fixtures/quota-effect-launch.ts` admits the fixed effectful CLI libtest entry,
 hash-bound JSON configuration and fresh private paths under `/private/tmp`.

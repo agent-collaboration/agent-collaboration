@@ -27,6 +27,9 @@ function cancelReceipt(): unknown {
 	];
 	return {
 		scenario: 'remove-cancel',
+		groupingReopen: null,
+		preferenceWrites: [],
+		storedGrouping: null,
 		outcomes: [{ kind: 'quit' }],
 		before: accounts,
 		after: accounts,
@@ -273,7 +276,7 @@ test('one refresh journey requires two fresh child bindings', () => {
 		'refresh-partial',
 	]);
 	expect(quotaJourneyScenarios('quota-remove-middle')).toEqual(['remove-middle', 'remove-held']);
-	expect(quotaJourneyScenarios('quota-group-by-f6')).toEqual([]);
+	expect(quotaJourneyScenarios('quota-group-by-f6')).toEqual(['grouping-reopen']);
 });
 
 test('actual login receipt must retain A, restored terminal, exact exit and a fresh mount', () => {

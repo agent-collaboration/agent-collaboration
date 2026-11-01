@@ -8,13 +8,8 @@ import type { GhosttyInputProfile } from './example-ghostty-keybinds.ts';
 import type { CellMouseEvent } from './ghostty-input-encoding.ts';
 import { GhosttyJourneyInput, requireDelivered } from './ghostty-journey-input.ts';
 import type { DispatchFrameObservation } from './input-dispatch-frames.ts';
-import {
-	requireHandoffChildEntry,
-	requireHandoffChildExit,
-	requireHandoffRemount,
-	observeHandoffFact,
-} from './loop-ending-handoff.ts';
-import type { LoopEndingHandoff } from './loop-ending-handoff.ts';
+import { observeHandoffLifecycle, observeHandoffFact } from './loop-ending-handoff.ts';
+import type { HandoffLifecycle, LoopEndingHandoff } from './loop-ending-handoff.ts';
 import type { PtyGridDriver } from './pty-grid-driver.ts';
 
 export interface MarkedInputEvidence {
@@ -23,14 +18,11 @@ export interface MarkedInputEvidence {
 	/** A burst never observes the state between its inputs. Send separately to assert it. */
 	readonly observation: { readonly kind: 'after-input' | 'after-burst'; readonly sequence: number };
 }
-export interface LoopEndingHandoffEvidence {
+export type LoopEndingHandoffEvidence = HandoffLifecycle & {
 	readonly driverPid: number;
 	readonly receipts: readonly InputDispatchReceipt[];
-	readonly childEntry: ReturnType<typeof requireHandoffChildEntry>;
-	readonly childExit: ReturnType<typeof requireHandoffChildExit>;
-	readonly remount: ReturnType<typeof requireHandoffRemount>;
 	readonly firstFrame: MarkedInputEvidence;
-}
+};
 export class MarkerInputSession {
 	private readonly driver: PtyGridDriver;
 	private readonly reader: InputConsumptionReadback;
@@ -144,7 +136,7 @@ export class MarkerInputSession {
 	assertComplete(): readonly InputDispatchReceipt[] {
 		return this.reader.assertComplete();
 	}
-	/** Only the UI loop ends. Keep this PTY owner through the child and its fresh quota mount. */
+	/** Only the UI loop ends; preserve the PTY through the declared lifecycle and new mount. */
 	async handoff(
 		options: LoopEndingHandoff & {
 			readonly expected: readonly InputConsumptionExpectation[];
@@ -168,19 +160,14 @@ export class MarkerInputSession {
 				timeoutMs: 8000,
 				inject: async () => {
 					await options.inject();
-					// A real entry fact forces a re-read even if receipt notifications coalesce.
-					entered = await observeHandoffFact(options.childEntered, observation.signal);
+					// Real lifecycle settlement forces a re-read if receipt notifications coalesce.
+					entered = await observeHandoffFact(
+						options.kind === 'child-login' ? options.childEntered : options.invocationSettled,
+						observation.signal,
+					);
 				},
 			});
-			const childEntry = requireHandoffChildEntry(entered, options.expectedChildArguments);
-			const childExit = requireHandoffChildExit(
-				await observeHandoffFact(options.childExited, observation.signal),
-				options.expectedChildExitCode,
-			);
-			const remount = requireHandoffRemount(
-				await observeHandoffFact(options.remounted, observation.signal),
-				options.previousMount,
-			);
+			const lifecycle = await observeHandoffLifecycle(options, entered, observation.signal);
 			const actionReceipt = receipts[0];
 			if (actionReceipt === undefined) throw new Error('handoff exact action receipt absent');
 			await this.driver.waitForGrid('handoff fresh quota scene', options.ready, beforeGeneration);
@@ -194,7 +181,7 @@ export class MarkerInputSession {
 				latest.binding.frameEndByteOffset <= beforeByteOffset
 			)
 				throw new Error('handoff first frame is not the fresh quota state on the same PTY owner');
-			return { driverPid, receipts, childEntry, childExit, remount, firstFrame };
+			return { ...lifecycle, driverPid, receipts, firstFrame };
 		} finally {
 			clearTimeout(deadline);
 			observation.abort(new Error('handoff observation settled'));

@@ -291,10 +291,15 @@ export class NativeFlowRuntime implements FlowRuntime {
 			JSON.stringify(
 				{
 					kind: 'loop-ending-handoff',
+					handoffKind: proof.kind,
 					driverPid: proof.driverPid,
 					receipts: proof.receipts,
-					childEntry: proof.childEntry,
-					childExit: proof.childExit,
+					...(proof.kind === 'child-login'
+						? { childEntry: proof.childEntry, childExit: proof.childExit }
+						: {
+								invocationSettled: proof.invocationSettled,
+								invocationStarted: proof.invocationStarted,
+							}),
 					remount: proof.remount,
 					firstFrame: proof.firstFrame.frames.at(-1)?.binding,
 				},

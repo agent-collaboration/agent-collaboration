@@ -9,6 +9,7 @@ import {
 	quotaEffectArguments,
 	quotaEffectConfigurationSchema,
 	quotaLoginExit,
+	quotaRequiresPrivateGuard,
 } from '../journeys/flows/quota-fixture-contract.ts';
 import type { ChildLaunch, FixtureCommand } from './fixture-child.ts';
 
@@ -89,7 +90,7 @@ export function quotaEffectLaunch(configuration: FixtureCommand): ChildLaunch {
 		if (value !== undefined) environment[name] = value;
 	}
 	const loginExit = quotaLoginExit(effect.scenario);
-	if (loginExit === null) {
+	if (!quotaRequiresPrivateGuard(effect.scenario)) {
 		if (record.login_standin_sha256 !== undefined || record.login_path_prefix !== undefined)
 			throw new Error('non-login quota scenario forbids login launch fields');
 	} else {
@@ -117,7 +118,7 @@ export function quotaEffectLaunch(configuration: FixtureCommand): ChildLaunch {
 			prefix + (environment['PATH'] === undefined ? '' : ':' + environment['PATH']);
 		environment['QUOTA_LOGIN_STANDIN_RECEIPT'] = effect.loginReceipt;
 		environment['QUOTA_LOGIN_STANDIN_GATE'] = effect.loginGateSocket;
-		environment['QUOTA_LOGIN_STANDIN_EXIT'] = String(loginExit);
+		environment['QUOTA_LOGIN_STANDIN_EXIT'] = String(loginExit ?? 0);
 	}
 	return {
 		executable: record.binary,

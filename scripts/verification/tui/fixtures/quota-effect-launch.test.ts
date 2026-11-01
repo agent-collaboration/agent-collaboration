@@ -17,6 +17,7 @@ import { fileDigest } from '../evidence/source-binding.ts';
 import {
 	quotaEffectScenarioSchema,
 	quotaLoginExit,
+	quotaRequiresPrivateGuard,
 } from '../journeys/flows/quota-fixture-contract.ts';
 import type { QuotaEffectScenario } from '../journeys/flows/quota-fixture-contract.ts';
 import { quotaEffectLaunch } from './quota-effect-launch.ts';
@@ -50,7 +51,8 @@ function launchRecord(scenario: QuotaEffectScenario): Readonly<Record<string, st
 		effect_configuration: effectConfiguration,
 		effect_configuration_sha256: '',
 	};
-	if (quotaLoginExit(scenario) === null) writeFileSync(effectConfiguration, JSON.stringify(effect));
+	if (!quotaRequiresPrivateGuard(scenario))
+		writeFileSync(effectConfiguration, JSON.stringify(effect));
 	else {
 		const standin = join(output, 'quota-login-recording-standin');
 		writeFileSync(standin, 'not executed by this test');
@@ -88,7 +90,7 @@ test.each(quotaEffectScenarioSchema.options)(
 			'--test-threads=1',
 		]);
 		expect(launch.environment['QUOTA_LOGIN_STANDIN_EXIT']).toBe(
-			quotaLoginExit(scenario)?.toString(),
+			quotaRequiresPrivateGuard(scenario) ? String(quotaLoginExit(scenario) ?? 0) : undefined,
 		);
 		expect(launch.environment['HOME']).toBe(process.env['HOME']);
 		for (const name of [

@@ -7,7 +7,7 @@ import { expect, test, vi } from 'vitest';
 import { controlledExecutable } from '../fixtures/controlled-child-fixtures.ts';
 import { temporaryRoot } from '../fixtures/receipt-fixtures.ts';
 import type { InputConsumptionExpectation } from '../sessions/input-consumption-schema.ts';
-import type { LoopEndingHandoff } from './loop-ending-handoff.ts';
+import type { ChildLoginHandoff } from './loop-ending-handoff.ts';
 import { MarkerInputSession } from './marker-input-session.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import { gridLines } from './terminal-grid.ts';
@@ -58,7 +58,7 @@ async function controlledHandoff(
 ): Promise<{
 	driver: PtyGridDriver;
 	input: MarkerInputSession;
-	handoff: LoopEndingHandoff;
+	handoff: ChildLoginHandoff;
 	directory: string;
 	phases: string[];
 }> {
@@ -116,6 +116,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
 		directory,
 		phases,
 		handoff: {
+			kind: 'child-login',
 			previousMount: 1,
 			expectedChildArguments: argv,
 			expectedChildExitCode: exitCode,
@@ -150,6 +151,7 @@ test.each([0, 130, 7] as const)(
 				expected: [login],
 				inject: () => driver.send(Buffer.from('\r')),
 			});
+			if (proof.kind !== 'child-login') throw new Error('login returned a different lifecycle');
 			expect(proof.driverPid).toBe(pid);
 			expect(proof.receipts.map((receipt) => receipt.sequence)).toEqual([1]);
 			expect(proof.childExit).toEqual({ kind: 'exited', code: exitCode });
