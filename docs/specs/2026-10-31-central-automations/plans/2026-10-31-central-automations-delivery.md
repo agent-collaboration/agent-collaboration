@@ -139,7 +139,7 @@ These run on Sunclaw, never on Sunbook.
 
 ## Follow-up PRs (owner, 2026-11-01)
 
-- **PR 2b, mechanical split of interactions** (stacked after PR 2): a new crate owns typed interactions (approval and question history, approval routes) on the same `interaction.sqlite`, while `interaction-storage` keeps delivery. It's a mechanical move with no behavior change, and no stored data moves. It's kept out of PR 1 because PR 2's lanes change `interaction-storage`.
+- **PR 2b, mechanical split of interactions** (stacked after PR 2): a new crate owns typed interactions (approval and question history, approval routes) on the same `interaction.sqlite`, while `interaction-storage` keeps delivery. It's a mechanical move with no behavior change, and no stored data moves. It’s kept out of PR 1 because PR 2’s lanes change `interaction-storage`. Its plan: [2026-11-01-pr2b-plan.md](2026-11-01-pr2b-plan.md).
 - **Library follow-up** (owner approved the pin changes): `agent-fleet-sync` install-attempt pruning and journal mode for its stores, and `sqlx-turso` vacuum.
 - **PR 3, routed approvals through central:** its own design cycle.
 
