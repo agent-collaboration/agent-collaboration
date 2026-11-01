@@ -55,12 +55,9 @@ function protocolDriver(root: string, source: string): DriverChild {
 		closeSync(stderr);
 	}
 }
-function watchFixtureMarker(
-	root: string,
-	name: string,
-): { readonly observed: Promise<void>; close(): void } {
+function watchFixtureMarker(root: string, name: string): { wait(): Promise<void>; close(): void } {
 	const marker = join(root, name);
-	const watcher = watch(root, { signal: AbortSignal.timeout(5000) });
+	const watcher = watch(root);
 	const observed = new Promise<void>((resolve, reject) => {
 		const inspect = (): void => {
 			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
@@ -70,7 +67,20 @@ function watchFixtureMarker(
 		watcher.once('close', () => reject(new Error('fixture marker wait closed: ' + name)));
 		inspect();
 	});
-	return { observed, close: () => watcher.close() };
+	return {
+		wait: () => {
+			const guard = AbortSignal.timeout(5000);
+			let rejectGuard: (() => void) | undefined;
+			const expired = new Promise<never>((_resolve, reject) => {
+				rejectGuard = () => reject(new Error('fixture marker causal wait expired: ' + name));
+				guard.addEventListener('abort', rejectGuard, { once: true });
+			});
+			return Promise.race([observed, expired]).finally(() => {
+				if (rejectGuard !== undefined) guard.removeEventListener('abort', rejectGuard);
+			});
+		},
+		close: () => watcher.close(),
+	};
 }
 test('discovery must identify only the exact declared libtest entry', async () => {
 	const root = rootDirectory();
@@ -258,7 +268,7 @@ test.each([false, true])(
 			(error: unknown) => String(error),
 		);
 		try {
-			await ready.observed;
+			await ready.wait();
 			await vi.advanceTimersByTimeAsync(200);
 			const failure = await observed;
 			expect(failure).toContain(oracle ? 'command reap deadline' : 'capture discovery failed');
@@ -268,7 +278,7 @@ test.each([false, true])(
 		} finally {
 			writeFileSync(release, 'release\n');
 			try {
-				await exited.observed;
+				await exited.wait();
 				await observed;
 			} finally {
 				ready.close();

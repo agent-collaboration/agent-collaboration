@@ -1,7 +1,7 @@
 import { journeyGridSizes } from '../journey-definition.ts';
 import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
-export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'] as const).map(
+const toolbarMenuDrafts: readonly FlowJourney[] = (['sessions', 'quota'] as const).map(
 	(surface) => ({
 		journeyId: surface + '-toolbar-and-menu',
 		requirements: surface === 'quota' ? ['U12/R13', 'U16/R17', 'U17/R18'] : ['U12/R13'],
@@ -71,6 +71,8 @@ export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'
 							checkpoint: 'new-background-preset',
 							checks: ['new-run-mode-by-capability'],
 						},
+						{ kind: 'focus', target: 'Run', via: 'Tab' },
+						{ kind: 'click', target: 'Run' },
 						{ kind: 'click', target: 'Foreground' },
 						{
 							kind: 'capture',
@@ -78,8 +80,21 @@ export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'
 							checks: ['new-run-mode-by-capability'],
 						},
 						{ kind: 'press', key: 'Escape' },
+						{ kind: 'focus', target: 'main list', via: 'Tab' },
 						{ kind: 'press', key: '/' },
-						{ kind: 'type', text: 'fixture unique session query' },
+						{
+							kind: 'capture',
+							checkpoint: 'filter-shortcut-focus',
+							checks: ['filter-focus-and-live-query'],
+						},
+						{ kind: 'focus', target: 'main list', via: 'Tab' },
+						{ kind: 'click', target: 'Filter' },
+						{
+							kind: 'capture',
+							checkpoint: 'filter-click-focus',
+							checks: ['filter-focus-and-live-query'],
+						},
+						{ kind: 'type', text: '0123456789A' },
 						{ kind: 'capture', checkpoint: 'live-filter', checks: ['filter-focus-and-live-query'] },
 						{ kind: 'press', key: 'Escape' },
 					] satisfies FlowJourney['steps'])
@@ -101,6 +116,7 @@ export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'
 				checkpoint: 'narrow-menu-complete',
 				checks: ['closed-menu-inventory', 'right-dropoff', 'projection-parity'],
 			},
+			{ kind: 'press', key: 'Escape' },
 		],
 		wrongOutcomes: [
 			'Help or Quit on toolbar',
@@ -113,3 +129,43 @@ export const toolbarMenuJourneys: readonly FlowJourney[] = (['sessions', 'quota'
 		admissionInputs: [],
 	}),
 );
+
+export const toolbarMenuJourneys: readonly FlowJourney[] = toolbarMenuDrafts.map((journey) => {
+	if (journey.surface !== 'sessions') return journey;
+	return Object.assign({}, journey, {
+		inputProfile: 'example-ghostty-keybinds',
+		steps: journey.steps.flatMap((step): FlowJourney['steps'] => {
+			if (step.kind === 'capture' && step.checks.includes('closed-menu-inventory'))
+				return [
+					{
+						kind: 'fixture',
+						operation: 'inspect-picker-menu-' + step.checkpoint,
+						purpose:
+							'Traverse the entire real menu, including checked values and nonfocusable section keys, before its original capture.',
+					},
+					step,
+				];
+			if (step.kind === 'capture' && step.checkpoint === 'help-actions-settings-conventions')
+				return [
+					{
+						kind: 'fixture',
+						operation: 'inspect-picker-menu-help',
+						purpose:
+							'Check every physical Help row against the independently retained base conventions and current action/settings census.',
+					},
+					step,
+				];
+			if (step.kind === 'click' && step.target === 'New background session…')
+				return [
+					{
+						kind: 'fixture',
+						operation: 'reveal-picker-background-new',
+						purpose:
+							'Reveal the actual menu action through acknowledged focus navigation before clicking its painted cells.',
+					},
+					step,
+				];
+			return [step];
+		}),
+	});
+});

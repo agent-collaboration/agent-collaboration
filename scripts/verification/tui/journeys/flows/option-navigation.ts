@@ -42,6 +42,16 @@ export const optionNavigationJourneys: readonly FlowJourney[] = (
 			},
 			{ kind: 'focus', target: help ? 'main list before Help' : 'main list', via: 'Tab' },
 			...(help ? ([{ kind: 'press', key: 'F1' }] satisfies FlowJourney['steps']) : []),
+			...(context === 'sessions-help'
+				? ([
+						{
+							kind: 'fixture',
+							operation: 'qualify-native-help-physical-rows',
+							purpose:
+								'Index physical one-row Down transitions against the independent current Help census, then return to the first row.',
+						},
+					] satisfies FlowJourney['steps'])
+				: []),
 			{ kind: 'capture', checkpoint: 'alias-entry', checks: [check] },
 			{
 				kind: 'fixture',

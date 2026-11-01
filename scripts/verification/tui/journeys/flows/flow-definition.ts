@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { journeyGridSizes } from '../journey-definition.ts';
 
 export const flowBaseHead = 'e23f28aff392d7c09905fe65ae64628ddaba81a4';
-export const flowDesignHead = '76803a480b21cad31dc32db1b6fbc86c31aab61b';
+export const flowDesignHead = '5bafadfffa493c6f4aea05660f7b7681127fb34f';
 /** Lead contract 01a19430: sequential steps observe their final input; a burst
  * observes only its final state. Author separate steps for intermediate states.
  */
@@ -51,6 +51,9 @@ export const flowCheckSchema = z.enum([
 	'picker-option-page-and-ends',
 	'content-scroll-option-page-and-ends',
 	'help-option-page-and-ends',
+	'session-grouping-buckets',
+	'session-grouping-selection',
+	'session-grouping-checked',
 ]);
 export type FlowCheck = z.infer<typeof flowCheckSchema>;
 export const flowStepSchema = z.discriminatedUnion('kind', [
@@ -86,7 +89,9 @@ export const flowStepSchema = z.discriminatedUnion('kind', [
 ]);
 export const flowJourneySchema = z.strictObject({
 	journeyId: z.string().regex(/^[a-z0-9-]+$/u),
-	requirements: z.array(z.enum(['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])).min(1),
+	requirements: z
+		.array(z.enum(['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18', 'U18/R19']))
+		.min(1),
 	surface: z.enum(['sessions', 'quota']),
 	availability: z.strictObject({
 		state: z.literal('absent-at-base'),

@@ -10,6 +10,10 @@ import type { ArtifactBinding } from '../evidence/evidence-schema.ts';
 import { PENDING_SCENARIOS, isComponentScenario } from '../fixtures/component-fixture-contract.ts';
 import type { ComponentScenario } from '../fixtures/component-fixture-contract.ts';
 import {
+	SESSIONS_PREFERENCES_DIRECTORY,
+	sessionsPreferencesEnvironment,
+} from '../sessions/sessions-preferences-directory.ts';
+import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
 } from '../sessions/sessions-receipt-directory.ts';
@@ -48,6 +52,7 @@ export interface PtyGridTarget {
 	readonly componentScenario?: ComponentScenario;
 	readonly componentReleaseFile?: string;
 	readonly sessionsReceiptDirectory?: string;
+	readonly sessionsPreferencesDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly showcaseEnvironment?: NodeJS.ProcessEnv;
 	readonly quotaEffectEnvironment?: NodeJS.ProcessEnv;
@@ -61,7 +66,11 @@ export interface PtyGridTarget {
 		| 'new-machine-uncommitted'
 		| 'source-options-add'
 		| 'source-options-remove'
-		| 'source-options-replace';
+		| 'source-options-replace'
+		| 'fork-ssh-profile'
+		| 'claude-new-success'
+		| 'large-list'
+		| 'r19-grouping';
 }
 export function ptyGridDriverArguments(surface: PtyGridTarget['surface']): readonly string[] {
 	return [
@@ -164,6 +173,11 @@ export class PtyGridDriver {
 			target.sessionsReceiptDirectory,
 			target.evidence,
 		);
+		const preferencesEnvironment = sessionsPreferencesEnvironment(
+			target.sessionsPreferencesDirectory,
+			target.repository,
+			target.surface,
+		);
 		this.child = spawn(target.driver, ptyGridDriverArguments(target.surface), {
 			cwd: target.repository,
 			env: {
@@ -184,6 +198,8 @@ export class PtyGridDriver {
 						}),
 				[SESSIONS_RECEIPT_DIRECTORY]: undefined,
 				...receiptEnvironment,
+				[SESSIONS_PREFERENCES_DIRECTORY]: undefined,
+				...preferencesEnvironment,
 				...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
 				...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
 				...(target.surface === 'quota-effects' ? target.quotaEffectEnvironment : {}),
@@ -287,7 +303,13 @@ export class PtyGridDriver {
 	}
 	static async start(target: PtyGridTarget): Promise<PtyGridDriver> {
 		const core = await createTerminalCore(120, 36);
-		const driver = new PtyGridDriver(target, core);
+		let driver: PtyGridDriver;
+		try {
+			driver = new PtyGridDriver(target, core);
+		} catch (error) {
+			core.dispose();
+			throw error;
+		}
 		try {
 			const ready = await driver.nextLine();
 			if (ready !== 'READY 120 36 STREAM')

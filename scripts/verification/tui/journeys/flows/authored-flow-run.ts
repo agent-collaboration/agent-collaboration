@@ -26,6 +26,7 @@ import type { FlowInvocation, FlowExecutionResult } from './flow-executor.ts';
 import { executeNativeFlow } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
+import { executePickerGroupingCase } from './picker-grouping-run.ts';
 
 export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocation[] {
 	validateAuthoredFlows();
@@ -100,13 +101,19 @@ export async function runAuthoredFlow(plan: AuthoredFlowPlan): Promise<void> {
 			await previous;
 			const output = join(plan.output, invocation.keys + '-' + invocation.grid);
 			mkdirSync(output, { mode: 0o700 });
-			const receipts = join(output, 'receipts');
-			mkdirSync(receipts, { mode: 0o700 });
-			const bindings = pickerFlowBindings(plan, invocation, output, receipts);
-			if (bindings === null) throw new Error('fixture adapter disappeared');
 			let result: FlowExecutionResult;
 			try {
-				result = await executeNativeFlow(invocation, bindings);
+				if (plan.journey === 'sessions-group-by-f6') {
+					result = await executePickerGroupingCase(plan, invocation, output, () =>
+						requireSourcePins(plan),
+					);
+				} else {
+					const receipts = join(output, 'receipts');
+					mkdirSync(receipts, { mode: 0o700 });
+					const bindings = pickerFlowBindings(plan, invocation, output, receipts);
+					if (bindings === null) throw new Error('fixture adapter disappeared');
+					result = await executeNativeFlow(invocation, bindings);
+				}
 			} catch (error) {
 				results.push({
 					grid: invocation.grid,

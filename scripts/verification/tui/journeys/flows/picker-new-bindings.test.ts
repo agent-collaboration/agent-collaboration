@@ -2,7 +2,7 @@
 import { expect, test } from 'vitest';
 
 import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
-import { checkNewMachineDropdown } from './picker-new-bindings.ts';
+import { checkNewKeyHints, checkNewMachineDropdown } from './picker-new-bindings.ts';
 const line = (value: string): string => '│' + value.padEnd(38) + '│';
 
 async function checkOptions(
@@ -54,3 +54,29 @@ test('configured source keeps its committed remote while highlighting the defaul
 		await checkOptions([gold + '● This machine' + ordinary, '○ Fixture remote'], 'configured'),
 	).toContain('committed Machine mark changed before Start');
 });
+
+test('New hints require the separate adopted wording and reject absent, repeated or inline keys', async () => {
+	expect(await inspectNewHints(['Cancel       Start', 'Ctrl+Enter start · Esc close'])).toEqual([]);
+	expect(await inspectNewHints(['Cancel Esc   Start Ctrl+Enter'])).not.toEqual([]);
+	expect(await inspectNewHints(['Cancel       Start'])).not.toEqual([]);
+	expect(await inspectNewHints(['Cancel Esc   Start', 'Ctrl+Enter start · Esc close'])).not.toEqual(
+		[],
+	);
+});
+
+async function inspectNewHints(rows: readonly string[]): Promise<readonly string[]> {
+	const core = await createTerminalCore(60, 12);
+	try {
+		core.writeString(
+			[
+				'╭' + '─'.repeat(58) + '╮',
+				'│' + 'New session'.padEnd(58) + '│',
+				...rows.map((row) => '│' + row.padEnd(58) + '│'),
+				'╰' + '─'.repeat(58) + '╯',
+			].join('\r\n'),
+		);
+		return checkNewKeyHints(snapshotGrid(core));
+	} finally {
+		core.dispose();
+	}
+}

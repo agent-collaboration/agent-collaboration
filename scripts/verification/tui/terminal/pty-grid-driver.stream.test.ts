@@ -1,8 +1,8 @@
 /** Controlled protocol child checks command/stream ordering, never product behavior. */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { z } from 'zod';
 
 import { controlledExecutable } from '../fixtures/controlled-child-fixtures.ts';
@@ -10,6 +10,69 @@ import { temporaryRoot } from '../fixtures/receipt-fixtures.ts';
 import { InputConsumptionReadback } from '../sessions/input-consumption-readback.ts';
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import { gridLines } from './terminal-grid.ts';
+
+test('an explicit picker preference path reaches its controlled driver without an ambient fallback', async () => {
+	const repository = temporaryRoot();
+	const preferences = join(repository, 'tmp', 'run', 'preferences');
+	mkdirSync(preferences, { recursive: true, mode: 0o700 });
+	const observed = join(repository, 'preference-nomination.json');
+	const executable = controlledExecutable(
+		repository,
+		'picker-preferences-control',
+		`
+require('node:fs').writeFileSync(${JSON.stringify(observed)},JSON.stringify({preferences:process.env.TUI_SESSIONS_FIXTURE_PREFERENCES_DIR??null}));
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});`,
+	);
+	vi.stubEnv('TUI_SESSIONS_FIXTURE_PREFERENCES_DIR', '/ambient-must-not-reach-child');
+	try {
+		await [preferences, undefined].reduce(async (previous, nominated) => {
+			await previous;
+			const driver = await PtyGridDriver.start({
+				repository,
+				driver: executable,
+				surface: 'sessions-filters',
+				keys: 'legacy',
+				evidence: repository,
+				...(nominated === undefined ? {} : { sessionsPreferencesDirectory: nominated }),
+			});
+			try {
+				expect(JSON.parse(readFileSync(observed, 'utf8'))).toEqual({
+					preferences: nominated ?? null,
+				});
+			} finally {
+				await driver.stop();
+			}
+		}, Promise.resolve());
+	} finally {
+		vi.unstubAllEnvs();
+	}
+});
+
+test('foreign preference paths reject before launching even a controlled driver', async () => {
+	const repository = temporaryRoot();
+	const foreign = temporaryRoot();
+	const launched = join(repository, 'must-not-launch');
+	const executable = controlledExecutable(
+		repository,
+		'invalid-preferences-control',
+		`
+require('node:fs').writeFileSync(${JSON.stringify(launched)},'unexpected child');
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdin.on('data',()=>{process.stdout.write('TUI_GRID STOPPED 0\\n');process.exit(0);});`,
+	);
+	await expect(
+		PtyGridDriver.start({
+			repository,
+			driver: executable,
+			surface: 'sessions-filters',
+			keys: 'legacy',
+			evidence: repository,
+			sessionsPreferencesDirectory: foreign,
+		}),
+	).rejects.toThrow('picker preferences');
+	expect(existsSync(launched)).toBe(false);
+});
 
 test('a retained terminal FINISHED record settles without writing another command to the exited bridge', async () => {
 	const directory = temporaryRoot();

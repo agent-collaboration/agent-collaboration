@@ -22,6 +22,7 @@ import type {
 import {
 	pickerBaseBindings,
 	pickerDialogTarget,
+	pickerDialogText,
 	pickerExpectedKey,
 	pickerFocused,
 	pickerOverlay,
@@ -30,6 +31,21 @@ import {
 } from './picker-flow-inputs.ts';
 
 type NewSource = 'default' | 'local' | 'configured';
+/** Owner mock / Lead01a1962f: one hints projection, with plain Cancel and Start labels. */
+export function checkNewKeyHints(grid: TerminalGrid): readonly string[] {
+	const body = pickerDialogText(grid, 'New session');
+	const compact = body.replace(/\s+/gu, '');
+	const failures: string[] = [];
+	if (
+		!compact.includes('Ctrl+Enterstart·Escclose') ||
+		(compact.match(/Ctrl\+Enter/gu) ?? []).length !== 1 ||
+		(compact.match(/Esc/gu) ?? []).length !== 1
+	)
+		failures.push('New must show exactly one Ctrl+Enter start · Esc close hints projection');
+	if (body.split('\n').some((line) => /Cancel.*Esc|Start.*Ctrl\+Enter/u.test(line)))
+		failures.push('New Cancel or Start retained inline key spans');
+	return failures;
+}
 function newSource(journey: string): NewSource | null {
 	if (!journey.startsWith('new-')) return null;
 	for (const source of ['default', 'local', 'configured'] as const)
@@ -196,6 +212,8 @@ export function pickerNewBindings(
 			[
 				'select-New-source:' + expectedRequest.machine,
 				async (context) => {
+					const hintFailures = checkNewKeyHints(context.frame.grid);
+					if (hintFailures.length > 0) throw new Error(hintFailures.join('; '));
 					if (
 						!gridFieldPair(
 							context.frame.grid,

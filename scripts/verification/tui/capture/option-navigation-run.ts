@@ -25,7 +25,11 @@ import {
 	requireHelpRows,
 	selectedFixtureRow,
 } from '../journeys/scenes/option-navigation-observation.ts';
-import { lookupProcessIdentity, sameIdentity } from '../processes/process-identity.ts';
+import {
+	lookupProcessIdentity,
+	requireOwnedProductChild,
+	sameIdentity,
+} from '../processes/process-identity.ts';
 import { InputConsumptionReadback } from '../sessions/input-consumption-readback.ts';
 import type {
 	InputConsumptionExpectation,
@@ -163,21 +167,7 @@ async function observeCase(
 		// This entry spawns the product directly through portable-pty; PID files
 		// belong to the separate public-wrapper entry and are not produced here.
 		const driverPid = driver.processId();
-		const children = execFileSync('/bin/ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' })
-			.trim()
-			.split('\n')
-			.flatMap((line) => {
-				const [childPid, parentPid] = line.trim().split(/\s+/u).map(Number);
-				if (parentPid !== driverPid || childPid === undefined) return [];
-				const child = lookupProcessIdentity(childPid);
-				return child !== null &&
-					child.realUid === process.getuid?.() &&
-					realpathSync(child.executable) === plan.product.path
-					? [child]
-					: [];
-			});
-		if (children.length !== 1) throw new Error('one exact owned driver product child required');
-		const identity = children[0];
+		const identity = requireOwnedProductChild(driverPid, plan.product.path);
 		if (
 			identity === undefined ||
 			identity.realUid !== process.getuid?.() ||

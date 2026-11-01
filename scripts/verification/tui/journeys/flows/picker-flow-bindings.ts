@@ -1,4 +1,4 @@
-/** Fixture adapter for the stopped-native-Claude flow; other fixtures remain admission gaps. */
+/** Native adapters for declared picker fixtures; missing contracts stay admission gaps. */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -17,8 +17,12 @@ import type { NativeFlowBindings } from './native-flow-runtime.ts';
 import { locatePaintedTarget } from './painted-flow-target.ts';
 import type { PaintedFlowTarget } from './painted-flow-target.ts';
 import { pickerFilterTextExpectations } from './picker-flow-inputs.ts';
+import { pickerForkBindings } from './picker-fork-bindings.ts';
+import { pickerGroupingBindings } from './picker-grouping-bindings.ts';
 import { pickerIdentityBindings } from './picker-identity-bindings.ts';
 import { pickerNewBindings } from './picker-new-bindings.ts';
+import { pickerOptionBindings } from './picker-option-bindings.ts';
+import { pickerToolbarBindings } from './picker-toolbar-bindings.ts';
 
 const screen = { kind: 'screen' } as const;
 // This journey creates exactly one overlay. SurfaceStack::new starts at 1;
@@ -85,6 +89,10 @@ export function pickerFlowBindings(
 ): NativeFlowBindings | null {
 	if (invocation.journey.journeyId !== 'stopped-claude-details-open-only')
 		return (
+			pickerToolbarBindings(plan, invocation, evidence, receiptDirectory) ??
+			pickerOptionBindings(plan, invocation, evidence, receiptDirectory) ??
+			pickerGroupingBindings(plan, invocation, evidence, receiptDirectory) ??
+			pickerForkBindings(plan, invocation, evidence, receiptDirectory) ??
 			pickerNewBindings(plan, invocation, evidence, receiptDirectory) ??
 			pickerIdentityBindings(plan, invocation, evidence, receiptDirectory)
 		);

@@ -2,13 +2,14 @@
 import { join } from 'node:path';
 
 import type { InputConsumptionExpectation } from '../../sessions/input-consumption-schema.ts';
+import type { MarkedInputEvidence } from '../../terminal/marker-input-session.ts';
 import type { PtyGridTarget } from '../../terminal/pty-grid-driver.ts';
 import { cellText, terminalTheme } from '../../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import { findDialog } from '../scenes/grid-scene-matcher.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import type { FlowInvocation } from './flow-executor.ts';
-import type { NativeFlowBindings } from './native-flow-runtime.ts';
+import type { NativeFlowBindings, NativeFlowContext } from './native-flow-runtime.ts';
 import { locatePaintedTarget } from './painted-flow-target.ts';
 import type { PaintedFlowTarget } from './painted-flow-target.ts';
 
@@ -33,6 +34,20 @@ export function pickerFilterTextExpectations(
 export function pickerOverlay(ordinal: number): InputConsumptionExpectation['surface'] {
 	return { kind: 'overlay', overlayId: String(ordinal) };
 }
+/** An unchanged kernel size need not produce SIGWINCH; use an explicit harmless input instead. */
+export function resizePickerWhenChanged(options: {
+	readonly context: NativeFlowContext;
+	readonly columns: number;
+	readonly rows: number;
+	readonly surface: InputConsumptionExpectation['surface'];
+}): Promise<MarkedInputEvidence> {
+	const { context, columns, rows, surface } = options;
+	if (context.frame.grid.columns === columns && context.frame.grid.rows === rows)
+		return context.input.press('F12', [pickerExpectedKey('F12', surface)]);
+	return context.input.resize(columns, rows, [
+		{ event: { kind: 'resize', columns, rows }, surface, target: null, action: null },
+	]);
+}
 export function pickerExpectedKey(
 	key: string,
 	surface: InputConsumptionExpectation['surface'],
@@ -55,11 +70,13 @@ export function pickerExpectedKey(
 				: {
 						kind: 'fixed',
 						name:
-							name === 'Enter' && process.platform === 'darwin'
-								? 'Return'
-								: name === 'Escape'
-									? 'Esc'
-									: name,
+							name === 'Tab' && parts.includes('Shift')
+								? 'BackTab'
+								: name === 'Enter' && process.platform === 'darwin'
+									? 'Return'
+									: name === 'Escape'
+										? 'Esc'
+										: name,
 					},
 			modifiers,
 			phase: 'press',

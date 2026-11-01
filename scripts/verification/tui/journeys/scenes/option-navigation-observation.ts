@@ -38,9 +38,10 @@ export interface HelpViewport {
 	readonly rows: readonly string[];
 	readonly atEnd: boolean;
 }
-function trackedHelpViewport(grid: TerminalGrid): HelpViewport | null {
-	const rectangle = findDialog(grid, 'Help');
-	if (rectangle === null) throw new Error('Help frame missing');
+export function trackedScrollViewport(
+	grid: TerminalGrid,
+	rectangle: GridRectangle,
+): HelpViewport | null {
 	// The focused public ScrollList paints a thumb and a contiguous track.
 	// Derive the actual body interval from those cells, excluding frame/footer.
 	let track: { column: number; rows: number[] } | null = null;
@@ -75,6 +76,11 @@ function trackedHelpViewport(grid: TerminalGrid): HelpViewport | null {
 	const last = track.rows.at(-1);
 	const lastCell = last === undefined ? undefined : grid.cells[last]?.[track.column];
 	return { rectangle, rows, atEnd: lastCell !== undefined && cellText(lastCell) === '█' };
+}
+function trackedHelpViewport(grid: TerminalGrid): HelpViewport | null {
+	const rectangle = findDialog(grid, 'Help');
+	if (rectangle === null) throw new Error('Help frame missing');
+	return trackedScrollViewport(grid, rectangle);
 }
 export function helpViewport(grid: TerminalGrid): HelpViewport {
 	const viewport = trackedHelpViewport(grid);

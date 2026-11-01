@@ -11,6 +11,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[path = "sessions_preferences_capture.rs"]
+mod sessions_preferences_capture;
 #[path = "wrapped_fixture_capture.rs"]
 mod wrapped_fixture_capture;
 
@@ -258,6 +260,15 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         )?;
         environment.push(("TUI_SESSIONS_FIXTURE_RECEIPT_DIR", directory));
     }
+    let preferences_nomination = std::env::var_os("TUI_SESSIONS_FIXTURE_PREFERENCES_DIR");
+    let preferences_directory =
+        sessions_preferences_capture::directory(&surface, preferences_nomination.as_deref())?;
+    if let Some(directory) = &preferences_directory {
+        environment.push((
+            "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR",
+            directory.as_os_str(),
+        ));
+    }
     let storyboard_variant = std::env::var_os("TUI_GRID_STORYBOARD_VARIANT");
     if let Some(variant) = storyboard_variant.as_deref() {
         ensure(
@@ -384,6 +395,10 @@ fn split_source_product_binding_rejects_missing_wrong_or_changed_artifact() -> T
 fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {
     surface == "sessions-filters"
         && [
+            "fork-ssh-profile",
+            "claude-new-success",
+            "large-list",
+            "r19-grouping",
             "wide-glyph-left-border",
             "source-qualified-outcome",
             "configured-source-new",
@@ -401,6 +416,10 @@ fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {
 #[test]
 fn storyboard_variants_are_explicit_and_sessions_only() {
     for variant in [
+        "fork-ssh-profile",
+        "claude-new-success",
+        "large-list",
+        "r19-grouping",
         "wide-glyph-left-border",
         "source-qualified-outcome",
         "configured-source-new",
@@ -422,6 +441,26 @@ fn storyboard_variants_are_explicit_and_sessions_only() {
         "sessions-filters",
         OsStr::new("unknown")
     ));
+}
+
+#[test]
+fn sessions_preferences_input_crosses_the_real_pty_environment_boundary() -> TestResult<()> {
+    let terminal = TerminalDriver::spawn_with_environment(
+        Path::new("/usr/bin/env"),
+        std::iter::empty::<&str>(),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &[(
+            "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR",
+            OsStr::new("/fixture-owned/preferences"),
+        )],
+    )?;
+    let transcript = String::from_utf8(terminal.finish(Duration::from_secs(8))?)?;
+    ensure(
+        transcript.lines().any(|line| {
+            line.trim_end() == "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR=/fixture-owned/preferences"
+        }),
+        "explicit preference nomination did not cross the real PTY boundary",
+    )
 }
 
 pub(super) struct TerminalOutcome {

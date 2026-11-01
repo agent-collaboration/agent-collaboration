@@ -15,7 +15,7 @@ export const paintedMouseExpectationSchema = inputConsumptionExpectationSchema
 		mouse: z.enum(['down', 'up']),
 		button: z.literal('left'),
 		modifiers: z.tuple([]),
-		coordinateRule: z.literal('unique-fully-painted-label-in-active-dialog'),
+		coordinateRule: z.literal('unique-fully-painted-label-in-active-surface'),
 	});
 
 export const authoredFlowPlanSchema = z

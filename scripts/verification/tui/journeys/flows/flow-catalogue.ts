@@ -21,6 +21,7 @@ import { flowJourneySchema, flowDesignHead } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
 import { newDialogJourneys } from './new-dialog.ts';
 import { optionNavigationJourneys } from './option-navigation.ts';
+import { pickerGroupingJourney } from './picker-grouping.ts';
 import { quotaRefreshJourneys } from './quota-refresh.ts';
 import { sourceQualifiedJourneys } from './source-qualified-selection.ts';
 import { toolbarMenuJourneys } from './toolbar-menus.ts';
@@ -33,9 +34,10 @@ export const authoredFlows: readonly FlowJourney[] = [
 	...accountActionJourneys,
 	...quotaRefreshJourneys,
 	...optionNavigationJourneys,
+	pickerGroupingJourney,
 ];
 /** Named coverage placeholders, not admitted journeys or product passes. */
-export const pendingGroupingFlows = (['sessions', 'quota'] as const).map((surface) => ({
+export const pendingGroupingFlows = (['quota'] as const).map((surface) => ({
 	journeyId: surface + '-group-by-f6',
 	requirement: 'U18/R19',
 	surface,
@@ -57,7 +59,7 @@ export function validateAuthoredFlows(): void {
 		if (new Set(checkpoints).size !== checkpoints.length)
 			throw new Error('duplicate checkpoint ' + journey.journeyId);
 	}
-	for (const requirement of ['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18'])
+	for (const requirement of ['U4/R4', 'U12/R13', 'U5/R9', 'U16/R17', 'U17/R18', 'U18/R19'])
 		for (const keys of ['legacy', 'kitty'])
 			if (
 				!authoredFlows.some(
