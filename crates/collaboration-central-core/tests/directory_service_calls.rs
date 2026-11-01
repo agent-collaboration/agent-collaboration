@@ -56,16 +56,17 @@ enum RequestObservation {
         body: Value,
     },
 }
+#[derive(Clone)]
 struct ScriptedTransport {
-    replies: Mutex<VecDeque<Result<Vec<u8>, ServiceHttpFailure>>>,
-    requests: Mutex<Vec<RequestObservation>>,
+    replies: Arc<Mutex<VecDeque<Result<Vec<u8>, ServiceHttpFailure>>>>,
+    requests: Arc<Mutex<Vec<RequestObservation>>>,
 }
 impl ScriptedTransport {
-    fn new(replies: Vec<Result<Vec<u8>, ServiceHttpFailure>>) -> Arc<Self> {
-        Arc::new(Self {
-            replies: Mutex::new(replies.into()),
-            requests: Mutex::default(),
-        })
+    fn new(replies: Vec<Result<Vec<u8>, ServiceHttpFailure>>) -> Self {
+        Self {
+            replies: Arc::new(Mutex::new(replies.into())),
+            requests: Arc::default(),
+        }
     }
     fn answer(&self) -> Result<Vec<u8>, ServiceHttpFailure> {
         self.replies
@@ -75,7 +76,7 @@ impl ScriptedTransport {
             .expect("unexpected service request")
     }
 }
-impl ServiceFormTransport for Arc<ScriptedTransport> {
+impl ServiceFormTransport for ScriptedTransport {
     async fn post_service_form(
         &self,
         endpoint: &ResourceUri,
@@ -93,7 +94,7 @@ impl ServiceFormTransport for Arc<ScriptedTransport> {
         self.answer()
     }
 }
-impl ServiceJsonTransport for Arc<ScriptedTransport> {
+impl ServiceJsonTransport for ScriptedTransport {
     async fn post_service_json(
         &self,
         destination: &ResourceUri,
@@ -114,9 +115,7 @@ impl ServiceJsonTransport for Arc<ScriptedTransport> {
 fn uri(value: &str) -> ResourceUri {
     ResourceUri::try_from(value.to_owned()).unwrap()
 }
-fn client(
-    transport: Arc<ScriptedTransport>,
-) -> DirectoryServiceClient<SignerDouble, Arc<ScriptedTransport>> {
+fn client(transport: ScriptedTransport) -> DirectoryServiceClient<SignerDouble, ScriptedTransport> {
     DirectoryServiceClient::new(
         PrivateKeyJwtClient::new(
             ServiceClientId::try_from("pinned-directory".to_owned()).unwrap(),
