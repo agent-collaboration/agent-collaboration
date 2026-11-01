@@ -68,6 +68,7 @@ pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, res
 pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
 mod directory_service_client;
 mod platform_capabilities;
+mod remote_call_outcome;
 mod private_key_client_assertion;
 mod service_receiver_policy;
 mod service_request_bodies;
@@ -90,9 +91,10 @@ pub use issuer_key_cache::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
 };
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
 };
+pub use remote_call_outcome::CallOutcome;
 pub use service_receiver_policy::{
     AuthorizedServiceOperation, PinnedServiceCaller, RegisteredServiceClientKind,
     ServiceCallerIdentity, ServiceClientId, ServiceOperation, ServiceOperationTrust,
