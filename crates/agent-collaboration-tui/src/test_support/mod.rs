@@ -24,4 +24,6 @@ mod frame_inspection;
 #[cfg(all(feature = "test-support", debug_assertions))]
 pub mod frame_output;
 
+pub mod control_kind_contract;
+mod control_kind_contract_test;
 pub mod grids;

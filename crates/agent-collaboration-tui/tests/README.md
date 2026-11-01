@@ -50,6 +50,53 @@ events. A processed-acknowledgement assertion can run before a frame wait, so a
 missing action fails on its state rather than timing out waiting for its redraw.
 Test timeouts are failure guards, never evidence that input was processed.
 
+## R15 consumer control contracts
+
+`../src/test_support/control_kind_contract.rs` is source-reused beside a
+consumer's existing `event_driver`, `frame_grid`, `grids` and `recording_backend` modules.
+It imports those siblings; it adds no shipping feature or dependency. Include it
+with `#[path = "<relative path to that source>"] pub mod control_kind_contract;`
+inside the consumer's test-support module.
+Source-reuse `../src/test_support/grids.rs` as its `grids` sibling too, so the
+four viewport values keep their existing single owner.
+
+Call `assert_control_kind_matrix(contracts, build).await`. `build` receives
+`ControlInstanceRequest { screen, kind, viewport }`, the real `EventJournal`,
+and `ObservedControlStack`. It returns the mounted real screen/control element.
+Connect the screen's existing stack observer to `observed.observer()` and its
+existing input outcome observer to `journal.processed(SurfaceSnapshot(...))`.
+Use `journal.log_handler(...)` at the existing recording effect seam. Do not
+build a lookalike control or add another terminal listener.
+
+Each `ControlKindContract` supplies its screen, kind, viewport, initial paint
+assertions and nonempty input steps. Every screen/viewport must include button,
+text field, filter field, combo box, segmented switch, scrolling list, form field
+and dialog key hints. Use the four standard grids. Multiple cases of a kind may
+cover its different states.
+
+Each `ControlStep` has `ControlInput::Event(TerminalEvent)` or
+`ControlInput::Pointer { target, kind }`, `redraw`, exact `expected_snapshot`,
+cumulative `expected_handlers` and paint assertions. Pointer positions come
+from the current published hit map on the active surface. A disabled/ignored
+event still needs an acknowledgement; set `redraw: false` when it changes no
+serialized frame. Wrong outcomes are asserted before waiting for paint.
+
+`ControlPaint::{Contains, Absent, Styled}` observes the real serialized frame.
+`Styled { text, style: FrameStyle }` checks every cell of every occurrence;
+palette indices are serialized `Color::AnsiValue`, not named-color aliases.
+Supply literal contract oracles, including normal, focused, hovered, disabled
+with reason, and selected/checked where applicable. For passive form/key-hint
+presentation, exercise the containing real control/action; the line itself must
+not become an invented pointer target. Bind the actual list policy and actual
+combo option keys. Consumer callback bytes and effect counts remain their own
+typed model's projection.
+
+The crate's qualification uses two Button composition profiles across all four
+grids and rejects wrong callback bytes, handler observations, paint and styles.
+It also rejects an incomplete kind matrix before mounting a substitute. This
+qualifies the runner; each consumer's real eight-kind matrix earns its R15 row.
+Full/diff/resize transport and physical-terminal observations remain separate.
+
 The pure key parser, focus traversal and measured scroll calculation are adapted
 from [CometixTUI ec7c0615](https://github.com/Haleclipse/CometixTUI/tree/ec7c06155482815a4b4a99be5ad4c62675a632a1),
 `use_keybinding.rs:1–153`, `focus.rs:121–435`, and
