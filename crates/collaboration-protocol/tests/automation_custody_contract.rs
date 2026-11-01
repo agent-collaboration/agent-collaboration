@@ -178,3 +178,78 @@ fn report_envelope_and_durable_sequence_reject_corrupt_values() {
         .is_terminal()
     );
 }
+
+#[test]
+fn tagged_unit_outcomes_reject_unknown_fields_without_changing_valid_wire()
+-> Result<(), Box<dyn std::error::Error>> {
+    use collaboration_protocol::{
+        FiringMessageOrigin, FirstInputState, LocalRunOutcome, RemoteCreateRefusal,
+        SessionCreateState,
+    };
+    println!(
+        "AUTOMATION_TAGGED_UNIT_SCHEMAS {}",
+        json!({
+            "FiringMessageOrigin":schemars::schema_for!(FiringMessageOrigin),
+            "FiringOutcome":schemars::schema_for!(FiringOutcome),
+            "SessionCreateState":schemars::schema_for!(SessionCreateState),
+            "RemoteCreateRefusal":schemars::schema_for!(RemoteCreateRefusal),
+            "FirstInputState":schemars::schema_for!(FirstInputState),
+            "LocalRunOutcome":schemars::schema_for!(LocalRunOutcome),
+        })
+    );
+    strict_unit_variants::<FiringMessageOrigin>("kind", &["humanUser", "router"])?;
+    strict_unit_variants::<FiringOutcome>(
+        "state",
+        &[
+            "pending",
+            "cancelled",
+            "held",
+            "received",
+            "delivered",
+            "expired",
+            "unknown",
+        ],
+    )?;
+    strict_unit_variants::<SessionCreateState>("state", &["unknown"])?;
+    strict_unit_variants::<RemoteCreateRefusal>(
+        "kind",
+        &[
+            "originMismatch",
+            "creatorNotSupported",
+            "approverRequired",
+            "approverNotSupported",
+        ],
+    )?;
+    strict_unit_variants::<FirstInputState>("state", &["none", "accepted", "unknown"])?;
+    strict_unit_variants::<LocalRunOutcome>("state", &["finished"])?;
+    Ok(())
+}
+
+fn strict_unit_variants<Outcome>(
+    tag: &str,
+    variants: &[&str],
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    Outcome: serde::de::DeserializeOwned + serde::Serialize + schemars::JsonSchema,
+{
+    let schema = serde_json::to_value(schemars::schema_for!(Outcome))?;
+    let validator = jsonschema::validator_for(&schema)?;
+    for variant in variants {
+        let valid = json!({tag:variant});
+        if !validator.is_valid(&valid) {
+            return Err(format!("valid unit variant rejected: {valid}").into());
+        }
+        let decoded: Outcome = serde_json::from_value(valid.clone())?;
+        if serde_json::to_value(decoded)? != valid {
+            return Err(format!("valid unit variant changed on roundtrip: {valid}").into());
+        }
+        let corrupt = json!({tag:variant,"unexpected":true});
+        if validator.is_valid(&corrupt) {
+            return Err(format!("schema permits unknown field: {corrupt}").into());
+        }
+        if serde_json::from_value::<Outcome>(corrupt.clone()).is_ok() {
+            return Err(format!("decoder silently drops unknown field: {corrupt}").into());
+        }
+    }
+    Ok(())
+}
