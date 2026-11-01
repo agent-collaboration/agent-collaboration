@@ -122,19 +122,21 @@ pub enum CoverageScene {
     LeftEdge,
 }
 #[derive(Clone, Copy, Debug)]
+pub struct CoverageSeed {
+    pub column: u16,
+    pub viewport: (u16, u16),
+}
+#[derive(Clone, Copy, Debug)]
 pub struct CoverageFixture {
     pub glyph: CoverageGlyph,
     pub scene: CoverageScene,
+    pub seed: Option<CoverageSeed>,
 }
 impl CoverageFixture {
-    pub fn column(self, viewport: (u16, u16)) -> u16 {
-        let width = match self.scene {
-            CoverageScene::Menu => 44.min(viewport.0),
-            CoverageScene::Dialog => 88.min(viewport.0.saturating_sub(4)),
-            CoverageScene::Dropdown => 40.min(viewport.0),
-            CoverageScene::LeftEdge => return 0,
-        };
-        ((viewport.0 - width) / 2).saturating_sub(1)
+    pub fn column(self, viewport: (u16, u16)) -> Option<u16> {
+        self.seed
+            .filter(|seed| seed.viewport == viewport)
+            .map(|seed| seed.column)
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

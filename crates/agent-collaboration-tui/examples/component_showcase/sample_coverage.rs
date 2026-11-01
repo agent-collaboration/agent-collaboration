@@ -1,10 +1,12 @@
 //! Ordinary layout fixtures place real UiText beneath each overlay border row.
 use super::{
     sample_dialogs::{SampleDialogKind, open_dialog},
-    sample_model::{CoverageFixture, CoverageGlyph, CoverageScene, SampleData, action, target_id},
+    sample_model::{
+        CoverageFixture, CoverageGlyph, CoverageScene, CoverageSeed, SampleData, action, target_id,
+    },
 };
 use agent_collaboration_tui::{
-    actions::{ActionDef, Placement},
+    actions::{ActionDef, ActionRegistry, Placement},
     controls::{self, ComboBoxBinding, ComboBoxControl, HelpControl},
     surface_handle::{SurfaceContext, SurfaceStackHandle},
     surface_stack::{OverlayLayout, SurfaceId},
@@ -119,7 +121,13 @@ pub fn coverage_actions(
                 section: "Wide glyph fixtures",
             },
             move |()| {
-                data.update(|model| model.coverage = Some(CoverageFixture { glyph, scene }));
+                data.update(|model| {
+                    let seed = model
+                        .coverage
+                        .filter(|fixture| fixture.glyph == glyph && fixture.scene == scene)
+                        .and_then(|fixture| fixture.seed);
+                    model.coverage = Some(CoverageFixture { glyph, scene, seed });
+                });
                 let viewport = stack.viewport();
                 match scene {
                     CoverageScene::Dialog => {
@@ -161,10 +169,50 @@ pub fn coverage_actions(
                         stack.open_overlay(spec).expect("coverage menu identity");
                     }
                 }
+                install_coverage_seed_action(stack, &data);
             },
         )
     })
     .collect()
+}
+#[expect(
+    clippy::expect_used,
+    reason = "A declared coverage fixture must expose its actual published overlay footprint; missing geometry invalidates the apparatus."
+)]
+fn install_coverage_seed_action(stack: SurfaceStackHandle, data: &SampleData) {
+    let data = *data;
+    let overlay = stack
+        .snapshot()
+        .overlays()
+        .last()
+        .expect("coverage overlay")
+        .id;
+    stack.update_overlay_if_open(overlay, |model| {
+        let mut definitions = model.actions.definitions().to_vec();
+        definitions.push(action(
+            "seed-wide-glyph",
+            "Seed wide glyph at painted overlay edge",
+            &["Ctrl+Alt+S"],
+            Placement::Hidden,
+            move |()| {
+                let frame = stack.hit_regions().published().expect("coverage draw");
+                let column = frame
+                    .surfaces
+                    .iter()
+                    .find(|region| region.surface == SurfaceId::Overlay(overlay))
+                    .and_then(|region| region.cells.iter().map(|(column, _)| *column).min())
+                    .expect("painted coverage footprint")
+                    .saturating_sub(1);
+                let viewport = stack.viewport();
+                data.update(|model| {
+                    model.coverage.as_mut().expect("coverage fixture").seed =
+                        Some(CoverageSeed { column, viewport });
+                });
+            },
+        ));
+        model.actions = ActionRegistry::new(model.actions.scope().clone(), definitions)
+            .expect("unique coverage setup action");
+    });
 }
 #[derive(Props)]
 pub struct CoverageColumnProps {
@@ -176,7 +224,9 @@ pub fn CoverageColumn(props: &CoverageColumnProps) -> impl Into<AnyElement<'stat
     let Some(fixture) = props.fixture else {
         return element!(View).into_any();
     };
-    let left = fixture.column(props.viewport);
+    let Some(left) = fixture.column(props.viewport) else {
+        return element!(View).into_any();
+    };
     element!(View(position:Position::Absolute,left,top:0,width:2,height:props.viewport.1,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
         #((0..props.viewport.1).map(|row|element!(agent_collaboration_tui::UiText(key:row,content:fixture.glyph.text().to_owned(),role:agent_collaboration_tui::UiTextRole::Body))))
     }).into_any()
