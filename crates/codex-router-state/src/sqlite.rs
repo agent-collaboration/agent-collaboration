@@ -278,7 +278,11 @@ pub struct AsyncWeeklyQuotaFloorMutationStore {
 }
 
 impl AsyncSqliteStateStore {
-    /// Opens a SQLite state database through SQLx and applies supported migrations.
+    /// Opens proxy account state through SQLx and applies account migrations.
+    ///
+    /// The Router's `state.sqlite` holds accounts, credential metadata, quota and
+    /// credit, routing policy, session-account affinity, and client leases.
+    /// Fleet records belong in `codex-router-fleet-state` and its `fleet.sqlite`.
     pub async fn open(database_path: &Path) -> Result<Self, StateStoreError> {
         let options = SqliteConnectOptions::new()
             .filename(database_path)

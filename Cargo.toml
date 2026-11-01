@@ -48,6 +48,7 @@ members = [
     "crates/codex-router-secret-store",
     "crates/codex-router-selection",
     "crates/codex-router-state",
+    "crates/codex-router-fleet-state",
     "crates/codex-router-test-support",
     "prototypes/ux_prototype",
     "crates/workspace-architecture-check",
