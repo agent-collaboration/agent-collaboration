@@ -7,7 +7,7 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::observation_timestamp::timestamp;
 pub(crate) fn snapshot<TReceipt: Into<DeliveryReceipt>>(
-    record: RunRecord<SessionRef, EndpointRef, CodexGeneration, TReceipt>,
+    record: RunRecord<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, TReceipt>,
 ) -> Result<RunSnapshot, ()> {
     let route = record
         .evidence
@@ -169,19 +169,24 @@ mod tests {
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"provider-worker"
         }))?;
         let operation = agent_automation::AttemptId::generate();
-        let provider: RunRecord<SessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
-            serde_json::from_value(json!({
-                "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
-                "dueAtMs":1000,"phase":"executing","inputs":captured_inputs(&provider_target),
-                "threadBindingId":null,"nativeTurnId":null,
-                "evidence":{"route":{"kind":"providerAcp","target":provider_target,
-                    "generation":{"serviceEpoch":service,"generation":1},"binding":"binding-one",
-                    "attemptId":operation,"submission":"accepted","settlement":"notObserved"},
-                    "timing":{"dispatchStartedAtMs":1000,"effectiveTimeoutSeconds":120,"deadlineAtMs":121000},
-                    "acceptance":{"outcome":{"kind":"started"},"reachability":"providerAcp",
-                        "client":{"kind":"providerAcp","operationId":operation}}},
-                "workerOutcome":null,"summaryAttempt":null,"summaryText":null,"summarySource":null,"completedAtMs":null
-            }))?;
+        let provider: RunRecord<
+            SessionRef,
+            EndpointRef,
+            message_board::ProjectId,
+            CodexGeneration,
+            DeliveryReceipt,
+        > = serde_json::from_value(json!({
+            "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
+            "dueAtMs":1000,"phase":"executing","inputs":captured_inputs(&provider_target),
+            "threadBindingId":null,"nativeTurnId":null,
+            "evidence":{"route":{"kind":"providerAcp","target":provider_target,
+                "generation":{"serviceEpoch":service,"generation":1},"binding":"binding-one",
+                "attemptId":operation,"submission":"accepted","settlement":"notObserved"},
+                "timing":{"dispatchStartedAtMs":1000,"effectiveTimeoutSeconds":120,"deadlineAtMs":121000},
+                "acceptance":{"outcome":{"kind":"started"},"reachability":"providerAcp",
+                    "client":{"kind":"providerAcp","operationId":operation}}},
+            "workerOutcome":null,"summaryAttempt":null,"summaryText":null,"summarySource":null,"completedAtMs":null
+        }))?;
         let inspected = snapshot(provider).map_err(|_| "provider projection failed")?;
         if !matches!(
             inspected.state,
@@ -201,17 +206,22 @@ mod tests {
         let peer_target: SessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"peer-worker"
         }))?;
-        let peer: RunRecord<SessionRef, EndpointRef, CodexGeneration, DeliveryReceipt> =
-            serde_json::from_value(json!({
-                "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
-                "dueAtMs":1000,"phase":"finished","inputs":captured_inputs(&peer_target),
-                "threadBindingId":null,"nativeTurnId":null,
-                "evidence":{"route":{"kind":"claudeCodePeer","sessionId":"peer-worker","processId":42,"write":"written"},
-                    "timing":{"dispatchStartedAtMs":1000,"effectiveTimeoutSeconds":120,"deadlineAtMs":121000},
-                    "acceptance":null},
-                "workerOutcome":{"kind":"peerMessageWritten","explanation":"written"},
-                "summaryAttempt":null,"summaryText":null,"summarySource":null,"completedAtMs":2000
-            }))?;
+        let peer: RunRecord<
+            SessionRef,
+            EndpointRef,
+            message_board::ProjectId,
+            CodexGeneration,
+            DeliveryReceipt,
+        > = serde_json::from_value(json!({
+            "runId":agent_automation::RunId::generate(),"scheduleId":agent_automation::ScheduleId::generate(),
+            "dueAtMs":1000,"phase":"finished","inputs":captured_inputs(&peer_target),
+            "threadBindingId":null,"nativeTurnId":null,
+            "evidence":{"route":{"kind":"claudeCodePeer","sessionId":"peer-worker","processId":42,"write":"written"},
+                "timing":{"dispatchStartedAtMs":1000,"effectiveTimeoutSeconds":120,"deadlineAtMs":121000},
+                "acceptance":null},
+            "workerOutcome":{"kind":"peerMessageWritten","explanation":"written"},
+            "summaryAttempt":null,"summaryText":null,"summarySource":null,"completedAtMs":2000
+        }))?;
         let inspected = snapshot(peer).map_err(|_| "peer projection failed")?;
         if !matches!(
             inspected.state,

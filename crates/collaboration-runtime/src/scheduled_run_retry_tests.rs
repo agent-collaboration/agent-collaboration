@@ -60,7 +60,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         let busy = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
             .await?;
         if busy.phase != RunPhase::Preparing || busy.evidence.timing.is_some() {
             return Err("not-started-busy consumed a dispatch budget".into());
@@ -81,7 +81,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         let settled = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
             .await?;
         if settled.phase != expected_phase {
             return Err(format!(
@@ -151,7 +151,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
                 .await
                 .read_run::<
                     SessionRef,
-                    EndpointRef,
+                    EndpointRef, message_board::ProjectId,
                     CodexGeneration,
                     crate::stored_run_receipt::StoredRunReceipt,
                 >(&run_id)
@@ -261,7 +261,7 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         .await
         .read_run::<
             SessionRef,
-            EndpointRef,
+            EndpointRef, message_board::ProjectId,
             CodexGeneration,
             crate::stored_run_receipt::StoredRunReceipt,
         >(&run_id)
@@ -297,7 +297,7 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         .await
         .read_run::<
             SessionRef,
-            EndpointRef,
+            EndpointRef, message_board::ProjectId,
             CodexGeneration,
             crate::stored_run_receipt::StoredRunReceipt,
         >(&run_id)
@@ -389,7 +389,7 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     let accepted_run = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     if accepted_run.phase != RunPhase::Executing {
         return Err("known rejection retry did not advance the Run after acceptance".into());

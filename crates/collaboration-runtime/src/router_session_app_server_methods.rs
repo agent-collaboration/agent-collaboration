@@ -130,6 +130,12 @@ pub(super) async fn handle_app_server_thread_request(
                 provider_model_override(params.get("model").and_then(Value::as_str), catalog);
             let session = commands
                 .create(CreateSessionCommand {
+                    project_id: params
+                        .pointer("/_meta/codexRouter/projectId")
+                        .filter(|value| !value.is_null())
+                        .map(|value| serde_json::from_value(value.clone()))
+                        .transpose()
+                        .map_err(|_| ThreadMethodError::InvalidParams)?,
                     endpoint: endpoint.clone(),
                     working_directory,
                     settings: SessionSettingsCommand {

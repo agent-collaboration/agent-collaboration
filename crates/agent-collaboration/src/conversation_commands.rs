@@ -67,6 +67,9 @@ enum ConversationCommand {
 }
 #[derive(Args)]
 struct CreateArguments {
+    /// Project for the new or forked session, required with Fleet machine login.
+    #[arg(long)]
+    project: Option<String>,
     #[arg(long)]
     endpoint: String,
     /// Provider mode option value advertised by the agent.
@@ -108,6 +111,9 @@ struct CreateArguments {
 }
 #[derive(Args)]
 struct PromptArguments {
+    /// Project for --new or --fork, required with Fleet machine login.
+    #[arg(long)]
+    project: Option<String>,
     #[arg(long)]
     endpoint: Option<String>,
     #[arg(long, conflicts_with_all = ["session"])]
@@ -331,6 +337,7 @@ fn run_prompt(args: PromptArguments) -> i32 {
             stage=if args.new_session{"new"}else if args.fork.is_some(){"fork"}else{"load"};
             let mut emit=|event|emit_record(event,args.json);
             let request = ConversationCreateRequest {
+                project_id: args.project.clone().map(TryInto::try_into).transpose().map_err(|_| ClientError::Protocol("--project must be a canonical project UUIDv7"))?,
                 operation_id: fork_operation_id,
                 endpoint: client.endpoint().clone(),
                 cwd: args.cwd.clone().ok_or(ClientError::Protocol("--cwd is required with --new or --fork"))?,
@@ -468,6 +475,18 @@ const fn conversation_end_exit(end: ConversationEnd) -> i32 {
     }
 }
 fn prepare(args: &PromptArguments) -> Result<(PathBuf, String), String> {
+    if !args.new_session && args.fork.is_none() && args.project.is_some() {
+        return Err(
+            "--project is valid only with --new or --fork; existing sessions keep their project"
+                .into(),
+        );
+    }
+    if let Some(project) = &args.project {
+        let _: message_board::ProjectId = project
+            .clone()
+            .try_into()
+            .map_err(|_| "--project must be a canonical project UUIDv7")?;
+    }
     let dispatch_count = usize::from(args.new_session)
         + usize::from(args.session.is_some())
         + usize::from(args.fork.as_ref().is_some_and(|value| !value.is_empty()))

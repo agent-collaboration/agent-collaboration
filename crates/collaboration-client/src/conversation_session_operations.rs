@@ -62,6 +62,7 @@ impl ConversationClient {
                     ));
                 }
                 let request = crate::ConversationCreateRequest {
+                    project_id: None,
                     operation_id: OperationId::generate(),
                     endpoint: target.endpoint.clone(),
                     cwd: input.working_directory,

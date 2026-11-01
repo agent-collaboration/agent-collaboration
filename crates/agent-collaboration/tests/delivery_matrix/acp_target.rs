@@ -209,6 +209,7 @@ async fn create_provider_session(
     match conversation
         .create(
             ConversationCreateInput {
+                project_id: None,
                 operation_id: OperationId::generate(),
                 endpoint,
                 working_directory: proof.workspace.clone(),

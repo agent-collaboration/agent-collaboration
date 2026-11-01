@@ -101,7 +101,7 @@ impl ScheduledRunWorker {
                 match &push_update {
                     Some(push_update) => {
                         store
-                            .record_run_submission_with_push::<_, EndpointRef, _, _>(
+                            .record_run_submission_with_push::<_, EndpointRef, message_board::ProjectId, _, _>(
                                 result.clone(),
                                 push_update.clone(),
                             )
@@ -109,7 +109,7 @@ impl ScheduledRunWorker {
                     }
                     None => {
                         store
-                            .record_run_submission::<_, EndpointRef, _, _>(result.clone())
+                            .record_run_submission::<_, EndpointRef, message_board::ProjectId, _, _>(result.clone())
                             .await
                     }
                 }

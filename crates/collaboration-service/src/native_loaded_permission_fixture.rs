@@ -87,7 +87,7 @@ impl RecordedPolicyFixture {
     pub(super) fn scheduled_run(&self) -> collaboration_contracts::ScheduledRunSubmission {
         collaboration_contracts::ScheduledRunSubmission {
             run_id: RunId::generate(), target: target(), payload: collaboration_contracts::ScheduledRunPayload::Fresh { task_input: "validate scheduled policy".to_owned().try_into().unwrap() }, precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
-            inputs: serde_json::from_value::<CapturedRunInputs<_, _>>(json!({ "scheduleChangeId":agent_automation::ChangeId::generate(),"instructionRevisionId":agent_automation::RevisionId::generate(),"instructionText":"Validate policy","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"ownedThread","target":target(),"cwd":self.directory.path()},"executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"} })).unwrap(),
+            inputs: serde_json::from_value::<CapturedRunInputs<_, _, message_board::ProjectId>>(json!({ "scheduleChangeId":agent_automation::ChangeId::generate(),"instructionRevisionId":agent_automation::RevisionId::generate(),"instructionText":"Validate policy","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"ownedThread","target":target(),"cwd":self.directory.path()},"executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"} })).unwrap(),
             recorded: serde_json::from_value(json!({"kind":"codexAppServer","target":target(),"generation":self.generation,"clientUserMessageId":"loaded-policy-input","nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"notDispatched","cessation":"notApplicable"})).unwrap(),
         }
     }
@@ -160,7 +160,7 @@ pub(super) fn policy_server(
                     }
                     "turn/start" => {
                         if let Some((store, run_id)) = &scenario.stored_run {
-                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
+                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef, message_board::ProjectId,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
                             if record.evidence.timing.is_none()
                                 || !matches!(record.evidence.route,Some(RouteEffectEvidence::CodexAppServer(effects)) if effects.submission==agent_automation::SubmissionEffect::Dispatching && effects.resume==agent_automation::PreparationEffect::Accepted)
                             {

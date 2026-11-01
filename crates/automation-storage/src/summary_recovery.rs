@@ -20,12 +20,13 @@ impl AutomationStore {
     pub async fn recover_summary<
         TTarget: Clone + Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
+        TProject: Serialize + DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
         &mut self,
         request: &SummaryRecoveryRequest,
-    ) -> Result<RunRecord<TTarget, TEndpoint, TGeneration, TReceipt>, StorageError> {
+    ) -> Result<RunRecord<TTarget, TEndpoint, TProject, TGeneration, TReceipt>, StorageError> {
         if request.now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
@@ -50,12 +51,14 @@ impl AutomationStore {
             transaction.commit().await?;
             return Ok(result);
         }
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if !matches!(
             record.phase,
             agent_automation::RunPhase::SummaryRequired
@@ -137,12 +140,14 @@ impl AutomationStore {
                 sqlx::query("UPDATE workflow_runs SET run_status='finished',summary_attempt_json=?,summary_text=NULL,summary_source_json=?,completed_at_ms=? WHERE run_id=?").bind(record.summary_attempt.as_ref().map(serde_json::to_string).transpose().map_err(|_|StorageError::InvalidRecord)?).bind(serde_json::to_string(&source).map_err(|_|StorageError::InvalidRecord)?).bind(request.now_ms).bind(request.run_id.as_str()).execute(&mut *transaction).await?;
             }
         }
-        let result =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let result = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         let encoded = serde_json::to_string(&result).map_err(|_| StorageError::InvalidRecord)?;
         local_operation_receipts::record(
             &mut transaction,

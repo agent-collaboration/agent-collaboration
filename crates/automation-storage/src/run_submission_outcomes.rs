@@ -48,19 +48,23 @@ impl AutomationStore {
     pub async fn record_run_submission<
         TTarget: PartialEq + Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: PartialEq + Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
         &mut self,
         request: RunSubmissionResult<TTarget, TGeneration, TReceipt>,
     ) -> Result<(), StorageError> {
-        self.record_run_submission_inner::<TTarget, TEndpoint, TGeneration, TReceipt>(request, None)
-            .await
+        self.record_run_submission_inner::<TTarget, TEndpoint, TProject, TGeneration, TReceipt>(
+            request, None,
+        )
+        .await
     }
 
     pub async fn record_run_submission_with_push<
         TTarget: PartialEq + Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: PartialEq + Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -68,7 +72,7 @@ impl AutomationStore {
         request: RunSubmissionResult<TTarget, TGeneration, TReceipt>,
         push_update: ScheduleRunPushUpdate,
     ) -> Result<(), StorageError> {
-        self.record_run_submission_inner::<TTarget, TEndpoint, TGeneration, TReceipt>(
+        self.record_run_submission_inner::<TTarget, TEndpoint, TProject, TGeneration, TReceipt>(
             request,
             Some(push_update),
         )
@@ -78,6 +82,7 @@ impl AutomationStore {
     async fn record_run_submission_inner<
         TTarget: PartialEq + Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: PartialEq + Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -86,12 +91,14 @@ impl AutomationStore {
         push_update: Option<ScheduleRunPushUpdate>,
     ) -> Result<(), StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         let recording_no_execution_outcome = push_update.is_some()
             && matches!(
                 &request.outcome,

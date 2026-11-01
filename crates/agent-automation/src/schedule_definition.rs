@@ -4,28 +4,66 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum ExecutionDestination<TTarget, TEndpoint> {
-    Unprepared,
-    FreshEachRunUnprepared,
-    OwnedThread { target: TTarget, cwd: String },
-    FreshEachRun { endpoint: TEndpoint, cwd: String },
+pub enum ExecutionDestination<TTarget, TEndpoint, TProject> {
+    Unprepared {
+        #[serde(
+            rename = "projectId",
+            default = "Option::default",
+            skip_serializing_if = "Option::is_none"
+        )]
+        project_id: Option<TProject>,
+    },
+    FreshEachRunUnprepared {
+        #[serde(
+            rename = "projectId",
+            default = "Option::default",
+            skip_serializing_if = "Option::is_none"
+        )]
+        project_id: Option<TProject>,
+    },
+    OwnedThread {
+        target: TTarget,
+        cwd: String,
+    },
+    FreshEachRun {
+        endpoint: TEndpoint,
+        cwd: String,
+        #[serde(
+            rename = "projectId",
+            default = "Option::default",
+            skip_serializing_if = "Option::is_none"
+        )]
+        project_id: Option<TProject>,
+    },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExecutionMode {
     ReuseThread,
     FreshEachRun,
 }
-impl<TTarget, TEndpoint> ExecutionDestination<TTarget, TEndpoint> {
+impl<TTarget, TEndpoint, TProject> ExecutionDestination<TTarget, TEndpoint, TProject> {
     pub fn execution_mode(&self) -> ExecutionMode {
         match self {
-            Self::Unprepared | Self::OwnedThread { .. } => ExecutionMode::ReuseThread,
-            Self::FreshEachRunUnprepared | Self::FreshEachRun { .. } => ExecutionMode::FreshEachRun,
+            Self::Unprepared { .. } | Self::OwnedThread { .. } => ExecutionMode::ReuseThread,
+            Self::FreshEachRunUnprepared { .. } | Self::FreshEachRun { .. } => {
+                ExecutionMode::FreshEachRun
+            }
         }
     }
-    pub fn without_bindings(&self) -> Self {
-        match self.execution_mode() {
-            ExecutionMode::ReuseThread => Self::Unprepared,
-            ExecutionMode::FreshEachRun => Self::FreshEachRunUnprepared,
+    pub fn without_bindings(&self) -> Self
+    where
+        TProject: Clone,
+    {
+        match self {
+            Self::Unprepared { project_id } => Self::Unprepared {
+                project_id: project_id.clone(),
+            },
+            Self::OwnedThread { .. } => Self::Unprepared { project_id: None },
+            Self::FreshEachRunUnprepared { project_id } | Self::FreshEachRun { project_id, .. } => {
+                Self::FreshEachRunUnprepared {
+                    project_id: project_id.clone(),
+                }
+            }
         }
     }
     pub fn is_prepared(&self) -> bool {
@@ -35,11 +73,11 @@ impl<TTarget, TEndpoint> ExecutionDestination<TTarget, TEndpoint> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ScheduleDefinition<TTarget, TEndpoint> {
+pub struct ScheduleDefinition<TTarget, TEndpoint, TProject> {
     pub instruction_id: InstructionId,
     pub timing: TimingRule,
     pub enabled: bool,
-    pub destination: ExecutionDestination<TTarget, TEndpoint>,
+    pub destination: ExecutionDestination<TTarget, TEndpoint, TProject>,
     pub execution_timeout_seconds: Option<u32>,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -78,8 +116,8 @@ pub enum ContinuityInput<TTarget> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FrozenExecutionConfiguration<TTarget, TEndpoint> {
-    pub destination: ExecutionDestination<TTarget, TEndpoint>,
+pub struct FrozenExecutionConfiguration<TTarget, TEndpoint, TProject> {
+    pub destination: ExecutionDestination<TTarget, TEndpoint, TProject>,
     pub execution_timeout_seconds: Option<u32>,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -87,12 +125,12 @@ pub struct FrozenExecutionConfiguration<TTarget, TEndpoint> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CapturedRunInputs<TTarget, TEndpoint> {
+pub struct CapturedRunInputs<TTarget, TEndpoint, TProject> {
     pub schedule_change_id: ChangeId,
     pub instruction_revision_id: RevisionId,
     pub instruction_text: InstructionText,
     pub continuity: ContinuityInput<TTarget>,
-    pub execution_configuration: FrozenExecutionConfiguration<TTarget, TEndpoint>,
+    pub execution_configuration: FrozenExecutionConfiguration<TTarget, TEndpoint, TProject>,
 }
 
 /// Stored summary provenance is separate from the text materialized on its Run.
@@ -118,10 +156,10 @@ pub enum SummarySource<TTarget> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ScheduleRecord<TTarget, TEndpoint> {
+pub struct ScheduleRecord<TTarget, TEndpoint, TProject> {
     pub schedule_id: crate::ScheduleId,
     pub change_id: ChangeId,
-    pub definition: ScheduleDefinition<TTarget, TEndpoint>,
+    pub definition: ScheduleDefinition<TTarget, TEndpoint, TProject>,
     pub imported_continuity: ContinuityInput<TTarget>,
     pub anchor_at_ms: i64,
     pub next_due_at_ms: Option<i64>,

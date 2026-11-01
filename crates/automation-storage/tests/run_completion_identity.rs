@@ -20,7 +20,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -39,19 +39,19 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         })
         .await?;
     let run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
         return Err("missing admission".into());
     }
     let before = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if before.evidence.timing.is_some() {
         return Err("waiting consumed budget".into());
@@ -71,7 +71,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<String, String, String, String>(
+        .begin_run_preparation::<String, String, String, String, String>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -79,7 +79,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         )
         .await?;
     store
-        .begin_run_dispatch::<_, String, _, String>(RunDispatchIntent {
+        .begin_run_dispatch::<_, String, String, _, String>(RunDispatchIntent {
             run_id: run.clone(),
             effects: effects.clone().into(),
             configured_timeout_seconds: 3600,
@@ -94,7 +94,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         mismatched.native_turn_id = Some(turn.to_owned());
         mismatched.target = Some(target.to_owned());
         let rejected = store
-            .record_run_submission::<String, String, String, String>(
+            .record_run_submission::<String, String, String, String, String>(
                 automation_storage::RunSubmissionResult {
                     run_id: run.clone(),
                     effects: mismatched.into(),
@@ -110,7 +110,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         }
     }
     store
-        .record_run_submission::<_, String, _, _>(automation_storage::RunSubmissionResult {
+        .record_run_submission::<_, String, String, _, _>(automation_storage::RunSubmissionResult {
             run_id: run.clone(),
             effects: accepted.into(),
             outcome: automation_storage::RunSubmissionOutcome::Accepted {
@@ -120,7 +120,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         })
         .await?;
     let stale = store
-        .complete_run_settlement::<String, String, String, String>(
+        .complete_run_settlement::<String, String, String, String, String>(
             automation_storage::RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("another-turn".into()),
@@ -133,7 +133,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         return Err("unrelated turn completed this run".into());
     }
     if !store
-        .complete_run_settlement::<String, String, String, String>(
+        .complete_run_settlement::<String, String, String, String, String>(
             automation_storage::RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn(
@@ -148,7 +148,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         return Err("exact completed turn not recorded".into());
     }
     let read = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if read.phase != agent_automation::RunPhase::Finished
         || read.completed_at_ms != Some(502000)

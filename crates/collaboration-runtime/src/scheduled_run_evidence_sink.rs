@@ -56,7 +56,7 @@ impl StoredRunEvidenceSink {
             .store
             .lock()
             .await
-            .begin_run_dispatch::<_, EndpointRef, _, crate::stored_run_receipt::StoredRunReceipt>(
+            .begin_run_dispatch::<_, EndpointRef, message_board::ProjectId, _, crate::stored_run_receipt::StoredRunReceipt>(
                 RunDispatchIntent {
                     run_id: self.run_id.clone(),
                     effects: evidence,
@@ -102,7 +102,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                     self.store
                         .lock()
                         .await
-                        .retain_run_uncertainty::<_, EndpointRef, _, crate::stored_run_receipt::StoredRunReceipt>(
+                        .retain_run_uncertainty::<_, EndpointRef, message_board::ProjectId, _, crate::stored_run_receipt::StoredRunReceipt>(
                             RunUncertainty {
                                 run_id: self.run_id.clone(),
                                 effects: native.clone(),
@@ -125,7 +125,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                         .store
                         .lock()
                         .await
-                        .record_run_target::<_, EndpointRef, _, crate::stored_run_receipt::StoredRunReceipt>(
+                        .record_run_target::<_, EndpointRef, message_board::ProjectId, _, crate::stored_run_receipt::StoredRunReceipt>(
                             RunPreparedTarget {
                                 run_id: self.run_id.clone(),
                                 effects: native.clone(),
@@ -154,7 +154,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                         .store
                         .lock()
                         .await
-                        .begin_run_preparation::<_, EndpointRef, _, crate::stored_run_receipt::StoredRunReceipt>(
+                        .begin_run_preparation::<_, EndpointRef, message_board::ProjectId, _, crate::stored_run_receipt::StoredRunReceipt>(
                             RunPreparationIntent {
                                 run_id: self.run_id.clone(),
                                 effects: evidence.clone(),
@@ -177,7 +177,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                             .store
                             .lock()
                             .await
-                            .begin_run_preparation::<_, EndpointRef, _, crate::stored_run_receipt::StoredRunReceipt>(
+                            .begin_run_preparation::<_, EndpointRef, message_board::ProjectId, _, crate::stored_run_receipt::StoredRunReceipt>(
                                 RunPreparationIntent {
                                     run_id: self.run_id.clone(),
                                     effects: evidence.clone(),
@@ -220,7 +220,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                 .store
                 .lock()
                 .await
-                .begin_run_stop::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                .begin_run_stop::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                     &self.run_id,
                     identity,
                 )

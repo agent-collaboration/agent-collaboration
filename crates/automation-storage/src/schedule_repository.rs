@@ -7,15 +7,15 @@ use agent_automation::{
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{Connection, Row};
 
-pub struct ScheduleCreate<TTarget, TEndpoint> {
+pub struct ScheduleCreate<TTarget, TEndpoint, TProject> {
     pub operation_id: OperationId,
-    pub definition: ScheduleDefinition<TTarget, TEndpoint>,
+    pub definition: ScheduleDefinition<TTarget, TEndpoint, TProject>,
     pub imported_continuity: ContinuityInput<TTarget>,
     pub now_ms: i64,
 }
-pub(crate) fn validate_unchanged_execution_mode<TTarget, TEndpoint>(
-    before: &ExecutionDestination<TTarget, TEndpoint>,
-    after: &ExecutionDestination<TTarget, TEndpoint>,
+pub(crate) fn validate_unchanged_execution_mode<TTarget, TEndpoint, TProject>(
+    before: &ExecutionDestination<TTarget, TEndpoint, TProject>,
+    after: &ExecutionDestination<TTarget, TEndpoint, TProject>,
 ) -> Result<(), StorageError> {
     if before.execution_mode() != after.execution_mode() {
         return Err(StorageError::InvalidSchedule {
@@ -26,13 +26,14 @@ pub(crate) fn validate_unchanged_execution_mode<TTarget, TEndpoint>(
     Ok(())
 }
 impl AutomationStore {
-    pub async fn create_schedule<TTarget, TEndpoint>(
+    pub async fn create_schedule<TTarget, TEndpoint, TProject>(
         &mut self,
-        request: &ScheduleCreate<TTarget, TEndpoint>,
-    ) -> Result<ScheduleRecord<TTarget, TEndpoint>, StorageError>
+        request: &ScheduleCreate<TTarget, TEndpoint, TProject>,
+    ) -> Result<ScheduleRecord<TTarget, TEndpoint, TProject>, StorageError>
     where
         TTarget: Clone + Serialize + DeserializeOwned,
         TEndpoint: Clone + Serialize + DeserializeOwned,
+        TProject: Clone + Serialize + DeserializeOwned,
     {
         if request.now_ms < 0 {
             return Err(StorageError::InvalidRecord);
@@ -99,8 +100,8 @@ impl AutomationStore {
     }
 }
 
-pub(crate) fn validate_definition<TTarget, TEndpoint>(
-    definition: &ScheduleDefinition<TTarget, TEndpoint>,
+pub(crate) fn validate_definition<TTarget, TEndpoint, TProject>(
+    definition: &ScheduleDefinition<TTarget, TEndpoint, TProject>,
 ) -> Result<(), StorageError> {
     let valid_choice = |value: Option<&String>| {
         value.is_some_and(|value| {
@@ -115,7 +116,8 @@ pub(crate) fn validate_definition<TTarget, TEndpoint>(
     }
     if matches!(
         definition.destination,
-        ExecutionDestination::FreshEachRunUnprepared | ExecutionDestination::FreshEachRun { .. }
+        ExecutionDestination::FreshEachRunUnprepared { .. }
+            | ExecutionDestination::FreshEachRun { .. }
     ) && !valid_choice(definition.model.as_ref())
     {
         return Err(StorageError::InvalidSchedule {
@@ -124,7 +126,8 @@ pub(crate) fn validate_definition<TTarget, TEndpoint>(
         });
     }
     match &definition.destination {
-        ExecutionDestination::Unprepared | ExecutionDestination::FreshEachRunUnprepared
+        ExecutionDestination::Unprepared { .. }
+        | ExecutionDestination::FreshEachRunUnprepared { .. }
             if definition.enabled =>
         {
             return Err(StorageError::InvalidSchedule {

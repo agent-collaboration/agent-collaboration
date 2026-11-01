@@ -21,13 +21,14 @@ async fn schedule_creation_replays_without_resetting_timer_anchor()
             100,
         )
         .await?;
-    let mut request = ScheduleCreate::<String, String> {
+    let mut request = ScheduleCreate::<String, String, String> {
         operation_id: OperationId::generate(),
         definition: ScheduleDefinition {
             instruction_id: instruction.instruction_id,
             timing: TimingRule::Interval { seconds: 600 },
             enabled: true,
             destination: ExecutionDestination::FreshEachRun {
+                project_id: None,
                 endpoint: "debug".into(),
                 cwd: "/work".into(),
             },

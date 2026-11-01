@@ -182,7 +182,7 @@ async fn check_stored_timer_retirement(
 ) -> ProofResult<()> {
     let wake = store.read_wakeup::<SavedMessage>(wakeup_id).await?;
     let schedule = store
-        .inspect_schedule::<SessionRef, EndpointRef>(schedule_id)
+        .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(schedule_id)
         .await?;
     if wake.definition.wakeup_id != *wakeup_id
         || wake.state != agent_automation::WakeState::Cancelled

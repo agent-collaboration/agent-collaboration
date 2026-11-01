@@ -9,6 +9,9 @@ pub(crate) struct PreparationArguments {
     pub(crate) schedule_id: String,
     #[arg(long)]
     pub(crate) operation_id: Option<String>,
+    /// Named project for a fresh or forked session.
+    #[arg(long, conflicts_with = "existing")]
+    project: Option<String>,
     /// Create a fresh native thread; preparation does not activate the schedule.
     #[arg(long,required_unless_present_any=["existing","fork_from"],conflicts_with_all=["existing","fork_from"])]
     fresh: bool,
@@ -30,18 +33,24 @@ pub(crate) enum PreparedDestination {
     Fresh {
         endpoint_id: EndpointId,
         cwd: String,
+        project_id: Option<message_board::ProjectId>,
     },
     Exact(DestinationPreparation),
 }
 impl PreparedDestination {
     pub(crate) fn resolve(self, service_id: UuidIdentity) -> DestinationPreparation {
         match self {
-            Self::Fresh { endpoint_id, cwd } => DestinationPreparation::Fresh {
+            Self::Fresh {
+                endpoint_id,
+                cwd,
+                project_id,
+            } => DestinationPreparation::Fresh {
                 endpoint: EndpointRef {
                     service_id,
                     endpoint_id,
                 },
                 cwd,
+                project_id,
             },
             Self::Exact(destination) => destination,
         }
@@ -49,6 +58,12 @@ impl PreparedDestination {
 }
 impl PreparationArguments {
     pub(crate) fn destination(&self) -> Result<PreparedDestination, String> {
+        let project_id = self
+            .project
+            .clone()
+            .map(TryInto::try_into)
+            .transpose()
+            .map_err(|_| "--project must be a canonical project UUIDv7")?;
         if !std::path::Path::new(&self.cwd).is_absolute() {
             return Err("--cwd must be an absolute workspace path".into());
         }
@@ -75,6 +90,7 @@ impl PreparationArguments {
                 source,
                 through_turn_id,
                 cwd: self.cwd.clone(),
+                project_id,
             }));
         }
         if !self.fresh {
@@ -87,6 +103,7 @@ impl PreparationArguments {
                 .try_into()
                 .map_err(|_| "--endpoint requires a valid endpoint ID")?,
             cwd: self.cwd.clone(),
+            project_id,
         })
     }
 }

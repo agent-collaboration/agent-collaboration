@@ -40,7 +40,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     )
     .await?;
     let interactions = Arc::clone(&worker.interactions);
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     let inputs = first.inputs.as_ref().ok_or("captured schedule inputs")?;
     let ExecutionDestination::OwnedThread { target, .. } =
         &inputs.execution_configuration.destination
@@ -52,7 +52,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     let definition_before = store
         .lock()
         .await
-        .inspect_schedule::<SessionRef, EndpointRef>(&schedule_id)
+        .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(&schedule_id)
         .await?
         .record;
     let first_push_id: PushId = uuid::Uuid::now_v7().to_string().try_into()?;
@@ -86,7 +86,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         Box::pin(worker.step(first_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     ensure_eq!(first.phase, agent_automation::RunPhase::Finished);
     let old = interactions
         .get_push_record(&first_push_id)
@@ -134,18 +134,21 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     let second_run = store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule_id, now.timestamp_millis())
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule_id,
+            now.timestamp_millis(),
+        )
         .await?
         .ok_or("second occurrence")?;
     ensure_ne!(second_run, first_run);
     ensure!(
-        matches!(store.lock().await.admit_waiting_run::<SessionRef, EndpointRef>(&schedule_id, now.timestamp_millis()).await?, automation_storage::RunAdmission::Admitted { run_id, .. } if run_id == second_run)
+        matches!(store.lock().await.admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(&schedule_id, now.timestamp_millis()).await?, automation_storage::RunAdmission::Admitted { run_id, .. } if run_id == second_run)
     );
     for _ in 0..4 {
         Box::pin(worker.step(second_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
-    let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
+    let second = store.lock().await.read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
     ensure_eq!(second.phase, agent_automation::RunPhase::Finished);
     ensure!(second.due_at_ms - first.due_at_ms >= interval.num_milliseconds());
     let new_origin = RouterOriginRef::ScheduleRun {
@@ -177,7 +180,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     let current = store
         .lock()
         .await
-        .inspect_schedule::<SessionRef, EndpointRef>(&schedule_id)
+        .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(&schedule_id)
         .await?
         .record;
     ensure_eq!(

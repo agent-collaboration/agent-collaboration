@@ -132,7 +132,9 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
                 ScheduleDestination::Existing { target } => {
                     self.scheduled_for_existing(target).await?
                 }
-                ScheduleDestination::Fresh { endpoint } => self.scheduled_for_fresh(endpoint)?,
+                ScheduleDestination::Fresh { endpoint, .. } => {
+                    self.scheduled_for_fresh(endpoint)?
+                }
                 ScheduleDestination::Fork { source, .. } => {
                     self.scheduled_for_existing(source).await?
                 }
@@ -148,7 +150,9 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
                 ScheduleDestination::Existing { target } => {
                     self.scheduled_for_existing(target).await?
                 }
-                ScheduleDestination::Fresh { endpoint } => self.scheduled_for_fresh(endpoint)?,
+                ScheduleDestination::Fresh { endpoint, .. } => {
+                    self.scheduled_for_fresh(endpoint)?
+                }
                 ScheduleDestination::Fork { source, .. } => {
                     self.scheduled_for_existing(source).await?
                 }

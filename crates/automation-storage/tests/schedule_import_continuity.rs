@@ -20,7 +20,7 @@ async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart(
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -39,12 +39,12 @@ async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart(
         })
         .await?;
     let active = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60_000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60_000)
         .await?
         .ok_or("missing first run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 60_000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 60_000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
@@ -52,15 +52,15 @@ async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart(
     }
     let before = serde_json::to_value(
         store
-            .read_run::<String, String, String, String>(&active)
+            .read_run::<String, String, String, String, String>(&active)
             .await?,
     )?;
     let waiting = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 120_000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 120_000)
         .await?
         .ok_or("missing waiting run")?;
     let mut package = store
-        .export_schedule::<String, String>(&schedule.schedule_id)
+        .export_schedule::<String, String, String>(&schedule.schedule_id)
         .await?;
     package.definition.execution_timeout_seconds = Some(300);
     package.continuity = Some(PortableContinuity {
@@ -70,7 +70,7 @@ async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart(
     });
     let encoded = encode_schedule_package(&package, 1_048_576)?;
     let imported = store
-        .import_schedule::<String, String>(&ScheduleImport {
+        .import_schedule::<String, String, String>(&ScheduleImport {
             operation_id: OperationId::generate(),
             package_utf8: &encoded,
             overwrite: true,
@@ -126,24 +126,24 @@ async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart(
     }
     if serde_json::to_value(
         store
-            .read_run::<String, String, String, String>(&active)
+            .read_run::<String, String, String, String, String>(&active)
             .await?,
     )? != before
     {
         return Err("import/restart changed frozen active run inputs".into());
     }
     let waiting_record = store
-        .read_run::<String, String, String, String>(&waiting)
+        .read_run::<String, String, String, String, String>(&waiting)
         .await?;
     if waiting_record.phase != RunPhase::Waiting || waiting_record.inputs.is_some() {
         return Err("import admitted or rewrote waiting work".into());
     }
-    if !matches!(store.admit_waiting_run::<String,String>(&schedule.schedule_id, 140_000).await?, RunAdmission::Occupied { run_id } if run_id == active)
+    if !matches!(store.admit_waiting_run::<String,String, String>(&schedule.schedule_id, 140_000).await?, RunAdmission::Occupied { run_id } if run_id == active)
     {
         return Err("import bypassed active run exclusion".into());
     }
     let exported = store
-        .export_schedule::<String, String>(&schedule.schedule_id)
+        .export_schedule::<String, String, String>(&schedule.schedule_id)
         .await?;
     if exported
         .continuity

@@ -19,25 +19,29 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         .create_instruction(&OperationId::generate(), &"x".to_owned().try_into()?, 0)
         .await?;
     let schedule = store
-        .create_schedule(
-            &automation_storage::ScheduleCreate::<SessionRef, EndpointRef> {
-                operation_id: OperationId::generate(),
-                definition: agent_automation::ScheduleDefinition {
-                    instruction_id: instruction.instruction_id.clone(),
-                    timing: agent_automation::TimingRule::Interval { seconds: 60 },
-                    enabled: false,
-                    destination: agent_automation::ExecutionDestination::Unprepared,
-                    execution_timeout_seconds: None,
-                    model: Some("gpt-5.6-sol".into()),
-                    effort: Some("medium".into()),
+        .create_schedule(&automation_storage::ScheduleCreate::<
+            SessionRef,
+            EndpointRef,
+            message_board::ProjectId,
+        > {
+            operation_id: OperationId::generate(),
+            definition: agent_automation::ScheduleDefinition {
+                instruction_id: instruction.instruction_id.clone(),
+                timing: agent_automation::TimingRule::Interval { seconds: 60 },
+                enabled: false,
+                destination: agent_automation::ExecutionDestination::Unprepared {
+                    project_id: None,
                 },
-                imported_continuity: agent_automation::ContinuityInput::None,
-                now_ms: 0,
+                execution_timeout_seconds: None,
+                model: Some("gpt-5.6-sol".into()),
+                effort: Some("medium".into()),
             },
-        )
+            imported_continuity: agent_automation::ContinuityInput::None,
+            now_ms: 0,
+        })
         .await?;
     let package = store
-        .export_schedule::<SessionRef, EndpointRef>(&schedule.schedule_id)
+        .export_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(&schedule.schedule_id)
         .await?;
     let encoded = agent_automation::encode_schedule_package(&package, usize::MAX)?;
     let response_size =

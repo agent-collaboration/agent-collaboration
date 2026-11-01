@@ -22,13 +22,14 @@ async fn known_preparation_rejection_finishes_but_unknown_effects_do_not()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRule::Interval { seconds: 60 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
+                    project_id: None,
                     endpoint: "fixture-endpoint".into(),
                     cwd: "/private-fixture".into(),
                 },
@@ -41,17 +42,17 @@ async fn known_preparation_rejection_finishes_but_unknown_effects_do_not()
         })
         .await?;
     let run_id = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     store
-        .admit_waiting_run::<String, String>(&schedule.schedule_id, 60000)
+        .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?;
     let mut effects: NativeEffectEvidence<String, String> = serde_json::from_value(
         json!({"target":null,"generation":"generation-1","clientUserMessageId":null,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"unknown","resume":"notRequested","submission":"notDispatched","cessation":"notApplicable"}),
     )?;
     store
-        .begin_run_preparation::<_, String, _, String>(RunPreparationIntent {
+        .begin_run_preparation::<_, String, String, _, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: effects.clone().into(),
         })
@@ -63,7 +64,7 @@ async fn known_preparation_rejection_finishes_but_unknown_effects_do_not()
         now_ms: 61000,
     };
     if store
-        .fail_run_preparation::<_, String, _, String>(attempt)
+        .fail_run_preparation::<_, String, String, _, String>(attempt)
         .await
         .is_ok()
     {
@@ -71,15 +72,17 @@ async fn known_preparation_rejection_finishes_but_unknown_effects_do_not()
     }
     effects.allocation = agent_automation::PreparationEffect::Rejected;
     store
-        .fail_run_preparation::<_, String, _, String>(automation_storage::RunPreparationFailure {
-            run_id: run_id.clone(),
-            effects: effects.into(),
-            explanation: "native allocation rejected".into(),
-            now_ms: 62000,
-        })
+        .fail_run_preparation::<_, String, String, _, String>(
+            automation_storage::RunPreparationFailure {
+                run_id: run_id.clone(),
+                effects: effects.into(),
+                explanation: "native allocation rejected".into(),
+                now_ms: 62000,
+            },
+        )
         .await?;
     let record = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if record.phase != agent_automation::RunPhase::PreparationFailed
         || record.completed_at_ms != Some(62000)
@@ -88,7 +91,7 @@ async fn known_preparation_rejection_finishes_but_unknown_effects_do_not()
         return Err("known no-execution outcome did not finish without consuming budget".into());
     }
     if store
-        .inspect_schedule::<String, String>(&schedule.schedule_id)
+        .inspect_schedule::<String, String, String>(&schedule.schedule_id)
         .await?
         .active_run_id
         .is_some()

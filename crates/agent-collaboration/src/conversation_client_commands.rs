@@ -18,9 +18,9 @@ mod reporting;
 use reporting::{
     emit_cancel_submission, emit_create_outcome, emit_create_start, emit_operation_outcome,
     emit_operation_start, endpoint_has_provider_channel, operation_result_exit,
-    parse_cli_generation, parse_cli_operation_id, parse_optional_session_ref, parse_session_ref,
-    report_conversation_failure, report_create_client_error,
-    report_uninspectable_codex_operation_id, resolve_create_endpoint,
+    parse_cli_generation, parse_cli_operation_id, parse_optional_session_ref,
+    parse_project_argument, parse_session_ref, report_conversation_failure,
+    report_create_client_error, report_uninspectable_codex_operation_id, resolve_create_endpoint,
 };
 
 #[path = "conversation_client_lifecycle.rs"]
@@ -28,6 +28,10 @@ mod lifecycle;
 pub(super) use lifecycle::{run_close, run_resume};
 
 pub(super) fn run_create(args: CreateArguments) -> i32 {
+    let project_id = match parse_project_argument(args.project.as_deref(), args.json) {
+        Ok(value) => value,
+        Err(exit) => return exit,
+    };
     if let Err(failure) = validate_create_endpoint_options(&args) {
         return crate::endpoint_commands::report_failure(
             failure.kind,
@@ -195,6 +199,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             }
         };
         let request = ConversationCreateInput {
+            project_id,
             operation_id: operation_id.clone(),
             endpoint: endpoint.clone(),
             working_directory: args.cwd,
@@ -237,6 +242,10 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
 }
 
 pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
+    let project_id = match parse_project_argument(args.project.as_deref(), args.json) {
+        Ok(value) => value,
+        Err(exit) => return exit,
+    };
     let (directory, text) = match prepare(&args) {
         Ok(value) => value,
         Err(message) => {
@@ -367,6 +376,7 @@ pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
             }
         };
         let create = ConversationCreateInput {
+            project_id,
             operation_id: create_operation_id.clone(),
             endpoint,
             working_directory: cwd,
@@ -434,6 +444,14 @@ fn emit_create_prompt_outcome(
 }
 
 pub(super) fn run_existing_prompt(args: PromptArguments) -> i32 {
+    if args.project.is_some() {
+        return crate::endpoint_commands::report_failure(
+            "invalidField",
+            "--project is valid only with --new or --fork; existing sessions keep their project",
+            2,
+            args.json,
+        );
+    }
     let (directory, text) = match prepare(&args) {
         Ok(value) => value,
         Err(message) => {

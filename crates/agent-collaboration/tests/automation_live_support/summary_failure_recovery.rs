@@ -45,6 +45,7 @@ pub async fn exercise(proof: &mut ProofContext) -> ProofResult<PortableRunProof>
                 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
+                    project_id: None,
                     endpoint: proof.endpoint.clone(),
                     cwd: proof.workspace.to_string_lossy().into_owned(),
                 },

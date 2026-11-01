@@ -39,6 +39,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         operation(
             backend
                 .create(ConversationCreateRequest {
+                    project_id: None,
                     settings: Some(ProviderRequestedSettings {
                         mode: (!mode.starts_with("invalid")).then(|| "ask".to_owned()),
                         model: Some(

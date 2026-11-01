@@ -467,6 +467,8 @@ pub struct ConversationCreateRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     pub working_directory: ProviderWorkingDirectory,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<message_board::ProjectId>,
     pub created_by: ProviderIdentity,
     pub approver: ProviderIdentity,
     pub requested_policy: ProviderRequestedPolicy,
@@ -647,6 +649,7 @@ pub struct ConversationOperationWaitResult {
 #[serde(rename_all = "camelCase")]
 pub enum ConversationOperationFailureKind {
     Overloaded,
+    ProjectRequired,
     InvalidRequest,
     InvalidSetting,
     SettingsUnresolved,

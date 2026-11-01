@@ -107,16 +107,19 @@ fn success(
         | Method::ScheduleDisable
         | Method::SchedulePrepare
         | Method::ScheduleImport => {
-            let inspection: automation_storage::ScheduleInspection<SessionRef, EndpointRef> =
-                if method == Method::ScheduleCreate {
-                    automation_storage::ScheduleInspection {
-                        record: decode(result)?,
-                        active_run_id: None,
-                        waiting_run_id: None,
-                    }
-                } else {
-                    decode(result)?
-                };
+            let inspection: automation_storage::ScheduleInspection<
+                SessionRef,
+                EndpointRef,
+                message_board::ProjectId,
+            > = if method == Method::ScheduleCreate {
+                automation_storage::ScheduleInspection {
+                    record: decode(result)?,
+                    active_run_id: None,
+                    waiting_run_id: None,
+                }
+            } else {
+                decode(result)?
+            };
             Ok(OperationSuccess::Schedule {
                 method: decode(method_value)?,
                 result: Box::new(

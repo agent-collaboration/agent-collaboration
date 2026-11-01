@@ -112,7 +112,7 @@ impl ScheduleTimingWorker {
             self.store
                 .lock()
                 .await
-                .enqueue_due_run::<SessionRef, EndpointRef>(&id, now)
+                .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(&id, now)
                 .await?;
         }
         let waiting = self
@@ -133,7 +133,7 @@ impl ScheduleTimingWorker {
             self.store
                 .lock()
                 .await
-                .admit_waiting_run::<SessionRef, EndpointRef>(&id, now)
+                .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(&id, now)
                 .await?;
         }
         Ok(())

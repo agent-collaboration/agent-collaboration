@@ -61,34 +61,42 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         let schedule = store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-                operation_id: OperationId::generate(),
-                definition: ScheduleDefinition {
-                    instruction_id: instruction.instruction_id,
-                    timing: TimingRule::Interval { seconds: 60 },
-                    enabled: true,
-                    destination: ExecutionDestination::OwnedThread {
-                        target: target.clone(),
-                        cwd: root.to_string_lossy().into_owned(),
+            .create_schedule(
+                &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                    operation_id: OperationId::generate(),
+                    definition: ScheduleDefinition {
+                        instruction_id: instruction.instruction_id,
+                        timing: TimingRule::Interval { seconds: 60 },
+                        enabled: true,
+                        destination: ExecutionDestination::OwnedThread {
+                            target: target.clone(),
+                            cwd: root.to_string_lossy().into_owned(),
+                        },
+                        execution_timeout_seconds: Some(120),
+                        model: Some("fixture-model".into()),
+                        effort: Some("medium".into()),
                     },
-                    execution_timeout_seconds: Some(120),
-                    model: Some("fixture-model".into()),
-                    effort: Some("medium".into()),
+                    imported_continuity: ContinuityInput::None,
+                    now_ms: 0,
                 },
-                imported_continuity: ContinuityInput::None,
-                now_ms: 0,
-            })
+            )
             .await?;
         let run_id = store
             .lock()
             .await
-            .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &schedule.schedule_id,
+                60000,
+            )
             .await?
             .ok_or("run missing")?;
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &schedule.schedule_id,
+                60000,
+            )
             .await?;
         let worker = ScheduledRunWorker {
             store: Arc::clone(&store),
@@ -106,7 +114,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
                 let current = store
                     .lock()
                     .await
-                    .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
+                    .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
                     .await?;
                 return Err(format!(
                     "fake {route_name} stage {stage}: {error}; phase={:?}, route={:?}, timing={:?}",
@@ -208,20 +216,22 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         let schedule = store
             .lock()
             .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-                operation_id: OperationId::generate(),
-                definition: ScheduleDefinition {
-                    instruction_id: instruction.instruction_id.clone(),
-                    timing: TimingRule::Interval { seconds: 60 },
-                    enabled: false,
-                    destination: ExecutionDestination::Unprepared,
-                    execution_timeout_seconds: Some(120),
-                    model: Some("fixture-model".into()),
-                    effort: Some("medium".into()),
+            .create_schedule(
+                &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                    operation_id: OperationId::generate(),
+                    definition: ScheduleDefinition {
+                        instruction_id: instruction.instruction_id.clone(),
+                        timing: TimingRule::Interval { seconds: 60 },
+                        enabled: false,
+                        destination: ExecutionDestination::Unprepared { project_id: None },
+                        execution_timeout_seconds: Some(120),
+                        model: Some("fixture-model".into()),
+                        effort: Some("medium".into()),
+                    },
+                    imported_continuity: ContinuityInput::None,
+                    now_ms: 0,
                 },
-                imported_continuity: ContinuityInput::None,
-                now_ms: 0,
-            })
+            )
             .await?;
         schedules.push(schedule.schedule_id);
     }

@@ -20,7 +20,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -39,19 +39,19 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         })
         .await?;
     let run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
         return Err("missing admission".into());
     }
     let before = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if before.evidence.timing.is_some() {
         return Err("waiting consumed budget".into());
@@ -71,7 +71,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<String, String, String, String>(
+        .begin_run_preparation::<String, String, String, String, String>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -79,7 +79,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         )
         .await?;
     let started = store
-        .begin_run_dispatch::<_, String, _, String>(RunDispatchIntent {
+        .begin_run_dispatch::<_, String, String, _, String>(RunDispatchIntent {
             run_id: run.clone(),
             effects: effects.clone().into(),
             configured_timeout_seconds: 3600,
@@ -94,7 +94,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         return Err("captured override or dispatch clock incorrect".into());
     }
     if store
-        .begin_run_dispatch::<_, String, _, String>(RunDispatchIntent {
+        .begin_run_dispatch::<_, String, String, _, String>(RunDispatchIntent {
             run_id: run.clone(),
             effects: effects.into(),
             configured_timeout_seconds: 3600,
@@ -106,7 +106,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         return Err("second dispatch reset budget".into());
     }
     let read = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if read.evidence.timing.is_none() {
         return Err("budget and SQL projections diverged".into());
@@ -122,7 +122,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
     rejected_effects.submission = SubmissionEffect::Rejected;
     rejected_effects.cessation = CessationEvidence::Confirmed;
     store
-        .record_run_submission::<String, String, String, String>(
+        .record_run_submission::<String, String, String, String, String>(
             automation_storage::RunSubmissionResult {
                 run_id: run.clone(),
                 effects: rejected_effects.into(),
@@ -133,7 +133,7 @@ async fn execution_budget_starts_at_dispatch_not_trigger_and_cannot_restart()
         )
         .await?;
     let retained = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if retained.phase != agent_automation::RunPhase::Preparing
         || retained.evidence.timing.is_some()

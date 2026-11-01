@@ -32,30 +32,38 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRule::After { seconds: 1 },
-                enabled: true,
-                destination: ExecutionDestination::OwnedThread {
-                    target: target.clone(),
-                    cwd: root.to_string_lossy().into(),
+        .create_schedule(
+            &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                operation_id: OperationId::generate(),
+                definition: ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: TimingRule::After { seconds: 1 },
+                    enabled: true,
+                    destination: ExecutionDestination::OwnedThread {
+                        target: target.clone(),
+                        cwd: root.to_string_lossy().into(),
+                    },
+                    execution_timeout_seconds: None,
+                    model: Some("gpt-5.6-sol".into()),
+                    effort: Some("medium".into()),
                 },
-                execution_timeout_seconds: None,
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                imported_continuity: ContinuityInput::None,
+                now_ms: 0,
             },
-            imported_continuity: ContinuityInput::None,
-            now_ms: 0,
-        })
+        )
         .await?;
     let run = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            1000,
+        )
         .await?
         .ok_or("missing fixture run")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
+        .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            1000,
+        )
         .await?;
     let mut effects = NativeEffectEvidence {
         permission_differences: Vec::new(),
@@ -72,7 +80,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -80,12 +88,14 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         )
         .await?;
     store
-        .begin_run_dispatch::<_, EndpointRef, _, NativeSendReceipt>(RunDispatchIntent {
-            run_id: run.clone(),
-            effects: effects.clone().into(),
-            configured_timeout_seconds: 3600,
-            now_ms: 1000,
-        })
+        .begin_run_dispatch::<_, EndpointRef, message_board::ProjectId, _, NativeSendReceipt>(
+            RunDispatchIntent {
+                run_id: run.clone(),
+                effects: effects.clone().into(),
+                configured_timeout_seconds: 3600,
+                now_ms: 1000,
+            },
+        )
         .await?;
     effects.submission = SubmissionEffect::Accepted;
     effects.native_turn_id = Some("fixture-turn".into());
@@ -93,17 +103,19 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         json!({"target":target,"generation":generation,"inputKind":"agent","representation":"declaredAgentText","clientUserMessageId":run,"resumeEffect":"notRequested","acceptance":{"kind":"nativeInputAccepted","operation":"turnStart","disposition":"startedOrSteered","turnId":"fixture-turn"}}),
     )?;
     store
-        .record_run_submission::<_, EndpointRef, _, _>(RunSubmissionResult {
-            run_id: run.clone(),
-            effects: effects.into(),
-            outcome: RunSubmissionOutcome::Accepted {
-                turn_id: "fixture-turn".into(),
-                receipt,
+        .record_run_submission::<_, EndpointRef, message_board::ProjectId, _, _>(
+            RunSubmissionResult {
+                run_id: run.clone(),
+                effects: effects.into(),
+                outcome: RunSubmissionOutcome::Accepted {
+                    turn_id: "fixture-turn".into(),
+                    receipt,
+                },
             },
-        })
+        )
         .await?;
     store
-        .complete_run_settlement::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .complete_run_settlement::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
             RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("fixture-turn".into()),

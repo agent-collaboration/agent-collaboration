@@ -334,17 +334,23 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                     target,
                     cwd: String::new(),
                 },
-                ScheduleDestination::Fresh { endpoint } => DestinationPreparation::Fresh {
+                ScheduleDestination::Fresh {
+                    endpoint,
+                    project_id,
+                } => DestinationPreparation::Fresh {
                     endpoint,
                     cwd: String::new(),
+                    project_id,
                 },
                 ScheduleDestination::Fork {
                     source,
                     through_turn_id,
+                    project_id,
                 } => DestinationPreparation::Fork {
                     source,
                     through_turn_id,
                     cwd: String::new(),
+                    project_id,
                 },
             };
             let mut native =
@@ -357,7 +363,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
     fn support(&self, destination: &ScheduleDestination) -> DeliveryFuture<'_, ScheduleSupport> {
         let endpoint = match destination {
             ScheduleDestination::Existing { target } => &target.endpoint,
-            ScheduleDestination::Fresh { endpoint } => endpoint,
+            ScheduleDestination::Fresh { endpoint, .. } => endpoint,
             ScheduleDestination::Fork { source, .. } => &source.endpoint,
         };
         let mine = endpoint == &self.backend.endpoint;
@@ -465,6 +471,7 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                 DestinationPreparation::Fresh {
                     endpoint: request.endpoint,
                     cwd: request.working_directory,
+                    project_id: request.project_id,
                 },
                 request.message.as_str(),
                 request.inputs.execution_configuration.model.as_deref(),
@@ -748,16 +755,17 @@ mod tests {
             "nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested",
             "submission":"accepted","cessation":"unconfirmed"
         }))?;
-        let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-            "scheduleChangeId":agent_automation::ChangeId::generate(),
-            "instructionRevisionId":agent_automation::RevisionId::generate(),
-            "instructionText":"Check work",
-            "continuity":{"kind":"none"},
-            "executionConfiguration":{
-                "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
-                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-            }
-        }))?;
+        let inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId> =
+            serde_json::from_value(json!({
+                "scheduleChangeId":agent_automation::ChangeId::generate(),
+                "instructionRevisionId":agent_automation::RevisionId::generate(),
+                "instructionText":"Check work",
+                "continuity":{"kind":"none"},
+                "executionConfiguration":{
+                    "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
+                    "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+                }
+            }))?;
         let sink = CountingStopSink {
             writes: AtomicUsize::new(0),
         };

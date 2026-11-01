@@ -154,6 +154,9 @@ impl AcpConversation {
             router_metadata.insert("scratchScope".into(), json!(scratch_scope));
             router_metadata.insert("scratchPath".into(), json!(scratch_path));
             router_metadata.insert("operationId".into(), json!(request.operation_id));
+            if let Some(project) = &request.project_id {
+                router_metadata.insert("projectId".into(), json!(project));
+            }
             if let Some(source_thread_id) = &request.fork {
                 router_metadata.insert("forkThreadId".into(), json!(source_thread_id));
             }

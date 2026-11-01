@@ -159,7 +159,9 @@ impl AutomationOperations {
             let current = store
                 .lock()
                 .await
-                .inspect_schedule::<SessionRef, EndpointRef>(&request.schedule_id)
+                .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(
+                    &request.schedule_id,
+                )
                 .await;
             if let Ok(mut current) = current {
                 current.record.definition.enabled = true;
@@ -190,7 +192,11 @@ impl AutomationOperations {
     async fn validate_activation(
         &self,
         store: &Arc<Mutex<AutomationStore>>,
-        definition: &agent_automation::ScheduleDefinition<SessionRef, EndpointRef>,
+        definition: &agent_automation::ScheduleDefinition<
+            SessionRef,
+            EndpointRef,
+            message_board::ProjectId,
+        >,
         schedule_id: Option<&ScheduleId>,
         operation_id: &OperationId,
         context: &ScheduleFailureContext,
@@ -239,7 +245,9 @@ impl AutomationOperations {
         let package = store
             .lock()
             .await
-            .export_schedule::<SessionRef, EndpointRef>(&request.schedule_id)
+            .export_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &request.schedule_id,
+            )
             .await
             .map_err(operation_failure)?;
         // Encode once without a text-only cap, then measure the actual escaped response envelope.
@@ -280,12 +288,14 @@ impl AutomationOperations {
         let imported = store
             .lock()
             .await
-            .import_schedule::<SessionRef, EndpointRef>(&automation_storage::ScheduleImport {
-                operation_id: request.operation_id,
-                package_utf8: &request.package_utf8,
-                overwrite: request.overwrite,
-                now_ms: chrono::Utc::now().timestamp_millis(),
-            })
+            .import_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &automation_storage::ScheduleImport {
+                    operation_id: request.operation_id,
+                    package_utf8: &request.package_utf8,
+                    overwrite: request.overwrite,
+                    now_ms: chrono::Utc::now().timestamp_millis(),
+                },
+            )
             .await;
         match imported {
             Ok(record) => crate::schedule_projection::snapshot(record).map_err(|()| {
@@ -335,7 +345,10 @@ enum ScheduleAccess {
 #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn project_schedule(
     store: &Arc<Mutex<AutomationStore>>,
-    result: Result<ScheduleInspection<SessionRef, EndpointRef>, StorageError>,
+    result: Result<
+        ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>,
+        StorageError,
+    >,
     context: ScheduleFailureContext,
     access: ScheduleAccess,
 ) -> ScheduleResult<ScheduleSnapshot> {
@@ -364,7 +377,7 @@ async fn project_schedule(
                 (StorageError::ScheduleChangeConflict, Some(id)) => store
                     .lock()
                     .await
-                    .inspect_schedule::<SessionRef, EndpointRef>(id)
+                    .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(id)
                     .await
                     .ok()
                     .map(|record| record.record.change_id),

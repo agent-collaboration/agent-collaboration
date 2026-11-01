@@ -42,8 +42,8 @@ async fn two_connections_admit_only_one_run_and_capture_current_inputs()
     let mut second = AutomationStore::open(&path).await?;
     // Act: both repository instances try admission concurrently.
     let (left, right) = tokio::join!(
-        first.admit_waiting_run::<String, String>(&schedule_id, 200),
-        second.admit_waiting_run::<String, String>(&schedule_id, 200)
+        first.admit_waiting_run::<String, String, String>(&schedule_id, 200),
+        second.admit_waiting_run::<String, String, String>(&schedule_id, 200)
     );
     let outcomes = [left?, right?];
     let mut admitted = 0;

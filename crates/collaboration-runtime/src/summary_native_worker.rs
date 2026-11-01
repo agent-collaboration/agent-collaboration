@@ -25,6 +25,7 @@ pub(crate) struct SummaryStep<'a> {
     pub record: RunRecord<
         SessionRef,
         EndpointRef,
+        message_board::ProjectId,
         CodexGeneration,
         crate::stored_run_receipt::StoredRunReceipt,
     >,
@@ -50,7 +51,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
             .store
             .lock()
             .await
-            .begin_required_summary::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+            .begin_required_summary::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                 &SummaryAdmission {
                     run_id: id,
                     timeout_seconds: input.timeout_seconds,

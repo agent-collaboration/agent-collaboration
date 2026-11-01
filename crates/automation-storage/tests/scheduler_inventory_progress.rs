@@ -24,13 +24,14 @@ async fn bounded_scheduler_scans_reach_work_beyond_first_page()
     let mut runs = Vec::new();
     for _ in 0..105 {
         let schedule = store
-            .create_schedule(&ScheduleCreate::<String, String> {
+            .create_schedule(&ScheduleCreate::<String, String, String> {
                 operation_id: OperationId::generate(),
                 definition: ScheduleDefinition {
                     instruction_id: instruction.instruction_id.clone(),
                     timing: TimingRule::Interval { seconds: 1 },
                     enabled: true,
                     destination: ExecutionDestination::FreshEachRun {
+                        project_id: None,
                         endpoint: "fixture-endpoint".into(),
                         cwd: "/private-fixture".into(),
                     },
@@ -44,7 +45,7 @@ async fn bounded_scheduler_scans_reach_work_beyond_first_page()
             .await?;
         runs.push(
             store
-                .enqueue_due_run::<String, String>(&schedule.schedule_id, 1000)
+                .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 1000)
                 .await?
                 .ok_or("missing run")?,
         );
@@ -56,7 +57,9 @@ async fn bounded_scheduler_scans_reach_work_beyond_first_page()
         return Err("waiting inventory did not advance beyond blocked first page".into());
     }
     for id in &schedules {
-        store.admit_waiting_run::<String, String>(id, 1000).await?;
+        store
+            .admit_waiting_run::<String, String, String>(id, 1000)
+            .await?;
     }
     let first = store.observable_run_ids(None).await?;
     let second = store.observable_run_ids(first.last()).await?;

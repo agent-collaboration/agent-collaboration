@@ -100,6 +100,7 @@ async fn create_session(
     submit_provider_create(
         client,
         ConversationCreateRequest {
+            project_id: None,
             settings: None,
             operation_id: operation_id.clone(),
             endpoint: provider.endpoint.clone(),

@@ -418,6 +418,21 @@ async fn serve_provider_sessions(
                         match route
                             .commands
                             .create(CreateSessionCommand {
+                                project_id: match params
+                                    .pointer("/_meta/codexRouter/projectId")
+                                    .filter(|value| !value.is_null())
+                                    .map(|value| serde_json::from_value(value.clone()))
+                                    .transpose()
+                                {
+                                    Ok(project) => project,
+                                    Err(_) => {
+                                        router
+                                            .output
+                                            .send(failure(id, -32602, "Invalid session project ID"))
+                                            .await?;
+                                        continue;
+                                    }
+                                },
                                 endpoint: route.endpoint.clone(),
                                 working_directory: PathBuf::from(cwd),
                                 settings: SessionSettingsCommand::default(),

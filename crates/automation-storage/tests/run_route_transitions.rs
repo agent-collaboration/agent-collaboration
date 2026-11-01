@@ -23,7 +23,7 @@ async fn admitted_run(store: &mut AutomationStore) -> Result<RunId, Box<dyn std:
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -42,12 +42,12 @@ async fn admitted_run(store: &mut AutomationStore) -> Result<RunId, Box<dyn std:
         })
         .await?;
     let run_id = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
@@ -96,7 +96,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
     let run_id = admitted_run(&mut store).await?;
     let attempt_id = AttemptId::generate();
     if store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?
         .evidence
         .route
@@ -105,7 +105,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("waiting run selected a client before preparation".into());
     }
     if store
-        .complete_run_settlement::<String, String, String, String>(RunCompletion {
+        .complete_run_settlement::<String, String, String, String, String>(RunCompletion {
             run_id: run_id.clone(),
             settlement: RunStopIdentity::NativeTurn("never-started".into()),
             outcome: WorkerOutcome::Completed { explanation: None },
@@ -117,7 +117,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("unselected run accepted completion".into());
     }
     if store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt_id.clone(),
@@ -133,7 +133,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("unselected run dispatched without a persisted route".into());
     }
     if !store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt_id.clone(),
@@ -146,7 +146,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("provider route preparation was not recorded".into());
     }
     if store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 AttemptId::generate(),
@@ -162,7 +162,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("different provider operation dispatched the run".into());
     }
     store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt_id.clone(),
@@ -174,7 +174,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         })
         .await?;
     if store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt_id.clone(),
@@ -190,7 +190,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("in-flight provider submission was admitted a second time".into());
     }
     if store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 AttemptId::generate(),
@@ -207,7 +207,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("unrelated provider operation changed the run".into());
     }
     store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt_id.clone(),
@@ -220,7 +220,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         })
         .await?;
     if !store
-        .begin_run_stop::<String, String, String, String>(
+        .begin_run_stop::<String, String, String, String, String>(
             &run_id,
             RunStopIdentity::ProviderOperation(attempt_id.clone()),
         )
@@ -229,13 +229,13 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("provider cancellation intent was not recorded".into());
     }
     let stopping = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if stopping.phase != RunPhase::Stopping || stopping.worker_outcome.is_some() {
         return Err("cancellation finalized a running provider operation".into());
     }
     if store
-        .complete_run_settlement::<String, String, String, String>(RunCompletion {
+        .complete_run_settlement::<String, String, String, String, String>(RunCompletion {
             run_id: run_id.clone(),
             settlement: RunStopIdentity::ProviderOperation(AttemptId::generate()),
             outcome: WorkerOutcome::Completed { explanation: None },
@@ -246,7 +246,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("another provider operation settled this run".into());
     }
     if !store
-        .complete_run_settlement::<String, String, String, String>(RunCompletion {
+        .complete_run_settlement::<String, String, String, String, String>(RunCompletion {
             run_id: run_id.clone(),
             settlement: RunStopIdentity::ProviderOperation(attempt_id),
             outcome: WorkerOutcome::Completed { explanation: None },
@@ -257,7 +257,7 @@ async fn provider_run_stop_waits_for_exact_operation_settlement()
         return Err("exact provider operation settlement did not finish the run".into());
     }
     let finished = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if finished.phase != RunPhase::Finished
         || !matches!(
@@ -288,7 +288,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
     let mut store = AutomationStore::open(&path).await?;
     let run_id = admitted_run(&mut store).await?;
     if !store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::NotDispatched)?,
         })
@@ -297,7 +297,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         return Err("peer route preparation was not recorded".into());
     }
     if store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Written)?,
             configured_timeout_seconds: 3600,
@@ -309,7 +309,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         return Err("peer write cannot bypass dispatch intent".into());
     }
     store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Dispatching)?,
             configured_timeout_seconds: 3600,
@@ -317,7 +317,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         })
         .await?;
     if store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Written)?,
             outcome: RunSubmissionOutcome::PeerWritten {
@@ -331,7 +331,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         return Err("peer write predated its dispatch budget".into());
     }
     store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Written)?,
             outcome: RunSubmissionOutcome::PeerWritten {
@@ -341,7 +341,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         })
         .await?;
     let finished = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if finished.phase != RunPhase::Finished
         || finished.native_turn_id.is_some()
@@ -359,7 +359,7 @@ async fn peer_written_run_finishes_without_claiming_turn_completion()
         return Err("peer write claimed a native turn or remained active".into());
     }
     if store
-        .begin_run_stop::<String, String, String, String>(
+        .begin_run_stop::<String, String, String, String, String>(
             &run_id,
             RunStopIdentity::NativeTurn("none".into()),
         )
@@ -382,13 +382,13 @@ async fn peer_written_evidence_finishes_after_uncertain_submission()
     let mut store = AutomationStore::open(&path).await?;
     let run_id = admitted_run(&mut store).await?;
     store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::NotDispatched)?,
         })
         .await?;
     store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Dispatching)?,
             configured_timeout_seconds: 120,
@@ -396,7 +396,7 @@ async fn peer_written_evidence_finishes_after_uncertain_submission()
         })
         .await?;
     store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: run_id.clone(),
             effects: peer_evidence(PeerWriteEffect::Written)?,
             outcome: RunSubmissionOutcome::Unknown {
@@ -405,13 +405,13 @@ async fn peer_written_evidence_finishes_after_uncertain_submission()
         })
         .await?;
     let uncertain = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if uncertain.phase != RunPhase::Uncertain {
         return Err("peer write was not retained as uncertain".into());
     }
     if !store
-        .complete_run_settlement::<String, String, String, String>(RunCompletion {
+        .complete_run_settlement::<String, String, String, String, String>(RunCompletion {
             run_id: run_id.clone(),
             settlement: RunStopIdentity::PeerMessageWritten,
             outcome: WorkerOutcome::PeerMessageWritten {
@@ -424,7 +424,7 @@ async fn peer_written_evidence_finishes_after_uncertain_submission()
         return Err("recorded peer write did not settle".into());
     }
     let finished = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if finished.phase != RunPhase::Finished
         || finished.evidence.acceptance.is_some()
@@ -458,13 +458,14 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRule::Interval { seconds: 60 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
+                    project_id: None,
                     endpoint: "provider-endpoint".into(),
                     cwd: "/isolated-fixture".into(),
                 },
@@ -477,11 +478,11 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         })
         .await?;
     let first_run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("first run missing")?;
     store
-        .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+        .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
         .await?;
     let provider_attempt = AttemptId::generate();
     let preparing = provider_evidence(
@@ -490,13 +491,13 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         ProviderSettlementEffect::NotObserved,
     )?;
     store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: first_run.clone(),
             effects: preparing.clone(),
         })
         .await?;
     store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: first_run.clone(),
             effects: provider_evidence(
                 provider_attempt.clone(),
@@ -508,7 +509,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         })
         .await?;
     store
-        .record_run_submission::<String, String, String, String>(RunSubmissionResult {
+        .record_run_submission::<String, String, String, String, String>(RunSubmissionResult {
             run_id: first_run.clone(),
             effects: provider_evidence(
                 provider_attempt.clone(),
@@ -521,7 +522,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         })
         .await?;
     if !store
-        .complete_run_settlement::<String, String, String, String>(RunCompletion {
+        .complete_run_settlement::<String, String, String, String, String>(RunCompletion {
             run_id: first_run.clone(),
             settlement: RunStopIdentity::ProviderOperation(provider_attempt.clone()),
             outcome: WorkerOutcome::Completed { explanation: None },
@@ -533,7 +534,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
     }
     if !matches!(
         store
-            .begin_required_summary::<String, String, String, String>(&SummaryAdmission {
+            .begin_required_summary::<String, String, String, String, String>(&SummaryAdmission {
                 run_id: first_run.clone(),
                 timeout_seconds: 900,
                 now_ms: 64000,
@@ -545,7 +546,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
     }
     if !matches!(
         store
-            .recover_summary::<String, String, String, String>(
+            .recover_summary::<String, String, String, String, String>(
                 &automation_storage::SummaryRecoveryRequest {
                     operation_id: OperationId::generate(),
                     run_id: first_run.clone(),
@@ -562,7 +563,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
     }
     if !matches!(
         store
-            .recover_summary::<String, String, String, String>(
+            .recover_summary::<String, String, String, String, String>(
                 &automation_storage::SummaryRecoveryRequest {
                     operation_id: OperationId::generate(),
                     run_id: first_run.clone(),
@@ -576,7 +577,7 @@ async fn provider_fresh_run_cannot_admit_or_retry_native_summary()
         return Err("provider summary skip fabricated a summary outcome".into());
     }
     let record = store
-        .read_run::<String, String, String, String>(&first_run)
+        .read_run::<String, String, String, String, String>(&first_run)
         .await?;
     if record.phase != RunPhase::SummaryRequired || record.summary_attempt.is_some() {
         return Err("rejected provider summary changed the run".into());
@@ -629,7 +630,7 @@ async fn old_native_waiting_placeholder_prepares_as_codex_evidence()
         cessation: CessationEvidence::NotApplicable,
     };
     if !store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: initial.into(),
         })
@@ -638,7 +639,7 @@ async fn old_native_waiting_placeholder_prepares_as_codex_evidence()
         return Err("legacy native placeholder did not prepare".into());
     }
     let prepared = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     if !matches!(
         prepared.evidence.route,

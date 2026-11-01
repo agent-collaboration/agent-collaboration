@@ -16,6 +16,7 @@ impl AutomationStore {
     pub async fn complete_run_settlement<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
+        TProject: Serialize + DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -29,12 +30,14 @@ impl AutomationStore {
             return Err(StorageError::InvalidRecord);
         }
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if record.evidence.route.is_none() {
             return Err(StorageError::InvalidRecord);
         }

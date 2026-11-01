@@ -60,7 +60,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
     let run = automation
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     let attempted = worker
         .interactions

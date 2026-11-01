@@ -50,6 +50,7 @@ fn public_prompt_schema_cannot_decode_router_authored_content() {
 #[test]
 fn resumed_session_rejects_creation_settings_before_connection() {
     let request = ConversationCreateRequest {
+        project_id: None,
         operation_id: collaboration_protocol::OperationId::generate(),
         endpoint: endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f"),
         cwd: std::path::PathBuf::from("/tmp/project"),
@@ -91,6 +92,7 @@ fn new_and_forked_conversations_require_local_creator_and_approver_before_setup(
         session_id: SessionId::try_from("foreign".to_owned()).expect("session ID"),
     };
     let request = |created_by, approver| ConversationCreateRequest {
+        project_id: None,
         operation_id: collaboration_protocol::OperationId::generate(),
         endpoint: local_endpoint.clone(),
         cwd: std::path::PathBuf::from("/tmp/project"),
@@ -150,6 +152,7 @@ fn new_and_forked_conversations_require_local_creator_and_approver_before_setup(
 #[test]
 fn existing_session_without_creation_identities_remains_valid() {
     let request = ConversationCreateRequest {
+        project_id: None,
         operation_id: collaboration_protocol::OperationId::generate(),
         endpoint: endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f"),
         cwd: std::path::PathBuf::from("/tmp/project"),
@@ -184,6 +187,7 @@ async fn sdk_identity_preflight_fails_before_acp_discovery_or_mutation() {
         let result = AcpConversation::create(
             &crate::CollaborationAccess::api(std::path::Path::new("/path-that-must-not-be-read")),
             ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint: local_endpoint.clone(),
                 cwd: std::path::PathBuf::from("/tmp/project"),
@@ -254,6 +258,7 @@ async fn invalid_prompt_deadline_fails_before_discovery_or_creation() {
         &crate::CollaborationAccess::api(std::path::Path::new("/path-that-must-not-be-read")),
         ConversationCreatePromptRequest {
             create: ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint,
                 cwd: std::path::PathBuf::from("/tmp/project"),

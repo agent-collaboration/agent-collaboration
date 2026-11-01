@@ -57,7 +57,7 @@ pub async fn exercise() -> ProofResult<()> {
                     seconds: 60.try_into()?,
                 },
                 enabled: false,
-                destination: ExecutionDestination::Unprepared,
+                destination: ExecutionDestination::Unprepared { project_id: None },
                 execution_timeout_seconds: Some(120.try_into()?),
                 model: Some("gpt-5.6-sol".into()),
                 effort: Some("medium".into()),
@@ -70,6 +70,7 @@ pub async fn exercise() -> ProofResult<()> {
             operation_id: OperationId::generate(),
             schedule_id: schedule.schedule_id.clone(),
             destination: DestinationPreparation::Fork {
+                project_id: None,
                 source: source.clone(),
                 through_turn_id: turn_id.clone(),
                 cwd: proof.workspace.to_string_lossy().into_owned(),

@@ -20,13 +20,14 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRule::Interval { seconds: 60 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
+                    project_id: None,
                     endpoint: "fixture".into(),
                     cwd: "/isolated-fixture".into(),
                 },
@@ -39,19 +40,19 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         })
         .await?;
     let run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
         return Err("missing admission".into());
     }
     let before = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if before.evidence.timing.is_some() {
         return Err("waiting consumed budget".into());
@@ -71,7 +72,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<String, String, String, String>(
+        .begin_run_preparation::<String, String, String, String, String>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -79,7 +80,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         )
         .await?;
     store
-        .begin_run_dispatch::<_, String, _, String>(RunDispatchIntent {
+        .begin_run_dispatch::<_, String, String, _, String>(RunDispatchIntent {
             run_id: run.clone(),
             effects: effects.clone().into(),
             configured_timeout_seconds: 3600,
@@ -90,7 +91,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
     accepted.submission = SubmissionEffect::Accepted;
     accepted.native_turn_id = Some("native-run-turn".into());
     store
-        .record_run_submission::<_, String, _, _>(automation_storage::RunSubmissionResult {
+        .record_run_submission::<_, String, String, _, _>(automation_storage::RunSubmissionResult {
             run_id: run.clone(),
             effects: accepted.into(),
             outcome: automation_storage::RunSubmissionOutcome::Accepted {
@@ -100,7 +101,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         })
         .await?;
     store
-        .complete_run_settlement::<String, String, String, String>(
+        .complete_run_settlement::<String, String, String, String, String>(
             automation_storage::RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn(
@@ -112,7 +113,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         )
         .await?;
     store
-        .begin_required_summary::<String, String, String, String>(
+        .begin_required_summary::<String, String, String, String, String>(
             &automation_storage::SummaryAdmission {
                 run_id: run.clone(),
                 timeout_seconds: 900,
@@ -121,7 +122,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         )
         .await?;
     let current = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     let previous = current.summary_attempt.ok_or("missing summary attempt")?;
     let mut stopped = previous.effects.clone();
@@ -147,7 +148,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
     };
     let mut other = AutomationStore::open(&path).await?;
     let waiting = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 601000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 601000)
         .await?
         .ok_or("successor Run missing")?;
     if waiting == run {
@@ -159,15 +160,15 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         ..request.clone()
     };
     let (first, second, admission) = tokio::join!(
-        store.recover_summary::<String, String, String, String>(&request),
-        other.recover_summary::<String, String, String, String>(&competing),
-        successor.admit_waiting_run::<String, String>(&schedule.schedule_id, 601000)
+        store.recover_summary::<String, String, String, String, String>(&request),
+        other.recover_summary::<String, String, String, String, String>(&competing),
+        successor.admit_waiting_run::<String, String, String>(&schedule.schedule_id, 601000)
     );
     if !matches!(admission?, RunAdmission::Occupied { run_id } if run_id == run) {
         return Err("successor bypassed occupying Run during concurrent summary recovery".into());
     }
     let successor_record = successor
-        .read_run::<String, String, String, String>(&waiting)
+        .read_run::<String, String, String, String, String>(&waiting)
         .await?;
     if successor_record.phase != agent_automation::RunPhase::Waiting {
         return Err("summary retry permitted successor execution".into());
@@ -179,7 +180,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         _ => return Err("concurrent retries admitted zero or multiple summary attempts".into()),
     };
     let replay = store
-        .recover_summary::<String, String, String, String>(winner)
+        .recover_summary::<String, String, String, String, String>(winner)
         .await?;
     other.close().await?;
     if retried.run_id != run
@@ -207,7 +208,7 @@ async fn summary_retry_keeps_same_run_and_rejects_stale_attempt()
         return Err("stale attempt completed replacement".into());
     }
     let current = store
-        .inspect_schedule::<String, String>(&schedule.schedule_id)
+        .inspect_schedule::<String, String, String>(&schedule.schedule_id)
         .await?;
     if current.active_run_id != Some(run) {
         return Err("summary retry released schedule exclusion".into());

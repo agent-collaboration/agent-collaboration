@@ -186,7 +186,7 @@ async fn check_store_state(
     }
     if let Some((_, schedule_id)) = &expected.schedule {
         let schedule = automation
-            .inspect_schedule::<SessionRef, EndpointRef>(schedule_id)
+            .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(schedule_id)
             .await?;
         let enabled = matches!(
             expectation,

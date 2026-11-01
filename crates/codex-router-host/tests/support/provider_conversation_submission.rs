@@ -65,6 +65,7 @@ pub(crate) async fn submit_provider_create(
         (settings.model, settings.mode, settings.effort)
     });
     let input = ConversationCreateInput {
+        project_id: request.project_id.clone(),
         operation_id: request.operation_id,
         endpoint: request.endpoint.clone(),
         working_directory: PathBuf::from(String::from(request.working_directory)),

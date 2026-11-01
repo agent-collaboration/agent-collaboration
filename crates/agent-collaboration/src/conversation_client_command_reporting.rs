@@ -245,6 +245,7 @@ pub(super) fn report_create_operation_failure(
 ) -> i32 {
     let exit_code = match failure.kind {
         ConversationOperationFailureKind::InvalidRequest
+        | ConversationOperationFailureKind::ProjectRequired
         | ConversationOperationFailureKind::InvalidSetting
         | ConversationOperationFailureKind::UnsupportedCapability
         | ConversationOperationFailureKind::ProtocolViolation => 2,
@@ -427,4 +428,20 @@ pub(super) fn emit_cancel_submission(
     }
     .map_err(io::Error::other)?;
     writeln!(io::stdout(), "{encoded}")
+}
+pub(super) fn parse_project_argument(
+    value: Option<&str>,
+    json: bool,
+) -> Result<Option<message_board::ProjectId>, i32> {
+    value
+        .map(|value| value.to_owned().try_into())
+        .transpose()
+        .map_err(|_| {
+            crate::endpoint_commands::report_failure(
+                "invalidField",
+                "--project must be a canonical project UUIDv7",
+                2,
+                json,
+            )
+        })
 }

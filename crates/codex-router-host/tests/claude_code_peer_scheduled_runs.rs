@@ -122,6 +122,7 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
     assert!(matches!(
         route
             .support(&ScheduleDestination::Fresh {
+                project_id: None,
                 endpoint: target.endpoint.clone()
             })
             .await
@@ -132,6 +133,7 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
     assert!(matches!(
         route
             .support(&ScheduleDestination::Fork {
+                project_id: None,
                 source: target.clone(),
                 through_turn_id: "turn-1".to_owned().try_into().expect("turn ID"),
             })
@@ -198,17 +200,18 @@ async fn existing_live_peer_run_finishes_as_written_without_summary() {
         );
         user
     });
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-        "scheduleChangeId":agent_automation::ChangeId::generate(),
-        "instructionRevisionId":agent_automation::RevisionId::generate(),
-        "instructionText":"Check work",
-        "continuity":{"kind":"none"},
-            "executionConfiguration":{
-            "destination":{"kind":"ownedThread","target":target.clone(),"cwd":"/tmp"},
-            "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-        }
-    }))
-    .expect("captured inputs");
+    let inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId> =
+        serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Check work",
+            "continuity":{"kind":"none"},
+                "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target.clone(),"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+            }
+        }))
+        .expect("captured inputs");
     let submitted = router
         .submit_run(
             ScheduledRunSubmission {
@@ -314,17 +317,18 @@ async fn scheduled_peer_rejects_a_prepared_push_link_that_disagrees_with_its_id(
         body: Some("Inspect work".to_owned()),
     })
     .expect("prepared schedule line");
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-        "scheduleChangeId":agent_automation::ChangeId::generate(),
-        "instructionRevisionId":agent_automation::RevisionId::generate(),
-        "instructionText":"Inspect work",
-        "continuity":{"kind":"none"},
-        "executionConfiguration":{
-            "destination":{"kind":"ownedThread","target":target.clone(),"cwd":"/tmp"},
-            "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-        }
-    }))
-    .expect("captured inputs");
+    let inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId> =
+        serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Inspect work",
+            "continuity":{"kind":"none"},
+            "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target.clone(),"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+            }
+        }))
+        .expect("captured inputs");
     let recorded = RouteEffectEvidence::ClaudeCodePeer(ClaudeCodePeerEffectEvidence {
         session_id: String::from(target.session_id.clone())
             .try_into()

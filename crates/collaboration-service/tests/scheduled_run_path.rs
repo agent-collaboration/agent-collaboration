@@ -349,7 +349,7 @@ async fn exercise_scheduled_run(
                 }
                 let ids = backend_store.lock().await.observable_run_ids(None).await?;
                 let run_id = ids.first().ok_or("busy Run missing")?;
-                let run=backend_store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                let run=backend_store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef, message_board::ProjectId,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
                 if run.evidence.timing.is_some() {
                     return Err("busy wait consumed execution budget".into());
                 }
@@ -406,7 +406,7 @@ async fn exercise_scheduled_run(
         store
             .lock()
             .await
-            .enqueue_due_run::<SessionRef, collaboration_protocol::EndpointRef>(
+            .enqueue_due_run::<SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(
                 &schedule.schedule_id,
                 now,
             )
@@ -415,7 +415,7 @@ async fn exercise_scheduled_run(
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, collaboration_protocol::EndpointRef>(
+            .admit_waiting_run::<SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(
                 &schedule.schedule_id,
                 now,
             )
@@ -431,6 +431,7 @@ async fn exercise_scheduled_run(
         future.instruction_id = future_instruction.instruction_id;
         future.execution_timeout_seconds = Some(1.try_into()?);
         future.destination = collaboration_protocol::ExecutionDestination::FreshEachRun {
+            project_id: None,
             endpoint: target.endpoint.clone(),
             cwd: "/future-fixture".into(),
         };
@@ -454,14 +455,14 @@ async fn exercise_scheduled_run(
         let mut known_run=None;
         loop{
             poll.tick().await;
-            let current=store.lock().await.inspect_schedule::<SessionRef,collaboration_protocol::EndpointRef>(&schedule.schedule_id).await?;
+            let current=store.lock().await.inspect_schedule::<SessionRef,collaboration_protocol::EndpointRef, message_board::ProjectId>(&schedule.schedule_id).await?;
             if current.active_run_id.is_some(){known_run=current.active_run_id;}
             if known_run.is_none() {
                 let page = client.list_runs(collaboration_protocol::RunListRequest { schedule_id: schedule.schedule_id.clone(), cursor: None, limit: 1.try_into().map_err(|_|automation_storage::StorageError::InvalidRecord)? }).await.map_err(|_|automation_storage::StorageError::InvalidRecord)?;
                 known_run = page.records.first().map(|run|run.run_id.clone());
             }
             if let Some(run_id)=&known_run{
-                let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef, message_board::ProjectId,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
                 if resume_rejected && run.phase == agent_automation::RunPhase::Uncertain {
                     resume_uncertainty_observed.notify_one();
                 }
@@ -488,7 +489,7 @@ async fn exercise_scheduled_run(
         let current = store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
+            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(
                 &schedule.schedule_id,
             )
             .await?;
@@ -537,7 +538,7 @@ async fn exercise_scheduled_run(
         && store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
+            .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(
                 &schedule.schedule_id,
             )
             .await?

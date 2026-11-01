@@ -165,6 +165,7 @@ pub(super) async fn create_provider_target(
     submit_provider_create(
         client,
         ConversationCreateRequest {
+            project_id: None,
             settings: None,
             operation_id: operation_id.clone(),
             endpoint,

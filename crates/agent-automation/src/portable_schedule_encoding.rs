@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-enum PortableRecord<TTarget, TEndpoint> {
+enum PortableRecord<TTarget, TEndpoint, TProject> {
     PackageHeader {
         format: String,
         version: u32,
@@ -22,7 +22,7 @@ enum PortableRecord<TTarget, TEndpoint> {
     ScheduleDefinition {
         schedule_id: crate::ScheduleId,
         source_change_id: String,
-        definition: crate::ScheduleDefinition<TTarget, TEndpoint>,
+        definition: crate::ScheduleDefinition<TTarget, TEndpoint, TProject>,
     },
     ContinuitySummary {
         text: crate::InstructionText,
@@ -34,14 +34,18 @@ enum PortableRecord<TTarget, TEndpoint> {
         sha256: String,
     },
 }
-pub fn encode_schedule_package<TTarget: Clone + Serialize, TEndpoint: Clone + Serialize>(
-    package: &PortableSchedulePackage<TTarget, TEndpoint>,
+pub fn encode_schedule_package<
+    TTarget: Clone + Serialize,
+    TEndpoint: Clone + Serialize,
+    TProject: Clone + Serialize,
+>(
+    package: &PortableSchedulePackage<TTarget, TEndpoint, TProject>,
     maximum_bytes: usize,
 ) -> Result<String, PackageError> {
     let mut definition = package.definition.clone();
     definition.enabled = false;
     definition.destination = definition.destination.without_bindings();
-    let mut records: Vec<PortableRecord<TTarget, TEndpoint>> = vec![
+    let mut records: Vec<PortableRecord<TTarget, TEndpoint, TProject>> = vec![
         PortableRecord::PackageHeader {
             format: "agentSchedule".into(),
             version: 1,
@@ -69,7 +73,7 @@ pub fn encode_schedule_package<TTarget: Clone + Serialize, TEndpoint: Clone + Se
         result.push_str(&serde_json::to_string(record).map_err(|_| PackageError::InvalidRecord)?);
         result.push('\n');
     }
-    let footer = PortableRecord::<TTarget, TEndpoint>::PackageEnd {
+    let footer = PortableRecord::<TTarget, TEndpoint, TProject>::PackageEnd {
         record_count: u32::try_from(records.len()).map_err(|_| PackageError::InvalidRecord)?,
         sha256: format!("{:x}", Sha256::digest(result.as_bytes())),
     };
@@ -80,10 +84,14 @@ pub fn encode_schedule_package<TTarget: Clone + Serialize, TEndpoint: Clone + Se
     }
     Ok(result)
 }
-pub fn decode_schedule_package<TTarget: DeserializeOwned, TEndpoint: DeserializeOwned>(
+pub fn decode_schedule_package<
+    TTarget: DeserializeOwned,
+    TEndpoint: DeserializeOwned,
+    TProject: DeserializeOwned,
+>(
     text: &str,
     maximum_bytes: usize,
-) -> Result<PortableSchedulePackage<TTarget, TEndpoint>, PackageError> {
+) -> Result<PortableSchedulePackage<TTarget, TEndpoint, TProject>, PackageError> {
     if text.len() > maximum_bytes {
         return Err(PackageError::TooLarge);
     }
@@ -101,7 +109,7 @@ pub fn decode_schedule_package<TTarget: DeserializeOwned, TEndpoint: Deserialize
     let mut records = lines
         .iter()
         .map(|line| {
-            serde_json::from_str::<PortableRecord<TTarget, TEndpoint>>(line)
+            serde_json::from_str::<PortableRecord<TTarget, TEndpoint, TProject>>(line)
                 .map_err(|_| PackageError::InvalidRecord)
         })
         .collect::<Result<Vec<_>, _>>()?;

@@ -22,6 +22,7 @@ pub struct SessionSettingsCommand {
 pub struct CreateSessionCommand {
     pub endpoint: SessionEndpointRef,
     pub working_directory: PathBuf,
+    pub project_id: Option<message_board::ProjectId>,
     pub settings: SessionSettingsCommand,
     pub actor: Identity,
 }
@@ -262,6 +263,7 @@ mod tests {
 
         assert_eq!(
             port.create(CreateSessionCommand {
+                project_id: None,
                 endpoint,
                 working_directory: PathBuf::from("/tmp"),
                 settings: SessionSettingsCommand::default(),

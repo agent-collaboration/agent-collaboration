@@ -77,7 +77,9 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
     if fresh {
         if !matches!(
             imported.definition.destination,
-            collaboration_protocol::ExecutionDestination::FreshEachRunUnprepared
+            collaboration_protocol::ExecutionDestination::FreshEachRunUnprepared {
+                project_id: None
+            }
         ) {
             return Err("SDK import lost fresh mode or retained local binding".into());
         }
@@ -93,6 +95,7 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
         }
         let mut definition = imported.definition.clone();
         definition.destination = collaboration_protocol::ExecutionDestination::FreshEachRun {
+            project_id: None,
             endpoint: serde_json::from_value(
                 json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"destination-local"}),
             )?,

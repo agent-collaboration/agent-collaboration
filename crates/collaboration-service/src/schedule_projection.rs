@@ -2,7 +2,7 @@
 use automation_storage::ScheduleInspection;
 use collaboration_protocol::{EndpointRef, ScheduleSnapshot, SessionRef};
 pub(crate) fn snapshot(
-    inspection: ScheduleInspection<SessionRef, EndpointRef>,
+    inspection: ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>,
 ) -> Result<ScheduleSnapshot, ()> {
     let record = inspection.record;
     Ok(ScheduleSnapshot {

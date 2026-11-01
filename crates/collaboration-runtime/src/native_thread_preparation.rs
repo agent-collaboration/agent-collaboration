@@ -82,6 +82,7 @@ pub(crate) async fn prepare(
             source,
             through_turn_id,
             cwd,
+            ..
         } => (
             NativeOperation::ForkThread,
             json!({"threadId":String::from(source.session_id.clone()),"lastTurnId":String::from(through_turn_id.clone()),"cwd":cwd,"excludeTurns":true,"developerInstructions":input.instruction_text,"model":input.model,"config":{"model_reasoning_effort":input.effort},"allowProviderModelFallback":false,"threadSource":"user"}),

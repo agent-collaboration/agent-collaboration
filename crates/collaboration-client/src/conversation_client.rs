@@ -29,6 +29,8 @@ pub struct ConversationCreateInput {
     pub operation_id: OperationId,
     pub endpoint: EndpointRef,
     pub working_directory: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<message_board::ProjectId>,
     pub access: RouterAccess,
     pub created_by: ConversationCreateActor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -424,6 +426,7 @@ impl ConversationClient {
                     ));
                 }
                 let request = crate::ConversationCreateRequest {
+                    project_id: input.project_id.clone(),
                     operation_id: operation_id.clone(),
                     endpoint: input.endpoint,
                     cwd: input.working_directory,
@@ -490,6 +493,7 @@ impl ConversationClient {
                 )
                 .map_err(|_| ConversationClientError::InvalidInput("invalid working directory"))?;
                 let request = collaboration_protocol::ConversationCreateRequest {
+                    project_id: input.project_id.clone(),
                     operation_id: operation_id.clone(),
                     endpoint: input.endpoint,
                     generation: input.generation,

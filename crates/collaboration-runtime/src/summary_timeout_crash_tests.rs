@@ -73,7 +73,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
     let before = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&id)
         .await?;
     let attempt = before
         .summary_attempt
@@ -157,7 +157,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
         let record = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
+            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
             .await?;
         let summary_endpoint = record
             .summary_attempt
@@ -179,7 +179,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
         let observed = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&id)
+            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&id)
             .await?;
         let summary = observed.summary_attempt.ok_or("summary disappeared")?;
         if summary.attempt_id != old_attempt_id

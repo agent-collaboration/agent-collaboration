@@ -100,30 +100,38 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRule::Interval { seconds: 60 },
-                enabled: true,
-                destination: ExecutionDestination::OwnedThread {
-                    target: target.clone(),
-                    cwd: root.to_string_lossy().into_owned(),
+        .create_schedule(
+            &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                operation_id: OperationId::generate(),
+                definition: ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: TimingRule::Interval { seconds: 60 },
+                    enabled: true,
+                    destination: ExecutionDestination::OwnedThread {
+                        target: target.clone(),
+                        cwd: root.to_string_lossy().into_owned(),
+                    },
+                    execution_timeout_seconds: Some(1),
+                    model: Some("gpt-5.6-sol".into()),
+                    effort: Some("medium".into()),
                 },
-                execution_timeout_seconds: Some(1),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                imported_continuity: ContinuityInput::None,
+                now_ms: 0,
             },
-            imported_continuity: ContinuityInput::None,
-            now_ms: 0,
-        })
+        )
         .await?;
     let run_id = store
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            60000,
+        )
         .await?
         .ok_or("run missing")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+        .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            60001,
+        )
         .await?;
     let mut effects: NativeEffectEvidence<SessionRef, CodexGeneration> = serde_json::from_value(
         json!({
@@ -134,7 +142,7 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
     let mut prepared = effects.clone();
     prepared.submission = agent_automation::SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run_id.clone(),
                 effects: prepared.into(),
@@ -142,12 +150,14 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         )
         .await?;
     store
-        .begin_run_dispatch::<_, EndpointRef, _, NativeSendReceipt>(RunDispatchIntent {
-            run_id: run_id.clone(),
-            effects: effects.clone().into(),
-            configured_timeout_seconds: 1,
-            now_ms: 61000,
-        })
+        .begin_run_dispatch::<_, EndpointRef, message_board::ProjectId, _, NativeSendReceipt>(
+            RunDispatchIntent {
+                run_id: run_id.clone(),
+                effects: effects.clone().into(),
+                configured_timeout_seconds: 1,
+                now_ms: 61000,
+            },
+        )
         .await?;
     effects.native_turn_id = Some("recorded-turn".into());
     effects.submission = agent_automation::SubmissionEffect::Accepted;
@@ -155,14 +165,16 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         json!({"target":target,"generation":generation,"inputKind":"agent","representation":"declaredAgentText","clientUserMessageId":run_id,"resumeEffect":"notRequested","acceptance":{"kind":"nativeInputAccepted","operation":"turnStart","disposition":"startedOrSteered","turnId":"recorded-turn"}}),
     )?;
     store
-        .record_run_submission::<_, EndpointRef, _, _>(RunSubmissionResult {
-            run_id: run_id.clone(),
-            effects: effects.into(),
-            outcome: RunSubmissionOutcome::Accepted {
-                turn_id: "recorded-turn".into(),
-                receipt,
+        .record_run_submission::<_, EndpointRef, message_board::ProjectId, _, _>(
+            RunSubmissionResult {
+                run_id: run_id.clone(),
+                effects: effects.into(),
+                outcome: RunSubmissionOutcome::Accepted {
+                    turn_id: "recorded-turn".into(),
+                    receipt,
+                },
             },
-        })
+        )
         .await?;
     std::fs::write(root.join("run-id.json"), serde_json::to_vec(&run_id)?)?;
     let socket = root.join("native.sock");
@@ -241,7 +253,7 @@ async fn recover(root: &Path) -> TestResult<()> {
     let before = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?;
     if before.phase != RunPhase::Stopping
         || before
@@ -333,7 +345,7 @@ async fn recover(root: &Path) -> TestResult<()> {
         let record = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
+            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&run_id)
             .await?;
         if serde_json::to_value(&record.evidence.timing)? != timing
             || record.native_turn_id.as_deref() != Some("recorded-turn")
@@ -343,7 +355,9 @@ async fn recover(root: &Path) -> TestResult<()> {
         let inventory = store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, EndpointRef>(&record.schedule_id)
+            .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &record.schedule_id,
+            )
             .await?;
         if stopped {
             if record.phase != RunPhase::Finished

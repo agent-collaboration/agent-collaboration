@@ -19,7 +19,7 @@ async fn disable_preserves_waiting_run_and_reenable_keeps_anchor()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
@@ -38,11 +38,11 @@ async fn disable_preserves_waiting_run_and_reenable_keeps_anchor()
         })
         .await?;
     let run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run not queued")?;
     let disabled = store
-        .mutate_schedule(&ScheduleMutation::<String, String> {
+        .mutate_schedule(&ScheduleMutation::<String, String, String> {
             operation_id: OperationId::generate(),
             schedule_id: schedule.schedule_id.clone(),
             edit: ScheduleEdit::SetEnabled { enabled: false },
@@ -50,7 +50,7 @@ async fn disable_preserves_waiting_run_and_reenable_keeps_anchor()
         })
         .await?;
     let current = store
-        .inspect_schedule::<String, String>(&schedule.schedule_id)
+        .inspect_schedule::<String, String, String>(&schedule.schedule_id)
         .await?;
     if disabled.record.definition.enabled
         || current.waiting_run_id != Some(run)
@@ -58,7 +58,7 @@ async fn disable_preserves_waiting_run_and_reenable_keeps_anchor()
     {
         return Err("disable mixed trigger and run ownership".into());
     }
-    let request = ScheduleMutation::<String, String> {
+    let request = ScheduleMutation::<String, String, String> {
         operation_id: OperationId::generate(),
         schedule_id: schedule.schedule_id.clone(),
         edit: ScheduleEdit::SetEnabled { enabled: true },
@@ -112,6 +112,7 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
             cwd: "/isolated-test".into(),
         };
         let separate = ExecutionDestination::FreshEachRun {
+            project_id: None,
             endpoint: "local".to_owned(),
             cwd: "/isolated-test".into(),
         };
@@ -158,7 +159,7 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
             return Err("schedule execution mode was mutable after creation".into());
         }
         let current = store
-            .inspect_schedule::<String, String>(&schedule.schedule_id)
+            .inspect_schedule::<String, String, String>(&schedule.schedule_id)
             .await?;
         if current.record.change_id != schedule.change_id
             || serde_json::to_value(&current.record.definition)?
@@ -169,11 +170,11 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
         let mut expected_change_id = schedule.change_id.clone();
         if fresh {
             let package = store
-                .export_schedule::<String, String>(&schedule.schedule_id)
+                .export_schedule::<String, String, String>(&schedule.schedule_id)
                 .await?;
             let encoded = agent_automation::encode_schedule_package(&package, 1_048_576)?;
             let overwritten = store
-                .import_schedule::<String, String>(&automation_storage::ScheduleImport {
+                .import_schedule::<String, String, String>(&automation_storage::ScheduleImport {
                     operation_id: OperationId::generate(),
                     package_utf8: &encoded,
                     overwrite: true,
@@ -191,7 +192,7 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
             let other_path = path.with_extension("destination.sqlite");
             let mut other = AutomationStore::open(&other_path).await?;
             let imported = other
-                .import_schedule::<String, String>(&automation_storage::ScheduleImport {
+                .import_schedule::<String, String, String>(&automation_storage::ScheduleImport {
                     operation_id: OperationId::generate(),
                     package_utf8: &encoded,
                     overwrite: false,
@@ -210,16 +211,19 @@ async fn execution_mode_cannot_change_even_before_the_first_run()
             other.close().await?;
             std::fs::remove_file(other_path)?;
             let mut wrong_mode = package;
-            wrong_mode.definition.destination = ExecutionDestination::Unprepared;
+            wrong_mode.definition.destination =
+                ExecutionDestination::Unprepared { project_id: None };
             let encoded = agent_automation::encode_schedule_package(&wrong_mode, 1_048_576)?;
             if !matches!(
                 store
-                    .import_schedule::<String, String>(&automation_storage::ScheduleImport {
-                        operation_id: OperationId::generate(),
-                        package_utf8: &encoded,
-                        overwrite: true,
-                        now_ms: 4,
-                    })
+                    .import_schedule::<String, String, String>(
+                        &automation_storage::ScheduleImport {
+                            operation_id: OperationId::generate(),
+                            package_utf8: &encoded,
+                            overwrite: true,
+                            now_ms: 4,
+                        }
+                    )
                     .await,
                 Err(automation_storage::StorageError::InvalidSchedule {
                     field: "destination",

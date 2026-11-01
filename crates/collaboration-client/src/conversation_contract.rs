@@ -29,6 +29,8 @@ pub struct ConversationCreateRequest {
     pub operation_id: OperationId,
     pub endpoint: EndpointRef,
     pub cwd: std::path::PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<message_board::ProjectId>,
     pub session: Option<SessionId>,
     pub fork: Option<SessionId>,
     pub model: Option<String>,

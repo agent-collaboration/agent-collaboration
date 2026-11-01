@@ -466,6 +466,7 @@ async fn read_run(
     agent_automation::RunRecord<
         SessionRef,
         EndpointRef,
+        message_board::ProjectId,
         CodexGeneration,
         collaboration_runtime::stored_run_receipt::StoredRunReceipt,
     >,
@@ -473,7 +474,7 @@ async fn read_run(
     store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
         .await
         .map_err(failure::storage)
 }

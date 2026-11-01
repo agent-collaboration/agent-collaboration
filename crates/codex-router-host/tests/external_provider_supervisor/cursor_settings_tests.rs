@@ -40,6 +40,7 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
     operation(
         backend
             .create(ConversationCreateRequest {
+                project_id: None,
                 settings: None,
                 operation_id: operation_id.clone(),
                 endpoint: provider_endpoint.clone(),

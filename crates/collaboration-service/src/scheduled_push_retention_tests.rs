@@ -111,7 +111,7 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
             .await
             .read_run::<
                 SessionRef,
-                EndpointRef,
+                EndpointRef, message_board::ProjectId,
                 CodexGeneration,
                 collaboration_runtime::stored_run_receipt::StoredRunReceipt,
             >(&run_id)
@@ -140,7 +140,7 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
     let run = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await?;
     if run.phase != RunPhase::Executing {
         return Err("run retry did not proceed after its old push expired".into());

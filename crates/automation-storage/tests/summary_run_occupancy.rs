@@ -20,13 +20,14 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRule::Interval { seconds: 60 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
+                    project_id: None,
                     endpoint: "fixture".into(),
                     cwd: "/isolated-fixture".into(),
                 },
@@ -39,19 +40,19 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         })
         .await?;
     let run = store
-        .enqueue_due_run::<String, String>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<String, String, String>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("missing run")?;
     if !matches!(
         store
-            .admit_waiting_run::<String, String>(&schedule.schedule_id, 61000)
+            .admit_waiting_run::<String, String, String>(&schedule.schedule_id, 61000)
             .await?,
         RunAdmission::Admitted { .. }
     ) {
         return Err("missing admission".into());
     }
     let before = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if before.evidence.timing.is_some() {
         return Err("waiting consumed budget".into());
@@ -71,7 +72,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
     let mut prepared = effects.clone();
     prepared.submission = SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<String, String, String, String>(
+        .begin_run_preparation::<String, String, String, String, String>(
             automation_storage::RunPreparationIntent {
                 run_id: run.clone(),
                 effects: prepared.into(),
@@ -79,7 +80,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         )
         .await?;
     store
-        .begin_run_dispatch::<_, String, _, String>(RunDispatchIntent {
+        .begin_run_dispatch::<_, String, String, _, String>(RunDispatchIntent {
             run_id: run.clone(),
             effects: effects.clone().into(),
             configured_timeout_seconds: 3600,
@@ -90,7 +91,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
     accepted.submission = SubmissionEffect::Accepted;
     accepted.native_turn_id = Some("native-run-turn".into());
     store
-        .record_run_submission::<_, String, _, _>(automation_storage::RunSubmissionResult {
+        .record_run_submission::<_, String, String, _, _>(automation_storage::RunSubmissionResult {
             run_id: run.clone(),
             effects: accepted.into(),
             outcome: automation_storage::RunSubmissionOutcome::Accepted {
@@ -100,7 +101,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         })
         .await?;
     let stale = store
-        .complete_run_settlement::<String, String, String, String>(
+        .complete_run_settlement::<String, String, String, String, String>(
             automation_storage::RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("another-turn".into()),
@@ -113,7 +114,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         return Err("unrelated turn completed this run".into());
     }
     if !store
-        .complete_run_settlement::<String, String, String, String>(
+        .complete_run_settlement::<String, String, String, String, String>(
             automation_storage::RunCompletion {
                 run_id: run.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn(
@@ -128,13 +129,13 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         return Err("exact completed turn not recorded".into());
     }
     let read = store
-        .read_run::<String, String, String, String>(&run)
+        .read_run::<String, String, String, String, String>(&run)
         .await?;
     if read.phase != agent_automation::RunPhase::SummaryRequired || read.completed_at_ms.is_some() {
         return Err("fresh execution released slot before summary".into());
     }
     let summary = store
-        .begin_required_summary::<String, String, String, String>(
+        .begin_required_summary::<String, String, String, String, String>(
             &automation_storage::SummaryAdmission {
                 run_id: run.clone(),
                 timeout_seconds: 900,
@@ -146,7 +147,7 @@ async fn fresh_run_keeps_occupancy_while_separate_summary_budget_begins()
         return Err("summary did not receive independent 15-minute budget".into());
     }
     let current = store
-        .inspect_schedule::<String, String>(&schedule.schedule_id)
+        .inspect_schedule::<String, String, String>(&schedule.schedule_id)
         .await?;
     if current.active_run_id != Some(run) {
         return Err("summary admission lost occupied Run".into());

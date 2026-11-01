@@ -9,7 +9,7 @@ use collaboration_protocol::{EndpointRef, SessionRef, UuidIdentity};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 pub(crate) struct ActivationRequest<'a> {
-    pub definition: &'a ScheduleDefinition<SessionRef, EndpointRef>,
+    pub definition: &'a ScheduleDefinition<SessionRef, EndpointRef, message_board::ProjectId>,
     pub schedule_id: Option<&'a ScheduleId>,
     pub operation_id: &'a OperationId,
     pub service_id: &'a UuidIdentity,
@@ -29,20 +29,25 @@ pub(crate) async fn validate(
         return Ok(());
     }
     let destination = match &request.definition.destination {
-        ExecutionDestination::FreshEachRunUnprepared => {
+        ExecutionDestination::FreshEachRunUnprepared { .. } => {
             return Err(StorageError::InvalidSchedule {
                 field: "destination",
                 reason: "use schedule update to set a freshEachRun endpoint and absolute workspace before enabling; execution mode remains fresh-per-run",
             });
         }
-        ExecutionDestination::Unprepared => {
+        ExecutionDestination::Unprepared { .. } => {
             return Err(StorageError::InvalidSchedule {
                 field: "enabled",
                 reason: "prepare the destination before enabling future triggers",
             });
         }
-        ExecutionDestination::FreshEachRun { endpoint, .. } => ScheduleDestination::Fresh {
+        ExecutionDestination::FreshEachRun {
+            endpoint,
+            project_id,
+            ..
+        } => ScheduleDestination::Fresh {
             endpoint: endpoint.clone(),
+            project_id: project_id.clone(),
         },
         ExecutionDestination::OwnedThread { target, .. } => {
             let Some(schedule_id) = request.schedule_id else {
@@ -73,7 +78,7 @@ pub(crate) async fn validate(
         }
     };
     let endpoint = match &destination {
-        ScheduleDestination::Fresh { endpoint } => endpoint,
+        ScheduleDestination::Fresh { endpoint, .. } => endpoint,
         ScheduleDestination::Existing { target } => &target.endpoint,
         ScheduleDestination::Fork { .. } => return Err(StorageError::ActivationUnavailable),
     };

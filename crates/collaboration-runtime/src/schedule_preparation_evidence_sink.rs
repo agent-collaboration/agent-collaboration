@@ -136,7 +136,8 @@ impl PreparationEvidenceSink for StoredPreparationEvidenceSink {
     fn record_prepared<'a>(
         &'a self,
         prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<'a, ScheduleInspection<SessionRef, EndpointRef>> {
+    ) -> DeliveryFuture<'a, ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>>
+    {
         Box::pin(async move {
             validate_prepared_target(prepared)?;
             let mut store = self.store.lock().await;
@@ -153,18 +154,20 @@ impl PreparationEvidenceSink for StoredPreparationEvidenceSink {
                 return Err(DeliveryContractError::InvalidEvidence);
             }
             store
-                .complete_thread_preparation::<_, EndpointRef, _>(PreparedThread {
-                    operation_id: self.operation_id.clone(),
-                    schedule_id: self.schedule_id.clone(),
-                    expected_change_id: self.expected_change_id.clone(),
-                    target: prepared.target.clone(),
-                    service_id: String::from(prepared.target.endpoint.service_id.clone()),
-                    endpoint_id: String::from(prepared.target.endpoint.endpoint_id.clone()),
-                    thread_id: String::from(prepared.target.session_id.clone()),
-                    cwd: self.working_directory.clone(),
-                    evidence: prepared.evidence.clone(),
-                    now_ms: chrono::Utc::now().timestamp_millis(),
-                })
+                .complete_thread_preparation::<_, EndpointRef, message_board::ProjectId, _>(
+                    PreparedThread {
+                        operation_id: self.operation_id.clone(),
+                        schedule_id: self.schedule_id.clone(),
+                        expected_change_id: self.expected_change_id.clone(),
+                        target: prepared.target.clone(),
+                        service_id: String::from(prepared.target.endpoint.service_id.clone()),
+                        endpoint_id: String::from(prepared.target.endpoint.endpoint_id.clone()),
+                        thread_id: String::from(prepared.target.session_id.clone()),
+                        cwd: self.working_directory.clone(),
+                        evidence: prepared.evidence.clone(),
+                        now_ms: chrono::Utc::now().timestamp_millis(),
+                    },
+                )
                 .await
                 .map_err(|error| match error {
                     StorageError::ThreadOwnershipConflict { .. } => {
@@ -223,6 +226,7 @@ mod tests {
         }))?;
         let native =
             crate::native_thread_preparation::initial_effects(&DestinationPreparation::Fresh {
+                project_id: None,
                 endpoint,
                 cwd: "/fixture".into(),
             });

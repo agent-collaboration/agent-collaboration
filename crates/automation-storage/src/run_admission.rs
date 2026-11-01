@@ -8,7 +8,7 @@ use agent_automation::{
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{Connection, Row, SqliteConnection};
 
-pub enum RunAdmission<TTarget, TEndpoint> {
+pub enum RunAdmission<TTarget, TEndpoint, TProject> {
     NoWaitingRun,
     DestinationUnprepared {
         run_id: RunId,
@@ -18,18 +18,19 @@ pub enum RunAdmission<TTarget, TEndpoint> {
     },
     Admitted {
         run_id: RunId,
-        inputs: Box<CapturedRunInputs<TTarget, TEndpoint>>,
+        inputs: Box<CapturedRunInputs<TTarget, TEndpoint, TProject>>,
     },
 }
 impl AutomationStore {
-    pub async fn admit_waiting_run<TTarget, TEndpoint>(
+    pub async fn admit_waiting_run<TTarget, TEndpoint, TProject>(
         &mut self,
         schedule_id: &ScheduleId,
         now_ms: i64,
-    ) -> Result<RunAdmission<TTarget, TEndpoint>, StorageError>
+    ) -> Result<RunAdmission<TTarget, TEndpoint, TProject>, StorageError>
     where
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
+        TProject: Serialize + DeserializeOwned,
     {
         if now_ms < 0 {
             return Err(StorageError::InvalidRecord);
@@ -46,7 +47,7 @@ impl AutomationStore {
             transaction.commit().await?;
             return Ok(RunAdmission::NoWaitingRun);
         };
-        let definition: ScheduleDefinition<TTarget, TEndpoint> =
+        let definition: ScheduleDefinition<TTarget, TEndpoint, TProject> =
             serde_json::from_str(&schedule.try_get::<String, _>("definition_json")?)
                 .map_err(|_| StorageError::InvalidRecord)?;
         if !definition.destination.is_prepared() {

@@ -72,12 +72,12 @@ pub enum WorkerOutcome {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RunRecord<TTarget, TEndpoint, TGeneration, TReceipt> {
+pub struct RunRecord<TTarget, TEndpoint, TProject, TGeneration, TReceipt> {
     pub run_id: crate::RunId,
     pub schedule_id: crate::ScheduleId,
     pub due_at_ms: i64,
     pub phase: crate::RunPhase,
-    pub inputs: Option<crate::CapturedRunInputs<TTarget, TEndpoint>>,
+    pub inputs: Option<crate::CapturedRunInputs<TTarget, TEndpoint, TProject>>,
     pub thread_binding_id: Option<crate::ThreadBindingId>,
     pub native_turn_id: Option<String>,
     pub evidence: RunExecutionEvidence<TTarget, TGeneration, TReceipt>,

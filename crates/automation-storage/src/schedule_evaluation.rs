@@ -5,7 +5,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{Connection, Row};
 
 impl AutomationStore {
-    pub async fn enqueue_due_run<TTarget, TEndpoint>(
+    pub async fn enqueue_due_run<TTarget, TEndpoint, TProject>(
         &mut self,
         schedule_id: &ScheduleId,
         now_ms: i64,
@@ -13,6 +13,7 @@ impl AutomationStore {
     where
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
+        TProject: Serialize + DeserializeOwned,
     {
         if now_ms < 0 {
             return Err(StorageError::InvalidRecord);
@@ -36,7 +37,7 @@ impl AutomationStore {
             transaction.commit().await?;
             return Ok(None);
         }
-        let definition: ScheduleDefinition<TTarget, TEndpoint> =
+        let definition: ScheduleDefinition<TTarget, TEndpoint, TProject> =
             serde_json::from_str(&row.try_get::<String, _>("definition_json")?)
                 .map_err(|_| StorageError::InvalidRecord)?;
         let anchor =

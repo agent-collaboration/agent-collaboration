@@ -200,6 +200,7 @@ impl AcpConversation {
             Ok(())
         };
         let create = ConversationCreateRequest {
+            project_id: None,
             operation_id: collaboration_protocol::OperationId::generate(),
             endpoint,
             cwd: request.cwd,
@@ -622,6 +623,7 @@ fn validate_conversation_create_request(
             || request.access.is_some()
             || request.created_by.is_some()
             || request.approver.is_some()
+            || request.project_id.is_some()
             || request.root_message_id.is_some())
     {
         return Err(ClientError::InvalidRequest(

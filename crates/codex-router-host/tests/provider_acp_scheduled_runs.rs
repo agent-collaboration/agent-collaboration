@@ -111,7 +111,10 @@ impl PreparationEvidenceSink for RecordedPreparationIntent {
     fn record_prepared<'a>(
         &'a self,
         _prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<SessionRef, EndpointRef>> {
+    ) -> DeliveryFuture<
+        'a,
+        automation_storage::ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>,
+    > {
         Box::pin(async { Err(DeliveryContractError::ClientOperation) })
     }
 
@@ -330,6 +333,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     assert!(matches!(
         router
             .support(&ScheduleDestination::Fresh {
+                project_id: None,
                 endpoint: endpoint.clone(),
             })
             .await
@@ -340,6 +344,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     assert!(matches!(
         router
             .support(&ScheduleDestination::Fork {
+                project_id: None,
                 source: target.clone(),
                 through_turn_id: NonEmptyText::try_from("turn".to_owned()).expect("turn"),
             })
@@ -355,6 +360,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
                 schedule_id: agent_automation::ScheduleId::generate(),
                 expected_change_id: agent_automation::ChangeId::generate(),
                 destination: DestinationPreparation::Fork {
+                    project_id: None,
                     source: target.clone(),
                     through_turn_id: NonEmptyText::try_from("turn".to_owned()).expect("turn"),
                     cwd: "/tmp".into(),
@@ -375,17 +381,18 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         .prepare_existing_target(&target, "", &sink)
         .await
         .expect("existing target prepared");
-    let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
-        "scheduleChangeId":agent_automation::ChangeId::generate(),
-        "instructionRevisionId":agent_automation::RevisionId::generate(),
-        "instructionText":"Check work",
-        "continuity":{"kind":"none"},
-        "executionConfiguration":{
-            "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
-            "executionTimeoutSeconds":120,"model":null,"effort":null
-        }
-    }))
-    .expect("captured inputs");
+    let inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId> =
+        serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Check work",
+            "continuity":{"kind":"none"},
+            "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":null,"effort":null
+            }
+        }))
+        .expect("captured inputs");
     let run = ScheduledRunSubmission {
         run_id: run_id.clone(),
         target: target.clone(),

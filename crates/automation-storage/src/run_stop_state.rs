@@ -13,6 +13,7 @@ impl AutomationStore {
     pub async fn begin_run_stop<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -21,12 +22,14 @@ impl AutomationStore {
         identity: RunStopIdentity,
     ) -> Result<bool, StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, id)
+        .await?;
         if record.evidence.route.is_none() {
             return Err(StorageError::InvalidRecord);
         }

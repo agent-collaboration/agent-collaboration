@@ -95,6 +95,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     submit_provider_create(
         &client,
         ConversationCreateRequest {
+            project_id: None,
             settings: None,
             operation_id: create_operation.clone(),
             endpoint: provider_endpoint.endpoint.clone(),
@@ -280,6 +281,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     let failure = submit_provider_create(
         &client,
         ConversationCreateRequest {
+            project_id: None,
             settings: None,
             operation_id: OperationId::generate(),
             endpoint: provider_endpoint.endpoint,

@@ -53,6 +53,7 @@ pub(crate) fn report_client_failure(
 fn report_typed_failure(failure: &ConversationOperationFailure, json_output: bool) -> i32 {
     let exit = match failure.kind {
         ConversationOperationFailureKind::InvalidRequest
+        | ConversationOperationFailureKind::ProjectRequired
         | ConversationOperationFailureKind::InvalidSetting
         | ConversationOperationFailureKind::UnsupportedCapability
         | ConversationOperationFailureKind::ProtocolViolation => 2,

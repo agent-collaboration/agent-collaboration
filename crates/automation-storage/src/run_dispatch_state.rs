@@ -16,6 +16,7 @@ impl AutomationStore {
     pub async fn begin_run_dispatch<
         TTarget: PartialEq + Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: PartialEq + Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -23,12 +24,14 @@ impl AutomationStore {
         request: RunDispatchIntent<TTarget, TGeneration>,
     ) -> Result<RunExecutionEvidence<TTarget, TGeneration, TReceipt>, StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if record.phase != agent_automation::RunPhase::Preparing
             || record.evidence.timing.is_some()
             || record.evidence.acceptance.is_some()

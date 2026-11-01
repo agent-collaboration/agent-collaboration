@@ -510,6 +510,7 @@ impl CollaborationRejection for ConversationFailure {
                 Some(CollaborationRejectionReason::Overloaded)
             }
             ConversationOperationFailureKind::InvalidRequest
+            | ConversationOperationFailureKind::ProjectRequired
             | ConversationOperationFailureKind::InvalidSetting
             | ConversationOperationFailureKind::SettingsUnresolved
             | ConversationOperationFailureKind::UnsupportedCapability

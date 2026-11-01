@@ -23,13 +23,13 @@ async fn prepared_identity_and_schedule_result_commit_together()
         )
         .await?;
     let schedule = store
-        .create_schedule(&ScheduleCreate::<String, String> {
+        .create_schedule(&ScheduleCreate::<String, String, String> {
             operation_id: OperationId::generate(),
             definition: ScheduleDefinition {
                 instruction_id: instruction.instruction_id,
                 timing: TimingRule::Interval { seconds: 60 },
                 enabled: false,
-                destination: ExecutionDestination::Unprepared,
+                destination: ExecutionDestination::Unprepared { project_id: None },
                 execution_timeout_seconds: None,
                 model: Some("gpt-5.6-sol".into()),
                 effort: Some("medium".into()),
@@ -59,7 +59,7 @@ async fn prepared_identity_and_schedule_result_commit_together()
         return Err("native intent not persisted".into());
     }
     let completed = store
-        .complete_thread_preparation::<_, String, _>(PreparedThread {
+        .complete_thread_preparation::<_, String, String, _>(PreparedThread {
             operation_id: admission.operation_id.clone(),
             schedule_id: schedule.schedule_id.clone(),
             expected_change_id: schedule.change_id,

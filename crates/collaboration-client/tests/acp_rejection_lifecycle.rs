@@ -146,6 +146,7 @@ mod tests {
         let load_error = client
             .open_session(
                 &ConversationCreateRequest {
+                    project_id: None,
                     operation_id: collaboration_protocol::OperationId::generate(),
                     endpoint: client.endpoint().clone(),
                     cwd: root.clone(),
@@ -167,6 +168,7 @@ mod tests {
             client
                 .open_session(
                     &ConversationCreateRequest {
+                        project_id: None,
                         operation_id: collaboration_protocol::OperationId::generate(),
                         endpoint: client.endpoint().clone(),
                         cwd: root.clone(),

@@ -84,6 +84,7 @@ async fn create_and_first_prompt_share_one_connection_and_return_correlated_sett
         &CollaborationAccess::api(&root),
         ConversationCreatePromptRequest {
             create: ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint: sender.endpoint.clone(),
                 cwd: root.clone(),
@@ -183,6 +184,7 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
         &CollaborationAccess::api(&root),
         ConversationCreatePromptRequest {
             create: ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint: sender.endpoint.clone(),
                 cwd: root.clone(),
@@ -332,6 +334,7 @@ async fn reusable_acp_client_orders_load_updates_and_detaches_on_caller_cancel()
     client
         .open_session(
             &ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint: client.endpoint().clone(),
                 cwd: root.clone(),

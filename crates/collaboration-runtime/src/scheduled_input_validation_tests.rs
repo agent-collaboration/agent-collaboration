@@ -49,42 +49,51 @@ async fn exercise_input_validation(
     let schedule = store
         .lock()
         .await
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRule::Interval { seconds: 60 },
-                enabled: true,
-                destination: ExecutionDestination::FreshEachRun {
-                    endpoint: endpoint.clone(),
-                    cwd: root.to_string_lossy().into_owned(),
+        .create_schedule(
+            &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                operation_id: OperationId::generate(),
+                definition: ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: TimingRule::Interval { seconds: 60 },
+                    enabled: true,
+                    destination: ExecutionDestination::FreshEachRun {
+                        project_id: None,
+                        endpoint: endpoint.clone(),
+                        cwd: root.to_string_lossy().into_owned(),
+                    },
+                    execution_timeout_seconds: None,
+                    model: Some("gpt-5.6-sol".into()),
+                    effort: Some("medium".into()),
                 },
-                execution_timeout_seconds: None,
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
-            },
-            imported_continuity: ContinuityInput::ImportedSummary {
-                text: "y".repeat(100_000),
-                source_run_id: "prior-run".into(),
-                source_target: SessionRef {
-                    endpoint: endpoint.clone(),
-                    session_id: "prior-thread".to_owned().try_into()?,
+                imported_continuity: ContinuityInput::ImportedSummary {
+                    text: "y".repeat(100_000),
+                    source_run_id: "prior-run".into(),
+                    source_target: SessionRef {
+                        endpoint: endpoint.clone(),
+                        session_id: "prior-thread".to_owned().try_into()?,
+                    },
+                    import_operation_id: OperationId::generate(),
                 },
-                import_operation_id: OperationId::generate(),
+                now_ms: 0,
             },
-            now_ms: 0,
-        })
+        )
         .await?;
     let run = store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            60000,
+        )
         .await?
         .ok_or("run missing")?;
     store
         .lock()
         .await
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+        .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            60000,
+        )
         .await?;
     let socket_path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
@@ -93,6 +102,7 @@ async fn exercise_input_validation(
     if prepared {
         let mut effects = crate::native_thread_preparation::initial_automation_effects(
             &DestinationPreparation::Fresh {
+                project_id: None,
                 endpoint: endpoint.clone(),
                 cwd: root.to_string_lossy().into_owned(),
             },
@@ -102,7 +112,7 @@ async fn exercise_input_validation(
         store
             .lock()
             .await
-            .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+            .begin_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
                 automation_storage::RunPreparationIntent {
                     run_id: run.clone(),
                     effects: effects.clone().into(),
@@ -117,7 +127,7 @@ async fn exercise_input_validation(
         store
             .lock()
             .await
-            .record_run_target::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
+            .record_run_target::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
                 RunPreparedTarget {
                     run_id: run.clone(),
                     effects,
@@ -158,7 +168,7 @@ async fn exercise_input_validation(
     let failed = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&run)
         .await?;
     let failed_native = failed
         .evidence
@@ -215,14 +225,20 @@ async fn exercise_input_validation(
     store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 120000)
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            120000,
+        )
         .await?
         .ok_or("successor missing")?;
     if !matches!(
         store
             .lock()
             .await
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 120000)
+            .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &schedule.schedule_id,
+                120000
+            )
             .await?,
         RunAdmission::Admitted { .. }
     ) {

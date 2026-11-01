@@ -121,7 +121,7 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
         Box::pin(async move {
             let endpoint = match &destination {
                 ScheduleDestination::Existing { target } => &target.endpoint,
-                ScheduleDestination::Fresh { endpoint } => endpoint,
+                ScheduleDestination::Fresh { endpoint, .. } => endpoint,
                 ScheduleDestination::Fork { source, .. } => &source.endpoint,
             };
             let mut missing = Vec::new();

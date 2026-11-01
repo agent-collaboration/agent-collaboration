@@ -11,6 +11,7 @@ impl AutomationStore {
     pub async fn retain_run_uncertainty<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -18,12 +19,14 @@ impl AutomationStore {
         request: RunUncertainty<TTarget, TGeneration>,
     ) -> Result<(), StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if !matches!(
             record.phase,
             RunPhase::Preparing | RunPhase::Executing | RunPhase::Stopping | RunPhase::Uncertain

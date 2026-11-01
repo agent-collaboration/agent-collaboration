@@ -26,7 +26,7 @@ pub(crate) async fn project_record(
                 .try_into()
                 .map_err(|_| StorageError::InvalidRecord)?;
             let record = store
-                .inspect_schedule::<SessionRef, EndpointRef>(&id)
+                .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(&id)
                 .await?;
             serde_json::to_value(
                 crate::schedule_projection::snapshot(record)
@@ -39,7 +39,7 @@ pub(crate) async fn project_record(
                 .try_into()
                 .map_err(|_| StorageError::InvalidRecord)?;
             let record = store
-                .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&id)
+                .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&id)
                 .await?;
             if record.schedule_id != *schedule_id {
                 return Err(StorageError::InvalidRecord);

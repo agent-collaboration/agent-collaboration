@@ -27,6 +27,11 @@ pub enum SessionRegistrationMode {
 pub trait SessionRegistrationModeSource: Send + Sync {
     fn mode(&self) -> SessionRegistrationMode;
 }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SessionBindingListener {
+    Stable(SessionBindingOrigin),
+    Ephemeral,
+}
 pub trait SessionBindingEntropy: Send + Sync {
     fn new_capability(&self) -> Result<[u8; 16], SessionBindingEntropyUnavailable>;
 }
@@ -47,7 +52,7 @@ pub struct FleetSessionLaunch {
 
 pub struct FleetSessionRegistrarProps {
     pub installation: InstallationId,
-    pub origin: SessionBindingOrigin,
+    pub listener: SessionBindingListener,
     pub repository: Arc<dyn FleetSessionRegistrationRepository>,
     pub connection: Arc<dyn FleetSessionConnection>,
     pub mode: Arc<dyn SessionRegistrationModeSource>,
@@ -56,7 +61,7 @@ pub struct FleetSessionRegistrarProps {
 }
 pub struct FleetSessionRegistrar {
     pub(super) installation: InstallationId,
-    pub(super) origin: SessionBindingOrigin,
+    listener: SessionBindingListener,
     pub(super) repository: Arc<dyn FleetSessionRegistrationRepository>,
     pub(super) connection: Arc<dyn FleetSessionConnection>,
     mode: Arc<dyn SessionRegistrationModeSource>,
@@ -81,6 +86,8 @@ pub enum RegistrarFailure {
     ForeignInstallation,
     #[error("the configured session binding origin changed")]
     OriginChanged,
+    #[error("session registration requires a fixed MCP listener origin")]
+    EphemeralListener,
     #[error("session create operation has different immutable input")]
     OperationConflict,
     #[error("session registration is unavailable")]
@@ -104,7 +111,7 @@ impl FleetSessionRegistrar {
     pub fn new(props: FleetSessionRegistrarProps) -> Self {
         Self {
             installation: props.installation,
-            origin: props.origin,
+            listener: props.listener,
             repository: props.repository,
             connection: props.connection,
             mode: props.mode,
@@ -124,6 +131,7 @@ impl FleetSessionRegistrar {
             .project_id
             .clone()
             .ok_or(RegistrarFailure::ProjectRequired)?;
+        let origin = self.stable_origin()?;
         if String::from(intent.endpoint.service_id.clone()) != self.installation.as_str() {
             return Err(RegistrarFailure::ForeignInstallation);
         }
@@ -153,7 +161,7 @@ impl FleetSessionRegistrar {
             .map_err(|_| RegistrarFailure::Unavailable)?;
         let address = format!(
             "{}/mcp/session/{}",
-            self.origin.as_str(),
+            origin.as_str(),
             capability_text(capability)
         )
         .try_into()
@@ -208,11 +216,17 @@ impl FleetSessionRegistrar {
             .binding_address
             .origin()
             .map_err(|_| RegistrarFailure::Unavailable)?
-            != self.origin
+            != *self.stable_origin()?
         {
             return Err(RegistrarFailure::OriginChanged);
         }
         Ok(())
+    }
+    fn stable_origin(&self) -> Result<&SessionBindingOrigin, RegistrarFailure> {
+        match &self.listener {
+            SessionBindingListener::Stable(origin) => Ok(origin),
+            SessionBindingListener::Ephemeral => Err(RegistrarFailure::EphemeralListener),
+        }
     }
 }
 

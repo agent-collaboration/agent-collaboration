@@ -110,7 +110,8 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
                 .await
         } else {
             let mut definition = created.definition.clone();
-            definition.destination = collaboration_protocol::ExecutionDestination::Unprepared;
+            definition.destination =
+                collaboration_protocol::ExecutionDestination::Unprepared { project_id: None };
             client
                 .update_schedule(collaboration_protocol::ScheduleUpdateRequest {
                     operation_id: OperationId::generate(),
@@ -137,7 +138,7 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
         }
         served.stop().await?;
     }
-    let current = store.lock().await.inspect_schedule::<collaboration_protocol::SessionRef, collaboration_protocol::EndpointRef>(&created.schedule_id).await?;
+    let current = store.lock().await.inspect_schedule::<collaboration_protocol::SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(&created.schedule_id).await?;
     if current.record.change_id != created.change_id
         || current.active_run_id.is_some()
         || current.waiting_run_id.is_some()

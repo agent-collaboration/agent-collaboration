@@ -26,6 +26,7 @@ impl AutomationStore {
     pub async fn fail_run_preparation<
         TTarget: PartialEq + Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: PartialEq + Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -56,12 +57,14 @@ impl AutomationStore {
             return Err(StorageError::InvalidRecord);
         }
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if record.phase != RunPhase::Preparing
             || record.evidence.timing.is_some()
             || record.native_turn_id.is_some()
@@ -94,6 +97,7 @@ impl AutomationStore {
     pub async fn begin_run_preparation<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -101,12 +105,14 @@ impl AutomationStore {
         request: RunPreparationIntent<TTarget, TGeneration>,
     ) -> Result<bool, StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if record.phase != RunPhase::Preparing || record.evidence.timing.is_some() {
             transaction.commit().await?;
             return Ok(false);
@@ -152,6 +158,7 @@ impl AutomationStore {
     pub async fn record_run_target<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: Serialize + DeserializeOwned,
         TReceipt: Serialize + DeserializeOwned,
     >(
@@ -159,12 +166,14 @@ impl AutomationStore {
         request: RunPreparedTarget<TTarget, TGeneration>,
     ) -> Result<bool, StorageError> {
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let mut record =
-            crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
-                &mut transaction,
-                &request.run_id,
-            )
-            .await?;
+        let mut record = crate::run_inspection::read_current::<
+            TTarget,
+            TEndpoint,
+            TProject,
+            TGeneration,
+            TReceipt,
+        >(&mut transaction, &request.run_id)
+        .await?;
         if !matches!(record.phase, RunPhase::Preparing | RunPhase::Uncertain)
             || record.evidence.timing.is_some()
             || record.schedule_id != request.binding.schedule_id

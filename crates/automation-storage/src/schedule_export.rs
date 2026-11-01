@@ -7,12 +7,16 @@ use agent_automation::{
 use serde::de::DeserializeOwned;
 use sqlx::{Connection, Row};
 impl AutomationStore {
-    pub async fn export_schedule<TTarget: DeserializeOwned, TEndpoint: DeserializeOwned>(
+    pub async fn export_schedule<
+        TTarget: DeserializeOwned,
+        TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
+    >(
         &mut self,
         id: &ScheduleId,
-    ) -> Result<PortableSchedulePackage<TTarget, TEndpoint>, StorageError> {
+    ) -> Result<PortableSchedulePackage<TTarget, TEndpoint, TProject>, StorageError> {
         let mut transaction = self.connection.begin().await?;
-        let record: ScheduleRecord<TTarget, TEndpoint> =
+        let record: ScheduleRecord<TTarget, TEndpoint, TProject> =
             crate::schedule_inspection::read_current(&mut transaction, id).await?;
         let instruction=sqlx::query("SELECT current_revision_id,instruction_text FROM instruction_documents WHERE instruction_id=?").bind(record.definition.instruction_id.as_str()).fetch_one(&mut *transaction).await?;
         let prior=sqlx::query("SELECT run_id,summary_text,summary_source_json FROM workflow_runs WHERE schedule_id=? AND run_status='finished' ORDER BY completed_at_ms DESC,run_id DESC LIMIT 1").bind(id.as_str()).fetch_optional(&mut *transaction).await?;

@@ -262,7 +262,7 @@ impl Fixture {
     ) -> FleetSessionRegistrar {
         FleetSessionRegistrar::new(FleetSessionRegistrarProps {
             installation: INSTALLATION.to_owned().try_into().unwrap(),
-            origin: origin.to_owned().try_into().unwrap(),
+            listener: SessionBindingListener::Stable(origin.to_owned().try_into().unwrap()),
             repository,
             connection: authority,
             mode,
@@ -295,6 +295,17 @@ impl Fixture {
             .unwrap(),
             machine_environment: MachineEnvironment::Physical,
         }
+    }
+    pub fn ephemeral_registrar(&self) -> FleetSessionRegistrar {
+        FleetSessionRegistrar::new(FleetSessionRegistrarProps {
+            installation: INSTALLATION.to_owned().try_into().unwrap(),
+            listener: SessionBindingListener::Ephemeral,
+            repository: self.repository.clone(),
+            connection: self.authority.clone(),
+            mode: self.mode.clone(),
+            ids: Arc::new(FixedIds(AtomicU64::new(0))),
+            entropy: Arc::new(FixedEntropy),
+        })
     }
     pub fn session(&self) -> message_board::SessionRef {
         serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":INSTALLATION,"endpointId":"codex-local"},"sessionId":"provider-returned-conversation"})).unwrap()

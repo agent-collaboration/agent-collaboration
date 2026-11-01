@@ -185,7 +185,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     let blocked = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
         .await
         .map_err(|error| format!("unavailable source read: {error}"))?;
     if blocked.phase != RunPhase::SummaryBlocked

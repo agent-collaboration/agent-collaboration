@@ -7,24 +7,26 @@ impl AutomationStore {
     pub async fn read_run<
         TTarget: DeserializeOwned,
         TEndpoint: DeserializeOwned,
+        TProject: DeserializeOwned,
         TGeneration: DeserializeOwned,
         TReceipt: DeserializeOwned,
     >(
         &mut self,
         id: &RunId,
-    ) -> Result<RunRecord<TTarget, TEndpoint, TGeneration, TReceipt>, StorageError> {
+    ) -> Result<RunRecord<TTarget, TEndpoint, TProject, TGeneration, TReceipt>, StorageError> {
         read_current(&mut self.connection, id).await
     }
 }
 pub(crate) async fn read_current<
     TTarget: DeserializeOwned,
     TEndpoint: DeserializeOwned,
+    TProject: DeserializeOwned,
     TGeneration: DeserializeOwned,
     TReceipt: DeserializeOwned,
 >(
     connection: &mut SqliteConnection,
     id: &RunId,
-) -> Result<RunRecord<TTarget, TEndpoint, TGeneration, TReceipt>, StorageError> {
+) -> Result<RunRecord<TTarget, TEndpoint, TProject, TGeneration, TReceipt>, StorageError> {
     let row = sqlx::query("SELECT * FROM workflow_runs WHERE run_id=?")
         .bind(id.as_str())
         .fetch_optional(connection)

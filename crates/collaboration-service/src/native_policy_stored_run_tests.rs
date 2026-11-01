@@ -10,6 +10,7 @@ use collaboration_protocol::{EndpointRef, OperationId};
 type NativeRunRecord = agent_automation::RunRecord<
     SessionRef,
     EndpointRef,
+    message_board::ProjectId,
     CodexGeneration,
     collaboration_runtime::stored_run_receipt::StoredRunReceipt,
 >;
@@ -31,33 +32,41 @@ impl StoredPolicyRun {
             )
             .await?;
         let schedule = store
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-                operation_id: OperationId::generate(),
-                definition: ScheduleDefinition {
-                    instruction_id: instruction.instruction_id,
-                    timing: TimingRule::Interval { seconds: 60 },
-                    enabled: true,
-                    destination: agent_automation::ExecutionDestination::OwnedThread {
-                        target: target(),
-                        cwd: fixture.directory.path().to_string_lossy().into_owned(),
+            .create_schedule(
+                &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                    operation_id: OperationId::generate(),
+                    definition: ScheduleDefinition {
+                        instruction_id: instruction.instruction_id,
+                        timing: TimingRule::Interval { seconds: 60 },
+                        enabled: true,
+                        destination: agent_automation::ExecutionDestination::OwnedThread {
+                            target: target(),
+                            cwd: fixture.directory.path().to_string_lossy().into_owned(),
+                        },
+                        execution_timeout_seconds: Some(120),
+                        model: Some("fixture-model".into()),
+                        effort: Some("medium".into()),
                     },
-                    execution_timeout_seconds: Some(120),
-                    model: Some("fixture-model".into()),
-                    effort: Some("medium".into()),
+                    imported_continuity: ContinuityInput::None,
+                    now_ms: 0,
                 },
-                imported_continuity: ContinuityInput::None,
-                now_ms: 0,
-            })
+            )
             .await?;
         let run_id = store
-            .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
+            .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &schedule.schedule_id,
+                60000,
+            )
             .await?
             .ok_or("run not enqueued")?;
         store
-            .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
+            .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+                &schedule.schedule_id,
+                60001,
+            )
             .await?;
         let initial = fixture.scheduled_run().recorded;
-        store.begin_run_preparation::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
+        store.begin_run_preparation::<SessionRef,EndpointRef, message_board::ProjectId,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
         Ok(Self {
             store: Arc::new(tokio::sync::Mutex::new(store)),
             run_id,
@@ -169,7 +178,7 @@ async fn stored_two_attempts(
     // Fresh owning store decodes the actual committed transition, not sink.latest().
     let mut reopened =
         AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
-    let record=reopened.read_run::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
+    let record=reopened.read_run::<SessionRef,EndpointRef, message_board::ProjectId,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
     reopened.close().await?;
     Ok((record, second, requests))
 }

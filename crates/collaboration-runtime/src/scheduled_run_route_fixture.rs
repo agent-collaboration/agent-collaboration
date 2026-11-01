@@ -99,36 +99,44 @@ pub async fn provider_worker_fixture_at(
     let schedule = store
         .lock()
         .await
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRule::Interval {
-                    seconds: timing.interval_seconds,
+        .create_schedule(
+            &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
+                operation_id: OperationId::generate(),
+                definition: ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: TimingRule::Interval {
+                        seconds: timing.interval_seconds,
+                    },
+                    enabled: true,
+                    destination: ExecutionDestination::OwnedThread {
+                        target,
+                        cwd: root.to_string_lossy().into_owned(),
+                    },
+                    execution_timeout_seconds: Some(120),
+                    model: Some("fixture-model".into()),
+                    effort: Some("medium".into()),
                 },
-                enabled: true,
-                destination: ExecutionDestination::OwnedThread {
-                    target,
-                    cwd: root.to_string_lossy().into_owned(),
-                },
-                execution_timeout_seconds: Some(120),
-                model: Some("fixture-model".into()),
-                effort: Some("medium".into()),
+                imported_continuity: ContinuityInput::None,
+                now_ms: timing.anchor_ms,
             },
-            imported_continuity: ContinuityInput::None,
-            now_ms: timing.anchor_ms,
-        })
+        )
         .await?;
     let run_id = store
         .lock()
         .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, timing.first_due_ms())
+        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            timing.first_due_ms(),
+        )
         .await?
         .ok_or("run missing")?;
     store
         .lock()
         .await
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, timing.first_due_ms())
+        .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
+            &schedule.schedule_id,
+            timing.first_due_ms(),
+        )
         .await?;
     let worker = ScheduledRunWorker {
         store: Arc::clone(&store),

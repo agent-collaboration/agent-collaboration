@@ -19,7 +19,7 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
     let run_id = admitted_run(&mut store).await?;
     let attempt = AttemptId::generate();
     store
-        .begin_run_preparation::<String, String, String, String>(RunPreparationIntent {
+        .begin_run_preparation::<String, String, String, String, String>(RunPreparationIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt.clone(),
@@ -29,7 +29,7 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
         })
         .await?;
     store
-        .begin_run_dispatch::<String, String, String, String>(RunDispatchIntent {
+        .begin_run_dispatch::<String, String, String, String, String>(RunDispatchIntent {
             run_id: run_id.clone(),
             effects: provider_evidence(
                 attempt.clone(),
@@ -41,7 +41,7 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
         })
         .await?;
     let before = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     let push_id = uuid::Uuid::now_v7().to_string().try_into()?;
     let settled_at = chrono::DateTime::from_timestamp_millis(63_000).ok_or("settlement time")?;
@@ -75,7 +75,7 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
     sqlx::raw_sql("CREATE TRIGGER reject_run_outcome BEFORE UPDATE OF run_status ON workflow_runs WHEN NEW.run_status='executing' BEGIN SELECT RAISE(ABORT,'run outcome fault after owed insertion'); END")
         .execute(&mut observer).await?;
     if store
-        .record_run_submission_with_push::<String, String, String, String>(
+        .record_run_submission_with_push::<String, String, String, String, String>(
             request.clone(),
             update.clone(),
         )
@@ -87,7 +87,7 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
     if !store.list_owed_push_operations(100).await?.is_empty()
         || serde_json::to_value(
             store
-                .read_run::<String, String, String, String>(&run_id)
+                .read_run::<String, String, String, String, String>(&run_id)
                 .await?,
         )? != serde_json::to_value(before)?
     {
@@ -98,13 +98,16 @@ async fn run_outcome_and_owed_push_settlement_commit_and_roll_back_together()
         .await?;
     observer.close().await?;
     store
-        .record_run_submission_with_push::<String, String, String, String>(request, update.clone())
+        .record_run_submission_with_push::<String, String, String, String, String>(
+            request,
+            update.clone(),
+        )
         .await?;
     store.close().await?;
 
     let mut store = AutomationStore::open(&path).await?;
     let run = store
-        .read_run::<String, String, String, String>(&run_id)
+        .read_run::<String, String, String, String, String>(&run_id)
         .await?;
     let owed = store.list_owed_push_operations(100).await?;
     let [operation] = owed.as_slice() else {

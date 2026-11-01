@@ -65,6 +65,25 @@ async fn fleet_session_registrar_access_enrollment_preserves_the_old_no_registra
 }
 
 #[tokio::test]
+async fn fleet_session_registrar_ephemeral_listener_keeps_step_one_and_refuses_new_registration() {
+    let fixture = Fixture::new();
+    let registrar = fixture.ephemeral_registrar();
+    let intent = fixture.intent();
+    *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::AccessEnrollment;
+    assert!(matches!(
+        registrar.prepare(&intent).await.unwrap(),
+        PrepareSessionStart::AccessEnrollment
+    ));
+    *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::MachineTokens;
+    assert!(matches!(
+        registrar.prepare(&intent).await,
+        Err(RegistrarFailure::EphemeralListener)
+    ));
+    assert!(fixture.authority.events.lock().unwrap().is_empty());
+    assert!(fixture.repository.records.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn fleet_session_registrar_persists_actual_identity_before_registration_and_holds_binding_until_granted()
  {
     let fixture = Fixture::new();

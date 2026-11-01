@@ -244,6 +244,7 @@ async fn aggregate_prompt_does_not_retain_more_than_one_thousand_updates() {
         &CollaborationAccess::api(&root),
         ConversationCreatePromptRequest {
             create: ConversationCreateRequest {
+                project_id: None,
                 operation_id: collaboration_protocol::OperationId::generate(),
                 endpoint: sender.endpoint.clone(),
                 cwd: root.clone(),

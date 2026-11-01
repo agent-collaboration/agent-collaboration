@@ -14,11 +14,11 @@ pub struct PortableContinuity<TTarget> {
     pub source_target: TTarget,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PortableSchedulePackage<TTarget, TEndpoint> {
+pub struct PortableSchedulePackage<TTarget, TEndpoint, TProject> {
     pub schedule_id: ScheduleId,
     pub source_change_id: String,
     pub instruction: PortableInstruction,
-    pub definition: ScheduleDefinition<TTarget, TEndpoint>,
+    pub definition: ScheduleDefinition<TTarget, TEndpoint, TProject>,
     pub continuity: Option<PortableContinuity<TTarget>>,
 }
 #[derive(Debug, thiserror::Error)]
