@@ -1,4 +1,18 @@
-# Component contract tests (layer A)
+# TUI tests (layer A)
+
+Unit tests live beside their owning source modules as `*_test.rs`.
+`integration/` covers public-API, renderer-parity and subprocess contracts. Its
+`main.rs` registers the single `integration` Cargo target; `component_contract.rs`
+declares the scenario modules. Run only this kind from the workspace root:
+
+```sh
+env -u NO_COLOR cargo nextest run --profile ci -p agent-collaboration-tui --test integration
+```
+
+There is no e2e Cargo target in this crate. End-to-end PTY observations belong to
+the repository's verification drivers. New e2e tests, if introduced here, belong
+in `e2e/` with `main.rs` and one explicit `e2e` Cargo target. Keep loose Rust test
+files out of the `tests/` root.
 
 Run from the workspace root:
 
@@ -30,7 +44,7 @@ modes without Ctrl+C. Removing the public opt-in must fail the Ctrl+C rows.
 This adapter is shared by unit and integration tests under `cfg(test)`.
 
 Component scenarios live beside their owning modules as `<module>_test.rs` and
-share the helpers in `../src/test_support/`. `component_contract.rs` indexes the
+share the helpers in `../src/test_support/`. `integration/component_contract.rs` indexes the
 cross-module backend-parity and subprocess-frame integration tests; each file in
 `integration/` states why it needs that boundary. Representative UI matrices use
 `../src/test_support/grids.rs`: 120×36, 76×30, 48×12 and 32×24. Tiny-view and exact
