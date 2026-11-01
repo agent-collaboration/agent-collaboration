@@ -1,5 +1,7 @@
 //! Harnesses consume launch decisions; the Host adapts the sole registrar policy owner.
-use collaboration_protocol::{EndpointRef, OperationId, SessionSetupAbandonmentCause};
+use collaboration_protocol::{
+    EndpointRef, NonEmptyText, OperationId, SessionSetupAbandonmentCause,
+};
 use fleet_identity_protocol::{
     AgentIsolation, LaunchContext, MachineEnvironment, SessionRefusal, SessionStartRefusal,
     StartedBy,
@@ -22,20 +24,20 @@ pub struct HarnessSessionLaunch {
 /// intentionally opaque to serializers and diagnostics; only harness config uses it.
 #[derive(Clone)]
 pub struct HarnessSessionBinding {
-    operation_id: OperationId,
+    server_name: NonEmptyText,
     address: String,
 }
 impl HarnessSessionBinding {
     #[must_use]
-    pub fn from_host_record(operation_id: OperationId, address: String) -> Self {
+    pub fn from_host_record(server_name: NonEmptyText, address: String) -> Self {
         Self {
-            operation_id,
+            server_name,
             address,
         }
     }
     #[must_use]
-    pub fn operation_id(&self) -> &OperationId {
-        &self.operation_id
+    pub fn server_name(&self) -> &str {
+        self.server_name.as_str()
     }
     #[must_use]
     pub fn expose_address(&self) -> &str {

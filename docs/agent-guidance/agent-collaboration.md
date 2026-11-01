@@ -20,8 +20,8 @@ scan ports, guess from a default, or inspect provider session files or transcrip
 ```sh
 ROUTER_SERVICE_DIRECTORY="/absolute/path/to/selected/service-directory"
 ROUTER_MCP_URL="$(jq -er '.mcp.url' "$ROUTER_SERVICE_DIRECTORY/service.json")"
-codex mcp add codex-router --url "$ROUTER_MCP_URL"
-codex mcp get codex-router --json
+codex mcp add agent-router --url "$ROUTER_MCP_URL"
+codex mcp get agent-router --json
 codex mcp list
 ```
 

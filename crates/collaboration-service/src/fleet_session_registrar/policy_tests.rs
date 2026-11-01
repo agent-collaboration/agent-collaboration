@@ -3,6 +3,7 @@ use super::*;
 use codex_router_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, PreparedSessionCreation,
 };
+use collaboration_protocol::SessionSetupAbandonmentCause;
 use fleet_identity_protocol::{
     RegisterFleetSessionResult, SessionEndCause, SessionStartCheck, SessionStartRefusal,
 };
@@ -11,6 +12,154 @@ use futures_util::FutureExt;
 #[path = "policy_test_fixture.rs"]
 mod fixture;
 use fixture::*;
+
+#[tokio::test]
+async fn fleet_session_registrar_known_created_local_refusals_keep_identity_and_never_register() {
+    for cause in [
+        SessionSetupAbandonmentCause::ModelMismatch {},
+        SessionSetupAbandonmentCause::EffectiveWorkingDirectoryMismatch {},
+        SessionSetupAbandonmentCause::WorkspaceRootsMismatch {},
+    ] {
+        let fixture = Fixture::new();
+        let intent = fixture.intent();
+        fixture.registrar.prepare(&intent).await.unwrap();
+        let address = fixture
+            .registrar
+            .mark_dispatched(&intent.operation_id)
+            .await
+            .unwrap();
+        let session = fixture.session();
+        fixture
+            .registrar
+            .record_provider_created(&intent.operation_id, session.clone())
+            .await
+            .unwrap();
+        assert!(matches!(
+            fixture.registrar.resolve_binding(&address).await,
+            Err(RegistrarFailure::InactiveBinding)
+        ));
+        fixture
+            .registrar
+            .abandon_created_setup(&intent.operation_id, cause)
+            .await
+            .unwrap();
+
+        {
+            let records = fixture.repository.records.lock().unwrap();
+            let record = records.first().unwrap();
+            assert_eq!(record.lifecycle().session(), Some(&session));
+            assert!(
+                matches!(record.lifecycle(), FleetSessionBindingLifecycle::Abandoned {
+                creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { session: actual, cause: actual_cause }
+            } if actual == &session && actual_cause == &cause)
+            );
+        }
+        assert!(matches!(
+            fixture
+                .registrar
+                .reconcile_registration(&intent.operation_id)
+                .await,
+            Err(RegistrarFailure::InactiveBinding)
+        ));
+        assert!(matches!(
+            fixture
+                .registrar
+                .complete_created_setup(&intent.operation_id)
+                .await,
+            Err(RegistrarFailure::InvalidTransition)
+        ));
+        assert!(fixture.authority.registrations.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_reconstructed_owner_settles_pending_setup_without_registration() {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    fixture.registrar.prepare(&intent).await.unwrap();
+    let address = fixture
+        .registrar
+        .mark_dispatched(&intent.operation_id)
+        .await
+        .unwrap();
+    let session = fixture.session();
+    fixture
+        .registrar
+        .record_provider_created(&intent.operation_id, session.clone())
+        .await
+        .unwrap();
+    let live_reconcile = fixture
+        .registrar
+        .reconcile_registration(&intent.operation_id)
+        .now_or_never();
+    assert_eq!(
+        live_reconcile.unwrap().unwrap(),
+        RegistrationCompletion::Pending
+    );
+    let reconstructed = Fixture::make_registrar(
+        fixture.repository.clone(),
+        fixture.authority.clone(),
+        fixture.mode.clone(),
+        "http://127.0.0.1:8788",
+    );
+
+    reconstructed
+        .settle_interrupted_setups_after_restart()
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        reconstructed.resolve_binding(&address).await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    let records = fixture.repository.records.lock().unwrap();
+    let record = records.first().unwrap();
+    assert_eq!(record.lifecycle().session(), Some(&session));
+    assert!(matches!(record.lifecycle(), FleetSessionBindingLifecycle::Abandoned {
+        creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { cause: SessionSetupAbandonmentCause::SetupInterrupted {}, .. }
+    }));
+    assert!(fixture.authority.registrations.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn fleet_session_registrar_success_after_pending_setup_uses_the_original_registration() {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    fixture.registrar.prepare(&intent).await.unwrap();
+    let address = fixture
+        .registrar
+        .mark_dispatched(&intent.operation_id)
+        .await
+        .unwrap();
+    let session = fixture.session();
+    fixture
+        .registrar
+        .record_provider_created(&intent.operation_id, session.clone())
+        .await
+        .unwrap();
+    fixture.grant();
+
+    let RegistrationCompletion::Registered(bound) = fixture
+        .registrar
+        .complete_created_setup(&intent.operation_id)
+        .await
+        .unwrap()
+    else {
+        panic!("completed setup did not register");
+    };
+
+    assert_eq!(bound.session(), &session);
+    assert_eq!(
+        fixture.registrar.resolve_binding(&address).await.unwrap(),
+        bound
+    );
+    let sent = fixture.authority.registrations.lock().unwrap();
+    assert_eq!(sent.len(), 1);
+    let registration: fleet_identity_protocol::RegisterFleetSession =
+        serde_json::from_slice(sent.first().unwrap()).unwrap();
+    assert_eq!(registration.session, session);
+    assert_eq!(Some(registration.project_id), intent.project_id);
+}
 
 #[tokio::test]
 async fn fleet_session_registrar_missing_project_and_each_live_refusal_store_no_preparation() {

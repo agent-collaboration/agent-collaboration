@@ -18,8 +18,10 @@ mod prompt_connection_task;
 mod prompt_content_translation;
 mod prompt_settlement;
 mod queued_frame_budget;
+mod session_binding_config;
 mod session_connection_registry;
 mod session_creation;
+pub use session_binding_config::{InvalidSessionBindingConfig, insert_session_binding_config};
 mod stored_session_listing;
 pub use acp_connection_dispatch::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 pub use acp_connection_router::{

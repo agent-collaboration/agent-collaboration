@@ -1,5 +1,5 @@
 //! Validated registrar facts for the Router's private state; policy has one writer in the registrar.
-use collaboration_protocol::{EndpointRef, OperationId};
+use collaboration_protocol::{EndpointRef, OperationId, SessionSetupAbandonmentCause};
 use fleet_identity_protocol::{
     AgentIsolation, InstallationId, LaunchContext, MachineEnvironment, OrganizationId,
     RegisterFleetSession, StartedBy,
@@ -57,9 +57,11 @@ impl PreparedFleetSession {
             && request.isolation == self.isolation
             && request.launch_context == self.launch_context
             && request.machine_environment == self.machine_environment
-            && request.session.endpoint.service_id.as_str()
-                == String::from(self.endpoint.service_id.clone())
-            && request.session.endpoint.endpoint_id.as_str()
+            && self.matches_session(&request.session)
+    }
+    fn matches_session(&self, session: &SessionRef) -> bool {
+        session.endpoint.service_id.as_str() == String::from(self.endpoint.service_id.clone())
+            && session.endpoint.endpoint_id.as_str()
                 == String::from(self.endpoint.endpoint_id.clone())
     }
 }
@@ -74,6 +76,9 @@ impl PreparedFleetSession {
 pub enum PreparedSessionCreation {
     NotDispatched {},
     Dispatched {},
+    CreatedPendingSetup {
+        session: SessionRef,
+    },
     Created {
         registration: Box<RegisterFleetSession>,
     },
@@ -87,6 +92,10 @@ pub enum PreparedSessionCreation {
 )]
 pub enum AbandonedSessionCreation {
     NotCreated {},
+    KnownCreated {
+        session: SessionRef,
+        cause: SessionSetupAbandonmentCause,
+    },
     RegistrationRefused {
         registration: Box<RegisterFleetSession>,
     },
@@ -126,11 +135,29 @@ impl FleetSessionBindingLifecycle {
             }
             Self::Prepared {
                 creation:
-                    PreparedSessionCreation::NotDispatched {} | PreparedSessionCreation::Dispatched {},
+                    PreparedSessionCreation::NotDispatched {}
+                    | PreparedSessionCreation::Dispatched {}
+                    | PreparedSessionCreation::CreatedPendingSetup { .. },
             }
             | Self::Abandoned {
-                creation: AbandonedSessionCreation::NotCreated {},
+                creation:
+                    AbandonedSessionCreation::NotCreated {}
+                    | AbandonedSessionCreation::KnownCreated { .. },
             } => None,
+        }
+    }
+    #[must_use]
+    pub fn session(&self) -> Option<&SessionRef> {
+        match self {
+            Self::Prepared {
+                creation: PreparedSessionCreation::CreatedPendingSetup { session },
+            }
+            | Self::Abandoned {
+                creation: AbandonedSessionCreation::KnownCreated { session, .. },
+            } => Some(session),
+            _ => self
+                .registration()
+                .map(|registration| &registration.session),
         }
     }
 }
@@ -173,6 +200,11 @@ impl FleetSessionRegistrationRecord {
             return Err(InvalidFleetSessionRegistration {
                 field: "registration",
             });
+        }
+        if let Some(session) = lifecycle.session()
+            && !preparation.launch.matches_session(session)
+        {
+            return Err(InvalidFleetSessionRegistration { field: "session" });
         }
         if let FleetSessionBindingLifecycle::Active { confirmed }
         | FleetSessionBindingLifecycle::Retired { confirmed } = &lifecycle

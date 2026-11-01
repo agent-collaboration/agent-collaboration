@@ -2,6 +2,7 @@
 mod binding_admission;
 mod connection_port;
 mod registration_lifecycle;
+mod setup_lifecycle;
 mod start_admission;
 mod storage_port;
 

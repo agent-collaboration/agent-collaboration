@@ -45,14 +45,7 @@ impl FleetSessionRegistrationRepository for MemoryRepository {
         &'a self,
         session: &'a message_board::SessionRef,
     ) -> FleetSessionStorageRequest<'a, Option<FleetSessionRegistrationRecord>> {
-        Box::pin(async move {
-            self.select(|record| {
-                record
-                    .lifecycle()
-                    .registration()
-                    .is_some_and(|registration| &registration.session == session)
-            })
-        })
+        Box::pin(async move { self.select(|record| record.lifecycle().session() == Some(session)) })
     }
     fn binding<'a>(
         &'a self,

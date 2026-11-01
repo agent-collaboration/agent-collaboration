@@ -84,6 +84,18 @@ impl FleetSessionRegistrar {
                 self.replace(&current, &next).await?;
             }
             FleetSessionBindingLifecycle::Prepared {
+                creation: PreparedSessionCreation::CreatedPendingSetup { session },
+            } if session == &request.session => {
+                let next = current
+                    .with_lifecycle(FleetSessionBindingLifecycle::Prepared {
+                        creation: PreparedSessionCreation::Created {
+                            registration: Box::new(request),
+                        },
+                    })
+                    .map_err(|_| RegistrarFailure::OperationConflict)?;
+                self.replace(&current, &next).await?;
+            }
+            FleetSessionBindingLifecycle::Prepared {
                 creation: PreparedSessionCreation::Created { registration },
             } if registration.as_ref() == &request => {}
             FleetSessionBindingLifecycle::Active { confirmed }
@@ -203,7 +215,7 @@ impl FleetSessionRegistrar {
         Ok(())
     }
 
-    async fn record(
+    pub(super) async fn record(
         &self,
         operation: &OperationId,
     ) -> Result<FleetSessionRegistrationRecord, RegistrarFailure> {
@@ -215,7 +227,7 @@ impl FleetSessionRegistrar {
         self.require_record_context(&record)?;
         Ok(record)
     }
-    async fn replace(
+    pub(super) async fn replace(
         &self,
         current: &FleetSessionRegistrationRecord,
         next: &FleetSessionRegistrationRecord,

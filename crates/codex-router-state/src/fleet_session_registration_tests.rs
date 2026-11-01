@@ -47,6 +47,33 @@ fn fleet_session_setup_pending_and_local_refusals_retain_the_actual_id_as_closed
     }
 }
 
+#[test]
+fn fleet_session_setup_known_id_must_belong_to_the_prepared_endpoint() {
+    let preparation = preparation();
+    let mut session = registration(&preparation).session;
+    session.endpoint.endpoint_id = "other-provider".to_owned().try_into().unwrap();
+    for lifecycle in [
+        FleetSessionBindingLifecycle::Prepared {
+            creation: PreparedSessionCreation::CreatedPendingSetup {
+                session: session.clone(),
+            },
+        },
+        FleetSessionBindingLifecycle::Abandoned {
+            creation: AbandonedSessionCreation::KnownCreated {
+                session: session.clone(),
+                cause: SessionSetupAbandonmentCause::SetupInterrupted {},
+            },
+        },
+    ] {
+        assert_eq!(
+            FleetSessionRegistrationRecord::new(preparation.clone(), lifecycle)
+                .unwrap_err()
+                .field,
+            "session"
+        );
+    }
+}
+
 fn preparation() -> FleetSessionPreparation {
     FleetSessionPreparation {
         registration_id: "019f0000-0000-7000-8000-000000000001".to_owned().try_into().unwrap(),
