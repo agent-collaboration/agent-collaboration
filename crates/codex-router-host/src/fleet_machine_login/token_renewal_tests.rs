@@ -157,7 +157,6 @@ async fn exercise(
     replies: Vec<MachineTokenRenewal>,
     fail_on_second: bool,
 ) -> (bool, usize, Vec<String>) {
-    let root = tempfile::tempdir().unwrap();
     let central = CentralStandIn {
         replies: Arc::new(Mutex::new(replies.into())),
         tokens: Arc::new(Mutex::new(Vec::new())),

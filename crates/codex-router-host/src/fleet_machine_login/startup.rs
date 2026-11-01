@@ -37,6 +37,9 @@ pub struct FleetLoginDependencies {
 /// Selected by the deployment entrypoint, independently of saved-row presence.
 pub(crate) enum MachineLoginStartup {
     AccessEnrollment,
+    // Real deployment composition is held on the Fleet backend. The existing
+    // isolated entrypoint is the only current caller of token-mode startup.
+    #[cfg(any(test, feature = "runtime-test-support"))]
     MachineTokens {
         repository: Option<Arc<dyn FleetLoginRepository>>,
         dependencies: Option<FleetLoginDependencies>,
@@ -54,6 +57,7 @@ impl MachineLoginStartup {
     ) -> Result<Option<MachineTokenStartupInputs>, FleetLoginStorageFailure> {
         match self {
             Self::AccessEnrollment => Ok(None),
+            #[cfg(any(test, feature = "runtime-test-support"))]
             Self::MachineTokens {
                 repository,
                 dependencies,

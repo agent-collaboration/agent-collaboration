@@ -202,14 +202,14 @@ impl HostRuntime {
         update_inputs: ManagedUpdateInputs,
     ) -> Result<HostExit, HostError> {
         let instance = HostInstance::acquire(config.coordination_paths().clone())?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             None,
             crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
-        )
+        ))
         .await
     }
 
@@ -222,14 +222,14 @@ impl HostRuntime {
     ) -> Result<HostExit, HostError> {
         let instance =
             HostInstance::acquire_inherited(config.coordination_paths().clone(), marker)?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             None,
             crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
-        )
+        ))
         .await
     }
 
@@ -257,14 +257,14 @@ impl HostRuntime {
         instance: HostInstance,
         progress: Option<HostProgressCallback<'_>>,
     ) -> Result<HostExit, HostError> {
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             progress,
             crate::fleet_machine_login::MachineLoginStartup::AccessEnrollment,
-        )
+        ))
         .await
     }
 
@@ -280,7 +280,7 @@ impl HostRuntime {
         >,
         dependencies: crate::fleet_machine_login::FleetLoginDependencies,
     ) -> Result<HostExit, HostError> {
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
@@ -290,7 +290,7 @@ impl HostRuntime {
                 repository: Some(repository),
                 dependencies: Some(dependencies),
             },
-        )
+        ))
         .await
     }
 
