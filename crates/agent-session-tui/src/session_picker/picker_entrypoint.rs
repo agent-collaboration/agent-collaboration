@@ -24,7 +24,7 @@ pub fn run_sessions_picker(
 struct PickerRenderSupport {
     #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
     dispatch_receipt:
-        Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
+        Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
     source_preparer: Option<super::super::source_action_worker::SourceActionPreparer>,
 }
 
@@ -100,7 +100,7 @@ pub fn run_sessions_picker_test_harness() -> io::Result<()> {
     let dispatch_receipt = receipt_directory
         .as_ref()
         .map(|directory| {
-            agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink::create(
+            agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink::create(
                 directory.join("input-dispatch.jsonl"),
             )
         })

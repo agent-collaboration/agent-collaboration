@@ -125,7 +125,7 @@ async fn render_counted_picker_capture_at(
             request,
             width,
             height,
-            surface_observer: move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| {
+            surface_observer: move |(_,model): (agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| {
                 let model=model.read();
                 let mut snapshot=sink.lock().unwrap();
                 snapshot.visible_records=model.visible_record_len();
@@ -391,9 +391,9 @@ async fn render_anchored_picker_canvases(
     height: usize,
     events_before_quit: Vec<TerminalEvent>,
     outcome: Option<&mut Option<SessionsPickerOutcome>>,
-    expected_kind: agent_collaboration_tui::surface_stack::OverlayKind,
+    expected_kind: agent_collaboration_tui::surfaces::surface_stack::OverlayKind,
 ) -> (Vec<iocraft::Canvas>, DialogBounds) {
-    use agent_collaboration_tui::{
+    use agent_collaboration_tui::surfaces::{
         hit_regions::HitRegionKind,
         surface_handle::SurfaceStackHandle,
         surface_stack::{OverlayLayout, SurfaceId},

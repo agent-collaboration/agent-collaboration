@@ -4,7 +4,9 @@ use super::*;
 // R7/R13: click Menu then Help; the generated rows must match the screen's real bindings.
 #[tokio::test]
 async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
-    use agent_collaboration_tui::{surface_handle::SurfaceStackHandle, surface_stack::SurfaceId};
+    use agent_collaboration_tui::surfaces::{
+        surface_handle::SurfaceStackHandle, surface_stack::SurfaceId,
+    };
     let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
     let sink = observed.clone();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();

@@ -232,7 +232,7 @@ async fn owner_feedback_atomic_paste_searches_full_session_id_without_executing_
         let query = Arc::new(Mutex::new(String::new()));
         let sink = query.clone();
         let canvases = element! {
-            SessionsPickerComponent(request, width: 120usize, height: 36usize, selected_outcome_out: &mut outcome, surface_observer:move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *sink.lock().unwrap()=model.read().search.clone())
+            SessionsPickerComponent(request, width: 120usize, height: 36usize, selected_outcome_out: &mut outcome, surface_observer:move |(_,model): (agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *sink.lock().unwrap()=model.read().search.clone())
         }.mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(vec![
             TerminalEvent::BracketedPaste(pasted), ctrl_key('d'),
         ]))).collect::<Vec<_>>().await;
@@ -427,9 +427,11 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
                 36,
                 events,
                 None,
-                agent_collaboration_tui::surface_stack::OverlayKind::Dropdown {
-                    field: agent_collaboration_tui::focus_model::TargetId::new("filter-provider")
-                        .unwrap(),
+                agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Dropdown {
+                    field: agent_collaboration_tui::surfaces::focus_model::TargetId::new(
+                        "filter-provider",
+                    )
+                    .unwrap(),
                 },
             )
             .await
@@ -519,8 +521,8 @@ async fn sessions_help_wide_overlay_preserves_background_top_bottom_and_inactive
     assert_eq!(
         style.color,
         Some(
-            agent_collaboration_tui::theme::Theme::covered()
-                .foreground(agent_collaboration_tui::theme::TextRole::Accent)
+            agent_collaboration_tui::foundation::theme::Theme::covered()
+                .foreground(agent_collaboration_tui::foundation::theme::TextRole::Accent)
         )
     );
     assert_eq!(style.weight, Weight::Bold);

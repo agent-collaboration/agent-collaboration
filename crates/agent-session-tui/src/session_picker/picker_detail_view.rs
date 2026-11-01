@@ -3,8 +3,8 @@ use super::{SessionConversationPreview, SessionPickerRecord, fit_line};
 use crate::session_picker::picker_rendering::iocraft_cell_count;
 use agent_collaboration_tui::{
     UiHeading, UiHeadingLevel,
-    surface_handle::SurfaceContext,
-    theme::{TextRole, Theme},
+    foundation::theme::{TextRole, Theme},
+    surfaces::surface_handle::SurfaceContext,
 };
 use iocraft::prelude::*;
 
@@ -237,14 +237,14 @@ fn render_structured_details(
     };
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            agent_collaboration_tui::controls::DialogSections {
-                agent_collaboration_tui::controls::DialogSection {
+            agent_collaboration_tui::dialog::DialogSections {
+                agent_collaboration_tui::dialog::DialogSection {
                     agent_collaboration_tui::FormFields(stacked:width<52) {#(fields)}
                 }
-                agent_collaboration_tui::controls::DialogSection(heading:"Original title".to_owned()) {
+                agent_collaboration_tui::dialog::DialogSection(heading:"Original title".to_owned()) {
                     agent_collaboration_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:agent_collaboration_tui::UiTextRole::Body,wrap:TextWrap::Wrap)
                 }
-                agent_collaboration_tui::controls::DialogSection(heading:"Conversation".to_owned()) {
+                agent_collaboration_tui::dialog::DialogSection(heading:"Conversation".to_owned()) {
                     #(history)
                 }
             }

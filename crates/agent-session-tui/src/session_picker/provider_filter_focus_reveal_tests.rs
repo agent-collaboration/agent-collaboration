@@ -3,7 +3,9 @@ use super::*;
 use crate::session_picker::{
     provider_filter_model::SessionProviderFilter, provider_filter_tests::mixed_request,
 };
-use agent_collaboration_tui::{surface_handle::SurfaceStackHandle, surface_stack::OverlayKind};
+use agent_collaboration_tui::surfaces::{
+    surface_handle::SurfaceStackHandle, surface_stack::OverlayKind,
+};
 
 fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))

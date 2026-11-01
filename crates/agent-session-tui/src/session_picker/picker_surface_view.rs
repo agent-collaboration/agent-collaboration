@@ -6,10 +6,16 @@ use super::{
 };
 use agent_collaboration_tui::{
     actions::ActionRegistry,
-    controls::{ComboBox, FormField, FormFields, ListRow, ScrollList},
-    hit_regions::{HitRegion, HitRegionKind},
-    surface_handle::SurfaceContext,
-    theme::TextRole,
+    controls::{
+        combo::ComboBox,
+        fields::{FormField, FormFields},
+        list::{ListRow, ScrollList},
+    },
+    foundation::theme::TextRole,
+    surfaces::{
+        hit_regions::{HitRegion, HitRegionKind},
+        surface_handle::SurfaceContext,
+    },
 };
 use iocraft::prelude::*;
 
@@ -369,19 +375,21 @@ fn render_dialog_body(
         .iter()
         .find(|overlay| SurfaceId::Overlay(overlay.id) == surface.surface)
         .and_then(|overlay| match overlay.layout.clone().resolve(viewport) {
-            agent_collaboration_tui::surface_stack::OverlayPlacement::Centered {
+            agent_collaboration_tui::surfaces::surface_stack::OverlayPlacement::Centered {
                 max_width,
                 max_height,
                 ..
             } => Some((max_width, max_height)),
-            agent_collaboration_tui::surface_stack::OverlayPlacement::Fixed {
+            agent_collaboration_tui::surfaces::surface_stack::OverlayPlacement::Fixed {
                 width,
                 height,
                 ..
             } => Some((width, height)),
             // Only the parent dialog owns this body; anchored child controls
             // receive their dimensions from the host instead.
-            agent_collaboration_tui::surface_stack::OverlayPlacement::Anchored { .. } => None,
+            agent_collaboration_tui::surfaces::surface_stack::OverlayPlacement::Anchored {
+                ..
+            } => None,
         })
         .unwrap_or(viewport);
     let padding = u16::from(frame_height >= 16);

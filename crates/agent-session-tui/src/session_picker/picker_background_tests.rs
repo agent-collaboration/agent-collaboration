@@ -263,7 +263,7 @@ async fn sessions_picker_view_shortcut_filters_the_latest_loaded_records() {
             width: 100usize,
             // This test observes reload behavior, so keep both Start New and the loaded row visible.
             height: 40usize,
-            surface_observer: move |(_,model): (agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *view_sink.lock().unwrap()=Some(model.read().runtime_view),
+            surface_observer: move |(_,model): (agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)| *view_sink.lock().unwrap()=Some(model.read().runtime_view),
         )
     };
     let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));

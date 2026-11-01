@@ -1,9 +1,9 @@
 //! Toolbar groups wrap without clipping names, counts or focusable controls.
 use super::{ActionId, PickerSurfaceContext, SessionsPickerModel, SurfaceResult, TargetId, target};
 use agent_collaboration_tui::{
-    controls::{Button, FilterField, MenuButton, SegmentedSwitch},
-    surface_handle::SurfaceContext,
-    theme::TextRole,
+    controls::fields::{Button, FilterField, MenuButton, SegmentedSwitch},
+    foundation::theme::TextRole,
+    surfaces::surface_handle::SurfaceContext,
 };
 use agent_session_inventory::picker_data_query::SessionsPickerRoot;
 use iocraft::prelude::*;

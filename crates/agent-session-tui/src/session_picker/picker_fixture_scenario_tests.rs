@@ -10,9 +10,8 @@ use crate::session_picker::{
     },
 };
 use agent_collaboration_tui::{
-    surface_handle::SurfaceStackHandle,
-    surface_stack::OverlayKind,
-    theme::{SurfaceRole, Theme},
+    foundation::theme::{SurfaceRole, Theme},
+    surfaces::{surface_handle::SurfaceStackHandle, surface_stack::OverlayKind},
 };
 use agent_session_inventory::sessions::source_client_action::SessionClientEffect;
 use agent_session_inventory::sessions::source_ssh_protocol::SourceNativeClaudeAction;

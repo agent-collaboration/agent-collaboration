@@ -52,7 +52,7 @@ async fn sessions_provider_filter_real_keys_apply_cancel_and_hide_nonmatching_ro
         key(KeyCode::Esc),
         ctrl_key('d'),
     ]);
-    let frames=element!(SessionsPickerComponent(request:mixed_request(),width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(_,model):(agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*observation.lock().unwrap()=Some(model.read().provider_filter)))
+    let frames=element!(SessionsPickerComponent(request:mixed_request(),width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(_,model):(agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*observation.lock().unwrap()=Some(model.read().provider_filter)))
         .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).map(|canvas|canvas.to_string()).collect::<Vec<_>>().await;
     assert_eq!(outcome, None);
     assert_eq!(
@@ -125,7 +125,7 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
     let result = tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! {
             SessionsPickerComponent(request: mixed_request(), width: 120usize, height: 36usize,
-                surface_observer:move |(_,model):(agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*observation.lock().unwrap()=Some(model.read().provider_filter))
+                surface_observer:move |(_,model):(agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*observation.lock().unwrap()=Some(model.read().provider_filter))
         };
         let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(canvases);

@@ -3,7 +3,9 @@ use super::*;
 
 #[tokio::test]
 async fn details_copy_status_stays_below_the_scrolling_body() {
-    use agent_collaboration_tui::{hit_regions::HitRegionKind, surface_handle::SurfaceStackHandle};
+    use agent_collaboration_tui::surfaces::{
+        hit_regions::HitRegionKind, surface_handle::SurfaceStackHandle,
+    };
 
     for (width, height, failure) in [(76usize, 30usize, false), (48, 24, true), (32, 24, false)] {
         let mut request = picker_request();
@@ -96,7 +98,7 @@ async fn details_copy_status_stays_below_the_scrolling_body() {
 
 #[tokio::test]
 async fn unreachable_source_hint_requires_a_live_record_loader() {
-    use agent_collaboration_tui::surface_handle::SurfaceStackHandle;
+    use agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle;
     use agent_session_inventory::source_inventory_request::{
         PickerSourceContext, SourceInventoryRejection, SourceInventoryResult,
     };
@@ -192,7 +194,7 @@ async fn menu_is_a_surface_and_never_lists_itself_or_input_conventions() {
         36,
         vec![key(KeyCode::F(10))],
         None,
-        agent_collaboration_tui::surface_stack::OverlayKind::Menu,
+        agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Menu,
     )
     .await;
     let frame = dialog_text(&canvases.last().unwrap().to_string(), bounds);
@@ -230,8 +232,9 @@ async fn new_dialog_down_moves_to_machine_instead_of_starting() {
         36,
         vec![ctrl_key('n'), key(KeyCode::Down), key(KeyCode::Enter)],
         Some(&mut outcome),
-        agent_collaboration_tui::surface_stack::OverlayKind::Dropdown {
-            field: agent_collaboration_tui::focus_model::TargetId::new("new-machine").unwrap(),
+        agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Dropdown {
+            field: agent_collaboration_tui::surfaces::focus_model::TargetId::new("new-machine")
+                .unwrap(),
         },
     )
     .await;
@@ -251,7 +254,8 @@ async fn new_dialog_down_moves_to_machine_instead_of_starting() {
 #[tokio::test]
 async fn filter_focus_reaches_apply_cancel_and_back_through_input_owner() {
     use agent_collaboration_tui::{
-        actions::ActionId, surface_handle::SurfaceStackHandle, surface_stack::SurfaceId,
+        actions::ActionId,
+        surfaces::{surface_handle::SurfaceStackHandle, surface_stack::SurfaceId},
     };
     let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
     let sink = observed.clone();
@@ -326,7 +330,8 @@ async fn filter_focus_reaches_apply_cancel_and_back_through_input_owner() {
 #[tokio::test]
 async fn an_accepted_start_outcome_cannot_be_replaced_by_a_following_open_callback() {
     use agent_collaboration_tui::{
-        actions::ActionId, surface_handle::SurfaceStackHandle, surface_stack::SurfaceId,
+        actions::ActionId,
+        surfaces::{surface_handle::SurfaceStackHandle, surface_stack::SurfaceId},
     };
     let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
     let sink = observed.clone();

@@ -8,11 +8,14 @@ use super::{
 use agent_collaboration_tui::{
     actions::Checked,
     controls::{
-        ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl,
-        button_target, menu_overlay, segmented_targets,
+        fields::{button_target, segmented_targets},
+        list::{ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl},
+        menu_overlay,
     },
-    focus_model::{GroupId, TargetInputHandler, TargetSpec, TargetVisibility},
-    surface_handle::SurfaceContext,
+    surfaces::{
+        focus_model::{GroupId, TargetInputHandler, TargetSpec, TargetVisibility},
+        surface_handle::SurfaceContext,
+    },
 };
 use agent_session_inventory::sessions::{SessionPickerIdentity, SessionsSort};
 use iocraft::prelude::*;

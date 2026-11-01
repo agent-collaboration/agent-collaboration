@@ -13,9 +13,14 @@ use crate::session_picker::{
 use agent_collaboration_tui::{
     ChoiceAvailability, ChoiceOption,
     actions::Availability,
-    controls::{ComboBoxBinding, ComboBoxControl, OptionKey, SelectOption},
-    focus_model::{GroupId, TargetSpec},
-    surface_handle::SurfaceContext,
+    controls::{
+        combo::{ComboBoxBinding, ComboBoxControl},
+        list::{OptionKey, SelectOption},
+    },
+    surfaces::{
+        focus_model::{GroupId, TargetSpec},
+        surface_handle::SurfaceContext,
+    },
 };
 use iocraft::prelude::*;
 
@@ -387,7 +392,7 @@ pub(super) fn declare_combo(
         });
     }
     targets.push(
-        agent_collaboration_tui::controls::button_target(target(field.name())?, &declared)
+        agent_collaboration_tui::controls::fields::button_target(target(field.name())?, &declared)
             .in_group(GroupId::new("dialog-controls")?),
     );
     actions.push(declared);

@@ -8,11 +8,16 @@ use crate::session_picker::{
 use agent_collaboration_tui::{
     actions::{ActionDef, ActionId, ActionRegistry, AvailabilityFn, Placement, ScopeId},
     controls::{
-        ComboBoxState, HelpControl, ListSelectionControl, ListSelectionState, TextFieldState,
+        combo::ComboBoxState,
+        fields::TextFieldState,
+        list::{ListSelectionControl, ListSelectionState},
     },
-    focus_model::{FocusModel, TargetId},
-    surface_handle::SurfaceStackHandle,
-    surface_stack::{OverlayId, SurfaceId, SurfaceModel},
+    dialog::help::HelpControl,
+    surfaces::{
+        focus_model::{FocusModel, TargetId},
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{OverlayId, SurfaceId, SurfaceModel},
+    },
 };
 use iocraft::prelude::*;
 
@@ -48,7 +53,7 @@ pub(super) enum PickerDialogKind {
 pub(super) struct ActivePickerDialog {
     pub id: OverlayId,
     pub kind: PickerDialogKind,
-    pub scroll: agent_collaboration_tui::controls::ScrollHandle,
+    pub scroll: agent_collaboration_tui::controls::list::ScrollHandle,
     pub targets: Vec<TargetId>,
 }
 

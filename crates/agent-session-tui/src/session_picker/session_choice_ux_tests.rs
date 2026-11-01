@@ -112,7 +112,9 @@ async fn machine_cancel_pointer_returns_to_browse_without_selecting_a_source() {
 // The R14 dropdown now owns its scope in InputOwner. Observe the actual
 // consumer and retain a real parent callback before opening that dropdown.
 async fn assert_stale_parent_action_blocked(opening: TerminalEvent, action_name: &'static str) {
-    use agent_collaboration_tui::{actions::ActionId, surface_handle::SurfaceStackHandle};
+    use agent_collaboration_tui::{
+        actions::ActionId, surfaces::surface_handle::SurfaceStackHandle,
+    };
     let observed = Arc::new(Mutex::new(
         None::<(SurfaceStackHandle, State<SessionsPickerModel>)>,
     ));
@@ -176,7 +178,7 @@ async fn assert_stale_parent_action_blocked(opening: TerminalEvent, action_name:
                 }
                 // End through the real screen Quit action; this is not Ctrl+C proof.
                 snapshot
-                    .surface(agent_collaboration_tui::surface_stack::SurfaceId::Screen)
+                    .surface(agent_collaboration_tui::surfaces::surface_stack::SurfaceId::Screen)
                     .unwrap()
                     .actions
                     .invocation(&ActionId::new("quit").unwrap())

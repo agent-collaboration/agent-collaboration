@@ -6,7 +6,7 @@ use super::{
 };
 use agent_collaboration_tui::{
     actions::Availability,
-    focus_model::{GroupId, TargetSpec},
+    surfaces::focus_model::{GroupId, TargetSpec},
 };
 
 pub(super) fn declare_new(

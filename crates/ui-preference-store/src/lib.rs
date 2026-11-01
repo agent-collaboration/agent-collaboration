@@ -110,3 +110,6 @@ async fn initialize_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .map_err(|error| sqlx::Error::Protocol(error.to_string()))?;
     transaction.commit().await
 }
+
+#[cfg(test)]
+mod sqlite_preferences_test;

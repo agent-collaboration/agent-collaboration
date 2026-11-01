@@ -1,6 +1,6 @@
 //! Picker context and input conventions supplement generated action bindings.
 use super::PickerSurfaceContext;
-use agent_collaboration_tui::controls::{HelpContent, HelpContextLine, HelpInputConvention};
+use agent_collaboration_tui::dialog::help::{HelpContent, HelpContextLine, HelpInputConvention};
 pub(super) fn help_content(context: &PickerSurfaceContext) -> HelpContent {
     let model = context.model.read();
     let mut content = HelpContent::default();

@@ -173,7 +173,7 @@ async fn ineligible_fork_destination_cannot_replace_the_captured_source() {
         receiver.recv().await.map(|event| (event, receiver))
     });
     let mut outcome: Option<SessionsPickerOutcome> = None;
-    let mut component = element!(SessionsPickerComponent(request,width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(_,model):(agent_collaboration_tui::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*sink.lock().unwrap()=model.read().fork_confirmation.as_ref().map(|confirmation|confirmation.focused_destination)));
+    let mut component = element!(SessionsPickerComponent(request,width:120usize,height:36usize,selected_outcome_out:&mut outcome,surface_observer:move |(_,model):(agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,State<SessionsPickerModel>)|*sink.lock().unwrap()=model.read().fork_confirmation.as_ref().map(|confirmation|confirmation.focused_destination)));
     let mut phase = 0;
     let journey = component
         .mock_terminal_render_loop(MockTerminalConfig::with_events(events))

@@ -56,10 +56,10 @@ pub struct SessionsPickerComponentProps<'a> {
     selected_outcome_out: Option<&'a mut Option<SessionsPickerOutcome>>,
     #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
     dispatch_receipt:
-        Option<agent_collaboration_tui::input_dispatch_receipt::InputDispatchReceiptSink>,
+        Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
     #[cfg(test)]
     surface_observer: Handler<(
-        agent_collaboration_tui::surface_handle::SurfaceStackHandle,
+        agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle,
         State<SessionsPickerModel>,
     )>,
     #[cfg(test)]
@@ -212,10 +212,9 @@ pub fn SessionsPickerComponent<'a>(
     );
     use agent_collaboration_tui::{
         actions::ActionId,
-        controls::{ComboBoxState, ListSelectionState, TextFieldState},
-        input_owner::{InputOwner, Routed},
-        overlay_host::OverlayHost,
-        surface_handle::use_surface_stack,
+        controls::{combo::ComboBoxState, fields::TextFieldState, list::ListSelectionState},
+        input::input_owner::{InputOwner, Routed},
+        surfaces::{overlay_host::OverlayHost, surface_handle::use_surface_stack},
     };
     let setup = (|| -> picker_surface::SurfaceResult<_> {
         let rows = picker_surface::selection_rows(&model.read())?;

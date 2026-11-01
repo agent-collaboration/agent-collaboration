@@ -1,6 +1,6 @@
+use super::UiPreferenceStore;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::error::Error;
-use ui_preference_store::UiPreferenceStore;
 
 #[tokio::test]
 #[expect(

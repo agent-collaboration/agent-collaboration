@@ -15,7 +15,7 @@ async fn narrow_provider_details_keep_the_complete_inspection_notice() {
 }
 
 async fn assert_provider_details_notice(width: usize, height: usize) {
-    use agent_collaboration_tui::{
+    use agent_collaboration_tui::surfaces::{
         focus_model::TargetId, hit_regions::HitRegionKind, surface_handle::SurfaceStackHandle,
     };
 
@@ -224,7 +224,7 @@ async fn sessions_picker_iocraft_mock_terminal_ctrl_shortcuts_drive_filters() {
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(10))),
         ],
         None,
-        agent_collaboration_tui::surface_stack::OverlayKind::Menu,
+        agent_collaboration_tui::surfaces::surface_stack::OverlayKind::Menu,
     )
     .await;
     let actual = canvases.iter().map(ToString::to_string).collect::<Vec<_>>();

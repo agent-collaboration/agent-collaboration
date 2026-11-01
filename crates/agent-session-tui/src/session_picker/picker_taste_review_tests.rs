@@ -108,7 +108,9 @@ async fn narrow_toolbar_keeps_menu_and_filter_on_one_row() {
 
 #[tokio::test]
 async fn toolbar_scope_visibility_matches_targets_and_keeps_twelve_filter_editor_cells() {
-    use agent_collaboration_tui::{surface_handle::SurfaceStackHandle, surface_stack::SurfaceId};
+    use agent_collaboration_tui::surfaces::{
+        surface_handle::SurfaceStackHandle, surface_stack::SurfaceId,
+    };
     for width in [32usize, 40, 48, 76, 104, 120] {
         let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
         let sink = observed.clone();
@@ -183,7 +185,7 @@ async fn toolbar_scope_visibility_matches_targets_and_keeps_twelve_filter_editor
 
 #[tokio::test]
 async fn hidden_new_returns_focus_after_resize_unless_the_user_moves() {
-    use agent_collaboration_tui::surface_handle::SurfaceStackHandle;
+    use agent_collaboration_tui::surfaces::surface_handle::SurfaceStackHandle;
     let observed = Arc::new(Mutex::new(None::<SurfaceStackHandle>));
     let sink = observed.clone();
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();

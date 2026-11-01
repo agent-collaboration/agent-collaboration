@@ -8,10 +8,16 @@ use crate::session_picker::details_dialog_state::DetailsAction;
 use agent_collaboration_tui::{
     DialogAxisSize, DialogMargins, DialogPresentation,
     actions::{ActionTitle, Availability},
-    controls::{Button, DialogFrame, HelpDialog, PinnedContext, ScrollHandle, button_target},
-    focus_model::{GroupId, TargetSpec},
-    surface_handle::SurfaceContext,
-    surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView},
+    controls::{
+        fields::{Button, button_target},
+        list::ScrollHandle,
+    },
+    dialog::{DialogFrame, PinnedContext, help::HelpDialog},
+    surfaces::{
+        focus_model::{GroupId, TargetSpec},
+        surface_handle::SurfaceContext,
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView},
+    },
 };
 use iocraft::prelude::*;
 
@@ -214,7 +220,8 @@ fn dialog_model(
             scroll.pages_input_handler()
         };
         for target in &mut targets {
-            if target.role == agent_collaboration_tui::focus_model::TargetRole::Focusable {
+            if target.role == agent_collaboration_tui::surfaces::focus_model::TargetRole::Focusable
+            {
                 target.input = input.clone();
             }
         }
