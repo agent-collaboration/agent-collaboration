@@ -87,11 +87,9 @@ async fn issuer_ed25519_capability_matches_fixed_public_vectors()
                 SignatureValidity::Invalid
             };
             if verdict != expected {
-                return Err(format!(
-                    "{}: expected {expected:?}, observed {verdict:?}",
-                    case.name
-                )
-                .into());
+                return Err(
+                    format!("{}: expected {expected:?}, observed {verdict:?}", case.name).into(),
+                );
             }
             println!("ISSUER_SIGNATURE_CASE {} {verdict:?}", case.name);
         }
