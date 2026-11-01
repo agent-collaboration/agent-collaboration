@@ -1,6 +1,5 @@
 //! A controlled Access timeline exists only in conformance builds.
 
-use crate::RegistryTime;
 use runtime_primitives::{Clock, SyncTime};
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -14,8 +13,8 @@ impl ConformanceAccessClock {
         Self(AtomicI64::new(Self::INITIAL_MILLIS))
     }
 
-    pub fn set(&self, now: RegistryTime) {
-        self.0.store(now.0.timestamp_millis(), Ordering::SeqCst);
+    pub(crate) fn set(&self, now: SyncTime) {
+        self.0.store(now.unix_millis(), Ordering::SeqCst);
     }
 }
 

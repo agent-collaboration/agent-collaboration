@@ -60,7 +60,9 @@ pub(crate) async fn verify<Platform: CentralPlatform>(
         let Some(clock) = application.platform.conformance_access_clock() else {
             return StatusCode::CONFLICT.into_response();
         };
-        clock.set(now);
+        clock.set(runtime_primitives::SyncTime::from_unix_millis(
+            now.0.timestamp_millis(),
+        ));
     }
     Json(AccessVerificationOutcome::of(
         application
