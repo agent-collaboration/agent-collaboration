@@ -191,10 +191,11 @@ async fn fleet_session_registrar_ambiguous_registration_resends_identical_bytes_
             .unwrap(),
         RegistrationCompletion::Registered(_)
     ));
-    let sent = fixture.authority.registrations.lock().unwrap();
-    assert_eq!(sent.len(), 2);
-    assert_eq!(sent[0], sent[1]);
-    drop(sent);
+    {
+        let sent = fixture.authority.registrations.lock().unwrap();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0], sent[1]);
+    }
     let mut different = intent.clone();
     different.project_id = Some(
         "019f0000-0000-7000-8000-000000000099"
