@@ -21,7 +21,7 @@ export function assertHelpProjection(registry: ShowcaseRegistry, received: strin
 	const expected = registry.actions
 		.map((action) =>
 			compact(
-				(action.keys.length === 0 ? '—' : action.keys.join(', ')) +
+				action.keys.join(', ') +
 					action.title +
 					(action.availability.kind === 'unavailable' ? action.availability.reason : ''),
 			),

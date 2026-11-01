@@ -1,3 +1,4 @@
+import { clippedGeometry } from './clipping-scenarios.ts';
 import {
 	comboPickCancel,
 	comboOptionUpdates,
@@ -19,7 +20,7 @@ import {
 	modelLifecycle,
 } from './dialog-scenarios.ts';
 import { inputPhases } from './input-scenarios.ts';
-import { rowPaging, contentScroll, clippedGeometry } from './list-scenarios.ts';
+import { rowPaging, contentScroll } from './list-scenarios.ts';
 import type { ShowcaseRig } from './rig.ts';
 import type { ScenarioVariant } from './scenario-variants.ts';
 import {
@@ -83,6 +84,11 @@ export async function driveScenario(
 		await modelLifecycle(rig, variant.transition);
 		return;
 	}
+	if (scenarioId === 'SC22') {
+		if (variant.kind !== 'clipping') throw new Error('SC22 requires a declared clipping fixture');
+		await clippedGeometry(rig, variant.fixture);
+		return;
+	}
 	const screenDrivers = {
 		SC02: toolbarDropOff,
 		SC03: menuProjections,
@@ -104,7 +110,6 @@ export async function driveScenario(
 		SC19: outsideClicks,
 		SC20: rowPaging,
 		SC21: contentScroll,
-		SC22: clippedGeometry,
 		SC23: anchoredResize,
 		SC24: coveredSurfaces,
 		SC27: inputPhases,

@@ -132,13 +132,11 @@ pub fn coverage_actions(
                                 surface: SurfaceId::Screen,
                             },
                             field: target_id("screen-choice"),
+                            parent_scroll: None,
                             value: data.choices,
                             on_pick: Handler::from(move |_| data.record("screen-pick")),
                         })
-                        .open(OverlayLayout::CenteredCells {
-                            width: 40,
-                            height: 10,
-                        })
+                        .open()
                         .expect("coverage dropdown");
                     }
                     CoverageScene::Menu | CoverageScene::LeftEdge => {
@@ -156,12 +154,11 @@ pub fn coverage_actions(
                             }
                         };
                         let registry = stack.snapshot().top().actions.clone();
-                        stack
-                            .open_overlay(
-                                controls::menu_overlay(stack, &registry, layout)
-                                    .expect("coverage menu model"),
-                            )
-                            .expect("coverage menu identity");
+                        let mut spec =
+                            controls::menu_overlay(stack, &registry, target_id("action:menu"))
+                                .expect("coverage menu model");
+                        spec.layout = layout;
+                        stack.open_overlay(spec).expect("coverage menu identity");
                     }
                 }
             },

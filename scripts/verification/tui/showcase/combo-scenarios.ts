@@ -1,4 +1,4 @@
-import { cellText } from '../terminal-grid.ts';
+import { cellText, terminalTheme } from '../terminal-grid.ts';
 import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
 import type { ShowcaseRig } from './rig.ts';
 import {
@@ -90,7 +90,8 @@ export async function comboPickCancel(rig: ShowcaseRig): Promise<void> {
 }
 async function staged(rig: ShowcaseRig, action: string): Promise<void> {
 	await rig.menuAction(action);
-	await openForm(rig);
+	// The minimal dialog keeps the same public Choice control reachable at 12 rows.
+	await rig.menuAction('focus-sample');
 	await openChoice(rig);
 }
 export async function comboOptionUpdates(rig: ShowcaseRig): Promise<void> {
@@ -101,12 +102,44 @@ export async function comboOptionUpdates(rig: ShowcaseRig): Promise<void> {
 		'typing that still matches preserves highlight',
 		rig.state(),
 	);
+	const beforeBeta = rig.point(childTarget('choice', 'option:beta'));
+	const beforeAlpha = rig.point(childTarget('choice', 'option:alpha'));
 	await rig.completeFixture();
 	requireObservation(
 		rig.state().highlight === 'beta',
 		'external reorder preserves highlighted key',
 		rig.state(),
 	);
+	const afterBeta = rig.point(childTarget('choice', 'option:beta'));
+	const afterAlpha = rig.point(childTarget('choice', 'option:alpha'));
+	requireObservation(
+		beforeAlpha.row < beforeBeta.row && afterBeta.row < afterAlpha.row,
+		'the open dropdown really repaints the pure reorder of the duplicate-label keys',
+		{ beforeAlpha, beforeBeta, afterAlpha, afterBeta },
+	);
+	const betaCells =
+		rig
+			.drawState()
+			.hitMap?.targets.find(
+				(region) =>
+					region.surface === rig.state().surface &&
+					region.target === childTarget('choice', 'option:beta'),
+			)?.cells ?? [];
+	const paintedHighlight = betaCells
+		.map(([column, row]) => rig.grid().cells[row]?.[column])
+		.filter(
+			(cell) =>
+				cell !== undefined && cell.fgRgb === terminalTheme.palette[11] && cell.bgRgb === 0x343b46,
+		)
+		.map((cell) => (cell === undefined ? '' : cellText(cell)))
+		.join('')
+		.trim();
+	requireObservation(
+		paintedHighlight === 'Shared label',
+		'the reordered Beta key retains the shipped focused foreground and selected background',
+		paintedHighlight,
+	);
+	await rig.capture('open-dropdown-reordered-key-highlight');
 	await deleteQuery(rig);
 	await rig.text('Long', dropdownFilter());
 	requireObservation(

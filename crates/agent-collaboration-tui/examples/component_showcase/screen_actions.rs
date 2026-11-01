@@ -2,8 +2,8 @@
 use super::{
     sample_dialogs,
     sample_model::{
-        CompletionKind, SampleData, SampleSetting, ScreenBindings, action, action_id, help_content,
-        target_id,
+        ClippingCase, CompletionKind, SampleData, SampleSetting, ScreenBindings, action, action_id,
+        help_content, settings_switch_width, target_id,
     },
 };
 use agent_collaboration_tui::{
@@ -16,7 +16,7 @@ use agent_collaboration_tui::{
     },
     focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
     surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::{OverlayLayout, SurfaceId, SurfaceModel},
+    surface_stack::{SurfaceId, SurfaceModel},
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -153,17 +153,9 @@ pub fn build_screen(
     actions.push(help_action);
     let menu = action("menu", "Menu", &["F10"], Placement::Hidden, move |()| {
         let registry = stack.snapshot().top().actions.clone();
-        let spec = controls::menu_overlay(
-            stack,
-            &registry,
-            OverlayLayout::AtCells {
-                left: 2,
-                top: 2,
-                width: 44,
-                height: stack.viewport().1.saturating_sub(3).max(1),
-            },
-        )
-        .expect("sample menu model");
+        let spec =
+            controls::menu_overlay(stack, &registry, TargetId::for_action(&action_id("menu")))
+                .expect("sample menu model");
         stack.open_overlay(spec).expect("sample menu identity");
     });
     actions.push(menu);
@@ -235,15 +227,11 @@ pub fn build_screen(
                     surface: SurfaceId::Screen,
                 },
                 field: target_id("screen-choice"),
+                parent_scroll: None,
                 value: data.choices,
                 on_pick: Handler::from(move |_| data.record("screen-pick")),
             })
-            .open(OverlayLayout::AtCells {
-                left: 2,
-                top: 5,
-                width: 40.min(stack.viewport().0),
-                height: 10.min(stack.viewport().1.saturating_sub(5).max(1)),
-            })
+            .open()
             .expect("screen dropdown");
         },
     ));
@@ -308,6 +296,7 @@ pub fn build_screen(
             .cloned()
             .collect::<Vec<_>>(),
         GroupId::new("settings").expect("group"),
+        move || settings_switch_width(stack.viewport().0),
     ));
     *handle.lock().expect("bindings") = Some(ScreenBindings { list, help });
     SurfaceModel {
@@ -379,6 +368,74 @@ fn fixture_actions(
             move |()| data.update(|model| model.local_enabled = !model.local_enabled),
         ),
     ];
+    let focus_help = help.clone();
+    actions.push(action(
+        "focus-sample",
+        "Focus replacement sample",
+        &[],
+        Placement::Menu {
+            section: "Demonstrations",
+        },
+        move |()| {
+            sample_dialogs::open_dialog(
+                stack,
+                &data,
+                sample_dialogs::SampleDialogKind::FocusProbe,
+                focus_help.clone(),
+            );
+        },
+    ));
+    for (name, title, case) in [
+        (
+            "clip-plain-horizontal",
+            "Clip plain horizontally",
+            ClippingCase::PlainHorizontal,
+        ),
+        (
+            "clip-plain-vertical",
+            "Clip plain vertically",
+            ClippingCase::PlainVertical,
+        ),
+        (
+            "clip-bordered-horizontal",
+            "Clip bordered horizontally",
+            ClippingCase::BorderedHorizontal,
+        ),
+        (
+            "clip-bordered-vertical",
+            "Clip bordered vertically",
+            ClippingCase::BorderedVertical,
+        ),
+        (
+            "clip-nested-horizontal",
+            "Clip nested horizontally",
+            ClippingCase::NestedHorizontal,
+        ),
+        (
+            "clip-nested-vertical",
+            "Clip nested vertically",
+            ClippingCase::NestedVertical,
+        ),
+    ] {
+        let clipping_help = help.clone();
+        actions.push(action(
+            name,
+            title,
+            &[],
+            Placement::Menu {
+                section: "Clipping fixtures",
+            },
+            move |()| {
+                data.update(|model| model.clipping_case = case);
+                sample_dialogs::open_dialog(
+                    stack,
+                    &data,
+                    sample_dialogs::SampleDialogKind::ClippingProbe,
+                    clipping_help.clone(),
+                );
+            },
+        ));
+    }
     for (name, title, completion) in [
         (
             "stage-update",
@@ -391,6 +448,11 @@ fn fixture_actions(
             CompletionKind::RemoveHighlight,
         ),
         ("stage-reorder", "Stage reorder", CompletionKind::Reorder),
+        (
+            "stage-focus-replace",
+            "Stage focused field replacement",
+            CompletionKind::ReplaceFocusedTarget,
+        ),
         (
             "stage-add",
             "Stage option addition",

@@ -198,7 +198,7 @@ export async function showcaseMain(args: readonly string[]): Promise<void> {
 	);
 	if (values.help) {
 		process.stdout.write(
-			'showcase/run.ts PLAN.json [--check]: fixed public-wrapper sample, exact input/state/frame receipts and per-SC observations. Default matrix is all 27 IDs, six grids, both modes.\n',
+			'showcase/run.ts PLAN.json [--check]: fixed public-wrapper sample, exact input/state/frame receipts and per-SC observations. Default matrix is all 27 IDs, four grids, both modes.\n',
 		);
 		return;
 	}

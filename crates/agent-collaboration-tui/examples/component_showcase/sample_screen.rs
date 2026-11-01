@@ -3,8 +3,9 @@
 use super::sample_dialogs;
 use super::{
     sample_model::{
-        SampleData, SampleModel, ScreenBindings, action_id, fixture_rows, initial_choices,
-        initial_list, initialized_bindings, target_id, visible_row,
+        FILTER_OUTER_MINIMUM_WIDTH, FILTER_SETTINGS_GAP, SampleData, SampleModel, ScreenBindings,
+        action_id, fixture_rows, initial_choices, initial_list, initialized_bindings,
+        settings_switch_width, target_id, visible_row,
     },
     screen_actions::build_screen,
 };
@@ -161,7 +162,7 @@ fn ScreenBody(props: &ScreenBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
     element!(View(width:100pct,height:100pct,flex_direction:FlexDirection::Column) {
         SurfaceHeader(title:"Component showcase".to_owned()) {UiText(content:format!("{} rows · {}",list.rows().len(),data.model.read().effects.last().map_or("Ready".to_owned(),|effect|format!("{} {}",effect.action,effect.target.as_deref().unwrap_or("none")))),role:UiTextRole::Secondary)}
         Toolbar(available_width:context.stack.viewport().0.saturating_sub(12)) {MenuButton(id:TargetId::for_action(&action_id("menu")),action:action_id("menu"))}
-        View(width:100pct,column_gap:2,flex_shrink:0.0_f32) {View(flex_grow:1.0_f32,min_width:0) {FilterField(id:target_id("filter"),value:data.filter,placeholder:"Filter rows / 界".to_owned())} SegmentedSwitch(actions:vec![action_id("all"),action_id("local")])}
+        View(width:100pct,column_gap:FILTER_SETTINGS_GAP,flex_shrink:0.0_f32) {View(flex_grow:1.0_f32,min_width:FILTER_OUTER_MINIMUM_WIDTH) {FilterField(id:target_id("filter"),value:data.filter,placeholder:"Filter rows / 界".to_owned())} SegmentedSwitch(actions:vec![action_id("all"),action_id("local")],available_width:settings_switch_width(context.stack.viewport().0))}
         controls::ComboBox(id:target_id("screen-choice"),value:data.choices)
         ScrollList(id:list.scroll_target(),keyboard_target:Some(target_id("sample-list")),scroll:list.scroll(),grow:true) {
             #(list.rows().into_iter().map(|key|{let row=visible_row(&data,&key);element!(ListRow(key:key.as_str().to_owned(),control:list.clone(),row:key.clone()) {View(column_gap:1,width:100pct) {View(width:13,flex_shrink:0.0_f32) UiText(content:row.glyph.to_owned(),role:UiTextRole::Body) UiText(content:format!("{} · {}",row.title,row.key.as_str()),role:UiTextRole::Body)}}).into_any()}))

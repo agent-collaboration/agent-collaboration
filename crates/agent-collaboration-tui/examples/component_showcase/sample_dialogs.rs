@@ -12,8 +12,8 @@ use agent_collaboration_tui::{
     controls::{
         Button, ComboBox, ComboBoxBinding, ComboBoxControl, DialogFrame, DialogKeyHints,
         DialogSection, DialogSections, FormField, FormFields, HelpControl, HelpDialog,
-        ListNavigationPolicy, ListRow, ListSelectionBinding, ListSelectionControl, ScrollHandle,
-        ScrollList, SelectOption, StatusKind, StatusValue, TextField, TextFieldState,
+        ListNavigationPolicy, ListRow, ListSelectionBinding, ListSelectionControl, PinnedContext,
+        ScrollHandle, ScrollList, SelectOption, StatusKind, StatusValue, TextField, TextFieldState,
         button_target,
     },
     focus_model::{FocusModel, GroupId, TargetId, TargetSpec},
@@ -31,6 +31,8 @@ pub enum SampleDialogKind {
     Percentage,
     Fill,
     Fork,
+    FocusProbe,
+    ClippingProbe,
 }
 impl SampleDialogKind {
     fn title(self) -> &'static str {
@@ -40,6 +42,8 @@ impl SampleDialogKind {
             Self::Percentage => "Percentage dialog",
             Self::Fill => "Fill details",
             Self::Fork => "Fork confirmation",
+            Self::FocusProbe => "Focus sample",
+            Self::ClippingProbe => "Clip sample",
         }
     }
 }
@@ -55,6 +59,11 @@ fn combo_control(
             surface: parent,
         },
         field: target_id("choice"),
+        parent_scroll: data
+            .dialog_scroll
+            .read()
+            .clone()
+            .filter(|_| matches!(parent, SurfaceId::Overlay(_))),
         value: data.choices,
         on_pick: Handler::from(move |_| data.record("pick")),
     })
@@ -151,16 +160,8 @@ pub fn open_dialog(
         agent_collaboration_tui::actions::Placement::Hidden,
         move |()| {
             let parent = stack.snapshot().top_id();
-            let (width, height) = stack.viewport();
-            // A4: this public base has no anchored layout. SC23 deliberately exposes
-            // fixed placement across resize, rather than adding consumer hit repair.
             combo_control(stack, &data, parent)
-                .open(OverlayLayout::AtCells {
-                    left: width.saturating_sub(44) / 2,
-                    top: height.min(8),
-                    width: 40.min(width),
-                    height: 10.min(height.saturating_sub(8).max(1)),
-                })
+                .open()
                 .expect("sample dropdown");
         },
     ));
@@ -202,6 +203,15 @@ pub fn open_dialog(
             }
         },
     ));
+    if matches!(
+        kind,
+        SampleDialogKind::FocusProbe | SampleDialogKind::ClippingProbe
+    ) {
+        actions.retain(|definition| {
+            definition.placement != agent_collaboration_tui::actions::Placement::Toolbar
+                || definition.id == action_id("close")
+        });
+    }
     let group = GroupId::new("sample-form").expect("group");
     let mut targets = vec![
         TargetSpec::new(target_id("draft"))
@@ -238,7 +248,10 @@ pub fn open_dialog(
         )
         .pointer_only(),
     );
-    let form = matches!(kind, SampleDialogKind::Form | SampleDialogKind::Fork);
+    let form = matches!(
+        kind,
+        SampleDialogKind::Form | SampleDialogKind::Fork | SampleDialogKind::FocusProbe
+    );
     if !form {
         let clipping = super::sample_clipping::clipping_actions(&data);
         targets.extend(
@@ -259,14 +272,18 @@ pub fn open_dialog(
     }
     let layout = OverlayLayout::Dialog {
         presentation: match kind {
-            SampleDialogKind::Form | SampleDialogKind::Fork => DialogPresentation::Sized {
-                width: DialogAxisSize::cells(88),
-                height: DialogAxisSize::Content { maximum: Some(30) },
-            },
+            SampleDialogKind::Form | SampleDialogKind::Fork | SampleDialogKind::FocusProbe => {
+                DialogPresentation::Sized {
+                    width: DialogAxisSize::cells(88),
+                    height: DialogAxisSize::Content { maximum: Some(30) },
+                }
+            }
             SampleDialogKind::Details | SampleDialogKind::Percentage => {
                 DialogPresentation::default()
             }
-            SampleDialogKind::Fill => DialogPresentation::FullScreen,
+            SampleDialogKind::Fill | SampleDialogKind::ClippingProbe => {
+                DialogPresentation::FullScreen
+            }
         },
         margins: DialogMargins {
             top: 1,
@@ -278,9 +295,9 @@ pub fn open_dialog(
     let registry = ActionRegistry::new(ScopeId::new("sample-dialog").expect("scope"), actions)
         .expect("unique dialog actions");
     let mut last = data.last_overlay;
-    let id=stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(targets).expect("dialog targets"),actions:registry,primary_action:Some(action_id(if !form {"open"} else if data.model.read().alternate_primary {"alternate-start"}else{"start"}))},view:OverlayView::new(move||element!(SampleDialog(data,kind,help:help.clone(),scroll:scroll.clone(),details:view_details.lock().expect("detail bindings").clone())).into_any()),layout}).expect("sample dialog identity");
+    let id=stack.open_overlay(OverlaySpec {kind:OverlayKind::Dialog,model:SurfaceModel {focus:FocusModel::new(targets).expect("dialog targets"),actions:registry,primary_action:Some(action_id(if matches!(kind, SampleDialogKind::FocusProbe|SampleDialogKind::ClippingProbe) {"close"} else if !form {"open"} else if data.model.read().alternate_primary {"alternate-start"}else{"start"}))},view:OverlayView::new(move||element!(SampleDialog(data,kind,help:help.clone(),scroll:scroll.clone(),details:view_details.lock().expect("detail bindings").clone())).into_any()),layout}).expect("sample dialog identity");
     last.set(Some(id));
-    if !form {
+    if !form && kind != SampleDialogKind::ClippingProbe {
         let parent = SurfaceContext {
             stack,
             surface: SurfaceId::Overlay(id),
@@ -341,6 +358,24 @@ pub fn complete_fixture(stack: SurfaceStackHandle, data: &SampleData, bindings: 
     });
     match completion {
         CompletionKind::None => {}
+        CompletionKind::ReplaceFocusedTarget => {
+            data.update(|model| model.draft_visible = false);
+            if let Some(id) = data.last_overlay.get() {
+                stack.update_overlay_if_open(id, |model| {
+                    let targets = model
+                        .focus
+                        .targets()
+                        .iter()
+                        .filter(|target| target.id != target_id("draft"))
+                        .cloned()
+                        .collect();
+                    model
+                        .focus
+                        .replace_targets(targets)
+                        .expect("replacement target identities");
+                });
+            }
+        }
         CompletionKind::UpdateSuspended => {
             data.update(|model| {
                 model.live_title = "Updated while Help is visible 界".into();
@@ -412,10 +447,17 @@ fn SampleDialog(props: &SampleDialogProps, hooks: Hooks) -> impl Into<AnyElement
     }
     let shared_width =
         FormFields::label_width_for(["Directory", "Option", "Long section label 界"]);
-    let body = if matches!(props.kind, SampleDialogKind::Form | SampleDialogKind::Fork) {
+    let body = if props.kind == SampleDialogKind::ClippingProbe {
+        element!(super::sample_clipping::ClippingFixture(case:data.model.read().clipping_case,centered:true)).into_any()
+    } else if props.kind == SampleDialogKind::FocusProbe {
+        element!(FormFields(minimum_label_width:Some(6u32)) {
+            #(data.model.read().draft_visible.then(||element!(FormField(label:"Draft".to_owned(),has_focus:context.is_focused(&target_id("draft"))) {TextField(id:target_id("draft"),value:data.draft)})))
+            FormField(label:"Choice".to_owned(),has_focus:context.is_focused(&target_id("choice"))) {ComboBox(id:target_id("choice"),value:data.choices)}
+        }).into_any()
+    } else if matches!(props.kind, SampleDialogKind::Form | SampleDialogKind::Fork) {
         element!(DialogSections {
             DialogSection(heading:"Draft connection".to_owned()) {FormFields(minimum_label_width:Some(shared_width)) {
-                FormField(label:"Directory".to_owned(),has_focus:context.is_focused(&target_id("draft"))) {TextField(id:target_id("draft"),value:data.draft)}
+                #(data.model.read().draft_visible.then(||element!(FormField(label:"Directory".to_owned(),has_focus:context.is_focused(&target_id("draft"))) {TextField(id:target_id("draft"),value:data.draft)})))
                 FormField(label:"Option".to_owned(),has_focus:context.is_focused(&target_id("choice"))) {ComboBox(id:target_id("choice"),value:data.choices)}
             }}
             DialogSection(heading:"Tinted status 界".to_owned(),surface:Some(agent_collaboration_tui::theme::SurfaceRole::Alternate)) {FormFields(minimum_label_width:Some(shared_width)) {FormField(label:"Long section label 界".to_owned()) {StatusValue(status:StatusKind::Available,detail:Some("Local recording only".into()))}}
@@ -426,7 +468,26 @@ fn SampleDialog(props: &SampleDialogProps, hooks: Hooks) -> impl Into<AnyElement
     } else {
         match &props.details {Some(control)=>element!(DetailsBody(control:control.clone())).into_any(),None=>element!(UiText(content:"Missing declared details control".to_owned(),role:UiTextRole::Error)).into_any()}
     };
-    element!(DialogFrame(title:props.kind.title().to_owned(),padding:Some(1u16),scroll:props.scroll.clone(),scroll_target:target_id("dialog-scroll"),help_action,context:vec![element!(UiText(content:format!("Selected {}",data.selected.read().selected().map_or("none",|key|key.as_str())),role:UiTextRole::Secondary)).into_any()],action_hints:vec![element!(DialogKeyHints(actions:vec![action_id("start"),action_id("close")])).into_any()]) {#(Some(body))}).into_any()
+    let probe = matches!(
+        props.kind,
+        SampleDialogKind::FocusProbe | SampleDialogKind::ClippingProbe
+    );
+    let identity = (!probe).then(|| {
+        PinnedContext::new(format!(
+            "Selected {}",
+            data.selected
+                .read()
+                .selected()
+                .map_or("none", |key| key.as_str())
+        ))
+    });
+    let hints = (!probe)
+        .then(|| {
+            element!(DialogKeyHints(actions:vec![action_id("start"),action_id("close")])).into_any()
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    element!(DialogFrame(title:props.kind.title().to_owned(),padding:Some(if props.kind==SampleDialogKind::ClippingProbe {0u16}else{1u16}),scroll:props.scroll.clone(),scroll_target:target_id("dialog-scroll"),help_action,context:identity,action_hints:hints) {#(Some(body))}).into_any()
 }
 #[derive(Props)]
 struct DetailsBodyProps {
@@ -437,7 +498,7 @@ struct DetailsBodyProps {
 fn DetailsBody(props: &DetailsBodyProps) -> impl Into<AnyElement<'static>> {
     let control = props.control.clone();
     element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-        super::sample_clipping::ClippingFixture
+        super::sample_clipping::ClippingFixture(case:super::sample_model::ClippingCase::BorderedHorizontal)
         UiHeading(content:"Typography and long content".to_owned(),level:UiHeadingLevel::Section)
         UiColumnHeading(content:"Keyed content".to_owned())
         #([UiTextRole::Body,UiTextRole::Prominent,UiTextRole::Label,UiTextRole::Rule,UiTextRole::Secondary,UiTextRole::Disabled,UiTextRole::Selected,UiTextRole::Success,UiTextRole::Warning,UiTextRole::Error].into_iter().map(|role|element!(UiText(content:format!("Public role {role:?} 界"),role))))

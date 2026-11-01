@@ -68,12 +68,13 @@ node scripts/verification/tui/capture-run.ts --showcase tmp/component-showcase-p
 The output directory must be fresh. Pin after final edits/signing; source or
 executable changes invalidate the plan. `--cases`, `--grids`, `--keys` and
 `--variants` narrow a
-preflight run; the default plan is all SC01–SC27, six grids and both protocols.
+preflight run; the default plan is all SC01–SC27, four grids and both protocols.
 SC07 allocates separate children for enabled Quit from main/menu/dropdown/dialog.
-SC25 allocates twelve independent scene/glyph children and SC26 three lifecycle
+SC25 allocates twelve independent scene/glyph children and SC26 five lifecycle
 children, so one contrary result cannot hide a later probe. The complete matrix
-has 516 cases. Two independent PTY children run concurrently with separate
-receipt directories and browser profiles. SIGINT/SIGTERM stops allocating cases
+has 400 cases, including six independent SC22 clipping poses. Two independent PTY
+children run concurrently with separate receipt directories and browser profiles.
+SIGINT/SIGTERM stops allocating cases
 and lets the active cases finish and clean up; an incomplete run returns exit 1.
 Resize cases retain the same child. Use a separate fresh plan/output with
 `--profile example-ghostty-keybinds` to retain consumed-key prerequisite findings.
@@ -93,7 +94,9 @@ PNGs and identity/cleanup evidence. `results.json` and `results.md` distinguish
 Pass, Fail, Unobserved and blocked-by-prerequisite. Any non-pass returns exit 1;
 that is not permission to repair product code or relax an assertion. Unknown
 SC18 dropdown-Help restoration policy remains unobserved until the core owner
-pins it. Fixed dropdown placement is exposed by SC23, not repaired by the sample.
+pins it. SC23 observes the public anchored dropdown layout. SC25's dropdown seed
+still needs qualification against that layout; the old centered-column seed is
+not evidence for the anchored pose.
 
 These are build-and-drive observations. The Advisor owns the independent verdict.
 Physical keyboard delivery is outside the PTY profile's claim.

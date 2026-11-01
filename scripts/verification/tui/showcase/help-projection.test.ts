@@ -26,17 +26,18 @@ const registry: ShowcaseRegistry = {
 	],
 };
 const actual =
-	'Context\nScreen Main\nActions\nCtrl+N, F2 New\nsession\n— Open selected No selection\nInput conventions';
+	'Context\nScreen Main\nActions\nCtrl+N, F2 New\nsession\nOpen selected No selection\nInput conventions';
 test('full received Help projection rejects omitted, extra, reordered, stale-key and stale-reason rows', () => {
 	expect(() => assertHelpProjection(registry, actual)).not.toThrow();
 	for (const bad of [
 		actual.replace('Ctrl+N', 'Ctrl+R'),
-		actual.replace('— Open selected No selection\n', ''),
+		actual.replace('Open selected', '— Open selected'),
+		actual.replace('Open selected No selection\n', ''),
 		actual.replace('Input conventions', 'F3 Extra\nInput conventions'),
 		actual.replace('No selection', 'Offline'),
 		actual.replace(
-			'Ctrl+N, F2 New\nsession\n— Open selected No selection',
-			'— Open selected No selection\nCtrl+N, F2 New session',
+			'Ctrl+N, F2 New\nsession\nOpen selected No selection',
+			'Open selected No selection\nCtrl+N, F2 New session',
 		),
 	])
 		expect(() => assertHelpProjection(registry, bad)).toThrow('complete source registry');

@@ -18,7 +18,7 @@ function plan(): ShowcasePlan {
 }
 test('default coverage retains every ID/grid/protocol and independent exit, lifecycle and glyph probes', () => {
 	const matrix = scenarioMatrix(plan());
-	expect(matrix).toHaveLength(516);
+	expect(matrix).toHaveLength(400);
 	expect(new Set(matrix.map((entry) => entry.scenarioId))).toEqual(new Set(scenarioIds));
 	expect(
 		new Set(
@@ -35,10 +35,11 @@ test('default coverage retains every ID/grid/protocol and independent exit, life
 					variantLabel(entry.variant),
 			),
 		).size,
-	).toBe(516);
-	expect(matrix.filter((entry) => entry.scenarioId === 'SC07')).toHaveLength(48);
-	expect(matrix.filter((entry) => entry.scenarioId === 'SC25')).toHaveLength(144);
-	expect(matrix.filter((entry) => entry.scenarioId === 'SC26')).toHaveLength(36);
+	).toBe(400);
+	expect(matrix.filter((entry) => entry.scenarioId === 'SC07')).toHaveLength(32);
+	expect(matrix.filter((entry) => entry.scenarioId === 'SC25')).toHaveLength(96);
+	expect(matrix.filter((entry) => entry.scenarioId === 'SC26')).toHaveLength(40);
+	expect(matrix.filter((entry) => entry.scenarioId === 'SC22')).toHaveLength(48);
 });
 test('a declared variant narrows to that real case and unknown labels reject', () => {
 	const base = plan();

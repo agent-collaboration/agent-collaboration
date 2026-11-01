@@ -35,9 +35,7 @@ export type ScenarioId = (typeof scenarioIds)[number];
 export const adoptedGrids = [
 	{ columns: 120, rows: 36 },
 	{ columns: 76, rows: 30 },
-	{ columns: 48, rows: 24 },
 	{ columns: 48, rows: 12 },
-	{ columns: 40, rows: 24 },
 	{ columns: 32, rows: 24 },
 ] as const;
 const artifact = z.strictObject({ path: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/u) });

@@ -13,6 +13,7 @@ import {
 	surfaceBounds,
 	visibleTarget,
 } from './scenario-helpers.ts';
+import type { ScenarioVariant } from './scenario-variants.ts';
 
 export async function livePrimary(rig: ShowcaseRig): Promise<void> {
 	await openForm(rig);
@@ -263,8 +264,47 @@ export async function dropdownHelp(rig: ShowcaseRig): Promise<void> {
 }
 export async function modelLifecycle(
 	rig: ShowcaseRig,
-	transition: 'close' | 'help' | 'late',
+	transition: Extract<ScenarioVariant, { kind: 'lifecycle' }>['transition'],
 ): Promise<void> {
+	if (transition === 'focus-replaced' || transition === 'help-focus-replaced') {
+		await rig.menuAction('stage-focus-replace');
+		await rig.menuAction('focus-sample');
+		await rig.focus('draft');
+		const before = rig.state();
+		if (transition === 'help-focus-replaced') await rig.key('F1', rig.route('help'));
+		await rig.completeFixture();
+		if (transition === 'help-focus-replaced') await escapeOverlay(rig);
+		const after = rig.state();
+		requireObservation(
+			after.focus === 'choice' &&
+				!after.focusTargets.some((target) => target.targetId === 'draft') &&
+				!visibleTarget(rig.drawState(), 'draft'),
+			'arbitrary target replacement falls back to the first remaining target and removes its old hit geometry',
+			after,
+		);
+		sameFields(
+			before,
+			after,
+			['draft', 'committed'],
+			'replacing a target never edits or commits its old value',
+		);
+		requireObservation(
+			JSON.stringify(after.effects.slice(before.effects.length).map((effect) => effect.action)) ===
+				JSON.stringify(transition === 'help-focus-replaced' ? ['completion-while-help'] : []),
+			'replacement records only the declared fixture completion, never a user action',
+			after.effects,
+		);
+		await rig.capture('lifecycle-' + transition);
+		await rig.key('Enter', rig.route('choice-open', 'choice'));
+		requireObservation(
+			rig.state().overlays.length === 2,
+			'replacement focus activates the new Choice control',
+			rig.state(),
+		);
+		await escapeOverlay(rig);
+		await escapeOverlay(rig);
+		return;
+	}
 	await openForm(rig);
 	const identity = rig.state().overlays.at(-1)?.overlayId;
 	if (transition === 'close') {

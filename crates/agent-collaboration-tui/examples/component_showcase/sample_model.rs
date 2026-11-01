@@ -12,6 +12,15 @@ use agent_collaboration_tui::{
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
 
+pub const FILTER_OUTER_MINIMUM_WIDTH: u16 = 14;
+pub const FILTER_SETTINGS_GAP: u16 = 2;
+
+pub fn settings_switch_width(row_width: u16) -> u16 {
+    row_width
+        .saturating_sub(FILTER_OUTER_MINIMUM_WIDTH)
+        .saturating_sub(FILTER_SETTINGS_GAP)
+}
+
 #[expect(
     clippy::expect_used,
     reason = "The sample contains fixed validated fixture identities; refusal of a declared control operation must fail the apparatus rather than fabricate fallback state."
@@ -71,6 +80,26 @@ pub enum SampleSetting {
     Local,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClippingCase {
+    PlainHorizontal,
+    PlainVertical,
+    BorderedHorizontal,
+    BorderedVertical,
+    NestedHorizontal,
+    NestedVertical,
+}
+impl ClippingCase {
+    pub fn is_vertical(self) -> bool {
+        matches!(
+            self,
+            Self::PlainVertical | Self::BorderedVertical | Self::NestedVertical
+        )
+    }
+    pub fn uses_multiline_label(self) -> bool {
+        self.is_vertical() || self == Self::NestedHorizontal
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CoverageGlyph {
     Folder,
     Mail,
@@ -117,6 +146,7 @@ pub enum CompletionKind {
     AddOption,
     EmptyOptions,
     RestoreOptions,
+    ReplaceFocusedTarget,
 }
 #[derive(Clone, Debug)]
 pub struct EffectRecord {
@@ -134,6 +164,8 @@ pub struct SampleModel {
     pub quit_enabled: bool,
     pub local_enabled: bool,
     pub filter_enabled: bool,
+    pub draft_visible: bool,
+    pub clipping_case: ClippingCase,
     pub alternate_primary: bool,
     pub queued_completion: CompletionKind,
     pub completion_count: usize,
@@ -150,6 +182,8 @@ impl Default for SampleModel {
             quit_enabled: true,
             local_enabled: true,
             filter_enabled: true,
+            draft_visible: true,
+            clipping_case: ClippingCase::BorderedHorizontal,
             alternate_primary: false,
             queued_completion: CompletionKind::None,
             completion_count: 0,

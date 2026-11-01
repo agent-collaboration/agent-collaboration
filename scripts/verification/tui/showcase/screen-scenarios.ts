@@ -1,4 +1,5 @@
 import { canonicalJson } from '../source-binding.ts';
+import { cellText } from '../terminal-grid.ts';
 import { childTarget, requireObservation } from './contracts.ts';
 import { expectedInput, expectedKey } from './input-expectations.ts';
 import type { ShowcaseRig } from './rig.ts';
@@ -90,16 +91,74 @@ export async function menuProjections(rig: ShowcaseRig): Promise<void> {
 	await escapeOverlay(rig);
 }
 export async function segmentedSettings(rig: ShowcaseRig): Promise<void> {
-	await rig.click('action:local', 'local');
-	requireObservation(rig.state().setting === 'local', 'click selects Local', rig.state().setting);
-	await rig.focus('action:all');
-	await rig.key('Right');
+	const columns = rig.grid().columns;
+	const hidden = columns === 28 || columns === 32;
+	const compact = columns === 40 || columns === 48;
+	const drawn = rig.drawState();
+	const segments = ['action:all', 'action:local'];
+	const visible = segments.map((target) => visibleTarget(drawn, target));
 	requireObservation(
-		rig.state().focus === 'action:local',
-		'grouped arrow reaches next segment',
-		rig.state().focus,
+		visible.every((value) => value === !hidden),
+		'the adopted row budget paints the whole switch group or hides it together',
+		{ columns, visible, hidden },
 	);
-	await rig.key('Enter', rig.route('local', 'action:local'));
+	const field = drawn.hitMap?.targets.find(
+		(target) => target.surface === drawn.surface && target.target === 'filter',
+	);
+	requireObservation(
+		field !== undefined && new Set(field.cells.map(([column]) => column)).size >= 12,
+		'outer filter wrapper reserves twelve editor cells plus its slash and gap',
+		{ columns, field },
+	);
+	if (hidden) {
+		requireObservation(
+			drawn.focusTargets
+				.filter((target) => segments.includes(target.targetId))
+				.every((target) => !target.eligible),
+			'hidden switch targets are not tabbable',
+			drawn.focusTargets,
+		);
+		await rig.focus('filter');
+		await rig.key('Tab');
+		requireObservation(
+			!segments.includes(rig.state().focus ?? ''),
+			'Tab skips the hidden group',
+			rig.state(),
+		);
+		await rig.key('Ctrl+F', rig.route('local'));
+		requireObservation(
+			rig.state().setting === 'local',
+			'hidden switch retains its binding',
+			rig.state(),
+		);
+	} else {
+		const text =
+			drawn.hitMap?.targets
+				.filter((target) => target.surface === drawn.surface && segments.includes(target.target))
+				.flatMap((target) =>
+					target.cells
+						.map(([column, row]) => rig.grid().cells[row]?.[column])
+						.filter((cell) => cell !== undefined)
+						.map(cellText),
+				)
+				.join('') ?? '';
+		requireObservation(
+			compact ? !text.includes('Ctrl+') : text.includes('Ctrl+E') && text.includes('Ctrl+F'),
+			'whole-group compact projection removes printed hints while full projection retains them',
+			{ columns, text, compact },
+		);
+		await rig.click('action:local', 'local');
+		requireObservation(rig.state().setting === 'local', 'click selects Local', rig.state().setting);
+		await rig.focus('action:all');
+		await rig.key('Right');
+		requireObservation(
+			rig.state().focus === 'action:local',
+			'grouped arrow reaches next segment',
+			rig.state().focus,
+		);
+		await rig.key('Enter', rig.route('local', 'action:local'));
+	}
+	await rig.capture('switch-row-projection');
 	await rig.key('Ctrl+E', rig.route('all'));
 	await rig.menuAction('local');
 	await rig.menu();

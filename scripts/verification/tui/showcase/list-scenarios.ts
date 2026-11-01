@@ -1,6 +1,5 @@
 import { cellText } from '../terminal-grid.ts';
 import { childTarget, PrerequisiteGap, requireObservation } from './contracts.ts';
-import { expectedInput } from './input-expectations.ts';
 import type { ShowcaseRig } from './rig.ts';
 import { effectCount, escapeOverlay, visibleTarget } from './scenario-helpers.ts';
 
@@ -161,74 +160,5 @@ export async function contentScroll(rig: ShowcaseRig): Promise<void> {
 	await rig.capture('hover-selected-unfocused');
 	await rig.focus('detail-list');
 	await rig.capture('focused-selected');
-	await escapeOverlay(rig);
-}
-export async function clippedGeometry(rig: ShowcaseRig): Promise<void> {
-	await rig.key('F5', rig.route('fill'));
-	const state = rig.state();
-	const visible = rig.point('action:clip-hit');
-	const partial = state.hitMap?.targets.find(
-		(target) => target.surface === state.surface && target.target === 'action:clip-partial',
-	);
-	if (partial === undefined)
-		throw new PrerequisiteGap('partial nested button not drawn in current viewport');
-	requireObservation(
-		!visibleTarget(state, 'action:clip-hidden') &&
-			state.focusTargets.some((target) => target.targetId === 'action:clip-hidden'),
-		'fully clipped target remains in event model but has no hit cells',
-		state.hitMap,
-	);
-	const columns = [...new Set(partial.cells.map((cell) => cell[0]))];
-	requireObservation(
-		columns.length > 0 && columns.length < 9,
-		'partial button publishes only its clipped width',
-		columns,
-	);
-	await rig.click('action:clip-hit', 'clip-hit');
-	await rig.click('action:clip-partial', 'clip-partial');
-	requireObservation(
-		effectCount(rig.state(), 'clip-hit') === 1 && effectCount(rig.state(), 'clip-partial') === 1,
-		'both visible positive controls activate',
-		rig.state().effects,
-	);
-	const points = [
-		{ column: Math.max(...columns) + 1, row: visible.row },
-		{ column: Math.min(...columns) + 11, row: visible.row },
-	];
-	await points.reduce<Promise<void>>(async (previous, point) => {
-		await previous;
-		if (point.column >= rig.grid().columns)
-			throw new PrerequisiteGap('hidden natural rectangle lies outside this physical viewport');
-		await rig.burst({
-			bytes: Buffer.from(
-				`\x1b[<0;${point.column + 1};${point.row + 1}M\x1b[<0;${point.column + 1};${point.row + 1}m`,
-			),
-			expected: [
-				expectedInput(
-					{ kind: 'mouse', mouse: { kind: 'down', button: 'left' }, ...point, modifiers: [] },
-					rig.route(),
-				),
-				expectedInput(
-					{ kind: 'mouse', mouse: { kind: 'up', button: 'left' }, ...point, modifiers: [] },
-					rig.route(),
-				),
-			],
-			redraw: false,
-			label: 'clipped half / fully hidden natural button coordinate',
-		});
-	}, Promise.resolve());
-	requireObservation(
-		effectCount(rig.state(), 'clip-partial') === 1 && effectCount(rig.state(), 'clip-hidden') === 0,
-		'clipped and fully hidden natural cells never activate',
-		rig.state().effects,
-	);
-	await rig.resize(rig.grid().columns === 120 ? 76 : 120, rig.grid().rows === 36 ? 30 : 36);
-	await rig.click('action:clip-hit', 'clip-hit');
-	requireObservation(
-		effectCount(rig.state(), 'clip-hit') === 2,
-		'new current hit cells work after complete resize draw',
-		rig.state().effects,
-	);
-	await rig.capture('clipped-nested-geometry');
 	await escapeOverlay(rig);
 }

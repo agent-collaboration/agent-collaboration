@@ -25,7 +25,7 @@ export function prepareShowcasePlan(args: readonly string[]): void {
 	);
 	if (values.help) {
 		process.stdout.write(
-			'showcase/prepare-plan.ts --driver ABSOLUTE_SIGNED_DRIVER --example ABSOLUTE_SIGNED_EXAMPLE --output FRESH_ABSOLUTE_DIRECTORY --chrome CHROME [--profile terminal-only|example-ghostty-keybinds] [--cases SC01,SC02] [--variants wide-dropdown-folder] [--grids 120x36,48x24] [--keys legacy,kitty]\nPrints a pinned plan; default coverage is all 27 scenarios, six adopted grids, both protocols, including four independent Quit surfaces.\n',
+			'showcase/prepare-plan.ts --driver ABSOLUTE_SIGNED_DRIVER --example ABSOLUTE_SIGNED_EXAMPLE --output FRESH_ABSOLUTE_DIRECTORY --chrome CHROME [--profile terminal-only|example-ghostty-keybinds] [--cases SC01,SC02] [--variants wide-dropdown-folder] [--grids 120x36,48x12] [--keys legacy,kitty]\nPrints a pinned plan; default coverage is all 27 scenarios, four adopted grids, both protocols, including four independent Quit surfaces.\n',
 		);
 		return;
 	}
