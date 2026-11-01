@@ -129,7 +129,12 @@ struct ClockCheckedTransport {
 }
 impl ClockCheckedTransport {
     fn case_name(&self, channel: &str) -> String {
-        let receiver = self.receiver.lock().unwrap();
+        // Recover only diagnostics here. The final fixture lock still rejects
+        // poison before comparing any expected outcome.
+        let receiver = match self.receiver.lock() {
+            Ok(receiver) => receiver,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let name = receiver
             .steps
             .get(receiver.next)
@@ -140,7 +145,11 @@ impl ClockCheckedTransport {
     // and fail the fixture before any expected-unknown comparison can pass.
     fn record_clock_check(&self, clock: paused_http_clock::PausedHttpClock, case_name: &str) {
         if let Err(error) = clock.require_no_advance(case_name) {
-            self.receiver.lock().unwrap().errors.push(error.to_string());
+            let mut receiver = match self.receiver.lock() {
+                Ok(receiver) => receiver,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            receiver.errors.push(error.to_string());
         }
     }
 }
