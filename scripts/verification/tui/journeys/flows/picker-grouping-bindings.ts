@@ -141,10 +141,12 @@ export function pickerGroupingBindings(
 	const inputs = new Map<number, NativeFlowInputBinding>();
 	for (const [index, step] of invocation.journey.steps.entries())
 		if (step.kind === 'press') {
-			if (step.key !== 'F6') throw new Error('undeclared grouping key');
+			if (step.key !== 'F6' && step.key !== 'F12') throw new Error('undeclared grouping key');
 			inputs.set(index, {
 				kind: 'continuing',
-				expected: [pickerExpectedKey('F6', pickerScreen, null, 'cycle-group')],
+				expected: [
+					pickerExpectedKey(step.key, pickerScreen, null, step.key === 'F6' ? 'cycle-group' : null),
+				],
 			});
 		}
 	const fixtures = new Map<

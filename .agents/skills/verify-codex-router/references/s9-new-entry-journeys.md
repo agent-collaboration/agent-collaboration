@@ -194,10 +194,15 @@ reopens A through real Enter and changes Browse to B under that captured dialog.
 Disable/Enable retain Details and get no extra Enter. Setup control ACKs remain
 distinct from actual UI input/frame proof.
 
-The catalogue exposes named `sessions-group-by-f6` and `quota-group-by-f6`
-placeholders for U18/R19 while the grouped crate/consumer target is pending.
+The picker `sessions-group-by-f6` binding traverses the nine declared identities,
+checks all six menu facets and reopens the same private preference store.
+After every processed F6 it sends exactly one separately acknowledged safe F12;
+strict selection, heading and bucket checks use that marked frame. Preserve the
+F6 ACK/frame and raw bytes as the owner-deferred first-frame measurement
+limitation, never as a first-paint pass (Lead decision 01a196f6-4356).
 F6 is the settled grouping key on both screens; picker Ctrl+G/F2 remain Machine.
-A placeholder is not an authored runnable flow or a product pass.
+Quota grouping still needs its separately declared child-free remount binding.
+An authored binding is not a product pass.
 
 ## Quota B offline preparation (draft)
 

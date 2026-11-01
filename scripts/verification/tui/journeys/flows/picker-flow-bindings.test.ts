@@ -197,6 +197,43 @@ test('the R19 journey admits both protocols and nominates only its private fixtu
 	}
 });
 
+test('every R19 regroup retains its own ACK frame before exactly one separate safe F12', () => {
+	const plan = controlledPlan('sessions-group-by-f6');
+	for (const invocation of authoredFlowMatrix(plan)) {
+		const bindings = pickerFlowBindings(
+			plan,
+			invocation,
+			plan.output,
+			join(plan.output, 'receipts'),
+		);
+		for (const [index, step] of invocation.journey.steps.entries()) {
+			if (step.kind !== 'press' || step.key !== 'F6') continue;
+			expect(bindings?.inputs.get(index)).toMatchObject({
+				kind: 'continuing',
+				expected: [{ action: 'cycle-group' }],
+			});
+			expect(invocation.journey.steps[index + 1]).toEqual({ kind: 'press', key: 'F12' });
+			expect(invocation.journey.steps[index + 2]).not.toEqual({ kind: 'press', key: 'F12' });
+			expect(bindings?.inputs.get(index + 1)).toEqual({
+				kind: 'continuing',
+				expected: [
+					{
+						event: {
+							kind: 'key',
+							code: { kind: 'fixed', name: 'F12' },
+							modifiers: [],
+							phase: 'press',
+						},
+						surface: { kind: 'screen' },
+						target: null,
+						action: null,
+					},
+				],
+			});
+		}
+	}
+});
+
 test.each(['picker-list-option-navigation', 'sessions-help-option-navigation'])(
 	'%s binds the large-list fixture and every authored input at all four grids',
 	(journey) => {
