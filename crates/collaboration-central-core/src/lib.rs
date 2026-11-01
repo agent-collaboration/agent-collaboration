@@ -27,9 +27,15 @@ mod conformance_access;
 #[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
 #[cfg(feature = "conformance")]
+mod conformance_person_proof;
+#[cfg(feature = "conformance")]
 pub use conformance_issuer_signature::{
     ISSUER_SIGNATURE_PROBE_PATH, IssuerSignatureObservation, IssuerSignatureProbe,
     observe_issuer_signature,
+};
+#[cfg(feature = "conformance")]
+pub use conformance_person_proof::{
+    PERSON_PROOF_PROBE_PATH, PersonProofObservation, PersonProofProbe, observe_person_proof,
 };
 #[cfg(feature = "conformance")]
 mod conformance_fleet;
@@ -41,7 +47,11 @@ mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
 mod issuer_key_cache;
 mod issuer_key_resolution;
+mod issuer_signature_verifier;
+pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
+mod issuer_person_client;
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
+pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
 mod platform_capabilities;
 mod service_token_time;
 pub use issuer_key_cache::{
@@ -52,7 +62,8 @@ pub use platform_capabilities::{
     RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
 };
 pub use service_token_time::{
-    ServiceTokenTimeRefusal, ServiceTokenTimeRule, validate_service_token_times,
+    ServiceTokenTimeRefusal, ServiceTokenTimeRule, grant_deadline_is_current,
+    validate_service_token_times,
 };
 mod caller_context;
 pub use caller_context::CallerContext;

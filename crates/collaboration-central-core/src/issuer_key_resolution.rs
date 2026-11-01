@@ -28,13 +28,16 @@ pub async fn resolve_issuer_key<Source: IssuerKeySource>(
     clock: &dyn Clock,
     key_id: &IssuerKeyId,
 ) -> Result<IssuerVerificationKey, IssuerKeyResolutionRefusal> {
-    let mut keys = match cache.fresh(source.configured_source(), receipt_time(clock)?)? {
-        Some(keys) => keys,
-        None => fetch_keys(source, cache, clock).await?,
-    };
-    if matches!(keys.key(key_id), Err(IssuerKeyRefusal::UnknownKey)) {
-        keys = fetch_keys(source, cache, clock).await?;
+    if let Some(keys) = cache.fresh(source.configured_source(), receipt_time(clock)?)? {
+        match keys.key(key_id) {
+            Ok(key) => return Ok(key.clone()),
+            Err(IssuerKeyRefusal::UnknownKey) => {}
+            Err(refusal) => return Err(refusal.into()),
+        }
     }
+    // A cold fetch is already this request's one attempt at the current set.
+    // A cached miss forces one refresh; neither path fetches a second time.
+    let keys = fetch_keys(source, cache, clock).await?;
     keys.key(key_id).cloned().map_err(Into::into)
 }
 

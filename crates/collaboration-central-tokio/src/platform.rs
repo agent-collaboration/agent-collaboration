@@ -36,6 +36,15 @@ pub struct TokioCentralPlatform {
 }
 
 impl TokioCentralPlatform {
+    /// Bind only the issuer key address from the deployment's trust settings.
+    #[must_use]
+    pub fn issuer_key_source(
+        &self,
+        configured_source: collaboration_central_core::identity_contract::ResourceUri,
+    ) -> crate::TokioIssuerKeySource {
+        crate::TokioIssuerKeySource::new(self.client.clone(), configured_source)
+    }
+
     /// Conformance-only real import/seed; no production or HTTP route.
     #[cfg(feature = "conformance")]
     pub async fn conformance_import_board_snapshot(

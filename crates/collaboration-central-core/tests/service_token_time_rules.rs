@@ -2,11 +2,28 @@
 #![cfg(test)]
 
 use collaboration_central_core::{
-    ServiceTokenTimeRefusal, ServiceTokenTimeRule, validate_service_token_times,
+    ServiceTokenTimeRefusal, ServiceTokenTimeRule, grant_deadline_is_current,
+    validate_service_token_times,
 };
 use fleet_identity_protocol::UnixSeconds;
 
 const NOW: i64 = 1_793_462_400;
+
+#[test]
+fn grant_expiry_has_no_leeway_at_the_deadline() {
+    assert!(grant_deadline_is_current(
+        UnixSeconds(NOW),
+        UnixSeconds(NOW + 1),
+    ));
+    assert!(!grant_deadline_is_current(
+        UnixSeconds(NOW),
+        UnixSeconds(NOW),
+    ));
+    assert!(!grant_deadline_is_current(
+        UnixSeconds(NOW),
+        UnixSeconds(NOW - 1),
+    ));
+}
 
 #[test]
 fn service_lifetime_has_no_clock_skew_extension() {

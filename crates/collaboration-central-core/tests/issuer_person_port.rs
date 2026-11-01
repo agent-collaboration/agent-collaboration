@@ -6,10 +6,8 @@ use collaboration_central_core::organization_authority::ParsedPersonToken;
 use serde_json::{Value, json};
 
 fn structural_person_token(header: &Value) -> String {
-    let producer: Value = serde_json::from_str(include_str!(
-        "fixtures/person-identity/K6.fixtures.json"
-    ))
-    .unwrap();
+    let producer: Value =
+        serde_json::from_str(include_str!("fixtures/person-identity/K6.fixtures.json")).unwrap();
     let claims = &producer["examples"]["providerSession"];
     assert!(claims.get("sub").is_some());
     format!(

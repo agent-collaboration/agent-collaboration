@@ -13,9 +13,13 @@ mod conformance_bootstrap;
 mod conformance_core_store;
 #[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
+#[cfg(feature = "conformance")]
+mod conformance_person_proof;
 mod issuer_crypto;
+mod issuer_key_source;
 #[cfg(feature = "conformance")]
 pub use conformance_bootstrap::BootstrapObject;
+pub use issuer_key_source::CloudflareIssuerKeySource;
 mod cloudflare_transport;
 #[cfg(feature = "conformance")]
 mod conformance_scope_faults;
@@ -32,6 +36,10 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "conformance")]
+    if request.path() == collaboration_central_core::PERSON_PROOF_PROBE_PATH {
+        return conformance_person_proof::fetch(request, env).await;
+    }
     #[cfg(feature = "conformance")]
     if request.path() == collaboration_central_core::ISSUER_SIGNATURE_PROBE_PATH {
         return conformance_issuer_signature::fetch(request, env).await;

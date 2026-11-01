@@ -62,3 +62,9 @@ pub fn validate_service_token_times(
     }
     Ok(())
 }
+
+/// The authority's grant deadline is exact; issuer-clock leeway never extends it.
+#[must_use]
+pub const fn grant_deadline_is_current(now: UnixSeconds, grant_expires_at: UnixSeconds) -> bool {
+    now.0 < grant_expires_at.0
+}

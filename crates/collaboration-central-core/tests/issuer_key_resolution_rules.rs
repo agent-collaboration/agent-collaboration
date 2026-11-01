@@ -137,11 +137,8 @@ async fn an_unknown_cached_key_refetches_once_then_refuses() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_cold_unknown_key_has_one_initial_fetch_and_one_refetch() {
-    let source = ConfiguredSource::new(vec![
-        FetchStep::Answer(Ok(keys("known", [1; 32]))),
-        FetchStep::Answer(Ok(keys("known", [2; 32]))),
-    ]);
+async fn a_cold_unknown_key_never_fetches_twice() {
+    let source = ConfiguredSource::new(vec![FetchStep::Answer(Ok(keys("known", [1; 32])))]);
     let refused = resolve_issuer_key(
         &source,
         &IssuerKeyCache::default(),
@@ -155,7 +152,36 @@ async fn a_cold_unknown_key_has_one_initial_fetch_and_one_refetch() {
             IssuerKeyRefusal::UnknownKey
         ))
     ));
-    assert_eq!(source.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(source.calls.load(Ordering::SeqCst), 1);
+}
+
+// PD a01ff62d: the bound is per request, with no cross-request cooldown.
+#[tokio::test(start_paused = true)]
+async fn different_unknown_requests_each_fetch_once_then_a_known_key_hits() {
+    let source = ConfiguredSource::new(vec![
+        FetchStep::Answer(Ok(keys("known", [1; 32]))),
+        FetchStep::Answer(Ok(keys("known", [1; 32]))),
+        FetchStep::Answer(Ok(keys("known", [1; 32]))),
+    ]);
+    let cache = IssuerKeyCache::default();
+    resolve_issuer_key(&source, &cache, source.clock.as_ref(), &key_id("known"))
+        .await
+        .unwrap();
+    for (offset, unknown) in ["first-missing", "second-missing"].into_iter().enumerate() {
+        let refused =
+            resolve_issuer_key(&source, &cache, source.clock.as_ref(), &key_id(unknown)).await;
+        assert!(matches!(
+            refused,
+            Err(IssuerKeyResolutionRefusal::KeySet(
+                IssuerKeyRefusal::UnknownKey
+            ))
+        ));
+        assert_eq!(source.calls.load(Ordering::SeqCst), offset + 2);
+    }
+    resolve_issuer_key(&source, &cache, source.clock.as_ref(), &key_id("known"))
+        .await
+        .unwrap();
+    assert_eq!(source.calls.load(Ordering::SeqCst), 3);
 }
 
 #[tokio::test(start_paused = true)]
