@@ -13,11 +13,18 @@ use futures_util::FutureExt;
 mod fixture;
 use fixture::*;
 
+#[path = "handoff_identity_tests.rs"]
+mod handoff_identity_tests;
+
 #[tokio::test]
 async fn fleet_session_registrar_restart_abandons_a_prepared_launch_before_dispatch() {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    let PrepareSessionStart::Prepared(prepared) = fixture.registrar.prepare(&intent).await.unwrap()
+    let PrepareSessionStart::Prepared(prepared) = fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap()
     else {
         panic!("fixture launch was not prepared");
     };
@@ -55,7 +62,11 @@ async fn fleet_session_registrar_known_created_local_refusals_keep_identity_and_
     ] {
         let fixture = Fixture::new();
         let intent = fixture.intent();
-        fixture.registrar.prepare(&intent).await.unwrap();
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await
+            .unwrap();
         let address = fixture
             .registrar
             .mark_dispatched(&intent.operation_id)
@@ -109,7 +120,11 @@ async fn fleet_session_registrar_known_created_local_refusals_keep_identity_and_
 async fn fleet_session_registrar_reconstructed_owner_settles_pending_setup_without_registration() {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    fixture.registrar.prepare(&intent).await.unwrap();
+    fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap();
     let address = fixture
         .registrar
         .mark_dispatched(&intent.operation_id)
@@ -158,7 +173,11 @@ async fn fleet_session_registrar_reconstructed_owner_settles_pending_setup_witho
 async fn fleet_session_registrar_success_after_pending_setup_uses_the_original_registration() {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    fixture.registrar.prepare(&intent).await.unwrap();
+    fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap();
     let address = fixture
         .registrar
         .mark_dispatched(&intent.operation_id)
@@ -200,7 +219,10 @@ async fn fleet_session_registrar_missing_project_and_each_live_refusal_store_no_
     let mut intent = fixture.intent();
     intent.project_id = None;
     assert!(matches!(
-        fixture.registrar.prepare(&intent).await,
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await,
         Err(RegistrarFailure::ProjectRequired)
     ));
     assert!(fixture.authority.events.lock().unwrap().is_empty());
@@ -215,13 +237,16 @@ async fn fleet_session_registrar_missing_project_and_each_live_refusal_store_no_
             reason: reason.clone(),
         });
         assert!(
-            matches!(fixture.registrar.prepare(&intent).await, Err(RegistrarFailure::StartRefused(actual)) if actual == reason)
+            matches!(fixture.registrar.prepare(&intent, &fixture.identity(&intent)).await, Err(RegistrarFailure::StartRefused(actual)) if actual == reason)
         );
         assert!(fixture.repository.records.lock().unwrap().is_empty());
     }
     *fixture.authority.check.lock().unwrap() = Err(FleetSessionConnectionFailure::Unavailable);
     assert!(matches!(
-        fixture.registrar.prepare(&intent).await,
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await,
         Err(RegistrarFailure::Connection(_))
     ));
     assert!(fixture.repository.records.lock().unwrap().is_empty());
@@ -234,14 +259,21 @@ async fn fleet_session_registrar_access_enrollment_preserves_the_old_no_registra
     let mut intent = fixture.intent();
     intent.project_id = None;
     assert!(matches!(
-        fixture.registrar.prepare(&intent).await.unwrap(),
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await
+            .unwrap(),
         PrepareSessionStart::AccessEnrollment
     ));
     assert!(fixture.authority.events.lock().unwrap().is_empty());
     assert!(fixture.repository.records.lock().unwrap().is_empty());
     *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::MachineTokens;
     assert!(matches!(
-        fixture.registrar.prepare(&intent).await,
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await,
         Err(RegistrarFailure::ProjectRequired)
     ));
 }
@@ -253,12 +285,15 @@ async fn fleet_session_registrar_ephemeral_listener_keeps_step_one_and_refuses_n
     let intent = fixture.intent();
     *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::AccessEnrollment;
     assert!(matches!(
-        registrar.prepare(&intent).await.unwrap(),
+        registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await
+            .unwrap(),
         PrepareSessionStart::AccessEnrollment
     ));
     *fixture.mode.0.lock().unwrap() = SessionRegistrationMode::MachineTokens;
     assert!(matches!(
-        registrar.prepare(&intent).await,
+        registrar.prepare(&intent, &fixture.identity(&intent)).await,
         Err(RegistrarFailure::EphemeralListener)
     ));
     assert!(fixture.authority.events.lock().unwrap().is_empty());
@@ -270,7 +305,11 @@ async fn fleet_session_registrar_persists_actual_identity_before_registration_an
  {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    let PrepareSessionStart::Prepared(record) = fixture.registrar.prepare(&intent).await.unwrap()
+    let PrepareSessionStart::Prepared(record) = fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap()
     else {
         panic!("new preparation missing");
     };
@@ -350,7 +389,11 @@ async fn fleet_session_registrar_ambiguous_registration_resends_identical_bytes_
  {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    fixture.registrar.prepare(&intent).await.unwrap();
+    fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap();
     let address = fixture
         .registrar
         .mark_dispatched(&intent.operation_id)
@@ -373,7 +416,11 @@ async fn fleet_session_registrar_ambiguous_registration_resends_identical_bytes_
         Err(RegistrarFailure::InactiveBinding)
     ));
     assert!(matches!(
-        fixture.registrar.prepare(&intent).await.unwrap(),
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await
+            .unwrap(),
         PrepareSessionStart::Existing(_)
     ));
     assert_eq!(
@@ -405,7 +452,10 @@ async fn fleet_session_registrar_ambiguous_registration_resends_identical_bytes_
             .unwrap(),
     );
     assert!(matches!(
-        fixture.registrar.prepare(&different).await,
+        fixture
+            .registrar
+            .prepare(&different, &fixture.identity(&different))
+            .await,
         Err(RegistrarFailure::OperationConflict)
     ));
 }
@@ -415,7 +465,11 @@ async fn fleet_session_registrar_created_then_refused_and_known_failed_creation_
     for created in [false, true] {
         let fixture = Fixture::new();
         let intent = fixture.intent();
-        fixture.registrar.prepare(&intent).await.unwrap();
+        fixture
+            .registrar
+            .prepare(&intent, &fixture.identity(&intent))
+            .await
+            .unwrap();
         let address = fixture
             .registrar
             .mark_dispatched(&intent.operation_id)
@@ -466,7 +520,11 @@ async fn fleet_session_registrar_origin_change_refuses_an_existing_registration_
  {
     let fixture = Fixture::new();
     let intent = fixture.intent();
-    fixture.registrar.prepare(&intent).await.unwrap();
+    fixture
+        .registrar
+        .prepare(&intent, &fixture.identity(&intent))
+        .await
+        .unwrap();
     fixture.authority.events.lock().unwrap().clear();
     let moved = Fixture::make_registrar(
         fixture.repository.clone(),
@@ -475,7 +533,7 @@ async fn fleet_session_registrar_origin_change_refuses_an_existing_registration_
         "http://127.0.0.1:8789",
     );
     assert!(matches!(
-        moved.prepare(&intent).await,
+        moved.prepare(&intent, &fixture.identity(&intent)).await,
         Err(RegistrarFailure::OriginChanged)
     ));
     assert!(fixture.authority.events.lock().unwrap().is_empty());

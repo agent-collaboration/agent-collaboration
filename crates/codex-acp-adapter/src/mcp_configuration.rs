@@ -1,6 +1,7 @@
 //! Session-scoped stdio MCP settings; no global configuration writes or tool execution.
 use crate::AcpSchemaCatalog;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, thiserror::Error)]
@@ -19,13 +20,26 @@ pub enum McpConfigurationError {
 pub struct McpConfiguration {
     servers: BTreeMap<String, StdioServer>,
 }
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
 struct StdioServer {
     command: String,
     arguments: Vec<String>,
     environment: BTreeMap<String, String>,
 }
 impl McpConfiguration {
+    /// Compare user MCP configuration in memory without storing or exposing its environment.
+    pub fn fingerprint(
+        &self,
+    ) -> Result<collaboration_contracts::HarnessMcpConfigurationIdentity, McpConfigurationError>
+    {
+        let bytes = serde_json::to_vec(&self.servers)
+            .map_err(|_| McpConfigurationError::InvalidParameters)?;
+        Ok(
+            collaboration_contracts::HarnessMcpConfigurationIdentity::from_sha256(
+                Sha256::digest(bytes).into(),
+            ),
+        )
+    }
     pub fn parse(
         catalog: &mut AcpSchemaCatalog,
         servers: &[Value],

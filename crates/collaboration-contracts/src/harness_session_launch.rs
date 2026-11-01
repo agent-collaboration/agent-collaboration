@@ -123,6 +123,7 @@ pub trait HarnessSessionLaunchPort: Send + Sync {
     fn prepare_start<'a>(
         &'a self,
         launch: &'a HarnessSessionLaunch,
+        identity: &'a crate::HarnessLaunchIdentity,
     ) -> HarnessLaunchFuture<'a, HarnessStartAdmission>;
     /// Must finish before the native/provider create RPC can be dispatched.
     fn mark_dispatched<'a>(&'a self, operation: &'a OperationId) -> HarnessLaunchFuture<'a, ()>;

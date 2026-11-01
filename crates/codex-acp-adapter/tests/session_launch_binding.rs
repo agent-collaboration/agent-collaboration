@@ -51,6 +51,7 @@ impl HarnessSessionLaunchPort for RecordingLaunch {
     fn prepare_start<'a>(
         &'a self,
         _launch: &'a HarnessSessionLaunch,
+        _identity: &'a collaboration_contracts::HarnessLaunchIdentity,
     ) -> HarnessLaunchFuture<'a, HarnessStartAdmission> {
         Box::pin(async { Err(HarnessLaunchFailure::AlreadyPrepared) })
     }

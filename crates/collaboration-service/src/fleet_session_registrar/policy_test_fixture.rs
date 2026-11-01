@@ -218,6 +218,36 @@ pub(super) struct Fixture {
         mpsc::UnboundedSender<Result<RegisterFleetSessionResult, FleetSessionConnectionFailure>>,
 }
 impl Fixture {
+    pub fn declared_input(
+        &self,
+        intent: &HarnessSessionLaunch,
+    ) -> collaboration_contracts::HarnessDeclaredLaunchInput {
+        let caller = collaboration_protocol::SessionRef {
+            endpoint: intent.endpoint.clone(),
+            session_id: "permission-route-owner".to_owned().try_into().unwrap(),
+        };
+        collaboration_contracts::HarnessDeclaredLaunchInput {
+            project_id: intent.project_id.clone(),
+            endpoint: intent.endpoint.clone(),
+            working_directory: intent.launch_context.working_directory.clone(),
+            settings: collaboration_contracts::HarnessDeclaredSettings::Native {
+                model: intent.launch_context.model.clone(),
+                effort: Some("low".to_owned().try_into().unwrap()),
+                access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                fork: None,
+                root_message_id: None,
+            },
+            created_by: caller.clone().into(),
+            approver: caller.into(),
+            user_mcp: collaboration_contracts::HarnessMcpConfigurationIdentity::empty(),
+        }
+    }
+    pub fn identity(
+        &self,
+        intent: &HarnessSessionLaunch,
+    ) -> collaboration_contracts::HarnessLaunchIdentity {
+        self.declared_input(intent).identity().unwrap()
+    }
     pub fn new() -> Self {
         let events = Arc::new(Mutex::new(Vec::new()));
         let repository = Arc::new(MemoryRepository {

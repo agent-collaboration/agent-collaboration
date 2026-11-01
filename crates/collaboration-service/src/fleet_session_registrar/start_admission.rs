@@ -110,6 +110,7 @@ impl FleetSessionRegistrar {
     pub async fn prepare(
         &self,
         intent: &HarnessSessionLaunch,
+        _identity: &collaboration_contracts::HarnessLaunchIdentity,
     ) -> Result<PrepareSessionStart, RegistrarFailure> {
         if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
             return Ok(PrepareSessionStart::AccessEnrollment);

@@ -12,6 +12,13 @@ fn stdio_mcp_configuration_preserves_arguments_and_compares_environment_by_name(
     let second = McpConfiguration::parse(&mut schema, &[reordered])
         .unwrap_or_else(|error| panic!("parse reordered: {error}"));
     assert!(first == second);
+    assert!(first.fingerprint().unwrap() == second.fingerprint().unwrap());
+    let mut changed = json!({"name":"notes.server","command":"/usr/bin/example","args":["second","first"],"env":[{"name":"A","value":"changed-private-value"},{"name":"B","value":"2"}]});
+    let different = McpConfiguration::parse(&mut schema, std::slice::from_ref(&changed)).unwrap();
+    assert!(first.fingerprint().unwrap() != different.fingerprint().unwrap());
+    changed["args"] = json!(["first", "second"]);
+    let reversed = McpConfiguration::parse(&mut schema, &[changed]).unwrap();
+    assert!(different.fingerprint().unwrap() != reversed.fingerprint().unwrap());
     let overrides = first
         .native_overrides()
         .unwrap_or_else(|| panic!("overrides"));

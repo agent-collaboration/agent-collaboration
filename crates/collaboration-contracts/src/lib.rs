@@ -13,7 +13,12 @@ pub use project_replication_position::{
 };
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
+mod harness_launch_identity;
 mod harness_session_launch;
+pub use harness_launch_identity::{
+    HarnessDeclaredLaunchInput, HarnessDeclaredSettings, HarnessForkInput, HarnessLaunchIdentity,
+    HarnessLaunchIdentityEncoding, HarnessMcpConfigurationIdentity,
+};
 mod native_delivery_result;
 mod provider_conversation_backend;
 mod scheduled_run_contract;
