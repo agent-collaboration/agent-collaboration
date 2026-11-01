@@ -67,7 +67,8 @@ impl JsonSchema for MessageText {
     }
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({"type":"string","minLength":1,"maxLength":MAX_CONTROL_FRAME_BYTES,
-            "pattern":"^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]+$","x-maxUtf8Bytes":MAX_CONTROL_FRAME_BYTES})
+            "pattern":"^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]+$","x-maxUtf8Bytes":MAX_CONTROL_FRAME_BYTES,
+            "description":format!("WAKE_MESSAGE_MAX_BYTES: 1..={} UTF-8 bytes; only newline and tab C0 controls are allowed. maxLength is a character pre-check; entry enforces the byte bound.", MAX_CONTROL_FRAME_BYTES)})
     }
 }
 

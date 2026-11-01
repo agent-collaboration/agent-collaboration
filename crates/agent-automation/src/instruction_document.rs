@@ -57,6 +57,7 @@ impl schemars::JsonSchema for InstructionText {
         "InstructionText".into()
     }
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({"type":"string","minLength":1,"maxLength":Self::MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":Self::MAX_BYTES})
+        schemars::json_schema!({"type":"string","minLength":1,"maxLength":Self::MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":Self::MAX_BYTES,
+            "description":format!("INSTRUCTION_MAX_BYTES: 1..={} UTF-8 bytes; nonempty and NUL-free. maxLength is a character pre-check; entry enforces the byte bound.", Self::MAX_BYTES)})
     }
 }

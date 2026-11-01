@@ -99,3 +99,73 @@ fn identity_and_text_decoders_use_the_same_byte_bounds_as_their_schemas() {
         "UTF-8 bytes, not scalar count"
     );
 }
+
+#[test]
+fn published_utf8_byte_bounds_match_multibyte_entry_and_stored_decode() {
+    fn boundary<T>(name: &str, maximum: usize)
+    where
+        T: schemars::JsonSchema + serde::de::DeserializeOwned + std::fmt::Debug,
+    {
+        // Literal four-byte characters distinguish the byte contract from maxLength.
+        let accepted = "🦁".repeat(maximum / 4);
+        let refused = format!("{accepted}🦁");
+        assert_eq!(accepted.len(), maximum);
+        assert_eq!(refused.len(), maximum + 4);
+        let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
+        assert_eq!(schema["x-maxUtf8Bytes"], maximum, "{name}");
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        assert!(
+            validator.is_valid(&json!(accepted)),
+            "{name}: schema must not be stricter than entry"
+        );
+        assert!(
+            serde_json::from_value::<T>(json!(accepted)).is_ok(),
+            "{name}: exact bytes accepted"
+        );
+        let error = serde_json::from_value::<T>(json!(refused))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("limitExceeded"), "{name}: {error}");
+        assert!(error.contains(name), "{name}: {error}");
+        assert!(
+            error.contains(&(maximum + 4).to_string()),
+            "{name}: actual byte count: {error}"
+        );
+        let description = schema["description"].as_str().unwrap_or("");
+        assert!(
+            description.contains("UTF-8 bytes"),
+            "{name}: published description must name bytes"
+        );
+        assert!(
+            description.contains(&maximum.to_string()),
+            "{name}: published description must state its bound"
+        );
+    }
+
+    boundary::<InstructionText>("INSTRUCTION_MAX_BYTES", 1_048_576);
+    boundary::<MessageText>("WAKE_MESSAGE_MAX_BYTES", 1_048_576);
+    boundary::<SessionId>("SESSION_ID_MAX_BYTES", 4096);
+    boundary::<NonEmptyText>("TEXT_MAX_BYTES", 4096);
+
+    // Endpoint IDs admit ASCII only, so character and byte counts coincide.
+    let schema = serde_json::to_value(schemars::schema_for!(EndpointId)).unwrap();
+    assert_eq!(schema["x-maxUtf8Bytes"], 64);
+    assert!(
+        schema["description"]
+            .as_str()
+            .unwrap()
+            .contains("64 ASCII bytes")
+    );
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    for (text, accepted) in [
+        ("x".repeat(64), true),
+        ("x".repeat(65), false),
+        ("🦁".repeat(16), false),
+    ] {
+        assert_eq!(validator.is_valid(&json!(text)), accepted);
+        assert_eq!(
+            serde_json::from_value::<EndpointId>(json!(text)).is_ok(),
+            accepted
+        );
+    }
+}

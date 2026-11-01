@@ -25,15 +25,19 @@ validated_schema!(
 validated_schema!(
     EndpointId,
     json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::ENDPOINT_ID_MAX_BYTES,
+        "x-maxUtf8Bytes":crate::limits::ENDPOINT_ID_MAX_BYTES,
+        "description":format!("ENDPOINT_ID_MAX_BYTES: 1..={} ASCII bytes; lowercase letters, digits and hyphens, starting with a letter.", crate::limits::ENDPOINT_ID_MAX_BYTES),
         "pattern":format!("^[a-z][a-z0-9-]{{0,{}}}$", crate::limits::ENDPOINT_ID_MAX_BYTES - 1)})
 );
 validated_schema!(
     SessionId,
-    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::SESSION_ID_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::SESSION_ID_MAX_BYTES})
+    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::SESSION_ID_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::SESSION_ID_MAX_BYTES,
+        "description":format!("SESSION_ID_MAX_BYTES: 1..={} UTF-8 bytes; nonempty and NUL-free. maxLength is a character pre-check; entry enforces the byte bound.", crate::limits::SESSION_ID_MAX_BYTES)})
 );
 validated_schema!(
     NonEmptyText,
-    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::TEXT_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::TEXT_MAX_BYTES})
+    json_schema!({"type":"string","minLength":1,"maxLength":crate::limits::TEXT_MAX_BYTES,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":crate::limits::TEXT_MAX_BYTES,
+        "description":format!("TEXT_MAX_BYTES: 1..={} UTF-8 bytes; nonempty and NUL-free. maxLength is a character pre-check; entry enforces the byte bound.", crate::limits::TEXT_MAX_BYTES)})
 );
 validated_schema!(
     SchemaDigest,
