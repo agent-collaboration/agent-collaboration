@@ -55,6 +55,7 @@ mod automation_import_content;
 mod automation_import_record;
 mod automation_import_store;
 mod automation_instruction_store;
+mod automation_list_cursor;
 mod automation_operation_store;
 mod automation_pending_mutation;
 mod automation_record_header;

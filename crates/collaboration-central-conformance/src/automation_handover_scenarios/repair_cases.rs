@@ -84,6 +84,57 @@ async fn repair_schedule(
         return Err("normal suspended Schedule inspection lost preserved configuration/header or fabricated timing".into());
     }
     let before = fixture::automation(client, &id, None).await?;
+    let expected_rows = required_value(&before, "/counts/automations")?
+        .as_u64()
+        .ok_or("catalog count missing")?;
+    if expected_rows > 100 {
+        return Err("repair catalog exceeded its bounded fixture".into());
+    }
+    let mut cursor = None;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut matches = 0;
+    let mut terminal = false;
+    for _ in 0..=expected_rows {
+        let page = raw_call(
+            machine,
+            json!({"kind":"list","value":{"cursor":cursor,"limit":1}}),
+        )
+        .await?;
+        let AutomationAnswer::List { automations, next } = page else {
+            return Err("suspended catalog page returned the wrong answer family".into());
+        };
+        if automations.len() > 1 {
+            return Err("suspended catalog page exceeded its bound".into());
+        }
+        for record in automations {
+            let key = match &record {
+                CatalogAutomation::Schedule(snapshot) => snapshot.schedule_id.as_str(),
+                CatalogAutomation::Wake(snapshot) => snapshot.definition.wakeup_id.as_str(),
+                CatalogAutomation::Faulted(snapshot) => snapshot.automation_id.as_str(),
+                CatalogAutomation::Suspended(snapshot) => snapshot.automation_id.as_str(),
+            }
+            .to_owned();
+            if !seen.insert(key) {
+                return Err("mixed suspended catalog repeated a record".into());
+            }
+            if serde_json::to_value(record)? == shown {
+                matches += 1;
+            }
+        }
+        match next {
+            None => {
+                terminal = true;
+                break;
+            }
+            Some(next) if cursor.as_ref() != Some(&next) => cursor = Some(next),
+            Some(_) => return Err("mixed suspended catalog cursor did not advance".into()),
+        }
+    }
+    if !terminal || u64::try_from(seen.len())? != expected_rows || matches != 1 {
+        return Err(
+            "normal List lost, duplicated or fabricated the preserved suspended snapshot".into(),
+        );
+    }
     let mut definition = configuration.clone();
     definition
         .as_object_mut()
