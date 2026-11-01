@@ -151,6 +151,11 @@ impl HttpConfiguredInventoryClient {
                     NativeLiveUnavailableReason::TransportUnavailable
                 })
             })?;
+        if response.status().is_server_error() {
+            return Err(InventoryReadFailure::Unavailable(
+                NativeLiveUnavailableReason::TransportUnavailable,
+            ));
+        }
         if response.status() != reqwest::StatusCode::OK {
             return Err(InventoryReadFailure::Invalid {
                 code: Some(i64::from(response.status().as_u16())),
