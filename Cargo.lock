@@ -1377,7 +1377,9 @@ version = "0.1.119"
 dependencies = [
  "collaboration-protocol",
  "fleet-identity-protocol",
+ "fleet-sync-protocol",
  "message-board",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2802,6 +2804,8 @@ dependencies = [
  "chrono",
  "jsonschema",
  "message-board",
+ "proptest",
+ "regex",
  "schemars 1.2.2",
  "serde",
  "serde_json",

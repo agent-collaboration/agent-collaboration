@@ -3,6 +3,10 @@ use serde_json::{Value, json};
 pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = vec![Value::Null];
     match name {
+        "HttpsUrl" | "ResourceUri" => invalid.extend([
+            json!("https://a:0443"),
+            json!("http://localhost:00080/a"),
+        ]),
         "DecideDeviceLogin" | "PresentedMachine" | "AdmittedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {

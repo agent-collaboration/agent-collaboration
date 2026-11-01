@@ -1,6 +1,7 @@
 //! Runtime-free contracts carried by a logged-in machine's Fleet connection.
 #![forbid(unsafe_code)]
 
+mod directory_addresses;
 mod identity_values;
 mod machine_renewal;
 mod remote_start;
@@ -8,6 +9,7 @@ mod session_activity;
 mod session_registration;
 mod session_start_check;
 
+pub use directory_addresses::*;
 pub use identity_values::*;
 pub use machine_renewal::*;
 pub use remote_start::*;

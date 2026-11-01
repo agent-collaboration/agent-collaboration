@@ -11,7 +11,9 @@ workspace = true
 [dependencies]
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.119" }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
+fleet-sync-protocol.workspace = true
 message-board = { path = "../message-board", version = "0.1.119" }
+schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 url.workspace = true
