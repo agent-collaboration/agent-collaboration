@@ -95,6 +95,11 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   dedicated owner-controlled directory because upstream Codex makes the socket
   parent private. It isolates the endpoint, not Codex home: upstream still
   serializes app-server startup per `CODEX_HOME`.
+- Test model sessions go through the running debug Router, using the
+  `codex-router-debug` profile. Use Codex Luna; use Claude Haiku only to test
+  the Claude provider. Never use the owner's main accounts, the `~/.codex`
+  login, or the production Router. Before asking the owner for a sign-in,
+  check whether the debug Router is already running.
 
 ## Cargo Build Storage
 
