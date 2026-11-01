@@ -119,20 +119,6 @@ impl CollaborationMcpServer {
         }
     }
 
-    pub(super) fn creator_claim_refusal(
-        &self,
-        actor: &collaboration_client::ConversationCreateActor,
-    ) -> Option<CallToolResult> {
-        match actor {
-            collaboration_client::ConversationCreateActor::Session(session) => {
-                self.sender_claim_refusal(session)
-            }
-            collaboration_client::ConversationCreateActor::Typed(actor) => {
-                self.actor_claim_refusal(actor)
-            }
-        }
-    }
-
     pub(super) fn prompt_author_claim_refusal(
         &self,
         prompt: &collaboration_client::PublicPromptContent,

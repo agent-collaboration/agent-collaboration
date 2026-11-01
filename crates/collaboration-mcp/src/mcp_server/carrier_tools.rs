@@ -24,9 +24,6 @@ impl CollaborationMcpServer {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
         request.create.default_approver();
-        if let Some(refusal) = self.creator_claim_refusal(&request.create.created_by) {
-            return refusal;
-        }
         let operation_id = request.create.operation_id.clone();
         let endpoint = request.create.endpoint.clone();
         let timeout_seconds = request.timeout_seconds.map_or(300, u32::from);
@@ -213,10 +210,7 @@ impl CollaborationMcpServer {
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
         request.input.create.default_approver();
-        if let Some(refusal) = self
-            .creator_claim_refusal(&request.input.create.created_by)
-            .or_else(|| self.prompt_author_claim_refusal(&request.input.message))
-        {
+        if let Some(refusal) = self.prompt_author_claim_refusal(&request.input.message) {
             return refusal;
         }
         let operation_id = request.input.create.operation_id.clone();

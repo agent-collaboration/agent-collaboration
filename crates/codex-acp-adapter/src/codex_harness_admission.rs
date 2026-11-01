@@ -30,7 +30,7 @@ impl CodexHarnessAdmission {
             .map_err(admission_failure)?
         {
             collaboration_contracts::HarnessStartAdmission::AccessEnrollment => {
-                Ok(crate::HarnessSessionSetup::AccessEnrollment)
+                Err(crate::SessionSetupError::Unavailable)
             }
             collaboration_contracts::HarnessStartAdmission::Prepared(binding) => Ok(
                 crate::HarnessSessionSetup::Start(crate::PreparedHarnessSessionStart {
@@ -73,7 +73,7 @@ impl CodexHarnessAdmission {
             .map_err(admission_failure)?
         {
             collaboration_contracts::HarnessRestoreAdmission::AccessEnrollment => {
-                Ok(crate::HarnessSessionSetup::AccessEnrollment)
+                Err(crate::SessionSetupError::Unavailable)
             }
             collaboration_contracts::HarnessRestoreAdmission::Bound(binding) => {
                 Ok(crate::HarnessSessionSetup::Restore(
