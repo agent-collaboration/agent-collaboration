@@ -4,6 +4,10 @@
 //! This database stores no proxy account state and no token bytes.
 
 pub mod fleet_login;
+pub mod fleet_login_repository;
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 /// The fleet database owned by this crate, separate from proxy account storage.
 pub const FLEET_DATABASE_FILENAME: &str = "fleet.sqlite";

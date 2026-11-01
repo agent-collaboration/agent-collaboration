@@ -8,11 +8,17 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-support = ["dep:serde_json"]
+
 [dependencies]
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 fleet-sync-protocol.workspace = true
 schemars.workspace = true
 serde.workspace = true
+thiserror.workspace = true
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
