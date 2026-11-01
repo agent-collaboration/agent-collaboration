@@ -1,0 +1,7 @@
+[
+{"result":"allowed","workspaceId":"019a3dce-2000-7000-8000-000000000001"},
+{"reason":{"kind":"projectUnknown"},"result":"refused"},
+{"reason":{"kind":"machineNotAllowed"},"result":"refused"},
+{"reason":{"kind":"differentWorkspace"},"result":"refused"},
+{"reason":{"kind":"starterNotActive"},"result":"refused"}
+]

@@ -1,0 +1,5 @@
+[
+{"projectId":"019a3dce-2000-7000-8000-000000000001","startedBy":{"kind":"routerOperator"}},
+{"projectId":"019a3dce-2000-7000-8000-000000000001","startedBy":{"kind":"session","session":{"endpoint":{"endpointId":"codex-local","serviceId":"019a3dce-2000-7000-8000-000000000002"},"sessionId":"fixture-conversation"}}},
+{"projectId":"019a3dce-2000-7000-8000-000000000001","startedBy":{"kind":"remoteSession","requestId":"019a3dce-2000-7000-8000-000000000003","session":{"endpoint":{"endpointId":"codex-local","serviceId":"019a3dce-2000-7000-8000-000000000002"},"sessionId":"fixture-conversation"}}}
+]

@@ -1,0 +1,8 @@
+[
+null,
+{"kind":"differentWorkspace","unexpectedField":true},
+{"kind":"machineNotAllowed","unexpectedField":true},
+{"kind":"projectUnknown","unexpectedField":true},
+{"kind":"starterNotActive","unexpectedField":true},
+{"kind":"unrecognizedVariant"}
+]
