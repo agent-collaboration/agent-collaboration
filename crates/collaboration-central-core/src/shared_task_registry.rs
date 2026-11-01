@@ -68,6 +68,8 @@ where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
     let mut engine = Engine::new(store, host);
     engine.register(crate::machine_notice_outbox::FleetNoticeTask::<Store>(

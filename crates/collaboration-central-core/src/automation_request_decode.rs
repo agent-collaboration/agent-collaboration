@@ -17,7 +17,7 @@ fn malformed() -> AutomationStoreError {
     }
 }
 
-fn call_limits(call: &Value) -> AutomationStoreResult<()> {
+pub(crate) fn call_limits(call: &Value) -> AutomationStoreResult<()> {
     identity_limits(call)?;
     let value = &call["value"];
     match call["kind"].as_str() {

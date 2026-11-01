@@ -9,7 +9,7 @@ use crate::{
 use collaboration_protocol::{AutomationBatch, BatchId, FiringEntry, WorkEntry};
 use durable_steps::{AtomicStore, JournalScope, RequestKey, StoreError, storage::TransactionScope};
 use runtime_primitives::SyncTime;
-use sqlx_core::{arguments::IntoArguments, database::Database, encode::Encode, types::Type};
+use sqlx_core::{arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode, encode::Encode, types::Type};
 use std::collections::BTreeMap;
 
 pub(crate) async fn freeze<Store: AtomicStore, Driver: Database>(
@@ -22,6 +22,8 @@ where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
     let mut by_machine: BTreeMap<String, Vec<FiringEntry>> = BTreeMap::new();
     for entry in entries {
