@@ -52,7 +52,19 @@ pub enum AutomationCall {
 )]
 pub enum CatalogAutomation {
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[schemars(extend("allOf" = [{"required":["nextDueAt","firstFiring"]}]))]
+pub struct CentralWakeSnapshot {
+    pub definition: crate::WakeDefinition,
+    pub state: crate::WakeState,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub next_due_at: Option<crate::ObservationTimestamp>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub first_firing: Option<FiringSnapshot>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -117,7 +129,7 @@ pub enum AutomationRefusal {
 pub enum AutomationAnswer {
     Instruction(crate::InstructionSnapshot),
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {
