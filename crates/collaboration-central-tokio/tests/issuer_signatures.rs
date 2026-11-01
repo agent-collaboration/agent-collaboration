@@ -86,10 +86,18 @@ async fn issuer_ed25519_capability_matches_fixed_public_vectors()
             } else {
                 SignatureValidity::Invalid
             };
-            assert_eq!(verdict, expected, "{}", case.name);
+            if verdict != expected {
+                return Err(format!(
+                    "{}: expected {expected:?}, observed {verdict:?}",
+                    case.name
+                )
+                .into());
+            }
             println!("ISSUER_SIGNATURE_CASE {} {verdict:?}", case.name);
         }
-        assert_eq!(clock.0.load(Ordering::SeqCst), before);
+        if clock.0.load(Ordering::SeqCst) != before {
+            return Err("signature capability consulted the clock".into());
+        }
         Ok::<_, configuration::TestError>(())
     }
     .await;
