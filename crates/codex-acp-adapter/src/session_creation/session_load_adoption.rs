@@ -84,13 +84,21 @@ impl AcpSessionBinding {
             ),
             None => None,
         };
+        let mut native = resume_parameters(session_id, profile.as_ref());
+        if let Some(binding) = &self.session_binding {
+            let config = native
+                .as_object_mut()
+                .ok_or(SessionSetupError::InvalidParameters)?
+                .entry("config")
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+                .ok_or(SessionSetupError::InvalidParameters)?;
+            crate::insert_session_binding_config(config, binding)
+                .map_err(|_| SessionSetupError::InvalidParameters)?;
+        }
         let result = self
             .connection
-            .request_validated(
-                &self.schemas,
-                NativeOperation::ResumeThread,
-                resume_parameters(session_id, profile.as_ref()),
-            )
+            .request_validated(&self.schemas, NativeOperation::ResumeThread, native)
             .await
             .map_err(map_native_failure)?;
         let thread = result

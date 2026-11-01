@@ -64,7 +64,7 @@ async fn session_launch_binding_cold_resume_uses_the_original_admitted_address()
             session: serde_json::from_value(json!({"endpoint":{"serviceId":INSTALLATION,"endpointId":"codex-local"},"sessionId":"native-returned-conversation"})).unwrap(),
             binding: HarnessSessionBinding::from_host_record("agent-router".to_owned().try_into().unwrap(), ADDRESS.to_owned()),
         }),
-        connection, schemas: payload_schemas(),
+        connection, schemas: payload_schemas().unwrap(),
         generation: serde_json::from_value(json!({"serviceEpoch":"019f0000-0000-7000-8000-000000000004","generation":1})).unwrap(),
         params: json!({"sessionId":"native-returned-conversation","cwd":cwd,"mcpServers":[]}),
         approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
@@ -146,7 +146,7 @@ impl HarnessSessionLaunchPort for RecordingLaunch {
     }
 }
 
-fn payload_schemas() -> Arc<NativePayloadSchemas> {
+fn payload_schemas() -> Result<Arc<NativePayloadSchemas>, Box<dyn std::error::Error>> {
     let mut definitions = serde_json::Map::new();
     for name in [
         "ThreadRead",
@@ -163,10 +163,9 @@ fn payload_schemas() -> Arc<NativePayloadSchemas> {
     }
     let bundle = NativeSchemaBundle::from_documents(BTreeMap::from([(
         "codex_app_server_protocol.schemas.json".to_owned(),
-        serde_json::to_vec(&json!({"definitions":{"v2":definitions}})).unwrap(),
-    )]))
-    .unwrap();
-    Arc::new(NativePayloadSchemas::from_bundle(&bundle).unwrap())
+        serde_json::to_vec(&json!({"definitions":{"v2":definitions}}))?,
+    )]))?;
+    Ok(Arc::new(NativePayloadSchemas::from_bundle(&bundle)?))
 }
 
 #[tokio::test]
@@ -226,7 +225,7 @@ async fn session_launch_binding_start_and_fork_use_the_admitted_address_and_keep
                     binding,
                 }),
                 connection,
-                schemas: payload_schemas(),
+                schemas: payload_schemas().unwrap(),
                 generation: serde_json::from_value(
                     json!({"serviceEpoch":"019f0000-0000-7000-8000-000000000004","generation":1}),
                 )
@@ -335,7 +334,7 @@ async fn session_launch_binding_local_refusals_record_the_returned_id_before_aba
                     ),
                 }),
                 connection,
-                schemas: payload_schemas(),
+                schemas: payload_schemas().unwrap(),
                 generation: serde_json::from_value(
                     json!({"serviceEpoch":"019f0000-0000-7000-8000-000000000004","generation":1}),
                 )

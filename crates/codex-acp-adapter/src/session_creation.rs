@@ -38,6 +38,8 @@ pub enum SessionSetupError {
     },
     #[error("native session creation outcome unknown")]
     OutcomeUnknown,
+    #[error("organization authority refused the created session registration")]
+    RegistrationRefused,
     #[error("native session request rejected")]
     NativeRejected,
     #[error("session connection unavailable")]
@@ -50,8 +52,10 @@ pub enum SessionSetupError {
 mod recorded_session_resume;
 mod router_permission_profile;
 pub use recorded_session_resume::RecordedSessionResume;
+mod session_launch_lifecycle;
 /// Retains one connection and a receipt minted only by successful fresh thread/start.
 mod session_load_adoption;
+use collaboration_contracts::HarnessLocalSetupRefusal;
 use router_permission_profile::{RouterSessionProfile, access_name};
 pub(crate) use session_load_adoption::{NativeThreadActivity, native_thread_activity};
 
@@ -61,6 +65,7 @@ pub struct AcpSessionBinding {
     pub(crate) materialized: bool,
     working_directory: PathBuf,
     configuration: Option<McpConfiguration>,
+    session_binding: Option<collaboration_contracts::HarnessSessionBinding>,
     pub(crate) connection: NativeProtocolConnection,
     pub(crate) schemas: Arc<NativePayloadSchemas>,
     pub(crate) requested_access: Option<String>,
@@ -213,6 +218,10 @@ impl AcpSessionBinding {
         catalog: &mut AcpSchemaCatalog,
         mut inputs: SessionSetupInputs,
     ) -> Result<Self, SessionSetupError> {
+        let prepared = session_launch_lifecycle::prepared_start(
+            &inputs.harness,
+            inputs.operation_id.as_ref(),
+        )?;
         if !catalog
             .validate("NewSessionRequest", &inputs.params)
             .map_err(|_| SessionSetupError::SchemaUnavailable)?
@@ -307,6 +316,16 @@ impl AcpSessionBinding {
             .and_then(Value::as_object_mut)
             .ok_or(SessionSetupError::InvalidParameters)?
             .extend(profile.native_config());
+        if let Some(prepared) = &prepared {
+            crate::insert_session_binding_config(
+                fields
+                    .get_mut("config")
+                    .and_then(Value::as_object_mut)
+                    .ok_or(SessionSetupError::InvalidParameters)?,
+                &prepared.binding,
+            )
+            .map_err(|_| SessionSetupError::InvalidParameters)?;
+        }
         if !directories.is_empty() {
             fields.insert("runtimeWorkspaceRoots".into(), json!(directories));
         }
@@ -327,11 +346,26 @@ impl AcpSessionBinding {
                 .await
                 .map_err(|_| SessionSetupError::Unavailable)?;
         }
-        let result = connection
+        session_launch_lifecycle::mark_dispatched(prepared.as_ref()).await?;
+        let result = match connection
             .request_validated(&inputs.schemas, operation, native)
             .await
-            .map_err(map_native_failure)?;
+        {
+            Ok(result) => result,
+            Err(failure) => {
+                return Err(
+                    session_launch_lifecycle::native_failure(prepared.as_ref(), failure).await,
+                );
+            }
+        };
+        let created_session_id =
+            session_launch_lifecycle::record_created(prepared.as_ref(), &result).await?;
         if result.get("model").and_then(Value::as_str) != Some(model.as_str()) {
+            session_launch_lifecycle::refuse_setup(
+                prepared.as_ref(),
+                HarnessLocalSetupRefusal::ModelMismatch,
+            )
+            .await?;
             return Err(SessionSetupError::ModelMismatch {
                 requested: model.clone(),
                 effective: result
@@ -356,6 +390,11 @@ impl AcpSessionBinding {
             .and_then(Value::as_str)
             .ok_or(SessionSetupError::OutcomeUnknown)?;
         if normalized_directory(effective_cwd).await? != expected_cwd {
+            session_launch_lifecycle::refuse_setup(
+                prepared.as_ref(),
+                HarnessLocalSetupRefusal::EffectiveWorkingDirectoryMismatch,
+            )
+            .await?;
             return Err(SessionSetupError::ConfigurationMismatch);
         }
         let thread = result
@@ -370,34 +409,60 @@ impl AcpSessionBinding {
         .await?
             != expected_cwd
         {
+            session_launch_lifecycle::refuse_setup(
+                prepared.as_ref(),
+                HarnessLocalSetupRefusal::EffectiveWorkingDirectoryMismatch,
+            )
+            .await?;
             return Err(SessionSetupError::ConfigurationMismatch);
         }
         if !directories.is_empty() {
-            let values = result
+            let Some(values) = result
                 .get("runtimeWorkspaceRoots")
                 .and_then(Value::as_array)
-                .ok_or(SessionSetupError::ConfigurationMismatch)?;
+            else {
+                session_launch_lifecycle::refuse_setup(
+                    prepared.as_ref(),
+                    HarnessLocalSetupRefusal::WorkspaceRootsMismatch,
+                )
+                .await?;
+                return Err(SessionSetupError::ConfigurationMismatch);
+            };
             let mut actual = Vec::with_capacity(values.len());
             for value in values {
                 actual.push(
-                    normalized_directory(
-                        value
-                            .as_str()
-                            .ok_or(SessionSetupError::ConfigurationMismatch)?,
-                    )
+                    normalized_directory(match value.as_str() {
+                        Some(value) => value,
+                        None => {
+                            session_launch_lifecycle::refuse_setup(
+                                prepared.as_ref(),
+                                HarnessLocalSetupRefusal::WorkspaceRootsMismatch,
+                            )
+                            .await?;
+                            return Err(SessionSetupError::ConfigurationMismatch);
+                        }
+                    })
                     .await?,
                 );
             }
             if actual != directories {
+                session_launch_lifecycle::refuse_setup(
+                    prepared.as_ref(),
+                    HarnessLocalSetupRefusal::WorkspaceRootsMismatch,
+                )
+                .await?;
                 return Err(SessionSetupError::ConfigurationMismatch);
             }
         }
-        let session_id = thread
-            .get("id")
-            .and_then(Value::as_str)
-            .filter(|id| !id.is_empty())
-            .ok_or(SessionSetupError::OutcomeUnknown)?
-            .to_owned();
+        let session_id = match created_session_id {
+            Some(session_id) => session_id,
+            None => thread
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .ok_or(SessionSetupError::OutcomeUnknown)?
+                .to_owned(),
+        };
         let access_route = crate::ApprovalRoute {
             thread_id: session_id.clone(),
             created_by: choice.created_by,
@@ -411,12 +476,14 @@ impl AcpSessionBinding {
             .register_route(access_route.clone())
             .await
             .map_err(|_| SessionSetupError::ConfigurationMismatch)?;
+        session_launch_lifecycle::complete_setup(prepared.as_ref()).await?;
         Ok(Self {
             session_id,
             generation: inputs.generation,
             materialized: false,
             working_directory: expected_cwd,
             configuration: Some(configuration),
+            session_binding: prepared.map(|prepared| prepared.binding),
             connection,
             schemas: inputs.schemas,
             requested_access: Some(access_name(choice.access).to_owned()),
@@ -501,6 +568,8 @@ impl AcpSessionBinding {
             .filter(|id| !id.is_empty())
             .ok_or(SessionSetupError::InvalidParameters)?
             .to_owned();
+        let session_binding =
+            session_launch_lifecycle::restored_binding(&inputs.harness, &session_id)?;
         let working_directory = normalized_directory(
             inputs
                 .params
@@ -520,6 +589,7 @@ impl AcpSessionBinding {
             materialized: true,
             working_directory,
             configuration: None,
+            session_binding,
             connection: inputs.connection,
             schemas: inputs.schemas,
             requested_access: route
