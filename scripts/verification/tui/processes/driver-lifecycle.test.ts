@@ -260,6 +260,47 @@ test.each([false, true])(
 		}
 	},
 );
+function lateOracleSource(exit: number): string {
+	return String.raw`
+const fs=require('node:fs');const path=require('node:path');
+const root=process.argv[2];const release=path.join(root,'oracle-release');
+let watcher;let released=false;
+const releaseIfPresent=()=>{
+ if(released)return true;
+ if(!fs.existsSync(release)||fs.readFileSync(release,'utf8')!=='release\n')return false;
+ released=true;process.stdout.write('late observation');process.stderr.write('retained stderr');
+ process.exitCode=${exit};watcher?.close();return true;
+};
+if(!releaseIfPresent()){
+ watcher=fs.watch(root,releaseIfPresent);
+ if(!releaseIfPresent())fs.writeFileSync(path.join(root,'oracle-ready'),'ready\n');
+}
+`;
+}
+
+test.each([false, true])(
+	'preexisting_release_finishes_controlled_oracle_before_watch (suppress notifications=%s)',
+	async (suppressNotifications) => {
+		const root = rootDirectory();
+		writeFileSync(join(root, 'oracle-release'), 'release\n');
+		// Suppression belongs only to this controlled subprocess; the file state stays real.
+		const notificationControl = suppressNotifications
+			? "require('node:fs').watch=()=>({close(){}});"
+			: '';
+		const executable = controlledExecutable(
+			root,
+			'pre-released-oracle',
+			notificationControl + lateOracleSource(0),
+		);
+		const result = await runCapturedCommand({
+			command: [executable, root],
+			repository: root,
+			timeoutSeconds: 5,
+		});
+		expect(result).toEqual({ exit: 0, stdout: 'late observation', stderr: 'retained stderr' });
+	},
+);
+
 test.each([0, 1])(
 	'oracle timeout remains failure after later exit %s when own-child signal is not delivered',
 	async (exit) => {
@@ -276,11 +317,7 @@ test.each([0, 1])(
 			watcher.once('close', () => reject(new Error('oracle readiness closed before ready')));
 			observeReady();
 		});
-		const executable = controlledExecutable(
-			root,
-			'late-oracle',
-			`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const release=path.join(root,'oracle-release');const watcher=fs.watch(root,()=>{if(fs.existsSync(release)&&fs.readFileSync(release,'utf8')==='release\\n'){process.stdout.write('late observation');process.stderr.write('retained stderr');process.exitCode=${exit};watcher.close();}});fs.writeFileSync(path.join(root,'oracle-ready'),'ready\\n');`,
-		);
+		const executable = controlledExecutable(root, 'late-oracle', lateOracleSource(exit));
 		// The real child owns readiness and exit; only the parent's deadline is advanced.
 		// A refused signal releases the child causally, with no child timer race.
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

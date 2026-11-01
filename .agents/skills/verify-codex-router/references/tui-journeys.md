@@ -55,6 +55,21 @@ The separately declared `showcase` surface validates its example launch through
 the fixed wrapper's `--check-only` path, including its path/hash, working directory
 and owned receipt directory. It does not observe the showcase.
 
+For the showcase, use only the canonical lane's runner, `PtyGridDriver`, readers
+and Rust driver at one declared apparatus commit. The separate showcase checkout
+supplies its example artifact and source binding only; never execute its old TS
+apparatus. `showcase/prepare-plan.ts --example-repository` records separate
+`source` (apparatus) and `exampleSource` bindings. The runner refuses a different
+apparatus checkout and checks both source bindings before and after observation.
+After argument admission and before requesting a native window, run
+`node scripts/verification/tui/showcase/qualify-transport.ts PLAN.json`.
+It starts the actual TS/Rust/wrapper pair for every declared mode, requires the
+exact `READY 120 36 STREAM` contract and the wrapper's own ready bytes, then
+stops it without spawning the example. Require exit 0, absent driver/wrapper
+processes, no example PID or product receipts and no cleanup-error marker.
+Keep `transport-receipt.json` and each mode's raw protocol/lifecycle output.
+This qualifies transport only; the product cases still require their own window.
+
 `--check` verifies head, signed artifacts, exact entries and emulator qualification;
 it does not observe a product. Qualification covers named/24-bit colours,
 bold/dim, 📂/✉️/界 widths/graphemes, overlay-left−1 gutter writes, right-edge
@@ -79,6 +94,7 @@ paired-marker cases and authored flows use that same list. A wired definition is
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
 | S9 authored flows | [Authored journeys and native bindings](s9-new-entry-journeys.md), `journeys/flows/flow-catalogue.ts --check`: 31 B flows, 212 grid/protocol variants. `authored-flow-run.ts` drives admitted fixture adapters; unsupported bindings fail before startup. Catalogue checks launch no product and report zero product passes. |
+| component showcase | `showcase/run.ts PLAN.json [--check]`: SC01–SC27 through the lane's canonical transport and readers against the separately bound ordinary example. Defaults are four grids and both modes, with independent Quit, glyph, clipping and lifecycle cases. Run `showcase/qualify-transport.ts` before a window request. A valid plan or handshake is not a scenario pass. |
 
 The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
 `baselinePlanSchema` with explicit `preparationProof`. It observes New's five

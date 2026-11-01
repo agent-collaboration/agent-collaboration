@@ -47,6 +47,7 @@ export interface PtyGridTarget {
 	readonly sessionsReceiptDirectory?: string;
 	readonly publicEnvironment?: NodeJS.ProcessEnv;
 	readonly showcaseEnvironment?: NodeJS.ProcessEnv;
+	readonly handshakeOnly?: boolean;
 	readonly storyboardVariant?:
 		| 'wide-glyph-left-border'
 		| 'source-qualified-outcome'
@@ -57,6 +58,17 @@ export interface PtyGridTarget {
 		| 'source-options-add'
 		| 'source-options-remove'
 		| 'source-options-replace';
+}
+export function ptyGridDriverArguments(surface: PtyGridTarget['surface']): readonly string[] {
+	return [
+		surface === 'public-sessions'
+			? 'compiled_public_sessions_grid_observation'
+			: 'compiled_grid_terminal_observation',
+		'--exact',
+		'--ignored',
+		'--nocapture',
+		'--test-threads=1',
+	];
 }
 function componentEnvironment(target: PtyGridTarget): Readonly<Record<string, string>> {
 	if (
@@ -142,57 +154,49 @@ export class PtyGridDriver {
 			throw new Error('sessions receipt directory requires a sessions fixture surface');
 		}
 		const componentOverrides = componentEnvironment(target);
+		if (target.handshakeOnly === true && target.surface !== 'showcase')
+			throw new Error('wrapper handshake requires showcase');
 		const receiptEnvironment = sessionsReceiptEnvironment(
 			target.sessionsReceiptDirectory,
 			target.evidence,
 		);
-		this.child = spawn(
-			target.driver,
-			[
-				target.surface === 'public-sessions'
-					? 'compiled_public_sessions_grid_observation'
-					: 'compiled_grid_terminal_observation',
-				'--exact',
-				'--ignored',
-				'--nocapture',
-				'--test-threads=1',
-			],
-			{
-				cwd: target.repository,
-				env: {
-					...process.env,
-					TUI_GRID_COMPONENT_DISPATCH_RECEIPT: undefined,
-					TUI_GRID_COMPONENT_SCENARIO: undefined,
-					TUI_GRID_COMPONENT_RELEASE: undefined,
-					QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE: undefined,
-					QUOTA_COMPONENT_FIXTURE_RELEASE_FILE: undefined,
-					...componentOverrides,
-					TUI_GRID_PRODUCT_BINARY: target.product?.path,
-					TUI_GRID_PRODUCT_SHA256: target.product?.sha256,
-					...(target.node === undefined
-						? {}
-						: {
-								QUOTA_STORYBOARD_NODE: target.node.path,
-								QUOTA_STORYBOARD_NODE_SHA256: target.node.sha256,
-							}),
-					[SESSIONS_RECEIPT_DIRECTORY]: undefined,
-					...receiptEnvironment,
-					...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
-					...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
-					TUI_GRID_SURFACE: target.surface,
-					TUI_GRID_KEYS: target.keys,
-					...(target.storyboardVariant === undefined
-						? {}
-						: { TUI_GRID_STORYBOARD_VARIANT: target.storyboardVariant }),
-					...(target.componentBinary === undefined
-						? {}
-						: {
-								TUI_GRID_COMPONENT_BINARY: target.componentBinary,
-								TUI_GRID_COMPONENT_RECEIPT: join(target.evidence, 'fixture-finished'),
-							}),
-				},
+		this.child = spawn(target.driver, ptyGridDriverArguments(target.surface), {
+			cwd: target.repository,
+			env: {
+				...process.env,
+				TUI_GRID_COMPONENT_DISPATCH_RECEIPT: undefined,
+				TUI_GRID_COMPONENT_SCENARIO: undefined,
+				TUI_GRID_COMPONENT_RELEASE: undefined,
+				QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE: undefined,
+				QUOTA_COMPONENT_FIXTURE_RELEASE_FILE: undefined,
+				...componentOverrides,
+				TUI_GRID_PRODUCT_BINARY: target.product?.path,
+				TUI_GRID_PRODUCT_SHA256: target.product?.sha256,
+				...(target.node === undefined
+					? {}
+					: {
+							QUOTA_STORYBOARD_NODE: target.node.path,
+							QUOTA_STORYBOARD_NODE_SHA256: target.node.sha256,
+						}),
+				[SESSIONS_RECEIPT_DIRECTORY]: undefined,
+				...receiptEnvironment,
+				...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
+				...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
+				TUI_GRID_CHECK_ONLY: undefined,
+				TUI_GRID_HANDSHAKE_ONLY: target.handshakeOnly === true ? '1' : undefined,
+				TUI_GRID_SURFACE: target.surface,
+				TUI_GRID_KEYS: target.keys,
+				...(target.storyboardVariant === undefined
+					? {}
+					: { TUI_GRID_STORYBOARD_VARIANT: target.storyboardVariant }),
+				...(target.componentBinary === undefined
+					? {}
+					: {
+							TUI_GRID_COMPONENT_BINARY: target.componentBinary,
+							TUI_GRID_COMPONENT_RECEIPT: join(target.evidence, 'fixture-finished'),
+						}),
 			},
-		);
+		});
 		let pending = '';
 		let stdout = '';
 		let stderr = '';

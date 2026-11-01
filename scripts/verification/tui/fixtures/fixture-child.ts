@@ -39,6 +39,7 @@ import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
 } from '../sessions/sessions-receipt-directory.ts';
+import { holdFixtureHandshake } from './fixture-handshake.ts';
 
 export const COMPONENT_TEST =
 	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
@@ -509,6 +510,11 @@ async function main(): Promise<number> {
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));
 	if (surface === 'public-sessions' || surface === 'quota-component' || surface === 'showcase') {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
+	}
+	if (process.env['TUI_GRID_HANDSHAKE_ONLY'] === '1') {
+		if (surface !== 'showcase') throw new FixtureLaunchRejected('handshake requires showcase');
+		await holdFixtureHandshake(output);
+		return 0;
 	}
 	const child = spawn(launch.executable, [...launch.arguments], {
 		env: launch.environment,
