@@ -19,6 +19,7 @@ for (const keys of ['legacy', 'kitty'] as const)
 				'legend-bridge',
 				`
 const {createInterface}=require('node:readline');
+const fs=require('node:fs');
 const emit=text=>process.stdout.write('TUI_GRID '+text+'\\n');
 const frame=text=>'\\x1b[?2026h\\x1b[2J\\x1b[H'+text+'\\x1b[?2026l';
 const main='\\x1b[38;2;255;255;255mCodex Alpha';
@@ -29,11 +30,13 @@ const flush=()=>{for(const bytes of queue)emit('BYTES '+Buffer.from(bytes).toStr
 createInterface({input:process.stdin}).on('line',line=>{
  if(line.startsWith('write ')){
   const text=Buffer.from(line.slice(6),'hex').toString();
+  const endHandled=overlay&&(text.includes('[F')||text.includes('[1;1F'));
   if(text.includes('OP')||text.includes('[1;1P')) {overlay=true;queue.push(frame(help(false)));}
   else if(overlay&&(text.includes('[F')||text.includes('[1;1F')))queue.push(frame(help(!${missing})));
   else if(overlay&&text.includes('[B'))queue.push(frame(help(false)));
   else if(overlay){overlay=false;queue.push(frame(main));}
   emit('OK');flush();
+  if(${missing}&&endHandled){fs.writeFileSync(${JSON.stringify(join(root, 'missing-legend-finished'))},'End handled without legend\\n');emit('EOF');process.stdout.write('TUI_GRID FINISHED 0\\n',()=>process.exit(0));}
  }else if(line.startsWith('read ')) {emit('OK');}
  else if(line==='stop'){emit('STOPPED 0');process.exit(0);}
  else emit('OK');
@@ -56,7 +59,10 @@ createInterface({input:process.stdin}).on('line',line=>{
 				Buffer.from(keys === 'legacy' ? '\x1bOP' : '\x1b[1;1P'),
 			);
 			if (missing) {
-				await expect(observed).rejects.toThrow();
+				await expect(observed).rejects.toThrow('grid checkpoint unreachable: Esc legend visible');
+				expect(readFileSync(join(root, 'missing-legend-finished'), 'utf8')).toBe(
+					'End handled without legend\n',
+				);
 				return;
 			}
 			const results = await observed;

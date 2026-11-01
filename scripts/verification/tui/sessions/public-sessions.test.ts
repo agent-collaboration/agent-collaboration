@@ -1,4 +1,6 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
@@ -58,7 +60,17 @@ function verificationRouterIdentity(pid: number): Record<string, unknown> {
 	return { ...produced };
 }
 const roots: string[] = [];
-afterEach(() => {
+const ownedLaunchChildren: ChildProcess[] = [];
+afterEach(async () => {
+	await Promise.all(
+		ownedLaunchChildren.splice(0).map(async (child) => {
+			if (child.exitCode === null && child.signalCode === null) {
+				const closed = once(child, 'close');
+				child.kill('SIGKILL');
+				await closed;
+			}
+		}),
+	);
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 function publicFixture(): {
@@ -135,7 +147,7 @@ test('public_lifecycle_cannot_claim_fixture_zero_effects_or_job_settlement', () 
 });
 test.each([undefined, 'normal codex'])(
 	'public_sessions_launch_uses_exact_binary_cwd_and_normal_environment %s',
-	(codex) => {
+	async (codex) => {
 		const fixture = publicFixture();
 		const inherited: NodeJS.ProcessEnv = {
 			HOME: join(fixture.root, 'normal home'),
@@ -146,12 +158,15 @@ test.each([undefined, 'normal codex'])(
 		const launch = publicSessionsLaunchConfiguration(fixture.target, fixture.host, inherited);
 		expect(launch.arguments).toEqual([fixture.executable]);
 		expect(inherited).toEqual(original);
-		const result = spawnSync(fixture.executable, [], {
+		const child = spawn(fixture.executable, [], {
 			cwd: fixture.approved,
 			env: launch.environment,
-			timeout: 2000,
+			stdio: 'ignore',
 		});
-		expect(result.status, result.error?.message).toBe(0);
+		ownedLaunchChildren.push(child);
+		await once(child, 'close');
+		expect(child.exitCode).toBe(0);
+		expect(child.signalCode).toBeNull();
 		expect(readJson(fixture.record)).toEqual({
 			argv: [],
 			cwd: fixture.approved,

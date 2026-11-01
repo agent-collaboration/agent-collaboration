@@ -55,6 +55,23 @@ function protocolDriver(root: string, source: string): DriverChild {
 		closeSync(stderr);
 	}
 }
+function watchFixtureMarker(
+	root: string,
+	name: string,
+): { readonly observed: Promise<void>; close(): void } {
+	const marker = join(root, name);
+	const watcher = watch(root, { signal: AbortSignal.timeout(5000) });
+	const observed = new Promise<void>((resolve, reject) => {
+		const inspect = (): void => {
+			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
+		};
+		watcher.on('change', inspect);
+		watcher.once('error', reject);
+		watcher.once('close', () => reject(new Error('fixture marker wait closed: ' + name)));
+		inspect();
+	});
+	return { observed, close: () => watcher.close() };
+}
 test('discovery must identify only the exact declared libtest entry', async () => {
 	const root = rootDirectory();
 	const executable = controlledExecutable(
@@ -72,18 +89,16 @@ test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 	const executable = controlledExecutable(
 		root,
 		'held-discovery',
-		`const fs=require('node:fs');process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');fs.writeFileSync(process.argv[2]+'/discovery-ready','ready\\n');setInterval(()=>{},1000);`,
+		`const fs=require('node:fs');fs.watch(process.argv[2],()=>{});process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');fs.writeFileSync(process.argv[2]+'/discovery-ready','ready\\n');`,
 	);
 	const readySignal = AbortSignal.timeout(5000);
 	const watcher = watch(root, { signal: readySignal });
-	let readinessInterval: ReturnType<typeof setInterval> | undefined;
 	const ready = new Promise<void>((resolve, reject) => {
 		const observeReady = (): void => {
 			const marker = join(root, 'discovery-ready');
 			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
 		};
-		// Exact marker state owns readiness; filesystem events only accelerate it.
-		readinessInterval = setInterval(observeReady, 10);
+		// Watch before launch, then inspect the exact state on each real file event.
 		watcher.on('change', observeReady);
 		watcher.once('error', reject);
 		watcher.once('close', () => reject(new Error('discovery readiness closed before ready')));
@@ -105,7 +120,6 @@ test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 			await vi.advanceTimersByTimeAsync(200);
 			failure = await discovery;
 		} finally {
-			clearInterval(readinessInterval);
 			watcher.close();
 			vi.useRealTimers();
 		}
@@ -134,13 +148,13 @@ test('static_deadline_stays_failure_after_cooperative_child_exit', async () => {
 		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];process.stdout.write('driver started\\n');process.stderr.write('driver stderr\\n');const watcher=fs.watch(root,()=>{const marker=path.join(root,'capture-stop');if(fs.existsSync(marker)&&fs.readFileSync(marker,'utf8')==='stop\\n'){process.stdout.write('owned cleanup settled\\n');watcher.close();process.disconnect();}});process.send('ready');`,
 	);
 	await once(child.process, 'message');
-	await expect(
-		waitStaticCapture(child, root, { work_seconds: 0.05, cleanup_seconds: 1 }).then((exit) => {
-			throw new Error(
-				`unexpected exit ${exit}; ${readFileSync(join(root, 'driver.stderr'), 'utf8')}`,
-			);
-		}),
-	).rejects.toThrow('static capture deadline');
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = waitStaticCapture(child, root, { work_seconds: 0.05, cleanup_seconds: 1 }).then(
+		(exit) => `unexpected exit ${exit}`,
+		(error: unknown) => String(error),
+	);
+	await vi.advanceTimersByTimeAsync(50);
+	expect(await waiting).toContain('static capture deadline');
 	expect(await child.completion).toBe(0);
 	expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n');
 	expect(readFileSync(join(root, 'driver.stdout'), 'utf8')).toContain('owned cleanup settled');
@@ -158,13 +172,17 @@ test('static_deadline_reports_unsettled_child_without_signalling_it', async () =
 		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'fixture-release'))){watcher.close();process.disconnect();process.exitCode=7;}});process.send('ready');`,
 	);
 	await once(child.process, 'message');
-	await expect(
-		waitStaticCapture(child, root, { work_seconds: 0.03, cleanup_seconds: 0.03 }).then((exit) => {
-			throw new Error(
-				`unexpected exit ${exit}; ${readFileSync(join(root, 'driver.stderr'), 'utf8')}`,
-			);
-		}),
-	).rejects.toThrow('cleanup unsettled');
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = waitStaticCapture(child, root, {
+		work_seconds: 0.03,
+		cleanup_seconds: 0.03,
+	}).then(
+		(exit) => `unexpected exit ${exit}`,
+		(error: unknown) => String(error),
+	);
+	await vi.advanceTimersByTimeAsync(30);
+	await vi.advanceTimersByTimeAsync(30);
+	expect(await waiting).toContain('cleanup unsettled');
 	expect(child.process.exitCode).toBeNull();
 	expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
 		exit: null,
@@ -178,10 +196,15 @@ test.each([0, 7])(
 	'static_wait_preserves_normal_success_and_failure_without_stop %s',
 	async (exit) => {
 		const root = rootDirectory();
-		const child = protocolDriver(root, `process.exitCode=${exit};`);
-		expect(await waitStaticCapture(child, root, { work_seconds: 2, cleanup_seconds: 1 })).toBe(
-			exit,
+		const child = protocolDriver(
+			root,
+			`process.on('message',()=>{process.exitCode=${exit};process.disconnect();});process.send('ready');`,
 		);
+		await once(child.process, 'message');
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		const waiting = waitStaticCapture(child, root, { work_seconds: 2, cleanup_seconds: 1 });
+		child.process.send('release');
+		expect(await waiting).toBe(exit);
 		expect(existsSync(join(root, 'capture-stop'))).toBe(false);
 		expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
 			exit,
@@ -198,19 +221,14 @@ test('static_stop_refuses_to_overwrite_a_foreign_marker', async () => {
 		`process.send('ready');process.on('message',()=>{process.disconnect();});`,
 	);
 	await once(child.process, 'message');
-	const waiting = waitStaticCapture(child, root, { work_seconds: 0.03, cleanup_seconds: 1 });
-	await expect(
-		(async () => {
-			const timer = setTimeout(() => {
-				child.process.send('release');
-			}, 100);
-			try {
-				await waiting;
-			} finally {
-				clearTimeout(timer);
-			}
-		})(),
-	).rejects.toThrow('invalid private capture stop marker');
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const waiting = waitStaticCapture(child, root, { work_seconds: 0.03, cleanup_seconds: 1 }).then(
+		(exit) => `unexpected exit ${exit}`,
+		(error: unknown) => String(error),
+	);
+	await vi.advanceTimersByTimeAsync(30);
+	child.process.send('release');
+	expect(await waiting).toContain('invalid private capture stop marker');
 	expect(await child.completion).toBe(0);
 	expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('different protocol\n');
 	expect(readJson(join(root, 'driver-exit.json'))).toMatchObject({
@@ -224,39 +242,38 @@ test.each([false, true])(
 	async (oracle) => {
 		const root = rootDirectory();
 		const release = join(root, 'descendant-release');
+		const ready = watchFixtureMarker(root, 'descendant-ready');
+		const exited = watchFixtureMarker(root, 'descendant-exited');
 		const executable = controlledExecutable(
 			root,
 			'inherited-output-parent',
-			`const cp=require('node:child_process');const fs=require('node:fs');const child=cp.spawn(process.execPath,['-e',${JSON.stringify("const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'descendant-release'))){watcher.close();}});")},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');setInterval(()=>{},1000);`,
+			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];process.once('exit',()=>fs.writeFileSync(path.join(root,'descendant-exited'),'ready\n'));const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'descendant-release'))){watcher.close();}});fs.writeFileSync(path.join(root,'descendant-ready'),'ready\n');`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
 		);
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		const task = oracle
 			? runCapturedCommand({ command: [executable], repository: root, timeoutSeconds: 0.2 })
 			: discoverCaptureTest([executable], root, 0.2);
-		let settled = false;
 		const observed = task.then(
-			(result) => {
-				settled = true;
-				return { kind: 'settled', result };
-			},
-			(error: unknown) => {
-				settled = true;
-				return { kind: 'settled', error: String(error) };
-			},
+			() => 'unexpected success',
+			(error: unknown) => String(error),
 		);
-		let timer: NodeJS.Timeout | undefined;
 		try {
-			const outcome = await Promise.race([
-				observed,
-				new Promise<{ kind: string }>((resolve) => {
-					timer = setTimeout(() => resolve({ kind: 'deadline' }), 2800);
-				}),
-			]);
-			expect(outcome.kind).toBe('settled');
-			expect(settled).toBe(true);
+			await ready.observed;
+			await vi.advanceTimersByTimeAsync(200);
+			const failure = await observed;
+			expect(failure).toContain(oracle ? 'command reap deadline' : 'capture discovery failed');
+			expect(failure).toContain('"timeout":true');
+			expect(failure).toContain(Buffer.from('partial inherited stdout\n').toString('base64'));
+			expect(failure).toContain(Buffer.from('partial inherited stderr\n').toString('base64'));
 		} finally {
-			if (timer !== undefined) clearTimeout(timer);
 			writeFileSync(release, 'release\n');
-			await observed;
+			try {
+				await exited.observed;
+				await observed;
+			} finally {
+				ready.close();
+				exited.close();
+			}
 		}
 	},
 );
