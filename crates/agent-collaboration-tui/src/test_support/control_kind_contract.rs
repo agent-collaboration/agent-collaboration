@@ -13,6 +13,36 @@ use iocraft::{ElementExt, TerminalEvent, prelude::*};
 use std::sync::{Arc, Mutex};
 use unicode_width::UnicodeWidthStr;
 
+pub(super) fn assert_outcome_snapshots_eq(
+    actual: &SurfaceSnapshot,
+    expected: &SurfaceSnapshot,
+    context: &str,
+) {
+    fn canonical_snapshot(snapshot: &SurfaceSnapshot) -> SurfaceSnapshot {
+        SurfaceSnapshot(
+            snapshot
+                .0
+                .iter()
+                .map(|(surface, payload)| {
+                    let canonical = match serde_json::from_slice::<serde_json::Value>(payload) {
+                        Ok(mut value) => {
+                            value.sort_all_objects();
+                            serde_json::to_vec(&value).expect("parsed JSON serializes")
+                        }
+                        Err(_) => payload.clone(),
+                    };
+                    (*surface, canonical)
+                })
+                .collect(),
+        )
+    }
+    assert_eq!(
+        canonical_snapshot(actual),
+        canonical_snapshot(expected),
+        "outcome: {context}"
+    );
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlKind {
     Button,
@@ -429,9 +459,10 @@ pub async fn assert_control_kind_contract<TElement: ElementExt + Send>(
                     step.redraw,
                     |acknowledgement| {
                         // Diagnose a wrong result before waiting for its expected paint.
-                        assert_eq!(
-                            acknowledgement.snapshot, step.expected_snapshot,
-                            "outcome: {context} step {index}"
+                        assert_outcome_snapshots_eq(
+                            &acknowledgement.snapshot,
+                            &step.expected_snapshot,
+                            &format!("{context} step {index}"),
                         );
                         assert_eq!(
                             acknowledgement.handlers, step.expected_handlers,

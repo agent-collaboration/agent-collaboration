@@ -42,6 +42,68 @@ fn snapshot(count: usize, enabled: bool) -> SurfaceSnapshot {
         format!("{count}|{enabled}").into_bytes(),
     )])
 }
+
+#[test]
+fn outcome_json_objects_compare_by_fields_including_nested_array_objects() {
+    let actual = SurfaceSnapshot(vec![(
+        SurfaceId::Screen,
+        br#"{"enabled":true,"rows":[{"id":"a","count":2}],"optional":null}"#.to_vec(),
+    )]);
+    let expected = SurfaceSnapshot(vec![(
+        SurfaceId::Screen,
+        br#"{"optional":null,"rows":[{"count":2,"id":"a"}],"enabled":true}"#.to_vec(),
+    )]);
+
+    assert_outcome_snapshots_eq(&actual, &expected, "JSON object key order is incidental");
+}
+
+#[test]
+fn outcome_comparison_rejects_changed_values_missing_fields_and_array_order() {
+    let actual = SurfaceSnapshot(vec![(
+        SurfaceId::Screen,
+        br#"{"enabled":true,"rows":[1,2],"optional":null}"#.to_vec(),
+    )]);
+    for forbidden in [
+        br#"{"enabled":false,"rows":[1,2],"optional":null}"#.as_slice(),
+        br#"{"enabled":true,"rows":[1,2]}"#.as_slice(),
+        br#"{"enabled":true,"rows":[2,1],"optional":null}"#.as_slice(),
+    ] {
+        let expected = SurfaceSnapshot(vec![(SurfaceId::Screen, forbidden.to_vec())]);
+        assert!(
+            std::panic::catch_unwind(|| {
+                assert_outcome_snapshots_eq(&actual, &expected, "changed outcome must fail");
+            })
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn outcome_comparison_keeps_opaque_payloads_and_surface_sequence_exact() {
+    let actual = snapshot(0, true);
+    assert_outcome_snapshots_eq(&actual, &snapshot(0, true), "equal opaque state");
+    for expected in [
+        snapshot(1, true),
+        SurfaceSnapshot(Vec::new()),
+        SurfaceSnapshot(vec![actual.0[0].clone(), actual.0[0].clone()]),
+    ] {
+        assert!(
+            std::panic::catch_unwind(|| {
+                assert_outcome_snapshots_eq(&actual, &expected, "changed opaque or surface state");
+            })
+            .is_err()
+        );
+    }
+    let ordered = SurfaceSnapshot(vec![actual.0[0].clone(), snapshot(1, true).0.remove(0)]);
+    let mut reversed = ordered.clone();
+    reversed.0.reverse();
+    assert!(
+        std::panic::catch_unwind(|| {
+            assert_outcome_snapshots_eq(&ordered, &reversed, "surface payload order");
+        })
+        .is_err()
+    );
+}
 fn definition(
     name: &str,
     title: &'static str,

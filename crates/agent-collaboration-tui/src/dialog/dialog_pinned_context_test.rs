@@ -67,6 +67,7 @@ fn PinnedPanel(props: &PinnedPanelProps, hooks: Hooks) -> impl Into<AnyElement<'
 #[derive(Props)]
 struct PinnedSceneProps {
     custom_tag: Option<String>,
+    remove_key: Option<&'static str>,
     #[iocraft(required)]
     journal: EventJournal,
     width: u16,
@@ -102,7 +103,7 @@ fn PinnedScene(props: &PinnedSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         );
         let definitions = [
             ("close", "Close", "Esc"),
-            ("remove", "Remove", "Delete"),
+            ("remove", "Remove", props.remove_key.unwrap_or("Delete")),
             ("help", "Help", "F1"),
             ("credits", "Credits", "F2"),
             ("resets", "Resets", "F3"),
@@ -312,8 +313,51 @@ async fn phone_options_keeps_captured_tag_on_its_own_row_in_all_five_poses() {
     }
 }
 #[tokio::test]
+async fn a_shorter_footer_keeps_the_separate_context_and_an_extra_body_row() {
+    // F12 has the same three-cell width as non-macOS Delete (crossterm event.rs:1423–1432).
+    for (height, body_rows, separate) in [(13u16, 4, true), (12, 3, true), (11, 3, false)] {
+        let handle = Arc::new(Mutex::new(None));
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui = element!(PinnedScene(journal,width:32u16,height,handle:handle.clone(),remove_key:Some("F12")));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            driver.initial(&mut frames).await;
+            let fixture = handle.lock().unwrap().clone().unwrap();
+            let panel = driver.frames.last().unwrap().round_frame_text();
+            assert_eq!(
+                fixture.scroll.position().viewport_height,
+                body_rows,
+                "{panel}"
+            );
+            assert!(
+                panel
+                    .lines()
+                    .any(|row| row.contains("Close Esc") && row.contains("Remove F12")),
+                "one footer row\n{panel}"
+            );
+            if separate {
+                assert_pinned(driver.frames.last().unwrap(), "Options · Resets", &fixture);
+            } else {
+                let title = panel.lines().find(|row| row.contains("Options")).unwrap();
+                assert!(
+                    title.contains('…') && title.contains("[alpha-tag]"),
+                    "{panel}"
+                );
+            }
+        })
+        .await
+        .unwrap();
+    }
+}
+
+#[tokio::test]
 async fn second_context_row_is_used_only_when_three_body_rows_remain() {
-    for (height, separate) in [(13u16, true), (12, false)] {
+    // crossterm event.rs:1423–1432 displays Delete as “Fwd Del” on macOS and “Del” elsewhere.
+    #[cfg(target_os = "macos")]
+    let cases = [(13u16, 3, true), (12, 3, false)];
+    #[cfg(not(target_os = "macos"))]
+    let cases = [(13u16, 4, true), (12, 3, true), (11, 3, false)];
+    for (height, body_rows, separate) in cases {
         let handle = Arc::new(Mutex::new(None));
         let (mut driver, config, journal) = EventDriver::new();
         let mut ui = element!(PinnedScene(journal,width:32u16,height,handle:handle.clone()));
@@ -324,8 +368,8 @@ async fn second_context_row_is_used_only_when_three_body_rows_remain() {
             let panel = driver.frames.last().unwrap().round_frame_text();
             assert_eq!(
                 fixture.scroll.position().viewport_height,
-                3,
-                "body gets exactly its three reserved rows\n{panel}"
+                body_rows,
+                "measured footer preserves the reserved body rows\n{panel}"
             );
             if separate {
                 assert_pinned(driver.frames.last().unwrap(), "Options · Resets", &fixture);
@@ -394,9 +438,13 @@ async fn wide_options_grid_sizes_to_typed_natural_context_and_retains_body_capac
         assert_eq!(panel.lines().count(), 24);
         assert!(panel.contains("RESET_ROW_13") && !panel.contains("RESET_ROW_14"));
         assert!(panel.contains("Help F1") && panel.contains("[alpha-tag]"));
+        // crossterm event.rs:1423–1432 displays Delete as “Fwd Del” on macOS and “Del” elsewhere.
+        #[cfg(target_os = "macos")]
+        let expected = include_str!("test_fixtures/options-120x36.txt").trim_end();
+        #[cfg(not(target_os = "macos"))]
+        let expected = include_str!("test_fixtures/options-120x36-linux.txt").trim_end();
         assert_eq!(
-            panel,
-            include_str!("test_fixtures/options-120x36.txt").trim_end(),
+            panel, expected,
             "typed context removes artificial allocation; body capacity and actions remain"
         );
     })
