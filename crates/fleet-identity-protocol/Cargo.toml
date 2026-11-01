@@ -9,11 +9,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+regex = "=1.12.4"
 serde.workspace = true
 schemars.workspace = true
 chrono = { version = "=0.4.45", default-features = false, features = ["std", "serde"] }
 message-board = { path = "../message-board", version = "0.1.118" }
 
 [dev-dependencies]
+proptest.workspace = true
 serde_json.workspace = true
 jsonschema.workspace = true
