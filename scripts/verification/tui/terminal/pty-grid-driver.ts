@@ -81,11 +81,11 @@ export function ptyGridDriverEntry(surface: PtyGridTarget['surface']): string {
 		case 'hard':
 			return 'quota_storyboard::compiled_grid_terminal_observation';
 		case 'public-sessions':
-			return 'compiled_public_sessions_grid_observation';
+			return 'quota_storyboard::compiled_public_sessions_grid_observation';
 		case 'sessions':
 		case 'sessions-filters':
 		case 'showcase':
-			return 'compiled_grid_terminal_observation';
+			return 'quota_storyboard::compiled_grid_terminal_observation';
 	}
 	const exhaustive: never = surface;
 	throw new Error('unknown driver surface: ' + String(exhaustive));

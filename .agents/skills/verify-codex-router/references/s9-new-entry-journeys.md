@@ -306,7 +306,39 @@ and a strict decoder for the selected event.
 Final producer settlement must reject a partial last line. These file-reader
 controls establish no native input, parent wait or preference persistence proof.
 
+### Post-flush event fence
+
+`QuotaFixtureControl.awaitEvent({afterOrdinal, kind, signal})` uses the same
+private connection and strictly increasing request IDs as setup. Its wire is
+`await_event` with `after_ordinal`; the `fixture-event-fence` response has no
+operation echo. A strict observed response must carry the requested existing
+kind and an ordinal strictly above the retained event boundary. The producer's
+latest matching ordinal can exceed the first matching journal record.
+
+The fence has only the caller's abort bound; existing setup requests retain their
+10-second failure guard. Ended-before-event, mismatched IDs/kinds/ordinals,
+malformed replies and native receipt claims fail. Abort/EOF stays terminal for
+that connection, with no reconnect or replay. Completion removes the abort
+listener, so a finished observation cannot cancel a later request.
+
+Bind `awaitCompletion(signal)` to that method and then independently decode the
+real journal. A control reply supplies no native input, draw, mount, child wait
+or preference fact. Real-socket/file controls suppress notifications and qualify
+this client boundary only. Product source/artifact admission, the actual quota
+adapter and a Lead-allocated native window remain required.
+
 ### Loop-ending login handoff
+
+The quota adapter composes `observeQuotaEvent` with the caller's existing
+AbortSignal. The socket fence must name a real matching ordinal in the
+independently read journal; only that journal supplies the decoded fact.
+
+`quotaLoginHandoff` binds child entry, then the parent's PID/count/raw wait
+result, then a later mounted view. The entry receipt's planned exit code is
+never a parent result. `quotaGroupingHandoff` binds the first invocation's
+actual None→Provider save/settlement and the next Provider mount/store.
+Both feed the existing same-PTY lifecycle owner and its separate F12 frame;
+they neither launch a product nor establish native proof by themselves.
 
 `MarkerInputSession.handoff` observes the exact action ACK, restored-terminal
 child entry, the parent's actual wait result, and a strictly newer quota mount

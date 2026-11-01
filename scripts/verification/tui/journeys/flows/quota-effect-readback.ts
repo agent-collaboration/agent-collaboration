@@ -72,7 +72,7 @@ export const quotaRefreshReceiptSchema = z.strictObject({
 	observations: z.array(refreshEventSchema),
 	requests: z.array(z.object({ method: z.string() })),
 });
-const loginSchema = z.strictObject({
+export const quotaLoginReceiptSchema = z.strictObject({
 	arguments: z.array(z.string()),
 	exitCode: z.number().int(),
 	terminal: z.discriminatedUnion('kind', [
@@ -86,7 +86,7 @@ const loginSchema = z.strictObject({
 		}),
 	]),
 });
-const loginParentExitSchema = z.strictObject({
+export const quotaLoginParentExitSchema = z.strictObject({
 	childPid: z.number().int().positive().nullable(),
 	waitOrdinal: z.number().int(),
 	status: z.discriminatedUnion('kind', [
@@ -108,7 +108,7 @@ export function requireQuotaLoginParentExit(
 	value: unknown,
 	expected: 0 | 130 | 7,
 ): { readonly kind: 'exited'; readonly code: number } {
-	const parent = loginParentExitSchema.parse(value);
+	const parent = quotaLoginParentExitSchema.parse(value);
 	if (
 		parent.childPid === null ||
 		parent.waitOrdinal !== 1 ||
@@ -148,8 +148,8 @@ export const quotaEffectReceiptSchema = z.strictObject({
 	removalGateEntered: z.boolean(),
 	removalGateReleased: z.boolean(),
 	refresh: quotaRefreshReceiptSchema.nullable(),
-	loginChild: loginSchema.nullable(),
-	loginParentExit: loginParentExitSchema.nullable(),
+	loginChild: quotaLoginReceiptSchema.nullable(),
+	loginParentExit: quotaLoginParentExitSchema.nullable(),
 	resetRequests: z.array(z.unknown()),
 	fixtureMutations: z.array(
 		z.object({ kind: z.literal('fixture-mutation'), operation: z.string() }),
