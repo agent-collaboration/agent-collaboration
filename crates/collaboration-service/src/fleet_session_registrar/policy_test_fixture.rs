@@ -1,7 +1,6 @@
 //! Policy-only atomic repository and event-ordered authority; neither proves SQLite or a provider.
 use super::*;
 use crate::fleet_session_registrar::test_support::MemoryRegistrationRepository;
-use codex_router_state::fleet_session_registration::*;
 use collaboration_contracts::HarnessSessionLaunch;
 use fleet_identity_protocol::*;
 use std::sync::{
