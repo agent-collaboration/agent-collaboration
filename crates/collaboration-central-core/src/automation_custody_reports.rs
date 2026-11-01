@@ -85,6 +85,7 @@ where
         };
         accepted.push(AcceptedWorkReport { subject, seq });
     }
+    ready.retain(|entry| entry.due_at.unix_millis() <= now_ms);
     crate::automation_batch_freeze::freeze::<Store, Driver>(scope, ready, now_ms, row_ids).await?;
     Ok(AutomationAnswer::Reports(WorkReportAcknowledgements {
         accepted,
@@ -235,6 +236,7 @@ where
     }
     let ready = waiting::prepare(scope, progress, &request.automation_id).await?;
     waiting::commit(scope, &request.automation_id, ready.as_ref()).await?;
+    let ready = ready.filter(|entry| entry.due_at.unix_millis() <= now_ms);
     crate::automation_batch_freeze::freeze::<Store, Driver>(
         scope,
         ready.into_iter().collect(),

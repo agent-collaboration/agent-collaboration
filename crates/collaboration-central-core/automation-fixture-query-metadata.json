@@ -67,7 +67,7 @@
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/automations/fixture_insert_automation_import.sql": "ad8000af8721956e117c593d2e90e4ec06ef471dea2d6dd0825f59736a10a0d0",
-    "sql/automations/fixture_read_automation.sql": "39158000883adc83d4b5fcf935cd53a9b81e786cfb55e0f670fc0a3cbdfa10c5",
+    "sql/automations/fixture_read_automation.sql": "e9d5b0a378b4f20e1395acf218843dd3c592395b6c7342055d72da8238694e29",
     "sql/automations/fixture_write_automation_batch.sql": "f3eca27f54def610cadba25e700c90369b5c932a29cdac67bc3408337fa74f0c",
     "sql/automations/fixture_write_automation_content.sql": "c19645f2b6d7ec044b65b61e00c2133fd3897b0a2833ea12f9d3e614ad3a3726",
     "sql/automations/fixture_write_automation_definition.sql": "c448a1684bf2dd0c0ee55fda9cb6b18d6a6c04e75ba557fc0681018669979a3f",

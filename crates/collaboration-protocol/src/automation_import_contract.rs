@@ -65,7 +65,8 @@ pub enum AutomationImportPayloadError {
 #[derive(Clone, Debug)]
 pub struct FrozenAutomationImportPayload {
     bytes: String,
-    decoded: AutomationImportPayload,
+    decoded: Box<AutomationImportPayload>,
+    resolved_timing: Option<AutomationTiming>,
 }
 
 impl FrozenAutomationImportPayload {
@@ -88,8 +89,12 @@ impl FrozenAutomationImportPayload {
         }
         let decoded: AutomationImportPayload = serde_json::from_value(raw.clone())?;
         require_retained_fields(&raw, &serde_json::to_value(&decoded)?)?;
-        decoded.validate()?;
-        Ok(Self { bytes, decoded })
+        let resolved_timing = decoded.validate()?;
+        Ok(Self {
+            bytes,
+            decoded: Box::new(decoded),
+            resolved_timing,
+        })
     }
 
     #[must_use]
@@ -100,6 +105,11 @@ impl FrozenAutomationImportPayload {
     #[must_use]
     pub fn payload(&self) -> &AutomationImportPayload {
         &self.decoded
+    }
+
+    #[must_use]
+    pub fn resolved_timing(&self) -> Option<&AutomationTiming> {
+        self.resolved_timing.as_ref()
     }
 }
 
@@ -146,7 +156,7 @@ pub struct AutomationImportIdentity {
 }
 
 impl AutomationImportPayload {
-    fn validate(&self) -> Result<(), AutomationImportPayloadError> {
+    fn validate(&self) -> Result<Option<AutomationTiming>, AutomationImportPayloadError> {
         use AutomationImportPayloadError::Invalid;
         if let Some(crate::ImportedContinuity::ImportedSummary {
             text,
@@ -189,7 +199,7 @@ impl AutomationImportPayload {
                 None
             }
         };
-        match (timing, self.first_due_ms) {
+        let resolved_timing = match (timing, self.first_due_ms) {
             (Some(request), Some(first)) => {
                 let before = first
                     .unix_millis()
@@ -199,10 +209,11 @@ impl AutomationImportPayload {
                 if resolved.first_due() != first {
                     return Err(Invalid("firstDueMs"));
                 }
+                Some(resolved)
             }
-            (None, None) => {}
+            (None, None) => None,
             _ => return Err(Invalid("firstDueMs")),
-        }
+        };
         if let Some(watermark) = self.watermark_local_ms
             && chrono::DateTime::<chrono::Utc>::from_timestamp_millis(watermark).is_none()
         {
@@ -236,16 +247,10 @@ impl AutomationImportPayload {
                     }
                 };
                 require_millisecond_timestamp(&configuration.expires_at)?;
-                if !matches!(
-                    configuration.state,
-                    crate::WakeState::Active | crate::WakeState::Paused | crate::WakeState::Expired
-                ) {
-                    return Err(Invalid("definition.configuration.state"));
-                }
             }
             AutomationKind::Schedule => {}
         }
-        Ok(())
+        Ok(resolved_timing)
     }
 }
 

@@ -1,0 +1,1 @@
+INSERT INTO automation_firings(firing_id,automation_id,due_ms,revision,content_id,state,report_service_id) VALUES(json_extract(?1,'$.firingId'),json_extract(?1,'$.automationId'),json_extract(?1,'$.dueMs'),json_extract(?1,'$.revision'),json_extract(?1,'$.contentId'),'received',json_extract(?1,'$.serviceId'));

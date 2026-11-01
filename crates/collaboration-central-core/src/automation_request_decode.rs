@@ -7,7 +7,45 @@ use serde_json::Value;
 pub(crate) fn decode(payload: BoardPayload) -> AutomationStoreResult<AutomationCall> {
     let value: Value = payload.decode().map_err(|_| malformed())?;
     call_limits(&value)?;
+    if value.get("kind").and_then(Value::as_str) == Some("automationImport") {
+        return decode_import(value);
+    }
     serde_json::from_value(value).map_err(|_| malformed())
+}
+
+fn decode_import(value: Value) -> AutomationStoreResult<AutomationCall> {
+    #[derive(serde::Deserialize)]
+    #[serde(
+        tag = "kind",
+        content = "value",
+        rename_all = "camelCase",
+        deny_unknown_fields
+    )]
+    enum ImportEnvelope {
+        AutomationImport(ImportRequest),
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct ImportRequest {
+        import_id: collaboration_protocol::ImportId,
+        payload: String,
+    }
+    let ImportEnvelope::AutomationImport(request) =
+        serde_json::from_value(value).map_err(|_| malformed())?;
+    let payload = collaboration_protocol::FrozenAutomationImportPayload::from_bytes(
+        request.payload.as_bytes(),
+    )
+    .map_err(|error| match error {
+        collaboration_protocol::AutomationImportPayloadError::Limit(error) => error.into(),
+        collaboration_protocol::AutomationImportPayloadError::Timing(error) => error.into(),
+        _ => malformed(),
+    })?;
+    Ok(AutomationCall::AutomationImport(
+        collaboration_protocol::AutomationImportRequest {
+            import_id: request.import_id,
+            payload,
+        },
+    ))
 }
 
 fn malformed() -> AutomationStoreError {

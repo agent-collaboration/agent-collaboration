@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-content-queries.json": "0a56f7fd21be90b0d3f7cb939023f929ab5df4f3941bb9a3998a0a29c1e8a5a0",
+    "automation-content-queries.json": "ebdb295f02766d200bd100d276e86b7aae36b2bacce96a162f5e4d4d2fced0b1",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -69,9 +69,10 @@
     "sql/automations/insert_content_revision.sql": "b41843f2bb0780545010dc63ab3b7c74ec540154d7664bb1fcc92e0fc2d20a19",
     "sql/automations/list_content_revisions.sql": "8b6529663859cc81561f4145f403d7a2f05489d887ebf3d6ece52fca49e5209d",
     "sql/automations/read_content_revision.sql": "361f84f2109eec96f8779f948233f7a032475c8ef3f7dde52ef09244ff44a9f1",
-    "src/generated_automation_content.rs": "eec30a875ce15775eab6d9c718dd9b686766539c3b11a64267df14ee2eab7157"
+    "sql/automations/read_imported_content_revision.sql": "ea026f16b02321cd25d2ee6a2695270dbd93f5d562dcb1021a5201acf2035987",
+    "src/generated_automation_content.rs": "c0cce9b458d48c70e3255ce1ccadcdc04173509231c6da43ec51f53fc9b1d2c7"
   },
-  "queries_digest": "92e4582e814dc7debf0f687cc0873b16b857f38588b94d6e4a7d1436d66530a3",
+  "queries_digest": "22daf3822629fcb888d49b6920581dbffe42877eb546cc0224d3c8e3254810c0",
   "queries": [
     {
       "name": "read_content_revision",
@@ -129,6 +130,54 @@
     {
       "name": "list_content_revisions",
       "bind_slots": 3,
+      "columns": [
+        {
+          "name": "content_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "owner_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "revision_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "recorded_at_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "digest",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "text",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "read_imported_content_revision",
+      "bind_slots": 2,
       "columns": [
         {
           "name": "content_id",

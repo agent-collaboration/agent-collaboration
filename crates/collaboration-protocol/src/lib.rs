@@ -11,6 +11,8 @@ mod automation_import_configuration;
 mod automation_import_contract;
 pub use automation_import_configuration::*;
 pub use automation_import_contract::*;
+mod automation_suspended_contract;
+pub use automation_suspended_contract::*;
 mod automation_fault_contract;
 pub use automation_fault_contract::*;
 mod automation_custody;

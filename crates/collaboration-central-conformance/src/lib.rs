@@ -25,6 +25,16 @@ pub use remote_session_create_scenarios::{
 mod automation_catalog_scenarios;
 #[cfg(feature = "client")]
 pub use automation_catalog_scenarios::run_automation_catalog_conformance;
+#[cfg(all(feature = "client", debug_assertions))]
+mod automation_handover_scenarios;
+#[cfg(all(feature = "client", debug_assertions))]
+pub use automation_handover_scenarios::{
+    AutomationHandoverRestartCase, prepare_automation_handover_restart,
+    resume_automation_handover_restart, run_automation_handover_carried_conformance,
+    run_automation_handover_conformance, run_automation_handover_external_conformance,
+    run_automation_handover_lifecycle_conformance, run_automation_handover_repair_conformance,
+    run_automation_handover_validation_conformance, run_automation_handover_wake_conformance,
+};
 #[cfg(feature = "client")]
 mod access_expiry_scenario;
 #[cfg(feature = "client")]

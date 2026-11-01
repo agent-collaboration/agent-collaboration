@@ -8,6 +8,40 @@ use sqlx_core::{
 };
 
 #[derive(Debug)]
+pub(crate) struct StoredDueAutomationOccupant {
+    pub automation_id: Option<String>,
+    pub firing_id: Option<String>,
+}
+pub(crate) fn list_due_automation_occupants<S>(
+    scope: &mut S,
+    now_ms: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredDueAutomationOccupant>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/automations/list_due_automation_occupants.sql"
+        )))
+        .bind(now_ms);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredDueAutomationOccupant {
+                    automation_id: row.try_get("automation_id")?,
+                    firing_id: row.try_get("firing_id")?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct StoredCustodyBatch {
     pub batch_id: Option<String>,
     pub service_id: Option<String>,

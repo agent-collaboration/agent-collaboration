@@ -25,6 +25,9 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     let (content, work) = match &record.definition {
+        StoredAutomationDefinition::Suspended(_) => {
+            return Err(AutomationStoreError::InvalidRecord("suspended.timing"));
+        }
         StoredAutomationDefinition::Schedule(schedule) => {
             let row = instructions::read_instruction_document(
                 scope,

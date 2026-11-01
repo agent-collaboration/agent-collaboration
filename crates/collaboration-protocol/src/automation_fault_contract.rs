@@ -27,6 +27,9 @@ pub struct FaultedAutomationSnapshot {
     deny_unknown_fields
 )]
 pub enum AutomationRefusal {
+    ImportConflict {
+        automation_id: crate::AutomationId,
+    },
     Validation {
         error: crate::AutomationValidationError,
     },

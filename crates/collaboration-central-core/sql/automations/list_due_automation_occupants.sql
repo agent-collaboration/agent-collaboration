@@ -1,0 +1,1 @@
+SELECT t.automation_id,f.firing_id FROM automation_timing t JOIN automation_firings f ON f.firing_id=t.occupying_firing_id WHERE t.occupying_external_run IS NULL AND f.state='pending' AND f.batch_id IS NULL AND f.due_ms<=CAST(?1 AS INTEGER) ORDER BY f.due_ms,f.firing_id;

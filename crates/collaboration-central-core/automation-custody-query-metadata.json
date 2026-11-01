@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "automation-custody-queries.json": "002c63d2c90dac644e76b7aeab8ec177ae8462bb7aaf0242be479dfc5f6cd758",
+    "automation-custody-queries.json": "538f1eed6dfa44d0e4232d15d99c4ec55225278210a6ebca19260c3e68a1bd08",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -70,6 +70,7 @@
     "sql/automations/authorized_automation_content.sql": "8c9bee444aa8f27fde863fb54a5f704afa4ec4e97eccaf04a120039b47bc7d44",
     "sql/automations/clear_cancelled_occupancy.sql": "f51cadd6137107a088b00281434b94414fdb146d00292eb8813381139cf4fe6b",
     "sql/automations/list_automation_batches.sql": "95ef875628fdac745fcb45119772146869d3f2939676e2b25cd240c290dabbe4",
+    "sql/automations/list_due_automation_occupants.sql": "97539c64a07b05454b89c5464033399236cfd17bb845c835e0c86639a62562f6",
     "sql/automations/list_pending_entries.sql": "2c7bafaf5bc824cee3b385eafe96965ceabbedb219d772d100e7aad6468cf340",
     "sql/automations/promote_automation_waiter.sql": "691d4ca81ba32d5b3d3318c21d56692b6402ebfd22b0ffdd82edbf2c61983ab6",
     "sql/automations/prune_acknowledged_batches.sql": "bc54436f23853d4175ebe3ba1464b7190d5612ac30b367216f981aeffcac4b16",
@@ -81,10 +82,30 @@
     "sql/automations/receive_automation_firings.sql": "78497a1143c1bf128e09bea4d6cb97e6d6a8bf0d3089dca08ec03257cb533e65",
     "sql/automations/replace_pending_entry.sql": "3a488fa01d89949a4b010bd28246bd27e85547e662ee3f0876a5b3eadb6d0c41",
     "sql/automations/write_firing_report.sql": "65b13ea3f11991c82ce61e204dd5bc13121ac7cc7bdd6c976ff6c987482d8964",
-    "src/generated_automation_custody.rs": "bd2a56b484e1640174db0e003ca0ded17fe06d09013683cdc19f6e4eb6cb8859"
+    "src/generated_automation_custody.rs": "dbc15cecd0ea05b707defa3c7caf5d283a448a160b2f64f209eb9def1621f121"
   },
-  "queries_digest": "b26e87bac04baa4adb5d6ed1723582ba4f33855b66a786845332664dc7b7e4f4",
+  "queries_digest": "db97b166b4a7c112ad279dd30859c9009c0b281ec223466a02be30fcb21ba448",
   "queries": [
+    {
+      "name": "list_due_automation_occupants",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "automation_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "firing_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
     {
       "name": "list_automation_batches",
       "bind_slots": 2,

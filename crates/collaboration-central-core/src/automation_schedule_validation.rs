@@ -19,9 +19,34 @@ pub(crate) fn definition(definition: &ScheduleDefinition) -> AutomationStoreResu
     if is_fresh(&definition.destination) && !valid_choice(definition.model.as_ref()) {
         return Err(invalid("model", AutomationRequestConstraint::RequiredToken));
     }
-    match &definition.destination {
+    retained_definition(definition)
+}
+
+pub(crate) fn retained_definition(definition: &ScheduleDefinition) -> AutomationStoreResult<()> {
+    retained_configuration(
+        &definition.destination,
+        definition.model.as_deref(),
+        definition.effort.as_deref(),
+        definition.enabled,
+    )
+}
+
+pub(crate) fn retained_configuration(
+    destination: &ExecutionDestination,
+    model: Option<&str>,
+    effort: Option<&str>,
+    enabled: bool,
+) -> AutomationStoreResult<()> {
+    for (field, value) in [("model", model), ("effort", effort)] {
+        if value
+            .is_some_and(|value| value.trim().is_empty() || value.chars().any(char::is_whitespace))
+        {
+            return Err(invalid(field, AutomationRequestConstraint::RequiredToken));
+        }
+    }
+    match destination {
         ExecutionDestination::Unprepared | ExecutionDestination::FreshEachRunUnprepared
-            if definition.enabled =>
+            if enabled =>
         {
             Err(invalid(
                 "enabled",
