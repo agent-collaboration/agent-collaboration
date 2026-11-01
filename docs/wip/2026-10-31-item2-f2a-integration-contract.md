@@ -1,14 +1,21 @@
 # F2a organization authority integration contract
 
-This records the F2a/F3a/F2b integration boundary before implementation. The
+This records the F2a/F2c/F3a integration boundary before implementation. The
 item-two Program Design and delivery plan govern behavior. F1's existing Rust
-contracts remain the body/result owners; this document does not replace them.
+contracts and F2c's new directory contracts own the body/result types; this
+document does not replace them. The 1 November ruling supersedes the earlier
+Registry and F2b allocation. Storage, handlers and host routing described here
+remain to be implemented; the current code contains the person-proof readers
+and pure authorization policy.
 
 F2a owns the organization authority, its store and transaction rules, token
 parsing/policy, guarded admin handlers, admissions, allowances and session
 registry. F3a supplies real signature verification, sign-in key fetching and
 caching, authenticated session confirmation, and mounting the bearer routes.
-F2b supplies per-organization Fleet routing and existing-store adoption.
+F2c owns the separate Fleet directory, its organization list, organization
+creation and initialization outbox, and the central deploy setting naming its
+one organization. Each central retains its existing single Fleet object and
+store; F2b was dropped by the 1 November ruling (R55).
 
 ## Person verification and confirmation
 
@@ -79,7 +86,6 @@ Every body refuses unknown fields.
 | `/v1/admin/organizations/{organizationId}/lookups/workspace` | `WorkspaceLookup` | `WorkspaceLookupResult` |
 | `/v1/admin/organizations/{organizationId}/lookups/machine` | `MachineLookup` | `MachineLookupResult` |
 | `/v1/admin/organizations/{organizationId}/lookups/command-status` | `CommandStatus` | `CommandStatusResult` |
-| `/v1/operator/organizations/create` | `CreateOrganization` | `OrganizationCommandResult` |
 | `/v1/operator/organizations/{organizationId}/owner` | `SetOrganizationOwner` | `OrganizationCommandResult` |
 
 The path selects a closed operation and organization before the body is
@@ -87,6 +93,9 @@ parsed. The body's organization must match it. No operation is selected from
 an arbitrary JSON tag. F10 adds its enrollment-revocation handler; device-code
 approval uses its own service edge, not an admin command. Presence and
 WhoIsLoggedIn handlers belong to their later ticket.
+
+`CreateOrganization` belongs to F2c's directory. F3a mounts that operator
+receiver there. It is not one of F2a's central handlers.
 
 ## Fleet capability
 
@@ -121,18 +130,35 @@ the same command ID and preserve its pending/applied status.
 
 ## Object and storage ownership
 
-`ObjectAddress::Organization(OrganizationId)` identifies one authority. Its
-address is derived directly from that ID, never from a Registry lookup.
-Native hosting gives it its own SQLite store; Cloudflare hosting gives it a
-distinct OrganizationObject. F2a adds their minimal routing and lifecycle.
-F2b alone changes Fleet addressing and adopts today's existing Fleet store.
+Each central serves exactly the organization named in its deploy settings.
+`ObjectAddress::Organization(OrganizationId)` is the planned address of its
+authority, derived directly from that ID. Native hosting gives it its own
+SQLite store; Cloudflare hosting gives it a distinct OrganizationObject.
+F2a adds the authority's minimal routing and lifecycle. A request naming
+another organization is refused before state changes; the central holds no
+rows or authority for that organization (R34, R55).
 
-The Registry owns organization list entries and their creating/active state.
-Creation records the creating entry and an outbox step in one transaction;
-the step initializes the authority and asks the Fleet capability to ensure
-that organization's Fleet exists before marking the Registry entry active.
-An uninitialized authority refuses commands, decisions and sign-in from its
-own state, even when an interrupted Registry row exists.
+F2c's separate directory owns organization list entries, their whole
+`CentralRecord` and their creating/active state. Its creation transaction
+records the creating entry and an outbox step. The step calls the named
+central over the network; it does not call a sibling authority object.
+F3a supplies the authenticated directory caller and mounts the central's
+receiver, restricted to the directory's pinned client, audience and scope.
+
+F2a owns the central-side initialization handler. Its shared request and
+result types are defined by F2c under `identity_contract.rs`:
+
+- `InitializeOrganization { organizationId, ownerEmail, commandId }`.
+- `OrganizationInitialization { result: initialized | alreadyInitialized |
+  notThisCentral }`.
+
+The handler checks the request against the deployed organization first.
+`notThisCentral` changes nothing. For the matching organization, it initializes
+the owner email as an unbound entry and the authority record in one authority
+transaction, and ensures that central's Fleet exists. Repeating initialization
+returns `alreadyInitialized`. The directory marks its own entry active only
+after acknowledgment. An uninitialized authority refuses commands, decisions
+and sign-in from its own state, even while the directory lists it as creating.
 
 The operator's owner replacement changes the authority's owner email and
 binding. An existing bound allowlist entry for that email supplies the new
@@ -140,8 +166,10 @@ binding; otherwise the entry is unbound until its provider sign-in. The
 previous owner keeps their admission as a member until removed. Repeating
 the same owner assignment does not erase its established binding.
 
-The exact authority/Registry SQL is separately held for owner approval. No
-commit may use an unapproved migration. F2a does not drop existing machine
+The exact SQL for F2a's nine authority tables remains held for owner approval.
+The two Registry tables in the earlier proposal are superseded: F2c owns the
+directory tables and their separate SQL approval. No commit may use an
+unapproved migration. F2a does not drop existing machine
 enrollments, move existing Fleet data, create a machine claim, or implement
 F10's activation/token/revocation lifecycle.
 
@@ -157,6 +185,8 @@ process against the same persistence directory.
 The signature/confirmation and Fleet capabilities use contract fixtures in
 these scenarios. They establish the authority's rules, real stored
 transactions, rollback and restart behavior. They leave real C7
-authentication, real sign-in output, per-organization Fleet routing and the
-Router registration/binding journey unverified until their owning tickets
-land and their real interactions pass.
+authentication, real sign-in output, directory-to-central initialization and
+the Router registration/binding journey unverified until their owning tickets
+land and their real interactions pass. F2c's two-central directory scenarios
+prove creation and routing across deployments; they do not replace F2a's own
+transaction, guard and restart proof.
