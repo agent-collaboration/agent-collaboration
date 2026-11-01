@@ -58,18 +58,7 @@ pub async fn observe_client_authentication<
     endpoint: ResourceUri,
     input: ClientAuthenticationProbe,
 ) -> Result<Vec<ClientAuthenticationObservation>, crate::ClientAssertionRefusal> {
-    let first = durable_steps::Uuid::parse_str(input.first_id.as_str())
-        .map_err(|_| crate::ClientAssertionRefusal::InvalidId)?;
-    let client = PrivateKeyJwtClient::new(
-        client_id,
-        signer,
-        Arc::new(FixedClock(input.now_millis)),
-        Arc::new(ScriptedIds {
-            first: first.as_u128(),
-            offset: AtomicU64::new(0),
-        }),
-        ClientAssertionLifetime::from_seconds(60)?,
-    )?;
+    let client = controlled_client(signer, client_id, input.now_millis, &input.first_id)?;
     let confirmation = PersonIntrospectionClient::new(client, transport, endpoint);
     let mut outcomes = Vec::with_capacity(usize::from(input.attempts));
     for _ in 0..input.attempts {
@@ -89,4 +78,24 @@ pub async fn observe_client_authentication<
         );
     }
     Ok(outcomes)
+}
+
+pub(crate) fn controlled_client<Signer: Ed25519ClientSigner>(
+    signer: Signer,
+    client_id: ServiceClientId,
+    now_millis: i64,
+    first_id: &message_board::RecordId,
+) -> Result<PrivateKeyJwtClient<Signer>, crate::ClientAssertionRefusal> {
+    let first = durable_steps::Uuid::parse_str(first_id.as_str())
+        .map_err(|_| crate::ClientAssertionRefusal::InvalidId)?;
+    PrivateKeyJwtClient::new(
+        client_id,
+        signer,
+        Arc::new(FixedClock(now_millis)),
+        Arc::new(ScriptedIds {
+            first: first.as_u128(),
+            offset: AtomicU64::new(0),
+        }),
+        ClientAssertionLifetime::from_seconds(60)?,
+    )
 }

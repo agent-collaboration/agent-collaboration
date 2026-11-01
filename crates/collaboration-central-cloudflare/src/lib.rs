@@ -13,7 +13,11 @@ mod conformance_bootstrap;
 #[cfg(feature = "conformance")]
 mod conformance_client_authentication;
 #[cfg(feature = "conformance")]
+mod conformance_client_key;
+#[cfg(feature = "conformance")]
 mod conformance_core_store;
+#[cfg(feature = "conformance")]
+mod conformance_directory_client;
 #[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
 #[cfg(feature = "conformance")]
@@ -42,6 +46,10 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "conformance")]
+    if request.path() == collaboration_central_core::DIRECTORY_CLIENT_PROBE_PATH {
+        return conformance_directory_client::fetch(request, env).await;
+    }
     #[cfg(feature = "conformance")]
     if request.path() == collaboration_central_core::CLIENT_AUTH_PROBE_PATH {
         return conformance_client_authentication::fetch(request, env).await;

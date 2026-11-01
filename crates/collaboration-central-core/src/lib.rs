@@ -27,6 +27,13 @@ mod conformance_access;
 #[cfg(feature = "conformance")]
 mod conformance_client_authentication;
 #[cfg(feature = "conformance")]
+mod conformance_directory_client;
+#[cfg(feature = "conformance")]
+pub use conformance_directory_client::{
+    DIRECTORY_CLIENT_PROBE_PATH, DirectoryClientObservation, DirectoryClientProbe,
+    observe_directory_client,
+};
+#[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
 #[cfg(feature = "conformance")]
 mod conformance_person_proof;

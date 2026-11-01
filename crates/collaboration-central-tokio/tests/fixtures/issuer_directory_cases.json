@@ -1,0 +1,1028 @@
+{
+  "oracle": "PD373b4704 directory shapes; C7 one-operation audience/scope; unknown is never a result. K7 and central replies are explicit stand-ins.",
+  "input": {
+    "nowMillis": 2208988800000,
+    "firstId": "019f0000-0000-7000-8000-000000000100",
+    "requests": [
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "activate",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "cancel",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "initialize",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "ownerEmail": "owner@example.invalid",
+          "commandId": "019f0000-0000-7000-8000-000000000006"
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "initialize",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "ownerEmail": "owner@example.invalid",
+          "commandId": "019f0000-0000-7000-8000-000000000006"
+        }
+      },
+      {
+        "operation": "initialize",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "ownerEmail": "owner@example.invalid",
+          "commandId": "019f0000-0000-7000-8000-000000000006"
+        }
+      },
+      {
+        "operation": "initialize",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "ownerEmail": "owner@example.invalid",
+          "commandId": "019f0000-0000-7000-8000-000000000006"
+        }
+      },
+      {
+        "operation": "cancel",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "cancel",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "cancel",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "cancel",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "initialize",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "ownerEmail": "owner@example.invalid",
+          "commandId": "019f0000-0000-7000-8000-000000000006"
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "activate",
+        "request": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "requestId": "019f0000-0000-7000-8000-000000000003"
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      },
+      {
+        "operation": "authorize",
+        "request": {
+          "decision": {
+            "organizationId": "019f0000-0000-7000-8000-000000000001",
+            "approver": "019f0000-0000-7000-8000-000000000002",
+            "requestId": "019f0000-0000-7000-8000-000000000003",
+            "installation": "019f0000-0000-7000-8000-000000000004",
+            "peer": "019f0000-0000-7000-8000-000000000005",
+            "label": "fixture machine",
+            "allowedWorkspaces": []
+          }
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "name": "positive-authorize",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "reserved"
+          }
+        }
+      }
+    },
+    {
+      "name": "positive-activate",
+      "operation": "activate",
+      "scope": "device-approval-activate",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-activate"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"activated\",\"enrollmentId\":\"019f0000-0000-7000-8000-000000000007\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "activate",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "activated",
+            "enrollmentId": "019f0000-0000-7000-8000-000000000007"
+          }
+        }
+      }
+    },
+    {
+      "name": "positive-cancel",
+      "operation": "cancel",
+      "scope": "device-approval-cancel",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-cancel"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"cancelled\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "cancel",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "cancelled"
+          }
+        }
+      }
+    },
+    {
+      "name": "positive-initialize",
+      "operation": "initialize",
+      "scope": "initialize-organization",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "ownerEmail": "owner@example.invalid",
+        "commandId": "019f0000-0000-7000-8000-000000000006"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"initialized\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "initialize",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "initialized"
+          }
+        }
+      }
+    },
+    {
+      "name": "authorize-unreadable",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "unreadable"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "authorize-resend-after-unreadable",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "reserved"
+          }
+        }
+      }
+    },
+    {
+      "name": "initialize-status-401",
+      "operation": "initialize",
+      "scope": "initialize-organization",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "ownerEmail": "owner@example.invalid",
+        "commandId": "019f0000-0000-7000-8000-000000000006"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 401,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "initialize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "initialize-status-403",
+      "operation": "initialize",
+      "scope": "initialize-organization",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "ownerEmail": "owner@example.invalid",
+        "commandId": "019f0000-0000-7000-8000-000000000006"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 403,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "initialize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "initialize-status-500",
+      "operation": "initialize",
+      "scope": "initialize-organization",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "ownerEmail": "owner@example.invalid",
+        "commandId": "019f0000-0000-7000-8000-000000000006"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 500,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "initialize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "cancel-token-wrong-scope",
+      "operation": "cancel",
+      "scope": "device-approval-cancel",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"cancelled\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "cancel",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "cancel-token-status-401",
+      "operation": "cancel",
+      "scope": "device-approval-cancel",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "response",
+        "status": 401,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"cancelled\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "cancel",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "cancel-token-status-503",
+      "operation": "cancel",
+      "scope": "device-approval-cancel",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "response",
+        "status": 503,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"cancelled\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "cancel",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "cancel-token-status-307",
+      "operation": "cancel",
+      "scope": "device-approval-cancel",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "response",
+        "status": 307,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"cancelled\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "cancel",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "initialize-redirect",
+      "operation": "initialize",
+      "scope": "initialize-organization",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "ownerEmail": "owner@example.invalid",
+        "commandId": "019f0000-0000-7000-8000-000000000006"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "initialize-organization"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 307,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "initialize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "authorize-wrong-media-type",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "text/plain",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "activate-not-reserved",
+      "operation": "activate",
+      "scope": "device-approval-activate",
+      "request": {
+        "organizationId": "019f0000-0000-7000-8000-000000000001",
+        "requestId": "019f0000-0000-7000-8000-000000000003"
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-activate"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"notReserved\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "activate",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "notReserved"
+          }
+        }
+      }
+    },
+    {
+      "name": "authorize-malformed-token-reply",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{}"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "authorize-token-transport-failure",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "transportFailure"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": false,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "authorize-operation-transport-failure",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "transportFailure"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "unknown"
+        }
+      }
+    },
+    {
+      "name": "authorize-resend-after-transport-failure",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"reserved\"}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "reserved"
+          }
+        }
+      }
+    },
+    {
+      "name": "authorize-actual-refusal",
+      "operation": "authorize",
+      "scope": "device-approval-authorize",
+      "request": {
+        "decision": {
+          "organizationId": "019f0000-0000-7000-8000-000000000001",
+          "approver": "019f0000-0000-7000-8000-000000000002",
+          "requestId": "019f0000-0000-7000-8000-000000000003",
+          "installation": "019f0000-0000-7000-8000-000000000004",
+          "peer": "019f0000-0000-7000-8000-000000000005",
+          "label": "fixture machine",
+          "allowedWorkspaces": []
+        }
+      },
+      "grant": {
+        "kind": "credential",
+        "scope": "device-approval-authorize"
+      },
+      "operationReply": {
+        "kind": "response",
+        "status": 200,
+        "contentType": "application/json",
+        "body": "{\"result\":\"refused\",\"reason\":{\"kind\":\"notOwner\"}}"
+      },
+      "expectOperation": true,
+      "expected": {
+        "operation": "authorize",
+        "outcome": {
+          "result": "answered",
+          "answer": {
+            "result": "refused",
+            "reason": {
+              "kind": "notOwner"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": [
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "reserved"
+        }
+      }
+    },
+    {
+      "operation": "activate",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "activated",
+          "enrollmentId": "019f0000-0000-7000-8000-000000000007"
+        }
+      }
+    },
+    {
+      "operation": "cancel",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "cancelled"
+        }
+      }
+    },
+    {
+      "operation": "initialize",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "initialized"
+        }
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "reserved"
+        }
+      }
+    },
+    {
+      "operation": "initialize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "initialize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "initialize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "cancel",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "cancel",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "cancel",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "cancel",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "initialize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "activate",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "notReserved"
+        }
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "unknown"
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "reserved"
+        }
+      }
+    },
+    {
+      "operation": "authorize",
+      "outcome": {
+        "result": "answered",
+        "answer": {
+          "result": "refused",
+          "reason": {
+            "kind": "notOwner"
+          }
+        }
+      }
+    }
+  ]
+}
