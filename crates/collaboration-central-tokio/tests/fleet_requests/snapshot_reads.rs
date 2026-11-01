@@ -70,7 +70,7 @@ async fn normal_snapshot_keeps_its_cut_across_reopen_and_current_rows_are_repair
     // real Session/Fleet path; Router replacement-cache visibility is separate.
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let first = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let first = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let setup=async {
         let client=ConformanceClient::new(first.base_url())?;
         let mut peer=enroll_admitted_peer(&client,SERVICE,"019f0000-0000-7000-8000-00000000100f","snapshot-origin","019f0000-0000-7000-8000-000000000f47").await?;
@@ -116,7 +116,7 @@ async fn normal_snapshot_keeps_its_cut_across_reopen_and_current_rows_are_repair
     }.await;
     first.shutdown().await?;
     let (first_records, cursor, snapshot_at) = setup?;
-    let second = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let second = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof=async {
         let client=ConformanceClient::new(second.base_url())?;
         let mut peer=enroll_admitted_peer(&client,SERVICE,"019f0000-0000-7000-8000-00000000100f","snapshot-origin","019f0000-0000-7000-8000-000000000f48").await?;

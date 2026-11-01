@@ -55,7 +55,7 @@ enum RuleCase {
 async fn run_case(case: RuleCase) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         delivery: DeliveryConfig {
             relay_peer: "019f0000-0000-7000-8000-000000005240"

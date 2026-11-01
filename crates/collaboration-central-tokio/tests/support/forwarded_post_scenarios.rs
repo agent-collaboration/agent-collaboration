@@ -41,8 +41,14 @@ pub(super) struct RegisteredForwardingPeers {
 
 pub(super) async fn registered_forwarding_peers(
     base: &str,
+    now: Option<collaboration_central_core::RegistryTime>,
 ) -> ConformanceResult<RegisteredForwardingPeers> {
     let client = ConformanceClient::new(base)?;
+    if let Some(now) = now {
+        client
+            .set_object_time(collaboration_central_core::ObjectAddress::Registry, now)
+            .await?;
+    }
     let sender = enroll_admitted_peer(
         &client,
         SENDER_SERVICE,
@@ -62,6 +68,18 @@ pub(super) async fn registered_forwarding_peers(
     let sender = sender.socket;
     let mut holder = Some(holder.socket);
     let arranged = async {
+        if let Some(now) = now {
+            for service in [SENDER_SERVICE, HOLDER_SERVICE] {
+                client
+                    .set_object_time(
+                        collaboration_central_core::ObjectAddress::Connection(ServiceId::try_from(
+                            service.to_owned(),
+                        )?),
+                        now,
+                    )
+                    .await?;
+            }
+        }
         let socket = holder.as_mut().ok_or("initial holder socket is absent")?;
         let database = register_database(socket, PeerId::try_from(HOLDER_PEER.to_owned())?).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(database)
@@ -113,11 +131,17 @@ async fn register_database(
 }
 
 pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> {
+    let now = if matches!(case, ForwardCase::RealTimer) {
+        // This case observes the actual platform alarm event, not elapsed time.
+        None
+    } else {
+        Some(collaboration_central_conformance::fixture_time()?)
+    };
     let RegisteredForwardingPeers {
         database,
         sender_socket: mut sender,
         holder_socket,
-    } = registered_forwarding_peers(base).await?;
+    } = registered_forwarding_peers(base, now).await?;
     let mut holder = Some(holder_socket);
     let proof = async {
         let socket = holder.as_mut().ok_or("initial holder socket is absent")?;

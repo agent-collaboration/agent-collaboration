@@ -30,7 +30,7 @@ async fn latest(socket: &mut WebSocket, item: ItemId, expected: Value) -> Confor
             {
                 return Ok(event.clone());
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            // The next authoritative response, not a pacing timer, advances this observer.
         }
     })
     .await?
@@ -58,17 +58,25 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let peer = recipient.peer;
     recipient.socket.close(CloseCode::Normal, None).await?;
     let proof=async {
+        let started = collaboration_central_conformance::fixture_time()?;
+        let mailbox = collaboration_central_core::ObjectAddress::Mailbox(
+            message_board::ServiceId::try_from(recipient_service.to_owned())?,
+        );
+        client.set_object_time(mailbox.clone(), started).await?;
         let item_id=ItemId::new(durable_steps::Uuid::now_v7())?;
         let item=DeliveryEnvelope::Item(DeliveryItem::<BoardDeliveryTypes>::new(item_id,
             serde_json::from_value(json!({"kind":"humanUser","installation":sender_service}))?,
             serde_json::from_value(json!({"peer":PeerId::new(peer)?,"address":{"endpoint":{"serviceId":recipient_service,"endpointId":"codex-local"},"sessionId":"quiet recipient"}}))?,
-            Some(runtime_primitives::SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis()+1500)),
+            Some(runtime_primitives::SyncTime::from_unix_millis(started.0.timestamp_millis()+1500)),
             serde_json::from_value(json!({"kind":"message","text":"offline timer expiry","delivery":"auto","guard":null,"senderDisplayName":null,"replyTo":null}))?,
         )?);
         let submitted=operation(&mut sender.socket,json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":item,"originEpoch":null}}})).await?;
         if submitted.pointer("/value/value/kind")!=Some(&json!("submitted")) {return Err(format!("quiet mail not admitted: {submitted}").into());}
         let sent=latest(&mut sender.socket,item_id,json!({"kind":"sent","value":{"seq":1}})).await?;
         if sent.get("version")!=Some(&json!(1)) {return Err("initial offline Sent version changed".into());}
+        client.set_object_time(mailbox,
+            collaboration_central_core::RegistryTime(started.0 + chrono::TimeDelta::milliseconds(1500)),
+        ).await?;
         let expired=latest(&mut sender.socket,item_id,json!({"kind":"expired"})).await?;
         if expired.get("version")!=Some(&json!(2)) || expired.get("cursor").and_then(Value::as_u64)<=sent.get("cursor").and_then(Value::as_u64) {return Err("offline expiry lost its newer exact revision".into());}
         // Only after sender status proves expiry do we reconnect and fetch.

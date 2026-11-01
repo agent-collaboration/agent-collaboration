@@ -100,7 +100,7 @@ impl CopyClient {
                 }
                 // This observer has no mutation or drive. Its next authoritative
                 // snapshot establishes readiness, never the backoff itself.
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                // The next authoritative response, not a pacing timer, advances this observer.
             }
         })
         .await?
@@ -121,7 +121,7 @@ impl CopyClient {
                 if reply.get("kind").and_then(Value::as_str) != Some("pending") {
                     return Err(format!("copy operation did not return its typed answer: {reply}; expected {expected}").into());
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                // The next authoritative response, not a pacing timer, advances this observer.
             }
         }).await?
     }
@@ -165,7 +165,7 @@ impl CopyClient {
                         return Ok(step);
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                // The next authoritative response, not a pacing timer, advances this observer.
             }
         }).await?
     }

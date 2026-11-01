@@ -82,7 +82,7 @@ const runtime = new Miniflare(
           MAILBOXES: { className: "MailboxObject", useSQLite: true },
           SCHEMA_PROBES: { className: "BootstrapObject", useSQLite: true },
         },
-        bindings: templateBindings,
+        bindings: { ...templateBindings, _cf_composed_clock: "1900000000000" },
         cacheAPI: true,
         outboundService: async (request) => {
           if (

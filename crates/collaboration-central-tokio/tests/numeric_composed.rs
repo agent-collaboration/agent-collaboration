@@ -30,13 +30,13 @@ async fn exact_scalar_cells_and_receipts_survive_whole_native_server_reopen()
             copy_ack_wait: Duration::from_secs(2),
         })
     };
-    let first = TokioServer::start(settings()?).await?;
+    let first = TokioServer::start_conformance(settings()?).await?;
     let prepared =
         ComposedNumericScenario::prepare(&ConformanceClient::new(first.base_url())?).await;
     first.shutdown().await?;
     let proof = async {
         let prepared = prepared?;
-        let second = TokioServer::start(settings()?).await?;
+        let second = TokioServer::start_conformance(settings()?).await?;
         let proof = prepared
             .verify(&ConformanceClient::new(second.base_url())?)
             .await;

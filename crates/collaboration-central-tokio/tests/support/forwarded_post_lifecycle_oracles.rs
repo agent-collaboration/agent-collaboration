@@ -134,15 +134,15 @@ where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = std::time::SystemTime::now();
+    let started = collaboration_central_conformance::fixture_time()?.0;
     control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
+        now: RegistryTime(started),
     })
     .await?;
     let original = post(sender, database).await?;
     let old_holder_frame = holder_frame(holder).await?;
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + std::time::Duration::from_secs(30)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
     })
     .await?;
     if outcome(sender, original).await? != ForwardOutcome::Unanswered {

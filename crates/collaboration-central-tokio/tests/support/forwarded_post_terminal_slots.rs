@@ -8,10 +8,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{DatabaseId, FrameId};
 use reqwest_websocket::WebSocket;
-use std::{
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::future::Future;
 
 type Outstanding = Vec<(FrameId, FrameId)>;
 
@@ -66,9 +63,9 @@ where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = SystemTime::now();
+    let started = collaboration_central_conformance::fixture_time()?.0;
     control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
+        now: RegistryTime(started),
     })
     .await?;
     let outstanding = reserve(sender, holder, database, 15).await?;
@@ -101,7 +98,7 @@ async fn deadline_release<Control, ControlFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
-    started: SystemTime,
+    started: chrono::DateTime<chrono::Utc>,
     control: &mut Control,
 ) -> ConformanceResult<()>
 where
@@ -111,7 +108,7 @@ where
     let old = post(sender, database).await?;
     let old_delivered = holder_frame(holder).await?;
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(1)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(1)),
     })
     .await?;
     let younger = reserve(sender, holder, database, 15).await?;
@@ -120,7 +117,7 @@ where
         return Err("deadline setup failed to retain exactly sixteen original slots".into());
     }
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
     })
     .await?;
     if outcome(sender, old).await? != ForwardOutcome::Unanswered {

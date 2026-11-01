@@ -242,7 +242,7 @@ async fn lost_nonempty_piece_is_read_without_new_hello_and_reconciles_across_two
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let keys = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: keys.url.clone(),

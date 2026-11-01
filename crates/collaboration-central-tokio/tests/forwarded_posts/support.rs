@@ -13,7 +13,7 @@ const SENDER_PEER: &str = "019f0000-0000-7000-8000-000000000476";
 const HOLDER_PEER: &str = "019f0000-0000-7000-8000-000000000477";
 
 pub async fn start(root: &Path, jwks: &str) -> ConformanceResult<TokioServer> {
-    Ok(TokioServer::start(TokioSettings {
+    Ok(TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

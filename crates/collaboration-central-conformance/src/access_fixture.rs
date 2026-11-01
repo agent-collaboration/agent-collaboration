@@ -59,9 +59,21 @@ pub fn fixture_key_profile_jwks() -> ConformanceResult<AccessJwks> {
     keys.keys.push(weak.key);
     Ok(keys)
 }
-pub fn fixture_claims(caller: AccessCaller, admin: bool) -> serde_json::Value {
+pub fn fixture_time() -> ConformanceResult<collaboration_central_core::RegistryTime> {
+    chrono::DateTime::from_timestamp_millis(
+        collaboration_central_core::ConformanceAccessClock::INITIAL_MILLIS,
+    )
+    .map(collaboration_central_core::RegistryTime)
+    .ok_or_else(|| "conformance fixture clock is outside the timestamp range".into())
+}
+
+pub fn fixture_claims(
+    caller: AccessCaller,
+    admin: bool,
+    now: collaboration_central_core::RegistryTime,
+) -> serde_json::Value {
     let policy = fixture_policy();
-    let now = chrono::Utc::now().timestamp();
+    let now = now.0.timestamp();
     let issuer = policy.issuer();
     let audience = if admin {
         policy.admin_audience
@@ -113,6 +125,7 @@ pub fn owner_assertion() -> ConformanceResult<String> {
                 email: fixture_policy().owner_identity,
             },
             true,
+            fixture_time()?,
         ),
         FIXTURE_KID,
     )
@@ -124,6 +137,7 @@ pub fn machine_assertion(token: &str) -> ConformanceResult<String> {
                 client_id: access_client_id(token)?,
             },
             false,
+            fixture_time()?,
         ),
         FIXTURE_KID,
     )

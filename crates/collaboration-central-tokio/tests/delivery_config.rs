@@ -16,7 +16,7 @@ async fn configured_relay_survives_enrollment_replay_update_and_real_readmission
     let jwks = JwksFixtureServer::start().await?;
     // Deliberately differ from both the receiver and the shared fixture value.
     let relay_peer = PeerId::try_from("019f0000-0000-7000-8000-000000005241".to_owned())?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

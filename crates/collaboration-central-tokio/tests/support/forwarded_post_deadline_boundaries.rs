@@ -9,10 +9,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{DatabaseId, OperationAnswer, ServerFrame};
 use reqwest_websocket::WebSocket;
-use std::{
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::{future::Future, time::Duration};
 
 pub(super) async fn exact_boundary<Control, ControlFuture>(
     sender: &mut WebSocket,
@@ -24,9 +21,9 @@ where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = SystemTime::now();
+    let started = collaboration_central_conformance::fixture_time()?.0;
     control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
+        now: RegistryTime(started),
     })
     .await?;
     let mut outstanding = Vec::new();
@@ -34,7 +31,7 @@ where
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));
     }
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_millis(29_999)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::milliseconds(29_999)),
     })
     .await?;
     let overflow = post(sender, database).await?;
@@ -60,7 +57,7 @@ where
         return Err("fresh forward reused an outstanding holder correlation identity".into());
     }
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
     })
     .await?;
     let old_holder_frame = outstanding
@@ -105,7 +102,6 @@ pub(super) async fn real_timer(
     database: DatabaseId,
 ) -> ConformanceResult<()> {
     // No SetTime: the production alarm must finish this real unanswered request.
-    let started = std::time::Instant::now();
     let original = post(sender, database).await?;
     let old_holder_frame = holder_frame(holder).await?;
     let frame = next_with_bound(sender, Duration::from_secs(35)).await?;
@@ -118,10 +114,6 @@ pub(super) async fn real_timer(
             "the actual production alarm did not return the correlated Unanswered outcome".into(),
         );
     }
-    println!(
-        "FORWARD_REAL_TIMER_OBSERVATION elapsed_ms={}",
-        started.elapsed().as_millis()
-    );
     let mut replacement = None;
     // Filling all sixteen slots proves the expired request no longer consumes one.
     for _ in 0..16 {

@@ -23,6 +23,10 @@ pub use admin_import_store::AdminImportRefusal;
 #[cfg(feature = "conformance")]
 mod conformance_access;
 #[cfg(feature = "conformance")]
+mod conformance_clock;
+#[cfg(feature = "conformance")]
+pub use conformance_clock::ConformanceAccessClock;
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;

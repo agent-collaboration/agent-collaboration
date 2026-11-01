@@ -25,7 +25,7 @@ const SECOND: &str = "550e8400-e29b-41d4-a716-4466554400c3";
 const RECIPIENT: &str = "550e8400-e29b-41d4-a716-4466554400c2";
 
 pub(super) async fn start(root: &Path, jwks: &JwksFixtureServer) -> ConformanceResult<TokioServer> {
-    Ok(TokioServer::start(TokioSettings {
+    Ok(TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

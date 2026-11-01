@@ -88,7 +88,7 @@ async fn native_central_process() -> ConformanceResult<()> {
     let controls: Vec<collaboration_central_conformance::RuntimeControlRequest> =
         serde_json::from_str(&std::env::var("CENTRAL_RESTART_CONTROLS")?)?;
     let server = if controls.is_empty() {
-        TokioServer::start(settings).await?
+        TokioServer::start_conformance(settings).await?
     } else {
         TokioServer::start_with_controls(settings, controls).await?
     };

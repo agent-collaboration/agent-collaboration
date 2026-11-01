@@ -13,7 +13,7 @@ async fn pages_keep_native_order_and_revoked_bindings_while_submit_still_refuses
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let keys = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: keys.url.clone(),

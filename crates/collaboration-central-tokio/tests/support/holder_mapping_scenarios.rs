@@ -55,7 +55,7 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
                 if actual.get("kind").and_then(Value::as_str) != Some("pending") {
                     return Err(format!("mapped call did not complete: {actual}").into());
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                // The next authoritative response, not a pacing timer, advances this observer.
             }
         }).await??;
         let expected_dispatch = vec![ObjectAddress::Connection(message_board::ServiceId::try_from(service.to_owned())?)];
@@ -84,7 +84,7 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
                         return Ok::<_, Box<dyn std::error::Error+Send+Sync>>(());
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                // The next authoritative response, not a pacing timer, advances this observer.
             }
         }).await??;
         if dispatches(&http, base).await? != expected_dispatch {

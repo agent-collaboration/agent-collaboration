@@ -37,7 +37,7 @@ fn stored_bytes(root: &std::path::Path, database: &str) -> ConformanceResult<Vec
 async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let database = "019f0000-0000-7000-8000-000000001048";
     let proof = async {
         let owner = OwnerClient::new(server.base_url())?;

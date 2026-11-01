@@ -68,6 +68,7 @@ impl EnrollmentAccessEdge {
                         client_id: AccessClientId::new(CLIENT_ID)?,
                     },
                     false,
+                    collaboration_central_conformance::fixture_time()?,
                 ),
                 FIXTURE_KID,
             )?,
