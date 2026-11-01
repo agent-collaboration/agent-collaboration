@@ -3,6 +3,7 @@
 mod access_crypto;
 mod access_verification;
 mod binding_attachment;
+mod client_assertion_signer;
 #[cfg(feature = "conformance")]
 mod composed_control;
 #[cfg(feature = "conformance")]
@@ -10,12 +11,17 @@ mod conformance_admission;
 #[cfg(feature = "conformance")]
 mod conformance_bootstrap;
 #[cfg(feature = "conformance")]
+mod conformance_client_authentication;
+#[cfg(feature = "conformance")]
 mod conformance_core_store;
 #[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
 #[cfg(feature = "conformance")]
 mod conformance_person_proof;
 mod issuer_crypto;
+pub use client_assertion_signer::CloudflareEd25519ClientSigner;
+mod service_form_transport;
+pub use service_form_transport::CloudflareServiceFormTransport;
 mod issuer_key_source;
 #[cfg(feature = "conformance")]
 pub use conformance_bootstrap::BootstrapObject;
@@ -36,6 +42,10 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "conformance")]
+    if request.path() == collaboration_central_core::CLIENT_AUTH_PROBE_PATH {
+        return conformance_client_authentication::fetch(request, env).await;
+    }
     #[cfg(feature = "conformance")]
     if request.path() == collaboration_central_core::PERSON_PROOF_PROBE_PATH {
         return conformance_person_proof::fetch(request, env).await;

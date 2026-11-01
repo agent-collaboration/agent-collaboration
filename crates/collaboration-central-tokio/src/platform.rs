@@ -36,6 +36,10 @@ pub struct TokioCentralPlatform {
 }
 
 impl TokioCentralPlatform {
+    #[must_use]
+    pub fn service_form_transport(&self) -> crate::TokioServiceFormTransport {
+        crate::TokioServiceFormTransport::new(self.client.clone())
+    }
     /// Bind only the issuer key address from the deployment's trust settings.
     #[must_use]
     pub fn issuer_key_source(

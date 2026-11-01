@@ -2,11 +2,15 @@
 #![forbid(unsafe_code)]
 
 mod access_crypto;
+mod client_assertion_signer;
 #[cfg(feature = "conformance")]
 mod conformance_control;
 #[cfg(feature = "conformance")]
 mod conformance_store;
 mod issuer_crypto;
+pub use client_assertion_signer::TokioEd25519ClientSigner;
+mod service_form_transport;
+pub use service_form_transport::TokioServiceFormTransport;
 mod issuer_key_source;
 pub use issuer_key_source::TokioIssuerKeySource;
 mod native_logging;

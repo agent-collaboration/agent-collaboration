@@ -25,9 +25,16 @@ pub use admin_import_store::AdminImportRefusal;
 #[cfg(feature = "conformance")]
 mod conformance_access;
 #[cfg(feature = "conformance")]
+mod conformance_client_authentication;
+#[cfg(feature = "conformance")]
 mod conformance_issuer_signature;
 #[cfg(feature = "conformance")]
 mod conformance_person_proof;
+#[cfg(feature = "conformance")]
+pub use conformance_client_authentication::{
+    CLIENT_AUTH_PROBE_PATH, ClientAuthenticationObservation, ClientAuthenticationProbe,
+    observe_client_authentication,
+};
 #[cfg(feature = "conformance")]
 pub use conformance_issuer_signature::{
     ISSUER_SIGNATURE_PROBE_PATH, IssuerSignatureObservation, IssuerSignatureProbe,
@@ -53,7 +60,16 @@ mod issuer_person_client;
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
 mod platform_capabilities;
+mod private_key_client_assertion;
 mod service_receiver_policy;
+pub use private_key_client_assertion::{
+    ClientAssertionAuthentication, ClientAssertionLifetime, ClientAssertionRefusal,
+    Ed25519ClientSigner, PrivateKeyJwtClient, ServiceForm,
+};
+mod person_introspection_client;
+pub use person_introspection_client::{
+    PersonIntrospectionClient, ServiceFormFailure, ServiceFormTransport,
+};
 mod service_token_time;
 pub use issuer_key_cache::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
