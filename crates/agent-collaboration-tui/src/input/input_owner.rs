@@ -52,6 +52,10 @@ pub fn InputOwner<'a>(
     let on_routed = props.on_routed.clone();
     #[cfg(all(feature = "test-support", debug_assertions))]
     let dispatch_receipt = props.dispatch_receipt.clone();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "InputOwner is the only terminal subscriber (R5)"
+    )]
     hooks.use_terminal_events(move |event| {
         #[cfg(all(feature = "test-support", debug_assertions))]
         let receipt_event = crate::input::input_dispatch_receipt::InputEventReadback::from(&event);
