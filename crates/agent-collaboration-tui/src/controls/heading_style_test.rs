@@ -78,6 +78,7 @@ fn HeadingScene(props: &HeadingSceneProps, mut hooks: Hooks) -> impl Into<AnyEle
             }],
         };
         let help_action = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action(),
             title: "Help".into(),
             toolbar_label: None,

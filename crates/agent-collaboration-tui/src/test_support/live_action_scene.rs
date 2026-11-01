@@ -70,6 +70,7 @@ pub struct LiveActionSceneProps {
 fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
     vec![
         ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("filters"),
             title: ActionTitle::dynamic(move || format!("Filters: {}", ui.filter.get())),
@@ -80,6 +81,7 @@ fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
             run: Handler::default(),
         },
         ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("login"),
             title: "Log in again".into(),
@@ -93,6 +95,7 @@ fn actions(stack: SurfaceStackHandle, ui: LiveUiState) -> Vec<ActionDef> {
             }),
         },
         ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("close"),
             title: "Close".into(),

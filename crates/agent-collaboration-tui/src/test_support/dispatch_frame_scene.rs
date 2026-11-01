@@ -33,6 +33,7 @@ pub fn DispatchScene(
             ScopeId::new("dispatch-frames").unwrap(),
             vec![
                 ActionDef {
+                    risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                     id: ActionId::new("change").unwrap(),
                     title: "Change".into(),
                     toolbar_label: None,
@@ -46,6 +47,7 @@ pub fn DispatchScene(
                     }),
                 },
                 ActionDef {
+                    risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                     id: ActionId::new("quit").unwrap(),
                     title: "Quit".into(),
                     toolbar_label: None,

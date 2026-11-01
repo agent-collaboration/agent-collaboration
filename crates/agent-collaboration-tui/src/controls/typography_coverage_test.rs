@@ -207,6 +207,7 @@ fn TypographyScene(
         actions: ActionRegistry::new(
             ScopeId::new("typography").unwrap(),
             vec![ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: ActionId::new("open-menu").unwrap(),
                 title: "Menu".into(),

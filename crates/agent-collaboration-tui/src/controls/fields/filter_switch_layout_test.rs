@@ -53,6 +53,7 @@ fn FilterSwitchScene(
         ]
         .into_iter()
         .map(|(id, title, key, is_local)| ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action(id),
             title: title.into(),
             toolbar_label: None,

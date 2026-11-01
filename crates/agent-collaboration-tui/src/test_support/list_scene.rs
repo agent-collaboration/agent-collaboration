@@ -113,6 +113,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         };
         let mut targets = control.targets();
         let toolbar = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("toolbar"),
             title: "Toolbar".into(),
@@ -138,6 +139,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                 ScopeId::new("list-scene").unwrap(),
                 vec![
                     ActionDef {
+                        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                         toolbar_label: None,
                         id: action("details"),
                         title: "Details".into(),
@@ -164,6 +166,7 @@ pub fn ListScene(props: &ListSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                     },
                     toolbar,
                     ActionDef {
+                        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                         toolbar_label: None,
                         id: action("cover"),
                         title: "Cover list".into(),

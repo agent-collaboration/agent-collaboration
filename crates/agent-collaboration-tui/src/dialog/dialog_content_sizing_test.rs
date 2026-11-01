@@ -53,6 +53,7 @@ fn ContentScene(props: &ContentSceneProps, mut hooks: Hooks) -> impl Into<AnyEle
     let mut opened = hooks.use_ref(|| false);
     if !opened.get() {
         let save = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("save"),
             title: "Save".into(),
@@ -66,6 +67,7 @@ fn ContentScene(props: &ContentSceneProps, mut hooks: Hooks) -> impl Into<AnyEle
             }),
         };
         let cancel = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("cancel"),
             title: "Cancel".into(),
@@ -78,6 +80,7 @@ fn ContentScene(props: &ContentSceneProps, mut hooks: Hooks) -> impl Into<AnyEle
             }),
         };
         let help = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("help"),
             title: "Help".into(),

@@ -65,6 +65,7 @@ fn EditorScene(props: &EditorSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
         actions: ActionRegistry::new(
             ScopeId::new("editor").unwrap(),
             vec![ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: action("menu"),
                 title: "Menu".into(),

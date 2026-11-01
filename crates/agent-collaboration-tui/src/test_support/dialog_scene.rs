@@ -82,6 +82,7 @@ pub fn DialogScene(props: &DialogSceneProps, mut hooks: Hooks) -> impl Into<AnyE
         actions: ActionRegistry::new(
             ScopeId::new("screen").unwrap(),
             vec![ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: action("quit"),
                 title: "Quit".into(),
@@ -138,6 +139,7 @@ fn dialog_spec(
     let group = GroupId::new("dialog-fields").unwrap();
     let parent_scroll = scroll.clone();
     let open = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action("client"),
         title: "Client".into(),
@@ -161,6 +163,7 @@ fn dialog_spec(
         }),
     };
     let start = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action("start"),
         title: "Start".into(),
@@ -182,6 +185,7 @@ fn dialog_spec(
         }),
     };
     let close = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action("close"),
         title: "Close".into(),
@@ -194,6 +198,7 @@ fn dialog_spec(
         }),
     };
     let help_action = ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         toolbar_label: None,
         id: action("help"),
         title: "Help".into(),

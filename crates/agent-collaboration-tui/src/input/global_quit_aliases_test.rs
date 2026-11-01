@@ -59,6 +59,7 @@ fn AliasScene(props: &AliasSceneProps, mut hooks: Hooks) -> impl Into<AnyElement
             keys.push("Ctrl+D".parse().unwrap());
         }
         let quit = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("quit"),
             title: "Quit".into(),
@@ -84,6 +85,7 @@ fn AliasScene(props: &AliasSceneProps, mut hooks: Hooks) -> impl Into<AnyElement
         let mut actions = vec![quit];
         if matches!(props.declaration, AliasDeclaration::LocalDomain) {
             actions.push(ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 toolbar_label: None,
                 id: action("domain-d"),
                 title: "Domain D".into(),

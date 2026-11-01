@@ -62,6 +62,7 @@ fn NarrowHelpScene(
             help: help.clone(),
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("help"),
             title: "Help".into(),
             toolbar_label: None,
@@ -120,6 +121,7 @@ fn NarrowHelpScene(
             ),
         };
         let inspect = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("inspect"),
             title: "Inspect metadata".into(),
             toolbar_label: None,
@@ -130,6 +132,7 @@ fn NarrowHelpScene(
             run: Handler::default(),
         };
         let refresh = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("refresh"),
             title: "Refresh account details".into(),
             toolbar_label: None,

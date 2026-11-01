@@ -131,6 +131,7 @@ fn ComboScene(props: &ComboSceneProps, mut hooks: Hooks) -> impl Into<AnyElement
         });
         *props.handle.0.lock().unwrap() = Some(control.clone());
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action(),
             title: "Client".into(),

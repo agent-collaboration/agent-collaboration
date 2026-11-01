@@ -35,6 +35,7 @@ fn SwitchScene(props: &SwitchSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let all = hooks.use_state(|| false);
     let stack = use_surface_stack(&mut hooks, |stack| {
         let folder = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("folder"),
             title: "This folder".into(),
@@ -48,6 +49,7 @@ fn SwitchScene(props: &SwitchSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             }),
         };
         let mut every = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("all"),
             title: "All sessions".into(),
@@ -64,6 +66,7 @@ fn SwitchScene(props: &SwitchSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             every.keys.push("Ctrl+Left".parse().unwrap());
         }
         let menu = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("menu"),
             title: "Menu".into(),

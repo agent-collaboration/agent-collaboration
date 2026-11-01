@@ -71,6 +71,7 @@ fn FilterScene(props: &FilterSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             on_pick: Handler::default(),
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: action("open"),
             title: "Choose".into(),

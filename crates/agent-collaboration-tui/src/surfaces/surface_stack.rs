@@ -56,6 +56,27 @@ pub struct SurfaceModel {
     pub primary_action: Option<ActionId>,
 }
 
+impl SurfaceModel {
+    pub(crate) fn reconcile_focus(&mut self) -> bool {
+        let actions = &self.actions;
+        let primary_action = self.primary_action.as_ref();
+        self.focus.reconcile_with_priority(|target| {
+            target.activation.as_ref().is_some_and(|action| {
+                primary_action == Some(action)
+                    || actions.definitions().iter().any(|definition| {
+                        definition.id == *action
+                            && definition.risk == crate::actions::ActionRisk::Destructive
+                    })
+            })
+        })
+    }
+
+    fn mount_initial_focus(&mut self) {
+        self.focus.capture_initial_focus();
+        self.reconcile_focus();
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct OverlaySpec {
     pub kind: OverlayKind,
@@ -218,7 +239,7 @@ impl SurfaceStack {
         })
     }
     pub fn new(mut screen: SurfaceModel) -> Self {
-        screen.focus.mount_initial_focus();
+        screen.mount_initial_focus();
         Self {
             screen,
             overlays: Vec::new(),
@@ -307,6 +328,7 @@ impl SurfaceStack {
         true
     }
     pub(crate) fn restore_dialog_model(&mut self, id: OverlayId) -> bool {
+        let active = self.top_id() == SurfaceId::Overlay(id);
         let Some(overlay) = self.overlays.iter_mut().find(|overlay| overlay.id == id) else {
             return false;
         };
@@ -314,6 +336,9 @@ impl SurfaceStack {
             return false;
         };
         overlay.model = model;
+        if active {
+            overlay.model.reconcile_focus();
+        }
         true
     }
     pub(crate) fn dropdown_for(&self, parent: SurfaceId, field: &TargetId) -> Option<&Overlay> {
@@ -347,6 +372,8 @@ impl SurfaceStack {
             self.suspended_dropdown = Some(dropdown);
             return false;
         }
+        let mut dropdown = dropdown;
+        dropdown.model.reconcile_focus();
         self.overlays.push(dropdown);
         true
     }
@@ -357,7 +384,7 @@ impl SurfaceStack {
         &mut self,
         mut spec: OverlaySpec,
     ) -> Result<OverlayId, OverlayIdentityExhausted> {
-        spec.model.focus.mount_initial_focus();
+        spec.model.mount_initial_focus();
         let next = self
             .next_identity
             .checked_add(1)
@@ -387,6 +414,7 @@ impl SurfaceStack {
             self.suspended_dropdown = None;
         }
         self.top_mut().focus.restore(closed.restore_focus.as_ref());
+        self.top_mut().reconcile_focus();
         Some(closed.id)
     }
 }

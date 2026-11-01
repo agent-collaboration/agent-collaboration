@@ -106,6 +106,14 @@ pub enum Placement {
     Hidden,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+/// Declared effect risk used to prioritize automatic focus, without invoking an action.
+pub enum ActionRisk {
+    #[default]
+    Ordinary,
+    Destructive,
+}
+
 #[derive(Clone)]
 pub struct ActionDef {
     pub id: ActionId,
@@ -116,6 +124,7 @@ pub struct ActionDef {
     pub availability: AvailabilityFn,
     pub choice: Option<Checked>,
     pub placement: Placement,
+    pub risk: ActionRisk,
     pub run: Handler<()>,
 }
 impl ActionDef {
@@ -142,6 +151,7 @@ impl fmt::Debug for ActionDef {
             .field("availability", &self.availability)
             .field("choice", &self.choice)
             .field("placement", &self.placement)
+            .field("risk", &self.risk)
             .finish_non_exhaustive()
     }
 }

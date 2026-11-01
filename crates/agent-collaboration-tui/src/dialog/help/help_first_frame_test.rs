@@ -41,6 +41,7 @@ mod tests {
             let help = HelpControl::new(stack, ActionId::new("help").unwrap());
             *props.fixture.lock().unwrap() = Some((help.clone(), stack));
             let mut actions = vec![ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 id: help.action().clone(),
                 title: "Help".into(),
                 toolbar_label: None,
@@ -54,6 +55,7 @@ mod tests {
                 ),
             }];
             actions.extend((1..=props.extra_actions).map(|number| ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 id: ActionId::new(format!("action-{number}")).unwrap(),
                 title: "Declared action".into(),
                 toolbar_label: None,

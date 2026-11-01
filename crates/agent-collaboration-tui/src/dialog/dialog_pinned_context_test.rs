@@ -123,6 +123,7 @@ fn PinnedScene(props: &PinnedSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
                 _ => Handler::from(|()| panic!("navigation must not run Remove")),
             };
             ActionDef {
+                risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
                 id: action(name),
                 title: title.into(),
                 toolbar_label: None,

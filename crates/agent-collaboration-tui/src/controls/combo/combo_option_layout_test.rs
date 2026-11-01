@@ -96,6 +96,7 @@ fn OptionScene(props: &OptionSceneProps, mut hooks: Hooks) -> impl Into<AnyEleme
             }),
         });
         let open = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action(),
             title: "Client".into(),
             toolbar_label: None,

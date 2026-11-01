@@ -44,6 +44,8 @@ enum ReplacementPhase {
     Ready,
     Pending,
     Hidden,
+    Completed,
+    ButtonsOnly,
 }
 #[derive(Clone)]
 struct ReplacementBinding {
@@ -61,6 +63,7 @@ struct ReplacementFixture {
 fn model_for(phase: ReplacementPhase, binding: &ReplacementBinding) -> SurfaceModel {
     let effects = binding.effects;
     let definition = |name: &str, title: &'static str, keys: &[&str], placement, run| ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action(name),
         title: title.into(),
         toolbar_label: None,
@@ -82,7 +85,10 @@ fn model_for(phase: ReplacementPhase, binding: &ReplacementBinding) -> SurfaceMo
         }),
     );
     credits.availability = AvailabilityFn::new(move || match phase {
-        ReplacementPhase::Ready | ReplacementPhase::Hidden => Availability::Available,
+        ReplacementPhase::Ready
+        | ReplacementPhase::Hidden
+        | ReplacementPhase::Completed
+        | ReplacementPhase::ButtonsOnly => Availability::Available,
         ReplacementPhase::Pending => Availability::Unavailable {
             reason: "Operation pending".into(),
         },
@@ -92,7 +98,11 @@ fn model_for(phase: ReplacementPhase, binding: &ReplacementBinding) -> SurfaceMo
     }
     let other = definition(
         "other",
-        "Other",
+        if matches!(phase, ReplacementPhase::Completed) {
+            "Choice"
+        } else {
+            "Other"
+        },
         &["F3"],
         Placement::Toolbar,
         Handler::default(),
@@ -116,7 +126,23 @@ fn model_for(phase: ReplacementPhase, binding: &ReplacementBinding) -> SurfaceMo
             stack.close_top();
         }),
     );
-    let mut targets = [&body, &credits, &other, &cancel]
+    let apply = definition(
+        "apply",
+        "Apply",
+        &[],
+        Placement::Toolbar,
+        Handler::default(),
+    );
+    let completed = matches!(
+        phase,
+        ReplacementPhase::Completed | ReplacementPhase::ButtonsOnly
+    );
+    let visible_actions = match phase {
+        ReplacementPhase::Completed => vec![&apply, &other, &cancel],
+        ReplacementPhase::ButtonsOnly => vec![&apply, &cancel],
+        _ => vec![&body, &credits, &other, &cancel],
+    };
+    let mut targets = visible_actions
         .into_iter()
         .map(|definition| {
             let target = button_target(TargetId::for_action(&definition.id), definition);
@@ -138,10 +164,14 @@ fn model_for(phase: ReplacementPhase, binding: &ReplacementBinding) -> SurfaceMo
         focus: FocusModel::new(targets).unwrap(),
         actions: ActionRegistry::new(
             ScopeId::new("replacement-dialog").unwrap(),
-            vec![body, credits, other, cancel, help],
+            match phase {
+                ReplacementPhase::Completed => vec![apply, other, cancel, help],
+                ReplacementPhase::ButtonsOnly => vec![apply, cancel, help],
+                _ => vec![body, credits, other, cancel, help],
+            },
         )
         .unwrap(),
-        primary_action: None,
+        primary_action: completed.then(|| action("apply")),
     }
 }
 #[derive(Props)]
@@ -338,86 +368,186 @@ async fn replacing_a_help_suspended_dialog_model_preserves_return_intent() {
     }
 }
 #[tokio::test]
-async fn no_safe_focus_keeps_enter_inert_and_scope_help_and_escape_working() {
-    let handle = Arc::new(Mutex::new(None));
-    let (mut driver, config, journal) = EventDriver::new();
-    let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
-    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        driver.initial(&mut frames).await;
-        let fixture = handle.lock().unwrap().clone().unwrap();
-        let snapshot = fixture.stack.snapshot();
-        let cancel = snapshot
-            .top()
-            .actions
-            .definitions()
-            .iter()
-            .find(|definition| definition.id == action("cancel"))
+async fn only_non_primary_button_stays_focused_through_help_and_supports_enter_or_escape() {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        for finish in [KeyCode::Enter, KeyCode::Esc] {
+            let handle = Arc::new(Mutex::new(None));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.lock().unwrap().clone().unwrap();
+                let snapshot = fixture.stack.snapshot();
+                let cancel = snapshot
+                    .top()
+                    .actions
+                    .definitions()
+                    .iter()
+                    .find(|definition| definition.id == action("cancel"))
+                    .unwrap();
+                let targets = vec![button_target(target("cancel"), cancel)];
+                fixture.stack.update_overlay_if_open(fixture.id, |model| {
+                    model.focus.replace_targets(targets).unwrap()
+                });
+                assert_eq!(
+                    fixture.stack.snapshot().top().focus.current(),
+                    Some(&target("cancel"))
+                );
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::F(1)), true)],
+                        true,
+                        |_| {
+                            assert!(
+                                fixture
+                                    .binding
+                                    .help
+                                    .is_active(SurfaceId::Overlay(fixture.id))
+                            );
+                            assert_eq!(
+                                fixture.binding.effects.get(),
+                                0,
+                                "Help opening invokes no fallback action"
+                            );
+                        },
+                    )
+                    .await;
+                driver
+                    .drive_checked(
+                        &mut frames,
+                        mode,
+                        vec![(key(KeyCode::Esc), true)],
+                        true,
+                        |_| {
+                            assert_eq!(
+                                fixture.stack.snapshot().top().focus.current(),
+                                Some(&target("cancel")),
+                                "Help returns to the enabled remaining button"
+                            );
+                            assert_eq!(fixture.binding.effects.get(), 0);
+                        },
+                    )
+                    .await;
+                driver
+                    .drive_checked(&mut frames, mode, vec![(key(finish), true)], true, |_| {
+                        assert_eq!(
+                            fixture.stack.snapshot().top_id(),
+                            SurfaceId::Screen,
+                            "Enter activates the focused Cancel and Escape closes explicitly"
+                        );
+                        assert_eq!(fixture.binding.effects.get(), 0);
+                    })
+                    .await;
+            })
+            .await
             .unwrap();
-        let targets = vec![button_target(target("cancel"), cancel)];
-        fixture.stack.update_overlay_if_open(fixture.id, |model| {
-            model.focus.replace_targets(targets).unwrap()
-        });
-        // Removing all safe targets changes routing even if the footer's pixels are identical.
-        assert_eq!(fixture.stack.snapshot().top().focus.current(), None);
-        driver
-            .drive_checked(
-                &mut frames,
-                InputMode::Burst,
-                vec![(key(KeyCode::Enter), false)],
-                false,
-                |_| {
-                    assert_eq!(
-                        fixture.stack.snapshot().top_id(),
-                        SurfaceId::Overlay(fixture.id),
-                        "Enter cannot arm Cancel"
-                    );
-                    assert_eq!(fixture.binding.effects.get(), 0);
-                },
-            )
-            .await;
-        driver
-            .drive_checked(
-                &mut frames,
-                InputMode::Burst,
-                vec![(key(KeyCode::F(1)), true)],
-                true,
-                |_| {
+        }
+    }
+}
+
+async fn assert_completed_replacement_focus(suspended: bool) {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        for phase in [ReplacementPhase::Completed, ReplacementPhase::ButtonsOnly] {
+            let expected = target(if matches!(phase, ReplacementPhase::Completed) {
+                "other"
+            } else {
+                "cancel"
+            });
+            let handle = Arc::new(Mutex::new(None));
+            let (mut driver, config, journal) = EventDriver::new();
+            let mut ui = element!(ReplacementScene(journal,handle:handle.clone()));
+            let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                driver.initial(&mut frames).await;
+                let fixture = handle.lock().unwrap().clone().unwrap();
+                driver
+                    .drive(&mut frames, mode, vec![(key(KeyCode::Tab), true)], true)
+                    .await;
+                assert_eq!(
+                    fixture.stack.snapshot().top().focus.current(),
+                    Some(&target("credits"))
+                );
+                if suspended {
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::F(1)), true)],
+                            true,
+                            |_| {
+                                assert!(
+                                    fixture
+                                        .binding
+                                        .help
+                                        .is_active(SurfaceId::Overlay(fixture.id))
+                                );
+                            },
+                        )
+                        .await;
+                }
+                replace_phase(&fixture, phase);
+                if suspended {
                     assert!(
                         fixture
                             .binding
                             .help
                             .is_active(SurfaceId::Overlay(fixture.id)),
-                        "scope Help remains available without focus"
-                    )
-                },
-            )
-            .await;
-        driver
-            .drive(
-                &mut frames,
-                InputMode::Burst,
-                vec![(key(KeyCode::Esc), true)],
-                true,
-            )
-            .await;
-        assert_eq!(fixture.stack.snapshot().top().focus.current(), None);
-        driver
-            .drive_checked(
-                &mut frames,
-                InputMode::Burst,
-                vec![(key(KeyCode::Esc), true)],
-                true,
-                |_| {
+                        "replacement preserves active Help"
+                    );
+                    driver
+                        .drive_checked(
+                            &mut frames,
+                            mode,
+                            vec![(key(KeyCode::Esc), true)],
+                            true,
+                            |_| {
+                                assert_eq!(
+                                    fixture.stack.snapshot().top().focus.current(),
+                                    Some(&expected),
+                                    "Help return focuses the first enabled non-primary activation"
+                                );
+                            },
+                        )
+                        .await;
+                } else {
                     assert_eq!(
-                        fixture.stack.snapshot().top_id(),
-                        SurfaceId::Screen,
-                        "explicit Escape still closes the scope"
-                    )
-                },
-            )
-            .await;
-    })
-    .await
-    .unwrap();
+                        fixture.stack.snapshot().top().focus.current(),
+                        Some(&expected),
+                        "completed replacement focuses the first enabled non-primary activation"
+                    );
+                    driver.initial(&mut frames).await;
+                }
+                let snapshot = fixture.stack.snapshot();
+                assert!(snapshot.top().focus.focused().unwrap().is_enabled());
+                assert_eq!(snapshot.top().primary_action, Some(action("apply")));
+                let map = fixture.stack.hit_regions().published().unwrap();
+                assert!(
+                    map.targets
+                        .iter()
+                        .any(|region| region.surface == snapshot.top_id()
+                            && region.target == expected
+                            && !region.cells.is_empty()),
+                    "the fallback focus owns actual painted cells"
+                );
+                assert_eq!(
+                    fixture.binding.effects.get(),
+                    0,
+                    "focus reconciliation invokes no action"
+                );
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+#[tokio::test]
+async fn completed_replacement_focuses_choice_or_cancel_before_the_primary() {
+    assert_completed_replacement_focus(false).await;
+}
+#[tokio::test]
+async fn help_suspended_completed_replacement_restores_choice_or_cancel_focus() {
+    assert_completed_replacement_focus(true).await;
 }

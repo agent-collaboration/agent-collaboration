@@ -52,6 +52,7 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let mut opened = hooks.use_ref(|| false);
     if !opened.get() {
         let apply = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             toolbar_label: None,
             id: ActionId::new("apply").unwrap(),
             title: "Apply".into(),

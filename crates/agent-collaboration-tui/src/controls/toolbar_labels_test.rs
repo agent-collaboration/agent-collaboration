@@ -33,6 +33,7 @@ fn definition(
     run: Handler<()>,
 ) -> ActionDef {
     ActionDef {
+        risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
         id: action(name),
         title: title.into(),
         toolbar_label: None,

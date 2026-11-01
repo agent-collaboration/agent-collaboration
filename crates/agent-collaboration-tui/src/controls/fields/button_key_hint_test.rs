@@ -41,6 +41,7 @@ fn HintScene(props: &HintSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'
         let mut retained_help = retained_help;
         retained_help.set(Some(help.clone()));
         let previous = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("previous"),
             title: "Previous".into(),
             toolbar_label: None,
@@ -54,6 +55,7 @@ fn HintScene(props: &HintSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'
             }),
         };
         let help_action = ActionDef {
+            risk: agent_collaboration_tui::actions::ActionRisk::Ordinary,
             id: action("help"),
             title: "Help".into(),
             toolbar_label: None,
