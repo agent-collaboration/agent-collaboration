@@ -23,7 +23,7 @@ impl ProviderCreateAdmission {
         admission: &ProviderSessionLaunchAdmission,
         request: &ConversationCreateRequest,
         supports_http: bool,
-    ) -> Result<Self, ConversationOperationFailure> {
+    ) -> Result<Self, Box<ConversationOperationFailure>> {
         let ProviderSessionLaunchAdmission::MachineTokens { port } = admission else {
             return Ok(Self::AccessEnrollment);
         };
@@ -77,14 +77,14 @@ impl ProviderCreateAdmission {
                 .creation_refused()
                 .await
                 .map_err(|error| launch_failure(request.operation_id.clone(), None, error))?;
-            return Err(failure(
+            return Err(Box::new(failure(
                 ConversationOperationFailureKind::UnsupportedCapability,
                 ConversationOperationFailureStage::Binding,
                 ProviderOperationEffect::None,
                 "provider runtime does not support the required session HTTP MCP binding",
                 request.operation_id.clone(),
                 None,
-            ));
+            )));
         }
         Ok(prepare)
     }

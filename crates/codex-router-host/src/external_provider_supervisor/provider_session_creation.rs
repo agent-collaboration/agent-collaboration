@@ -46,7 +46,7 @@ pub(super) fn create(
                             &launch_admission, &declared_request, runtime.admission().supports_mcp_http,
                         ).await {
                             Ok(admission) => admission,
-                            Err(error) => return ProviderOperationCompletion::Failure(error),
+                            Err(error) => return ProviderOperationCompletion::Failure(*error),
                         };
                         let setup = match admission.client_setup().await {
                             Ok(setup) => setup,
