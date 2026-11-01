@@ -112,6 +112,19 @@ struct Receiver {
     errors: Vec<String>,
 }
 
+// An independent RFC7523 wire oracle: each required assertion claim has its
+// real JSON type, rather than null-fallback indexing into a partial envelope.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClientAssertionClaims {
+    iss: String,
+    sub: String,
+    aud: String,
+    iat: i64,
+    exp: i64,
+    jti: String,
+}
+
 fn validate_assertion(
     assertion: &str,
     audience: &str,
@@ -120,24 +133,23 @@ fn validate_assertion(
     let (signed, signature) = assertion.rsplit_once('.').ok_or("malformed assertion")?;
     let (header, claims) = signed.split_once('.').ok_or("malformed signing input")?;
     let header: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(header)?)?;
-    let claims: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(claims)?)?;
+    let claims: ClientAssertionClaims = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(claims)?)?;
     if header != json!({"alg":"EdDSA","typ":"JWT","kid":"rfc8032-test-1"})
-        || claims["iss"] != "pinned-directory"
-        || claims["sub"] != "pinned-directory"
-        || claims["aud"] != audience
-        || claims["iat"] != 2_208_988_800_i64
-        || claims["exp"] != 2_208_988_860_i64
+        || claims.iss != "pinned-directory"
+        || claims.sub != "pinned-directory"
+        || claims.aud != audience
+        || claims.iat != 2_208_988_800_i64
+        || claims.exp != 2_208_988_860_i64
     {
         return Err("incorrect directory client assertion".into());
     }
     UnparsedPublicKey::new(&ED25519, public_key)
         .verify(signed.as_bytes(), &URL_SAFE_NO_PAD.decode(signature)?)
         .map_err(|_| "invalid directory assertion signature")?;
-    let jti = claims["jti"].as_str().ok_or("assertion has no jti")?;
-    if durable_steps::Uuid::parse_str(jti)?.get_version_num() != 7 {
+    if durable_steps::Uuid::parse_str(&claims.jti)?.get_version_num() != 7 {
         return Err("assertion jti is not UUIDv7".into());
     }
-    Ok(jti.to_owned())
+    Ok(claims.jti)
 }
 fn response(reply: &HttpReply) -> Response {
     match reply {
@@ -379,7 +391,7 @@ async fn directory_service_calls_match_the_shared_real_http_corpus()
         for (step,expected) in receiver.steps.iter().zip(corpus.expected.as_array().ok_or("fixture expected array")?) {
             if &step.expected!=expected {return Err("fixture per-step oracle mismatch".into());}
         }
-        println!("DIRECTORY_HTTP_RESULT {}",observed);
+        println!("DIRECTORY_HTTP_RESULT {observed}");
         println!("DIRECTORY_HTTP_COUNTS token={token_count} operation={operation_count} uniqueJti={} unexpected=0",token_ids.len());
         println!("DIRECTORY_HTTP_CENTRAL {}",serde_json::to_string(&central)?);
         Ok::<_,configuration::TestError>(())
