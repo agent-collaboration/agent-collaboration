@@ -32,6 +32,7 @@ test('an already flushed source event after the retained boundary needs no notif
 		afterSequence: boundary,
 		kind: 'view-mounted',
 		signal: new AbortController().signal,
+		awaitCompletion: async () => {},
 		decode: (value) => mounted.parse(value),
 	});
 	expect(result).toEqual({ sequence: 2, event: { kind: 'view-mounted', readback: { mount: 1 } } });
@@ -45,11 +46,13 @@ test('a partial append resolves only when the genuine complete line arrives', as
 		afterSequence: 1,
 		kind: 'view-mounted',
 		signal: new AbortController().signal,
+		awaitCompletion: async () => {
+			appendFileSync(path, second.slice(0, -1));
+			expect(journal.read()).toHaveLength(1);
+			appendFileSync(path, '\n');
+		},
 		decode: (value) => mounted.parse(value),
 	});
-	appendFileSync(path, second.slice(0, -1));
-	expect(journal.read()).toHaveLength(1);
-	appendFileSync(path, '\n');
 	expect((await waiting).sequence).toBe(2);
 });
 
@@ -62,6 +65,7 @@ test('a consumed boundary cannot reuse a stale mount event', async () => {
 		afterSequence: 2,
 		kind: 'view-mounted',
 		signal: stop.signal,
+		awaitCompletion: async () => {},
 		decode: (value) => mounted.parse(value),
 	});
 	const failure = expect(waiting).rejects.toThrow('aborted');
@@ -99,6 +103,7 @@ test('the selected event body is decoded strictly before returning lifecycle fac
 			afterSequence: 1,
 			kind: 'view-mounted',
 			signal: new AbortController().signal,
+			awaitCompletion: async () => {},
 			decode: (value) => mounted.parse(value),
 		}),
 	).rejects.toThrow();
@@ -144,7 +149,48 @@ test('future sequence floors reject instead of hiding earlier producer facts', a
 			afterSequence: 2,
 			kind: 'view-mounted',
 			signal: new AbortController().signal,
+			awaitCompletion: async () => {},
 			decode: (value) => mounted.parse(value),
 		}),
 	).rejects.toThrow('boundary');
+});
+
+test('an existing event cannot bypass an incomplete writer completion', async () => {
+	const path = journalFile();
+	appendFileSync(path, second);
+	const journal = new QuotaEventJournal(path);
+	const stop = new AbortController();
+	const waiting = journal.waitFor({
+		afterSequence: 1,
+		kind: 'view-mounted',
+		signal: stop.signal,
+		decode: (value) => mounted.parse(value),
+		awaitCompletion: (signal) =>
+			new Promise<void>((_resolve, reject) => {
+				signal.throwIfAborted();
+				signal.addEventListener('abort', () => reject(new Error('writer cancelled')), {
+					once: true,
+				});
+			}),
+	});
+	const rejected = expect(waiting).rejects.toThrow('aborted');
+	stop.abort();
+	await rejected;
+});
+
+test('writer failure cannot be replaced by an already flushed event', async () => {
+	const path = journalFile();
+	appendFileSync(path, second);
+	const journal = new QuotaEventJournal(path);
+	await expect(
+		journal.waitFor({
+			afterSequence: 1,
+			kind: 'view-mounted',
+			signal: new AbortController().signal,
+			decode: (value) => mounted.parse(value),
+			awaitCompletion: async () => {
+				throw new Error('actual writer failed');
+			},
+		}),
+	).rejects.toThrow('actual writer failed');
 });
