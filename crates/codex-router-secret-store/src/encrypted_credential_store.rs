@@ -382,6 +382,8 @@ impl EncryptedCredentialStore {
         let sync = |directory: &std::path::Path| std::fs::File::open(directory)?.sync_all();
         #[cfg(any(test, feature = "test-support"))]
         let sync = self.confirmed_write_sync.unwrap_or(sync);
+        #[cfg(any(test, feature = "test-support"))]
+        self.file_store.record_directory_sync_attempted();
         sync(self.file_store.root()).map_err(|source| SecretStoreError::Filesystem {
             path: self.file_store.root().to_path_buf(),
             source,

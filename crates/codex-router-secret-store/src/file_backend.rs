@@ -6,10 +6,6 @@ use std::io::Write;
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
-#[cfg(any(test, feature = "test-support"))]
-use std::sync::Arc;
-#[cfg(any(test, feature = "test-support"))]
-use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
@@ -21,6 +17,8 @@ use crate::model::SecretKey;
 use crate::model::SecretStoreError;
 
 mod debug_plaintext;
+mod file_write_observer;
+use file_write_observer::FileWriteObserver;
 mod pooled_credential_files;
 pub(crate) use pooled_credential_files::PooledCredentialTemporaryFile;
 
@@ -36,6 +34,8 @@ pub struct FileSecretStore {
     write_trace: Option<FileWriteTrace>,
     #[cfg(any(test, feature = "test-support"))]
     read_trace: Option<FileReadTrace>,
+    #[cfg(any(test, feature = "test-support"))]
+    durability_trace: Option<FileDurabilityTrace>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,139 +46,13 @@ enum FileCredentialPolicy {
     DebugPlaintextPooled,
 }
 
-trait FileWriteObserver {
-    fn temporary_file_written(&self, path: &Path, contents: &[u8]);
-    fn file_renamed(&self, from: &Path, to: &Path);
-    #[cfg(any(test, feature = "test-support"))]
-    fn file_removed(&self, path: &Path);
-}
-
 #[cfg(any(test, feature = "test-support"))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FileReadTraceEvent {
-    FileOpenAttempted { path: PathBuf },
-    DirectoryOpenAttempted { path: PathBuf },
-}
-
+mod file_trace;
 #[cfg(any(test, feature = "test-support"))]
-#[derive(Clone, Default)]
-pub struct FileReadTrace(Arc<Mutex<Vec<FileReadTraceEvent>>>);
-
-#[cfg(any(test, feature = "test-support"))]
-impl std::fmt::Debug for FileReadTrace {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("FileReadTrace([PATHS REDACTED])")
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl FileReadTrace {
-    pub fn events(&self) -> Vec<FileReadTraceEvent> {
-        self.0
-            .lock()
-            .map(|events| events.clone())
-            .unwrap_or_default()
-    }
-
-    fn file_open_attempted(&self, path: &Path) {
-        self.record(FileReadTraceEvent::FileOpenAttempted {
-            path: path.to_path_buf(),
-        });
-    }
-
-    fn directory_open_attempted(&self, path: &Path) {
-        self.record(FileReadTraceEvent::DirectoryOpenAttempted {
-            path: path.to_path_buf(),
-        });
-    }
-
-    fn record(&self, event: FileReadTraceEvent) {
-        if let Ok(mut events) = self.0.lock() {
-            events.push(event);
-        }
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-#[derive(Clone, Default)]
-pub struct FileWriteTrace(Arc<Mutex<Vec<FileWriteTraceEvent>>>);
-
-#[cfg(any(test, feature = "test-support"))]
-#[derive(Clone, Eq, PartialEq)]
-pub enum FileWriteTraceEvent {
-    TemporaryFileWritten { path: PathBuf, contents: Vec<u8> },
-    FileRenamed { from: PathBuf, to: PathBuf },
-    FileRemoved { path: PathBuf },
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl std::fmt::Debug for FileWriteTraceEvent {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TemporaryFileWritten { path, .. } => formatter
-                .debug_struct("TemporaryFileWritten")
-                .field("path", path)
-                .field("contents", &"[REDACTED]")
-                .finish(),
-            Self::FileRenamed { from, to } => formatter
-                .debug_struct("FileRenamed")
-                .field("from", from)
-                .field("to", to)
-                .finish(),
-            Self::FileRemoved { path } => formatter
-                .debug_struct("FileRemoved")
-                .field("path", path)
-                .finish(),
-        }
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl std::fmt::Debug for FileWriteTrace {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("FileWriteTrace([REDACTED])")
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl FileWriteTrace {
-    pub fn events(&self) -> Vec<FileWriteTraceEvent> {
-        self.0
-            .lock()
-            .map(|events| events.clone())
-            .unwrap_or_default()
-    }
-
-    fn record(&self, event: FileWriteTraceEvent) {
-        if let Ok(mut events) = self.0.lock() {
-            events.push(event);
-        }
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl FileWriteObserver for FileWriteTrace {
-    fn temporary_file_written(&self, path: &Path, contents: &[u8]) {
-        self.record(FileWriteTraceEvent::TemporaryFileWritten {
-            path: path.to_path_buf(),
-            contents: contents.to_vec(),
-        });
-    }
-
-    fn file_renamed(&self, from: &Path, to: &Path) {
-        self.record(FileWriteTraceEvent::FileRenamed {
-            from: from.to_path_buf(),
-            to: to.to_path_buf(),
-        });
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn file_removed(&self, path: &Path) {
-        self.record(FileWriteTraceEvent::FileRemoved {
-            path: path.to_path_buf(),
-        });
-    }
-}
+pub use file_trace::{
+    FileDurabilityTrace, FileDurabilityTraceEvent, FileReadTrace, FileReadTraceEvent,
+    FileWriteTrace, FileWriteTraceEvent,
+};
 
 impl FileSecretStore {
     /// Opens or creates a file-backed secret store.
@@ -197,6 +71,8 @@ impl FileSecretStore {
             write_trace: None,
             #[cfg(any(test, feature = "test-support"))]
             read_trace: None,
+            #[cfg(any(test, feature = "test-support"))]
+            durability_trace: None,
         })
     }
 
@@ -246,6 +122,8 @@ impl FileSecretStore {
             write_trace: None,
             #[cfg(any(test, feature = "test-support"))]
             read_trace: None,
+            #[cfg(any(test, feature = "test-support"))]
+            durability_trace: None,
         })
     }
 
@@ -312,13 +190,34 @@ impl FileSecretStore {
         contents: &[u8],
     ) -> Result<(), SecretStoreError> {
         #[cfg(any(test, feature = "test-support"))]
-        let observer = self
-            .write_trace
-            .as_ref()
-            .map(|trace| trace as &dyn FileWriteObserver);
+        let observers: [Option<&dyn FileWriteObserver>; 2] = [
+            self.write_trace
+                .as_ref()
+                .map(|trace| trace as &dyn FileWriteObserver),
+            self.durability_trace
+                .as_ref()
+                .map(|trace| trace as &dyn FileWriteObserver),
+        ];
         #[cfg(not(any(test, feature = "test-support")))]
-        let observer: Option<&dyn FileWriteObserver> = None;
-        write_atomic_file(&self.root, target_path, temp_stem, contents, observer)
+        let observers: [Option<&dyn FileWriteObserver>; 0] = [];
+        write_atomic_file(&self.root, target_path, temp_stem, contents, &observers)
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn open_with_durability_trace(
+        root: &Path,
+        trace: FileDurabilityTrace,
+    ) -> Result<Self, SecretStoreError> {
+        let mut store = Self::open(root)?;
+        store.durability_trace = Some(trace);
+        Ok(store)
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn record_directory_sync_attempted(&self) {
+        if let Some(trace) = &self.durability_trace {
+            trace.directory_sync_attempted(&self.root);
+        }
     }
 
     /// Reads the non-secret identifier that binds the secret root to its Keychain item.
@@ -458,7 +357,7 @@ fn write_atomic_file(
     target_path: &Path,
     temp_stem: &str,
     contents: &[u8],
-    observer: Option<&dyn FileWriteObserver>,
+    observers: &[Option<&dyn FileWriteObserver>],
 ) -> Result<(), SecretStoreError> {
     reject_symlink_path(target_path)?;
     let temp_path = root.join(format!(
@@ -469,13 +368,16 @@ fn write_atomic_file(
     reject_symlink_path(&temp_path)?;
     let mut temp_file = open_private_temp_file(&temp_path)?;
     write_all(&mut temp_file, &temp_path, contents)?;
-    if let Some(observer) = observer {
+    for observer in observers.iter().flatten() {
         observer.temporary_file_written(&temp_path, contents);
     }
     sync_file(&temp_file, &temp_path)?;
+    for observer in observers.iter().flatten() {
+        observer.temporary_file_synced(&temp_path);
+    }
     drop(temp_file);
     rename(&temp_path, target_path)?;
-    if let Some(observer) = observer {
+    for observer in observers.iter().flatten() {
         observer.file_renamed(&temp_path, target_path);
     }
     set_private_file_permissions(target_path)

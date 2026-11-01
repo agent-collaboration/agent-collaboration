@@ -33,6 +33,17 @@ async fn fleet_machine_login_first_credential_rename_then_failed_sync_is_unknown
     };
     let fixture = Fixture::new();
     let encrypted = encrypted_credentials(fixture.root.path());
+    let old = FleetSecretKey::new(
+        FleetSecretKind::MachineCredential,
+        "019f0000-0000-7000-8000-000000000002",
+        "019f0000-0000-7000-8000-000000000009",
+    )
+    .unwrap()
+    .secret_key()
+    .unwrap();
+    encrypted
+        .write_staged(&old, &SecretString::new("old-confirmed-enrollment-canary"))
+        .unwrap();
     let failing = codex_router_secret_store::test_support::with_confirmed_credential_sync_failure(
         encrypted.clone(),
     );
@@ -61,6 +72,11 @@ async fn fleet_machine_login_first_credential_rename_then_failed_sync_is_unknown
     assert!(
         read_metadata(fixture.root.path()).unwrap().is_none(),
         "public metadata waits for a confirmed credential write"
+    );
+    assert_eq!(
+        encrypted.read_secret(&old).unwrap().expose_secret(),
+        "old-confirmed-enrollment-canary",
+        "old credentials never retire before the new credential is confirmed"
     );
     let key = FleetSecretKey::new(
         FleetSecretKind::MachineCredential,

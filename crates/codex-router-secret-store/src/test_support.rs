@@ -11,6 +11,7 @@ pub use crate::file_backend::FileReadTraceEvent;
 use crate::file_backend::FileSecretStore;
 pub use crate::file_backend::FileWriteTrace;
 pub use crate::file_backend::FileWriteTraceEvent;
+pub use crate::file_backend::{FileDurabilityTrace, FileDurabilityTraceEvent};
 use crate::keychain_data_key::KeychainAccess;
 use crate::keychain_data_key::KeychainAccessError;
 use crate::keychain_data_key::PooledCredentialDataKey;
@@ -89,6 +90,20 @@ pub fn open_encrypted_credential_store(
 ) -> Result<EncryptedCredentialStore, SecretStoreError> {
     let home_root = production_home_root()?;
     open_encrypted_credential_store_for_home(secret_root.as_ref(), &home_root)
+}
+
+/// Observes real write/fsync/rename order for confirmed credential publication.
+pub fn open_encrypted_credential_store_with_durability_trace(
+    secret_root: impl AsRef<Path>,
+) -> Result<(EncryptedCredentialStore, FileDurabilityTrace), SecretStoreError> {
+    let secret_root = secret_root.as_ref();
+    ensure_test_credential_key_root_safe_for_home(secret_root, &production_home_root()?)?;
+    let trace = FileDurabilityTrace::default();
+    let files = FileSecretStore::open_with_durability_trace(secret_root, trace.clone())?;
+    Ok((
+        EncryptedCredentialStore::new(files, PooledCredentialDataKey::from_bytes([0x54; 32])),
+        trace,
+    ))
 }
 
 fn open_encrypted_credential_store_for_home(
