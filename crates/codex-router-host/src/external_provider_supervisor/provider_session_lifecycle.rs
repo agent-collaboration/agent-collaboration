@@ -58,12 +58,28 @@ pub(super) fn resume(
                 let approver = request.approver;
                 let completion_target = target.clone();
                 let completion_inner = Arc::clone(&backend.inner);
+                let restore_backend = backend.clone();
                 backend.spawn_operation(operation_id.clone(), live, async move {
+                    let mcp = match restore_backend
+                        .session_mcp_for_restore(&completion_target)
+                        .await
+                    {
+                        Ok(mcp) => mcp,
+                        Err(error) => {
+                            return ProviderOperationCompletion::Failure(
+                                super::provider_launch_admission::launch_failure(
+                                    operation_id,
+                                    Some(completion_target),
+                                    error,
+                                ),
+                            );
+                        }
+                    };
                     match runtime
                         .resume_session(
                             provider_session_id.clone(),
                             PathBuf::from(String::from(working_directory.clone())),
-                            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
+                            mcp,
                         )
                         .await
                     {

@@ -4,6 +4,8 @@ mod provider_operation_failure;
 mod provider_prompt_contents;
 pub use provider_prompt_contents::ProviderPromptContentsRequest;
 mod provider_conversation_backend;
+mod provider_launch_admission;
+mod provider_session_creation;
 mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_settings_control;

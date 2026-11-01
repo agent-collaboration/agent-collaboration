@@ -90,6 +90,10 @@ pub(crate) async fn ensure_provider_session_loaded(
     let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
         return unavailable("provider runtime is unavailable");
     };
+    let mcp = match supervisor.session_mcp_for_restore(target).await {
+        Ok(mcp) => mcp,
+        Err(error) => return unavailable(error.to_string()),
+    };
     let provider_session_id = String::from(target.session_id.clone());
     let working_directory = match inspect_provider_session_loadability(
         runtime.as_ref(),
@@ -123,11 +127,7 @@ pub(crate) async fn ensure_provider_session_loaded(
         }
     };
     match runtime
-        .load_session(
-            provider_session_id,
-            working_directory,
-            acp_client_runtime::ProviderSessionMcp::ConnectionDefaults,
-        )
+        .load_session(provider_session_id, working_directory, mcp)
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
