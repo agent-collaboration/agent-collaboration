@@ -1,0 +1,84 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"type": "object",
+	"properties": {
+		"iss": {
+			"type": "string",
+			"format": "uri"
+		},
+		"sub": {
+			"type": "string",
+			"format": "uuid",
+			"pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+		},
+		"aud": {
+			"type": "string",
+			"format": "uri",
+			"description": "Exactly one relying-service audience; arrays are refused"
+		},
+		"exp": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991,
+			"description": "Seconds since the Unix epoch"
+		},
+		"iat": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991,
+			"description": "Seconds since the Unix epoch"
+		},
+		"scope": {
+			"type": "string"
+		},
+		"client_id": {
+			"type": "string",
+			"minLength": 1
+		},
+		"azp": {
+			"type": "string",
+			"minLength": 1
+		},
+		"sid": {
+			"type": "string",
+			"format": "uuid",
+			"pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+		},
+		"jti": {
+			"type": "string",
+			"minLength": 1
+		},
+		"organization_id": {
+			"type": "string",
+			"format": "uuid",
+			"pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+		},
+		"second_factor_at": {
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 9007199254740991,
+			"description": "Seconds since the Unix epoch"
+		},
+		"amr": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"enum": ["otp", "hwk", "swk", "user", "mfa"]
+			}
+		}
+	},
+	"required": [
+		"iss",
+		"sub",
+		"aud",
+		"exp",
+		"iat",
+		"scope",
+		"client_id",
+		"azp",
+		"sid",
+		"jti",
+		"organization_id"
+	],
+	"additionalProperties": {}
+}
