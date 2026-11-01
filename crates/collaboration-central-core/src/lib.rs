@@ -37,10 +37,20 @@ mod conformance_fleet_entity;
 pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
+mod issuer_key_cache;
+mod issuer_key_resolution;
+pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 mod platform_capabilities;
+mod service_token_time;
+pub use issuer_key_cache::{
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+};
 pub use platform_capabilities::{
     CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
     RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+};
+pub use service_token_time::{
+    ServiceTokenTimeRefusal, ServiceTokenTimeRule, validate_service_token_times,
 };
 mod caller_context;
 pub use caller_context::CallerContext;

@@ -46,3 +46,5 @@ fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
 jsonschema.workspace = true
+proptest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

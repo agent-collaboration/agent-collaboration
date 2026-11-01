@@ -1749,6 +1749,7 @@ dependencies = [
  "http",
  "jsonschema",
  "message-board",
+ "proptest",
  "runtime-primitives",
  "schemars 1.2.2",
  "serde",
@@ -1756,6 +1757,7 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx-core",
  "thiserror 2.0.18",
+ "tokio",
  "url",
  "uuid",
 ]
