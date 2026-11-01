@@ -3,11 +3,10 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import * as publicTemplateModule from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
+import type * as MiniflareTypes from "../../verification/node_modules/miniflare/dist/src/index.js";
 
 // Types use the repository's frozen verification dependency. Execution still
 // loads the exact pinned Miniflare allocation supplied by the Rust harness.
-type MiniflareRuntimeModule =
-  typeof import("../../verification/node_modules/miniflare/dist/src/index.js");
 const publicTemplate = publicTemplateModule.default;
 
 const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
@@ -58,7 +57,7 @@ for (const name of Object.keys(replacements)) {
   if (!(name in templateBindings))
     throw new Error(`public central template missing required ${name}`);
 }
-const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: MiniflareRuntimeModule = await import(
+const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions }: typeof MiniflareTypes = await import(
   pathToFileURL(miniflareEntrypoint).href
 );
 const runtime = new Miniflare(
@@ -93,7 +92,7 @@ const runtime = new Miniflare(
         },
         bindings: { ...templateBindings, _cf_composed_clock: "1900000000000" },
         cacheAPI: true,
-        outboundService: async (request) => {
+        outboundService: async (request: MiniflareTypes.Request): Promise<MiniflareTypes.Response> => {
           if (
             request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
           ) {
