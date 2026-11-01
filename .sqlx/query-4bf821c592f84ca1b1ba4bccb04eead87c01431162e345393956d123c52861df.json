@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT preference_id, value FROM ui_preferences WHERE screen = ? AND setting = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "preference_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ui_preferences",
+            "name": "preference_id"
+          }
+        }
+      },
+      {
+        "name": "value",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ui_preferences",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4bf821c592f84ca1b1ba4bccb04eead87c01431162e345393956d123c52861df"
+}
