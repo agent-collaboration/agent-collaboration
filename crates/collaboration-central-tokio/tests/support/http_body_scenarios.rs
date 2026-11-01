@@ -150,12 +150,15 @@ impl Connection {
             } else {
                 BodyOrderEvidence::NotObserved
             };
-            Ok((reply, order))
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((reply, order))
         })
         .await
         .map_err(|error| {
             format!("HTTP body request exceeded its existing bound while waiting for {waiting_for}: {error}")
         })?
+        .map_err(|error| {
+            format!("HTTP body request failed while waiting for {waiting_for}: {error}").into()
+        })
     }
     async fn line(&mut self) -> ConformanceResult<String> {
         let mut line = String::new();
