@@ -22,6 +22,20 @@ pub enum ServiceFormFailure {
     Unreachable,
     #[error("the service refused the request")]
     Refused { status: u16 },
+    #[error("the service reply is not a JSON response")]
+    InvalidReply,
+}
+
+/// OAuth token and introspection success replies use application/json. Parse
+/// parameters separately so charset spelling cannot change the media type.
+#[must_use]
+pub fn service_reply_is_json(content_type: Option<&str>) -> bool {
+    content_type.is_some_and(|value| {
+        value
+            .split(';')
+            .next()
+            .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("application/json"))
+    })
 }
 
 pub struct PersonIntrospectionClient<Signer, Transport> {

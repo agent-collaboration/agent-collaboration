@@ -288,6 +288,7 @@ async fn confirmation_authenticates_each_call_and_decodes_the_actual_k5_shape() 
 async fn confirmation_refuses_unavailable_or_malformed_replies_without_guessing_inactive() {
     for answer in [
         Err(ServiceFormFailure::Unreachable),
+        Err(ServiceFormFailure::InvalidReply),
         Err(ServiceFormFailure::Refused { status: 401 }),
         Ok(b"{}".to_vec()),
     ] {
@@ -305,5 +306,27 @@ async fn confirmation_refuses_unavailable_or_malformed_replies_without_guessing_
                 .await,
             Err(SignInUnavailable::ConfirmationUnreachable)
         );
+    }
+}
+
+#[test]
+fn oauth_service_reply_media_type_is_json_with_optional_parameters() {
+    for value in [
+        "application/json",
+        "application/json; charset=utf-8",
+        "Application/JSON ; charset=UTF-8",
+    ] {
+        assert!(collaboration_central_core::service_reply_is_json(Some(
+            value
+        )));
+    }
+    for value in [
+        None,
+        Some(""),
+        Some("text/plain"),
+        Some("application/jsonish"),
+        Some("application/javascript"),
+    ] {
+        assert!(!collaboration_central_core::service_reply_is_json(value));
     }
 }

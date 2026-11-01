@@ -1,6 +1,7 @@
 //! Service forms carry client authentication on the pinned TLS endpoint.
 use collaboration_central_core::{
     ServiceForm, ServiceFormFailure, ServiceFormTransport, identity_contract::ResourceUri,
+    service_reply_is_json,
 };
 use worker::{
     CacheMode, Fetch, Headers, Method, Request, RequestInit, RequestRedirect, send::SendFuture,
@@ -38,6 +39,13 @@ impl ServiceFormTransport for CloudflareServiceFormTransport {
             let status = response.status_code();
             if !(200..300).contains(&status) {
                 return Err(ServiceFormFailure::Refused { status });
+            }
+            let content_type = response
+                .headers()
+                .get("content-type")
+                .map_err(|_| ServiceFormFailure::InvalidReply)?;
+            if !service_reply_is_json(content_type.as_deref()) {
+                return Err(ServiceFormFailure::InvalidReply);
             }
             response
                 .bytes()

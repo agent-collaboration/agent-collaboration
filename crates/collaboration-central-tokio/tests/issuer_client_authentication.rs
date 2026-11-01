@@ -4,7 +4,7 @@ use axum::{
     Router,
     body::Body,
     extract::State,
-    http::{HeaderMap, StatusCode, Uri},
+    http::{HeaderMap, Method, StatusCode, Uri},
     response::Response,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -69,7 +69,7 @@ struct Receiver {
     base: String,
     public_key: Vec<u8>,
     confirmation: Vec<u8>,
-    seen: Mutex<Vec<(String, String)>>,
+    seen: Mutex<Vec<(String, String, String)>>,
     errors: Mutex<Vec<String>>,
 }
 fn validate_request(
@@ -77,7 +77,7 @@ fn validate_request(
     uri: &Uri,
     headers: &HeaderMap,
     body: &str,
-) -> Result<String, configuration::TestError> {
+) -> Result<(String, String), configuration::TestError> {
     if headers.contains_key("authorization")
         || headers
             .get("content-type")
@@ -119,18 +119,28 @@ fn validate_request(
     {
         return Err("wrong assertion claims".into());
     }
-    Ok(claims.jti)
+    Ok((claims.jti, assertion.clone()))
 }
 async fn receive(
     State(state): State<Arc<Receiver>>,
+    method: Method,
     uri: Uri,
     headers: HeaderMap,
     body: String,
 ) -> Response {
+    if method != Method::POST {
+        if let Ok(mut errors) = state.errors.lock() {
+            errors.push("introspection request was not POST".into());
+        }
+        return Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Body::empty())
+            .unwrap_or_default();
+    }
     match validate_request(&state, &uri, &headers, &body) {
-        Ok(token_id) => {
+        Ok((token_id, assertion)) => {
             if let Ok(mut seen) = state.seen.lock() {
-                seen.push((uri.to_string(), token_id));
+                seen.push((uri.to_string(), token_id, assertion));
             }
         }
         Err(error) => {
@@ -145,12 +155,23 @@ async fn receive(
     }
     let (status, body) = match uri.path() {
         "/introspect" => (200, state.confirmation.clone()),
+        "/inactive" => (200, b"{\"active\":false}".to_vec()),
+        "/wrong-media-type" => (200, state.confirmation.clone()),
         "/malformed" => (200, b"{}".to_vec()),
         "/redirect" => (307, Vec::new()),
+        "/forbidden" => (403, Vec::new()),
         _ => (401, Vec::new()),
     };
     Response::builder()
         .status(status)
+        .header(
+            "content-type",
+            if uri.path() == "/wrong-media-type" {
+                "text/plain"
+            } else {
+                "application/json; charset=utf-8"
+            },
+        )
         .header("location", "/unexpected")
         .body(Body::from(body))
         .unwrap_or_default()
@@ -225,9 +246,12 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
         for path in [
             "/introspect",
             "/introspect",
+            "/inactive",
             "/redirect",
             "/malformed",
             "/refused",
+            "/forbidden",
+            "/wrong-media-type",
         ] {
             let client = PrivateKeyJwtClient::new(
                 ServiceClientId::try_from("pinned-central".to_owned())?,
@@ -244,6 +268,8 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
                 if !matches!(answer, Ok(PersonSessionConfirmation::Active { .. })) {
                     return Err("valid authenticated introspection refused".into());
                 }
+            } else if path=="/inactive" {
+                if answer!=Ok(PersonSessionConfirmation::Inactive {}) {return Err("inactive reply was not decoded as inactive".into());}
             } else if answer != Err(SignInUnavailable::ConfirmationUnreachable) {
                 return Err("bad introspection reply was accepted".into());
             }
@@ -259,11 +285,17 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
             .seen
             .lock()
             .map_err(|_| "receiver trace poisoned")?;
-        let ids: std::collections::BTreeSet<_> = seen.iter().map(|(_, id)| id).collect();
-        if seen.len() != 5 || ids.len() != 5 || seen.iter().any(|(path, _)| path == "/unexpected") {
+        let ids: std::collections::BTreeSet<_> = seen.iter().map(|(_, id,_)| id).collect();
+        if seen.len() != 8 || ids.len() != 8 || seen.iter().any(|(path, _,_)| path == "/unexpected") {
             return Err("assertions were replayed, lost or redirected".into());
         }
-        println!("CLIENT_AUTH_HTTP accepted=2 refused=3 requests=5 uniqueJti=5 unexpected=0");
+        for (index,(path,jti,assertion)) in seen.iter().enumerate() {
+            println!("CLIENT_AUTH_ASSERTION {}",serde_json::json!({
+                "name":format!("{}:{path}",index+1),"endpoint":format!("{}{path}",receiver.base),
+                "jti":jti,"assertion":assertion
+            }));
+        }
+        println!("CLIENT_AUTH_HTTP active=2 inactive=1 unavailable=5 requests=8 uniqueJti=8 unexpected=0");
         Ok::<_, configuration::TestError>(())
     }
     .await;

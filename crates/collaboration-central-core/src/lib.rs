@@ -68,7 +68,7 @@ pub use private_key_client_assertion::{
 };
 mod person_introspection_client;
 pub use person_introspection_client::{
-    PersonIntrospectionClient, ServiceFormFailure, ServiceFormTransport,
+    PersonIntrospectionClient, ServiceFormFailure, ServiceFormTransport, service_reply_is_json,
 };
 mod service_token_time;
 pub use issuer_key_cache::{

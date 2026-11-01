@@ -1,6 +1,7 @@
 //! Authenticated service forms use the host's existing long-lived HTTP client.
 use collaboration_central_core::{
     ServiceForm, ServiceFormFailure, ServiceFormTransport, identity_contract::ResourceUri,
+    service_reply_is_json,
 };
 
 #[derive(Clone)]
@@ -34,6 +35,14 @@ impl ServiceFormTransport for TokioServiceFormTransport {
             return Err(ServiceFormFailure::Refused {
                 status: response.status().as_u16(),
             });
+        }
+        if !service_reply_is_json(
+            response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+        ) {
+            return Err(ServiceFormFailure::InvalidReply);
         }
         response
             .bytes()

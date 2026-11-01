@@ -19,6 +19,7 @@ pub struct ClientAuthenticationProbe {
     pub now_millis: i64,
     pub bearer_token: String,
     pub attempts: u16,
+    pub first_id: message_board::RecordId,
 }
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,13 +35,15 @@ impl Clock for FixedClock {
         SyncTime::from_unix_millis(self.0)
     }
 }
-#[derive(Default)]
-struct ScriptedIds(AtomicU64);
+struct ScriptedIds {
+    first: u128,
+    offset: AtomicU64,
+}
 impl IdSource for ScriptedIds {
     fn new_id(&self) -> durable_steps::Uuid {
         // Fixed, injected fixture sequence; no wall clock or random ID source.
         durable_steps::Uuid::from_u128(
-            0x019f0000000070008000000000000000 + u128::from(self.0.fetch_add(1, Ordering::SeqCst)),
+            self.first + u128::from(self.offset.fetch_add(1, Ordering::SeqCst)),
         )
     }
 }
@@ -55,11 +58,16 @@ pub async fn observe_client_authentication<
     endpoint: ResourceUri,
     input: ClientAuthenticationProbe,
 ) -> Result<Vec<ClientAuthenticationObservation>, crate::ClientAssertionRefusal> {
+    let first = durable_steps::Uuid::parse_str(input.first_id.as_str())
+        .map_err(|_| crate::ClientAssertionRefusal::InvalidId)?;
     let client = PrivateKeyJwtClient::new(
         client_id,
         signer,
         Arc::new(FixedClock(input.now_millis)),
-        Arc::new(ScriptedIds::default()),
+        Arc::new(ScriptedIds {
+            first: first.as_u128(),
+            offset: AtomicU64::new(0),
+        }),
         ClientAssertionLifetime::from_seconds(60)?,
     )?;
     let confirmation = PersonIntrospectionClient::new(client, transport, endpoint);
