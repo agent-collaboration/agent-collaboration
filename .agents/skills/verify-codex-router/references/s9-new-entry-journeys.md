@@ -329,6 +329,17 @@ adapter and a Lead-allocated native window remain required.
 
 ### Loop-ending login handoff
 
+The quota adapter composes `observeQuotaEvent` with the caller's existing
+AbortSignal. The socket fence must name a real matching ordinal in the
+independently read journal; only that journal supplies the decoded fact.
+
+`quotaLoginHandoff` binds child entry, then the parent's PID/count/raw wait
+result, then a later mounted view. The entry receipt's planned exit code is
+never a parent result. `quotaGroupingHandoff` binds the first invocation's
+actual None→Provider save/settlement and the next Provider mount/store.
+Both feed the existing same-PTY lifecycle owner and its separate F12 frame;
+they neither launch a product nor establish native proof by themselves.
+
 `MarkerInputSession.handoff` observes the exact action ACK, restored-terminal
 child entry, the parent's actual wait result, and a strictly newer quota mount
 on the same retained PTY driver. It then requires a new synchronized frame and

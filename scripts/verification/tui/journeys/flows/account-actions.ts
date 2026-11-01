@@ -75,7 +75,7 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 			{ kind: 'click', target: 'Copy account ID' },
 			{ kind: 'readback', port: 'clipboard', checks: ['clipboard-full-account-id'] },
 			{ kind: 'click', target: 'Actions ▾' },
-			{ kind: 'click', target: 'Disable account' },
+			{ kind: 'click', target: 'Disable' },
 			{
 				kind: 'readback',
 				port: 'account-command',
@@ -87,7 +87,7 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 				checkpoint: 'disabled-actions-menu',
 				checks: ['account-actions-inventory'],
 			},
-			{ kind: 'click', target: 'Enable account' },
+			{ kind: 'click', target: 'Enable' },
 			{
 				kind: 'readback',
 				port: 'account-command',
