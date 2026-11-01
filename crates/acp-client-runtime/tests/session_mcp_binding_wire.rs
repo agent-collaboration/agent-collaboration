@@ -151,27 +151,39 @@ async fn session_mcp_binding_create_load_and_resume_keep_their_own_full_addresse
         )
         .await?;
     client.shutdown().await;
-    assert!(!client.shutdown_failed());
+    if client.shutdown_failed() {
+        return Err("ACP client shutdown failed".into());
+    }
 
     let requests = captured_requests(root.path())?;
     let setup: Vec<_> = requests
         .iter()
         .filter(|request| request["method"] != "session/close")
         .collect();
-    assert_eq!(setup.len(), 4);
+    if setup.len() != 4 {
+        return Err(format!("expected four setup requests, received {}", setup.len()).into());
+    }
     for (request, (method, address)) in setup.iter().zip([
         ("session/new", FIRST_ADDRESS),
         ("session/new", SECOND_ADDRESS),
         ("session/load", FIRST_ADDRESS),
         ("session/resume", FIRST_ADDRESS),
     ]) {
-        assert_eq!(request["method"], method);
-        assert_eq!(
-            request["params"]["mcpServers"],
-            json!([{"type":"http","name":"collaboration","url":address,"headers":[]}])
-        );
+        if request["method"] != method {
+            return Err(format!("expected {method}, received {}", request["method"]).into());
+        }
+        let expected = json!([{"type":"http","name":"collaboration","url":address,"headers":[]}]);
+        if request["params"]["mcpServers"] != expected {
+            return Err(format!(
+                "wrong MCP list for {method}: {}",
+                request["params"]["mcpServers"]
+            )
+            .into());
+        }
     }
-    assert_eq!(second.provider_session_id, "fixture-session-2");
+    if second.provider_session_id != "fixture-session-2" {
+        return Err("second create did not return its own provider session".into());
+    }
     Ok(())
 }
 
@@ -202,25 +214,33 @@ async fn session_mcp_binding_http_requirement_refuses_before_any_provider_comman
         )
         .await;
     client.shutdown().await;
-    assert!(matches!(
+    if !matches!(
         create,
         Err(ExternalProviderRuntimeError::UnsupportedCapability {
             capability: "mcp/http"
         })
-    ));
-    assert!(matches!(
+    ) {
+        return Err("HTTP MCP create was not refused before dispatch".into());
+    }
+    if !matches!(
         load,
         Err(ExternalProviderRuntimeError::UnsupportedCapability {
             capability: "mcp/http"
         })
-    ));
-    assert!(matches!(
+    ) {
+        return Err("HTTP MCP load was not refused before dispatch".into());
+    }
+    if !matches!(
         resume,
         Err(ExternalProviderRuntimeError::UnsupportedCapability {
             capability: "mcp/http"
         })
-    ));
-    assert!(captured_requests(root.path())?.is_empty());
+    ) {
+        return Err("HTTP MCP resume was not refused before dispatch".into());
+    }
+    if !captured_requests(root.path())?.is_empty() {
+        return Err("unsupported HTTP MCP emitted a provider command".into());
+    }
     Ok(())
 }
 
@@ -238,8 +258,14 @@ async fn session_mcp_binding_access_enrollment_keeps_the_existing_non_http_creat
         .await?;
     client.shutdown().await;
     let requests = captured_requests(root.path())?;
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0]["method"], "session/new");
-    assert_eq!(requests[0]["params"]["mcpServers"], json!([]));
+    if requests.len() != 1 {
+        return Err("legacy create emitted an unexpected command count".into());
+    }
+    if requests[0]["method"] != "session/new" {
+        return Err("legacy create emitted a different method".into());
+    }
+    if requests[0]["params"]["mcpServers"] != json!([]) {
+        return Err("legacy non-HTTP create changed its MCP list".into());
+    }
     Ok(())
 }
