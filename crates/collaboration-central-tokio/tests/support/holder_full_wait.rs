@@ -98,7 +98,7 @@ where
             }
         }).await??;
         if !observe().await?.is_empty() { return Err("completed full-wait call leaked its waiter".into()); }
-        println!("HOLDER_FULL_WAIT_CASE configured_20s_attempt_inside_30s_drive calls=2 observed_live_waiters=1 obsolete_waiters=0 original_drive_expiry_crossed=true first_attempt_ms={} passed", elapsed);
+        println!("HOLDER_FULL_WAIT_CASE configured_20s_attempt_inside_30s_drive calls=2 observed_live_waiters=1 obsolete_waiters=0 original_drive_expiry_crossed=true first_attempt_ms={elapsed} passed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
     tasks.abort_all();

@@ -163,9 +163,8 @@ where
             return Err("converged operation retained an obsolete Copy waiter".into());
         }
         println!(
-            "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={} terminal=retired passed",
-            rejected.iter().filter(|id| **id == call.operation).count(),
-            elapsed
+            "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={elapsed} terminal=retired passed",
+            rejected.iter().filter(|id| **id == call.operation).count()
         );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
