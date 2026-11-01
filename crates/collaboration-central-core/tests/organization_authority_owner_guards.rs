@@ -42,10 +42,14 @@ fn confirmed_with_expiry(
         PersonTokenAudience::Admin => ADMIN,
         PersonTokenAudience::Operator => OPERATOR,
     };
-    body["aud"] = json!(audience);
-    body["second_factor_at"] = json!(factor_at);
-    body["exp"] = json!(expires_at);
-    body["iat"] = json!(expires_at.saturating_sub(300));
+    body.as_object_mut()
+        .ok_or("person claims must be an object")?
+        .extend([
+            ("aud".into(), json!(audience)),
+            ("second_factor_at".into(), json!(factor_at)),
+            ("exp".into(), json!(expires_at)),
+            ("iat".into(), json!(expires_at.saturating_sub(300))),
+        ]);
     Ok(person_token(&body)?
         .verified(SignatureValidity::Valid, &policy()?, purpose, NOW)?
         .confirmed(
