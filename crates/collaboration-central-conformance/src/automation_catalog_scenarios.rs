@@ -11,6 +11,7 @@ use collaboration_protocol::{
 };
 mod collection_pages;
 mod lost_reply;
+mod preparation_cases;
 mod raw_limits;
 mod schedule_cases;
 mod timing_cases;
@@ -52,11 +53,12 @@ pub async fn run_automation_catalog_conformance(
         let current = edit_and_replay(&mut first, &mut second, &request, &instruction).await?;
         instruction_pages(&mut first, &mut second, &instruction, &current).await?;
         raw_limits::run(&mut first, &second_service).await?;
-        schedule_cases::run(&mut first, &mut second, &second_service).await?;
+        let prepared = schedule_cases::run(&mut first, &mut second, &second_service).await?;
         wake_cases::run(&mut first, &mut second, &second_service).await?;
         collection_pages::run(&mut second, &second_service).await?;
         lost_reply::run(client, &mut first, &mut second, &first_service).await?;
         timing_cases::run(&mut first, &mut second, &second_service).await?;
+        preparation_cases::run(client, &mut first, &mut second, &second_service, &prepared).await?;
         Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;

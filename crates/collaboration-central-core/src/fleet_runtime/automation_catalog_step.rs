@@ -116,6 +116,15 @@ where
                         )
                         .await
                     }
+                    AutomationCall::ScheduleBindPrepared(request) => {
+                        schedules::bind_prepared(
+                            scope,
+                            request,
+                            &self.installation,
+                            &mut self.row_ids,
+                        )
+                        .await
+                    }
                     AutomationCall::ScheduleEnable(request) => {
                         schedules::change(
                             scope,
@@ -266,6 +275,7 @@ fn mutation_id(call: &AutomationCall) -> Option<OperationId> {
         AutomationCall::InstructionUpdate(request) => Some(request.operation_id.clone()),
         AutomationCall::ScheduleCreate(request) => Some(request.operation_id.clone()),
         AutomationCall::ScheduleUpdate(request) => Some(request.operation_id.clone()),
+        AutomationCall::ScheduleBindPrepared(request) => Some(request.operation_id.clone()),
         AutomationCall::ScheduleEnable(request)
         | AutomationCall::ScheduleDisable(request)
         | AutomationCall::ScheduleCancel(request) => Some(request.operation_id.clone()),
