@@ -60,7 +60,7 @@ fn fleet_session_setup_known_id_must_belong_to_the_prepared_endpoint() {
         },
         FleetSessionBindingLifecycle::Abandoned {
             creation: AbandonedSessionCreation::KnownCreated {
-                session: session.clone(),
+                session,
                 cause: SessionSetupAbandonmentCause::SetupInterrupted {},
             },
         },
