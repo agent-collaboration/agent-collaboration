@@ -72,10 +72,12 @@ impl runtime_primitives::IdSource for SequenceLaunchIds {
         )
     }
 }
-struct FixedBindingEntropy;
-impl SessionBindingEntropy for FixedBindingEntropy {
+struct SequenceBindingEntropy(AtomicU64);
+impl SessionBindingEntropy for SequenceBindingEntropy {
     fn new_capability(&self) -> Result<[u8; 16], SessionBindingEntropyUnavailable> {
-        Ok([0x35; 16])
+        Ok((0x35353535353535353535353535353535_u128
+            + u128::from(self.0.fetch_add(1, Ordering::SeqCst)))
+        .to_be_bytes())
     }
 }
 
@@ -84,6 +86,7 @@ pub(super) struct ProviderRegistrarFixture {
     pub repository: Arc<MemoryRegistrationRepository>,
     pub authority: Arc<FixtureSessionAuthority>,
     launch_port: Arc<dyn HarnessSessionLaunchPort>,
+    launch_ids: Arc<dyn runtime_primitives::IdSource + Send + Sync>,
     pub operation: OperationId,
 }
 impl ProviderRegistrarFixture {
@@ -108,12 +111,12 @@ impl ProviderRegistrarFixture {
             connection: authority.clone(),
             mode: Arc::new(FixedRegistrationMode(mode)),
             ids: ids.clone(),
-            entropy: Arc::new(FixedBindingEntropy),
+            entropy: Arc::new(SequenceBindingEntropy(AtomicU64::new(0))),
         }));
         let port = Arc::new(crate::HostHarnessSessionLaunchPort::new(
             registrar.clone(),
             MachineEnvironment::CloudVm,
-            ids,
+            ids.clone(),
             crate::HostHarnessMcpServer::Provider,
         ));
         Ok(Self {
@@ -121,10 +124,26 @@ impl ProviderRegistrarFixture {
             repository,
             authority,
             launch_port: port,
+            launch_ids: ids,
             operation: "019f0000-0000-7000-8000-000000000020"
                 .to_owned()
                 .try_into()?,
         })
+    }
+    pub fn native_launch_port(&self) -> Arc<dyn HarnessSessionLaunchPort> {
+        Arc::new(crate::HostHarnessSessionLaunchPort::new(
+            self.registrar.clone(),
+            MachineEnvironment::CloudVm,
+            self.launch_ids.clone(),
+            crate::HostHarnessMcpServer::Native,
+        ))
+    }
+    pub fn bound_preparation(&self) -> Arc<dyn collaboration_mcp::BoundConversationPreparation> {
+        Arc::new(crate::HostBoundConversationPreparation::new(
+            self.registrar.clone(),
+            MachineEnvironment::CloudVm,
+            self.launch_ids.clone(),
+        ))
     }
     pub async fn create_setup(
         &self,

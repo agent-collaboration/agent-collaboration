@@ -64,36 +64,96 @@ async fn bound_helper_missing_prepare_port_refuses_before_carrier_creation() {
     );
     let server = tokio::spawn(serve_collaboration_api(listener, router, shutdown.clone()));
 
-    let response = reqwest::Client::new().post(format!("http://{address}/mcp/session/35353535353535353535353535353535"))
-        .header("Content-Type", "application/json").header("Accept", "application/json, text/event-stream")
-        .header("MCP-Protocol-Version", "2025-11-25")
-        .json(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"conversation_create","arguments":{
-            "operationId":"019f0000-0000-7000-8000-000000000021",
-            "endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"codex-local"},
-            "workingDirectory":root.path(),"projectId":"019f0000-0000-7000-8000-000000000002",
-            "access":"workspace-write","createdBy":caller,"model":"fixture-model","effort":"low"
-        }}})).send().await.unwrap();
-    let body = response.text().await.unwrap();
-    let encoded = body
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("data: ")
-                .filter(|value| !value.is_empty())
-        })
-        .unwrap_or(body.as_str());
-    let answer: Value = serde_json::from_str(encoded).unwrap();
+    let create = json!({
+        "operationId":"019f0000-0000-7000-8000-000000000021",
+        "endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"codex-local"},
+        "workingDirectory":root.path(),"projectId":"019f0000-0000-7000-8000-000000000002",
+        "access":"workspace-write","createdBy":caller,"model":"fixture-model","effort":"low"
+    });
+    for tool in ["conversation_create", "conversation_create_and_prompt"] {
+        let arguments = if tool == "conversation_create" {
+            create.clone()
+        } else {
+            json!({"create":create,"message":{"kind":"agent","sender":caller,"text":"must-not-be-sent"}})
+        };
+        let response = reqwest::Client::new().post(format!("http://{address}/mcp/session/35353535353535353535353535353535"))
+            .header("Content-Type", "application/json").header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-11-25")
+            .json(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":tool,"arguments":arguments}})).send().await.unwrap();
+        let body = response.text().await.unwrap();
+        let encoded = body
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("data: ")
+                    .filter(|value| !value.is_empty())
+            })
+            .unwrap_or(body.as_str());
+        let answer: Value = serde_json::from_str(encoded).unwrap();
+        assert_eq!(
+            answer["result"]["structuredContent"]["kind"], "startPreparationUnavailable",
+            "{tool}: {answer}"
+        );
+        assert_eq!(answer["result"]["structuredContent"]["effect"], "none");
+    }
     shutdown.cancel();
     server.await.unwrap().unwrap();
-
-    assert_eq!(
-        answer["result"]["structuredContent"]["kind"], "startPreparationUnavailable",
-        "{answer}"
-    );
-    assert_eq!(answer["result"]["structuredContent"]["effect"], "none");
     assert_eq!(
         fixture.repository.records.lock().unwrap().len(),
         1,
         "only the active caller may exist"
     );
+    assert_eq!(fixture.authority.registrations.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn bound_helper_preparation_refreshes_a_binding_that_retired_after_call_admission() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let fixture = ProviderRegistrarFixture::new(SessionRegistrationMode::MachineTokens).unwrap();
+    let _caller_create = fixture
+        .create_setup(root.path(), &RequestedProviderSettings::default())
+        .await
+        .unwrap();
+    let caller = json!({"endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"claude-local"},"sessionId":"bound-starter"});
+    fixture
+        .registrar
+        .record_provider_created(
+            &fixture.operation,
+            serde_json::from_value(caller.clone()).unwrap(),
+        )
+        .await
+        .unwrap();
+    fixture
+        .registrar
+        .complete_created_setup(&fixture.operation)
+        .await
+        .unwrap();
+    let admitted = fixture
+        .registrar
+        .resolve_binding_capability("35353535353535353535353535353535")
+        .await
+        .unwrap();
+    fixture
+        .registrar
+        .end(
+            admitted.session(),
+            fleet_identity_protocol::SessionEndCause::Archived,
+        )
+        .await
+        .unwrap();
+    let declared: collaboration_client::ConversationCreateInput = serde_json::from_value(json!({
+        "operationId":"019f0000-0000-7000-8000-000000000021","endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"claude-local"},
+        "workingDirectory":root.path(),"projectId":"019f0000-0000-7000-8000-000000000002","access":"workspace-write","createdBy":caller
+    })).unwrap();
+
+    let outcome = fixture
+        .bound_preparation()
+        .prepare(&admitted, &declared)
+        .await;
+
+    assert!(matches!(
+        outcome,
+        Err(collaboration_contracts::HarnessLaunchFailure::InactiveBinding)
+    ));
+    assert_eq!(fixture.repository.records.lock().unwrap().len(), 1);
     assert_eq!(fixture.authority.registrations.lock().unwrap().len(), 1);
 }

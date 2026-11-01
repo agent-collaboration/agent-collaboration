@@ -109,6 +109,8 @@ impl From<HarnessLocalSetupRefusal> for SessionSetupAbandonmentCause {
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum HarnessLaunchFailure {
+    #[error("the declared session launch input is invalid")]
+    InvalidInput,
     #[error("a session start must name its project")]
     ProjectRequired,
     #[error("the organization authority refused the start")]

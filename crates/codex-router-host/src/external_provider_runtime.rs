@@ -695,3 +695,7 @@ mod setup_refusal_matrix_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/bound_helper_preparation_tests.rs"]
 mod bound_helper_preparation_tests;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/bound_helper_native_path_tests.rs"]
+mod bound_helper_native_path_tests;

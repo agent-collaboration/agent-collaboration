@@ -16,8 +16,8 @@ use fleet_identity_protocol::{
 use runtime_primitives::IdSource;
 
 use super::{
-    FleetSessionConnection, FleetSessionConnectionFailure, FleetSessionRegistrationRepository,
-    FleetSessionStorageFailure, RegistrationInsert,
+    BoundFleetSession, FleetSessionConnection, FleetSessionConnectionFailure,
+    FleetSessionRegistrationRepository, FleetSessionStorageFailure, RegistrationInsert,
 };
 
 /// F11 supplies this policy projection; F17 removes the AccessEnrollment branch.
@@ -216,11 +216,56 @@ impl FleetSessionRegistrar {
         if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
             return Ok(PrepareSessionStart::AccessEnrollment);
         }
+        if let Some(record) = self.existing_prepared_launch(intent, identity).await? {
+            return Ok(PrepareSessionStart::Existing(record));
+        }
+        // A session starter comes from a prepared binding handoff.
+        let mut operator_launch = intent.clone();
+        operator_launch.started_by = fleet_identity_protocol::StartedBy::RouterOperator {};
+        self.prepare(&operator_launch, identity).await
+    }
+
+    /// The opaque caller came from a binding; refresh it before using its actual session as starter.
+    pub async fn prepare_bound_helper(
+        &self,
+        caller: &BoundFleetSession,
+        intent: &HarnessSessionLaunch,
+        identity: &HarnessLaunchIdentity,
+    ) -> Result<PrepareSessionStart, RegistrarFailure> {
+        if self.mode.mode() == SessionRegistrationMode::AccessEnrollment {
+            return Ok(PrepareSessionStart::AccessEnrollment);
+        }
+        let current = self
+            .repository
+            .conversation(caller.session())
+            .await?
+            .ok_or(RegistrarFailure::InactiveBinding)?;
+        self.require_record_context(&current)?;
+        let refreshed = BoundFleetSession::from_active(&current)?;
+        if &refreshed != caller {
+            return Err(RegistrarFailure::InactiveBinding);
+        }
+        let started_by = fleet_identity_protocol::StartedBy::Session {
+            session: refreshed.session().clone(),
+        };
+        if let Some(record) = self.existing_prepared_launch(intent, identity).await? {
+            if record.preparation().launch.started_by != started_by {
+                return Err(RegistrarFailure::OperationConflict);
+            }
+            return Ok(PrepareSessionStart::Existing(record));
+        }
+        let mut trusted = intent.clone();
+        trusted.started_by = started_by;
+        self.prepare(&trusted, identity).await
+    }
+
+    async fn existing_prepared_launch(
+        &self,
+        intent: &HarnessSessionLaunch,
+        identity: &HarnessLaunchIdentity,
+    ) -> Result<Option<Box<FleetSessionRegistrationRecord>>, RegistrarFailure> {
         let Some(record) = self.repository.operation(&intent.operation_id).await? else {
-            let mut operator_launch = intent.clone();
-            // Permission-routing metadata cannot supply starter authority without a prepared handoff.
-            operator_launch.started_by = fleet_identity_protocol::StartedBy::RouterOperator {};
-            return self.prepare(&operator_launch, identity).await;
+            return Ok(None);
         };
         self.require_record_context(&record)?;
         if !matches!(
@@ -238,7 +283,7 @@ impl FleetSessionRegistrar {
         {
             return Err(RegistrarFailure::OperationConflict);
         }
-        Ok(PrepareSessionStart::Existing(Box::new(record)))
+        Ok(Some(Box::new(record)))
     }
 
     fn require_prepared_identity(

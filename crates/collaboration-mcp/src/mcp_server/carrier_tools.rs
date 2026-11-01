@@ -23,7 +23,6 @@ impl CollaborationMcpServer {
         Parameters(mut request): Parameters<ConversationCreateToolRequest>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
-        let _declared_bound_preparation = &self.bound_conversation_preparation;
         request.create.default_approver();
         if let Some(refusal) = self.creator_claim_refusal(&request.create.created_by) {
             return refusal;
@@ -36,6 +35,15 @@ impl CollaborationMcpServer {
             Duration::from_secs(u64::from(timeout_seconds)),
         ) {
             return conversation_create_tool_result(Err(error), operation_id);
+        }
+        if matches!(
+            &self.call_session,
+            super::session_binding::CallSessionAdmission::BoundHttp(_)
+        ) {
+            tokio::select! {
+                _ = context.ct.cancelled() => return conversation_call_cancelled(OperationEffect::None, Some(&operation_id)),
+                refusal = self.prepare_bound_conversation(&request.create) => if let Some(refusal) = refusal { return refusal; },
+            }
         }
         let connected = tokio::select! {
             _ = context.ct.cancelled() => {
@@ -214,6 +222,28 @@ impl CollaborationMcpServer {
         let operation_id = request.input.create.operation_id.clone();
         let timeout =
             Duration::from_secs(u64::from(request.timeout_seconds.map_or(300, u32::from)));
+        if matches!(
+            &self.call_session,
+            super::session_binding::CallSessionAdmission::BoundHttp(_)
+        ) {
+            if request.input.create.fork.is_some() {
+                return conversation_tool_result(
+                    Err(ConversationClientError::InvalidInput(
+                        "create-and-prompt requires a fresh destination",
+                    )),
+                    Some(operation_id),
+                );
+            }
+            if let Err(error) =
+                ConversationClient::validate_create_input(&request.input.create, timeout)
+            {
+                return conversation_tool_result(Err(error), Some(operation_id));
+            }
+            tokio::select! {
+                _ = context.ct.cancelled() => return conversation_call_cancelled(OperationEffect::None, Some(&operation_id)),
+                refusal = self.prepare_bound_conversation(&request.input.create) => if let Some(refusal) = refusal { return refusal; },
+            }
+        }
         let result = ConversationClient::create_and_prompt(
             &self.carrier_access,
             request.input,

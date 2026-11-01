@@ -207,7 +207,7 @@ impl HarnessSessionLaunchPort for HostHarnessSessionLaunchPort {
     }
 }
 
-fn launch_failure(error: RegistrarFailure) -> HarnessLaunchFailure {
+pub(super) fn launch_failure(error: RegistrarFailure) -> HarnessLaunchFailure {
     match error {
         RegistrarFailure::ProjectRequired => HarnessLaunchFailure::ProjectRequired,
         RegistrarFailure::StartRefused(reason) => HarnessLaunchFailure::StartRefused(reason),

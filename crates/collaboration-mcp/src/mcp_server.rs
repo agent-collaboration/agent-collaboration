@@ -44,6 +44,7 @@ use std::{sync::Arc, time::Duration};
 
 mod application_tool_results;
 mod board_argument_classification;
+mod bound_conversation_preparation;
 mod carrier_tools;
 mod catalog_descriptions;
 mod catalog_tools;
