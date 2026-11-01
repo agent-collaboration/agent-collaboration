@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionPreparation, FleetSessionRegistrationRecord,
     PreparedFleetSession, PreparedSessionCreation, SessionBindingOrigin,
 };

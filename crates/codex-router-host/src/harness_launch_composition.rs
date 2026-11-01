@@ -1,5 +1,5 @@
 //! The Host translates the shared harness port into the sole registrar's policy.
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, PreparedSessionCreation,
 };
 use collaboration_contracts::{

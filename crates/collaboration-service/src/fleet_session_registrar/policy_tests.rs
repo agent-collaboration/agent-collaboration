@@ -1,6 +1,6 @@
 //! Narrow policy evidence on event-controlled stand-ins; SQLite restart and real harness proofs remain separate.
 use super::*;
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, PreparedSessionCreation,
 };
 use collaboration_protocol::SessionSetupAbandonmentCause;
@@ -51,7 +51,7 @@ async fn fleet_session_registrar_restart_abandons_a_prepared_launch_before_dispa
     ));
     let records = fixture.repository.records.lock().unwrap();
     assert!(matches!(records.first().unwrap().lifecycle(), FleetSessionBindingLifecycle::Abandoned {
-        creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::NotCreated {}
+        creation: codex_router_fleet_state::fleet_session_registration::AbandonedSessionCreation::NotCreated {}
     }));
     assert!(fixture.authority.registrations.lock().unwrap().is_empty());
 }
@@ -97,7 +97,7 @@ async fn fleet_session_registrar_known_created_local_refusals_keep_identity_and_
             assert_eq!(record.lifecycle().session(), Some(&session));
             assert!(
                 matches!(record.lifecycle(), FleetSessionBindingLifecycle::Abandoned {
-                creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { session: actual, cause: actual_cause }
+                creation: codex_router_fleet_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { session: actual, cause: actual_cause }
             } if actual == &session && actual_cause == &cause)
             );
         }
@@ -167,7 +167,7 @@ async fn fleet_session_registrar_reconstructed_owner_settles_pending_setup_witho
     let record = records.first().unwrap();
     assert_eq!(record.lifecycle().session(), Some(&session));
     assert!(matches!(record.lifecycle(), FleetSessionBindingLifecycle::Abandoned {
-        creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { cause: SessionSetupAbandonmentCause::SetupInterrupted {}, .. }
+        creation: codex_router_fleet_state::fleet_session_registration::AbandonedSessionCreation::KnownCreated { cause: SessionSetupAbandonmentCause::SetupInterrupted {}, .. }
     }));
     assert!(fixture.authority.registrations.lock().unwrap().is_empty());
 }

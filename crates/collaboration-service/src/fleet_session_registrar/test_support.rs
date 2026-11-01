@@ -4,7 +4,7 @@ use super::{
     FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,
     RegistrationInsert,
 };
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionRegistrationRecord, SessionBindingAddress,
 };
 use std::sync::{Arc, Mutex};
@@ -99,7 +99,7 @@ impl FleetSessionRegistrationRepository for MemoryRegistrationRepository {
     ) -> FleetSessionStorageRequest<'a, bool> {
         Box::pin(async move {
             if matches!(next.lifecycle(), FleetSessionBindingLifecycle::Prepared {
-                creation: codex_router_state::fleet_session_registration::PreparedSessionCreation::CreatedPendingSetup { .. }
+                creation: codex_router_fleet_state::fleet_session_registration::PreparedSessionCreation::CreatedPendingSetup { .. }
             }) {
                 let control = { self.pending_setup.lock().map_err(|_| FleetSessionStorageFailure::Unavailable)?.take() };
                 if let Some(control) = control {

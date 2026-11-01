@@ -1,7 +1,7 @@
 //! Atomic registrar facts stay at the private Router state owner.
 use std::{future::Future, pin::Pin};
 
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionRegistrationRecord, SessionBindingAddress,
 };
 use collaboration_protocol::OperationId;

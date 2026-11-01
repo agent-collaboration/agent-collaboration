@@ -62,6 +62,7 @@ collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-native-integration.workspace = true
 codex-router-core.workspace = true
 codex-router-state = { path = "../codex-router-state", version = "0.1.119" }
+codex-router-fleet-state = { path = "../codex-router-fleet-state", version = "0.1.119" }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4" }
 httparse.workspace = true
 opentelemetry.workspace = true

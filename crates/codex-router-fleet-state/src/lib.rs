@@ -5,3 +5,5 @@
 
 /// The fleet database owned by this crate, separate from proxy account storage.
 pub const FLEET_DATABASE_FILENAME: &str = "fleet.sqlite";
+
+pub mod fleet_session_registration;

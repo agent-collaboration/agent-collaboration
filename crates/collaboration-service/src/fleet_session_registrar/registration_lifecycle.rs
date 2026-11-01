@@ -1,5 +1,5 @@
 //! Provider outcomes and confirmed registration determine activation; an unknown create is never replayed.
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionRegistrationRecord,
     PreparedSessionCreation, RegisteredFleetSession, SessionBindingAddress,
 };

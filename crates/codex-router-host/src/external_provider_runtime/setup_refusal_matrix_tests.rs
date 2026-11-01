@@ -7,7 +7,7 @@ use acp_client_runtime::{
     ExternalProviderCreatedSession, ExternalProviderRuntimeError, ProviderSettingKind,
     RequestedProviderSettings,
 };
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionRegistrationRecord,
 };
 use collaboration_service::fleet_session_registrar::SessionRegistrationMode;

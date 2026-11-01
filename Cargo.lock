@@ -1374,6 +1374,15 @@ dependencies = [
 [[package]]
 name = "codex-router-fleet-state"
 version = "0.1.119"
+dependencies = [
+ "collaboration-protocol",
+ "fleet-identity-protocol",
+ "message-board",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "url",
+]
 
 [[package]]
 name = "codex-router-host"
@@ -1393,6 +1402,7 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-core",
+ "codex-router-fleet-state",
  "codex-router-host",
  "codex-router-secret-store",
  "codex-router-state",
@@ -1595,17 +1605,11 @@ version = "0.1.119"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
- "collaboration-protocol",
- "fleet-identity-protocol",
  "futures-util",
- "message-board",
  "rusqlite",
- "serde",
- "serde_json",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
- "url",
 ]
 
 [[package]]
@@ -2018,7 +2022,7 @@ dependencies = [
  "claude-code-peer-messaging",
  "codex-acp-adapter",
  "codex-native-integration",
- "codex-router-state",
+ "codex-router-fleet-state",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mail-protocol",

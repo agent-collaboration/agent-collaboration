@@ -7,3 +7,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.119" }
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.119" }
+message-board = { path = "../message-board", version = "0.1.119" }
+serde.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

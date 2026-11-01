@@ -12,7 +12,6 @@ pub mod affinity_owner;
 pub mod credential_maintenance;
 mod credential_maintenance_store;
 pub mod credit_store;
-pub mod fleet_session_registration;
 pub mod quota_snapshot;
 pub mod repositories;
 pub mod selection_projection;

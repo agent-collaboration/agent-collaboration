@@ -1,5 +1,5 @@
 //! Only an active, local persisted registration resolves to a session actor.
-use codex_router_state::fleet_session_registration::{
+use codex_router_fleet_state::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionRegistrationId, FleetSessionRegistrationRecord,
     SessionBindingAddress,
 };
