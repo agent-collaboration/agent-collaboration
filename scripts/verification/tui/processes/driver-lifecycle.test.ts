@@ -1,14 +1,6 @@
 import { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import {
-	closeSync,
-	openSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-	existsSync,
-	watch,
-} from 'node:fs';
+import { closeSync, openSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import type { Socket } from 'node:net';
 import { join } from 'node:path';
@@ -60,33 +52,6 @@ function protocolDriver(root: string, source: string): DriverChild {
 		closeSync(stderr);
 	}
 }
-function watchFixtureMarker(root: string, name: string): { wait(): Promise<void>; close(): void } {
-	const marker = join(root, name);
-	const watcher = watch(root);
-	const observed = new Promise<void>((resolve, reject) => {
-		const inspect = (): void => {
-			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
-		};
-		watcher.on('change', inspect);
-		watcher.once('error', reject);
-		watcher.once('close', () => reject(new Error('fixture marker wait closed: ' + name)));
-		inspect();
-	});
-	return {
-		wait: () => {
-			const guard = AbortSignal.timeout(5000);
-			let rejectGuard: (() => void) | undefined;
-			const expired = new Promise<never>((_resolve, reject) => {
-				rejectGuard = () => reject(new Error('fixture marker causal wait expired: ' + name));
-				guard.addEventListener('abort', rejectGuard, { once: true });
-			});
-			return Promise.race([observed, expired]).finally(() => {
-				if (rejectGuard !== undefined) guard.removeEventListener('abort', rejectGuard);
-			});
-		},
-		close: () => watcher.close(),
-	};
-}
 test('discovery must identify only the exact declared libtest entry', async () => {
 	const root = rootDirectory();
 	const executable = controlledExecutable(
@@ -101,24 +66,13 @@ test('discovery must identify only the exact declared libtest entry', async () =
 });
 test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 	const root = rootDirectory();
+	const control = await oracleReleaseControl(root);
 	const executable = controlledExecutable(
 		root,
 		'held-discovery',
-		`const fs=require('node:fs');fs.watch(process.argv[2],()=>{});process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');fs.writeFileSync(process.argv[2]+'/discovery-ready','ready\\n');`,
+		"const fs=require('node:fs');process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');fs.writeFileSync(process.argv[2]+'/discovery-ready','ready\\n');" +
+			controlledOracleSocketSource(root, control.port, 0),
 	);
-	const readySignal = AbortSignal.timeout(5000);
-	const watcher = watch(root, { signal: readySignal });
-	const ready = new Promise<void>((resolve, reject) => {
-		const observeReady = (): void => {
-			const marker = join(root, 'discovery-ready');
-			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
-		};
-		// Watch before launch, then inspect the exact state on each real file event.
-		watcher.on('change', observeReady);
-		watcher.once('error', reject);
-		watcher.once('close', () => reject(new Error('discovery readiness closed before ready')));
-		observeReady();
-	});
 	// The child must emit real output before this unit advances the deadline.
 	// Its process, raw descriptors and exact-child SIGKILL remain real.
 	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -128,14 +82,14 @@ test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 	);
 	let failure: string;
 	try {
-		await ready;
+		await control.ready;
 		expect(readFileSync(join(root, 'discovery-ready'), 'utf8')).toBe('ready\n');
 	} finally {
 		try {
 			await vi.advanceTimersByTimeAsync(200);
 			failure = await discovery;
 		} finally {
-			watcher.close();
+			await control.close();
 			vi.useRealTimers();
 		}
 	}
@@ -160,7 +114,7 @@ test('static_deadline_stays_failure_after_cooperative_child_exit', async () => {
 	const root = rootDirectory();
 	const child = protocolDriver(
 		root,
-		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];process.stdout.write('driver started\\n');process.stderr.write('driver stderr\\n');const watcher=fs.watch(root,()=>{const marker=path.join(root,'capture-stop');if(fs.existsSync(marker)&&fs.readFileSync(marker,'utf8')==='stop\\n'){process.stdout.write('owned cleanup settled\\n');watcher.close();process.disconnect();}});process.send('ready');`,
+		`const fs=require('node:fs');const path=require('node:path');const root=process.argv[2];process.stdout.write('driver started\\n');process.stderr.write('driver stderr\\n');process.on('message',()=>{const marker=path.join(root,'capture-stop');if(fs.existsSync(marker)&&fs.readFileSync(marker,'utf8')==='stop\\n'){process.stdout.write('owned cleanup settled\\n');process.disconnect();}});process.send('ready');`,
 	);
 	await once(child.process, 'message');
 	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -169,6 +123,7 @@ test('static_deadline_stays_failure_after_cooperative_child_exit', async () => {
 		(error: unknown) => String(error),
 	);
 	await vi.advanceTimersByTimeAsync(50);
+	child.process.send('inspect-stop');
 	expect(await waiting).toContain('static capture deadline');
 	expect(await child.completion).toBe(0);
 	expect(readFileSync(join(root, 'capture-stop'), 'utf8')).toBe('stop\n');
@@ -257,13 +212,12 @@ test.each([false, true])(
 	'discovery and oracle remain finite when a controlled descendant inherits stdout %s',
 	async (oracle) => {
 		const root = rootDirectory();
-		const release = join(root, 'descendant-release');
-		const ready = watchFixtureMarker(root, 'descendant-ready');
-		const exited = watchFixtureMarker(root, 'descendant-exited');
+		const control = await oracleReleaseControl(root);
+		let descendantPid: number | undefined;
 		const executable = controlledExecutable(
 			root,
 			'inherited-output-parent',
-			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(String.raw`const fs=require('node:fs');const path=require('node:path');const root=process.argv[1];const publish=(name)=>{const marker=path.join(root,name);fs.writeFileSync(marker+'.pending','ready\n');fs.renameSync(marker+'.pending',marker);};process.once('exit',()=>publish('descendant-exited'));let watcher;const releaseIfPresent=()=>{if(!fs.existsSync(path.join(root,'descendant-release')))return false;watcher?.close();return true;};if(!releaseIfPresent()){watcher=fs.watch(root,releaseIfPresent);if(!releaseIfPresent())publish('descendant-ready');}`)},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
+			`const cp=require('node:child_process');const fs=require('node:fs');fs.watch(${JSON.stringify(root)},()=>{});process.stdout.write('partial inherited stdout\\n');process.stderr.write('partial inherited stderr\\n');const child=cp.spawn(process.execPath,['-e',${JSON.stringify(controlledOracleSocketSource(root, control.port, 0))},${JSON.stringify(root)}],{stdio:['ignore',1,2]});child.unref();`,
 		);
 		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		const task = oracle
@@ -275,7 +229,7 @@ test.each([false, true])(
 		);
 		try {
 			try {
-				await ready.wait();
+				descendantPid = await control.ready;
 			} finally {
 				// Cleanup must trigger the real parent's deadline even if readiness fails.
 				await vi.advanceTimersByTimeAsync(200);
@@ -286,13 +240,14 @@ test.each([false, true])(
 			expect(failure).toContain(Buffer.from('partial inherited stdout\n').toString('base64'));
 			expect(failure).toContain(Buffer.from('partial inherited stderr\n').toString('base64'));
 		} finally {
-			writeFileSync(release, 'release\n');
 			try {
-				await exited.wait();
-				await observed;
+				if (descendantPid !== undefined) {
+					control.release(descendantPid);
+					await control.waitForExit();
+				}
 			} finally {
-				ready.close();
-				exited.close();
+				await control.close();
+				await observed;
 			}
 		}
 	},
@@ -340,7 +295,8 @@ test.each([false, true])(
 
 interface OracleReleaseControl {
 	readonly port: number;
-	readonly ready: Promise<void>;
+	readonly ready: Promise<number>;
+	waitForExit(): Promise<void>;
 	release(childPid: number | undefined): void;
 	close(): Promise<void>;
 }
@@ -349,6 +305,7 @@ async function oracleReleaseControl(root: string): Promise<OracleReleaseControl>
 	let socket: Socket | null = null;
 	let lines: Interface | null = null;
 	let childPid: number | null = null;
+	let childExited = false;
 	let failure: Error | null = null;
 	const readySchema = z.strictObject({
 		kind: z.literal('ready'),
@@ -362,6 +319,10 @@ async function oracleReleaseControl(root: string): Promise<OracleReleaseControl>
 			return;
 		}
 		socket = connection;
+		connection.once('close', () => {
+			childExited = true;
+			server.emit('oracle-exited');
+		});
 		connection.on('error', (error) => server.emit('error', error));
 		lines = createInterface({ input: connection, crlfDelay: Infinity });
 		lines.on('line', (line: string) => {
@@ -378,7 +339,10 @@ async function oracleReleaseControl(root: string): Promise<OracleReleaseControl>
 	server.on('error', (error) => {
 		failure ??= error;
 	});
-	const ready = once(server, 'oracle-ready', { signal: AbortSignal.timeout(5000) }).then(() => {});
+	const ready = once(server, 'oracle-ready', { signal: AbortSignal.timeout(5000) }).then(() => {
+		if (childPid === null) throw new Error('oracle child identity absent');
+		return childPid;
+	});
 	// Retain the rejection even if setup itself fails before the caller awaits it.
 	void ready.catch(() => {});
 	server.listen(0, '127.0.0.1');
@@ -389,6 +353,10 @@ async function oracleReleaseControl(root: string): Promise<OracleReleaseControl>
 	return {
 		port: address.port,
 		ready,
+		waitForExit: async () => {
+			if (failure !== null) throw failure;
+			if (!childExited) await once(server, 'oracle-exited', { signal: AbortSignal.timeout(5000) });
+		},
 		release: (pid) => {
 			if (failure !== null) throw failure;
 			if (socket === null || childPid === null || pid !== childPid)
@@ -411,14 +379,14 @@ function controlledOracleSocketSource(root: string, port: number, exit: number):
 		"const net=require('node:net');const readline=require('node:readline');",
 		"const channel=net.createConnection({host:'127.0.0.1',port:" + port + '});',
 		'const lines=readline.createInterface({input:channel,crlfDelay:Infinity});let released=false;',
-		"lines.once('line',(line)=>{if(line!=='release')throw new Error('wrong oracle release');released=true;process.stdout.write('late observation');process.stderr.write('retained stderr');process.exitCode=" +
+		"lines.once('line',(line)=>{if(line!=='release')throw new Error('wrong oracle release');released=true;process.stdout.write('late observation');process.stderr.write('retained stderr');process.exit(" +
 			exit +
-			';lines.close();channel.end();});',
+			');});',
 		"channel.on('connect',()=>channel.write(JSON.stringify({kind:'ready',root:" +
 			JSON.stringify(root) +
 			",pid:process.pid})+'\\n'));",
-		"channel.on('error',()=>{process.exitCode=1;lines.close();channel.destroy();});",
-		"channel.on('close',()=>{if(!released)process.exitCode=1;lines.close();});",
+		"channel.on('error',()=>process.exit(1));",
+		"channel.on('close',()=>process.exit(released ? " + exit + ' : 1));',
 	].join('');
 }
 test.each([0, 1])(

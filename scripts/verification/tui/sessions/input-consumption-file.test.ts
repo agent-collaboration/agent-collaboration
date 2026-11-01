@@ -37,22 +37,13 @@ const release = {
 } satisfies InputConsumptionExpectation;
 const line = (sequence: number, expected: InputConsumptionExpectation): string =>
 	JSON.stringify({ sequence, ...expected }) + '\n';
-// Pass through real reads; the notification scenario waits for an actual empty read,
-// rather than a sleep, yield, or a count of internal calls. File watch and IO stay real.
-const readFacts = vi.hoisted((): { notify: ((path: unknown, value: unknown) => void) | null } => ({
-	notify: null,
-}));
+// Deliberately drop every notification: only completed writer IO may wake the read.
 vi.mock('node:fs', async (importOriginal) => {
 	const original = await importOriginal<typeof import('node:fs')>();
 	return {
 		...original,
-		readFileSync: (
-			...args: Parameters<typeof original.readFileSync>
-		): ReturnType<typeof original.readFileSync> => {
-			const value = original.readFileSync(...args);
-			readFacts.notify?.(args[0], value);
-			return value;
-		},
+		watch: (path: string, options: { persistent: boolean }) =>
+			original.watch(path, options, () => {}),
 	};
 });
 const roots: string[] = [];
@@ -64,7 +55,6 @@ function journal(initial: string = ''): string {
 	return path;
 }
 afterEach(() => {
-	readFacts.notify = null;
 	vi.useRealTimers();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -120,56 +110,33 @@ test('a resize must be explicitly accounted for, never silently matched to a cli
 	).rejects.toThrow('event mismatch');
 });
 
-test('file notification reads a separate producer acknowledgement after an empty post-injection read', async () => {
+test('actual producer exit completes the receipt read with all file notifications suppressed', async () => {
 	const path = journal();
 	const reader = InputConsumptionReadback.open(path);
-	let injected = false;
-	const emptyRead = Promise.withResolvers<void>();
-	const readTrace: unknown[] = [];
-	readFacts.notify = (queried, value) => {
-		readTrace.push({
-			injected,
-			same: queried === path,
-			buffer: Buffer.isBuffer(value),
-			size: Buffer.isBuffer(value) ? value.length : null,
-		});
-		if (injected && queried === path && Buffer.isBuffer(value) && value.length === 0)
-			emptyRead.resolve();
-	};
-	const observed = reader.observeInput({
+	let exitCode: number | null = null;
+	const observed = await reader.observeInput({
 		expected: [press],
 		timeoutMs: 1000,
 		inject: async () => {
-			injected = true;
+			const producer = spawn(
+				process.execPath,
+				[
+					'--input-type=module',
+					'-e',
+					"import{appendFileSync}from'node:fs';appendFileSync(process.argv[1],process.argv[2]);",
+					path,
+					line(1, press),
+				],
+				{ stdio: 'ignore' },
+			);
+			exitCode = await new Promise<number | null>((resolve, reject) => {
+				producer.once('error', reject);
+				producer.once('close', resolve);
+			});
 		},
 	});
-	await Promise.race([
-		emptyRead.promise,
-		observed.then(() => {
-			throw new Error('empty journal unexpectedly satisfied an acknowledgement');
-		}),
-	]);
-	const producer = spawn(
-		process.execPath,
-		[
-			'--input-type=module',
-			'-e',
-			"import{appendFileSync}from'node:fs';appendFileSync(process.argv[1],process.argv[2]);",
-			path,
-			line(1, press),
-		],
-		{ stdio: 'ignore' },
-	);
-	const producerExit = new Promise<number | null>((resolve, reject) => {
-		producer.once('error', reject);
-		producer.once('close', resolve);
-	});
-	expect(
-		await observed.catch((error) => {
-			throw new Error('read trace ' + JSON.stringify(readTrace), { cause: error });
-		}),
-	).toEqual([{ sequence: 1, ...press }]);
-	expect(await producerExit).toBe(0);
+	expect(observed).toEqual([{ sequence: 1, ...press }]);
+	expect(exitCode).toBe(0);
 	expect(reader.assertComplete()).toHaveLength(1);
 });
 

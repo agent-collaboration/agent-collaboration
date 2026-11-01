@@ -67,12 +67,13 @@ export class QuotaEventJournal {
 			throw this.failure;
 		}
 	}
-	/** The caller retains its pre-input sequence floor and owns the handoff's abort/deadline. */
+	/** A real writer/input completion drives the read; file notifications are only hints. */
 	async waitFor<Event>(options: {
 		readonly afterSequence: number;
 		readonly kind: string;
 		readonly decode: (value: unknown) => Event;
 		readonly signal: AbortSignal;
+		readonly awaitCompletion: (signal: AbortSignal) => Promise<void>;
 	}): Promise<{ readonly sequence: number; readonly event: Event }> {
 		if (this.busy) throw new Error('quota event observation is already active');
 		options.signal.throwIfAborted();
@@ -87,6 +88,7 @@ export class QuotaEventJournal {
 		return new Promise((resolve, reject) => {
 			const watchers: FSWatcher[] = [];
 			let settled = false;
+			let completed = false;
 			const fail = (error: unknown): void => {
 				if (settled) return;
 				this.failure = error instanceof Error ? error : new Error(String(error));
@@ -102,7 +104,7 @@ export class QuotaEventJournal {
 				options.signal.removeEventListener('abort', abort);
 			};
 			const inspect = (): void => {
-				if (settled) return;
+				if (settled || !completed) return;
 				try {
 					const record = this.read().find(
 						(entry) => entry.sequence > options.afterSequence && entry.event.kind === options.kind,
@@ -116,16 +118,23 @@ export class QuotaEventJournal {
 				}
 			};
 			try {
-				// Arm then read: a coalesced notification cannot hide already flushed facts.
-				// macOS may notify only the parent for a coalesced synchronous append.
+				// Arm before invoking the writer/input; completion forces the authoritative read.
 				for (const path of [dirname(this.path), this.path]) {
 					const watcher = watch(path, { persistent: false }, inspect);
 					watchers.push(watcher);
 					watcher.once('error', fail);
 				}
 				options.signal.addEventListener('abort', abort, { once: true });
-				if (options.signal.aborted) abort();
-				else inspect();
+				if (options.signal.aborted) {
+					abort();
+					return;
+				}
+				Promise.resolve()
+					.then(() => (settled ? undefined : options.awaitCompletion(options.signal)))
+					.then(() => {
+						completed = true;
+						inspect();
+					}, fail);
 			} catch (error) {
 				fail(error);
 			}

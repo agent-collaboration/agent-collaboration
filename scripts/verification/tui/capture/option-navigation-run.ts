@@ -144,6 +144,7 @@ async function observeCase(
 	});
 	const input = new GhosttyJourneyInput(driver, 'example-ghostty-keybinds');
 	let reader: InputConsumptionReadback | null = null;
+	let exitCode: number | null = null;
 	let ownedIdentity: ProcessIdentity | null = null;
 	let failure: { kind: 'none' } | { kind: 'failed'; error: unknown } = { kind: 'none' };
 	let aliveAfterStop = false;
@@ -193,7 +194,16 @@ async function observeCase(
 			inject: () => Promise<void>,
 		): Promise<InputDispatchReceipt> => {
 			if (reader === null) throw new Error('receipt reader absent');
-			const [ack] = await reader.observeInput({ expected: [expected], inject, timeoutMs: 8000 });
+			const sequence = reader.sequence + 1;
+			const [ack] = await reader.observeInput({
+				expected: [expected],
+				timeoutMs: 8000,
+				inject: async () => {
+					await inject();
+					if (expected.action === 'quit') exitCode = await driver.drainUntilExit();
+					else await driver.waitForDispatchFrame(sequence);
+				},
+			});
 			if (ack === undefined) throw new Error('dispatch acknowledgement absent');
 			actions.push(ack);
 			return ack;
@@ -362,7 +372,7 @@ async function observeCase(
 		});
 		// Loop-ending inputs may omit the frame marker. Settle on actual exit
 		// and the fixture's returned outcome, never on a rendering guess.
-		if ((await driver.drainUntilExit()) !== 0) throw new Error('picker did not exit cleanly');
+		if (exitCode !== 0) throw new Error('picker did not exit cleanly');
 		actions.push({
 			name: 'quit-outcome',
 			outcome: readSourceQualifiedOutcome(join(receiptsDirectory, 'picker-outcome.json'), {
