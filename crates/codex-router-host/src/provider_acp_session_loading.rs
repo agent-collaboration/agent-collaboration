@@ -257,6 +257,9 @@ fn unavailable_loadability(reason: impl Into<String>) -> ProviderSessionLoadabil
 }
 
 #[cfg(test)]
+mod registration_binding_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime};
