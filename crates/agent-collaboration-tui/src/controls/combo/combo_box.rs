@@ -80,12 +80,22 @@ pub(crate) fn ComboDropdown(
     let row_width = usize::from(sizing.max_width.saturating_sub(3));
     let state = props.value.read().clone();
     let matching = state.matching();
-    element!(View(width:100pct,height:100pct,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
+    let content_rows = props.scroll.position().natural_height;
+    // The filter and round border add three rows to the measured list extent;
+    // the host's available height remains the cap.
+    let height = if content_rows == 0 {
+        Size::Auto
+    } else {
+        Size::Length(u32::from(
+            content_rows.saturating_add(3).min(sizing.max_height),
+        ))
+    };
+    element!(View(width:100pct,height,max_height:sizing.max_height,border_style:BorderStyle::Round,background_color:theme.background(SurfaceRole::Raised),border_color:theme.foreground(TextRole::Accent),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
         HitRegion(target:props.field.child("filter"),kind:HitRegionKind::Target) {View(width:100pct,flex_shrink:0.0_f32,column_gap:1) {
             View(flex_shrink:0.0_f32) {Text(content:"Filter:",color:theme.foreground(TextRole::Muted),wrap:TextWrap::NoWrap)}
             View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {crate::controls::fields::text_field::EditorLine(value:state.query().clone(),focused:true,available_width:Some(sizing.max_width.saturating_sub(10)))}
         }}
-        ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:true) {
+        ScrollList(id:props.field.child("scroll"),keyboard_target:Some(props.field.child("filter")),scroll:props.scroll.clone(),grow:false) {
         #(matching.is_empty().then(||element!(Text(content:"No match",color:theme.foreground(TextRole::Muted)))))
         #(matching.into_iter().map(|option| {
             let highlighted=Some(&option.key)==state.highlight();
