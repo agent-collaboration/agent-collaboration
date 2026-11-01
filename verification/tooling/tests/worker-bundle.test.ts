@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
 import { checkDeployTemplate, checkWorkerBundle } from "../check-central-worker-bundle.ts";
+import { automationClockMarkers } from "../worker-bundle-markers.ts";
 
 const schema = z.object({
   cargo: z.string(),
@@ -70,3 +71,29 @@ test("deploy templates refuse public routes, private values, and rebundling", ()
     "Worker deploy tooling must upload the guarded bundle without rebundling",
   );
 });
+
+for (const marker of automationClockMarkers) {
+  test(`production guard refuses automation verification control ${marker}`, (): void => {
+    const production = baseline.cases.find(
+      (entry) => entry.mode === "production" && entry.expected.status === 0,
+    );
+    assert.ok(production);
+    const root = mkdtempSync(join(tmpdir(), "automation-clock-guard-"));
+    try {
+      const worker = join(root, "crates/collaboration-central-cloudflare");
+      mkdirSync(join(worker, "build"), { recursive: true });
+      writeFileSync(join(root, "Cargo.toml"), baseline.cargo);
+      writeFileSync(join(worker, "README.md"), baseline.readme);
+      writeFileSync(join(worker, "cloudflare.config.ts"), baseline.config);
+      writeFileSync(join(worker, "wrangler.config.ts"), baseline.tooling);
+      writeFileSync(join(worker, "build/index.js"), `${production.content}\n${marker}`);
+      writeFileSync(join(worker, "build/index_bg.wasm"), "");
+      assert.deepEqual(checkWorkerBundle("production", root), {
+        status: 1,
+        message: "Worker production bundle contains an automation verification control",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}

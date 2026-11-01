@@ -30,3 +30,10 @@ export const conformanceMarkers: readonly string[] = [
   "_cf_composed_clock",
   "BootstrapObject",
 ];
+
+export const automationClockMarkers: readonly string[] = [
+  "automationClock",
+  "automationStoreFailures",
+  "automationFixture",
+  "_cf_automation_verification_alarm",
+];

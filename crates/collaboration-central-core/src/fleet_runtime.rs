@@ -6,8 +6,7 @@ use crate::{
     object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
-    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError,
-    storage::{JournalStorage, TransactionScope},
+    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError, storage::TransactionScope,
 };
 use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
@@ -52,11 +51,19 @@ where
         })
     }
     pub async fn on_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
-        let ObjectWork::Fleet { engine, .. } = &self.work else {
+        let ObjectWork::Fleet { engine, host, io } = &self.work else {
             return Err(wrong_face());
         };
         self.prune_feed().await?;
-        engine.drive_due().await
+        StepDriver::new(host.clone())
+            .run(crate::automation_clock_step::EvaluateAutomations {
+                now_ms: io.now().unix_millis(),
+                row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+            })
+            .await?;
+        let driven = engine.drive_due().await?;
+        self.rearm().await?;
+        Ok(driven)
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
@@ -80,29 +87,46 @@ where
         Ok(())
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let answer = self.dispatch_call(bytes).await;
+        let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet);
+        // Raw debug observations must not repair the very alarm being observed.
+        // Normal requests and the existing journal fixture keep their postlude.
+        #[cfg(all(feature = "conformance", debug_assertions))]
+        let fixture_only = call.as_ref().is_ok_and(|call| {
+            call.kind == crate::conformance_fleet::FleetReceiptProbe::KIND
+                && matches!(
+                    serde_json::from_value::<crate::StepControl>(call.request.clone()),
+                    Ok(crate::StepControl::AutomationFixture { .. })
+                )
+        });
+        #[cfg(not(all(feature = "conformance", debug_assertions)))]
+        let fixture_only = false;
+        let answer = match call {
+            Ok(call) => self.dispatch_call(call).await,
+            Err(error) => Err(error),
+        };
+        if !fixture_only {
+            self.rearm().await.map_err(|_| CallFailure::AnswerLost)?;
+        }
+        answer
+    }
+    async fn rearm(&self) -> Result<(), StoreError> {
         let ObjectWork::Fleet { host, .. } = &self.work else {
-            return Err(refused());
+            return Err(wrong_face());
         };
         // The mutation saved both notice debt and wake intent in its transaction.
         // Only after it settles do we arm the platform timer. An inbound call
         // never drives notice work; a replay can also rearm an earlier saved debt.
         let earliest = host
             .store()
-            .transaction(|scope| Box::pin(async move { scope.earliest().await }))
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
+            .transaction(|scope| Box::pin(crate::automation_clock_deadline::request_next(scope)))
+            .await?;
         if let Some(at) = earliest {
-            host.wake()
-                .wake_at(at)
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
+            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
         }
-        answer
+        Ok(())
     }
 
-    async fn dispatch_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet)?;
+    async fn dispatch_call(&self, call: ObjectCallEnvelope) -> Result<Vec<u8>, CallFailure> {
         if call.kind == crate::owner_operation_calls::ReadCopyDirectoryPage::KIND {
             return self.owner_directory_page(call).await;
         }
@@ -131,6 +155,9 @@ where
         }
         if call.kind == crate::fleet_metadata_calls::FleetMetadata::KIND {
             return self.metadata_call(call).await;
+        }
+        if call.kind == crate::fleet_automation_calls::FleetAutomation::KIND {
+            return self.automation_call(call).await;
         }
         if call.kind == crate::fleet_lease_calls::AdvanceLeaseIncarnation::KIND {
             return self.advance_lease_incarnation_call(call).await;

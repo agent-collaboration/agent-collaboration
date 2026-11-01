@@ -1,0 +1,1 @@
+SELECT content_id,owner_id,revision_id,CAST(recorded_at_ms AS TEXT) AS recorded_at_ms,digest,text FROM content_revisions WHERE owner_id=? AND content_id>? ORDER BY content_id LIMIT CAST(? AS INTEGER);

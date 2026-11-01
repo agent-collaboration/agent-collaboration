@@ -1,0 +1,45 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_automation_operation.rs",
+  "metadata": "automation-operation-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_automation_operation",
+      "sql": "sql/automations/read_automation_operation.sql",
+      "row": "StoredAutomationOperation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_automation_operation",
+      "sql": "sql/automations/insert_automation_operation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "answer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

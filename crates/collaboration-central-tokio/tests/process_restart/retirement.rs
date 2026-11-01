@@ -108,13 +108,57 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let result: Value =
         serde_json::from_slice(after.1.as_ref().ok_or("retirement result missing")?)?;
     assert_eq!(result, expected);
-    let third = ServerProcess::start(root.path(), &jwks.url).await?;
-    assert_eq!(post(&third.base, &route, &request).await?, expected);
-    third.stop().await?;
+    // A fresh Registry run must acknowledge its own Directory publication before
+    // exposing Retired again. Hold the existing incarnation boundary so this
+    // valid Pending(Directory) response cannot race startup's publication.
+    let controls = [collaboration_central_conformance::RuntimeControlRequest {
+        address: ObjectAddress::Registry,
+        command: RuntimeControl::HoldNextDispatch {
+            destination: ObjectAddress::Fleet,
+        },
+    }];
+    let third = ServerProcess::start_with_controls(root.path(), &jwks.url, &controls).await?;
+    let replay = async {
+        let held = control(
+            &third.base,
+            ObjectAddress::Registry,
+            RuntimeControl::AwaitHeldDispatch,
+        )
+        .await?;
+        let DispatchFaultObservation::Held {
+            destination,
+            request: bytes,
+        } = held.dispatch
+        else {
+            return Err("restart missed its Registry incarnation barrier".into());
+        };
+        let call: Value = serde_json::from_slice(&bytes)?;
+        assert_eq!(destination, ObjectAddress::Fleet);
+        assert_eq!(call.get("kind"), Some(&json!("central.lease-incarnation")));
+        assert_eq!(
+            post(&third.base, &route, &request).await?,
+            json!({"kind":"pending","value":{"requestId":request.get("requestId"),"phase":"directory"}})
+        );
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    }
+    .await;
+    let released = control(
+        &third.base,
+        ObjectAddress::Registry,
+        RuntimeControl::ResumeDispatch,
+    )
+    .await;
+    let stopped = third.stop().await;
+    replay?;
+    released?;
+    stopped?;
     assert_eq!(
         operation(&registry_path, &identity).await?,
         after,
         "replay or another startup repeated a recorded step"
+    );
+    println!(
+        "RETIREMENT_RESTART_STAGE fresh_publication_gate_and_original_completed_journal passed"
     );
     jwks.shutdown().await?;
     Ok(())

@@ -52,7 +52,20 @@ pub enum AutomationCall {
 )]
 pub enum CatalogAutomation {
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
+    Faulted(crate::FaultedAutomationSnapshot),
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[schemars(extend("allOf" = [{"required":["nextDueAt","firstFiring"]}]))]
+pub struct CentralWakeSnapshot {
+    pub definition: crate::WakeDefinition,
+    pub state: crate::WakeState,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub next_due_at: Option<crate::ObservationTimestamp>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub first_firing: Option<FiringSnapshot>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -84,31 +97,6 @@ pub struct FiringSnapshot {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum AutomationRefusal {
-    Validation {
-        error: crate::AutomationValidationError,
-    },
-    OperationConflict {
-        operation_id: crate::OperationId,
-    },
-    WakeExists {
-        creator: crate::WakeCreator,
-    },
-    TargetNeedsUpgrade {
-        service_id: crate::UuidIdentity,
-    },
-    NotFound,
-    OriginMismatch,
-    DigestMismatch,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
     content = "value",
     rename_all = "camelCase",
     rename_all_fields = "camelCase",
@@ -116,9 +104,12 @@ pub enum AutomationRefusal {
 )]
 pub enum AutomationAnswer {
     Instruction(crate::InstructionSnapshot),
+    Instructions(crate::AutomationPage<crate::InstructionSnapshot>),
+    Revisions(crate::AutomationPage<crate::RevisionRecord>),
     Schedule(crate::ScheduleSnapshot),
-    Wake(crate::WakeSnapshot),
+    Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
+    Faulted(crate::FaultedAutomationSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {
         automations: Vec<CatalogAutomation>,

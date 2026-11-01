@@ -22,6 +22,7 @@ use fleet_sync_protocol::{CloseReason, ConnectionId, ServerFrame};
 use runtime_primitives::{Clock, WakeScheduler};
 use std::{collections::BTreeSet, sync::Arc};
 mod archive_reports;
+mod automation_requests;
 mod copy_reads;
 mod copy_writes;
 mod fleet_reads;
@@ -194,6 +195,17 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                 } => {
                     if !published.close.contains(&connection) {
                         self.answer_fleet_request(connection, session, frame, request)
+                            .await;
+                    }
+                }
+                SessionTransportEffect::AutomationRequest {
+                    connection,
+                    session,
+                    frame,
+                    request,
+                } => {
+                    if !published.close.contains(&connection) {
+                        self.answer_automation_request(connection, session, frame, request)
                             .await;
                     }
                 }

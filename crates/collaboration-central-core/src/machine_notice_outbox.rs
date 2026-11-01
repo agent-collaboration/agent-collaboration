@@ -1,5 +1,5 @@
 //! Each sender's journal owns its notice debt; alarms drive the same Delivery call.
-use crate::machine_notice_delivery::DeliverMachineNotice;
+use crate::machine_notice_calls::DeliverMachineNotice;
 use board_sync_protocol::BoardNotice;
 use durable_steps::{AtomicStore, OperationContext, OperationFailure, StepName, Task};
 use message_board::ServiceId;
