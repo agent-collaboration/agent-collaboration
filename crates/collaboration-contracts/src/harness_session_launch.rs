@@ -24,20 +24,20 @@ pub struct HarnessSessionLaunch {
 /// intentionally opaque to serializers and diagnostics; only harness config uses it.
 #[derive(Clone)]
 pub struct HarnessSessionBinding {
-    server_name: NonEmptyText,
+    server_name: String,
     address: String,
 }
 impl HarnessSessionBinding {
     #[must_use]
     pub fn from_host_record(server_name: NonEmptyText, address: String) -> Self {
         Self {
-            server_name,
+            server_name: server_name.into(),
             address,
         }
     }
     #[must_use]
     pub fn server_name(&self) -> &str {
-        self.server_name.as_str()
+        &self.server_name
     }
     #[must_use]
     pub fn expose_address(&self) -> &str {

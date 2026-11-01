@@ -14,6 +14,39 @@ mod fixture;
 use fixture::*;
 
 #[tokio::test]
+async fn fleet_session_registrar_restart_abandons_a_prepared_launch_before_dispatch() {
+    let fixture = Fixture::new();
+    let intent = fixture.intent();
+    let PrepareSessionStart::Prepared(prepared) = fixture.registrar.prepare(&intent).await.unwrap()
+    else {
+        panic!("fixture launch was not prepared");
+    };
+    let reconstructed = Fixture::make_registrar(
+        fixture.repository.clone(),
+        fixture.authority.clone(),
+        fixture.mode.clone(),
+        "http://127.0.0.1:8788",
+    );
+
+    reconstructed
+        .settle_interrupted_setups_after_restart()
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        reconstructed
+            .resolve_binding(&prepared.preparation().binding_address)
+            .await,
+        Err(RegistrarFailure::InactiveBinding)
+    ));
+    let records = fixture.repository.records.lock().unwrap();
+    assert!(matches!(records.first().unwrap().lifecycle(), FleetSessionBindingLifecycle::Abandoned {
+        creation: codex_router_state::fleet_session_registration::AbandonedSessionCreation::NotCreated {}
+    }));
+    assert!(fixture.authority.registrations.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn fleet_session_registrar_known_created_local_refusals_keep_identity_and_never_register() {
     for cause in [
         SessionSetupAbandonmentCause::ModelMismatch {},
