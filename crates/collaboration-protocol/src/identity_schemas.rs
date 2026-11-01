@@ -3,6 +3,7 @@ use crate::{
     EndpointId, GenerationNumber, NonEmptyText, ObservationTimestamp, SchemaDigest, SessionId,
     UuidIdentity,
 };
+use message_board::{CANONICAL_UUID_PATTERN, ENDPOINT_ID_PATTERN, OPAQUE_ID_PATTERN};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use std::borrow::Cow;
 
@@ -20,19 +21,19 @@ macro_rules! validated_schema {
 }
 validated_schema!(
     UuidIdentity,
-    json_schema!({"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"})
+    json_schema!({"type":"string","pattern":CANONICAL_UUID_PATTERN})
 );
 validated_schema!(
     EndpointId,
-    json_schema!({"type":"string","pattern":"^[a-z][a-z0-9-]{0,63}$"})
+    json_schema!({"type":"string","pattern":ENDPOINT_ID_PATTERN})
 );
 validated_schema!(
     SessionId,
-    json_schema!({"type":"string","minLength":1,"maxLength":4096,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":4096})
+    json_schema!({"type":"string","minLength":1,"maxLength":4096,"pattern":OPAQUE_ID_PATTERN,"x-maxUtf8Bytes":4096})
 );
 validated_schema!(
     NonEmptyText,
-    json_schema!({"type":"string","minLength":1,"maxLength":4096,"pattern":"^[^\\u0000]+$","x-maxUtf8Bytes":4096})
+    json_schema!({"type":"string","minLength":1,"maxLength":4096,"pattern":OPAQUE_ID_PATTERN,"x-maxUtf8Bytes":4096})
 );
 validated_schema!(
     SchemaDigest,

@@ -22,13 +22,13 @@ production processes. Preserve the allocation's disk floor.
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
-node scripts/verification/tui/terminal-qualification.ts QUALIFICATION.json
-node scripts/verification/tui/evidence-readback.ts --source REPOSITORY
-node scripts/verification/tui/capture-run.ts PLAN.json --check
-node scripts/verification/tui/capture-run.ts PLAN.json
+node scripts/verification/tui/terminal/terminal-qualification.ts QUALIFICATION.json
+node scripts/verification/tui/evidence/evidence-readback.ts --source REPOSITORY
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
-Read `gridCapturePlanSchema` in `scripts/verification/tui/capture-run.ts`.
+Read `gridCapturePlanSchema` in `scripts/verification/tui/capture/capture-run.ts`.
 A plan names `repository`, exact `sourceHead`, `driver` and `product`
 `{path, sha256}` bindings, fresh nonexistent `output`, `journey`, and `keys`
 (`legacy` or `kitty`). Normal/hard require `component`; optional `chrome` names the
@@ -42,6 +42,34 @@ libtest containing
 `quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture`.
 A CLI libtest without that entry rejects before startup.
 
+Before requesting any native window, invoke the exact driver entry and arguments
+with the case's surface, mode, artifact and fixture environment, adding
+`TUI_GRID_CHECK_ONLY=1`. Require exit 0 and `TUI_GRID CHECKED <surface> <mode>
+120 36` before requesting the window. The driver starts at 120×36; narrower cases
+then use the journey's acknowledged same-child resize. This admission path stops
+before opening the PTY or spawning the fixture. Keep its stdout/stderr, exact
+binary hash, admitted configuration and evidence that no child PID files or
+product receipts were written. Wrong surfaces, modes and artifact hashes must
+refuse. Hash/signature and libtest-entry checks alone do not establish admission.
+The separately declared `showcase` surface validates its example launch through
+the fixed wrapper's `--check-only` path, including its path/hash, working directory
+and owned receipt directory. It does not observe the showcase.
+
+For the showcase, use only the canonical lane's runner, `PtyGridDriver`, readers
+and Rust driver at one declared apparatus commit. The separate showcase checkout
+supplies its example artifact and source binding only; never execute its old TS
+apparatus. `showcase/prepare-plan.ts --example-repository` records separate
+`source` (apparatus) and `exampleSource` bindings. The runner refuses a different
+apparatus checkout and checks both source bindings before and after observation.
+After argument admission and before requesting a native window, run
+`node scripts/verification/tui/showcase/qualify-transport.ts PLAN.json`.
+It starts the actual TS/Rust/wrapper pair for every declared mode, requires the
+exact `READY 120 36 STREAM` contract and the wrapper's own ready bytes, then
+stops it without spawning the example. Require exit 0, absent driver/wrapper
+processes, no example PID or product receipts and no cleanup-error marker.
+Keep `transport-receipt.json` and each mode's raw protocol/lifecycle output.
+This qualifies transport only; the product cases still require their own window.
+
 `--check` verifies head, signed artifacts, exact entries and emulator qualification;
 it does not observe a product. Qualification covers named/24-bit colours,
 bold/dim, 📂/✉️/界 widths/graphemes, overlay-left−1 gutter writes, right-edge
@@ -52,8 +80,10 @@ switch renderers or fabricate bytes to fill it.
 ## Journey index
 
 `capture-run.ts` drives the literal data in `journeys/` through
-`journey-catalogue.ts`. Suffixes are `120x36`, `76x30`, `48x24`, `48x12`, `40x24`,
-`32x24`. A wired definition is not a passing observation.
+`journeys/journey-catalogue.ts`. One file per screen under `journeys/screens/`
+contains shared actions and explicit size-specific data. The canonical grid list
+in `journeys/journey-definition.ts` is `120x36`, `76x30`, `48x12`, `32x24`;
+paired-marker cases and authored flows use that same list. A wired definition is not a passing observation.
 
 | Prefix | Entry and deciding observations |
 | --- | --- |
@@ -63,7 +93,19 @@ switch renderers or fabricate bytes to fill it.
 | `hard-` | Exact `visual-hard-cases` fixture: known Alpha windows, stale selected Beta weekly/Extra, Pool census/locked-credentials notice, close and Beta Details. Short height has distinct identity/window poses. |
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
-| S9 new entries (authored/absent) | [New-entry drafts](s9-new-entry-journeys.md), `s9-prestage.ts --check`: 19 authored B cases awaiting S6/S7, with scene/effect oracle checks. This command launches no product and reports zero product passes. |
+| S9 authored flows | [Authored journeys and native bindings](s9-new-entry-journeys.md), `journeys/flows/flow-catalogue.ts --check`: 31 B flows, 212 grid/protocol variants. `authored-flow-run.ts` drives admitted fixture adapters; unsupported bindings fail before startup. Catalogue checks launch no product and report zero product passes. |
+| component showcase | `showcase/run.ts PLAN.json [--check]`: SC01–SC27 through the lane's canonical transport and readers against the separately bound ordinary example. Defaults are four grids and both modes, with independent Quit, glyph, clipping and lifecycle cases. Run `showcase/qualify-transport.ts` before a window request. A valid plan or handshake is not a scenario pass. |
+
+SC25's anchored-overlay reseed is draft until driven on a newly declared example.
+Its private `seed-wide-glyph` action (Ctrl+Alt+S) places ordinary `UiText` at
+the published overlay edge minus one, clamped to zero. This is fixture setup,
+not proof: close the overlay and independently require the actual width-two
+glyph on every covered row in the original PTY grid. Only then judge the saved
+covered frame's left border and gutter. Reopen and independently qualify that
+actual footprint against the retained uncovered parent grid too.
+Repeat that parent qualification after the same-overlay resize and after
+restoring the viewport; a seed from another viewport is invalid. A predicted
+centered width never qualifies an anchored dropdown.
 
 The supplemental lasting entry `input-journeys.ts PLAN.json [--check]` extends
 `baselinePlanSchema` with explicit `preparationProof`. It observes New's five
@@ -80,7 +122,9 @@ preparation dispatch. S6's agreed strict receipt is
 machine identifiers and runMode `foreground` or `background`. The recorded
 step names a fresh relative JSON filename and the independently declared expected
 request. It rejects missing receipts, extra fields, any count other than one, and
-any changed committed field. S9 requires the real recorded step. Never accept
+any changed committed field. That historical S0 preparer placeholder is superseded for local/default New by
+the [returned-outcome reader](input-consumption-readback.md); only configured
+New retains a counted preparer. Never accept
 `pending-s6` as dispatch proof.
 
 `wide-glyph-baseline.ts PLAN.json [--check]` extends `baselinePlanSchema` with
@@ -124,7 +168,7 @@ Explicit baseline decisions supersede stale prose checks:
   placeholders. Beta Details separately requires weekly 75%, reset unknown and
   no invented 7d; 5h No data with no percentage. This is adopted #161 behavior
   from `6388b9739`. The short-height unknown-window port still needs its Details
-  pose before it earns six-grid coverage.
+  pose before it earns four-grid coverage.
 
 ## Evidence and cleanup
 
@@ -143,8 +187,12 @@ cleanup prevents success. Fixture runs permit sealed GETs only, unchanged
 state/secrets, and component receipts with zero external requests/persisted writes.
 
 Use the retained driver's `stop` command and exact owned processes, never process
-names or another checkout's children. Chrome uses isolated profiles and closes on
-exit. Delete profiles only under exact-path authority, with no open handles and
+names or another checkout's children. Chrome uses isolated profiles and its own
+process group. Shutdown first awaits browser exit, stops its remaining owned
+group and awaits inherited-pipe closure. A controlled final-error subprocess
+regression requires natural exit 1 and absent browser/helper processes; this
+is apparatus coverage, not a product observation. Independently check owned
+processes after native runs. Delete profiles only under exact-path authority, with no open handles and
 all evidence outside them. Keep failed runs unchanged; later passes are separate.
 
 ## Public entry, effects and jobs
@@ -179,7 +227,7 @@ Host. Any needed Host/effect change returns to the Lead before editing.
 ## Coverage limits
 
 The S0 pilot drives four existing journeys at 120×36 in legacy and kitty modes.
-Report their exact receipt/source dependencies. Six-grid and same-child product
+Report their exact receipt/source dependencies. Four-grid and same-child product
 resize, pending/error variants, wide-under-dialog, complete new focus/navigation,
 S5 wrong builds, real public-entry/provider/client effects and physical terminals
 remain separately required or explicitly unverified. Full rollout observation is

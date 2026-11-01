@@ -11,6 +11,7 @@ struct RecorderState {
     api_url: String,
     client: reqwest::Client,
     requests: Mutex<Vec<serde_json::Value>>,
+    shutdown: CancellationToken,
 }
 
 pub struct RecordedApiListener {
@@ -28,10 +29,10 @@ impl RecordedApiListener {
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(std::io::Error::other)?,
             requests: Mutex::new(Vec::new()),
+            shutdown: shutdown.clone(),
         });
         let router = Router::new()
             .route("/mcp", post(record_call))
@@ -63,10 +64,10 @@ impl RecordedApiListener {
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(12))
                 .build()
                 .map_err(std::io::Error::other)?,
             requests: Mutex::new(Vec::new()),
+            shutdown: shutdown.clone(),
         });
         let router = Router::new()
             .route("/mcp", post(record_call))
@@ -156,20 +157,21 @@ async fn record_call(
             forwarded = forwarded.header(header, value);
         }
     }
-    let response = forwarded
-        .body(bytes)
-        .send()
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    let response = tokio::select! {
+        _ = state.shutdown.cancelled() => return Err(axum::http::StatusCode::BAD_GATEWAY),
+        response = forwarded.body(bytes).send() => {
+            response.map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?
+        }
+    };
     let status = response.status();
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .cloned();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?;
+    let body = tokio::select! {
+        _ = state.shutdown.cancelled() => return Err(axum::http::StatusCode::BAD_GATEWAY),
+        body = response.bytes() => body.map_err(|_| axum::http::StatusCode::BAD_GATEWAY)?,
+    };
     let mut response = Response::builder().status(status);
     if let Some(content_type) = content_type {
         response = response.header(reqwest::header::CONTENT_TYPE, content_type);

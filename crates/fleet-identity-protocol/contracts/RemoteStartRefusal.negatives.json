@@ -1,0 +1,10 @@
+[
+null,
+{"kind":"machineNotAllowed","unexpectedField":true},
+{"kind":"machineNotConnected","unexpectedField":true},
+{"kind":"notMember","unexpectedField":true},
+{"kind":"projectNotInWorkspace","unexpectedField":true},
+{"kind":"requestIdReused","unexpectedField":true},
+{"kind":"unavailable","unexpectedField":true},
+{"kind":"unrecognizedVariant"}
+]

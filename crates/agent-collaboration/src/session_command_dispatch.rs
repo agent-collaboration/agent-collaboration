@@ -455,6 +455,10 @@ impl SessionsPicker for TerminalSessionsPicker {
             Some(crate::session_client_composition::production_ports(
                 self.context.clone(),
             )),
+            crossterm::terminal::size().map_err(SessionsCommandError::Picker)?,
+            crate::session_environment::collaboration_service_directory(&self.context)
+                .ok()
+                .as_deref(),
         )
         .map_err(SessionsCommandError::Picker)
     }

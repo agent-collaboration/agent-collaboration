@@ -46,6 +46,7 @@ const LAYER_POLICY: [(&str, &[&str]); 16] = [
     (
         "agent-session-tui",
         &[
+            "ui-preference-store",
             "agent-session-inventory",
             "agent-collaboration-tui",
             "collaboration-contracts",

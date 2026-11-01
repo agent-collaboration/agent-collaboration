@@ -8,7 +8,13 @@ use super::terminal_interaction_test::{KeyboardProtocol, TerminalDriver};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, Write};
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
+
+#[path = "sessions_preferences_capture.rs"]
+mod sessions_preferences_capture;
+#[path = "wrapped_fixture_capture.rs"]
+mod wrapped_fixture_capture;
 
 pub(super) fn emit(line: &str) -> TestResult<()> {
     let mut output = std::io::stdout().lock();
@@ -32,6 +38,83 @@ fn decode_hex(encoded: &str) -> TestResult<Vec<u8>> {
 fn encode_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+fn verify_product_binary(path: &Path, expected: &str) -> TestResult<()> {
+    ensure(
+        path.is_absolute() && std::fs::canonicalize(path)? == path && path.is_file(),
+        "product binary must be an explicit canonical absolute file",
+    )?;
+    ensure(
+        super::capture_support::digest_file(path)? == expected,
+        "declared product binary SHA256 mismatch",
+    )
+}
+fn nominated_product_binary(
+    path: Option<&OsStr>,
+    digest: Option<&str>,
+) -> TestResult<Option<PathBuf>> {
+    match (path, digest) {
+        (None, None) => Ok(None),
+        (Some(path), Some(digest)) => {
+            let path = PathBuf::from(path);
+            verify_product_binary(&path, digest)?;
+            Ok(Some(path))
+        }
+        _ => Err("product binary path and SHA256 must be nominated together".into()),
+    }
+}
+fn component_scenario(
+    surface: &str,
+    nomination: Option<&OsStr>,
+) -> TestResult<(&'static str, &'static str)> {
+    let name = nomination
+        .map(|value| value.to_str().ok_or("component scenario is not Unicode"))
+        .transpose()?;
+    match (surface, name) {
+        ("normal", None | Some("normal")) => Ok(("normal", "scenario=Normal")),
+        ("normal", Some("save-failed")) => Ok(("save-failed", "scenario=SaveFailed")),
+        ("normal", Some("commit-pending")) => Ok(("commit-pending", "scenario=CommitPending")),
+        ("normal", Some("inspection-pending")) => {
+            Ok(("inspection-pending", "scenario=InspectionPending"))
+        }
+        ("normal", Some("unknown-result")) => Ok(("unknown-result", "scenario=UnknownResult")),
+        ("normal", Some("disabled-yes")) => Ok(("disabled-yes", "scenario=DisabledYes")),
+        ("normal", Some("revalidation-pending")) => {
+            Ok(("revalidation-pending", "scenario=RevalidationPending"))
+        }
+        ("normal", Some("refused-result")) => Ok(("refused-result", "scenario=RefusedResult")),
+        ("normal", Some("refresh-pending")) => Ok(("refresh-pending", "scenario=RefreshPending")),
+        ("normal", Some("save-pending")) => Ok(("save-pending", "scenario=SavePending")),
+        ("hard", None | Some("visual-hard-cases")) => {
+            Ok(("visual-hard-cases", "scenario=VisualHardCases"))
+        }
+        _ => Err("component scenario does not match its surface".into()),
+    }
+}
+fn component_dispatch_receipt(
+    surface: &str,
+    nomination: Option<&OsStr>,
+) -> TestResult<Option<PathBuf>> {
+    let Some(nomination) = nomination else {
+        return Ok(None);
+    };
+    ensure(
+        matches!(surface, "normal" | "hard"),
+        "component receipt requires a component surface",
+    )?;
+    let path = PathBuf::from(nomination);
+    let parent = path.parent().ok_or("component receipt parent absent")?;
+    ensure(
+        path.is_absolute()
+            && path.file_name().is_some()
+            && std::fs::canonicalize(parent)? == parent,
+        "component receipt path must be canonical and absolute",
+    )?;
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Some(path)),
+        _ => Err("component receipt path already exists or is unavailable".into()),
+    }
+}
+
 pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let surface = std::env::var("TUI_GRID_SURFACE")?;
     let protocol = match std::env::var("TUI_GRID_KEYS")?.as_str() {
@@ -39,6 +122,39 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         "kitty" => KeyboardProtocol::Kitty,
         _ => return Err("unknown terminal key mode".into()),
     };
+    ensure(
+        matches!(
+            surface.as_str(),
+            "sessions"
+                | "sessions-filters"
+                | "quota"
+                | "quota-filters"
+                | "normal"
+                | "hard"
+                | "showcase"
+                | "quota-effects"
+        ),
+        "unknown grid capture surface",
+    )?;
+    let check_only = match std::env::var("TUI_GRID_CHECK_ONLY") {
+        Err(std::env::VarError::NotPresent) => false,
+        Ok(value) if value == "1" => true,
+        _ => return Err("invalid grid check-only nomination".into()),
+    };
+    if surface == "showcase" {
+        return wrapped_fixture_capture::run(
+            protocol,
+            check_only,
+            wrapped_fixture_capture::WrappedFixtureSurface::Showcase,
+        );
+    }
+    if surface == "quota-effects" {
+        return wrapped_fixture_capture::run(
+            protocol,
+            check_only,
+            wrapped_fixture_capture::WrappedFixtureSurface::QuotaEffects,
+        );
+    }
     let fixture = if surface == "quota-filters" {
         QuotaResetFixture::create_provider_filters(ProviderFilterFixtureScenario::MixedAccounts)
             .await?
@@ -79,7 +195,54 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     let receipt_path = std::env::var_os("TUI_GRID_COMPONENT_RECEIPT");
     let release_path = std::env::var_os("TUI_GRID_COMPONENT_RELEASE");
     let component = matches!(surface.as_str(), "normal" | "hard");
+    let scenario_nomination = std::env::var_os("TUI_GRID_COMPONENT_SCENARIO");
+    ensure(
+        component || scenario_nomination.is_none(),
+        "component scenario requires a component surface",
+    )?;
+    let scenario = component
+        .then(|| component_scenario(&surface, scenario_nomination.as_deref()))
+        .transpose()?;
+    ensure(
+        release_path.is_some()
+            == scenario.is_some_and(|value| {
+                matches!(
+                    value.0,
+                    "inspection-pending"
+                        | "commit-pending"
+                        | "revalidation-pending"
+                        | "refresh-pending"
+                        | "save-pending"
+                )
+            }),
+        "component release requires a pending scenario and vice versa",
+    )?;
+    let release_path = component_dispatch_receipt(&surface, release_path.as_deref())?;
+    let dispatch_nomination = std::env::var_os("TUI_GRID_COMPONENT_DISPATCH_RECEIPT");
+    let dispatch_receipt = component_dispatch_receipt(&surface, dispatch_nomination.as_deref())?;
+    ensure(
+        release_path.is_none() || release_path != dispatch_receipt,
+        "component release and dispatch receipt paths collide",
+    )?;
+    let product_path = std::env::var_os("TUI_GRID_PRODUCT_BINARY");
+    let product_digest = match std::env::var("TUI_GRID_PRODUCT_SHA256") {
+        Ok(digest) => Some(digest),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => return Err(error.into()),
+    };
+    let product_binary =
+        nominated_product_binary(product_path.as_deref(), product_digest.as_deref())?;
+    ensure(
+        !(component && product_binary.is_some()),
+        "product and component binaries cannot be mixed",
+    )?;
     let mut environment: Vec<(&str, &OsStr)> = Vec::new();
+    if let Some(path) = &dispatch_receipt {
+        environment.push((
+            "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+            path.as_os_str(),
+        ));
+    }
     let sessions_receipt_directory = std::env::var_os("TUI_SESSIONS_FIXTURE_RECEIPT_DIR");
     if let Some(directory) = sessions_receipt_directory.as_deref() {
         ensure(
@@ -97,10 +260,19 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         )?;
         environment.push(("TUI_SESSIONS_FIXTURE_RECEIPT_DIR", directory));
     }
+    let preferences_nomination = std::env::var_os("TUI_SESSIONS_FIXTURE_PREFERENCES_DIR");
+    let preferences_directory =
+        sessions_preferences_capture::directory(&surface, preferences_nomination.as_deref())?;
+    if let Some(directory) = &preferences_directory {
+        environment.push((
+            "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR",
+            directory.as_os_str(),
+        ));
+    }
     let storyboard_variant = std::env::var_os("TUI_GRID_STORYBOARD_VARIANT");
     if let Some(variant) = storyboard_variant.as_deref() {
         ensure(
-            surface == "sessions-filters" && variant == OsStr::new("wide-glyph-left-border"),
+            valid_storyboard_variant(&surface, variant),
             "invalid grid storyboard variant or surface",
         )?;
         environment.push(("CODEX_ROUTER_TUI_STORYBOARD_VARIANT", variant));
@@ -108,11 +280,7 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     if component {
         environment.push((
             "QUOTA_COMPONENT_FIXTURE",
-            OsStr::new(if surface == "normal" {
-                "normal"
-            } else {
-                "visual-hard-cases"
-            }),
+            OsStr::new(scenario.ok_or("component scenario absent")?.0),
         ));
         environment.push((
             "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE",
@@ -121,16 +289,28 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
                 .ok_or("component receipt required")?,
         ));
         if let Some(release) = release_path.as_deref() {
-            environment.push(("QUOTA_COMPONENT_FIXTURE_RELEASE_FILE", release));
+            environment.push(("QUOTA_COMPONENT_FIXTURE_RELEASE_FILE", release.as_os_str()));
         }
     }
     let binary = if component {
         component_binary
             .as_deref()
             .ok_or("component binary required")?
+    } else if let Some(product_binary) = &product_binary {
+        product_binary.as_os_str()
     } else {
         OsStr::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness"))
     };
+    if check_only {
+        ensure(
+            Path::new(binary).is_absolute() && Path::new(binary).is_file(),
+            "capture binary must be an absolute existing file",
+        )?;
+        return emit(&format!(
+            "CHECKED {surface} {} 120 36",
+            std::env::var("TUI_GRID_KEYS")?
+        ));
+    }
     let terminal = TerminalDriver::spawn_with_environment(
         Path::new(binary),
         arguments,
@@ -138,17 +318,19 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
         &environment,
     )?;
     let outcome = drive_terminal(terminal, protocol)?;
+    if let Some(path) = &product_binary {
+        verify_product_binary(
+            path,
+            product_digest.as_deref().ok_or("product digest absent")?,
+        )?;
+    }
     if component {
         let receipt = std::fs::read_to_string(
             receipt_path
                 .as_deref()
                 .ok_or("component receipt required")?,
         )?;
-        let expected = if surface == "normal" {
-            "scenario=Normal"
-        } else {
-            "scenario=VisualHardCases"
-        };
+        let expected = scenario.ok_or("component scenario absent")?.1;
         ensure(
             receipt.contains(expected)
                 && receipt.contains("external_requests=0 persisted_writes=0"),
@@ -173,6 +355,114 @@ pub(super) async fn run_grid_terminal() -> TestResult<()> {
     Ok(())
 }
 
+#[test]
+fn split_source_product_binding_rejects_missing_wrong_or_changed_artifact() -> TestResult<()> {
+    let directory =
+        std::env::temp_dir().join(format!("grid-product-binding-{}", std::process::id()));
+    std::fs::create_dir(&directory)?;
+    let directory = std::fs::canonicalize(directory)?;
+    let path = directory.join("picker-fixture");
+    std::fs::write(&path, b"declared product")?;
+    let result = (|| {
+        let digest = super::capture_support::digest_file(&path)?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), Some(&digest))? == Some(path.clone()),
+            "explicit product was not selected",
+        )?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), None).is_err(),
+            "missing SHA256 accepted",
+        )?;
+        ensure(
+            nominated_product_binary(None, Some(&digest)).is_err(),
+            "missing path accepted",
+        )?;
+        ensure(
+            nominated_product_binary(Some(path.as_os_str()), Some(&"0".repeat(64))).is_err(),
+            "wrong artifact accepted",
+        )?;
+        std::fs::write(&path, b"changed product")?;
+        ensure(
+            verify_product_binary(&path, &digest).is_err(),
+            "artifact replacement went undetected",
+        )
+    })();
+    std::fs::remove_file(path)?;
+    std::fs::remove_dir(directory)?;
+    result
+}
+
+fn valid_storyboard_variant(surface: &str, variant: &OsStr) -> bool {
+    surface == "sessions-filters"
+        && [
+            "fork-ssh-profile",
+            "claude-new-success",
+            "large-list",
+            "r19-grouping",
+            "wide-glyph-left-border",
+            "source-qualified-outcome",
+            "configured-source-new",
+            "stopped-native-claude",
+            "local-codex-new",
+            "new-machine-uncommitted",
+            "source-options-add",
+            "source-options-remove",
+            "source-options-replace",
+        ]
+        .iter()
+        .any(|candidate| variant == OsStr::new(candidate))
+}
+
+#[test]
+fn storyboard_variants_are_explicit_and_sessions_only() {
+    for variant in [
+        "fork-ssh-profile",
+        "claude-new-success",
+        "large-list",
+        "r19-grouping",
+        "wide-glyph-left-border",
+        "source-qualified-outcome",
+        "configured-source-new",
+        "stopped-native-claude",
+        "local-codex-new",
+        "new-machine-uncommitted",
+        "source-options-add",
+        "source-options-remove",
+        "source-options-replace",
+    ] {
+        assert!(valid_storyboard_variant(
+            "sessions-filters",
+            OsStr::new(variant)
+        ));
+        assert!(!valid_storyboard_variant("quota", OsStr::new(variant)));
+        assert!(!valid_storyboard_variant("sessions", OsStr::new(variant)));
+    }
+    assert!(!valid_storyboard_variant(
+        "sessions-filters",
+        OsStr::new("unknown")
+    ));
+}
+
+#[test]
+fn sessions_preferences_input_crosses_the_real_pty_environment_boundary() -> TestResult<()> {
+    let terminal = TerminalDriver::spawn_with_environment(
+        Path::new("/usr/bin/env"),
+        std::iter::empty::<&str>(),
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &[(
+            "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR",
+            OsStr::new("/fixture-owned/preferences"),
+        )],
+    )?;
+    let transcript = String::from_utf8(terminal.finish(Duration::from_secs(8))?)?;
+    ensure(
+        transcript.lines().any(|line| {
+            line.trim_end() == "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR=/fixture-owned/preferences"
+        }),
+        "explicit preference nomination did not cross the real PTY boundary",
+    )
+}
+
 pub(super) struct TerminalOutcome {
     pub(super) completed: bool,
     pub(super) bytes: usize,
@@ -181,7 +471,27 @@ pub(super) fn drive_terminal(
     mut terminal: TerminalDriver,
     protocol: KeyboardProtocol,
 ) -> TestResult<TerminalOutcome> {
-    emit("READY 120 36")?;
+    // Handshake precedes unsolicited output, including terminal queries that
+    // can make the observer issue a reply command immediately.
+    emit("READY 120 36 STREAM")?;
+    let forwarding = terminal.forward_output(|bytes| {
+        emit(&match bytes {
+            Some(bytes) => format!("BYTES {}", encode_hex(bytes)),
+            None => "EOF".to_owned(),
+        })
+        .map_err(|error| std::io::Error::other(error.to_string()))
+    });
+    let outcome = drive_commands(terminal, protocol);
+    // The original TerminalDriver still owns/reaps the child; join the output
+    // publisher before FINISHED/STOPPED so no bytes can follow settlement.
+    forwarding.recv()??;
+    outcome
+}
+
+fn drive_commands(
+    mut terminal: TerminalDriver,
+    protocol: KeyboardProtocol,
+) -> TestResult<TerminalOutcome> {
     for line in std::io::stdin().lock().lines() {
         let line = line?;
         let mut words = line.split_whitespace();
@@ -189,11 +499,9 @@ pub(super) fn drive_terminal(
             Some("read") => {
                 let milliseconds: u64 = words.next().ok_or("read deadline required")?.parse()?;
                 ensure(milliseconds <= 30_000, "read deadline too long")?;
-                match terminal.receive_bytes(Duration::from_millis(milliseconds)) {
-                    Ok(Some(bytes)) => emit(&format!("BYTES {}", encode_hex(&bytes)))?,
-                    Ok(None) => emit("EOF")?,
-                    Err(error) => emit(&format!("READ_ERROR {error}"))?,
-                }
+                // Output is unsolicited now. A read command is an immediate
+                // barrier acknowledgement, never a blocking PTY receive.
+                emit("OK")?;
             }
             Some("write" | "reply") => {
                 let bytes = decode_hex(words.next().ok_or("bytes required")?)?;
@@ -208,8 +516,12 @@ pub(super) fn drive_terminal(
             Some("resize") => {
                 let cols = words.next().ok_or("columns required")?.parse()?;
                 let rows = words.next().ok_or("rows required")?.parse()?;
+                // Serialize the geometry boundary with stream publication.
+                let mut output = std::io::stdout().lock();
                 terminal.resize(rows, cols)?;
-                emit("OK")?;
+                writeln!(output, "TUI_GRID RESIZED {cols} {rows}")?;
+                writeln!(output, "TUI_GRID OK")?;
+                output.flush()?;
             }
             Some("running") => emit(if terminal.child_is_running()? {
                 "RUNNING"
@@ -279,7 +591,7 @@ fn sessions_wrapper_receipt_input_reaches_its_child_on_the_existing_pty_owner() 
         std::fs::create_dir(&directory)?;
         let configuration = fixture.root.join("configuration.json");
         let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/verification/tui/fixture-child.ts");
+            .join("../../scripts/verification/tui/fixtures/fixture-child.ts");
         let mut command = CommandBuilder::new(&fixture.node);
         command.args([wrapper.as_os_str(), configuration.as_os_str()]);
         command.env_clear();
@@ -305,4 +617,82 @@ fn sessions_wrapper_receipt_input_reaches_its_child_on_the_existing_pty_owner() 
         fixture.cleanup()?;
     }
     Ok(())
+}
+
+#[test]
+fn component_receipt_and_scenario_nomination_are_confined_and_reach_the_real_pty() -> TestResult<()>
+{
+    let directory = std::fs::canonicalize(std::env::temp_dir())?
+        .join(format!("grid-component-receipt-{}", std::process::id()));
+    std::fs::create_dir(&directory)?;
+    let path = directory.join("dispatch.jsonl");
+    let result = (|| {
+        ensure(
+            component_dispatch_receipt("normal", Some(path.as_os_str()))? == Some(path.clone()),
+            "valid receipt nomination lost",
+        )?;
+        ensure(
+            component_dispatch_receipt("sessions", Some(path.as_os_str())).is_err(),
+            "sessions accepted a component receipt",
+        )?;
+        ensure(
+            component_dispatch_receipt("normal", Some(OsStr::new("relative.jsonl"))).is_err(),
+            "relative receipt accepted",
+        )?;
+        ensure(
+            component_scenario("normal", Some(OsStr::new("save-failed")))?
+                == ("save-failed", "scenario=SaveFailed"),
+            "save failure scenario/receipt changed",
+        )?;
+        ensure(
+            component_scenario("hard", None)? == ("visual-hard-cases", "scenario=VisualHardCases"),
+            "hard default changed",
+        )?;
+        ensure(
+            component_scenario("normal", Some(OsStr::new("commit-pending")))?
+                == ("commit-pending", "scenario=CommitPending"),
+            "pending commit scenario/receipt changed",
+        )?;
+        for surface in ["normal", "hard", "sessions"] {
+            ensure(
+                component_scenario(surface, Some(OsStr::new("unknown"))).is_err(),
+                "unknown scenario accepted",
+            )?;
+        }
+        ensure(
+            component_scenario("hard", Some(OsStr::new("save-failed"))).is_err(),
+            "hard accepted normal scenario",
+        )?;
+        ensure(
+            component_scenario("hard", Some(OsStr::new("commit-pending"))).is_err(),
+            "hard accepted committing scenario",
+        )?;
+        let terminal = TerminalDriver::spawn_with_environment(
+            Path::new("/usr/bin/env"),
+            std::iter::empty::<&OsStr>(),
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[(
+                "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+                path.as_os_str(),
+            )],
+        )?;
+        let bytes = terminal.finish(Duration::from_secs(8))?;
+        ensure(
+            String::from_utf8(bytes)?.contains(&format!(
+                "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE={}",
+                path.display()
+            )),
+            "real PTY dropped receipt key",
+        )?;
+        std::fs::write(&path, b"occupied")?;
+        ensure(
+            component_dispatch_receipt("normal", Some(path.as_os_str())).is_err(),
+            "occupied receipt accepted",
+        )
+    })();
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    std::fs::remove_dir(directory)?;
+    result
 }

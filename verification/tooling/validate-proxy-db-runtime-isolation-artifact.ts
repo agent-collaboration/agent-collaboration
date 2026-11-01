@@ -241,7 +241,7 @@ export const selfTestSchema = z.object({
 });
 
 export function runSelfTest(): number {
-  const directory = new URL("proxy-db-artifact-cases/", import.meta.url);
+  const directory = new URL("./proxy-db-artifact-cases/", import.meta.url);
   const failures: string[] = [];
   for (const name of readdirSync(directory).sort()) {
     const entry = selfTestSchema.parse(JSON.parse(readFileSync(new URL(name, directory), "utf8")));

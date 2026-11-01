@@ -14,7 +14,7 @@ fn public_grid_constructor_preserves_home_and_guarded_stop_reaps_its_child() -> 
     let configuration = output.join("fixture-command.json");
     fs::copy(fixture.root.join("configuration.json"), &configuration)?;
     let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/verification/tui/fixture-child.ts")
+        .join("../../scripts/verification/tui/fixtures/fixture-child.ts")
         .canonicalize()?;
     let mut terminal =
         TerminalDriver::spawn_public_wrapper(&fixture.node, &wrapper, &configuration, &output)?;
@@ -48,7 +48,7 @@ fn changed_public_wrapper_identity_refuses_signal_and_child_can_finish_normally(
     let configuration = output.join("fixture-command.json");
     fs::copy(fixture.root.join("configuration.json"), &configuration)?;
     let wrapper = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/verification/tui/fixture-child.ts")
+        .join("../../scripts/verification/tui/fixtures/fixture-child.ts")
         .canonicalize()?;
     let mut terminal =
         TerminalDriver::spawn_public_wrapper(&fixture.node, &wrapper, &configuration, &output)?;

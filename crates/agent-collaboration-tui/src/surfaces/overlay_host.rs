@@ -101,6 +101,15 @@ fn SurfacePanel<'a>(
 pub struct OverlayHostProps<'a> {
     pub children: Vec<AnyElement<'a>>,
 }
+
+fn centered_cell_padding(leading_margin: u16, available: u16, size: Size) -> u16 {
+    let unused = match size {
+        Size::Length(cells) => u32::from(available).saturating_sub(cells),
+        _ => 0,
+    };
+    // Keep the drawn position without Taffy's half-cell range inflation (UW-11).
+    leading_margin.saturating_add(u16::from(unused % 2 != 0))
+}
 #[component]
 pub fn OverlayHost<'a>(
     props: &mut OverlayHostProps<'a>,
@@ -115,7 +124,13 @@ pub fn OverlayHost<'a>(
         match overlay.layout.clone().resolve(context.stack.viewport()) {
             OverlayPlacement::Anchored {target,preferred_width,maximum_width,maximum_height}=>element!(AnchoredPanel(key:overlay.id.get(),context,parent:overlay.parent,target,preferred_width,maximum_width,maximum_height) {#(Some(overlay.view.render()))}).into_any(),
             OverlayPlacement::Fixed {left,top,width,height}=>element!(SurfacePanel(key:overlay.id.get(),context,left,top,width:Size::Length(u32::from(width)),height:Size::Length(u32::from(height)),max_width:width,max_height:height,position:Position::Absolute,overlay:true) {#(Some(overlay.view.render()))}).into_any(),
-            OverlayPlacement::Centered {width:panel_width,height:panel_height,max_width,max_height,margins}=>element!(View(key:overlay.id.get(),position:Position::Absolute,left:0,top:0,width,height,padding_left:margins.left,padding_right:margins.right,padding_top:margins.top,padding_bottom:margins.bottom,align_items:AlignItems::Center,justify_content:JustifyContent::Center) {SurfacePanel(context,width:panel_width,height:panel_height,max_width,max_height,position:Position::Relative,overlay:true) {#(Some(overlay.view.render()))}}).into_any(),
+            OverlayPlacement::Centered {width:panel_width,height:panel_height,max_width,max_height,margins}=>{
+                let horizontal = width.saturating_sub(margins.left).saturating_sub(margins.right);
+                let vertical = height.saturating_sub(margins.top).saturating_sub(margins.bottom);
+                let left_padding = centered_cell_padding(margins.left,horizontal,panel_width);
+                let top_padding = centered_cell_padding(margins.top,vertical,panel_height);
+                element!(View(key:overlay.id.get(),position:Position::Absolute,left:0,top:0,width,height,padding_left:left_padding,padding_right:margins.right,padding_top:top_padding,padding_bottom:margins.bottom,align_items:AlignItems::Center,justify_content:JustifyContent::Center) {SurfacePanel(context,width:panel_width,height:panel_height,max_width,max_height,position:Position::Relative,overlay:true) {#(Some(overlay.view.render()))}}).into_any()
+            },
         }
     }).collect::<Vec<_>>();
     element! {

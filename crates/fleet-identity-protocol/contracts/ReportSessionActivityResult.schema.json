@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "ActivityRefusal": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notCurrentConnection",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "accepted",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "superseded",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/ActivityRefusal"
+        },
+        "result": {
+          "const": "refused",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "ReportSessionActivityResult"
+}

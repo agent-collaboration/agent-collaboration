@@ -1,0 +1,7 @@
+[
+{"kind":"notOwner"},
+{"kind":"notFound"},
+{"kind":"conflict"},
+{"kind":"recordUnwritable"},
+{"kind":"secondFactorRequired","withinSeconds":900}
+]

@@ -13,7 +13,7 @@ fn observe_floor_increment_cell(
     use std::io::Write;
     use std::process::Stdio;
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let script = repository.join("scripts/verification/tui/locate-floor-increment.ts");
+    let script = repository.join("scripts/verification/tui/journeys/scenes/locate-floor-increment.ts");
     let mut observer = Command::new("node")
         .arg(script)
         .args(["120", "36"])

@@ -14,12 +14,12 @@ pnpm --dir scripts/verification/tui typecheck
 pnpm --dir scripts/verification/tui lint
 pnpm --dir scripts/verification/tui format:check
 pnpm --dir scripts/verification/tui test
-node scripts/verification/tui/terminal-qualification.ts OUTPUT.json
-node scripts/verification/tui/capture-run.ts PLAN.json --check
-node scripts/verification/tui/capture-run.ts PLAN.json
+node scripts/verification/tui/terminal/terminal-qualification.ts OUTPUT.json
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
-`gridCapturePlanSchema` in `capture-run.ts` declares the repository, exact source
+`gridCapturePlanSchema` in `capture/capture-run.ts` declares the repository, exact source
 head, signed driver/product/component artifact paths and SHA-256s, fresh output,
 journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
 is the prebuilt `e2e` libtest (entry `quota_storyboard::compiled_grid_terminal_observation`), not Cargo. Component
@@ -27,10 +27,13 @@ journeys require the exact fixture-bearing Quota library test executable; the
 runner checks its test entry before launching it. Source files and artifact hashes
 are recorded and checked for drift. Build provenance remains the producer's duty.
 
-`journey-catalogue.ts` names 24 literal journeys: Sessions, Quota, Normal43 and
-hard cases at 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24. Data ports exist for all
-six grids; the S0 pilot observed only 120×36. A definition is not a passing receipt.
-`baseline-journeys.ts` separately records the component-system's pre-change
+`journeys/screens/` contains one data definition each for Sessions, Quota,
+Normal43 and hard cases. `journeys/journey-catalogue.ts` expands them over the
+canonical `journeyGridSizes` in `journeys/journey-definition.ts`: 120×36, 76×30,
+48×12 and 32×24. The 16 screen/grid variants retain their checkpoint IDs, action
+bursts and finish sequence. Size-specific scrolling is data inside each screen
+file. A definition is not a passing receipt.
+`capture/baseline-journeys.ts` separately records the component-system's pre-change
 failures, passing isolation cases, absent future entries, and unobserved fixtures.
 
 Every checkpoint keeps raw ANSI, JSON cells, text and assertion results. Each
@@ -39,7 +42,7 @@ build, viewport and checkpoint. Each journey rejects the actual empty-core and
 retained wrong-scene controls before writing a success receipt. An entry timeout
 is an apparatus/feasibility failure, never a product defect.
 
-`public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
+`sessions/public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
 public route without launching its TUI. Its Host/process/health/effect checks,
 normal HOME/CODEX_HOME, exact public argv/cwd and job-settlement boundary remain
 separate from fixture zero-effect receipts. Running that route requires its own

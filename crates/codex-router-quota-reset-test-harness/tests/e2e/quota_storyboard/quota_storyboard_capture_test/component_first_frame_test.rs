@@ -79,14 +79,14 @@ fn check_first_frame_grid(evidence: &Path, frame: &[u8]) -> TestResult<()> {
     let (node, _) = verified_node_executable()?;
     let script = fs::canonicalize(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/verification/tui/check-quota-first-frame.ts"),
+            .join("../../scripts/verification/tui/journeys/scenes/check-quota-first-frame.ts"),
     )?;
     ensure(
         digest_file(&script)?
             == format!(
                 "{:x}",
                 Sha256::digest(include_bytes!(
-                    "../../../../../../scripts/verification/tui/check-quota-first-frame.ts"
+                    "../../../../../../scripts/verification/tui/journeys/scenes/check-quota-first-frame.ts"
                 ))
             ),
         "first-frame checker differs from its compiled source",
