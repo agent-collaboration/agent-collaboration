@@ -75,7 +75,7 @@ impl TransportConnection for CentralConnection {
     async fn send(&mut self, bytes: Bytes) -> Result<(), ConnectionClosed> {
         let request: ClientFrame<BoardConsumerProtocol> =
             serde_json::from_slice(&bytes).map_err(|_| ConnectionClosed::Transport)?;
-        let reply = match request {
+        let reply: ServerFrame<BoardConsumerProtocol> = match request {
             ClientFrame::Hello { session_id, .. } => ServerFrame::Welcome {
                 session_id,
                 databases: Vec::new(),
