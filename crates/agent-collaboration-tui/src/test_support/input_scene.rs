@@ -88,6 +88,9 @@ pub(crate) struct SceneProps {
     pub(crate) wide_glyph: String,
     pub(crate) handle: SceneHandle,
     pub(crate) overlay_left: Option<u16>,
+    pub(crate) wide_glyph_left: Option<u16>,
+    pub(crate) width: Option<u16>,
+    pub(crate) height: Option<u16>,
 }
 #[component]
 pub(crate) fn Scene(props: &SceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -188,7 +191,7 @@ pub(crate) fn Scene(props: &SceneProps, mut hooks: Hooks) -> impl Into<AnyElemen
     *props.handle.0.lock().unwrap() = Some(stack);
     let journal = props.journal.clone();
     element! {
-        InputOwner(stack, width:60u16, height:18u16, quit_action: action_id("quit"), on_routed: move |_| {
+        InputOwner(stack, width:props.width.unwrap_or(60), height:props.height.unwrap_or(18), quit_action: action_id("quit"), on_routed: move |_| {
             let state = stack.snapshot();
             let focus=state.surface(SurfaceId::Screen).unwrap().focus.current().map_or("-",TargetId::as_str);
             let mut surfaces = vec![(SurfaceId::Screen, format!("{}|{}|{}|{}", text.read().as_str(),details.get(),quits.get(),focus).into_bytes())];
@@ -196,7 +199,7 @@ pub(crate) fn Scene(props: &SceneProps, mut hooks: Hooks) -> impl Into<AnyElemen
             journal.processed(SurfaceSnapshot(surfaces));
         }) {
             OverlayHost {
-                ScreenBody(text:text.read().clone(), details: details.get(), quits:quits.get(), wide_glyph:props.wide_glyph.clone())
+                ScreenBody(text:text.read().clone(), details: details.get(), quits:quits.get(), wide_glyph:props.wide_glyph.clone(),wide_glyph_left:props.wide_glyph_left.unwrap_or(19))
             }
         }
     }
@@ -208,6 +211,7 @@ struct ScreenBodyProps {
     details: usize,
     quits: usize,
     wide_glyph: String,
+    wide_glyph_left: u16,
 }
 #[component]
 fn ScreenBody(props: &ScreenBodyProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -234,7 +238,7 @@ fn ScreenBody(props: &ScreenBodyProps, hooks: Hooks) -> impl Into<AnyElement<'st
                     .into_iter().map(|role|element!(View(width:1,height:1,background_color:theme.background(role)){Text(content:"b",color:theme.foreground(TextRole::Text))})))
             }
             #(if props.wide_glyph.is_empty() { None } else { Some(element! {
-                View(position:Position::Absolute,left:19,top:4,flex_direction:FlexDirection::Column) {
+                View(position:Position::Absolute,left:props.wide_glyph_left,top:4,flex_direction:FlexDirection::Column) {
                     #((0..6).map(|_| element!(Text(content:props.wide_glyph.clone(),color:theme.foreground(TextRole::Text)))))
                 }
             }.into_any()) })
