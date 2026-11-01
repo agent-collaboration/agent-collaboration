@@ -106,7 +106,7 @@ impl FileReadTrace {
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Default)]
-pub struct FileWriteTrace(Arc<Mutex<Vec<FileWriteTraceEvent>>>);
+pub struct FileWriteTrace(pub(super) Arc<Mutex<Vec<FileWriteTraceEvent>>>);
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Eq, PartialEq)]
