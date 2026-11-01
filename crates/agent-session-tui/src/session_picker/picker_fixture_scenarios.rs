@@ -13,6 +13,12 @@ mod fork_preparation;
 #[cfg(debug_assertions)]
 pub(super) use fork_preparation::source_preparer;
 
+#[cfg(debug_assertions)]
+#[path = "picker_fixture_grouping.rs"]
+mod grouping;
+#[cfg(debug_assertions)]
+pub(super) use grouping::grouping_clock;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum FixtureSourceChange {
     Add,
@@ -29,6 +35,8 @@ pub(super) enum PickerFixtureScenario {
     ForkSshProfile,
     ClaudeNewSuccess,
     LargeList,
+    #[cfg(debug_assertions)]
+    R19Grouping,
 }
 
 impl PickerFixtureScenario {
@@ -43,6 +51,8 @@ impl PickerFixtureScenario {
             "fork-ssh-profile" => Self::ForkSshProfile,
             "claude-new-success" => Self::ClaudeNewSuccess,
             "large-list" => Self::LargeList,
+            #[cfg(debug_assertions)]
+            "r19-grouping" => Self::R19Grouping,
             _ => return None,
         })
     }
@@ -128,6 +138,8 @@ impl PickerFixtureScenario {
                 request.records = vec![record];
             }
             Self::ClaudeNewSuccess => {}
+            #[cfg(debug_assertions)]
+            Self::R19Grouping => return grouping::apply(request),
             Self::LargeList => {
                 const RECENCY_BASE_MS: i64 = 1_790_000_000_000;
                 request.records = (0..60)

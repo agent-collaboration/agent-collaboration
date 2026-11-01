@@ -71,6 +71,7 @@ async fn exercise_at(
     let captured_request = request.clone();
     let scenario = PickerFixtureScenario::from_name(name);
     let ports = picker_fixture_scenarios::client_ports(scenario, &request);
+    let grouping_clock = picker_fixture_scenarios::grouping_clock(scenario).unwrap();
     let source_preparer = picker_fixture_scenarios::source_preparer(scenario, &request)
         .unwrap_or_else(|| super::recording_preparer(Some(directory)));
     let loader =
@@ -91,6 +92,7 @@ async fn exercise_at(
     {
         let mut component = element!(SessionsPickerComponent(
             request, record_loader:loader,
+            grouping_clock,
             source_preparer:Some(source_preparer),
             details_client_inspector:ports.as_ref().map(|ports|ports.details_inspector.clone()),
             client_inventory_loader:ports.as_ref().map(|ports|ports.inventory_loader.clone()),
@@ -158,6 +160,9 @@ async fn exercise_at(
 
 #[path = "picker_fixture_additional_scenario_tests.rs"]
 mod additional_scenarios;
+
+#[path = "picker_fixture_grouping_tests.rs"]
+mod grouping_fixture;
 
 fn highlighted_option(canvas: &Canvas, stack: SurfaceStackHandle) -> Option<String> {
     let map = stack.hit_regions().published()?;

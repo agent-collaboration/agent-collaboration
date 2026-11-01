@@ -63,9 +63,11 @@ pub fn add_group_actions(
                 .iter()
                 .position(|facet| *facet == current)
                 .unwrap_or(0);
-            preferences
-                .write()
-                .choose(SessionGroupFacet::CHOICES[(index + 1) % SessionGroupFacet::CHOICES.len()]);
+            let next = SessionGroupFacet::CHOICES
+                .get(index + 1)
+                .copied()
+                .unwrap_or(SessionGroupFacet::None);
+            preferences.write().choose(next);
         },
     )?);
     for facet in SessionGroupFacet::CHOICES {

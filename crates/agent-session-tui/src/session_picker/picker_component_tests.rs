@@ -52,6 +52,9 @@ mod picker_grouping_projection_tests;
 #[path = "picker_grouping_persistence_tests.rs"]
 mod picker_grouping_persistence_tests;
 
+#[path = "picker_menu_section_tests.rs"]
+mod picker_menu_section_tests;
+
 // Blocking external fixture procedures run off the executor; production loaders are async.
 fn fixture_record_loader<FixtureProcedure>(
     procedure: FixtureProcedure,

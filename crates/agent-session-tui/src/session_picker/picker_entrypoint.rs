@@ -36,6 +36,8 @@ struct PickerRenderSupport {
     #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
     dispatch_receipt:
         Option<agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink>,
+    #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
+    grouping_clock: Option<super::picker_surface::SessionGroupingClock>,
     source_preparer: Option<super::super::source_action_worker::SourceActionPreparer>,
     preferences_directory: Option<PathBuf>,
 }
@@ -87,6 +89,7 @@ fn render_picker(
     #[cfg(all(feature = "quota-reset-test-harness", debug_assertions))]
     {
         component.props.dispatch_receipt = support.dispatch_receipt.clone();
+        component.props.grouping_clock = support.grouping_clock.clone();
     }
     let render_result = (|| {
         let render_loop = component
@@ -153,6 +156,7 @@ pub fn run_sessions_picker_test_harness() -> io::Result<()> {
     #[cfg(debug_assertions)]
     let support = PickerRenderSupport {
         dispatch_receipt: dispatch_receipt.clone(),
+        grouping_clock: super::super::picker_fixture_scenarios::grouping_clock(scenario)?,
         source_preparer: Some(
             super::super::picker_fixture_scenarios::source_preparer(scenario, &request)
                 .unwrap_or_else(|| {

@@ -6,7 +6,7 @@ use super::{
     action, target,
 };
 use agent_collaboration_tui::{
-    actions::Checked,
+    actions::{Checked, MenuSectionSpec},
     controls::{
         fields::{button_target, segmented_targets},
         list::{ListNavigationPolicy, ListRowKey, ListSelectionBinding, ListSelectionControl},
@@ -180,9 +180,7 @@ pub fn build_screen(
             name,
             title,
             &keys,
-            Placement::Menu {
-                section: "Sessions",
-            },
+            Placement::Menu { section: "Actions" },
             move |()| {
                 let mut model = context.model;
                 let _ = model.write().start_new_action();
@@ -193,6 +191,7 @@ pub fn build_screen(
             },
         )?;
         if name == "new" {
+            declared.placement = Placement::Toolbar;
             declared.toolbar_label = Some("+ New".into());
         }
         actions.push(declared);
@@ -203,9 +202,7 @@ pub fn build_screen(
         "details",
         "Details",
         &["Enter", "F4"],
-        Placement::Menu {
-            section: "Sessions",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| {
             let mut model = details_context.model;
             model.write().open_details_dialog();
@@ -218,9 +215,7 @@ pub fn build_screen(
         "open",
         "Open",
         &["Ctrl+Enter"],
-        Placement::Menu {
-            section: "Sessions",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| {
             let mut model = open_context.model;
             let selected = {
@@ -244,9 +239,7 @@ pub fn build_screen(
         "fork",
         "Fork",
         &["Ctrl+Shift+Enter"],
-        Placement::Menu {
-            section: "Sessions",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| {
             let mut model = fork_context.model;
             model.write().open_fork_confirmation();
@@ -258,9 +251,7 @@ pub fn build_screen(
         "refresh",
         "Refresh",
         &["Ctrl+R"],
-        Placement::Menu {
-            section: "Sessions",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| refresh.refresh(),
     )?);
     let filters = context.clone();
@@ -269,9 +260,7 @@ pub fn build_screen(
         "filters",
         "Filters…",
         &["Ctrl+F", "F3"],
-        Placement::Menu {
-            section: "Settings",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| {
             let mut model = filters.model;
             model.write().open_provider_filters();
@@ -284,9 +273,7 @@ pub fn build_screen(
         "machine",
         "Machine…",
         &["Ctrl+G", "F2"],
-        Placement::Menu {
-            section: "Settings",
-        },
+        Placement::Menu { section: "Actions" },
         move |()| {
             let registry = machine.model.read().request.router_registry.clone();
             let mut model = machine.model;
@@ -309,7 +296,7 @@ pub fn build_screen(
         "focus-filter",
         "Filter",
         &["/"],
-        Placement::Hidden,
+        Placement::Toolbar,
         move |()| {
             stack.focus(SurfaceId::Screen, &filter_target);
         },
@@ -320,7 +307,7 @@ pub fn build_screen(
         "Quit",
         &["Ctrl+C", "Ctrl+D"],
         Placement::Menu {
-            section: "Application",
+            section: "Help and Quit",
         },
         move |()| quit.quit(),
     )?;
@@ -330,7 +317,7 @@ pub fn build_screen(
         "Help",
         &["F1", "Ctrl+/", "Ctrl+7", "Ctrl+_"],
         Placement::Menu {
-            section: "Application",
+            section: "Help and Quit",
         },
         |_| {},
     )?;
@@ -409,7 +396,8 @@ pub fn build_screen(
     ));
     Ok(SurfaceModel {
         focus: FocusModel::new(targets)?,
-        actions: ActionRegistry::new(ScopeId::new("sessions")?, actions)?,
+        actions: ActionRegistry::new(ScopeId::new("sessions")?, actions)?
+            .with_menu_sections(menu_sections()?)?,
         primary_action: None,
     })
 }
@@ -516,6 +504,24 @@ fn add_settings(actions: &mut Vec<ActionDef>, context: &PickerSurfaceContext) ->
         actions.push(setting);
     }
     Ok(())
+}
+
+fn menu_sections() -> SurfaceResult<Vec<MenuSectionSpec>> {
+    let mut sections = Vec::new();
+    for (section, heading) in [
+        ("Scope", Some("cycle-scope")),
+        ("Runtime", Some("cycle-runtime")),
+        ("Sort", Some("cycle-sort")),
+        ("Group by", Some("cycle-group")),
+        ("Actions", None),
+        ("Help and Quit", None),
+    ] {
+        sections.push(MenuSectionSpec {
+            section,
+            heading_action: heading.map(ActionId::new).transpose()?,
+        });
+    }
+    Ok(sections)
 }
 
 pub(super) use super::picker_help_content::help_content;

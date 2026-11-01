@@ -8,21 +8,74 @@ fn key(code: KeyCode) -> TerminalEvent {
 
 #[tokio::test]
 async fn settings_menu_does_not_repeat_cycle_entries_and_help_precedes_quit() {
-    let frame = render_picker_capture_at(
-        picker_request(),
-        120,
-        36,
-        vec![key(KeyCode::F(10)), ctrl_key('d')],
-    )
-    .await;
+    use agent_collaboration_tui::{
+        controls::ActionProjections,
+        surfaces::{surface_handle::SurfaceStackHandle, surface_stack::OverlayKind},
+    };
+    let observed = Arc::new(Mutex::new(None));
+    let observer = observed.clone();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    sender.send(key(KeyCode::F(10))).unwrap();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker = element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize,
+        surface_observer:move |(stack,_): (SurfaceStackHandle,State<SessionsPickerModel>)|{*observer.lock().unwrap()=Some(stack)}));
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let frame = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            let stack = observed.lock().unwrap().unwrap();
+            if stack
+                .snapshot()
+                .overlays()
+                .last()
+                .is_some_and(|overlay| matches!(overlay.kind, OverlayKind::Menu))
+                && frame.contains("Group by F6")
+            {
+                return frame;
+            }
+        }
+        panic!("picker ended before the settings menu");
+    })
+    .await
+    .expect("settings sections publish after F10");
     let normalized = frame.split_whitespace().collect::<Vec<_>>().join(" ");
     for duplicate in ["Scope: all", "Sort: updated", "Runtime: All Ctrl+T"] {
         assert!(!normalized.contains(duplicate), "{frame}");
     }
+    let item_count = {
+        let stack = observed.lock().unwrap().unwrap();
+        let snapshot = stack.snapshot();
+        ActionProjections::from_registry(&snapshot.top().actions)
+            .menu
+            .len()
+    };
+    for _ in 1..item_count {
+        sender.send(key(KeyCode::Down)).unwrap();
+    }
+    let frame = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if frame.contains("Help") && frame.contains("Quit") {
+                return frame;
+            }
+        }
+        panic!("picker ended before Help and Quit");
+    })
+    .await
+    .expect("keyboard navigation reveals Help and Quit");
     assert!(
         frame.find("Help").unwrap() < frame.find("Quit").unwrap(),
         "{frame}"
     );
+    sender.send(ctrl_key('d')).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while frames.next().await.is_some() {}
+    })
+    .await
+    .expect("picker exits after Quit");
 }
 
 #[tokio::test]
