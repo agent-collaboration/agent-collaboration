@@ -16,30 +16,14 @@ import type { FlowInvocation } from './flow-executor.ts';
 import type { NativeFlowBindings } from './native-flow-runtime.ts';
 import { locatePaintedTarget } from './painted-flow-target.ts';
 import type { PaintedFlowTarget } from './painted-flow-target.ts';
+import { pickerFilterTextExpectations } from './picker-flow-inputs.ts';
+import { pickerIdentityBindings } from './picker-identity-bindings.ts';
+import { pickerNewBindings } from './picker-new-bindings.ts';
 
 const screen = { kind: 'screen' } as const;
 // This journey creates exactly one overlay. SurfaceStack::new starts at 1;
 // no expected route is learned from the ACK under test.
 const details = { kind: 'overlay', overlayId: '1' } as const;
-/** crossterm 0.29 char_code_to_event infers Shift for raw uppercase;
- * CSI-u events carry their encoded modifier mask.
- */
-export function pickerFilterTextExpectations(
-	text: string,
-	kittyFlags: number,
-): readonly InputConsumptionExpectation[] {
-	return Array.from(text, (character) => ({
-		event: {
-			kind: 'key',
-			code: { kind: 'text' },
-			modifiers: (kittyFlags & 8) === 0 && /^[A-Z]$/u.test(character) ? ['shift'] : [],
-			phase: 'press',
-		},
-		surface: screen,
-		target: 'session-filter',
-		action: null,
-	}));
-}
 function fixed(
 	name: string,
 	surface: InputConsumptionExpectation['surface'],
@@ -99,7 +83,11 @@ export function pickerFlowBindings(
 	evidence: string,
 	receiptDirectory: string,
 ): NativeFlowBindings | null {
-	if (invocation.journey.journeyId !== 'stopped-claude-details-open-only') return null;
+	if (invocation.journey.journeyId !== 'stopped-claude-details-open-only')
+		return (
+			pickerNewBindings(plan, invocation, evidence, receiptDirectory) ??
+			pickerIdentityBindings(plan, invocation, evidence, receiptDirectory)
+		);
 	const ignored = fixed('F12', details);
 	return {
 		target: {

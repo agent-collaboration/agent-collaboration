@@ -76,7 +76,7 @@ Ok/all-failed/setup-read-error are distinct inputs; stdout and old stored rows
 cannot supply them. Hold/release and duplicate input acknowledgments are causal
 events, not delays. The focused tests qualify oracle sensitivity only.
 
-For New use the [returned-outcome and input reader recipe](input-consumption-readback.md). Local/default New requires one real returned new request, with exact client, machine, directory and foreground/backgroundThenAttach run mode; no separate preparer count. Configured-source New retains the counted preparation stand-in. The three activation routes now cover each of default/local/configured (nine U5 drafts). A missing or duplicate outcome, wrong client or run mode, and uncommitted dropdown highlight must fail. Real S6b binding stays pending.
+For New use the [returned-outcome and input reader recipe](input-consumption-readback.md). Local/default New requires one real returned new request, with exact client, machine, directory and foreground/backgroundThenAttach run mode; no separate preparer count. Configured-source New retains the counted preparation stand-in. The three activation routes cover each of default/local/configured (nine U5 flows). Select source inside the real New Machine control after Ctrl+N. LocalCodex requires exactly its one committed Machine option; hosted/configured routes retain the distinct uncommitted highlight. Configured setup commits the remote then uses Up to highlight the default without picking, because Down clamps at the last option. Missing/duplicate outcomes, wrong source/client/run mode or committed unpicked highlights must fail. These bindings remain preparation until observed on the separately declared S6b executable.
 
 The [source-qualified outcome readback](source-qualified-outcome-proposal.md)
 was adopted by Lead push `01a18ce0-eea3-7eb3-b6bb-18b1df4f05d5` for the
@@ -141,11 +141,21 @@ with retained receipts wherever those inputs were reached. Missing/incomplete
 matrix preflights reject before launch. `--check` qualifies these sources,
 artifacts and emulator and reports zero product passes.
 
-`picker-flow-bindings.ts` currently binds `stopped-claude-details-open-only`
-through the real stopped-native-Claude fixture, filter, Details and Open outcome.
+`picker-flow-bindings.ts` binds `stopped-claude-details-open-only`, same-ID
+HostedCodex Resume, and nine New flows through source-pinned adapters. Resume
+selects Indigo, independently distinguished from Quartz by service and Cedar by
+endpoint. New uses `new-machine-uncommitted` or `local-codex-new`, the actual
+dropdown, and returned or counted preparation readbacks. A terminal Start click
+requires its MouseDown ACK and real exit/outcome, with no release sent after
+the product loop ends and no promised continuing frame. Pointer preflights name
+the independent label and ownership; actual coordinates come from the unique
+fully painted target in the prior marked frame, never invented pre-launch cells.
 Its first overlay identity is independently derived from fresh-stack source,
 never learned from the ACK under test. Other adapters remain named admission
-gaps before startup. The interpreter accepts all 31 data definitions; that does
+gaps before startup. On the six-scenario S6b declaration, Fork needs
+`fork-ssh-profile`, toolbar's successful Claude New needs `claude-new-success`,
+and the two >2-page alias journeys need `large-list`; the base six-row fixture
+does not supply these. The interpreter accepts all 31 data definitions; that does
 not mean all 31 have fixture bindings.
 
 Each press/focus hop is sent alone and awaits its exact receipt and marked frame
@@ -163,8 +173,9 @@ cannot supply publication proof. Capture keeps the marked native prefix, grid,
 frame binding and original wterm PNG; the full transcript retains the marker
 following that image prefix.
 
-LocalCodex has one Machine option: its distinct-uncommitted-Machine cross-case
-stays an admission gap. Pure permutation uses the ordinary component showcase's
+LocalCodex has one Machine option. Lead correction 01a19527 requires that single
+committed option and preserves all its other New obligations; distinct-highlight
+coverage belongs to multi-machine sources. Pure permutation uses the ordinary component showcase's
 `ComboBoxControl.replace_options`; picker sources sort provider IDs and support
 add/remove/replace with index shifts instead.
 

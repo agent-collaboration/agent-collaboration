@@ -5,6 +5,19 @@ import { artifactBindingSchema, sourceBindingSchema } from '../../evidence/evide
 import { inputConsumptionExpectationSchema } from '../../sessions/input-consumption-schema.ts';
 import { journeyGridSizes } from '../journey-definition.ts';
 
+/** Mouse cells are measured from the prior marked frame, never invented before launch. */
+export const paintedMouseExpectationSchema = inputConsumptionExpectationSchema
+	.unwrap()
+	.omit({ event: true })
+	.extend({
+		kind: z.literal('painted-mouse'),
+		label: z.string().min(1),
+		mouse: z.enum(['down', 'up']),
+		button: z.literal('left'),
+		modifiers: z.tuple([]),
+		coordinateRule: z.literal('unique-fully-painted-label-in-active-dialog'),
+	});
+
 export const authoredFlowPlanSchema = z
 	.strictObject({
 		productRepository: z.string().min(1),
@@ -42,7 +55,11 @@ export const authoredFlowPlanSchema = z
 								.array(
 									z.strictObject({
 										operation: z.string().min(1),
-										expected: z.array(inputConsumptionExpectationSchema).min(1),
+										expected: z
+											.array(
+												z.union([inputConsumptionExpectationSchema, paintedMouseExpectationSchema]),
+											)
+											.min(1),
 										minimumRepeats: z.number().int().nonnegative(),
 										maximumRepeats: z.number().int().positive(),
 										condition: z.string().min(1),

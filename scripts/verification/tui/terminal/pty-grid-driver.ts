@@ -256,6 +256,7 @@ export class PtyGridDriver {
 		this.child.stderr.on('data', (chunk: Buffer) => {
 			stderr += chunk.toString('utf8');
 		});
+		this.child.stdin.on('error', (error) => this.failStream(error));
 		this.completion = new Promise((resolve) => {
 			this.child.once('error', (error) => {
 				this.failStream(error);
@@ -312,6 +313,8 @@ export class PtyGridDriver {
 	private async command(command: string): Promise<string> {
 		const result = this.commandTail.then(async () => {
 			if (this.failure !== null && command !== 'stop') throw this.failure;
+			if (this.ended || this.child.stdin.destroyed)
+				throw new Error('PTY input ended before command');
 			this.commands.push(command);
 			const response = this.nextLine();
 			this.child.stdin.write(`${command}\n`);
@@ -363,6 +366,11 @@ export class PtyGridDriver {
 	}
 	private failStream(error: unknown): void {
 		this.failure ??= error instanceof Error ? error : new Error(String(error));
+		if (this.waiter !== null) {
+			clearTimeout(this.waiter.timer);
+			this.waiter.reject(this.failure);
+			this.waiter = null;
+		}
 		this.publishOutput();
 	}
 	private publishOutput(): void {
@@ -456,6 +464,12 @@ export class PtyGridDriver {
 		return (await this.command('running')) === 'RUNNING';
 	}
 	async finish(): Promise<number | null> {
+		// Some bridges publish their terminal result with EOF before the caller asks.
+		// That retained causal result needs no write to a pipe that may already be closed.
+		if (this.eof && this.lines[0]?.startsWith('FINISHED ')) {
+			this.lines.shift();
+			return this.release();
+		}
 		const response = await this.command('finish');
 		if (!response.startsWith('FINISHED ')) throw new Error(response);
 		return this.release();

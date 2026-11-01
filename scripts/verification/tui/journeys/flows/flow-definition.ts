@@ -25,6 +25,7 @@ export const flowCheckSchema = z.enum([
 	'stopped-claude-open-only',
 	'captured-session-outcome',
 	'dropdown-highlight-uncommitted',
+	'single-local-machine',
 	'compound-start-once',
 	'returned-new-once',
 	'configured-start-once',

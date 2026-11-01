@@ -11,6 +11,28 @@ import { InputConsumptionReadback } from '../sessions/input-consumption-readback
 import { PtyGridDriver } from './pty-grid-driver.ts';
 import { gridLines } from './terminal-grid.ts';
 
+test('a retained terminal FINISHED record settles without writing another command to the exited bridge', async () => {
+	const directory = temporaryRoot();
+	const executable = controlledExecutable(
+		directory,
+		'already-finished-bridge',
+		`process.stdout.write('TUI_GRID READY 120 36 STREAM\\nTUI_GRID EOF\\nTUI_GRID FINISHED 0\\n',()=>process.exit(0));`,
+	);
+	const driver = await PtyGridDriver.start({
+		repository: directory,
+		driver: executable,
+		surface: 'sessions-filters',
+		keys: 'legacy',
+		evidence: directory,
+	});
+	try {
+		expect(await driver.drainUntilExit()).toBe(0);
+		expect(JSON.parse(readFileSync(join(directory, 'driver-commands.json'), 'utf8'))).toEqual([]);
+	} finally {
+		await driver.stop();
+	}
+});
+
 test('old request-driven bridge is rejected and its controlled process is stopped', async () => {
 	const directory = temporaryRoot();
 	const executable = controlledExecutable(

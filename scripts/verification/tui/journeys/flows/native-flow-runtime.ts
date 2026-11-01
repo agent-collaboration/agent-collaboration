@@ -41,6 +41,8 @@ export type NativeFlowInputBinding =
 	| {
 			readonly kind: 'click';
 			readonly expected: (location: PaintedTargetLocation) => ExpectedInput;
+			/** The declared action ends the loop on MouseDown; no release/frame can be required afterward. */
+			readonly endsOnPress?: boolean;
 	  }
 	| {
 			readonly kind: 'focus';
@@ -209,6 +211,25 @@ export class NativeFlowRuntime implements FlowRuntime {
 		if (binding.kind !== 'click') throw new Error('expected a click binding');
 		const target = requireBinding(this.bindings.targets.get(step.target), step.target)(frame.grid);
 		const location = locatePaintedTarget(frame.grid, target);
+		if (binding.endsOnPress === true) {
+			const result = await input.exit({
+				expected: binding.expected(location),
+				inject: async () =>
+					requireDelivered(
+						await input.input.mouse({
+							kind: 'press',
+							button: 'left',
+							column: location.column,
+							row: location.row,
+						}),
+					),
+			});
+			this.exited = {
+				files: [this.bindings.receipt, join(this.bindings.target.evidence, 'terminal.ansi')],
+				dispatchSequences: result.receipts.map((receipt) => receipt.sequence),
+			};
+			return this.exited;
+		}
 		return this.retain(
 			await input.observe({
 				expected: binding.expected(location),

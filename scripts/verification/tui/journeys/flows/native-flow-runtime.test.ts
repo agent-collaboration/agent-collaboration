@@ -53,7 +53,7 @@ const journey: FlowJourney = {
 	wrongOutcomes: ['unrelated later frame replaces marked result', 'wrong target launches'],
 	admissionInputs: [],
 };
-function setup(mode: 'right' | 'wrong-frame' | 'missing-binding' | 'exit-step'): {
+function setup(mode: 'right' | 'wrong-frame' | 'missing-binding' | 'exit-step' | 'exit-click'): {
 	bindings: NativeFlowBindings;
 	directory: string;
 } {
@@ -80,7 +80,7 @@ else if(hex==='03'){event={kind:'key',code:{kind:'shortcut',key:'c'},modifiers:[
 else {
  const match=/^\\x1b\\[<0;4;1([Mm])$/.exec(text);if(!match)throw new Error('wrong painted click '+JSON.stringify(text));
  event={kind:'mouse',mouse:{kind:match[1]==='M'?'down':'up',button:'left'},column:3,row:0,modifiers:[]};target='action:start';
- if(match[1]==='M'){action='start';starts++;}
+ if(match[1]==='M'){action='start';starts++;if(mode==='exit-click')ending=true;}
 }
 sequence++;fs.appendFileSync(receipt,JSON.stringify({sequence,event,surface:{kind:'screen'},target,action})+'\\n');emit('OK');
 if(ending){fs.writeFileSync(${JSON.stringify(join(directory, 'effects.json'))},JSON.stringify({starts}));emit('EOF');process.stdout.write('TUI_GRID FINISHED 0\\n',()=>process.exit(0));return;}
@@ -131,6 +131,15 @@ bytes(frame(label+'\\r\\n'+(sequence>=2?'❯ Start':'ready'))+'\\x1b]7770;dispat
 		],
 	]);
 	if (mode === 'missing-binding') inputs.delete(1);
+	if (mode === 'exit-click') {
+		const click = inputs.get(1);
+		if (click?.kind !== 'click') throw new Error('controlled click absent');
+		inputs.set(1, {
+			...click,
+			endsOnPress: true,
+			expected: (point) => click.expected(point).slice(0, 1),
+		});
+	}
 	if (mode === 'exit-step') {
 		inputs.clear();
 		inputs.set(0, { kind: 'exit', expected: [quit] });
@@ -187,6 +196,20 @@ test('native executor focuses and clicks the marked painted target despite later
 	expect(result.finish.dispatchSequences).toEqual([5]);
 	expect(JSON.parse(readFileSync(join(directory, 'effects.json'), 'utf8'))).toEqual({ starts: 1 });
 	expect(readFileSync(join(directory, 'terminal.ansi'), 'utf8')).toContain('unrelated later');
+});
+
+test('terminal pointer activation settles through exact press ACK and exit, with no continuing frame', async () => {
+	const { bindings, directory } = setup('exit-click');
+	const terminalJourney: FlowJourney = { ...journey, steps: journey.steps.slice(0, 2) };
+	const result = await executeNativeFlow(
+		{ journey: terminalJourney, grid: '120x36', keys: 'legacy' },
+		bindings,
+	);
+	if (result.kind !== 'completed') throw new Error('controlled terminal click admission gap');
+	expect(result.steps[1]?.dispatchSequences).toEqual([3]);
+	expect(result.steps[1]?.inputObservation).toBeUndefined();
+	expect(result.finish.dispatchSequences).toEqual([3]);
+	expect(JSON.parse(readFileSync(join(directory, 'effects.json'), 'utf8'))).toEqual({ starts: 1 });
 });
 test('an absent late input binding rejects before launching a controlled child', async () => {
 	const { bindings, directory } = setup('missing-binding');

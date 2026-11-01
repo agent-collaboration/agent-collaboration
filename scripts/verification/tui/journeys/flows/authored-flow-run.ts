@@ -24,13 +24,23 @@ import { authoredFlows, validateAuthoredFlows } from './flow-catalogue.ts';
 import { flowObservationRule } from './flow-definition.ts';
 import type { FlowInvocation, FlowExecutionResult } from './flow-executor.ts';
 import { executeNativeFlow } from './native-flow-runtime.ts';
+import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 
 export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocation[] {
 	validateAuthoredFlows();
 	const journey = authoredFlows.find((flow) => flow.journeyId === plan.journey);
 	if (journey === undefined) throw new Error('unknown authored flow ' + plan.journey);
+	if (plan.keys.some((keys) => !journey.keys.includes(keys)))
+		throw new Error('declared protocol is outside the authored journey: ' + plan.journey);
 	return plan.grids.flatMap((grid) => plan.keys.map((keys) => ({ journey, grid, keys })));
+}
+export function requireAuthoredFlowAdmission(plan: AuthoredFlowPlan): void {
+	for (const invocation of authoredFlowMatrix(plan)) {
+		const bindings = pickerFlowBindings(plan, invocation, plan.output, plan.output);
+		const gaps = pickerFlowAdmission(invocation, bindings);
+		if (gaps.length > 0) throw new Error('fixture admission gap: ' + JSON.stringify(gaps));
+	}
 }
 function requireSourcePins(plan: AuthoredFlowPlan): void {
 	for (const [repository, source, digest] of [
@@ -80,12 +90,7 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 export async function runAuthoredFlow(plan: AuthoredFlowPlan): Promise<void> {
 	const matrix = authoredFlowMatrix(plan);
 	// Probe the adapter registry before any mkdir or child construction.
-	if (
-		matrix.some(
-			(invocation) => pickerFlowBindings(plan, invocation, plan.output, plan.output) === null,
-		)
-	)
-		throw new Error('fixture admission gap: no native adapter for ' + plan.journey);
+	requireAuthoredFlowAdmission(plan);
 	await checkAuthoredFlowTarget(plan);
 	mkdirSync(plan.output, { mode: 0o700 });
 	writeFileSync(join(plan.output, 'declared-plan.json'), JSON.stringify(plan, null, 2));
@@ -152,12 +157,7 @@ export async function authoredFlowMain(args: readonly string[]): Promise<void> {
 		JSON.parse(readFileSync(planArgument(positionals), 'utf8')),
 	);
 	const matrix = authoredFlowMatrix(plan);
-	if (
-		matrix.some(
-			(invocation) => pickerFlowBindings(plan, invocation, plan.output, plan.output) === null,
-		)
-	)
-		throw new Error('fixture admission gap: no native adapter for ' + plan.journey);
+	requireAuthoredFlowAdmission(plan);
 	if (values.check) {
 		await checkAuthoredFlowTarget(plan);
 		process.stdout.write(

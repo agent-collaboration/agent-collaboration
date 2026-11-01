@@ -9,7 +9,9 @@ import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, runAuthoredFlow } from './authored-flow-run.ts';
 import { authoredFlows } from './flow-catalogue.ts';
-import { pickerFlowBindings, pickerFilterTextExpectations } from './picker-flow-bindings.ts';
+import { pickerFlowAdmission } from './picker-flow-admission.ts';
+import { pickerFlowBindings } from './picker-flow-bindings.ts';
+import { pickerFilterTextExpectations } from './picker-flow-inputs.ts';
 
 function controlledPlan(journey: string): AuthoredFlowPlan {
 	const root = temporaryRoot(),
@@ -28,19 +30,19 @@ function controlledPlan(journey: string): AuthoredFlowPlan {
 		output: join(root, 'not-created'),
 		journey,
 		grids: ['120x36', '76x30', '48x12', '32x24'],
-		keys: ['legacy', 'kitty'],
+		keys: authoredFlows.find((flow) => flow.journeyId === journey)?.keys ?? ['legacy', 'kitty'],
 	});
 }
 test('all authored flow data selects through one matrix without copied steps', () => {
 	for (const journey of authoredFlows) {
 		const matrix = authoredFlowMatrix(controlledPlan(journey.journeyId));
-		expect(matrix).toHaveLength(8);
+		expect(matrix).toHaveLength(4 * journey.keys.length);
 		expect(matrix.every((invocation) => invocation.journey === journey)).toBe(true);
 	}
 });
 test('unsupported native fixture rejects before even creating an output directory', async () => {
 	const plan = controlledPlan('quota-refresh-partial');
-	await expect(runAuthoredFlow(plan)).rejects.toThrow('fixture admission gap: no native adapter');
+	await expect(runAuthoredFlow(plan)).rejects.toThrow('no native adapter');
 	expect(existsSync(plan.output)).toBe(false);
 });
 test('the stopped native adapter declares its independent first-overlay and exact captured source', () => {
@@ -82,4 +84,23 @@ test('raw uppercase infers Shift while explicit CSI-u text keeps its encoded mod
 		modifiers: [],
 		phase: 'press',
 	});
+});
+
+test('all nine New routes and the hosted Resume route have complete native capabilities', () => {
+	const selected = authoredFlows.filter(
+		(flow) => flow.journeyId.startsWith('new-') || flow.journeyId === 'same-id-hosted-codex-resume',
+	);
+	expect(selected).toHaveLength(10);
+	for (const journey of selected) {
+		const plan = controlledPlan(journey.journeyId);
+		for (const invocation of authoredFlowMatrix(plan)) {
+			const binding = pickerFlowBindings(
+				plan,
+				invocation,
+				plan.output,
+				join(plan.output, 'receipts'),
+			);
+			expect(pickerFlowAdmission(invocation, binding)).toEqual([]);
+		}
+	}
 });

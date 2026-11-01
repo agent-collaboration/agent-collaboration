@@ -33,3 +33,18 @@ test('U4 return drafts use same-ID HostedCodex service/endpoint controls, not pr
 		expect(row.wrongOutcomes).toContain('same ID but wrong endpoint');
 	}
 });
+
+test('source setup selects the real New draft and LocalCodex keeps its legitimate single machine', () => {
+	for (const journey of newDialogJourneys) {
+		expect(journey.steps[0]).toEqual({ kind: 'press', key: 'Ctrl+N' });
+		expect(journey.steps[1]?.kind).toBe('fixture');
+		const dropdown = journey.steps.find((step) => step.kind === 'capture');
+		if (dropdown?.kind !== 'capture') throw new Error('New dropdown checkpoint missing');
+		expect(dropdown.checks).toContain(
+			journey.journeyId.endsWith('-local')
+				? 'single-local-machine'
+				: 'dropdown-highlight-uncommitted',
+		);
+		expect(journey.wrongOutcomes).toContain('Start invoked twice');
+	}
+});
