@@ -12,6 +12,7 @@
     "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
     "core_migrations/0011_automations.sql": "a46b1e7e192ca774001b6e6311a3ef825edcb709bfd757fa517d622e0324bfc3",
+    "core_migrations/0012_machine_work_items.sql": "e9b499823fe2cf8111088c0e7bdb440de59242a79d927254c437c74ec106a007",
     "fleet-record-read-queries.json": "122fd994e55b565f270c025de3d539275abb5945ddfc76fa31b7c5305737fe92",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",

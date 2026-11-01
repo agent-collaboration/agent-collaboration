@@ -259,7 +259,23 @@ where
                         )
                         .await
                     }
-                    _ => Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound)),
+                    AutomationCall::RemoteSessionCreate(request) => {
+                        super::remote_session_create::admit_session_create::<Store, Driver>(
+                            scope,
+                            &self.installation,
+                            request,
+                            self.now_ms,
+                            &mut self.row_ids,
+                        )
+                        .await
+                    }
+                    AutomationCall::RemoteSessionCreateStatus { operation_id } => {
+                        super::remote_session_create::read_session_create_status(
+                            scope,
+                            operation_id,
+                        )
+                        .await
+                    }
                 }
             }
             .await;

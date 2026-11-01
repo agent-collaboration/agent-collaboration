@@ -1,0 +1,92 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_machine_work_item.rs",
+  "metadata": "machine-work-item-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_machine_work_item",
+      "row": "StoredMachineWorkItem",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/read_machine_work_item.sql"
+    },
+    {
+      "name": "read_machine_work_operation",
+      "row": "StoredMachineWorkItem",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/read_machine_work_operation.sql"
+    },
+    {
+      "name": "insert_machine_work_item",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "admission_json",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/insert_machine_work_item.sql"
+    },
+    {
+      "name": "hold_machine_work_item",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/hold_machine_work_item.sql"
+    },
+    {
+      "name": "receive_machine_work_item",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/receive_machine_work_item.sql"
+    },
+    {
+      "name": "write_machine_work_result",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "result_json",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "work_item_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "sql": "sql/machine_work/write_machine_work_result.sql"
+    }
+  ]
+}

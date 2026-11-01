@@ -371,3 +371,24 @@ fn unknown_stop_reason_round_trips_with_completed_prompt_output() {
         settlement
     );
 }
+
+#[test]
+fn provider_working_directory_keeps_portable_unix_wire_boundaries() {
+    use collaboration_protocol::ProviderWorkingDirectory;
+    let maximum_multibyte = format!("/{}abc", "🦀".repeat(1023));
+    assert_eq!(maximum_multibyte.len(), 4096);
+    for path in ["/".to_owned(), "/fixture".to_owned(), maximum_multibyte] {
+        let directory: ProviderWorkingDirectory =
+            serde_json::from_value(json!(path)).expect("portable absolute folder");
+        assert_eq!(String::from(directory), path);
+    }
+    for path in [
+        String::new(),
+        "relative/path".to_owned(),
+        "C:\\fixture".to_owned(),
+        "/invalid\0folder".to_owned(),
+        format!("/{}", "🦀".repeat(1024)),
+    ] {
+        assert!(serde_json::from_value::<ProviderWorkingDirectory>(json!(path)).is_err());
+    }
+}

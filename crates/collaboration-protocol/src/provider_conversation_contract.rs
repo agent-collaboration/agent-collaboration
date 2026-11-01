@@ -205,10 +205,7 @@ impl TryFrom<String> for ProviderWorkingDirectory {
     type Error = &'static str;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if (1..=4096).contains(&value.len())
-            && !value.contains('\0')
-            && std::path::Path::new(&value).is_absolute()
-        {
+        if (1..=4096).contains(&value.len()) && !value.contains('\0') && value.starts_with('/') {
             Ok(Self(value))
         } else {
             Err(
