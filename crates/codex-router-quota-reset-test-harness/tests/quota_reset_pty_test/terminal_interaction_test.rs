@@ -16,6 +16,9 @@ use portable_pty::native_pty_system;
 use super::isolated_fixture_test::FORBIDDEN_TERMINAL_CANARIES;
 use super::isolated_fixture_test::TestResult;
 
+#[path = "terminal_failure_capture.rs"]
+mod failure_capture;
+
 const INITIAL_SIZE: PtySize = PtySize {
     rows: 36,
     cols: 120,
@@ -32,6 +35,7 @@ pub(super) struct TerminalDriver {
     transcript: Vec<u8>,
     reached_eof: bool,
     public_wrapper: Option<PathBuf>,
+    failure_capture: Option<failure_capture::FailureCapture>,
 }
 
 enum ReaderEvent {
@@ -46,13 +50,50 @@ pub(super) enum KeyboardProtocol {
 }
 
 impl TerminalDriver {
+    /// Forward each received chunk immediately while retaining the original
+    /// event stream for this owner's transcript, EOF and child cleanup methods.
+    pub(super) fn forward_output(
+        &mut self,
+        mut publish: impl FnMut(Option<&[u8]>) -> std::io::Result<()> + Send + 'static,
+    ) -> mpsc::Receiver<std::io::Result<()>> {
+        let (retained_sender, retained_receiver) = mpsc::channel();
+        let incoming = std::mem::replace(&mut self.output_receiver, retained_receiver);
+        let reader = self.reader_thread.take();
+        let (completion, completed) = mpsc::channel();
+        self.reader_thread = Some(thread::spawn(move || {
+            let result = (|| {
+                while let Ok(event) = incoming.recv() {
+                    let eof = matches!(event, ReaderEvent::Eof);
+                    publish(match &event {
+                        ReaderEvent::Bytes(bytes) => Some(bytes),
+                        ReaderEvent::Eof => None,
+                    })?;
+                    if retained_sender.send(event).is_err() || eof {
+                        return Ok(());
+                    }
+                }
+                Err(std::io::Error::other("PTY output disconnected before EOF"))
+            })();
+            // Existing cleanup joins this handle before draining its retained
+            // transcript. Chaining the original reader prevents an orphan and
+            // ensures every final chunk is forwarded before that drain.
+            let reader_result = reader.map_or(Ok(()), |reader| {
+                reader
+                    .join()
+                    .map_err(|_| std::io::Error::other("PTY reader thread panicked"))
+            });
+            let _ = completion.send(result.and(reader_result));
+        }));
+        completed
+    }
+
     /// Receive actual PTY bytes before the observer chooses its next input.
     /// None is EOF; a deadline remains an error, never a synthetic empty frame.
     pub(super) fn receive_bytes(&mut self, timeout: Duration) -> TestResult<Option<Vec<u8>>> {
         if self.reached_eof {
             return Ok(None);
         }
-        match self.output_receiver.recv_timeout(timeout)? {
+        match self.receive_event(timeout)? {
             ReaderEvent::Bytes(bytes) => {
                 self.transcript.extend_from_slice(&bytes);
                 Ok(Some(bytes))
@@ -119,9 +160,11 @@ impl TerminalDriver {
                 *key,
                 "NO_COLOR"
                     | "TUI_SESSIONS_FIXTURE_RECEIPT_DIR"
+                    | "TUI_SESSIONS_FIXTURE_PREFERENCES_DIR"
                     | "CODEX_ROUTER_TUI_STORYBOARD_VARIANT"
                     | "QUOTA_COMPONENT_FIXTURE"
                     | "QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"
+                    | "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE"
                     | "QUOTA_COMPONENT_FIXTURE_RELEASE_FILE"
             ) {
                 return Err(std::io::Error::other("unapproved PTY fixture environment key").into());
@@ -173,6 +216,7 @@ impl TerminalDriver {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper,
+            failure_capture: failure_capture::FailureCapture::from_environment(),
         })
     }
 
@@ -255,13 +299,19 @@ impl TerminalDriver {
         })
     }
 
-    pub(super) fn resize(&self, rows: u16, cols: u16) -> TestResult<()> {
+    pub(super) fn resize(&mut self, rows: u16, cols: u16) -> TestResult<()> {
+        if self.failure_capture.is_some() {
+            self.drain_pending_output();
+        }
         self.master_ref()?.resize(PtySize {
             rows,
             cols,
             pixel_width: 0,
             pixel_height: 0,
         })?;
+        if let Some(capture) = self.failure_capture.as_mut() {
+            capture.record_resize(self.transcript.len(), cols, rows);
+        }
         Ok(())
     }
 
@@ -337,6 +387,7 @@ impl TerminalDriver {
                 break;
             }
             if Instant::now() >= deadline {
+                self.capture_wait_failure();
                 return Err(std::io::Error::other("PTY child termination exceeded timeout").into());
             }
             thread::sleep(Duration::from_millis(10));
@@ -407,6 +458,7 @@ impl TerminalDriver {
         let deadline = Instant::now() + timeout;
         while child.try_wait()?.is_none() {
             if Instant::now() >= deadline {
+                self.capture_wait_failure();
                 return Err("public wrapper cleanup unsettled".into());
             }
             thread::sleep(Duration::from_millis(10));
@@ -443,11 +495,12 @@ impl TerminalDriver {
         let deadline = Instant::now() + timeout;
         while !condition(&self.transcript) {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            match self.output_receiver.recv_timeout(remaining)? {
+            match self.receive_event(remaining)? {
                 ReaderEvent::Bytes(bytes) => self.transcript.extend(bytes),
                 ReaderEvent::Eof => self.reached_eof = true,
             }
             if self.reached_eof && !condition(&self.transcript) {
+                self.capture_wait_failure();
                 return Err(std::io::Error::other(
                     "PTY child exited before expected semantic output",
                 )
@@ -622,6 +675,66 @@ mod tests {
     use super::*;
 
     #[test]
+    fn output_forwarding_drains_without_a_read_command_and_preserves_transcript() -> TestResult<()>
+    {
+        let (incoming, output_receiver) = mpsc::channel();
+        let (published, publication) = mpsc::channel();
+        let mut terminal = TerminalDriver {
+            master: None,
+            writer: Some(Box::new(Vec::<u8>::new())),
+            child: None,
+            output_receiver,
+            reader_thread: None,
+            transcript: Vec::new(),
+            reached_eof: false,
+            public_wrapper: None,
+            failure_capture: None,
+        };
+        let completed = terminal.forward_output(move |bytes| {
+            published
+                .send(bytes.map(<[u8]>::to_vec))
+                .map_err(|error| std::io::Error::other(error.to_string()))
+        });
+        let first = b"stale frame".to_vec();
+        incoming.send(ReaderEvent::Bytes(first.clone()))?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))? == Some(first.clone()),
+            "stream did not publish before any receive_bytes call",
+        )?;
+        // The command-side writer remains available while the output worker
+        // is blocked causally on the next actual event, without timing polls.
+        terminal.send(b"command during burst")?;
+        let second = b"post-input frame and marker".to_vec();
+        incoming.send(ReaderEvent::Bytes(second.clone()))?;
+        incoming.send(ReaderEvent::Eof)?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))? == Some(second.clone()),
+            "stream changed burst order",
+        )?;
+        ensure(
+            publication.recv_timeout(Duration::from_secs(8))?.is_none(),
+            "stream did not publish EOF",
+        )?;
+        completed.recv_timeout(Duration::from_secs(8))??;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)? == Some(first.clone()),
+            "first transcript chunk lost",
+        )?;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)? == Some(second.clone()),
+            "second transcript chunk lost",
+        )?;
+        ensure(
+            terminal.receive_bytes(Duration::ZERO)?.is_none(),
+            "retained EOF lost",
+        )?;
+        ensure(
+            terminal.transcript == [first, second].concat(),
+            "forwarding changed retained transcript",
+        )
+    }
+
+    #[test]
     fn incremental_reads_preserve_actual_bytes_and_only_legacy_skips_kitty_reply() -> TestResult<()>
     {
         let (sender, receiver) = mpsc::channel();
@@ -637,6 +750,7 @@ mod tests {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper: None,
+            failure_capture: None,
         };
         ensure(
             terminal.receive_bytes(Duration::ZERO)? == Some(bytes.clone()),
@@ -680,6 +794,7 @@ mod tests {
             transcript: Vec::new(),
             reached_eof: false,
             public_wrapper: None,
+            failure_capture: None,
         };
 
         if terminal.transcript_len() != queued_frame.len() {
@@ -708,6 +823,7 @@ mod tests {
                 transcript: b"\x1b[?2026hSave\x1b[?2026l".to_vec(),
                 reached_eof: false,
                 public_wrapper: None,
+                failure_capture: None,
             };
             let action_start = terminal.transcript_len();
             output_sender.send(ReaderEvent::Bytes(current_output.to_vec()))?;

@@ -51,7 +51,7 @@ impl NativeFixture {
             &root,
             "prepare",
             Command::new(&node)
-                .arg(package.join("native-adapter-fixture.ts"))
+                .arg(package.join("fixtures/native-adapter-fixture.ts"))
                 .arg("prepare")
                 .arg(&root)
                 .arg(mode)
@@ -60,7 +60,7 @@ impl NativeFixture {
         Ok(Self {
             root,
             node,
-            wrapper: package.join("fixture-child.ts"),
+            wrapper: package.join("fixtures/fixture-child.ts"),
         })
     }
     pub(super) fn output(&self, name: &str) -> PathBuf {

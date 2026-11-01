@@ -1,6 +1,6 @@
 # Real compiled terminal observation
 
-The TypeScript entry is `scripts/verification/tui/capture-run.ts` with a declared
+The TypeScript entry is `scripts/verification/tui/capture/capture-run.ts` with a declared
 plan; its `--check` and README explain exact artifacts and prerequisites. This
 libtest's ignored `compiled_grid_terminal_observation` exposes the existing
 Rust-owned PTY as a bounded read/write/reply/resize/finish/stop protocol. It does
