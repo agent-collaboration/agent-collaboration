@@ -1,13 +1,19 @@
 //! A menu model is complete before open_overlay returns; paint registers no targets.
-use super::{ActionProjections, ScrollHandle, ScrollList, ScrollReveal, button_target};
+use crate::controls::{
+    ActionProjections,
+    fields::button_target,
+    list::{ScrollHandle, ScrollList, ScrollReveal},
+};
 use crate::{
     actions::{ActionError, ActionRegistry, Availability, Placement},
-    focus_model::{FocusError, FocusModel, GroupId, TargetId, TargetSpec},
-    hit_regions::{HitRegion, HitRegionKind},
-    overlay_host::SurfaceSizing,
-    surface_handle::{SurfaceContext, SurfaceStackHandle},
-    surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
-    theme::{SurfaceRole, TextRole, UiGlyph},
+    foundation::theme::{SurfaceRole, TextRole, UiGlyph},
+    surfaces::{
+        focus_model::{FocusError, FocusModel, GroupId, TargetId, TargetSpec},
+        hit_regions::{HitRegion, HitRegionKind},
+        overlay_host::SurfaceSizing,
+        surface_handle::{SurfaceContext, SurfaceStackHandle},
+        surface_stack::{OverlayKind, OverlayLayout, OverlaySpec, OverlayView, SurfaceModel},
+    },
 };
 use iocraft::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -167,3 +173,7 @@ pub fn MenuDropdown(props: &MenuDropdownProps, hooks: Hooks) -> impl Into<AnyEle
         }
     }}
 }
+
+#[cfg(test)]
+#[path = "menu_layout_test.rs"]
+mod tests;
