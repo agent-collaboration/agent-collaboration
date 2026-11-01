@@ -4,7 +4,7 @@ const SESSION_ID: &str = "00000000-0000-4000-8000-000000000014";
 #[test]
 fn shared_label_budget_yields_to_whole_status_words_and_keeps_fitting_wide_columns() {
     for width in [110u16, 66, 38, 30, 22, 18] {
-        let text=element!(View(width,flex_direction:FlexDirection::Column) {FormFields {
+        let text=element!(View(width,flex_direction:FlexDirection::Column) {FormFields(stacked:width<66) {
                 FormField(label:"Long section label 界".to_owned()) {StatusValue(status:StatusKind::Available,detail:Some("Local recording only".to_owned()))}
                 FormField(label:"ID".to_owned()) {Text(content:"KNOWN_VALUE")}
             }}).render(None).to_string();
@@ -42,7 +42,7 @@ fn shared_label_budget_yields_to_whole_status_words_and_keeps_fitting_wide_colum
 #[test]
 fn a_uuid_that_fits_after_the_selector_gutter_stays_whole_and_only_overlong_ids_break() {
     for width in [76u16, 38, 37, 32, 28] {
-        let text=element!(View(width) {FormFields {FormField(label:"Session ID".to_owned()) {Text(content:SESSION_ID)}}}).render(None).to_string();
+        let text=element!(View(width) {FormFields(stacked:width<50) {FormField(label:"Session ID".to_owned()) {Text(content:SESSION_ID)}}}).render(None).to_string();
         if width >= 38 {
             assert!(
                 text.lines().any(|line| line.contains(SESSION_ID)),

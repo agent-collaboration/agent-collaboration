@@ -219,7 +219,7 @@ pub fn TextField(props: &TextFieldProps, mut hooks: Hooks) -> impl Into<AnyEleme
     let value = props.value.read().clone();
     element!(View(width:100pct,min_height:1,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,background_color:theme.background(if focused {SurfaceRole::Selected}else if context.is_hovered(&props.id){SurfaceRole::Raised}else{SurfaceRole::Base})) {
         EditorLine(value,focused,disabled,placeholder:props.placeholder.clone())
-        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(View(width:100pct,flex_shrink:0.0_f32) {Text(content:reason,wrap:TextWrap::Wrap,color:theme.foreground(TextRole::Muted))}))})
+        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(super::wrapped_reason::WrappedReason(content:reason,color:theme.foreground(TextRole::Muted))))})
     })
 }
 #[component]

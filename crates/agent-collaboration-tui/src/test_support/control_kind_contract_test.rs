@@ -22,6 +22,10 @@ use crate::{
     test_support::event_driver::record_draw,
 };
 use iocraft::prelude::*;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 fn action(name: &str) -> ActionId {
     ActionId::new(name).unwrap()
@@ -67,11 +71,13 @@ struct ContractButtonProps {
     label: &'static str,
     width: u16,
     height: u16,
+    duplicate_label: bool,
+    initial_count: usize,
 }
 #[component]
 fn ContractButton(props: &ContractButtonProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     record_draw(&mut hooks, &props.journal);
-    let count = hooks.use_state(|| 0usize);
+    let count = hooks.use_state(|| props.initial_count);
     let enabled = hooks.use_state(|| true);
     let stack = use_surface_stack(&mut hooks, |_| {
         let journal = props.journal.clone();
@@ -135,9 +141,13 @@ fn ContractButton(props: &ContractButtonProps, mut hooks: Hooks) -> impl Into<An
             Button(id:target("other"),action:action("other"))
             Button(id:target("run"),action:action("run"))
             Text(content:format!("Calls {}",count.get()))
+            #(props.duplicate_label.then(|| element!(Text(content:props.label,color:Color::Red))))
         }}
     })
 }
+
+#[path = "control_target_style_test.rs"]
+mod target_style_test;
 
 fn style(focused: bool, hovered: bool, checked: bool) -> FrameStyle {
     FrameStyle {
@@ -304,39 +314,157 @@ async fn contract_rejects_a_missing_visual_label() {
 #[tokio::test]
 #[should_panic(expected = "R15 matrix missing TextField")]
 async fn matrix_rejects_an_omitted_control_kind_before_mounting_a_substitute() {
-    assert_control_kind_matrix(
-        crate::test_support::grids::STANDARD_GRIDS.into_iter().map(|viewport|contract("Start",viewport)).collect(),
-        |request, journal, observed| {
-            assert_eq!(request.kind,ControlKind::Button);
-            assert_eq!(request.screen,"picker composition profile");
-            element!(ContractButton(journal,observed,label:"Start",width:request.viewport.0,height:request.viewport.1))
-        },
-    )
+    let mut screen = button_matrix_contracts();
+    screen.kinds.retain(|declaration| {
+        !matches!(
+            declaration,
+            ControlKindDeclaration::NotOnScreen {
+                kind: ControlKind::TextField,
+                ..
+            }
+        )
+    });
+    assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
+        panic!("an undeclared kind must fail before mounting")
+    })
     .await;
 }
 
 #[tokio::test]
 #[should_panic(expected = "R15 matrix missing standard grid")]
 async fn matrix_rejects_an_omitted_standard_grid_before_mounting_a_substitute() {
-    let cases = [
-        ControlKind::Button,
-        ControlKind::TextField,
-        ControlKind::FilterField,
-        ControlKind::ComboBox,
-        ControlKind::SegmentedSwitch,
-        ControlKind::ScrollingList,
-        ControlKind::FormField,
-        ControlKind::DialogKeyHints,
-    ]
-    .into_iter()
-    .map(|kind| {
-        let mut case = contract("Start", (76, 30));
-        case.kind = kind;
-        case
-    })
-    .collect();
-    assert_control_kind_matrix::<AnyElement<'static>>(cases, |_, _, _| {
+    let mut screen = button_matrix_contracts();
+    for declaration in &mut screen.kinds {
+        if let ControlKindDeclaration::OnScreen { contracts, .. } = declaration {
+            contracts.retain(|contract| contract.viewport != (32, 24));
+        }
+    }
+    assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
         panic!("an incomplete grid matrix must not mount a substitute")
+    })
+    .await;
+}
+
+const BUTTON_ONLY_REASON: &str = "This runner qualification scene mounts Buttons only.";
+fn button_matrix_contracts() -> ScreenControlContracts {
+    ScreenControlContracts {
+        screen: "picker composition profile",
+        kinds: ControlKind::ALL
+            .into_iter()
+            .map(|kind| {
+                if kind == ControlKind::Button {
+                    ControlKindDeclaration::OnScreen {
+                        kind,
+                        contracts: crate::test_support::grids::STANDARD_GRIDS
+                            .into_iter()
+                            .map(|viewport| contract("Start", viewport))
+                            .collect(),
+                    }
+                } else {
+                    ControlKindDeclaration::NotOnScreen {
+                        kind,
+                        reason: BUTTON_ONLY_REASON,
+                    }
+                }
+            })
+            .collect(),
+    }
+}
+
+#[tokio::test]
+async fn matrix_reports_absent_kinds_separately_and_runs_only_real_contracts_at_all_grids() {
+    let mounts = Arc::new(AtomicUsize::new(0));
+    let observed_mounts = mounts.clone();
+    let summary = assert_control_kind_matrix(vec![button_matrix_contracts()],move |request,journal,observed| {
+        observed_mounts.fetch_add(1,Ordering::SeqCst);
+        assert_eq!(request.kind,ControlKind::Button);
+        assert_eq!(request.screen,"picker composition profile");
+        element!(ContractButton(journal,observed,label:"Start",width:request.viewport.0,height:request.viewport.1))
+    }).await;
+    assert_eq!(
+        mounts.load(Ordering::SeqCst),
+        4,
+        "absent kinds never mount a substitute"
+    );
+    assert_eq!(
+        summary.passed_contracts, 4,
+        "only real completed contracts count as passes"
+    );
+    assert_eq!(summary.not_on_screen.len(), 7);
+    assert!(
+        summary
+            .not_on_screen
+            .iter()
+            .all(|absent| absent.screen == "picker composition profile"
+                && absent.kind != ControlKind::Button
+                && absent.reason == BUTTON_ONLY_REASON)
+    );
+}
+
+#[tokio::test]
+async fn matrix_with_only_absent_declarations_reports_zero_runtime_passes() {
+    let screen = ScreenControlContracts {
+        screen: "empty qualification scene",
+        kinds: ControlKind::ALL
+            .into_iter()
+            .map(|kind| ControlKindDeclaration::NotOnScreen {
+                kind,
+                reason: "This qualification scene mounts no controls.",
+            })
+            .collect(),
+    };
+    let summary = assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
+        panic!("an absent kind must never mount")
+    })
+    .await;
+    assert_eq!(summary.passed_contracts, 0);
+    assert_eq!(summary.not_on_screen.len(), 8);
+}
+
+#[tokio::test]
+#[should_panic(expected = "R15 NotOnScreen needs a reason")]
+async fn matrix_rejects_an_absent_kind_with_an_empty_reason() {
+    let mut screen = button_matrix_contracts();
+    for declaration in &mut screen.kinds {
+        if let ControlKindDeclaration::NotOnScreen {
+            kind: ControlKind::FilterField,
+            reason,
+        } = declaration
+        {
+            *reason = " \n\t";
+        }
+    }
+    assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
+        panic!("empty absence reason must fail before mounting")
+    })
+    .await;
+}
+
+#[tokio::test]
+#[should_panic(expected = "R15 matrix duplicates Button")]
+async fn matrix_rejects_a_kind_declared_both_present_and_absent() {
+    let mut screen = button_matrix_contracts();
+    screen.kinds.push(ControlKindDeclaration::NotOnScreen {
+        kind: ControlKind::Button,
+        reason: "Contradicts the real Button contracts.",
+    });
+    assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
+        panic!("duplicate kind must fail before mounting")
+    })
+    .await;
+}
+
+#[tokio::test]
+#[should_panic(expected = "R15 real contract belongs to a different kind")]
+async fn matrix_rejects_a_real_case_bound_to_the_wrong_kind() {
+    let mut screen = button_matrix_contracts();
+    for declaration in &mut screen.kinds {
+        if let ControlKindDeclaration::OnScreen { contracts, .. } = declaration {
+            contracts[0].kind = ControlKind::FilterField;
+        }
+    }
+    assert_control_kind_matrix::<AnyElement<'static>>(vec![screen], |_, _, _| {
+        panic!("misbound real kind must fail before mounting")
     })
     .await;
 }

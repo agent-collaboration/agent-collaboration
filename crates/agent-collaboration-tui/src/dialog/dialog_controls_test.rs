@@ -313,3 +313,128 @@ async fn primary_button_is_reachable_by_tab_enter_shift_tab_and_pointer() {
             .unwrap();
     }
 }
+
+fn assert_primary_button_palette(
+    driver: &EventDriver,
+    stack: crate::surfaces::surface_handle::SurfaceStackHandle,
+    expected: Color,
+) {
+    let frame = driver.frames.last().unwrap();
+    let target = crate::surfaces::focus_model::TargetId::for_action(
+        &crate::test_support::dialog_scene::action("start"),
+    );
+    let map = stack.hit_regions().published().unwrap();
+    let surface = stack.snapshot().top_id();
+    let region = map
+        .targets
+        .iter()
+        .find(|region| region.surface == surface && region.target == target)
+        .unwrap();
+    let labels = region
+        .cells
+        .iter()
+        .copied()
+        .filter(|(column, row)| {
+            (0..5usize)
+                .filter_map(|offset| frame.cell(usize::from(*column) + offset, usize::from(*row)))
+                .map(|cell| cell.text.as_str())
+                .collect::<String>()
+                == "Start"
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        labels.len(),
+        1,
+        "only the actual primary button, not its key-hint copy"
+    );
+    let (column, row) = labels[0];
+    for offset in 0..5usize {
+        let cell = frame
+            .cell(usize::from(column) + offset, usize::from(row))
+            .unwrap();
+        assert!(
+            region
+                .cells
+                .contains(&(column + u16::try_from(offset).unwrap(), row))
+        );
+        assert_eq!(cell.style.foreground, Some(expected));
+        assert!(
+            !cell.style.bold,
+            "an unfocused, unchecked primary label has normal weight"
+        );
+        assert!(
+            !cell.style.underline,
+            "the primary mark must not invent focus"
+        );
+        assert_eq!(
+            cell.style.background,
+            Some(Color::Rgb {
+                r: 39,
+                g: 44,
+                b: 52
+            })
+        );
+    }
+    let marks = region
+        .cells
+        .iter()
+        .filter_map(|(column, row)| frame.cell(usize::from(*column), usize::from(*row)))
+        .filter(|cell| cell.text == "●")
+        .collect::<Vec<_>>();
+    assert_eq!(marks.len(), 1, "the declared primary has exactly one mark");
+    assert_eq!(
+        marks[0].style.foreground,
+        Some(Color::Rgb {
+            r: 156,
+            g: 188,
+            b: 251
+        })
+    );
+}
+
+#[tokio::test]
+async fn marked_primary_and_unavailable_footer_button_use_their_actual_contract_palette() {
+    for (width, height) in crate::test_support::grids::STANDARD_GRIDS {
+        let observed = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let (mut driver, config, journal) = EventDriver::new();
+        let mut ui =
+            element!(DialogScene(journal,form:true,width,height,surface_stack:observed.clone()));
+        let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+        let scenario = async {
+            driver.initial(&mut frames).await;
+            let stack = observed.lock().unwrap().unwrap();
+            assert_primary_button_palette(
+                &driver,
+                stack,
+                Color::Rgb {
+                    r: 156,
+                    g: 188,
+                    b: 251,
+                },
+            );
+            driver
+                .drive_checked(
+                    &mut frames,
+                    InputMode::FrameSeparated,
+                    vec![(ctrl_enter(), true)],
+                    true,
+                    |ack| {
+                        assert!(String::from_utf8_lossy(&ack.snapshot.0[1].1).contains("|beta|1|"));
+                    },
+                )
+                .await;
+            assert_primary_button_palette(
+                &driver,
+                stack,
+                Color::Rgb {
+                    r: 166,
+                    g: 175,
+                    b: 189,
+                },
+            );
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), scenario)
+            .await
+            .unwrap();
+    }
+}

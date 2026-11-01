@@ -60,7 +60,14 @@ inside the consumer's test-support module.
 Source-reuse `../src/test_support/grids.rs` as its `grids` sibling too, so the
 four viewport values keep their existing single owner.
 
-Call `assert_control_kind_matrix(contracts, build).await`. `build` receives
+Call `assert_control_kind_matrix(screens, build).await`. Each
+`ScreenControlContracts { screen, kinds }` declares each of the eight kinds once:
+`ControlKindDeclaration::OnScreen { kind, contracts }` or
+`ControlKindDeclaration::NotOnScreen { kind, reason }`. An absent kind needs a
+nonempty reason grounded in that screen's actual composition. It does not mount
+a substitute widget. An undeclared kind or duplicate declaration fails.
+
+`build` receives
 `ControlInstanceRequest { screen, kind, viewport }`, the real `EventJournal`,
 and `ObservedControlStack`. It returns the mounted real screen/control element.
 Connect the screen's existing stack observer to `observed.observer()` and its
@@ -68,11 +75,20 @@ existing input outcome observer to `journal.processed(SurfaceSnapshot(...))`.
 Use `journal.log_handler(...)` at the existing recording effect seam. Do not
 build a lookalike control or add another terminal listener.
 
-Each `ControlKindContract` supplies its screen, kind, viewport, initial paint
-assertions and nonempty input steps. Every screen/viewport must include button,
-text field, filter field, combo box, segmented switch, scrolling list, form field
-and dialog key hints. Use the four standard grids. Multiple cases of a kind may
-cover its different states.
+Every `OnScreen` declaration retains the existing `ControlKindContract` cases:
+screen, kind, viewport, initial paint assertions and nonempty input steps. The
+case's screen/kind must match its declaration. Each present kind requires cases
+at all four standard grids; multiple cases per grid may cover different states.
+The eight declarations cover button, text field, filter field, combo box,
+segmented switch, scrolling list, form field and dialog key hints. A combo-box
+query built from an internal editor belongs to the combo-box row; it does not
+establish a public TextField or FilterField instance.
+
+The runner returns `ControlMatrixSummary { passed_contracts, not_on_screen }`
+and reports absence reasons separately. `passed_contracts` increases only after
+a real case completes. `NotOnScreenControl { screen, kind, reason }` entries
+never count as passes. Carry them as separate applicability rows in the consumer
+declaration. The single-case `assert_control_kind_contract` entry is unchanged.
 
 Each `ControlStep` has `ControlInput::Event(TerminalEvent)` or
 `ControlInput::Pointer { target, kind }`, `redraw`, exact `expected_snapshot`,
@@ -81,9 +97,14 @@ from the current published hit map on the active surface. A disabled/ignored
 event still needs an acknowledgement; set `redraw: false` when it changes no
 serialized frame. Wrong outcomes are asserted before waiting for paint.
 
-`ControlPaint::{Contains, Absent, Styled}` observes the real serialized frame.
+`ControlPaint::{Contains, Absent, Styled, StyledInTarget}` observes the real serialized frame.
 `Styled { text, style: FrameStyle }` checks every cell of every occurrence;
 palette indices are serialized `Color::AnsiValue`, not named-color aliases.
+`StyledInTarget { target, text, style }` confines that assertion to the target's
+currently published hit cells on the active surface. Every occupied text cell
+must be inside the target; a label elsewhere cannot satisfy it. An absent,
+hidden or unpainted target, or missing text inside it, fails. Duplicate labels
+outside that target are ignored. Whole-frame `Styled` remains strict.
 Supply literal contract oracles, including normal, focused, hovered, disabled
 with reason, and selected/checked where applicable. For passive form/key-hint
 presentation, exercise the containing real control/action; the line itself must
@@ -93,8 +114,11 @@ typed model's projection.
 
 The crate's qualification uses two Button composition profiles across all four
 grids and rejects wrong callback bytes, handler observations, paint and styles.
-It also rejects an incomplete kind matrix before mounting a substitute. This
-qualifies the runner; each consumer's real eight-kind matrix earns its R15 row.
+It also rejects undeclared/duplicate kinds, empty absence reasons, misbound real
+cases and incomplete grids before mounting. Qualification checks that absent
+kinds never mount and remain separate from runtime passes. This qualifies the
+runner; each consumer's real-kind cases and explicit applicability declarations
+earn its R15 row.
 Full/diff/resize transport and physical-terminal observations remain separate.
 
 The pure key parser, focus traversal and measured scroll calculation are adapted
