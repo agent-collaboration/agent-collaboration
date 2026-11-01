@@ -93,6 +93,10 @@ enum ObservedRequest {
         uri: String,
         assertion: String,
         jti: String,
+        method: String,
+        headers: BTreeMap<String, String>,
+        #[serde(rename = "formBody")]
+        form_body: String,
     },
     Operation {
         step: usize,
@@ -100,6 +104,8 @@ enum ObservedRequest {
         uri: String,
         body: String,
         token: String,
+        method: String,
+        headers: BTreeMap<String, String>,
     },
 }
 struct Receiver {
@@ -179,7 +185,13 @@ fn reject(state: &mut Receiver, message: impl Into<String>) -> Response {
         .body(Body::empty())
         .unwrap_or_default()
 }
-fn token_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body: &str) -> Response {
+fn token_request(
+    state: &mut Receiver,
+    method: &Method,
+    uri: &Uri,
+    headers: &BTreeMap<String, String>,
+    body: &str,
+) -> Response {
     if state.pending.is_some() {
         return reject(state, "new credential requested before pending operation");
     }
@@ -187,11 +199,14 @@ fn token_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body: &st
     let Some(step) = state.steps.get(index) else {
         return reject(state, "unexpected token request");
     };
-    let form: BTreeMap<_, _> = url::form_urlencoded::parse(body.as_bytes())
+    let pairs: Vec<_> = url::form_urlencoded::parse(body.as_bytes())
         .into_owned()
         .collect();
+    let pair_count = pairs.len();
+    let form: BTreeMap<_, _> = pairs.into_iter().collect();
     let destination = format!("{}/{}", state.base, step.operation);
-    if headers.contains_key("authorization")
+    if pair_count != 6
+        || headers.contains_key("authorization")
         || form.len() != 6
         || form.get("grant_type").map(String::as_str) != Some("client_credentials")
         || form.get("client_id").map(String::as_str) != Some("pinned-directory")
@@ -219,6 +234,9 @@ fn token_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body: &st
         uri: endpoint,
         assertion: assertion.clone(),
         jti,
+        method: method.as_str().into(),
+        headers: headers.clone(),
+        form_body: body.into(),
     });
     let token = format!("public.fixture-service-token.{index}");
     let reply = match &step.grant {
@@ -247,7 +265,13 @@ fn token_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body: &st
     }
     reply
 }
-fn operation_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body: &str) -> Response {
+fn operation_request(
+    state: &mut Receiver,
+    method: &Method,
+    uri: &Uri,
+    headers: &BTreeMap<String, String>,
+    body: &str,
+) -> Response {
     let index = state.next;
     let Some(token) = state.pending.as_ref() else {
         return reject(state, "central call without a successful credential");
@@ -256,9 +280,7 @@ fn operation_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body:
         return reject(state, "unexpected central call");
     };
     if uri.to_string() != format!("/{}", step.operation)
-        || headers
-            .get("authorization")
-            .and_then(|value| value.to_str().ok())
+        || headers.get("authorization").map(String::as_str)
             != Some(format!("Bearer {token}").as_str())
         || serde_json::from_str::<Value>(body).ok() != Some(step.request.clone())
         || body.contains(token)
@@ -272,6 +294,8 @@ fn operation_request(state: &mut Receiver, uri: &Uri, headers: &HeaderMap, body:
         uri: format!("{}{uri}", state.base),
         body: body.into(),
         token: token.clone(),
+        method: method.as_str().into(),
+        headers: headers.clone(),
     });
     let reply = response(&step.operation_reply);
     state.pending = None;
@@ -288,17 +312,28 @@ async fn receive(
     let Ok(mut state) = state.lock() else {
         return Response::default();
     };
+    let collected = headers
+        .iter()
+        .map(|(name, value)| {
+            value
+                .to_str()
+                .map(|value| (name.as_str().to_owned(), value.to_owned()))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>();
+    let Ok(headers) = collected else {
+        return reject(&mut state, "non-text request header");
+    };
     if method != Method::POST {
         return reject(&mut state, "service request wasn't POST");
     }
-    let media = headers
-        .get("content-type")
-        .and_then(|value| value.to_str().ok());
+    let media = headers.get("content-type").map(String::as_str);
     match (uri.path(), media) {
         ("/oauth/token", Some("application/x-www-form-urlencoded")) => {
-            token_request(&mut state, &uri, &headers, &body)
+            token_request(&mut state, &method, &uri, &headers, &body)
         }
-        (_, Some("application/json")) => operation_request(&mut state, &uri, &headers, &body),
+        (_, Some("application/json")) => {
+            operation_request(&mut state, &method, &uri, &headers, &body)
+        }
         _ => reject(&mut state, "unexpected service path or content type"),
     }
 }

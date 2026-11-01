@@ -17,7 +17,7 @@ use collaboration_central_core::{
 use collaboration_central_tokio::{DeliveryConfig, TokioCentralPlatform, TokioEd25519ClientSigner};
 use ring::signature::{ED25519, UnparsedPublicKey};
 use runtime_primitives::{Clock, IdSource, SyncTime};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -69,8 +69,19 @@ struct Receiver {
     base: String,
     public_key: Vec<u8>,
     confirmation: Vec<u8>,
-    seen: Mutex<Vec<(String, String, String)>>,
+    seen: Mutex<Vec<ClientAuthenticationReceipt>>,
     errors: Mutex<Vec<String>>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClientAuthenticationReceipt {
+    name: String,
+    endpoint: String,
+    jti: String,
+    assertion: String,
+    method: String,
+    headers: BTreeMap<String, String>,
+    form_body: String,
 }
 fn validate_request(
     state: &Receiver,
@@ -86,10 +97,13 @@ fn validate_request(
     {
         return Err("wrong introspection authentication channel/content type".into());
     }
-    let form: BTreeMap<_, _> = url::form_urlencoded::parse(body.as_bytes())
+    let pairs: Vec<_> = url::form_urlencoded::parse(body.as_bytes())
         .into_owned()
         .collect();
-    if form.len() != 4
+    let pair_count = pairs.len();
+    let form: BTreeMap<_, _> = pairs.into_iter().collect();
+    if pair_count != 4
+        || form.len() != 4
         || form.get("token").map(String::as_str) != Some(PERSON_TOKEN)
         || form.get("client_id").map(String::as_str) != Some("pinned-central")
         || form.get("client_assertion_type").map(String::as_str)
@@ -140,7 +154,33 @@ async fn receive(
     match validate_request(&state, &uri, &headers, &body) {
         Ok((token_id, assertion)) => {
             if let Ok(mut seen) = state.seen.lock() {
-                seen.push((uri.to_string(), token_id, assertion));
+                let collected = headers
+                    .iter()
+                    .map(|(name, value)| {
+                        value
+                            .to_str()
+                            .map(|value| (name.as_str().to_owned(), value.to_owned()))
+                    })
+                    .collect::<Result<BTreeMap<_, _>, _>>();
+                let Ok(headers) = collected else {
+                    if let Ok(mut errors) = state.errors.lock() {
+                        errors.push("non-text introspection request header".into());
+                    }
+                    return Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::empty())
+                        .unwrap_or_default();
+                };
+                let name = format!("{}:{uri}", seen.len() + 1);
+                seen.push(ClientAuthenticationReceipt {
+                    name,
+                    endpoint: format!("{}{uri}", state.base),
+                    jti: token_id,
+                    assertion,
+                    method: method.as_str().into(),
+                    headers,
+                    form_body: body.clone(),
+                });
             }
         }
         Err(error) => {
@@ -268,8 +308,10 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
                 if !matches!(answer, Ok(PersonSessionConfirmation::Active { .. })) {
                     return Err("valid authenticated introspection refused".into());
                 }
-            } else if path=="/inactive" {
-                if answer!=Ok(PersonSessionConfirmation::Inactive {}) {return Err("inactive reply was not decoded as inactive".into());}
+            } else if path == "/inactive" {
+                if answer != Ok(PersonSessionConfirmation::Inactive {}) {
+                    return Err("inactive reply was not decoded as inactive".into());
+                }
             } else if answer != Err(SignInUnavailable::ConfirmationUnreachable) {
                 return Err("bad introspection reply was accepted".into());
             }
@@ -285,17 +327,21 @@ async fn private_key_jwt_signs_real_http_introspection_and_refuses_redirects()
             .seen
             .lock()
             .map_err(|_| "receiver trace poisoned")?;
-        let ids: std::collections::BTreeSet<_> = seen.iter().map(|(_, id,_)| id).collect();
-        if seen.len() != 8 || ids.len() != 8 || seen.iter().any(|(path, _,_)| path == "/unexpected") {
+        let ids: std::collections::BTreeSet<_> = seen.iter().map(|request| &request.jti).collect();
+        if seen.len() != 8
+            || ids.len() != 8
+            || seen
+                .iter()
+                .any(|request| request.endpoint.ends_with("/unexpected"))
+        {
             return Err("assertions were replayed, lost or redirected".into());
         }
-        for (index,(path,jti,assertion)) in seen.iter().enumerate() {
-            println!("CLIENT_AUTH_ASSERTION {}",serde_json::json!({
-                "name":format!("{}:{path}",index+1),"endpoint":format!("{}{path}",receiver.base),
-                "jti":jti,"assertion":assertion
-            }));
+        for request in seen.iter() {
+            println!("CLIENT_AUTH_ASSERTION {}", serde_json::to_string(request)?);
         }
-        println!("CLIENT_AUTH_HTTP active=2 inactive=1 unavailable=5 requests=8 uniqueJti=8 unexpected=0");
+        println!(
+            "CLIENT_AUTH_HTTP active=2 inactive=1 unavailable=5 requests=8 uniqueJti=8 unexpected=0"
+        );
         Ok::<_, configuration::TestError>(())
     }
     .await;
