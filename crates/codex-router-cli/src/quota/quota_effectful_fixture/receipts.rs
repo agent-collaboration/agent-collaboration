@@ -199,3 +199,24 @@ pub(super) fn write_summary(output: &mut impl Write, summary: &Value) -> io::Res
     writeln!(output)?;
     output.flush()
 }
+
+/// Keep summary transitions separate from full live and journal readback.
+pub(super) fn append_summary_pose(poses: &mut Vec<Value>, readback: &Value) {
+    let rows = readback["rows"]
+        .as_array()
+        .expect("serialized fixture readback rows")
+        .iter()
+        .map(|row| json!({"accountId":row["accountId"],"loginState":row["loginState"]}))
+        .collect::<Vec<_>>();
+    let actions = readback["actions"]
+        .as_array()
+        .expect("serialized fixture readback actions")
+        .iter()
+        .map(|action| json!({"id":action["id"],"checked":action["checked"]}))
+        .collect::<Vec<_>>();
+    let pose = json!({"mount":readback["mount"],"browseAccountId":readback["browseAccountId"],
+        "listSelection":readback["listSelection"],"captured":readback["captured"],"rows":rows,"actions":actions});
+    if poses.last() != Some(&pose) {
+        poses.push(pose);
+    }
+}

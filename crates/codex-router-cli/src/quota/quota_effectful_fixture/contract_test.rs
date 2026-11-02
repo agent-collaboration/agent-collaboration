@@ -26,3 +26,6 @@ mod event_fence;
 
 #[path = "summary_receipt_test.rs"]
 mod summary_receipt;
+
+#[path = "summary_pose_test.rs"]
+mod summary_pose;

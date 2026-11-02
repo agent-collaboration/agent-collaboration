@@ -86,7 +86,7 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
                     .frame;
                 publication_events.write(json!({"kind":"refresh-result-published","mount":value.mount,"publicationFrame":frame,"result":receipts::refresh_result(result)})).unwrap();
             }
-            observed_poses.lock().unwrap().push(wire);
+            receipts::append_summary_pose(&mut observed_poses.lock().unwrap(), &wire);
         }
     });
     let fixture = QuotaFixtureView {
