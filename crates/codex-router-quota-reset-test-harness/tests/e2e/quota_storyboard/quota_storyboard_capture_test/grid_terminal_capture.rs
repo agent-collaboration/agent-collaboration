@@ -71,6 +71,7 @@ fn component_scenario(
         .transpose()?;
     match (surface, name) {
         ("normal", None | Some("normal")) => Ok(("normal", "scenario=Normal")),
+        ("normal", Some("large-list")) => Ok(("large-list", "scenario=LargeList")),
         ("normal", Some("save-failed")) => Ok(("save-failed", "scenario=SaveFailed")),
         ("normal", Some("commit-pending")) => Ok(("commit-pending", "scenario=CommitPending")),
         ("normal", Some("inspection-pending")) => {
@@ -652,6 +653,15 @@ fn component_receipt_and_scenario_nomination_are_confined_and_reach_the_real_pty
             component_scenario("normal", Some(OsStr::new("commit-pending")))?
                 == ("commit-pending", "scenario=CommitPending"),
             "pending commit scenario/receipt changed",
+        )?;
+        ensure(
+            component_scenario("normal", Some(OsStr::new("large-list")))?
+                == ("large-list", "scenario=LargeList"),
+            "large navigation scenario/receipt changed",
+        )?;
+        ensure(
+            component_scenario("hard", Some(OsStr::new("large-list"))).is_err(),
+            "hard accepted large navigation scenario",
         )?;
         for surface in ["normal", "hard", "sessions"] {
             ensure(

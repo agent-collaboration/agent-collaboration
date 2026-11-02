@@ -29,6 +29,12 @@ export const accountLoginJourneys: readonly FlowJourney[] = (
 		},
 		{ kind: 'press', key: 'Enter' },
 		{
+			kind: 'fixture',
+			operation: 'inspect-account-login-details',
+			purpose:
+				'Read the entire actual scrolled command body through acknowledged physical row transitions, then restore entry scroll.',
+		},
+		{
 			kind: 'capture',
 			checkpoint: 'account-details-login',
 			checks: ['login-primary-by-status', 'exact-login-command'],

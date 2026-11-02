@@ -18,20 +18,20 @@ import {
 	quotaPreferenceReceiptSchema,
 } from './quota-preference-readback.ts';
 
-const accountFactSchema = z.strictObject({
+export const quotaAccountFactSchema = z.strictObject({
 	accountId: z.string(),
 	provider: z.string(),
 	label: z.string(),
 	status: z.enum(['enabled', 'disabled']),
 	credentialGeneration: z.number().int().nullable(),
 });
-const targetSchema = z.strictObject({
+export const quotaCapturedTargetSchema = z.strictObject({
 	accountId: z.string(),
 	provider: z.string(),
 	label: z.string(),
 	position: z.number().int(),
 });
-const commandSchema = targetSchema.extend({
+const commandSchema = quotaCapturedTargetSchema.extend({
 	action: z.enum(['copy-id', 'disable', 'enable', 'remove']),
 });
 const commandResultSchema = z.discriminatedUnion('kind', [
@@ -40,13 +40,13 @@ const commandResultSchema = z.discriminatedUnion('kind', [
 	z.strictObject({ kind: z.literal('failed'), message: z.string() }),
 ]);
 const capturedSchema = z.discriminatedUnion('kind', [
-	targetSchema.extend({ kind: z.literal('details') }),
+	quotaCapturedTargetSchema.extend({ kind: z.literal('details') }),
 	z.strictObject({ kind: z.literal('options'), accountId: z.string(), label: z.string() }),
 	z.strictObject({ kind: z.literal('floor'), accountId: z.string(), label: z.string() }),
 	z.strictObject({ kind: z.literal('other') }),
 ]);
 // Published geometry and other owner metadata remain in the original receipt.
-const poseSchema = z.object({
+export const quotaPoseSchema = z.object({
 	mount: z.number().int().positive(),
 	browseAccountId: z.string().nullable(),
 	listSelection: z.string().nullable(),
@@ -139,8 +139,8 @@ export const quotaEffectReceiptSchema = z.strictObject({
 			}),
 		]),
 	),
-	before: z.array(accountFactSchema),
-	after: z.array(accountFactSchema),
+	before: z.array(quotaAccountFactSchema),
+	after: z.array(quotaAccountFactSchema),
 	policiesBefore: policyFactsSchema,
 	policiesAfter: policyFactsSchema,
 	accountCommands: z.array(z.strictObject({ command: commandSchema, result: commandResultSchema })),
@@ -155,7 +155,7 @@ export const quotaEffectReceiptSchema = z.strictObject({
 		z.object({ kind: z.literal('fixture-mutation'), operation: z.string() }),
 	),
 	unexpectedEffectCalls: z.array(z.string()),
-	publishedPoses: z.array(poseSchema).min(1),
+	publishedPoses: z.array(quotaPoseSchema).min(1),
 	nativeDispatch: z.array(inputDispatchReceiptSchema).min(1),
 });
 export type QuotaEffectReceipt = z.infer<typeof quotaEffectReceiptSchema>;

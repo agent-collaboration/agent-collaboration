@@ -147,8 +147,8 @@ pub(crate) fn open_fixture_control(
 
 #[cfg(any(test, debug_assertions))]
 pub use crate::quota_fixture_controller::{
-    QuotaCapturedContext, QuotaFixtureControlAck, QuotaFixtureController, QuotaFixtureOperation,
-    QuotaFixturePendingAck, QuotaFixtureReadback,
+    QuotaBodyScrollSnapshot, QuotaCapturedContext, QuotaFixtureControlAck, QuotaFixtureController,
+    QuotaFixtureOperation, QuotaFixturePendingAck, QuotaFixtureReadback,
 };
 #[cfg(any(test, debug_assertions))]
 pub use crate::quota_fixture_view::{

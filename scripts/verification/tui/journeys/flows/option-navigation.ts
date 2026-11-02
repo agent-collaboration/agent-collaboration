@@ -5,7 +5,7 @@ import { journeyGridSizes } from '../journey-definition.ts';
 import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney, FlowCheck } from './flow-definition.ts';
 
-export const optionNavigationJourneys: readonly FlowJourney[] = (
+const optionNavigationDrafts: readonly FlowJourney[] = (
 	['picker-list', 'quota-list', 'sessions-help', 'quota-help'] as const
 ).map((context): FlowJourney => {
 	const surface = context === 'picker-list' || context === 'sessions-help' ? 'sessions' : 'quota';
@@ -101,3 +101,38 @@ export const optionNavigationJourneys: readonly FlowJourney[] = (
 		],
 	};
 });
+
+export const optionNavigationJourneys: readonly FlowJourney[] = optionNavigationDrafts.map(
+	(journey) =>
+		journey.surface !== 'quota'
+			? journey
+			: Object.assign({}, journey, {
+					steps: journey.steps.flatMap((step) => {
+						if (step.kind === 'press' && step.key === 'F1')
+							return [
+								step,
+								{
+									kind: 'fixture',
+									operation: 'qualify-native-quota-help-physical-rows',
+									purpose:
+										'Census actual one-row Help movement against independent actions/conventions, then restore its first row.',
+								} as const,
+							];
+						if (
+							step.kind === 'capture' &&
+							step.checkpoint === 'alias-last' &&
+							journey.journeyId === 'quota-list-option-navigation'
+						)
+							return [
+								step,
+								{
+									kind: 'fixture',
+									operation: 'verify-quota-selected-after-scroll',
+									purpose:
+										'Open real Details for the actual selected identity after scrolling; close it before resizing.',
+								} as const,
+							];
+						return [step];
+					}),
+				}),
+);

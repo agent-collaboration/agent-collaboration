@@ -193,6 +193,7 @@ pub(crate) fn render_interactive_quota_status(
         super::quota_fixture_controller::LiveQuotaFixture {
             context: context.clone(),
             list: list.clone(),
+            screen_help: _help,
             stack,
             loader: props.reload_view_model.clone(),
             reload_lock: reload_lock.clone(),

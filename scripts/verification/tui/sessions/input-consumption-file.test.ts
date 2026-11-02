@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { InputConsumptionReadback } from './input-consumption-readback.ts';
+import { inputDispatchReceiptSchema } from './input-consumption-schema.ts';
 import type { InputConsumptionExpectation } from './input-consumption-schema.ts';
 
 const press = {
@@ -253,4 +254,33 @@ test('abort after registration prevents a queued injection and a null rejection 
 	await expect(
 		other.observeInput({ expected: [press], timeoutMs: 1000, inject: () => Promise.reject(null) }),
 	).rejects.toThrow('failed');
+});
+
+test('completed ACK records are decoded once while exact consumption and append-only checks remain', async () => {
+	const path = journal(line(1, press));
+	const decode = vi.spyOn(inputDispatchReceiptSchema, 'safeParse');
+	try {
+		const reader = InputConsumptionReadback.open(path);
+		expect(reader.initialReceipts).toEqual([{ sequence: 1, ...press }]);
+		const second = await reader.observeInput({
+			expected: [release],
+			timeoutMs: 1000,
+			inject: async () => {
+				appendFileSync(path, line(2, release));
+			},
+		});
+		const third = await reader.observeInput({
+			expected: [press],
+			timeoutMs: 1000,
+			inject: async () => {
+				appendFileSync(path, line(3, press));
+			},
+		});
+		expect(second).toEqual([{ sequence: 2, ...release }]);
+		expect(third).toEqual([{ sequence: 3, ...press }]);
+		expect(reader.assertComplete()).toHaveLength(3);
+		expect(decode).toHaveBeenCalledTimes(3);
+	} finally {
+		decode.mockRestore();
+	}
 });
