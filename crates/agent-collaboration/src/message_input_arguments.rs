@@ -218,7 +218,7 @@ enum PreparedMessageContent {
 impl PreparedMessage {
     pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SavedMessage, String> {
         Ok(SavedMessage {
-            target: self.target.resolve(service_id)?,
+            target: self.target.into_mail_recipient(service_id),
             content: self.content.resolve(service_id)?,
             delivery: self.delivery,
             generation_guard: self.generation_guard,
