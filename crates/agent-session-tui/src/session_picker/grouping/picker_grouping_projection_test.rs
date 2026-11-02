@@ -306,3 +306,54 @@ async fn grouping_keeps_full_identity_through_navigation_and_regrouping_at_all_f
         .await;
     }
 }
+
+fn assert_projected_dst_day(now: &str, updated: &str, expected_heading: &str) {
+    use crate::session_picker::grouping::picker_grouping::selection_rows;
+    use agent_collaboration_tui::controls::list::ListRows;
+
+    // Arrange: literal local-calendar examples, not elapsed 24-hour periods.
+    let now = now
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .unwrap()
+        .with_timezone(&chrono_tz::America::Toronto);
+    let mut record = picker_record(
+        "dst-boundary",
+        "DST boundary",
+        "/repo/project-a",
+        "provider",
+        "cli",
+    );
+    record.recency_at_ms = Some(
+        updated
+            .parse::<chrono::DateTime<chrono::Utc>>()
+            .unwrap()
+            .timestamp_millis(),
+    );
+    let expected_key =
+        crate::session_picker::screen::picker_screen_scope::row_key(&record.identity).unwrap();
+    let model = SessionsPickerModel::new(request_with_rows(vec![record]), 120);
+
+    // Act: the production row projection keeps the timezone, not today's offset.
+    let rows = selection_rows(&model, SessionGroupFacet::Day, now).unwrap();
+
+    // Assert: same literal identity, correct local date across the transition.
+    let ListRows::Grouped(groups) = rows else {
+        panic!("Day must produce grouped rows");
+    };
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].heading.name, expected_heading);
+    assert_eq!(groups[0].heading.count, 1);
+    assert_eq!(groups[0].keys, [expected_key]);
+}
+
+#[test]
+fn picker_selection_rows_preserves_day_across_toronto_fall_dst() {
+    // Nov 2 00:10 EST; updated Nov 1 00:05 EDT is Yesterday, not Older.
+    assert_projected_dst_day("2026-11-02T05:10:00Z", "2026-11-01T04:05:00Z", "Yesterday");
+}
+
+#[test]
+fn picker_selection_rows_preserves_day_across_toronto_spring_dst() {
+    // Mar 9 00:10 EDT; updated Mar 7 23:05 EST is Older, not Yesterday.
+    assert_projected_dst_day("2026-03-09T04:10:00Z", "2026-03-08T04:05:00Z", "Older");
+}

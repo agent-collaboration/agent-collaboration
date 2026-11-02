@@ -13,15 +13,30 @@ use agent_collaboration_tui::controls::list::ListGroupHeading;
 use agent_collaboration_tui::controls::list::ListRows;
 use chrono::DateTime;
 use chrono::FixedOffset;
+use chrono::Local;
+use chrono::TimeZone;
 use chrono::Utc;
 use std::sync::Arc;
 
 pub type SessionGroupingClock = Arc<dyn Fn() -> DateTime<FixedOffset> + Send + Sync>;
 
-pub fn selection_rows(
+// Fixtures may pin an offset for reproducible captures. The live picker must
+// retain Local so each historical timestamp gets its own DST offset.
+pub fn live_selection_rows(
     model: &SessionsPickerModel,
     facet: SessionGroupFacet,
-    now: DateTime<FixedOffset>,
+    fixture_clock: Option<&SessionGroupingClock>,
+) -> SurfaceResult<ListRows> {
+    match fixture_clock {
+        Some(clock) => selection_rows(model, facet, clock()),
+        None => selection_rows(model, facet, Local::now()),
+    }
+}
+
+pub fn selection_rows<TZone: TimeZone>(
+    model: &SessionsPickerModel,
+    facet: SessionGroupFacet,
+    now: DateTime<TZone>,
 ) -> SurfaceResult<ListRows> {
     if facet == SessionGroupFacet::None {
         return Ok(ListRows::Ungrouped(
@@ -34,7 +49,7 @@ pub fn selection_rows(
         ));
     }
     let groups = model
-        .session_groups(facet, now.with_timezone(&Utc), now.offset())
+        .session_groups(facet, now.with_timezone(&Utc), &now.timezone())
         .into_iter()
         .map(|group| {
             Ok(ListGroup {

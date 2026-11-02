@@ -96,15 +96,7 @@ pub fn SessionsPickerComponent<'a>(
     });
     let mut conversation_cache = hooks.use_state(ConversationPreviewCache::default);
     let group_preferences = hooks.use_state(|| props.group_preferences.take().unwrap_or_default());
-    let grouping_clock = hooks.use_memo(
-        || {
-            props
-                .grouping_clock
-                .clone()
-                .unwrap_or_else(|| std::sync::Arc::new(|| chrono::Local::now().fixed_offset()))
-        },
-        (),
-    );
+    let grouping_clock = hooks.use_memo(|| props.grouping_clock.clone(), ());
     let reload_generation = hooks.use_state(|| 0_u64);
     let reload_port = hooks.use_memo(
         || SessionRecordsReloadPort::new(model.read().data_query(), model.read().source_contexts()),
@@ -228,10 +220,10 @@ pub fn SessionsPickerComponent<'a>(
     pub(crate) use agent_collaboration_tui::surfaces::overlay_host::OverlayHost;
     pub(crate) use agent_collaboration_tui::surfaces::surface_handle::use_surface_stack;
     let setup = (|| -> picker_surface::SurfaceResult<_> {
-        let rows = picker_surface::selection_rows(
+        let rows = picker_surface::live_selection_rows(
             &model.read(),
             group_preferences.read().facet(),
-            grouping_clock(),
+            grouping_clock.as_ref(),
         )?;
         let list = ListSelectionState::new(rows, None)?;
         let combo = ComboBoxState::new(Vec::new(), None)?;
