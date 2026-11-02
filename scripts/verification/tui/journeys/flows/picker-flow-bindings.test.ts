@@ -7,6 +7,7 @@ import { sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
 import { checkInputConsumptionReceipt } from '../../sessions/input-consumption-readback.ts';
 import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
+import { findDialog } from '../scenes/grid-scene-matcher.ts';
 import { authoredFlowPlanSchema, paintedMouseExpectationSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, runAuthoredFlow } from './authored-flow-run.ts';
@@ -409,9 +410,14 @@ test('toolbar New Escape names its declared close action and preserves exact sur
 	).toThrow('surface mismatch');
 });
 
-test.each([false, true])(
-	'post-cancel Browse filter check rejects a still-painted New dialog: %s',
-	async (dialogRemains) => {
+test.each([
+	['plain-browse', false, null],
+	['bordered-browse', true, null],
+	['open-new', true, 'New session'],
+	['open-details', true, 'Session details'],
+] as const)(
+	'post-cancel Browse filter check preserves the named-dialog contract: %s',
+	async (_label, bordered, dialogTitle) => {
 		const plan = controlledPlan('sessions-toolbar-and-menu'),
 			invocation = authoredFlowMatrix(plan)[0];
 		if (!invocation) throw new Error('controlled matrix absent');
@@ -425,11 +431,18 @@ test.each([false, true])(
 		if (!check) throw new Error('real post-cancel Browse checker absent');
 		const core = await createTerminalCore(76, 30);
 		try {
-			core.writeString('Sessions\r\n≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions');
-			if (dialogRemains)
+			if (bordered)
 				core.writeString(
-					'\r\n╭──────────────────────────╮\r\n│ New session              │\r\n│ Run Foreground           │\r\n╰──────────────────────────╯',
+					'╭────────────────────────────────────────────╮\r\n│ ≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions        │\r\n│ ┌───────────────────────────────────────┐  │\r\n│ │ Session                               │  │\r\n│ └───────────────────────────────────────┘  │\r\n╰────────────────────────────────────────────╯',
 				);
+			else core.writeString('Sessions\r\n≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions');
+			if (dialogTitle !== null)
+				core.writeString(
+					'\r\n╭──────────────────────────╮\r\n│ ' +
+						dialogTitle +
+						'              │\r\n│ Run Foreground           │\r\n╰──────────────────────────╯',
+				);
+			if (bordered) expect(findDialog(snapshotGrid(core), '')).not.toBeNull();
 			// Grid-only reader control: no input/driver is consulted and no product is launched.
 			const context: NativeFlowContext = {
 				get driver(): never {
@@ -451,7 +464,7 @@ test.each([false, true])(
 				},
 			};
 			const failures = await check(context, undefined);
-			expect(failures.length === 0).toBe(!dialogRemains);
+			expect(failures.length === 0).toBe(dialogTitle === null);
 		} finally {
 			core.dispose();
 		}

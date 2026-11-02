@@ -386,7 +386,8 @@ export function pickerToolbarBindings(
 				async (context) => {
 					const live = filterCheck++ === 2;
 					if (
-						findDialog(context.frame.grid, '') !== null ||
+						findDialog(context.frame.grid, 'New session') !== null ||
+						findDialog(context.frame.grid, 'Session details') !== null ||
 						!pickerFilterFocused(context.frame.grid)
 					)
 						return ['filter click/shortcut failed to focus Browse or left a dialog painted'];
