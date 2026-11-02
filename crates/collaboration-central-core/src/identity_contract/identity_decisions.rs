@@ -1,5 +1,5 @@
 //! Sign-in service decisions and machine-token extension claims.
-use super::{ClientId, DeviceLoginRequestId, PersonId};
+use super::{ClientId, DeviceLoginRequestId, FleetPermission, PersonId};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
 use fleet_sync_protocol::PeerId;
 use message_board::{MachineLabel, WorkspaceId};
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct DecideDeviceLogin {
     pub organization_id: OrganizationId,
     pub approver: PersonId,
+    pub permission_checked: FleetPermission,
     pub request_id: DeviceLoginRequestId,
     pub installation: InstallationId,
     #[schemars(with = "message_board::RecordId")]
@@ -38,7 +39,7 @@ pub enum DeviceLoginDecision {
     deny_unknown_fields
 )]
 pub enum DeviceLoginRefusal {
-    NotOwner {},
+    NotPermitted {},
     MachineInAnotherOrganization {},
     UnknownWorkspace {},
     SecondFactorRequired { within_seconds: u32 },
@@ -134,43 +135,6 @@ pub enum MachineConnectionRefusal {
     WrongClient {},
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "operation",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum PersonAdmissionRequest {
-    AdmitSignIn {
-        organization_id: OrganizationId,
-        person_id: PersonId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        verified_email: Option<String>,
-    },
-    Standing {
-        organization_id: OrganizationId,
-        person_id: PersonId,
-    },
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "result",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum OrganizationStanding {
-    Admitted { role: StandingRole },
-    AwaitingOwner {},
-    NotAdmitted {},
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum StandingRole {
-    Member,
-    Owner,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DisableMachineClient {
     pub organization_id: OrganizationId,
@@ -209,4 +173,21 @@ pub struct MachineTokenClaims {
     pub principal: MachinePrincipal,
     pub organization_id: OrganizationId,
     pub grant_expires_at: UnixSeconds,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProvisionOrganization {
+    pub organization_id: OrganizationId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "result",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ProvisionOrganizationResult {
+    Provisioned {},
 }

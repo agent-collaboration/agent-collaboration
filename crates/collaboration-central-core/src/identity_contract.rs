@@ -1,10 +1,12 @@
 //! Central-owned organization, issuer-decision and lookup contracts.
 mod enrollment_records;
+mod fleet_permissions;
 mod identity_decisions;
 mod identity_lookups;
 mod organization_commands;
 
 pub use enrollment_records::*;
+pub use fleet_permissions::*;
 pub use identity_decisions::*;
 pub use identity_lookups::*;
 pub use organization_commands::*;
@@ -36,10 +38,4 @@ macro_rules! central_identity {
         impl $name { #[must_use] pub fn as_str(&self) -> &str { self.0.as_str() } }
     )+};
 }
-central_identity!(
-    PersonId,
-    ClientId,
-    DeviceLoginRequestId,
-    AdmissionId,
-    CommandId
-);
+central_identity!(PersonId, ClientId, DeviceLoginRequestId, CommandId);

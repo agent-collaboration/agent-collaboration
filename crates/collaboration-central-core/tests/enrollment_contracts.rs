@@ -1,24 +1,12 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
 use collaboration_central_core::identity_contract::{
-    AdmissionId, AdmissionRef, ClientId, CommandId, DeviceLoginRequestId, EnrollmentAuthorization,
-    EnrollmentRevocationReason, MachineEnrollment, PersonId,
+    ClientId, CommandId, DeviceLoginRequestId, EnrollmentAuthorization, EnrollmentRevocationReason,
+    MachineEnrollment, PersonId,
 };
 use serde_json::json;
 #[cfg(test)]
 #[path = "support/contract_artifacts.rs"]
 mod contract_artifacts;
-
-#[test]
-fn admission_ref_wire_contract() {
-    contract_artifacts::assert_contract::<AdmissionRef>(
-        "AdmissionRef",
-        vec![
-            json!({"kind":"admission","admissionId":"019a3dce-2000-7000-8000-000000000001"}),
-            json!({"kind":"machine","installation":"019a3dce-2000-7000-8000-000000000001"}),
-        ],
-        false,
-    );
-}
 
 #[test]
 fn enrollment_authorization_wire_contract() {
@@ -79,15 +67,6 @@ fn client_id_wire_contract() {
 fn device_login_request_id_wire_contract() {
     contract_artifacts::assert_contract::<DeviceLoginRequestId>(
         "DeviceLoginRequestId",
-        vec![json!("019a3dce-2000-7000-8000-000000000001")],
-        false,
-    );
-}
-
-#[test]
-fn admission_id_wire_contract() {
-    contract_artifacts::assert_contract::<AdmissionId>(
-        "AdmissionId",
         vec![json!("019a3dce-2000-7000-8000-000000000001")],
         false,
     );

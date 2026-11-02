@@ -3,8 +3,7 @@ use collaboration_central_core::identity_contract::{
     AdmitMachineConnection, AdmittedMachine, DecideDeviceLogin, DecideMachineToken,
     DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient, DisabledMachineClient,
     MachineConnectionAdmission, MachineConnectionRefusal, MachinePrincipal, MachineTokenClaims,
-    MachineTokenDecision, MachineTokenRefusal, OrganizationStanding, PersonAdmissionRequest,
-    PresentedMachine, StandingRole,
+    MachineTokenDecision, MachineTokenRefusal, PresentedMachine,
 };
 use serde_json::json;
 #[cfg(test)]
@@ -16,8 +15,8 @@ fn decide_device_login_wire_contract() {
     contract_artifacts::assert_contract::<DecideDeviceLogin>(
         "DecideDeviceLogin",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"]}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"]}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64}),
         ],
         false,
     );
@@ -29,7 +28,7 @@ fn device_login_decision_wire_contract() {
         "DeviceLoginDecision",
         vec![
             json!({"result":"approved","enrollmentId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
             json!({"result":"refused","reason":{"kind":"machineInAnotherOrganization"}}),
             json!({"result":"refused","reason":{"kind":"unknownWorkspace"}}),
             json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}}),
@@ -43,7 +42,7 @@ fn device_login_refusal_wire_contract() {
     contract_artifacts::assert_contract::<DeviceLoginRefusal>(
         "DeviceLoginRefusal",
         vec![
-            json!({"kind":"notOwner"}),
+            json!({"kind":"notPermitted"}),
             json!({"kind":"machineInAnotherOrganization"}),
             json!({"kind":"unknownWorkspace"}),
             json!({"kind":"secondFactorRequired","withinSeconds":900}),
@@ -152,42 +151,6 @@ fn machine_connection_refusal_wire_contract() {
             json!({"kind":"machineInAnotherOrganization"}),
             json!({"kind":"wrongClient"}),
         ],
-        false,
-    );
-}
-
-#[test]
-fn person_admission_request_wire_contract() {
-    contract_artifacts::assert_contract::<PersonAdmissionRequest>(
-        "PersonAdmissionRequest",
-        vec![
-            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"}),
-            json!({"operation":"standing","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn organization_standing_wire_contract() {
-    contract_artifacts::assert_contract::<OrganizationStanding>(
-        "OrganizationStanding",
-        vec![
-            json!({"result":"admitted","role":"owner"}),
-            json!({"result":"admitted","role":"member"}),
-            json!({"result":"awaitingOwner"}),
-            json!({"result":"notAdmitted"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn standing_role_wire_contract() {
-    contract_artifacts::assert_contract::<StandingRole>(
-        "StandingRole",
-        vec![json!("member"), json!("owner")],
         false,
     );
 }

@@ -86,7 +86,7 @@ pub enum OrganizationCommandResult {
     deny_unknown_fields
 )]
 pub enum CommandRefusal {
-    NotOwner {},
+    NotPermitted {},
     NotFound {},
     Conflict {},
     RecordUnwritable {},

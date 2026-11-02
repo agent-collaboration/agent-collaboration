@@ -4,8 +4,8 @@ mod schema_validation;
 
 use collaboration_central_core::identity_contract::{
     CommandRefusal, ConnectionView, DecideDeviceLogin, DeviceLoginRefusal, IdentityLookup,
-    IdentityLookupResult, MachineEnrollment, MachinePresenceAnswer, PersonAdmissionRequest,
-    TokenLifetimeSeconds, WhoIsLoggedInResult,
+    IdentityLookupResult, MachineEnrollment, MachinePresenceAnswer, TokenLifetimeSeconds,
+    WhoIsLoggedInResult,
 };
 use fleet_identity_protocol::ReportSessionActivity;
 use schemars::JsonSchema;
@@ -150,10 +150,6 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
         "closedAgoMs",
     );
     assert_null_read_omitted_write::<ConnectionView>(json!({"state":"notConnected"}), "lastSeenAt");
-    assert_null_read_omitted_write::<PersonAdmissionRequest>(
-        json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
-        "verifiedEmail",
-    );
     let decisions: Vec<Value> =
         serde_json::from_str(include_str!("../contracts/DecideDeviceLogin.fixtures.json")).unwrap();
     assert_null_read_omitted_write::<DecideDeviceLogin>(
