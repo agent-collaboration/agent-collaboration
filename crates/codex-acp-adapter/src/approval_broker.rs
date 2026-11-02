@@ -6,6 +6,9 @@ use std::{future::Future, pin::Pin};
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApprovalRoute {
+    /// Central's authenticated creator installation; absent on ordinary local routes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_installation: Option<message_board::ServiceId>,
     pub thread_id: String,
     pub created_by: SessionRef,
     pub approver: SessionRef,

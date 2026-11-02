@@ -91,12 +91,12 @@ impl ReadinessHttpFixture {
         id: u64,
         method: &str,
     ) -> oneshot::Sender<serde_json::Value> {
-        let (request, reply) = tokio::time::timeout(Duration::from_secs(2), async {
-            tokio::select! {
-                request = self.incoming.recv() => request.expect("HTTP request"),
-                result = verification => panic!("readiness ended before expected request {id}: {result:?}"),
-            }
-        }).await.expect("request event bound");
+        // The verifier already bounds the request and total operation. Observe
+        // its completion instead of imposing a shorter socket-scheduling budget.
+        let (request, reply) = tokio::select! {
+            request = self.incoming.recv() => request.expect("HTTP request"),
+            result = verification => panic!("readiness ended before expected request {id}: {result:?}"),
+        };
         assert_eq!(request.host.as_deref(), Some("node.example.ts.net:8443"));
         assert!(request.origin.is_none(), "health must send no Origin");
         let request = request.payload;
@@ -272,10 +272,16 @@ async fn total_budget_times_out_across_two_individually_bounded_requests_without
     advance_held_reply(40).await;
     let _released = first.send(tools_response());
     let second = fixture.request(&mut verification, 2, "tools/call").await;
-    advance_held_reply(36).await;
-    let failure = completion(verification)
+    // This real request is already held. No more socket arrival is expected;
+    // let the verifier's own total or per-request deadline settle its result.
+    // A missing total deadline must reach the distinct per-request error.
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(36)).await;
+    let failure = verification
         .await
+        .expect("verification task")
         .expect_err("75-second total budget");
+    tokio::time::resume();
     assert_eq!(failure.kind(), io::ErrorKind::TimedOut);
     assert!(
         failure

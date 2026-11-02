@@ -479,7 +479,12 @@ async fn stateless_http_create_reports_discovery_failure_without_creation_uncert
     )
     .await;
     let wake_failure = &wake_response["result"]["structuredContent"];
-    assert_eq!(wake_failure["kind"], "waitUnavailable", "{wake_response}");
+    assert_eq!(wake_failure["kind"], "rejected", "{wake_response}");
+    assert_eq!(wake_failure["serviceKind"], "localStoreUnavailable");
+    assert_eq!(
+        wake_failure["data"]["wakeupId"],
+        "01985b1e-8d90-7fff-8000-000000000099"
+    );
     assert_eq!(wake_failure["effect"], "none");
     listener.stop().await;
 }

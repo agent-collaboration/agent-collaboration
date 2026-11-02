@@ -31,3 +31,19 @@ pub struct SchedulePrepareRequest {
     pub schedule_id: ScheduleId,
     pub destination: DestinationPreparation,
 }
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BoundScheduleThread {
+    pub target: SessionRef,
+    pub cwd: String,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScheduleBindPreparedRequest {
+    pub automation_id: crate::AutomationId,
+    pub expected_revision: crate::ChangeId,
+    pub operation_id: OperationId,
+    pub bound_thread: BoundScheduleThread,
+}

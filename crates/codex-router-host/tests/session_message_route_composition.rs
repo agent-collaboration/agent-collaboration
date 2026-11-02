@@ -4,6 +4,9 @@ mod follow_fixture;
 #[path = "support/registered_route_project.rs"]
 mod registered_route_project;
 use follow_fixture::post_thread_activity_for_sessions;
+#[path = "support/central_provider_wake_fixture.rs"]
+mod central_provider_wake_fixture;
+use central_provider_wake_fixture::send_and_wait_wake;
 #[path = "support/session_message_route_fixture.rs"]
 #[expect(
     dead_code,
@@ -24,8 +27,7 @@ use collaboration_runtime::ProviderSessionRecord;
 use registered_route_project::route_project_requests;
 use route_fixture::{
     create_provider_target, load_provider_target, message, prompt_and_approve_from_peer_provider,
-    provider_fixture, publish_peer, send_and_wait_wake, wait_for_completed_provider_prompts,
-    wait_for_prompt_text,
+    provider_fixture, publish_peer, wait_for_completed_provider_prompts, wait_for_prompt_text,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -33,16 +35,53 @@ use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 #[tokio::test]
 async fn host_router_selects_peer_and_provider_without_cross_loading() {
-    let root = tempfile::tempdir().expect("Host root");
+    if std::env::var("CODEX_ROUTER_TEST_PROVIDER_WAKE_CHILD").as_deref() != Ok("1") {
+        let output =
+            tokio::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "host_router_selects_peer_and_provider_without_cross_loading",
+                    "--nocapture",
+                ])
+                .env("CODEX_ROUTER_TEST_PROVIDER_WAKE_CHILD", "1")
+                .env("CODEX_ROUTER_DEBUG_AUTOMATION_FAULTS", "1")
+                .kill_on_drop(true)
+                .output()
+                .await
+                .expect("isolated provider-Wake child");
+        assert!(
+            output.status.success(),
+            "isolated provider-Wake test failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let root = tempfile::tempdir_in("/tmp").expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
+    // Select valid fixture timestamps once. Only explicit central controls advance due work;
+    // both due instants remain behind the Host's independent UTC admission clock.
+    let first_due_ms = collaboration_protocol::GridTime::next_after(
+        chrono::Utc::now().timestamp_millis() - 1_800_000,
+    )
+    .expect("first central due grid")
+    .unix_millis();
+    let timestamp = |milliseconds| {
+        chrono::DateTime::from_timestamp_millis(milliseconds)
+            .expect("fixture timestamp")
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    };
+    let initial = timestamp(first_due_ms - 1);
+    let first_due = timestamp(first_due_ms);
+    let second_due = timestamp(first_due_ms + 300_000);
     let route_project = route_project_requests();
     let identity = collaboration_contracts::MachineIdentity::new(
         collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
         None,
     )
     .expect("Host machine label");
-    let central = board_central_test_support::TestCentral::start_with_peer(
+    let central = board_central_test_support::TestCentral::start_with_peer_and_controls(
         &root.path().join("test-central"),
         &message_board::ActorOrigin {
             installation: String::from(identity.service_id().clone())
@@ -56,6 +95,15 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                 .expect("origin label"),
         },
         collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
+        vec![board_central_test_support::RuntimeControlRequest {
+            address: board_central_test_support::ObjectAddress::Fleet,
+            command: board_central_test_support::RuntimeControl::AutomationClock(
+                collaboration_central_conformance::AutomationClockControl::Start {
+                    now: serde_json::from_value(serde_json::json!(initial))
+                        .expect("central initial clock"),
+                },
+            ),
+        }],
     )
     .await
     .expect("real route central enrollment");
@@ -119,6 +167,13 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let client = CollaborationClient::connect(root.path(), "route-composition", "1")
         .await
         .expect("collaboration API client");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        runtime.runtime_test_causal_machine_work_readiness_pull(),
+    )
+    .await
+    .expect("machine-work readiness guard")
+    .expect("machine-work readiness");
     let claude_endpoint = EndpointRef {
         service_id: runtime.service_id().clone(),
         endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("Claude endpoint"),
@@ -284,8 +339,24 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     );
     assert!(!cursor_loads.exists(), "held Cursor was loaded again");
 
-    send_and_wait_wake(&client, held_claude.clone()).await;
-    send_and_wait_wake(&client, held_cursor.clone()).await;
+    send_and_wait_wake(
+        &client,
+        &central,
+        root.path(),
+        held_claude.clone(),
+        &first_due,
+    )
+    .await
+    .expect("Claude central Wake delivery");
+    send_and_wait_wake(
+        &client,
+        &central,
+        root.path(),
+        held_cursor.clone(),
+        &second_due,
+    )
+    .await
+    .expect("Cursor central Wake delivery");
     prompt_and_approve_from_peer_provider(
         &client,
         held_claude.clone(),

@@ -51,10 +51,9 @@ mod project_admission;
 mod project_cancellation;
 pub(crate) use project_cancellation::other_canonical_cancel;
 mod remote_admission;
-mod remote_wakes;
-pub(crate) use remote_wakes::LocalWakeOwner;
 mod remote_calls;
 mod remote_status;
+mod remote_wakes;
 mod terminal_retirement;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;
@@ -204,7 +203,6 @@ impl MailDeliveryRuntime {
         let consumer = Arc::new(MailConsumer {
             reader_actors: reader_actors.clone(),
             carrier: MailPushDelivery::new(props),
-            wakes: OnceLock::new(),
             clock: clock.clone(),
         });
         let project_replication = Arc::new(OnceLock::new());
@@ -357,7 +355,6 @@ struct MailConsumer {
     reader_actors: crate::SubscriptionDeliveryService,
     carrier: MailPushDelivery,
     clock: Arc<dyn SubscriptionClock>,
-    wakes: OnceLock<LocalWakeOwner>,
 }
 impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
     type Protocol = RouterConsumerProtocol;
@@ -626,7 +623,7 @@ impl CallRouter for MailCallRouter {
             crate::mail_push_outcome::local_message_outcome(listing_result, true)
                 .map_err(|_| CallFailure::AnswerLost)?
         } else if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
-            self.consumer.deliver_wake(item, body).await
+            self.consumer.deliver_wake(item, body)
         } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             // The reader actor owns its input; retain the resolved custody value
             // here so its stored receipt bound still validates the returned answer.

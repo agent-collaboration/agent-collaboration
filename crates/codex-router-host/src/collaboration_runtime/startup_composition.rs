@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            host_inputs.remote_create_default_approver,
         ))
         .await
     }
@@ -68,9 +70,19 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
+        if remote_create_default_approver
+            .as_ref()
+            .is_some_and(|approver| approver.endpoint.service_id != service_id)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "interim remote-create default approver must be a Session on this service",
+            ));
+        }
         let installation_peer = load_installation_peer(&inputs.directory)?;
         if inputs
             .board_session
@@ -326,6 +338,22 @@ impl CollaborationRuntime {
         let subscription_clock: std::sync::Arc<
             dyn collaboration_service::SubscriptionClock,
         > = std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        let central_catalog = prepared_board
+            .as_ref()
+            .and_then(|board| board.automation_transport());
+        let central_report_worker = match (&mut prepared_board, &automation_store) {
+            (Some(board), Some(store)) => board
+                .attach_automations(
+                    store.clone(),
+                    std::sync::Arc::new(super::automation_clock::HostAutomationClock(
+                        subscription_clock.clone(),
+                    )),
+                    service_id.clone(),
+                )
+                .await
+                .map(|(_, worker)| worker),
+            _ => None,
+        };
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
@@ -390,14 +418,6 @@ impl CollaborationRuntime {
         if let Some(mail) = &mail_delivery {
             mail.validate_owner(&identity, Some(&interactions))
                 .map_err(io::Error::other)?;
-            if let Some(store) = &automation_store {
-                mail.attach_wake_owner(
-                    service_id.clone(),
-                    store.clone(),
-                    wake_wait_permits.clone(),
-                )
-                .map_err(io::Error::other)?;
-            }
             mail.attach_reader_readiness().map_err(io::Error::other)?;
             mail.attach_project_replication(project_replication.clone())
                 .map_err(io::Error::other)?;
@@ -564,7 +584,8 @@ impl CollaborationRuntime {
                     Some(interactions.clone()),
                     Some(scheduled_run_execution),
                     Some(native_backend.clone()),
-                );
+                )
+                .with_catalog(central_catalog.clone());
             let interactions =
                 collaboration_service::collaboration_application::InteractionOperations::new(Some(
                     approval_broker.clone(),
@@ -574,7 +595,9 @@ impl CollaborationRuntime {
                 automation_store.clone().as_ref(),
             )
             .with_wait_capacity(&wake_wait_permits.clone())
-            .with_remote(mail_delivery.clone().as_ref());
+            .with_catalog(central_catalog)
+            .with_legacy_wake_recovery(mail_delivery.as_ref())
+            .with_clock(subscription_clock.clone());
             collaboration_service::CollaborationApplication::new(
                 identity.clone(),
                 board,
@@ -766,6 +789,13 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             })?;
         let mut tasks = JoinSet::new();
+        if let Some(worker) = central_report_worker {
+            let report_shutdown = shutdown.clone();
+            tasks.spawn(async move {
+                worker.run(report_shutdown).await;
+                Ok(())
+            });
+        }
         #[cfg(test)]
         let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]
@@ -823,6 +853,7 @@ impl CollaborationRuntime {
             installation_peer,
             board_session: None,
             owner_human_id,
+            remote_create_default_approver,
             project_admission,
             subscription_delivery,
             provider_store,

@@ -8,6 +8,51 @@ use sqlx_core::{
 };
 
 #[derive(Debug)]
+pub(crate) struct StoredFleetAlarmState {
+    pub state_id: Option<String>,
+    pub name: Option<String>,
+    pub last_position: Option<String>,
+    pub position_class: Option<String>,
+    pub retained_through: Option<String>,
+    pub floor_class: Option<String>,
+    pub state_exists: Option<String>,
+    pub feed_exists: Option<String>,
+    pub automation_work_exists: Option<String>,
+}
+pub(crate) fn read_fleet_alarm_state<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetAlarmState>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_fleet_alarm_state.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetAlarmState {
+                    state_id: row.try_get("state_id")?,
+                    name: row.try_get("name")?,
+                    last_position: row.try_get("last_position")?,
+                    position_class: row.try_get("position_class")?,
+                    retained_through: row.try_get("retained_through")?,
+                    floor_class: row.try_get("floor_class")?,
+                    state_exists: row.try_get("state_exists")?,
+                    feed_exists: row.try_get("feed_exists")?,
+                    automation_work_exists: row.try_get("automation_work_exists")?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct StoredFleetFeedState {
     pub state_id: Option<String>,
     pub name: Option<String>,

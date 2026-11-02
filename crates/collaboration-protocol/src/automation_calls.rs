@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
     deny_unknown_fields
 )]
 pub enum AutomationCall {
+    AutomationImport(crate::AutomationImportRequest),
     InstructionCreate(crate::InstructionCreateParams),
     InstructionUpdate(crate::InstructionUpdateParams),
     InstructionShow(crate::InstructionShowParams),
@@ -17,6 +18,8 @@ pub enum AutomationCall {
     RevisionList(crate::RevisionListRequest),
     ScheduleCreate(crate::ScheduleCreateRequest),
     ScheduleUpdate(crate::ScheduleUpdateRequest),
+    ScheduleBindPrepared(crate::ScheduleBindPreparedRequest),
+    SchedulePackageImport(crate::SchedulePackageImportRequest),
     ScheduleShow(crate::ScheduleShowRequest),
     ScheduleEnable(crate::ScheduleEnableRequest),
     ScheduleDisable(crate::ScheduleEnableRequest),
@@ -39,6 +42,7 @@ pub enum AutomationCall {
     LocalRunSettled(crate::LocalRunSettled),
     RemoteSessionCreate(crate::RemoteSessionCreateRequest),
     RemoteSessionCreateStatus {
+        #[serde(rename = "operationId")]
         operation_id: crate::OperationId,
     },
 }
@@ -51,6 +55,7 @@ pub enum AutomationCall {
     deny_unknown_fields
 )]
 pub enum CatalogAutomation {
+    Suspended(crate::SuspendedAutomationSnapshot),
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Faulted(crate::FaultedAutomationSnapshot),
@@ -103,12 +108,16 @@ pub struct FiringSnapshot {
     deny_unknown_fields
 )]
 pub enum AutomationAnswer {
+    Imported(crate::AutomationImportIdentity),
+    AlreadyImported(crate::AutomationImportIdentity),
+    Suspended(crate::SuspendedAutomationSnapshot),
     Instruction(crate::InstructionSnapshot),
     Instructions(crate::AutomationPage<crate::InstructionSnapshot>),
     Revisions(crate::AutomationPage<crate::RevisionRecord>),
     Schedule(crate::ScheduleSnapshot),
     Wake(CentralWakeSnapshot),
     Firing(FiringSnapshot),
+    SessionCreate(crate::RemoteSessionCreateSnapshot),
     Faulted(crate::FaultedAutomationSnapshot),
     Firings(crate::AutomationPage<FiringSnapshot>),
     List {

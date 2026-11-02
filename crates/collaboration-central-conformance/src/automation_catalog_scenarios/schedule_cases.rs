@@ -12,7 +12,7 @@ pub(super) async fn run(
     first: &mut NativeBoardSession,
     second: &mut NativeBoardSession,
     target_service: &str,
-) -> ConformanceResult<()> {
+) -> ConformanceResult<ScheduleSnapshot> {
     let instruction = require_instruction(
         call(
             first,
@@ -138,7 +138,7 @@ pub(super) async fn run(
     }
     same_answer(
         call(first, AutomationCall::ScheduleCreate(eligible)).await?,
-        AutomationAnswer::Schedule(original),
+        AutomationAnswer::Schedule(original.clone()),
     )?;
     let mut stale = update.clone();
     stale.operation_id = operation()?;
@@ -186,16 +186,16 @@ pub(super) async fn run(
     if cancelled.definition.enabled || cancelled.next_due_at.is_some() {
         return Err("cancelled schedule retained a deadline".into());
     }
-    Ok(())
+    Ok(original)
 }
 
-fn require_schedule(answer: AutomationAnswer) -> ConformanceResult<ScheduleSnapshot> {
+pub(super) fn require_schedule(answer: AutomationAnswer) -> ConformanceResult<ScheduleSnapshot> {
     match answer {
         AutomationAnswer::Schedule(snapshot) => Ok(snapshot),
         other => Err(format!("expected schedule: {other:?}").into()),
     }
 }
-fn require_mutation(answer: AutomationAnswer) -> ConformanceResult<ScheduleSnapshot> {
+pub(super) fn require_mutation(answer: AutomationAnswer) -> ConformanceResult<ScheduleSnapshot> {
     match answer {
         AutomationAnswer::Mutation {
             automation: collaboration_protocol::CatalogAutomation::Schedule(snapshot),
@@ -204,6 +204,6 @@ fn require_mutation(answer: AutomationAnswer) -> ConformanceResult<ScheduleSnaps
         other => Err(format!("expected schedule mutation before cutoff: {other:?}").into()),
     }
 }
-fn operation() -> ConformanceResult<collaboration_protocol::OperationId> {
+pub(super) fn operation() -> ConformanceResult<collaboration_protocol::OperationId> {
     Ok(durable_steps::Uuid::now_v7().to_string().try_into()?)
 }

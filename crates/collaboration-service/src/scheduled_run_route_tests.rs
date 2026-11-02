@@ -231,24 +231,17 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
     let application = (identity).build();
     let fresh = application
         .automation()
-        .schedule_create(serde_json::from_value(json!({
+        .schedule_prepare(serde_json::from_value(json!({
             "operationId": OperationId::generate(),
-            "definition": {
-                "instructionId": instruction.instruction_id.clone(),
-                "timing": {"kind": "interval", "seconds": 60},
-                "enabled": true,
-                "destination": {"kind": "freshEachRun", "endpoint": target.endpoint.clone(), "cwd": root},
-                "executionTimeoutSeconds": 120,
-                "model": "fixture-model",
-                "effort": "medium"
-            }
+            "scheduleId": schedules[0],
+            "destination": {"kind": "fresh", "endpoint": target.endpoint.clone(), "cwd": root}
         }))?)
         .await;
-    if !matches!(fresh.as_ref().map_err(crate::collaboration_application::ScheduleOperationFailure::failure), Err(failure)
+    if !matches!(fresh.as_ref().map_err(|error|match error { crate::ScheduleCommandFailure::Local(failure)=>Some(failure.failure()), _=>None }), Err(Some(failure))
         if failure.field.as_deref() == Some("destination")
             && failure.constraint.as_deref().is_some_and(|fix| fix.contains("conversation create")))
     {
-        return Err("fresh provider schedule activation lacked the create-first fix".into());
+        return Err("target-side fresh provider preparation lacked the create-first fix".into());
     }
     let operation_id = OperationId::generate();
     let prepared = application
@@ -284,7 +277,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
             "destination":{"kind":"fork","source":target,"throughTurnId":"turn-one","cwd":root}
         }))?)
         .await;
-    if !matches!(fork.as_ref().map_err(crate::collaboration_application::ScheduleOperationFailure::failure), Err(failure)
+    if !matches!(fork.as_ref().map_err(|error|match error { crate::ScheduleCommandFailure::Local(failure)=>Some(failure.failure()), _=>None }), Err(Some(failure))
         if matches!(failure.kind, collaboration_protocol::ScheduleFailureKind::UnsupportedCapability)
             && matches!(failure.effects, collaboration_protocol::ScheduleEffects::Route { ref evidence } if matches!(evidence.as_ref(), DeliveryRouteEvidence::ProviderAcp { .. })))
     {

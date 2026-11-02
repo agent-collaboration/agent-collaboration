@@ -261,6 +261,22 @@ async fn custody_bounds(
     machine: &mut NativeBoardSession,
     case: &Fixture<'_>,
 ) -> ConformanceResult<()> {
+    fixture::mutate(
+        client,
+        &case.entry.automation_id,
+        AutomationFixtureMutation::FiringOutcome {
+            firing_id: case.entry.firing_id.clone(),
+            report_seq: 0,
+            outcome_json: json!({"state":"uncertain","reason":"stored zero must be refused"})
+                .to_string(),
+        },
+    )
+    .await?;
+    assert!(
+        matches!(show_firing(machine, case.entry).await?,
+        AutomationAnswer::Refused(AutomationRefusal::InvalidRecord { field }) if field == "report_seq"),
+        "stored zero sequence was accepted or coerced"
+    );
     let reason = "🦀".repeat(limits::TEXT_MAX_BYTES / 4 + 1);
     fixture::mutate(
         client,

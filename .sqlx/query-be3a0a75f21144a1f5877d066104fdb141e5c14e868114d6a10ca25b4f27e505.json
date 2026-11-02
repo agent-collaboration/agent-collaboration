@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT report_id,subject_kind,subject_id,report_seq,report_json,queued_at_ms FROM central_report_outbox ORDER BY queued_at_ms,report_id LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "name": "report_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "report_id"
+          }
+        }
+      },
+      {
+        "name": "subject_kind",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "subject_kind"
+          }
+        }
+      },
+      {
+        "name": "subject_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "name": "report_seq",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "report_seq"
+          }
+        }
+      },
+      {
+        "name": "report_json",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "report_json"
+          }
+        }
+      },
+      {
+        "name": "queued_at_ms",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "central_report_outbox",
+            "name": "queued_at_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "be3a0a75f21144a1f5877d066104fdb141e5c14e868114d6a10ca25b4f27e505"
+}

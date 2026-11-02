@@ -117,6 +117,36 @@ async fn wake_application(directory: &std::path::Path) -> CollaborationApplicati
     (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
+/// These transport/lifecycle cases exercise an actual retained Local cursor, not new creation.
+async fn retained_local_wake(directory: &std::path::Path) -> collaboration_protocol::WakeupId {
+    let request: collaboration_protocol::WakeSendRequest =
+        serde_json::from_value(wake_send_arguments()).expect("retained Wake fixture");
+    let mut store = automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
+        .await
+        .expect("retained Local store");
+    let created = store
+        .create_wakeup(&automation_storage::WakeCreate {
+            operation_id: request.operation_id,
+            requested_by: request.requested_by,
+            replace: request.replace,
+            message: request.message,
+            timing: serde_json::from_value(serde_json::to_value(request.timing).expect("timing"))
+                .expect("retained timing"),
+            expiry: serde_json::from_value(serde_json::to_value(request.expiry).expect("expiry"))
+                .expect("retained expiry"),
+            now_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("fixture clock after epoch")
+                .as_millis()
+                .try_into()
+                .expect("fixture milliseconds fit storage"),
+        })
+        .await
+        .expect("actual pre-upgrade Local Wake");
+    store.close().await.expect("retained fixture store closed");
+    created.definition.wakeup_id
+}
+
 fn project_create_arguments(name: &str, board: &BoardId, project: ProjectId) -> Value {
     json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,
         "projectId":project,"boardId":board,"title":name,"actor":owner()})
@@ -235,20 +265,19 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
 }
 
 #[tokio::test]
-async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change() {
+async fn a_retained_local_wake_wait_returns_a_cursor_and_the_next_wait_misses_no_change() {
     // Arrange
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
     let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = api.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
+    let wakeup_id = retained_local_wake(directory.path()).await;
     let first = api
         .call_tool(
             "wake_wait_until_first_fire",
             json!({"wakeupId": wakeup_id, "timeoutSeconds": 1}),
         )
         .await;
-    let cursor = structured(&first)["cursor"].clone();
+    let cursor = structured(&first)["value"]["cursor"].clone();
     // The wake pauses and resumes between the two waits: only the cursor still sees it.
     for operation in ["wake_pause", "wake_resume"] {
         let changed = api
@@ -278,12 +307,14 @@ async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change
         .await;
 
     // Assert
-    assert_eq!(structured(&first)["outcome"]["kind"], "timedOut");
+    assert_eq!(structured(&first)["kind"], "local");
+    assert_eq!(structured(&first)["value"]["outcome"]["kind"], "timedOut");
     assert!(cursor.is_string(), "the bounded wait returns its cursor");
-    assert_eq!(structured(&resumed)["outcome"]["kind"], "paused");
-    assert_ne!(structured(&resumed)["cursor"], cursor);
+    assert_eq!(structured(&resumed)["kind"], "local");
+    assert_eq!(structured(&resumed)["value"]["outcome"]["kind"], "paused");
+    assert_ne!(structured(&resumed)["value"]["cursor"], cursor);
     assert_eq!(
-        structured(&fresh)["outcome"]["kind"],
+        structured(&fresh)["value"]["outcome"]["kind"],
         "timedOut",
         "a wait without the cursor starts from the current state and never sees the pause"
     );
@@ -341,14 +372,7 @@ async fn a_listener_past_its_request_limit_answers_overloaded() {
     config.concurrent_requests = 1;
     let api = ServedApi::tcp(&config).await;
     // Raw stateless calls: an rmcp client's handshake would itself take the only slot.
-    let (_, wake) = api
-        .post(
-            &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
-                "name":"wake_send","arguments":wake_send_arguments()
-            }}),
-        )
-        .await;
-    let wakeup_id = wake["result"]["structuredContent"]["definition"]["wakeupId"].clone();
+    let wakeup_id = retained_local_wake(directory.path()).await;
     let url = api.url();
     let holding = tokio::spawn(async move {
         reqwest::Client::new()

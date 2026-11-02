@@ -12,9 +12,10 @@ use crate::{
     fleet_row_ids::FleetRowIds,
 };
 use collaboration_protocol::{
-    AutomationAnswer, AutomationId, AutomationKind, AutomationRefusal, AutomationTiming,
-    CatalogAutomation, ExecutionDestination, ImportedContinuity, ScheduleCreateRequest,
-    ScheduleDefinition, ScheduleId, ScheduleSnapshot, ScheduleUpdateRequest, WakeCreator,
+    AutomationAnswer, AutomationId, AutomationKind, AutomationRefusal, AutomationRequestConstraint,
+    AutomationTiming, CatalogAutomation, ExecutionDestination, ImportedContinuity,
+    ScheduleBindPreparedRequest, ScheduleCreateRequest, ScheduleDefinition, ScheduleId,
+    ScheduleSnapshot, ScheduleUpdateRequest, WakeCreator,
 };
 use durable_steps::storage::TransactionScope;
 use message_board::ServiceId;
@@ -116,6 +117,11 @@ where
         return Ok(AutomationAnswer::Faulted(faulted));
     }
     let record = catalog::decode(row)?;
+    if matches!(record.definition, StoredAutomationDefinition::Suspended(_)) {
+        return Ok(AutomationAnswer::Suspended(
+            crate::automation_suspended_store::snapshot(&record)?,
+        ));
+    }
     if !matches!(record.definition, StoredAutomationDefinition::Schedule(_)) {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     }
@@ -162,6 +168,11 @@ where
         ));
     };
     let execution_mode = *execution_mode;
+    if let ScheduleEdit::Replace(request) = &edit
+        && matches!(record.definition, StoredAutomationDefinition::Suspended(_))
+    {
+        return repair_suspended(scope, record, request, now_ms, row_ids).await;
+    }
     let StoredAutomationDefinition::Schedule(schedule) = &mut record.definition else {
         return Ok(AutomationAnswer::Refused(AutomationRefusal::NotFound));
     };
@@ -199,7 +210,7 @@ where
         }
         ScheduleEdit::SetEnabled(enabled) => {
             schedule.definition.enabled = enabled;
-            validation::definition(&schedule.definition)?;
+            validation::retained_definition(&schedule.definition)?;
             if enabled {
                 require_target(scope, &schedule.definition).await?;
             }
@@ -244,6 +255,82 @@ where
     let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
     catalog::update(scope, &record).await?;
     crate::automation_pending_mutation::commit(scope, pending).await?;
+    Ok(answer)
+}
+
+pub(crate) async fn bind_prepared<Scope: TransactionScope>(
+    scope: &mut Scope,
+    request: &ScheduleBindPreparedRequest,
+    installation: &ServiceId,
+    row_ids: &mut FleetRowIds,
+) -> AutomationStoreResult<AutomationAnswer>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let Some(row) = crate::generated_automation_catalog::read_automation(
+        scope,
+        request.automation_id.as_str().into(),
+    )
+    .await?
+    else {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    };
+    if crate::automation_fault_projection::projection(&row)?.is_some() {
+        return Err(AutomationStoreError::InvalidRecord("faulted_automation"));
+    }
+    let mut record = catalog::decode(row)?;
+    if record.state == CatalogState::Deleted {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    }
+    let StoredAutomationDefinition::Schedule(schedule) = &mut record.definition else {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    };
+    if record.revision != request.expected_revision {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::ScheduleChangeConflict {
+                current_change_id: record.revision,
+            },
+        ));
+    }
+    if !matches!(
+        schedule.definition.destination,
+        ExecutionDestination::Unprepared
+    ) {
+        return Err(AutomationStoreError::InvalidRequest {
+            field: "destination",
+            reason: AutomationRequestConstraint::UnpreparedDestination,
+        });
+    }
+    if String::from(request.bound_thread.target.endpoint.service_id.clone())
+        != installation.as_str()
+    {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::OriginMismatch,
+        ));
+    }
+    let mut definition = schedule.definition.clone();
+    definition.destination = ExecutionDestination::OwnedThread {
+        target: request.bound_thread.target.clone(),
+        cwd: request.bound_thread.cwd.clone(),
+    };
+    validation::retained_definition(&definition)?;
+    require_target(scope, &definition).await?;
+    schedule.definition = definition;
+    record.revision = row_ids
+        .next()?
+        .to_string()
+        .try_into()
+        .map_err(|_| AutomationStoreError::InvalidRecord("revision"))?;
+    // Preparation preserves the independent header, timing and custody progress.
+    let answer = AutomationAnswer::Mutation {
+        automation: CatalogAutomation::Schedule(snapshot(&record)?),
+        already_sent: crate::automation_firing_store::sent_firings(scope, &record.id).await?,
+    };
+    catalog::update(scope, &record).await?;
     Ok(answer)
 }
 
@@ -316,9 +403,83 @@ where
     row.revision = Some(row_ids.next()?.to_string());
     row.fault_json = None;
     row.faulted_at_ms = None;
+    row.legacy_timing_json = None;
     // The validated replacement changes only executable fields and revision.
     // The original independent header, including updated_at, is retained.
     let record = catalog::decode(row)?;
+    let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
+    let answer = AutomationAnswer::Mutation {
+        automation: CatalogAutomation::Schedule(snapshot(&record)?),
+        already_sent: crate::automation_firing_store::sent_firings(scope, &record.id).await?,
+    };
+    catalog::update(scope, &record).await?;
+    crate::automation_pending_mutation::commit(scope, pending).await?;
+    Ok(answer)
+}
+
+async fn repair_suspended<Scope: TransactionScope>(
+    scope: &mut Scope,
+    mut record: AutomationRecord,
+    request: &ScheduleUpdateRequest,
+    now_ms: i64,
+    row_ids: &mut FleetRowIds,
+) -> AutomationStoreResult<AutomationAnswer>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    if record.revision != request.expected_change_id {
+        return Err(AutomationStoreError::Refused(
+            AutomationRefusal::ScheduleChangeConflict {
+                current_change_id: record.revision,
+            },
+        ));
+    }
+    let StoredAutomationDefinition::Suspended(suspended) = &record.definition else {
+        return Err(AutomationStoreError::InvalidRecord("suspended.kind"));
+    };
+    let crate::automation_catalog_record::StoredSuspendedConfiguration::Schedule(configuration) =
+        &suspended.configuration
+    else {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    };
+    let AutomationRecordHeader::Schedule { execution_mode, .. } = &record.header else {
+        return Err(AutomationStoreError::InvalidRecord(
+            "schedule.record_header",
+        ));
+    };
+    let mut definition = request.definition.clone();
+    definition.enabled = configuration.enabled;
+    execution_mode.require_destination(&definition.destination)?;
+    validation::definition(&definition)?;
+    require_target(scope, &definition).await?;
+    if instructions::read(scope, &definition.instruction_id)
+        .await?
+        .is_none()
+    {
+        return Err(AutomationStoreError::Refused(AutomationRefusal::NotFound));
+    }
+    let timing = AutomationTiming::resolve(&definition.timing, AutomationKind::Schedule, now_ms)?;
+    record.next_due = if definition.enabled {
+        timing.next_after(now_ms)?
+    } else {
+        None
+    };
+    record.state = if definition.enabled {
+        CatalogState::Enabled
+    } else {
+        CatalogState::Disabled
+    };
+    record.definition =
+        StoredAutomationDefinition::Schedule(StoredScheduleDefinition { definition, timing });
+    record.revision = row_ids
+        .next()?
+        .to_string()
+        .try_into()
+        .map_err(|_| AutomationStoreError::InvalidRecord("revision"))?;
     let pending = crate::automation_pending_mutation::prepare(scope, &record).await?;
     let answer = AutomationAnswer::Mutation {
         automation: CatalogAutomation::Schedule(snapshot(&record)?),

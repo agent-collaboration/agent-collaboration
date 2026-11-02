@@ -51,7 +51,7 @@ CREATE TABLE automation_firings (
     content_id TEXT NOT NULL REFERENCES content_revisions(content_id),
     state TEXT NOT NULL,
     batch_id TEXT REFERENCES automation_batches(batch_id) ON DELETE SET NULL,
-    report_seq INTEGER NOT NULL,
+    report_seq INTEGER,
     report_service_id TEXT,
     outcome_json TEXT,
     folded_through_ms INTEGER,

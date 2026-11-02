@@ -3,7 +3,7 @@ use crate::{ConformanceClient, ConformanceResult};
 use collaboration_central_core::{AutomationFixtureMutation, StepControl, StepControlReply};
 use collaboration_protocol::AutomationId;
 
-pub(super) async fn automation(
+pub(crate) async fn automation(
     client: &ConformanceClient,
     id: &AutomationId,
     definition_json: Option<String>,
@@ -11,7 +11,7 @@ pub(super) async fn automation(
     request(client, id, definition_json, None).await
 }
 
-pub(super) async fn mutate(
+pub(crate) async fn mutate(
     client: &ConformanceClient,
     id: &AutomationId,
     mutation: AutomationFixtureMutation,

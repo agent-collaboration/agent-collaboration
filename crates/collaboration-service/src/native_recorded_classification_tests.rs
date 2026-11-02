@@ -18,6 +18,7 @@ async fn policy_recorded_snapshot_survives_route_mutation_without_second_lookup(
     fixture
         .broker
         .register_route(ApprovalRoute {
+            source_installation: None,
             thread_id: THREAD.into(),
             created_by: target(),
             approver: target(),
@@ -57,6 +58,7 @@ async fn policy_generic_snapshot_stays_generic_until_the_next_attempt() {
     fixture
         .broker
         .register_route(ApprovalRoute {
+            source_installation: None,
             thread_id: THREAD.into(),
             created_by: target(),
             approver: target(),

@@ -23,6 +23,10 @@ use tokio::sync::Mutex;
 #[path = "wakeup_delivery_sender_tests.rs"]
 mod tests;
 
+#[cfg(all(test, debug_assertions))]
+#[path = "central_wake_fault_tests.rs"]
+mod central_fault_tests;
+
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn wake_handoff_checkpoint(stage: &str) {
     if std::env::var("NATIVE_DELIVERY_TEST_CRASH_STAGE").as_deref() == Ok(stage) {
@@ -197,6 +201,57 @@ impl WakeDeliverySender {
             .await
             .map_err(|_| StorageError::InvalidRecord)?
             .into_receipt();
+        #[cfg(debug_assertions)]
+        {
+            let accepted_evidence = sink.latest.lock().await.clone();
+            let native_input_accepted = match accepted_evidence.as_ref() {
+                Some(RouteEffectEvidence::CodexAppServer(native)) => {
+                    native.submission == agent_automation::SubmissionEffect::Accepted
+                }
+                Some(RouteEffectEvidence::ProviderAcp(provider)) => {
+                    provider.submission == agent_automation::SubmissionEffect::Accepted
+                }
+                Some(RouteEffectEvidence::ClaudeCodePeer(peer)) => {
+                    peer.write == agent_automation::PeerWriteEffect::Written
+                }
+                None => false,
+            };
+            if native_input_accepted
+                && matches!(
+                    receipt.outcome,
+                    DeliveryOutcome::Started
+                        | DeliveryOutcome::Steered
+                        | DeliveryOutcome::StartedOrSteered
+                        | DeliveryOutcome::Queued
+                        | DeliveryOutcome::PeerMessageWritten
+                )
+            {
+                let (faults, evidence) = {
+                    let mut owner = store.lock().await;
+                    (
+                        owner.automation_faults(),
+                        owner.central_delivery_fault_evidence(&delivery_id).await?,
+                    )
+                };
+                if let (Some(faults), Some(mut evidence)) = (faults, evidence) {
+                    evidence.delivery_attempt_id = Some(claim.attempt_id.clone());
+                    if let Some(collaboration_protocol::DeliveryClientReceipt::ProviderAcp {
+                        operation_id,
+                    }) = &receipt.client
+                    {
+                        evidence.operation_id = Some(operation_id.clone());
+                    }
+                    evidence.native_turn_id = match accepted_evidence.as_ref() {
+                        Some(RouteEffectEvidence::CodexAppServer(native)) => {
+                            native.native_turn_id.clone()
+                        }
+                        _ => None,
+                    };
+                    faults.hold(automation_storage::AutomationFaultPoint::NativeInputAcceptedBeforeOutcomeCommit,evidence)
+                .await;
+                }
+            }
+        }
         #[cfg(any(test, feature = "test-support"))]
         if matches!(
             receipt.outcome,

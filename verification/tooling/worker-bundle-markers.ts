@@ -35,5 +35,6 @@ export const automationClockMarkers: readonly string[] = [
   "automationClock",
   "automationStoreFailures",
   "automationFixture",
+  "machineWorkFixture",
   "_cf_automation_verification_alarm",
 ];

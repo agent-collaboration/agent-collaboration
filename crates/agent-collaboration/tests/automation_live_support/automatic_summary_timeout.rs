@@ -3,8 +3,8 @@ use super::proof_context::{ProofContext, ProofResult, agent_text};
 use collaboration_client::protocol::{
     AutomationConfigureRequest, CessationEvidence, ExecutionDestination, InstructionCreateParams,
     OperationId, RunExecution, RunListRequest, RunState, RunSummariesRequest,
-    ScheduleCreateRequest, ScheduleDefinition, ScheduleShowRequest, SummaryInspectionState,
-    TimingRequest, WorkerOutcome,
+    ScheduleCreateRequest, ScheduleDefinition, SummaryInspectionState, TimingRequest,
+    WorkerOutcome,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -44,8 +44,8 @@ pub async fn exercise() -> ProofResult<()> {
                     cwd: proof.workspace.to_string_lossy().into_owned(),
                 },
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;
@@ -166,13 +166,17 @@ pub async fn exercise() -> ProofResult<()> {
         return Err("Worker completion was not independently verified from native history".into());
     }
     let current = proof
-        .client
-        .read_schedule(ScheduleShowRequest {
-            schedule_id: schedule.schedule_id,
-        })
+        .firing_for_run(&schedule.schedule_id, &blocked.run_id)
         .await?;
-    if current.active_run_id.as_ref() != Some(&blocked.run_id) {
-        return Err("Timed-out required summary released the schedule slot".into());
+    proof.record(
+        "centralSummaryOccupancyObserved",
+        json!({"runId":&blocked.run_id,"firing":&current}),
+    )?;
+    if !matches!(current.as_ref().map(|firing|&firing.outcome),Some(collaboration_client::protocol::FiringOutcome::RunStarted {run_id}) if run_id==&blocked.run_id)
+    {
+        return Err(
+            "Timed-out summary lacked central RunStarted evidence for its exact Run".into(),
+        );
     }
     proof.record(
         "automaticNativeSummaryTimeoutVerified",

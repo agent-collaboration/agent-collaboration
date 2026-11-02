@@ -36,3 +36,6 @@ mod inspect_snapshot_tests;
 
 #[path = "tests/remote_wake_schema_tests.rs"]
 mod remote_wake_schema_tests;
+
+#[path = "tests/central_automation_schema_tests.rs"]
+mod central_automation_schema_tests;

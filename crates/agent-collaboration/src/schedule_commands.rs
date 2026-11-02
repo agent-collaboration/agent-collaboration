@@ -74,7 +74,7 @@ enum ScheduleAction {
         #[arg(long)]
         operation_id: Option<String>,
     },
-    /// Inspect configuration, timing and derived active/waiting run identities.
+    /// Inspect configuration and timing. Central occupancy is available through Firing inspection.
     Show {
         #[arg(long)]
         schedule_id: String,
@@ -124,6 +124,10 @@ impl PreparedSchedule {
 #[serde(untagged)]
 enum ScheduleOutput {
     Snapshot(Box<ScheduleSnapshot>),
+    Created(Box<collaboration_client::CentralScheduleSnapshot>),
+    SelectedMutation(Box<collaboration_client::ScheduleMutationResponse>),
+    Catalog(Box<collaboration_client::ScheduleReadResponse>),
+    Mutation(Box<collaboration_client::CatalogMutationResult>),
     Package(collaboration_client::protocol::ScheduleExportResult),
 }
 pub fn run_schedule_command(arguments: Vec<OsString>) -> i32 {
@@ -199,9 +203,10 @@ pub fn run_schedule_command(arguments: Vec<OsString>) -> i32 {
         let snapshot_output =
             |snapshot: ScheduleSnapshot| ScheduleOutput::Snapshot(Box::new(snapshot));
         match prepared {
-            PreparedSchedule::Import(request) => {
-                client.import_schedule(request).await.map(snapshot_output)
-            }
+            PreparedSchedule::Import(request) => client
+                .import_schedule(request)
+                .await
+                .map(|result| ScheduleOutput::Mutation(Box::new(result))),
             PreparedSchedule::Export(request) => client
                 .export_schedule(request)
                 .await
@@ -218,21 +223,26 @@ pub fn run_schedule_command(arguments: Vec<OsString>) -> i32 {
                 })
                 .await
                 .map(snapshot_output),
-            PreparedSchedule::Create(request) => {
-                client.create_schedule(*request).await.map(snapshot_output)
-            }
-            PreparedSchedule::Update(request) => {
-                client.update_schedule(*request).await.map(snapshot_output)
-            }
-            PreparedSchedule::Show(request) => {
-                client.read_schedule(request).await.map(snapshot_output)
-            }
-            PreparedSchedule::Enable(request) => {
-                client.enable_schedule(request).await.map(snapshot_output)
-            }
-            PreparedSchedule::Disable(request) => {
-                client.disable_schedule(request).await.map(snapshot_output)
-            }
+            PreparedSchedule::Create(request) => client
+                .create_schedule(*request)
+                .await
+                .map(|value| ScheduleOutput::Created(Box::new(value))),
+            PreparedSchedule::Update(request) => client
+                .update_schedule(*request)
+                .await
+                .map(|result| ScheduleOutput::SelectedMutation(Box::new(result))),
+            PreparedSchedule::Show(request) => client
+                .read_schedule(request)
+                .await
+                .map(|result| ScheduleOutput::Catalog(Box::new(result))),
+            PreparedSchedule::Enable(request) => client
+                .enable_schedule(request)
+                .await
+                .map(|result| ScheduleOutput::SelectedMutation(Box::new(result))),
+            PreparedSchedule::Disable(request) => client
+                .disable_schedule(request)
+                .await
+                .map(|result| ScheduleOutput::SelectedMutation(Box::new(result))),
         }
     });
     if !dispatched
@@ -284,6 +294,32 @@ pub fn run_schedule_command(arguments: Vec<OsString>) -> i32 {
                 if uncertain { 5 } else { 4 },
             )
         }
+        Err(ScheduleClientError::Catalog(error)) => {
+            let code = match &error {
+                collaboration_client::CentralCatalogFailure::CentralUnreachable { .. } => 3,
+                collaboration_client::CentralCatalogFailure::OutcomeUnknown { .. } => 5,
+                collaboration_client::CentralCatalogFailure::Refused { .. } => 4,
+            };
+            (
+                json!({"kind":"error","operationId":operation_id,"error":error}),
+                code,
+            )
+        }
+        Err(ScheduleClientError::Selection(error)) => (
+            json!({"kind":"error","operationId":operation_id,"error":error}),
+            if matches!(
+                *error,
+                collaboration_client::ScheduleSelectionFailure::HandoverPending { .. }
+            ) {
+                4
+            } else {
+                3
+            },
+        ),
+        Err(ScheduleClientError::ReadFailure(error)) => (
+            json!({"kind":"error","operationId":operation_id,"error":error}),
+            4,
+        ),
         Err(ScheduleClientError::Connection(_)) => {
             let uncertain = dispatched && operation_id.is_some();
             (

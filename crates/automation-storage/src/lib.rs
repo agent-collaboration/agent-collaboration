@@ -1,6 +1,8 @@
 //! SQLite persistence for local automation, independent of the Host executable.
 mod automation_connection;
-pub use automation_connection::{AutomationStore, StorageError, apply_message_drop_migration};
+pub use automation_connection::{AutomationStore, apply_message_drop_migration};
+mod automation_error;
+pub use automation_error::StorageError;
 mod automation_retention;
 mod instruction_repository;
 mod instruction_revision_read;
@@ -51,7 +53,10 @@ mod schedule_mutations;
 pub use schedule_mutations::{ScheduleEdit, ScheduleMutation};
 mod thread_binding_repository;
 pub use thread_binding_repository::ThreadBindingClaim;
+mod central_bind_request;
+mod central_preparation_projection;
 mod external_operation_receipts;
+pub use central_bind_request::StoredCentralBindRequest;
 mod operation_receipt_read;
 pub use external_operation_receipts::{
     ExternalAdmission, ExternalAdmissionResult, ExternalOperationRecord,
@@ -113,12 +118,24 @@ pub use schedule_import::ScheduleImport;
 
 mod remote_wake_requests;
 pub use remote_wake_requests::{
-    RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
+    RecordedRemoteWake, RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
 };
 
+mod central_report_outbox;
+pub use central_report_outbox::{CentralReportBatch, CentralReportId, QueuedCentralReport};
+mod central_definition_projection;
+mod central_firing_contract;
+mod central_firing_projection;
+mod central_firing_receipts;
+mod central_wake_admission;
+pub use central_firing_contract::{CentralFiringReceipt, CentralFiringRequest, CentralLocalWork};
+mod central_work_transitions;
 #[cfg(debug_assertions)]
 mod debug_automation_faults;
 #[cfg(debug_assertions)]
 pub use debug_automation_faults::{
     AutomationFaultEvidence, AutomationFaultObserver, AutomationFaultPoint,
 };
+mod automation_authority;
+mod automation_command_owner;
+pub use automation_command_owner::StoredAutomationOwner;

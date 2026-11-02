@@ -118,10 +118,17 @@ impl<P: InteractionPort> Drop for ApprovalContextGuard<P> {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum CreateSettingsFailurePolicy {
+    CloseUnchangedSession,
+    RetainCreatedSession,
+}
+
 enum ProviderCommand<P: InteractionPort> {
     Create {
         cwd: PathBuf,
         settings: crate::RequestedProviderSettings,
+        settings_failure: CreateSettingsFailurePolicy,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
         >,

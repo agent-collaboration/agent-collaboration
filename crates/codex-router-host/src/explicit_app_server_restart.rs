@@ -57,7 +57,14 @@ pub(crate) fn restart_app_server(
         .await
         {
             Ok(Ok(launch_plan)) => launch_plan,
-            Ok(Err(_error)) => {
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    %error,
+                    preparation_elapsed_ms = %timing.elapsed().as_millis(),
+                    preparation_deadline_ms = %config.deadlines().app_server_start().as_millis(),
+                    deadline_hit = false,
+                    "app-server restart preparation failed"
+                );
                 return AppServerRestartCompletion {
                     child: current_child,
                     readiness: None,
@@ -67,6 +74,12 @@ pub(crate) fn restart_app_server(
                 };
             }
             Err(_elapsed) => {
+                tracing::warn!(
+                    preparation_elapsed_ms = %timing.elapsed().as_millis(),
+                    preparation_deadline_ms = %config.deadlines().app_server_start().as_millis(),
+                    deadline_hit = true,
+                    "app-server restart preparation timed out"
+                );
                 return AppServerRestartCompletion {
                     child: current_child,
                     readiness: None,
@@ -76,6 +89,11 @@ pub(crate) fn restart_app_server(
                 };
             }
         };
+        tracing::info!(
+            preparation_elapsed_ms = %timing.elapsed().as_millis(),
+            preparation_deadline_ms = %config.deadlines().app_server_start().as_millis(),
+            "app-server restart preparation completed"
+        );
         crate::debug_readiness_timing::record("restartPrepared", timing);
         let mut shutdown_outcome = None;
         if let Some(mut child) = current_child {

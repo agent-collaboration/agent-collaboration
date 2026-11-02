@@ -101,7 +101,7 @@ async fn startup_mail_refuses_a_different_physical_interaction_store() {
 }
 
 #[tokio::test]
-async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
+async fn startup_retired_inbound_wakes_leave_local_wait_capacity_available() {
     let (_directory, construction, mail, actors) = fixture().await;
     let application = construction.clone().build();
     let request: WakeSendRequest = serde_json::from_value(json!({
@@ -109,7 +109,11 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
         "message":{"target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"capacity"},"content":{"kind":"humanUser","text":"capacity"},"delivery":"auto"},
         "timing":{"kind":"interval","seconds":300},"expiry":{"kind":"after","seconds":3600}
     })).expect("wake request");
-    let saved = application.wakes().wake_send(request).await.expect("wake");
+    let saved = application
+        .wakes()
+        .wake_send_local(request)
+        .await
+        .expect("legacy local wake");
     application
         .wakes()
         .wake_pause(WakeMutationRequest {
@@ -145,18 +149,18 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
     )
     .expect("wake envelope");
 
-    assert!(matches!(
-        application
-            .wakes()
-            .wake_wait_until_first_fire(wait.clone())
-            .await
-            .expect("outbound wait")
-            .outcome,
-        WakeWaitOutcome::Paused
-    ));
-    let inbound = mail.consumer.deliver_wake(&item, &body).await;
+    let crate::WakeWaitResponse::Local { value: local_wait } = application
+        .wakes()
+        .wake_wait_until_first_fire(wait.clone())
+        .await
+        .expect("outbound wait")
+    else {
+        panic!("stored local Wake must retain its local wait");
+    };
+    assert!(matches!(local_wait.outcome, WakeWaitOutcome::Paused));
+    let inbound = mail.consumer.deliver_wake(&item, &body);
     assert!(
-        matches!(inbound.outcome, LocalOutcome::Delivered { acceptance: CarrierAcceptance::Wake(answer) } if matches!(*answer, RemoteWakeResult::Wait(_)))
+        matches!(inbound.outcome, LocalOutcome::Delivered { acceptance: CarrierAcceptance::Wake(answer) } if matches!(*answer, RemoteWakeResult::Refused { reason: collaboration_mail_protocol::RemoteWakeRefusal::AutomationUnavailable, mutation: collaboration_mail_protocol::RemoteWakeMutationState::None }))
     );
 
     let held = construction
@@ -171,7 +175,7 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
             .await
             .is_err()
     );
-    let inbound = mail.consumer.deliver_wake(&item, &body).await;
+    let inbound = mail.consumer.deliver_wake(&item, &body);
     assert!(
         matches!(inbound.outcome, LocalOutcome::Delivered { acceptance: CarrierAcceptance::Wake(answer) } if matches!(*answer, RemoteWakeResult::Refused { .. }))
     );

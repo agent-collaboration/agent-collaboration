@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT firing_id,batch_id,local_work_ref,state,report_seq FROM firing_receipts WHERE firing_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "firing_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "firing_id"
+          }
+        }
+      },
+      {
+        "name": "batch_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "batch_id"
+          }
+        }
+      },
+      {
+        "name": "local_work_ref",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "local_work_ref"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "report_seq",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "firing_receipts",
+            "name": "report_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "aebdaf93f16185c269217a015a7be169c322a6d0992fe985a87558b95561e9b7"
+}

@@ -165,50 +165,75 @@ async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable
 async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried()
 -> Result<(), TestError> {
     timeout(BOUND, async {
+        eprintln!("native-close diagnostic: fixture.start started");
         let fixture = BoardFixture::start().await?;
+        eprintln!("native-close diagnostic: fixture.project started");
         let (project, _) = fixture.project().await?;
+        eprintln!("native-close diagnostic: registry.database started");
         let database = fixture._registry.database(&project).await?;
+        eprintln!("native-close diagnostic: registry.read_project started");
         let reader = fixture
             ._registry
             .read_project(&project)
             .await?
             .ok_or("reader")?;
+        eprintln!("native-close diagnostic: supersede authority started");
         supersede(&fixture._registry, &project).await?;
         // This real checked-out connection pins NativeFileOwner::close after
         // the registry's exclusive gate is taken; it is not a pool stand-in.
+        eprintln!("native-close diagnostic: held begin_read started");
         let held = database.reader().begin_read().await?;
         // The gate precedes an asynchronous authority read. Observe the actual
         // native-drain boundary before cancellation, while the real read pins it.
         let started = Arc::new(AtomicBool::new(false));
-        let subscriber = tracing_subscriber::registry().with(NativeDrainStarted(started.clone()));
+        let subscriber = tracing_subscriber::registry()
+            .with(NativeDrainStarted(started.clone()))
+            .with(tracing_subscriber::fmt::layer().with_test_writer());
+        let diagnostic_dispatch = tracing::Dispatch::new(subscriber);
         let mut closing = Box::pin(
             fixture
                 ._registry
                 .supersede_project(&project)
-                .with_subscriber(subscriber),
+                .with_subscriber(diagnostic_dispatch.clone()),
         );
+        eprintln!("native-close diagnostic: first supersede_project native drain started");
         wait_for_native_drain(closing.as_mut(), &started).await?;
         let mut reading = Box::pin(reader.snapshot());
         assert!(matches!(futures_util::poll!(&mut reading), Poll::Pending));
         drop(reading);
         drop(closing);
+        eprintln!("native-close diagnostic: first supersede_project cancelled; unavailable snapshot started");
         assert!(matches!(
             reader.snapshot().await,
             Err(ProjectRegistryError::Unavailable { .. })
         ));
+        eprintln!("native-close diagnostic: unavailable open_project started");
         assert!(fixture._registry.open_project(&project).await.is_err());
-        let mut retrying = Box::pin(fixture._registry.supersede_project(&project));
+        let mut retrying = Box::pin(
+            fixture
+                ._registry
+                .supersede_project(&project)
+                .with_subscriber(diagnostic_dispatch),
+        );
+        eprintln!("native-close diagnostic: retry supersede_project transition gate started");
         wait_for_transition_gate(retrying.as_mut(), &reader).await?;
+        eprintln!("native-close diagnostic: held read.close started");
         held.close().await?;
+        eprintln!("native-close diagnostic: held read.close completed; retry supersede_project started");
         retrying.await?;
+        eprintln!("native-close diagnostic: retry supersede_project completed; terminal snapshot started");
         assert!(matches!(
             reader.snapshot().await,
             Err(ProjectRegistryError::Unavailable { .. })
         ));
+        eprintln!("native-close diagnostic: terminal database lookup started");
         assert!(fixture._registry.database(&project).await.is_err());
         drop(reader);
         drop(database);
-        fixture.stop().await
+        eprintln!("native-close diagnostic: fixture.stop started");
+        let result = fixture.stop().await;
+        eprintln!("native-close diagnostic: fixture.stop completed");
+        result
     })
     .await?
 }

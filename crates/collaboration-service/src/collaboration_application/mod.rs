@@ -18,11 +18,20 @@ mod automation_history_operations;
 mod automation_inspection_operations;
 mod automation_operations;
 mod board_operations;
+mod catalog_firing_operations;
+mod catalog_inspection_operations;
+mod catalog_schedule_operations;
+mod catalog_schedule_packages;
+mod central_preparation_replay;
+mod central_schedule_preparation;
 mod conversation_operations;
 mod interaction_operations;
 mod journal_operations;
+mod local_schedule_operations;
 mod message_operations;
 mod provider_observation_operations;
+mod schedule_catalog_listing;
+mod schedule_list_cursor;
 mod schedule_operations;
 mod session_context_reader;
 mod session_native_control;
@@ -36,8 +45,11 @@ pub use session_context_reader::SessionContextReader;
 pub use session_native_control::NativeSessionControl;
 pub(crate) mod wake_operations;
 
+pub use crate::schedule_command_failure::ScheduleOperationFailure;
 pub use automation_operations::AutomationOperations;
 pub use board_operations::{BoardOperations, ThreadWaitBudgetError, thread_wait_root_notice_limit};
+pub use catalog_firing_operations::FiringShowRequest;
+pub use catalog_schedule_packages::SchedulePackageFailure;
 pub use conversation_operations::{ConversationFailure, ConversationOperations};
 pub use interaction_operations::{InteractionFailure, InteractionOperations, QuestionRejection};
 pub use journal_operations::{
@@ -50,7 +62,6 @@ pub use message_operations::{
 pub use provider_observation_operations::{
     ObservationFailure, ObservationOperations, ObservedEventSink,
 };
-pub use schedule_operations::ScheduleOperationFailure;
 pub use session_operations::{
     EndpointDirectoryUnavailable, InstallationIdentityUnavailable, SessionOperations,
 };
@@ -159,9 +170,9 @@ impl CollaborationApplication {
 
 // Rejection tests compose existing failure builders without exposing application internals.
 #[cfg(test)]
-pub(crate) use automation_operations::run_failure_context;
+pub(crate) use crate::schedule_command_failure::{ScheduleFailureContext, schedule_failure};
 #[cfg(test)]
-pub(crate) use schedule_operations::{ScheduleFailureContext, schedule_failure};
+pub(crate) use automation_operations::run_failure_context;
 #[cfg(test)]
 pub(crate) use session_native_control::INVALID_NATIVE_PARAMETERS;
 
@@ -178,7 +189,6 @@ pub(crate) fn instruction_rejection_fixture(
         InstructionContext {
             operation_id: None,
             instruction_id: None,
-            mutation: true,
             current_revision_id: None,
         },
         InstructionFailureReason {

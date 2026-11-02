@@ -23,6 +23,19 @@ pub struct FleetTestRuntime {
     central: CentralOwner,
 }
 impl FleetTestRuntime {
+    /// Drive the configured central's existing conformance controls through its owner API.
+    #[cfg(feature = "conformance")]
+    pub async fn runtime_control(
+        &self,
+        address: collaboration_central_core::ObjectAddress,
+        command: collaboration_central_conformance::RuntimeControl,
+    ) -> FixtureResult<collaboration_central_conformance::RuntimeFaultObservation> {
+        match &self.central {
+            CentralOwner::Running(central) => central.runtime_control(address, command).await,
+            CentralOwner::Stopped => Err("fixture central already stopped".into()),
+        }
+    }
+
     /// Count opaque bodies on the real Access bridge while one operation runs.
     #[cfg(feature = "conformance")]
     pub fn observe_payload_input_bodies(&self) -> FixtureResult<crate::PayloadInputObservation> {

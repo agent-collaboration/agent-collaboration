@@ -12,6 +12,7 @@ use tokio::sync::{Mutex, Notify, watch};
 pub struct AutomationFaultSelector {
     pub batch_id: Option<collaboration_protocol::BatchId>,
     pub firing_id: Option<collaboration_protocol::FiringId>,
+    pub report_seq: Option<collaboration_protocol::WorkReportSequence>,
     pub work_item_id: Option<collaboration_protocol::WorkItemId>,
     pub operation_id: Option<OperationId>,
     pub completed_entry_ordinal: Option<u32>,
@@ -25,6 +26,9 @@ impl AutomationFaultSelector {
                 .firing_id
                 .as_ref()
                 .is_none_or(|id| evidence.firing_id.as_ref() == Some(id))
+            && self
+                .report_seq
+                .is_none_or(|seq| evidence.report_seq == Some(seq))
             && self
                 .work_item_id
                 .as_ref()
@@ -71,6 +75,11 @@ impl DebugAutomationFaultController {
         point: AutomationFaultPoint,
         selector: AutomationFaultSelector,
     ) -> Result<OperationId, StorageError> {
+        if selector.report_seq.is_some()
+            && point != AutomationFaultPoint::ReportSentBeforeAcknowledgement
+        {
+            return Err(StorageError::InvalidRecord);
+        }
         let mut armed = self.armed.lock().await;
         if armed.is_some() {
             return Err(StorageError::OperationConflict);

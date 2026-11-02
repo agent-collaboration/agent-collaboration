@@ -100,3 +100,34 @@ where
     .map_err(StoreError::backend)?;
     Ok(())
 }
+
+pub(crate) async fn due<Scope: TransactionScope>(
+    scope: &mut Scope,
+    now_ms: i64,
+) -> AutomationStoreResult<Vec<FiringEntry>>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let mut ready = Vec::new();
+    for row in queries::list_due_automation_occupants(scope, now_ms.to_string()).await? {
+        let automation: AutomationId = required(row.automation_id, "automation_id")?
+            .try_into()
+            .map_err(|_| AutomationStoreError::InvalidRecord("automation_id"))?;
+        let id: FiringId = required(row.firing_id, "firing_id")?
+            .try_into()
+            .map_err(|_| AutomationStoreError::InvalidRecord("firing_id"))?;
+        let row = queries::read_pending_entry(scope, id.as_str().into())
+            .await?
+            .ok_or(AutomationStoreError::InvalidRecord("occupying_firing_id"))?;
+        if let Some(entry) = decode(row, &id, &automation)? {
+            if entry.due_at.unix_millis() > now_ms {
+                return Err(AutomationStoreError::InvalidRecord("due_ms"));
+            }
+            ready.push(entry);
+        }
+    }
+    Ok(ready)
+}

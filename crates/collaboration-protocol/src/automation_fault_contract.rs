@@ -27,6 +27,9 @@ pub struct FaultedAutomationSnapshot {
     deny_unknown_fields
 )]
 pub enum AutomationRefusal {
+    ImportConflict {
+        automation_id: crate::AutomationId,
+    },
     Validation {
         error: crate::AutomationValidationError,
     },
@@ -38,6 +41,13 @@ pub enum AutomationRefusal {
     },
     ScheduleChangeConflict {
         current_change_id: crate::ChangeId,
+    },
+    ScheduleImportExists {
+        schedule_id: crate::ScheduleId,
+    },
+    InstructionImportConflict {
+        instruction_id: crate::InstructionId,
+        schedule_ids: Vec<crate::ScheduleId>,
     },
     InvalidRecord {
         field: String,

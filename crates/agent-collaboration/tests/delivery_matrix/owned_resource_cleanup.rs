@@ -1,4 +1,6 @@
 //! One-pass cleanup mutations followed by reads of the existing M2 state owners.
+#[path = "owned_resource_cleanup_failures.rs"]
+mod failures;
 #[path = "owned_resource_cleanup_readback.rs"]
 pub(super) mod readback;
 use super::owned_resources::{
@@ -18,6 +20,9 @@ use collaboration_client::{
         WakeMutationRequest, WakeMutationResult, WakeState, WakeupId,
     },
 };
+#[cfg(test)]
+use failures::project_client_failure;
+use failures::{project_board_failure, project_schedule_failure, project_wake_failure};
 
 /// C retains this same client and owner outside its caught scenario, before first mutation.
 pub(super) struct OwnedMatrixScope {
@@ -39,24 +44,39 @@ impl OwnedMatrixScope {
         // All actual attempts/history survive the scenario error/panic reduction as metadata.
         let reporting_error =
             writeln!(std::io::stderr(), "matrix resource cleanup: {report:?}").err();
-        let returned_local_retirement = report.unresolved.is_empty()
+        let returned_retirement = report.unresolved.is_empty()
             && report.attempts.iter().all(|attempt| {
-                matches!(
-                    &attempt.outcome,
-                    CleanupOutcome::Returned(CleanupObservation::Wake {
+                let CleanupOutcome::Returned(observation) = &attempt.outcome else {
+                    return false;
+                };
+                match observation {
+                    CleanupObservation::Wake {
                         state: WakeState::Cancelled | WakeState::Expired | WakeState::Finished,
                         next_due_at: None,
                         ..
-                    }) | CleanupOutcome::Returned(CleanupObservation::Schedule {
+                    }
+                    | CleanupObservation::Schedule {
                         enabled: false,
                         next_due_at: None,
                         ..
-                    }) | CleanupOutcome::Returned(CleanupObservation::Subscription {
+                    }
+                    | CleanupObservation::Subscription {
                         delivery_eligible: false,
-                    }) | CleanupOutcome::Returned(CleanupObservation::Watch { watching: false })
-                )
+                    }
+                    | CleanupObservation::Watch { watching: false } => true,
+                    CleanupObservation::CentralWake { value, .. } => {
+                        matches!(
+                            value.state,
+                            WakeState::Cancelled | WakeState::Expired | WakeState::Finished
+                        ) && value.next_due_at.is_none()
+                    }
+                    CleanupObservation::CentralSchedule { value, .. } => {
+                        !value.definition.enabled && value.next_due_at.is_none()
+                    }
+                    _ => false,
+                }
             });
-        if returned_local_retirement && reporting_error.is_none() {
+        if returned_retirement && reporting_error.is_none() {
             Ok(())
         } else {
             Err(Box::new(MatrixCleanupFailure {
@@ -128,6 +148,14 @@ pub(super) enum CleanupOutcome {
 
 #[derive(Debug)]
 pub(super) enum CleanupObservation {
+    CentralWake {
+        value: Box<collaboration_protocol::CentralWakeSnapshot>,
+        already_sent: Vec<collaboration_protocol::FiringId>,
+    },
+    CentralSchedule {
+        value: Box<collaboration_client::CentralScheduleSnapshot>,
+        already_sent: Vec<collaboration_protocol::FiringId>,
+    },
     Wake {
         state: WakeState,
         next_due_at: Option<ObservationTimestamp>,
@@ -156,8 +184,12 @@ pub(super) struct RetainedDeliveryObservation {
     pub(super) disposition: DeliveryDisposition,
 }
 
-#[derive(Debug)]
 pub(super) enum ReportedCleanupFailure {
+    Catalog(Box<collaboration_client::CentralCatalogFailure>),
+    CatalogFault(Box<collaboration_protocol::FaultedAutomationSnapshot>),
+    ReadFault(Box<collaboration_client::CatalogReadFailure>),
+    WakeSelection(Box<collaboration_client::WakeSelectionFailure>),
+    ScheduleSelection(Box<collaboration_client::ScheduleSelectionFailure>),
     Wake {
         kind: WakeCleanupFailureKind,
         stage: WakeFailureStage,
@@ -217,8 +249,8 @@ pub(super) enum ReportedCleanupEffect {
     Route,
 }
 
-#[derive(Debug)]
 pub(super) enum CleanupUncertainty {
+    Catalog(Box<collaboration_client::CentralCatalogFailure>),
     Client(ClientFailureKind),
     BoardOutcomeUnknown,
     UnexpectedWaitOutcomeUnknown,
@@ -305,7 +337,7 @@ async fn execute_cleanup_action(
                 })
                 .await
             {
-                Ok(result) => project_wake_result(wakeup_id, result),
+                Ok(result) => project_wake_response(wakeup_id, result),
                 Err(error) => project_wake_failure(error),
             }
         }
@@ -320,16 +352,7 @@ async fn execute_cleanup_action(
                 })
                 .await
             {
-                Ok(result) if &result.schedule_id == schedule_id => {
-                    CleanupOutcome::Returned(CleanupObservation::Schedule {
-                        change_id: result.change_id,
-                        enabled: result.definition.enabled,
-                        next_due_at: result.next_due_at,
-                        active_run_id: result.active_run_id,
-                        waiting_run_id: result.waiting_run_id,
-                    })
-                }
-                Ok(_) => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
+                Ok(result) => project_schedule_response(schedule_id, result),
                 Err(error) => project_schedule_failure(error),
             }
         }
@@ -458,88 +481,62 @@ fn project_wake_result(wakeup_id: &WakeupId, result: WakeMutationResult) -> Clea
     }
 }
 
-fn project_wake_failure(error: WakeClientError) -> CleanupOutcome {
-    match error {
-        WakeClientError::Rejected(failure) => {
-            let failure = *failure;
-            let kind = match failure.reason {
-                WakeFailureReason::InvalidField { .. } => WakeCleanupFailureKind::InvalidField,
-                WakeFailureReason::OperationConflict => WakeCleanupFailureKind::OperationConflict,
-                WakeFailureReason::AutomationUnavailable => {
-                    WakeCleanupFailureKind::AutomationUnavailable
-                }
-                WakeFailureReason::ResourceNotFound => WakeCleanupFailureKind::ResourceNotFound,
-                WakeFailureReason::InvalidRecord => WakeCleanupFailureKind::InvalidRecord,
-                WakeFailureReason::LifecycleConflict => WakeCleanupFailureKind::LifecycleConflict,
-                WakeFailureReason::Overloaded => WakeCleanupFailureKind::Overloaded,
-                WakeFailureReason::RemoteUnavailable => WakeCleanupFailureKind::RemoteUnavailable,
-                WakeFailureReason::DeadlineExpired => WakeCleanupFailureKind::DeadlineExpired,
-                WakeFailureReason::Refused(reason) => WakeCleanupFailureKind::Refused(reason),
-            };
-            let LocalMutationEvidence::Local { mutation } = failure.effects;
-            CleanupOutcome::Rejected(ReportedCleanupFailure::Wake {
-                kind,
-                stage: failure.stage,
-                operation_id: failure.operation_id,
-                wakeup_id: failure.wakeup_id,
-                mutation,
-            })
-        }
-        WakeClientError::Connection(error) => project_client_failure(error),
+fn project_wake_response(
+    id: &WakeupId,
+    response: collaboration_client::WakeMutationResponse,
+) -> CleanupOutcome {
+    match response {
+        collaboration_client::WakeMutationResponse::Local(value) => project_wake_result(id, value),
+        collaboration_client::WakeMutationResponse::Central(value) => match value.automation {
+            collaboration_client::CatalogAutomationResult::Wake(wake)
+                if &wake.definition.wakeup_id == id =>
+            {
+                CleanupOutcome::Returned(CleanupObservation::CentralWake {
+                    value: Box::new(wake),
+                    already_sent: value.already_sent,
+                })
+            }
+            collaboration_client::CatalogAutomationResult::Faulted(fault) => {
+                CleanupOutcome::Rejected(ReportedCleanupFailure::CatalogFault(Box::new(fault)))
+            }
+            _ => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
+        },
     }
 }
-
-fn project_schedule_failure(error: ScheduleClientError) -> CleanupOutcome {
-    match error {
-        ScheduleClientError::Rejected(failure) => {
-            let failure = *failure;
-            let effect = match failure.effects {
-                ScheduleEffects::Local { mutation } => ReportedCleanupEffect::Local(mutation),
-                ScheduleEffects::Route { .. } => ReportedCleanupEffect::Route,
-            };
-            CleanupOutcome::Rejected(ReportedCleanupFailure::Schedule {
-                kind: failure.kind,
-                stage: failure.stage,
-                operation_id: failure.operation_id,
-                schedule_id: failure.schedule_id,
-                current_change_id: failure.current_change_id,
-                effect,
+fn project_schedule_response(
+    id: &ScheduleId,
+    response: collaboration_client::ScheduleMutationResponse,
+) -> CleanupOutcome {
+    match response {
+        collaboration_client::ScheduleMutationResponse::Local(value)
+            if &value.schedule_id == id =>
+        {
+            CleanupOutcome::Returned(CleanupObservation::Schedule {
+                change_id: value.change_id,
+                enabled: value.definition.enabled,
+                next_due_at: value.next_due_at,
+                active_run_id: value.active_run_id,
+                waiting_run_id: value.waiting_run_id,
             })
         }
-        ScheduleClientError::Connection(error) => project_client_failure(error),
+        collaboration_client::ScheduleMutationResponse::Central(value) => match value.automation {
+            collaboration_client::CatalogAutomationResult::Schedule(schedule)
+                if &schedule.schedule_id == id =>
+            {
+                CleanupOutcome::Returned(CleanupObservation::CentralSchedule {
+                    value: Box::new(schedule),
+                    already_sent: value.already_sent,
+                })
+            }
+            collaboration_client::CatalogAutomationResult::Faulted(fault) => {
+                CleanupOutcome::Rejected(ReportedCleanupFailure::CatalogFault(Box::new(fault)))
+            }
+            _ => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
+        },
+        collaboration_client::ScheduleMutationResponse::Local(_) => {
+            CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch)
+        }
     }
-}
-
-fn project_board_failure(error: BoardClientError) -> CleanupOutcome {
-    match error {
-        BoardClientError::Rejected(failure) => {
-            CleanupOutcome::Rejected(ReportedCleanupFailure::Board {
-                kind: failure.kind,
-                stage: failure.stage,
-            })
-        }
-        BoardClientError::OutcomeUnknown { .. } => {
-            CleanupOutcome::Unknown(CleanupUncertainty::BoardOutcomeUnknown)
-        }
-        BoardClientError::WaitOutcomeUnknown { .. } => {
-            CleanupOutcome::Unknown(CleanupUncertainty::UnexpectedWaitOutcomeUnknown)
-        }
-        BoardClientError::Connection(error) => project_client_failure(error),
-    }
-}
-
-fn project_client_failure(error: ClientError) -> CleanupOutcome {
-    let kind = match error {
-        ClientError::InvalidRequest(_) => ClientFailureKind::InvalidRequest,
-        ClientError::UnsupportedCapability(_) => ClientFailureKind::UnsupportedCapability,
-        ClientError::Discovery { .. } => ClientFailureKind::Discovery,
-        ClientError::Transport(error) => ClientFailureKind::Transport(error.kind()),
-        ClientError::Protocol(_) => ClientFailureKind::Protocol,
-        ClientError::Timeout => ClientFailureKind::Timeout,
-        ClientError::Rejected { code, .. } => ClientFailureKind::RpcRejected { code },
-        ClientError::Overloaded { .. } => ClientFailureKind::Overloaded,
-    };
-    CleanupOutcome::Unknown(CleanupUncertainty::Client(kind))
 }
 
 #[cfg(test)]

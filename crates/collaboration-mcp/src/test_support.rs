@@ -48,6 +48,8 @@ pub struct TestServeOptions {
 
 /// The API served on `<directory>/control.sock`, with its manifest published beside it.
 pub struct ServedCollaborationApi {
+    #[cfg(debug_assertions)]
+    tool_calls: crate::tool_call_registry::ToolCallRegistry,
     shutdown: CancellationToken,
     task: JoinHandle<io::Result<()>>,
     socket: String,
@@ -100,9 +102,13 @@ impl ServedCollaborationApi {
             shutdown: shutdown.clone(),
         };
         let api = collaboration_api_router(&config, CollaborationApiListener::UnixSocket);
+        #[cfg(debug_assertions)]
+        let tool_calls = api.tool_calls();
         let task = tokio::spawn(serve_collaboration_api(listener, api, shutdown.clone()));
         let manifest = ManifestPublication::publish(directory, &manifest)?;
         Ok(Self {
+            #[cfg(debug_assertions)]
+            tool_calls,
             shutdown,
             task,
             socket: socket_path
@@ -119,6 +125,12 @@ impl ServedCollaborationApi {
     #[must_use]
     pub fn directory(&self) -> &Path {
         &self.directory
+    }
+
+    /// Waits for this listener's tracker to own an actual tool call.
+    #[cfg(debug_assertions)]
+    pub async fn wait_for_tracked_call_start_for_test(&self) {
+        self.tool_calls.wait_for_tracked_call_start_for_test().await;
     }
 
     /// The CLIs' client, connected through the published manifest.

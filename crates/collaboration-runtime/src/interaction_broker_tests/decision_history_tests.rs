@@ -53,6 +53,7 @@ async fn native_request_by_its_own_approver_is_recorded_and_refused() {
     let self_approver = session(&broker.service_id, "self-approver");
     broker
         .register_route(ApprovalRoute {
+            source_installation: None,
             thread_id: "self-approver".to_owned(),
             created_by: self_approver.clone(),
             approver: self_approver.clone(),
@@ -141,6 +142,7 @@ async fn native_request_with_empty_option_mapping_is_recorded_as_refused() {
     let approver = session(&broker.service_id, "approver");
     broker
         .register_route(ApprovalRoute {
+            source_installation: None,
             thread_id: "requester".to_owned(),
             created_by: requester.clone(),
             approver: approver.clone(),

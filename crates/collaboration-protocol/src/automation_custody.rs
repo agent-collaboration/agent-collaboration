@@ -7,6 +7,21 @@ use crate::{
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyTaggedVariantFields {}
+
+fn deserialize_empty_tagged_variant<'de, Deserializer>(
+    deserializer: Deserializer,
+) -> Result<(), Deserializer::Error>
+where
+    Deserializer: serde::Deserializer<'de>,
+{
+    // Serde's default internally tagged unit visitor ignores remaining fields.
+    EmptyTaggedVariantFields::deserialize(deserializer)?;
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(try_from = "u64", into = "u64")]
 pub struct WorkReportSequence(u64);
@@ -65,7 +80,7 @@ pub enum FiringWork {
     },
 }
 
-fn frozen_schedule_schema(generator: &mut SchemaGenerator) -> Schema {
+pub(crate) fn frozen_schedule_schema(generator: &mut SchemaGenerator) -> Schema {
     let mut schema = crate::ScheduleDefinition::json_schema(generator);
     let timing = crate::automation_timing_contract::central_timing_schema(generator).to_value();
     let effort = generator.subschema_for::<Option<String>>().to_value();
@@ -85,8 +100,12 @@ fn frozen_schedule_schema(generator: &mut SchemaGenerator) -> Schema {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum FiringMessageOrigin {
-    Agent { sender: SessionRef },
+    Agent {
+        sender: SessionRef,
+    },
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     HumanUser,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Router,
 }
 
@@ -144,6 +163,7 @@ impl<'de> Deserialize<'de> for FiringEntry {
 pub struct SessionCreateEntry {
     pub work_item_id: WorkItemId,
     pub operation_id: OperationId,
+    pub source_installation: message_board::ServiceId,
     pub request: RemoteSessionCreateDefinition,
 }
 
@@ -226,12 +246,19 @@ pub struct AutomationBatch {
     deny_unknown_fields
 )]
 pub enum FiringOutcome {
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Pending,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Cancelled,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Held,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Received,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Delivered,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Expired,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Unknown,
     RunStarted {
         run_id: crate::RunId,
@@ -289,6 +316,7 @@ pub enum SessionCreateState {
     Refused {
         reason: RemoteCreateRefusal,
     },
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Unknown,
 }
 
@@ -314,9 +342,13 @@ pub enum RemoteCreatedSettings {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum RemoteCreateRefusal {
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     OriginMismatch,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     CreatorNotSupported,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     ApproverRequired,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     ApproverNotSupported,
     Local {
         failure: Box<crate::ConversationOperationFailure>,
@@ -326,9 +358,14 @@ pub enum RemoteCreateRefusal {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "camelCase", deny_unknown_fields)]
 pub enum FirstInputState {
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     None,
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Accepted,
-    Failed { reason: NonEmptyText },
+    Failed {
+        reason: NonEmptyText,
+    },
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Unknown,
 }
 
@@ -342,11 +379,14 @@ pub enum FirstInputState {
 )]
 pub enum WorkItemReport {
     Firing(FiringReport),
+    #[schemars(extend("allOf" = [{"properties":{"value":{"required":["input"]}}}]))]
     SessionCreate {
         work_item_id: WorkItemId,
         seq: WorkReportSequence,
         create: Box<SessionCreateState>,
-        input: FirstInputState,
+        /// Null is unreported input; the explicit `none` state records no requested input.
+        #[serde(deserialize_with = "Option::deserialize")]
+        input: Option<FirstInputState>,
     },
 }
 
@@ -462,8 +502,11 @@ pub struct WorkReportAcknowledgements {
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "camelCase", deny_unknown_fields)]
 pub enum LocalRunOutcome {
+    #[serde(deserialize_with = "deserialize_empty_tagged_variant")]
     Finished,
-    Failed { reason: NonEmptyText },
+    Failed {
+        reason: NonEmptyText,
+    },
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

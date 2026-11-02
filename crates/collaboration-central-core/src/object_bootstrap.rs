@@ -351,6 +351,11 @@ static FLEET_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>>
                 "central automations",
                 include_str!("../core_migrations/0011_automations.sql"),
             ),
+            (
+                12,
+                "remote session machine work",
+                include_str!("../core_migrations/0012_machine_work_items.sql"),
+            ),
         ]
         .into_iter()
         .map(|(version, description, sql)| {

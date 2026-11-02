@@ -28,7 +28,7 @@ pub struct ProofContext {
     pub client: CollaborationClient,
     pub native: NativeProtocolConnection,
     pub schemas: Arc<NativePayloadSchemas>,
-    private_codex_home: Option<PathBuf>,
+    private_codex_home: PathBuf,
 }
 impl ProofContext {
     pub async fn connect() -> ProofResult<Self> {
@@ -51,7 +51,7 @@ impl ProofContext {
         }
         let marker: Value =
             serde_json::from_slice(&std::fs::read(root.join("debug-host-context.json"))?)?;
-        if marker.get("model").and_then(Value::as_str) != Some("gpt-5.6-luna")
+        if marker.get("model").and_then(Value::as_str) != Some("gpt-6-luna")
             || marker.get("profile").and_then(Value::as_str) != Some("codex-router-debug")
             || marker
                 .get("port")
@@ -60,7 +60,10 @@ impl ProofContext {
         {
             return Err("Host did not establish the isolated debug profile and Luna model".into());
         }
-        if marker.get("kind").and_then(Value::as_str) == Some("isolatedDeliveryMatrix") {
+        if marker.get("kind").and_then(Value::as_str) != Some("isolatedDeliveryMatrix") {
+            return Err("Live proof requires the existing isolatedDeliveryMatrix root and owned private HOME/CODEX_HOME".into());
+        }
+        {
             let private_home =
                 PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?).canonicalize()?;
             let private_codex_home =
@@ -106,7 +109,7 @@ impl ProofContext {
                 .create_new(true)
                 .mode(0o600)
                 .open(root.join("proof-started.json"))?
-                .write_all(b"{\"model\":\"gpt-5.6-luna\"}\n")?;
+                .write_all(b"{\"model\":\"gpt-6-luna\"}\n")?;
         }
         let service_directory = root.join("agent-communication");
         let client =
@@ -131,12 +134,7 @@ impl ProofContext {
             })
             .ok_or("debug native generation/schema unavailable")?;
         let endpoint = endpoint.endpoint.clone();
-        let codex_home =
-            if marker.get("kind").and_then(Value::as_str) == Some("isolatedDeliveryMatrix") {
-                root.join("codex-home")
-            } else {
-                PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?).join(".codex")
-            };
+        let codex_home = root.join("codex-home");
         let paths = codex_native_integration::CodexPaths::from_codex_home(codex_home);
         let identity =
             codex_native_integration::executable_identity(&paths.managed_executable()).await?;
@@ -152,9 +150,7 @@ impl ProofContext {
         }
         let native =
             NativeProtocolConnection::connect(&root.join("native-socket/app-server.sock")).await?;
-        let private_codex_home = (marker.get("kind").and_then(Value::as_str)
-            == Some("isolatedDeliveryMatrix"))
-        .then(|| root.join("codex-home"));
+        let private_codex_home = root.join("codex-home");
         Ok(Self {
             root,
             workspace,
@@ -167,6 +163,10 @@ impl ProofContext {
             private_codex_home,
         })
     }
+    pub(super) fn owned_codex_home(&self) -> &std::path::Path {
+        &self.private_codex_home
+    }
+
     pub async fn start_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
         self.start_thread_with_instructions(
             role,
@@ -232,6 +232,7 @@ impl ProofContext {
         let configuration = json!({
             "permissions.automation-proof": {"extends":":workspace","network":{"enabled":true}},
             "features.hooks": false,
+            "model_reasoning_effort": "low",
             "features.network_proxy": {
                 "enabled":true,"proxy_url":format!("http://127.0.0.1:{proxy_port}"),
                 "enable_socks5":false,"allow_upstream_proxy":false,"allow_local_binding":false,
@@ -240,7 +241,7 @@ impl ProofContext {
         });
         drop(reservation);
         let response = self.native.request_validated(&self.schemas, NativeOperation::StartThread, json!({
-            "model":"gpt-5.6-luna","allowProviderModelFallback":false,"cwd":working_directory,
+            "model":"gpt-6-luna","allowProviderModelFallback":false,"cwd":working_directory,
             "permissions":"automation-proof","approvalPolicy":"never","config":configuration,
             "developerInstructions":developer_instructions
         })).await;
@@ -255,7 +256,8 @@ impl ProofContext {
                 return Err(error.into());
             }
         };
-        if response.get("model").and_then(Value::as_str) != Some("gpt-5.6-luna")
+        if response.get("model").and_then(Value::as_str) != Some("gpt-6-luna")
+            || response.get("reasoningEffort").and_then(Value::as_str) != Some("low")
             || response.get("modelProvider").and_then(Value::as_str) != Some("codex-router-debug")
         {
             return Err(
@@ -274,7 +276,7 @@ impl ProofContext {
         };
         self.record(
             "freshThread",
-            json!({"role":role,"target":target,"model":"gpt-5.6-luna"}),
+            json!({"role":role,"target":target,"model":"gpt-6-luna"}),
         )?;
         Ok(target)
     }
@@ -359,7 +361,8 @@ impl ProofContext {
         {
             return Err("History response selected a different thread".into());
         }
-        if let Some(private_codex_home) = &self.private_codex_home {
+        {
+            let private_codex_home = &self.private_codex_home;
             let native_path = response
                 .pointer("/thread/path")
                 .and_then(Value::as_str)
@@ -418,16 +421,21 @@ impl ProofContext {
                     limit: 100.try_into()?,
                 })
                 .await?;
-            if let Some(wake) =
-                wakes
-                    .records
-                    .iter()
-                    .find(|wake| match &wake.definition.message.content {
-                        collaboration_client::protocol::MessageContent::Agent { text, .. } => {
-                            text.as_str().starts_with(marker)
-                        }
-                        _ => false,
-                    })
+            if let Some(wake) = wakes
+                .records
+                .iter()
+                .filter_map(|wake| match wake {
+                    collaboration_client::WakeReadResponse::Central { value } => Some(value),
+                    collaboration_client::WakeReadResponse::Local { .. }
+                    | collaboration_client::WakeReadResponse::Faulted { .. }
+                    | collaboration_client::WakeReadResponse::Suspended { .. } => None,
+                })
+                .find(|wake| match &wake.definition.message.content {
+                    collaboration_client::protocol::MessageContent::Agent { text, .. } => {
+                        text.as_str().starts_with(marker)
+                    }
+                    _ => false,
+                })
             {
                 self.record(
                     "wakeArrangedByAgent",
@@ -460,6 +468,49 @@ impl ProofContext {
             }
         }
     }
+    /// Correlates real central reports to this exact local Run; absence is not free capacity.
+    pub async fn firing_for_run(
+        &self,
+        schedule: &collaboration_client::protocol::ScheduleId,
+        run: &collaboration_client::protocol::RunId,
+    ) -> ProofResult<Option<collaboration_client::protocol::FiringSnapshot>> {
+        let automation_id: collaboration_client::protocol::AutomationId =
+            schedule.as_str().to_owned().try_into()?;
+        let mut cursor = None;
+        loop {
+            let page = self
+                .client
+                .list_firings(collaboration_client::protocol::FiringListRequest {
+                    automation_id: automation_id.clone(),
+                    cursor: cursor.clone(),
+                    limit: 100.try_into()?,
+                })
+                .await?;
+            let candidate=page.records.into_iter().find(|firing|matches!(&firing.outcome,
+                collaboration_client::protocol::FiringOutcome::RunStarted {run_id}
+                    |collaboration_client::protocol::FiringOutcome::RunFinished {run_id,..} if run_id==run));
+            if let Some(firing) = candidate {
+                let current = self
+                    .client
+                    .read_firing(collaboration_client::FiringShowRequest {
+                        firing_id: firing.firing_id,
+                    })
+                    .await?;
+                if current.automation_id != automation_id {
+                    return Err("central Firing changed its Schedule identity".into());
+                }
+                return Ok(Some(current));
+            }
+            let Some(next) = page.next_cursor else {
+                return Ok(None);
+            };
+            if cursor.as_ref() == Some(&next) {
+                return Err("central Firing pagination repeated its cursor".into());
+            }
+            cursor = Some(next);
+        }
+    }
+
     pub fn record(&self, event: &str, details: Value) -> ProofResult<()> {
         let mut file = std::fs::OpenOptions::new()
             .append(true)

@@ -316,7 +316,7 @@ async fn real_tools_list_reports_input_and_output_bytes_separately() {
         }
         jsonschema::validator_for(&tool["inputSchema"]).expect("all local references resolve");
     }
-    assert_eq!(tools.len(), 166);
+    assert_eq!(tools.len(), 168);
     println!(
         "tools={} input_bytes={input_bytes} output_bytes={output_bytes} project_input_bytes={project_input_bytes} advisor_input_estimate=338678",
         tools.len()

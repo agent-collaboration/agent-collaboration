@@ -14,10 +14,28 @@ pub use automation_clock_scenarios::{
 mod automation_clock_controls;
 #[cfg(debug_assertions)]
 pub use automation_clock_controls::*;
+#[cfg(all(feature = "client", debug_assertions))]
+mod remote_session_create_scenarios;
+#[cfg(all(feature = "client", debug_assertions))]
+pub use remote_session_create_scenarios::{
+    RemoteCreateRestartCase, prepare_remote_create_restart, resume_remote_create_restart,
+    run_remote_session_create_conformance,
+};
 #[cfg(feature = "client")]
 mod automation_catalog_scenarios;
 #[cfg(feature = "client")]
 pub use automation_catalog_scenarios::run_automation_catalog_conformance;
+#[cfg(all(feature = "client", debug_assertions))]
+mod automation_handover_scenarios;
+#[cfg(all(feature = "client", debug_assertions))]
+pub use automation_handover_scenarios::{
+    AutomationHandoverRestartCase, prepare_automation_handover_restart,
+    resume_automation_handover_restart, run_automation_handover_carried_conformance,
+    run_automation_handover_conformance, run_automation_handover_external_conformance,
+    run_automation_handover_external_due_conformance,
+    run_automation_handover_lifecycle_conformance, run_automation_handover_repair_conformance,
+    run_automation_handover_validation_conformance, run_automation_handover_wake_conformance,
+};
 #[cfg(feature = "client")]
 mod access_expiry_scenario;
 #[cfg(feature = "client")]

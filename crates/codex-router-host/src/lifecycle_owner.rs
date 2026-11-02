@@ -203,14 +203,14 @@ impl HostRuntime {
     ) -> Result<HostExit, HostError> {
         let startup_started_at = tokio::time::Instant::now();
         let instance = HostInstance::acquire(config.coordination_paths().clone())?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             startup_started_at,
             None,
-        )
+        ))
         .await
     }
 
@@ -224,14 +224,14 @@ impl HostRuntime {
         let startup_started_at = tokio::time::Instant::now();
         let instance =
             HostInstance::acquire_inherited(config.coordination_paths().clone(), marker)?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             startup_started_at,
             None,
-        )
+        ))
         .await
     }
 
@@ -259,14 +259,14 @@ impl HostRuntime {
         instance: HostInstance,
         progress: Option<HostProgressCallback<'_>>,
     ) -> Result<HostExit, HostError> {
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             tokio::time::Instant::now(),
             progress,
-        )
+        ))
         .await
     }
 

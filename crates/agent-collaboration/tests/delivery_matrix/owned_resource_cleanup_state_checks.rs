@@ -1,5 +1,7 @@
 //! Public observations while live; exact native state only after the owner stops.
 use super::*;
+#[path = "owned_resource_cleanup_central_readback.rs"]
+mod central_readback;
 
 pub(super) async fn check_public_state(
     client: &CollaborationClient,
@@ -8,11 +10,14 @@ pub(super) async fn check_public_state(
 ) -> ProofResult<()> {
     let retired = matches!(expectation, StoreExpectation::Retired);
     if let Some((_, wakeup_id)) = &expected.wake {
-        let wake = client
+        let collaboration_client::WakeReadResponse::Central { value: wake } = client
             .read_wakeup(WakeShowRequest {
                 wakeup_id: wakeup_id.clone(),
             })
-            .await?;
+            .await?
+        else {
+            return Err("Runtime Wake read changed to Local/faulted".into());
+        };
         ensure(
             wake.definition.wakeup_id == *wakeup_id
                 && wake.state
@@ -21,17 +26,31 @@ pub(super) async fn check_public_state(
                     } else {
                         WakeState::Active
                     }
-                && wake.pending_delivery_id.is_none()
+                && wake.first_firing.is_none()
                 && wake.next_due_at.is_none() == retired,
             "public wake read did not confirm the expected state",
         )?;
+        let deliveries = client
+            .list_deliveries(collaboration_protocol::DeliveryListRequest {
+                wakeup_id: Some(wakeup_id.clone()),
+                cursor: None,
+                limit: 100.try_into()?,
+            })
+            .await?;
+        ensure(
+            deliveries.records.is_empty() && deliveries.next_cursor.is_none(),
+            "Runtime Wake fixture invented local delivery obligations",
+        )?;
     }
     if let Some((_, schedule_id)) = &expected.schedule {
-        let schedule = client
+        let collaboration_client::ScheduleReadResponse::Schedule { value: schedule } = client
             .read_schedule(ScheduleShowRequest {
                 schedule_id: schedule_id.clone(),
             })
-            .await?;
+            .await?
+        else {
+            return Err("Runtime Schedule read changed to Local/faulted".into());
+        };
         let enabled = matches!(
             expectation,
             StoreExpectation::Unchanged(RuntimePrefix::EnabledSchedule)
@@ -39,10 +58,19 @@ pub(super) async fn check_public_state(
         ensure(
             schedule.schedule_id == *schedule_id
                 && schedule.definition.enabled == enabled
-                && schedule.next_due_at.is_some() == enabled
-                && schedule.active_run_id.is_none()
-                && schedule.waiting_run_id.is_none(),
+                && schedule.next_due_at.is_some() == enabled,
             "public schedule read did not confirm the expected state",
+        )?;
+        let firings = client
+            .list_firings(collaboration_protocol::FiringListRequest {
+                automation_id: schedule_id.as_str().to_owned().try_into()?,
+                cursor: None,
+                limit: 100.try_into()?,
+            })
+            .await?;
+        ensure(
+            firings.records.is_empty() && firings.next_cursor.is_none(),
+            "Runtime Schedule fixture admitted central work before cleanup",
         )?;
     }
     let mut checked_actors = Vec::new();
@@ -115,6 +143,8 @@ pub(super) async fn check_fixture_stores(
     expectation: StoreExpectation,
 ) -> ProofResult<()> {
     fixture.open_stopped_stores().await?;
+    central_readback::check_reopened_catalog(&fixture.directory, &fixture.expected, expectation)
+        .await?;
     let board = fixture
         .board
         .as_mut()
@@ -169,36 +199,46 @@ async fn check_store_state(
             "exact SQLite Watch state changed unexpectedly",
         )?;
     }
-    if let Some((_, wakeup_id)) = &expected.wake {
-        let wake = automation.read_wakeup::<SavedMessage>(wakeup_id).await?;
-        let state = if retired {
-            agent_automation::WakeState::Cancelled
-        } else {
-            agent_automation::WakeState::Active
-        };
+    if let Some((_, id)) = &expected.wake {
         ensure(
-            wake.definition.wakeup_id == *wakeup_id
-                && wake.state == state
-                && wake.pending_delivery_id.is_none()
-                && wake.next_due_at_ms.is_none() == retired,
-            "SQLite wake did not preserve exact local state",
+            matches!(
+                automation.read_wakeup::<SavedMessage>(id).await,
+                Err(automation_storage::StorageError::WakeNotFound)
+            ),
+            "central cleanup Wake acquired a local shadow definition",
+        )?;
+        let page = automation
+            .list_collection_keys_with_central_parent(
+                &automation_storage::AutomationCollection::Deliveries(Some(id.clone())),
+                None,
+                100,
+            )
+            .await?;
+        ensure(
+            page.records.is_empty() && !page.has_more,
+            "central cleanup Wake retained local native obligations",
         )?;
     }
-    if let Some((_, schedule_id)) = &expected.schedule {
-        let schedule = automation
-            .inspect_schedule::<SessionRef, EndpointRef>(schedule_id)
-            .await?;
-        let enabled = matches!(
-            expectation,
-            StoreExpectation::Unchanged(RuntimePrefix::EnabledSchedule)
-        );
+    if let Some((_, id)) = &expected.schedule {
         ensure(
-            schedule.record.schedule_id == *schedule_id
-                && schedule.record.definition.enabled == enabled
-                && schedule.record.next_due_at_ms.is_some() == enabled
-                && schedule.active_run_id.is_none()
-                && schedule.waiting_run_id.is_none(),
-            "SQLite schedule changed or invented run cancellation",
+            matches!(
+                automation
+                    .inspect_schedule::<SessionRef, EndpointRef>(id)
+                    .await,
+                Err(automation_storage::StorageError::ScheduleNotFound)
+            ),
+            "central cleanup Schedule acquired a local shadow definition",
+        )?;
+        let page = automation
+            .list_collection_keys_with_central_parent(
+                &automation_storage::AutomationCollection::Runs(id.clone()),
+                None,
+                100,
+            )
+            .await?;
+        ensure(
+            page.records.is_empty() && !page.has_more,
+            "central cleanup Schedule retained local Runs",
         )?;
     }
     Ok(())
@@ -212,6 +252,7 @@ pub(super) async fn check_reopened_stores(
     let mut board = None;
     let mut automation = None;
     let observed: ProofResult<()> = async {
+        central_readback::check_reopened_catalog(directory, expected, expectation).await?;
         board = Some(CleanupReadback::open(directory).await?);
         automation = Some(AutomationStore::open(&directory.join("automation.sqlite")).await?);
         check_store_state(

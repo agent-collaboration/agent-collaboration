@@ -158,7 +158,18 @@ impl AutomationStore {
             },
         )
         .await?;
+        if matches!(request.action, SummaryRecoveryAction::Skip) {
+            crate::central_work_transitions::report_run_phase(
+                &mut transaction,
+                &request.run_id,
+                "finished",
+                None,
+                (self.central_report_clock)(),
+            )
+            .await?;
+        }
         transaction.commit().await?;
+        self.central_reports_changed.notify_one();
         Ok(result)
     }
 }

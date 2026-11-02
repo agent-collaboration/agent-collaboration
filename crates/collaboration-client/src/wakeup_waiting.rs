@@ -4,7 +4,7 @@ use crate::api_connection::ToolAnswer;
 use crate::{ClientError, CollaborationClient, WakeClientError};
 use collaboration_protocol::{
     FireReceipt, UuidIdentity, WakeFailure, WakeFailureReason, WakeShowRequest, WakeSnapshot,
-    WakeState, WakeWaitOutcome, WakeWaitRequest, WakeWaitResult, WakeupId,
+    WakeState, WakeWaitOutcome, WakeWaitRequest, WakeupId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -170,10 +170,20 @@ pub struct WakeWaitConnection {
 
 /// The wake-up's state when the wait subscribed.
 enum WakeWaitStart {
+    Suspended {
+        message: String,
+        suspended: Box<collaboration_protocol::SuspendedAutomationSnapshot>,
+    },
     /// It had already fired, or a change had already ruled a first fire out.
     Settled(WakeWaitOutcome),
     /// Changes after this cursor belong to the wait, including any before it starts.
     After(String),
+    Central(Option<collaboration_protocol::FiringSnapshot>),
+    Faulted {
+        message: String,
+        fault: collaboration_protocol::FaultedAutomationSnapshot,
+    },
+    Pending,
 }
 
 /// The longest one bounded wait lasts before it returns its cursor.
@@ -193,21 +203,59 @@ impl CollaborationClient {
                 return Err(subscribe_failure(&wakeup_id, *failure));
             }
             Err(WakeClientError::Connection(error)) => return Err(error.into()),
+            Err(WakeClientError::Selection(error)) => {
+                return Err(ClientError::Rejected {
+                    code: crate::api_connection::OPERATION_FAILED,
+                    data: serde_json::to_value(error).ok(),
+                }
+                .into());
+            }
+            Err(WakeClientError::Catalog(crate::CentralCatalogFailure::CentralUnreachable {
+                ..
+            })) => {
+                return Ok(WakeWaitConnection {
+                    owner_service: self.identity().service_id.clone(),
+                    client: self,
+                    wakeup_id,
+                    start: WakeWaitStart::Pending,
+                });
+            }
+            Err(WakeClientError::Catalog(crate::CentralCatalogFailure::Refused {
+                error, ..
+            })) if matches!(
+                error.as_ref(),
+                collaboration_protocol::AutomationRefusal::NotFound
+            ) =>
+            {
+                return Err(WakeWaitError::NotFound { wakeup_id });
+            }
+            Err(WakeClientError::Catalog(error)) => {
+                return Err(ClientError::Rejected {
+                    code: crate::api_connection::OPERATION_FAILED,
+                    data: serde_json::to_value(error).ok(),
+                }
+                .into());
+            }
         };
-        if snapshot.definition.wakeup_id != wakeup_id {
-            return Err(ClientError::Protocol("wake subscription identity mismatch").into());
-        }
-        let owner_service = snapshot
-            .definition
-            .message
-            .target
-            .endpoint
-            .service_id
-            .clone();
-        cursor_sequence(&snapshot.latest_event_cursor, &owner_service)?;
-        let start = match settled_outcome(&snapshot) {
-            Some(outcome) => WakeWaitStart::Settled(outcome),
-            None => WakeWaitStart::After(snapshot.latest_event_cursor),
+        let owner_service = self.identity().service_id.clone();
+        let start = match snapshot {
+            crate::WakeReadResponse::Suspended { message, suspended } => WakeWaitStart::Suspended {
+                message,
+                suspended: Box::new(suspended),
+            },
+            crate::WakeReadResponse::Local { value: snapshot } => {
+                cursor_sequence(&snapshot.latest_event_cursor, &owner_service)?;
+                match settled_outcome(&snapshot) {
+                    Some(outcome) => WakeWaitStart::Settled(outcome),
+                    None => WakeWaitStart::After(snapshot.latest_event_cursor),
+                }
+            }
+            crate::WakeReadResponse::Central { value } => {
+                WakeWaitStart::Central(value.first_firing)
+            }
+            crate::WakeReadResponse::Faulted { message, fault } => {
+                WakeWaitStart::Faulted { message, fault }
+            }
         };
         Ok(WakeWaitConnection {
             client: self,
@@ -219,7 +267,9 @@ impl CollaborationClient {
 }
 
 impl WakeWaitConnection {
-    pub async fn wait_until_first_fire(self) -> Result<FireReceipt, WakeWaitError> {
+    pub async fn wait_until_first_fire(
+        self,
+    ) -> Result<crate::WakeFirstFireResponse, WakeWaitError> {
         self.wait_until_first_fire_with_cancellation(CancellationToken::new())
             .await
     }
@@ -227,52 +277,125 @@ impl WakeWaitConnection {
     pub async fn wait_until_first_fire_with_cancellation(
         self,
         cancellation: CancellationToken,
-    ) -> Result<FireReceipt, WakeWaitError> {
+    ) -> Result<crate::WakeFirstFireResponse, WakeWaitError> {
         let id = self.wakeup_id.clone();
         let mut after = match self.start {
             WakeWaitStart::Settled(outcome) => {
                 return finished_wait(&id, outcome)
-                    .unwrap_or_else(|| Err(ClientError::Protocol("unsettled wake").into()));
+                    .unwrap_or_else(|| Err(ClientError::Protocol("unsettled wake").into()))
+                    .map(|value| crate::WakeFirstFireResponse::Local { value });
             }
-            WakeWaitStart::After(cursor) => cursor,
+            WakeWaitStart::After(cursor) => Some(cursor),
+            WakeWaitStart::Central(Some(firing)) => {
+                if firing.automation_id.as_str() != id.as_str() {
+                    return Err(ClientError::Protocol("central Firing identity mismatch").into());
+                }
+                return Ok(crate::WakeFirstFireResponse::Central {
+                    value: crate::CentralWakeWaitResult {
+                        wakeup_id: id,
+                        outcome: crate::CentralWakeWaitOutcome::Fired {
+                            firing: Box::new(firing),
+                        },
+                    },
+                });
+            }
+            WakeWaitStart::Central(None) => None,
+            WakeWaitStart::Suspended { message, suspended } => {
+                return Ok(crate::WakeFirstFireResponse::Suspended { message, suspended });
+            }
+            WakeWaitStart::Faulted { message, fault } => {
+                return Ok(crate::WakeFirstFireResponse::Faulted { message, fault });
+            }
+            WakeWaitStart::Pending => {
+                return Ok(crate::WakeFirstFireResponse::Central {
+                    value: crate::CentralWakeWaitResult {
+                        wakeup_id: id,
+                        outcome: crate::CentralWakeWaitOutcome::Pending { firing_id: None },
+                    },
+                });
+            }
         };
         loop {
-            let request = WakeWaitRequest {
-                wakeup_id: id.clone(),
-                after: Some(after.clone()),
-                timeout_seconds: Some(WAKE_WAIT_CALL_SECONDS),
-            };
-            let arguments = serde_json::to_value(&request)
-                .map_err(|_| ClientError::Protocol("invalid wake wait"))?;
-            let answer = tokio::select! {
-                () = cancellation.cancelled() => {
-                    return Err(WakeWaitError::CallerCancelled { wakeup_id: id });
+            let waited = wait_call(&self.client, &id, after.clone(), &cancellation).await?;
+            match waited {
+                crate::WakeWaitResponse::Suspended { message, suspended } => {
+                    return Ok(crate::WakeFirstFireResponse::Suspended { message, suspended });
                 }
-                answer = self.client.connection.answer_with_timeout(
-                    "wake_wait_until_first_fire",
-                    arguments,
-                    Duration::from_secs(u64::from(WAKE_WAIT_CALL_SECONDS) + 30),
-                ) => answer?,
-            };
-            let waited: WakeWaitResult = match answer {
-                ToolAnswer::Success(value) => serde_json::from_value(value)
-                    .map_err(|_| ClientError::Protocol("invalid wake wait result"))?,
-                ToolAnswer::Failure(failure) => return Err(wait_failure(&id, failure)),
-            };
-            if waited.wakeup_id != id {
-                return Err(ClientError::Protocol("wake wait identity mismatch").into());
-            }
-            let previous = cursor_sequence(&after, &self.owner_service)?;
-            let sequence = cursor_sequence(&waited.cursor, &self.owner_service)?;
-            if sequence < previous {
-                return Err(ClientError::Protocol("wake wait cursor moved backwards").into());
-            }
-            match finished_wait(&id, waited.outcome) {
-                Some(finished) => return finished,
-                None => after = waited.cursor,
+                crate::WakeWaitResponse::Local { value: waited } => {
+                    let sequence = cursor_sequence(&waited.cursor, &self.owner_service)?;
+                    if let Some(previous) = &after
+                        && sequence < cursor_sequence(previous, &self.owner_service)?
+                    {
+                        return Err(
+                            ClientError::Protocol("wake wait cursor moved backwards").into()
+                        );
+                    }
+                    match finished_wait(&id, waited.outcome) {
+                        Some(finished) => {
+                            return finished
+                                .map(|value| crate::WakeFirstFireResponse::Local { value });
+                        }
+                        None => after = Some(waited.cursor),
+                    }
+                }
+                crate::WakeWaitResponse::Central { value } => {
+                    return Ok(crate::WakeFirstFireResponse::Central { value });
+                }
+                crate::WakeWaitResponse::Faulted { message, fault } => {
+                    return Ok(crate::WakeFirstFireResponse::Faulted { message, fault });
+                }
             }
         }
     }
+}
+
+async fn wait_call(
+    client: &CollaborationClient,
+    id: &WakeupId,
+    after: Option<String>,
+    cancellation: &CancellationToken,
+) -> Result<crate::WakeWaitResponse, WakeWaitError> {
+    let request = WakeWaitRequest {
+        wakeup_id: id.clone(),
+        after,
+        timeout_seconds: Some(WAKE_WAIT_CALL_SECONDS),
+    };
+    let arguments =
+        serde_json::to_value(request).map_err(|_| ClientError::Protocol("invalid wake wait"))?;
+    let answer = tokio::select! {
+        () = cancellation.cancelled() => return Err(WakeWaitError::CallerCancelled { wakeup_id: id.clone() }),
+        answer = client.connection.answer_with_timeout("wake_wait_until_first_fire", arguments,
+            Duration::from_secs(u64::from(WAKE_WAIT_CALL_SECONDS) + 30)) => answer?,
+    };
+    let waited: crate::WakeWaitResponse = match answer {
+        ToolAnswer::Success(value) => serde_json::from_value(value)
+            .map_err(|_| ClientError::Protocol("invalid wake wait result"))?,
+        ToolAnswer::Failure(failure) => return Err(wait_failure(id, failure)),
+    };
+    let valid = match &waited {
+        crate::WakeWaitResponse::Suspended { suspended, .. } => {
+            suspended.kind == collaboration_protocol::AutomationKind::Wake
+                && suspended.automation_id.as_str() == id.as_str()
+        }
+        crate::WakeWaitResponse::Local { value } => &value.wakeup_id == id,
+        crate::WakeWaitResponse::Central { value } => {
+            &value.wakeup_id == id
+                && match &value.outcome {
+                    crate::CentralWakeWaitOutcome::Fired { firing } => {
+                        firing.automation_id.as_str() == id.as_str()
+                    }
+                    _ => true,
+                }
+        }
+        crate::WakeWaitResponse::Faulted { fault, .. } => {
+            fault.kind == collaboration_protocol::AutomationKind::Wake
+                && fault.automation_id.as_str() == id.as_str()
+        }
+    };
+    if !valid {
+        return Err(ClientError::Protocol("wake wait identity mismatch").into());
+    }
+    Ok(waited)
 }
 
 /// What a wait outcome means for the caller, or `None` when it only timed out.

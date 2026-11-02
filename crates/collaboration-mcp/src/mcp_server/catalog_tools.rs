@@ -109,26 +109,29 @@ pub(super) fn register_automation_mutation_tools(router: &mut ToolRouter<Collabo
         InstructionSnapshot, InstructionUpdateParams, RunRecoveryRequest, RunShowRequest,
         RunSnapshot, ScheduleCreateRequest, ScheduleEnableRequest, ScheduleExportResult,
         ScheduleImportRequest, SchedulePrepareRequest, ScheduleShowRequest, ScheduleSnapshot,
-        ScheduleUpdateRequest, WakeMutationRequest, WakeMutationResult, WakeSendRequest,
-        WakeShowRequest, WakeSnapshot,
+        ScheduleUpdateRequest, WakeMutationRequest, WakeSendRequest, WakeShowRequest,
+    };
+    use collaboration_service::{
+        CentralScheduleSnapshot, ScheduleMutationResponse, ScheduleReadResponse,
+        WakeCreateResponse, WakeMutationResponse, WakeReadResponse,
     };
     domain_tool!(router, "instruction_create", InstructionCreateParams => InstructionSnapshot, automation.instruction_create, true);
     domain_tool!(router, "instruction_update", InstructionUpdateParams => InstructionSnapshot, automation.instruction_update, true);
     domain_tool!(router, "instruction_show", InstructionShowParams => InstructionSnapshot, automation.instruction_show, false);
-    domain_tool!(router, "wake_send", WakeSendRequest => WakeSnapshot, wakes.wake_send, true);
-    domain_tool!(router, "wake_show", WakeShowRequest => WakeSnapshot, wakes.wake_show, false);
-    domain_tool!(router, "wake_pause", WakeMutationRequest => WakeMutationResult, wakes.wake_pause, true);
-    domain_tool!(router, "wake_resume", WakeMutationRequest => WakeMutationResult, wakes.wake_resume, true);
-    domain_tool!(router, "wake_cancel", WakeMutationRequest => WakeMutationResult, wakes.wake_cancel, true);
+    domain_tool!(router, "wake_send", WakeSendRequest => WakeCreateResponse, wakes.wake_send, true);
+    domain_tool!(router, "wake_show", WakeShowRequest => WakeReadResponse, wakes.wake_show, false);
+    domain_tool!(router, "wake_pause", WakeMutationRequest => WakeMutationResponse, wakes.wake_pause, true);
+    domain_tool!(router, "wake_resume", WakeMutationRequest => WakeMutationResponse, wakes.wake_resume, true);
+    domain_tool!(router, "wake_cancel", WakeMutationRequest => WakeMutationResponse, wakes.wake_cancel, true);
     domain_tool!(router, "delivery_show", DeliveryShowRequest => DeliveryInspection, wakes.delivery_show, false);
-    domain_tool!(router, "wake_list", AutomationPageRequest => AutomationPage<WakeSnapshot>, wakes.wake_list(budget), false);
-    domain_tool!(router, "schedule_import", ScheduleImportRequest => ScheduleSnapshot, automation.schedule_import, true);
+    domain_tool!(router, "wake_list", AutomationPageRequest => AutomationPage<WakeReadResponse>, wakes.wake_list(budget), false);
+    domain_tool!(router, "schedule_import", ScheduleImportRequest => collaboration_service::CatalogMutationResult, automation.schedule_import, true);
     domain_tool!(router, "schedule_export", ScheduleShowRequest => ScheduleExportResult, automation.schedule_export(budget), false);
-    domain_tool!(router, "schedule_create", ScheduleCreateRequest => ScheduleSnapshot, automation.schedule_create, true);
-    domain_tool!(router, "schedule_update", ScheduleUpdateRequest => ScheduleSnapshot, automation.schedule_update, true);
-    domain_tool!(router, "schedule_show", ScheduleShowRequest => ScheduleSnapshot, automation.schedule_show, false);
-    domain_tool!(router, "schedule_enable", ScheduleEnableRequest => ScheduleSnapshot, automation.schedule_enable, true);
-    domain_tool!(router, "schedule_disable", ScheduleEnableRequest => ScheduleSnapshot, automation.schedule_disable, true);
+    domain_tool!(router, "schedule_create", ScheduleCreateRequest => CentralScheduleSnapshot, automation.schedule_create, true);
+    domain_tool!(router, "schedule_update", ScheduleUpdateRequest => ScheduleMutationResponse, automation.schedule_update, true);
+    domain_tool!(router, "schedule_show", ScheduleShowRequest => ScheduleReadResponse, automation.schedule_show, false);
+    domain_tool!(router, "schedule_enable", ScheduleEnableRequest => ScheduleMutationResponse, automation.schedule_enable, true);
+    domain_tool!(router, "schedule_disable", ScheduleEnableRequest => ScheduleMutationResponse, automation.schedule_disable, true);
     domain_tool!(router, "schedule_prepare", SchedulePrepareRequest => ScheduleSnapshot, automation.schedule_prepare, true);
     domain_tool!(router, "run_show", RunShowRequest => RunSnapshot, automation.run_show, false);
     domain_tool!(router, "run_summary_retry", RunRecoveryRequest => RunSnapshot, automation.run_summary_retry, true);
@@ -144,7 +147,7 @@ pub(super) fn register_automation_inspection_tools(
         AutomationPage, AutomationPageRequest, DeliveryAttemptsRequest, DeliveryInspection,
         DeliveryListRequest, DeliveryShowRequest, InstructionSnapshot, OperationShowRequest,
         OperationSnapshot, RevisionListRequest, RevisionRecord, RunListRequest, RunShowRequest,
-        RunSnapshot, RunSummariesRequest, ScheduleSnapshot, SummaryInspection,
+        RunSnapshot, RunSummariesRequest, SummaryInspection,
     };
     domain_tool!(router, "run_reconcile", RunShowRequest => RunSnapshot, automation.run_reconcile(budget), false);
     domain_tool!(router, "delivery_reconcile", DeliveryShowRequest => DeliveryInspection, automation.delivery_reconcile(budget), false);
@@ -154,10 +157,12 @@ pub(super) fn register_automation_inspection_tools(
     domain_tool!(router, "delivery_attempts", DeliveryAttemptsRequest => AttemptHistoryPage<AttemptInspection>, automation.delivery_attempts(budget), false);
     domain_tool!(router, "run_summaries", RunSummariesRequest => AttemptHistoryPage<SummaryInspection>, automation.run_summaries(budget), false);
     domain_tool!(router, "instruction_list", AutomationPageRequest => AutomationPage<InstructionSnapshot>, automation.instruction_list(budget), false);
-    domain_tool!(router, "schedule_list", AutomationPageRequest => AutomationPage<ScheduleSnapshot>, automation.schedule_list(budget), false);
+    domain_tool!(router, "schedule_list", AutomationPageRequest => AutomationPage<collaboration_service::ScheduleReadResponse>, automation.schedule_list(budget), false);
     domain_tool!(router, "run_list", RunListRequest => AutomationPage<RunSnapshot>, automation.run_list(budget), false);
     domain_tool!(router, "delivery_list", DeliveryListRequest => AutomationPage<DeliveryInspection>, automation.delivery_list(budget), false);
     domain_tool!(router, "revision_list", RevisionListRequest => AutomationPage<RevisionRecord>, automation.revision_list(budget), false);
+    domain_tool!(router, "firing_show", collaboration_service::FiringShowRequest => collaboration_protocol::FiringSnapshot, automation.firing_show, false);
+    domain_tool!(router, "firing_list", collaboration_protocol::FiringListRequest => AutomationPage<collaboration_protocol::FiringSnapshot>, automation.firing_list(budget), false);
 }
 
 pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServer>) {

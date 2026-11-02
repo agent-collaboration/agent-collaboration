@@ -51,6 +51,17 @@ pub struct TestCentral {
 }
 
 impl TestCentral {
+    /// Retain this configured central and its real machine pump under one shutdown owner.
+    pub async fn connect_machine_session(
+        self,
+        directory: &Path,
+    ) -> FixtureResult<(
+        fleet_sync_tokio_runner::SessionRequests<board_sync_protocol::BoardConsumerProtocol>,
+        FleetTestRuntime,
+    )> {
+        machine_session::connect(directory, self).await
+    }
+
     pub fn observe_mail_wire(
         &self,
         drop_terminal: Option<fleet_sync_protocol::ItemId>,

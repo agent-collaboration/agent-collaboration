@@ -70,8 +70,7 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
     let mut proof = ProofContext::connect().await?;
     let target = proof.start_thread("Luna history readiness probe").await?;
     let thread_id = String::from(target.session_id.clone());
-    let database_path = std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?)
-        .join(".codex/state_5.sqlite");
+    let database_path = proof.owned_codex_home().join("state_5.sqlite");
     let options = sqlx::sqlite::SqliteConnectOptions::new()
         .filename(database_path)
         .read_only(true)
@@ -334,12 +333,18 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let wake = wakes
         .records
         .iter()
+        .filter_map(|wake| match wake {
+            collaboration_client::WakeReadResponse::Central { value } => Some(value),
+            collaboration_client::WakeReadResponse::Local { .. }
+            | collaboration_client::WakeReadResponse::Faulted { .. }
+            | collaboration_client::WakeReadResponse::Suspended { .. } => None,
+        })
         .find(|wake| match &wake.definition.message.content {
             MessageContent::Agent { text, .. } => text.as_str().contains(&wake_marker),
             _ => false,
         })
         .ok_or("A did not create its durable wake through the CLI")?;
-    if wake.first_fire.is_none() {
+    if wake.first_firing.is_none() {
         return Err("wake has no first-firing evidence".into());
     }
     let deliveries = proof
@@ -390,7 +395,7 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     }) {
         return Err("A's acknowledgement did not follow the actual stored reply push line".into());
     }
-    proof.record("agentCliRoundTripVerified", json!({"alpha":alpha,"beta":beta,"wakeupId":wake.definition.wakeup_id,"firstFire":wake.first_fire,"explicitReplyReceipt":explicit_reply,"deliveries":deliveries.records,"acknowledgement":acknowledgement}))?;
+    proof.record("agentCliRoundTripVerified", json!({"alpha":alpha,"beta":beta,"wakeupId":wake.definition.wakeup_id,"firstFiring":wake.first_firing,"explicitReplyReceipt":explicit_reply,"deliveries":deliveries.records,"acknowledgement":acknowledgement}))?;
     Ok(())
 }
 
@@ -409,7 +414,7 @@ async fn recorded_test_history_is_readable_without_resume() -> ProofResult<()> {
     let context: Value =
         serde_json::from_slice(&std::fs::read(source.join("debug-host-context.json"))?)?;
     if context.get("profile").and_then(Value::as_str) != Some("codex-router-debug")
-        || context.get("model").and_then(Value::as_str) != Some("gpt-5.6-luna")
+        || context.get("model").and_then(Value::as_str) != Some("gpt-6-luna")
     {
         return Err("Source was not a Luna debug proof".into());
     }

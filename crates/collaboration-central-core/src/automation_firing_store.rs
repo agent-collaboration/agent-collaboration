@@ -1,5 +1,6 @@
 //! Inspection reads the admitted content identity and central outcome without local IDs.
 use crate::{
+    automation_list_cursor::{AutomationListCursor, invalid_cursor},
     automation_store_error::{
         AutomationStoreError, AutomationStoreResult, required, timestamp_millis,
     },
@@ -7,6 +8,7 @@ use crate::{
 };
 use collaboration_protocol::{
     AutomationId, ContentReference, FiringId, FiringOutcome, FiringSnapshot, GridTime,
+    WorkReportSequence,
 };
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
@@ -33,9 +35,18 @@ pub(crate) fn decode(
             "automation_firings.state",
         ));
     }
-    let sequence = required(row.report_seq, "report_seq")?
-        .parse::<u64>()
-        .map_err(|_| AutomationStoreError::InvalidRecord("report_seq"))?;
+    let sequence: Option<WorkReportSequence> = row
+        .report_seq
+        .map(|value| {
+            let sequence = value
+                .parse::<u64>()
+                .map_err(|_| AutomationStoreError::InvalidRecord("report_seq"))?;
+            if sequence == 0 {
+                return Err(AutomationStoreError::InvalidRecord("report_seq"));
+            }
+            sequence.try_into().map_err(AutomationStoreError::from)
+        })
+        .transpose()?;
     let report_owner = row
         .report_service_id
         .map(|value| {
@@ -45,7 +56,7 @@ pub(crate) fn decode(
         .transpose()?;
     if report_owner.is_none()
         && (row.batch_id.is_some()
-            || sequence > 0
+            || sequence.is_some()
             || !matches!(outcome, FiringOutcome::Pending | FiringOutcome::Cancelled))
     {
         return Err(AutomationStoreError::InvalidRecord("report_service_id"));
@@ -73,11 +84,7 @@ pub(crate) fn decode(
                 .map_err(|_| AutomationStoreError::InvalidRecord("content_digest"))?,
         },
         outcome,
-        report_seq: if sequence == 0 {
-            None
-        } else {
-            Some(sequence.try_into()?)
-        },
+        report_seq: sequence,
         batch_id: row
             .batch_id
             .map(|id| {
@@ -165,16 +172,17 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let invalid_cursor = || AutomationStoreError::InvalidRequest {
-        field: "cursor",
-        reason: collaboration_protocol::AutomationRequestConstraint::InvalidCursor,
-    };
     let after = request
         .cursor
-        .as_ref()
-        .map(|value| FiringId::try_from(value.clone()))
-        .transpose()
-        .map_err(|_| invalid_cursor())?;
+        .as_deref()
+        .map(|cursor| match AutomationListCursor::decode(cursor)? {
+            AutomationListCursor::Firings {
+                automation_id,
+                after,
+            } if automation_id == request.automation_id => Ok(after),
+            _ => Err(invalid_cursor()),
+        })
+        .transpose()?;
     if let Some(id) = &after {
         let snapshot = read(scope, id).await?.ok_or_else(invalid_cursor)?;
         if snapshot.automation_id != request.automation_id {
@@ -203,12 +211,15 @@ where
     }
     let next_cursor = if more {
         Some(
-            records
-                .last()
-                .ok_or(AutomationStoreError::InvalidRecord("firing.page"))?
-                .firing_id
-                .as_str()
-                .into(),
+            AutomationListCursor::Firings {
+                automation_id: request.automation_id.clone(),
+                after: records
+                    .last()
+                    .ok_or(AutomationStoreError::InvalidRecord("firing.page"))?
+                    .firing_id
+                    .clone(),
+            }
+            .encode()?,
         )
     } else {
         None
@@ -219,4 +230,58 @@ where
             next_cursor,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unreported_row(sequence: Option<&str>) -> queries::StoredAutomationFiring {
+        let identity = || Some(durable_steps::Uuid::now_v7().to_string());
+        queries::StoredAutomationFiring {
+            firing_id: identity(),
+            automation_id: identity(),
+            due_ms: Some("1793440800000".into()),
+            revision: identity(),
+            content_id: identity(),
+            content_revision_id: identity(),
+            content_digest: Some("a".repeat(64)),
+            state: Some("pending".into()),
+            batch_id: None,
+            report_seq: sequence.map(str::to_owned),
+            outcome_json: None,
+            report_service_id: None,
+        }
+    }
+
+    #[test]
+    fn null_sequence_is_unreported() {
+        let snapshot = decode(unreported_row(None)).expect("NULL is the unreported state");
+        assert_eq!(snapshot.report_seq, None);
+    }
+
+    #[test]
+    fn stored_zero_sequence_is_refused_instead_of_coerced() {
+        assert!(matches!(
+            decode(unreported_row(Some("0"))),
+            Err(AutomationStoreError::InvalidRecord("report_seq"))
+        ));
+    }
+
+    #[test]
+    fn positive_sequence_requires_the_retained_report_owner() {
+        let mut row = unreported_row(Some("1"));
+        assert!(matches!(
+            decode(unreported_row(Some("1"))),
+            Err(AutomationStoreError::InvalidRecord("report_service_id"))
+        ));
+        row.report_service_id = Some(durable_steps::Uuid::now_v7().to_string());
+        assert_eq!(
+            decode(row)
+                .expect("positive owned report")
+                .report_seq
+                .map(u64::from),
+            Some(1)
+        );
+    }
 }

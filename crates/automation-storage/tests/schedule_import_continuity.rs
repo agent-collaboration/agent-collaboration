@@ -5,6 +5,34 @@ use agent_automation::{
 use automation_storage::{AutomationStore, RunAdmission, ScheduleCreate, ScheduleImport};
 
 #[tokio::test]
+async fn export_continuity_does_not_require_or_create_a_local_schedule_definition()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let mut store = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
+    let id = agent_automation::ScheduleId::generate();
+    let imported = ContinuityInput::ImportedSummary {
+        text: "Central imported context".into(),
+        source_run_id: "source-run".into(),
+        source_target: "source-thread".to_owned(),
+        import_operation_id: OperationId::generate(),
+    };
+    let continuity = store
+        .export_schedule_continuity(&id, imported.clone())
+        .await?;
+    if !matches!(continuity, Some(summary) if summary.text.as_str() == "Central imported context" && summary.source_run_id == "source-run" && summary.source_target == "source-thread")
+        || !matches!(
+            store.inspect_schedule::<String, String>(&id).await,
+            Err(automation_storage::StorageError::ScheduleNotFound)
+        )
+    {
+        return Err("continuity inspection depended on or created local definition truth".into());
+    }
+    store.close().await?;
+    directory.close()?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn overwrite_preserves_admitted_inputs_and_waiting_identity_after_restart()
 -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::temp_dir().join(format!(

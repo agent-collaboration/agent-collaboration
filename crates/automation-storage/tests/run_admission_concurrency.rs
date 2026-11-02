@@ -28,7 +28,7 @@ async fn two_connections_admit_only_one_run_and_capture_current_inputs()
     .await?;
     let definition = serde_json::json!({"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":600},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":"debug-endpoint","cwd":"/work-a"},"executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"});
     sqlx::query(
-        "INSERT INTO schedule_definitions VALUES (?,?,?,1,?,'{\"kind\":\"none\"}',100,100)",
+        "INSERT INTO schedule_definitions(schedule_id,change_id,instruction_id,enabled,definition_json,imported_continuity_json,created_at_ms,updated_at_ms) VALUES (?,?,?,1,?,'{\"kind\":\"none\"}',100,100)",
     )
     .bind(schedule_id.as_str())
     .bind(ChangeId::generate().as_str())

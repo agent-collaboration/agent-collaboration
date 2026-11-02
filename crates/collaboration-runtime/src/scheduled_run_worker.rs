@@ -355,6 +355,29 @@ impl ScheduledRunWorker {
             Err(DeliveryContractError::ClientOperation) => return Ok(()),
             Err(_) => return Err(StorageError::InvalidRecord),
         };
+        #[cfg(debug_assertions)]
+        if let collaboration_contracts::RunSubmission::Started(accepted) = &submitted {
+            let (faults, evidence) = {
+                let mut owner = self.store.lock().await;
+                (
+                    owner.automation_faults(),
+                    owner.central_run_fault_evidence(&id).await?,
+                )
+            };
+            if let (Some(faults), Some(mut evidence)) = (faults, evidence) {
+                match &accepted.execution {
+                    RunExecution::CodexAppServer(native) => {
+                        evidence.native_turn_id = Some(native.turn_id.clone())
+                    }
+                    RunExecution::ProviderAcp { operation_id, .. } => {
+                        evidence.operation_id = Some(operation_id.clone())
+                    }
+                    RunExecution::ClaudeCodePeer { .. } => {}
+                }
+                faults.hold(automation_storage::AutomationFaultPoint::NativeInputAcceptedBeforeOutcomeCommit,evidence)
+                .await;
+            }
+        }
         self.persist_submission(id, latest, submitted, schedule_push_identity)
             .await
     }

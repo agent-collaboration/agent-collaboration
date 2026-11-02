@@ -1,11 +1,10 @@
-//! A lost service process cannot turn a replayed creation into a duplicate wake.
+//! A lost process cannot duplicate a legacy local creation retained for handover.
 //!
 //! The child process exits either before the creation runs or after it ran but before any
 //! caller could receive its answer; the parent then replays the same operation.
 use crate::CollaborationApplication;
-use crate::collaboration_application::API_RESULT_BUDGET;
 use automation_storage::AutomationStore;
-use collaboration_protocol::{AutomationPageRequest, OperationId, WakeSendRequest};
+use collaboration_protocol::{OperationId, WakeSendRequest};
 use serde_json::json;
 use std::{
     path::{Path, PathBuf},
@@ -59,8 +58,7 @@ async fn wake_creation_replay_survives_service_exit_before_response() -> TestRes
         }
         let application = connect(&root, "00000000-0000-4000-8000-000000000003").await?;
         let wakes = application.wakes();
-        let before = wakes
-            .wake_list(page()?, API_RESULT_BUDGET)
+        let before = local_wakes(&root)
             .await
             .map_err(|failure| format!("{stage}: list failed: {failure:?}"))?;
         let expected_count = usize::from(stage == "after-dispatch");
@@ -70,15 +68,14 @@ async fn wake_creation_replay_survives_service_exit_before_response() -> TestRes
             );
         }
         let first = wakes
-            .wake_send(request(operation.clone())?)
+            .wake_send_local(request(operation.clone())?)
             .await
             .map_err(|failure| format!("{stage}: first replay failed: {failure:?}"))?;
         let second = wakes
-            .wake_send(request(operation)?)
+            .wake_send_local(request(operation)?)
             .await
             .map_err(|failure| format!("{stage}: second replay failed: {failure:?}"))?;
-        let after = wakes
-            .wake_list(page()?, API_RESULT_BUDGET)
+        let after = local_wakes(&root)
             .await
             .map_err(|failure| format!("{stage}: list failed: {failure:?}"))?;
         if first.definition.wakeup_id != second.definition.wakeup_id
@@ -117,7 +114,10 @@ async fn wake_crash_child() -> TestResult<()> {
     }
     let application = connect(&root, "00000000-0000-4000-8000-000000000002").await?;
     checkpoint("before-dispatch");
-    let created = application.wakes().wake_send(request(operation)?).await;
+    let created = application
+        .wakes()
+        .wake_send_local(request(operation)?)
+        .await;
     checkpoint("after-dispatch");
     Err(format!("creation did not stop at selected checkpoint: {created:?}").into())
 }
@@ -132,11 +132,13 @@ async fn connect(root: &Path, epoch: &str) -> TestResult<CollaborationApplicatio
     Ok((identity).build())
 }
 
-fn page() -> TestResult<AutomationPageRequest> {
-    Ok(AutomationPageRequest {
-        cursor: None,
-        limit: 50.try_into()?,
-    })
+async fn local_wakes(
+    root: &Path,
+) -> TestResult<automation_storage::WakeListPage<collaboration_protocol::SavedMessage>> {
+    let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
+    let page = store.list_wakeups(None, 50).await;
+    store.close().await?;
+    Ok(page?)
 }
 fn request(operation_id: OperationId) -> TestResult<WakeSendRequest> {
     Ok(serde_json::from_value(json!({

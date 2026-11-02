@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO central_report_outbox(report_id,subject_kind,subject_id,report_seq,report_json,queued_at_ms) VALUES (?,?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "ab7fe32bbda618d919d2095fbe16e65fdefbefdef09eed5712745e530d859526"
+}

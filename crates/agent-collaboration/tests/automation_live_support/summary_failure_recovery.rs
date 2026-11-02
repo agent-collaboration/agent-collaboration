@@ -49,8 +49,8 @@ pub async fn exercise(proof: &mut ProofContext) -> ProofResult<PortableRunProof>
                     cwd: proof.workspace.to_string_lossy().into_owned(),
                 },
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;
@@ -118,13 +118,18 @@ pub async fn exercise(proof: &mut ProofContext) -> ProofResult<PortableRunProof>
         }
     };
     let current = proof
-        .client
-        .read_schedule(ScheduleShowRequest {
-            schedule_id: schedule.schedule_id.clone(),
-        })
+        .firing_for_run(&schedule.schedule_id, &blocked.run_id)
         .await?;
-    if current.active_run_id.as_ref() != Some(&blocked.run_id) || blocked.summary.is_some() {
-        return Err("Failed required summary lost occupancy or fabricated summary text".into());
+    proof.record(
+        "centralSummaryOccupancyObserved",
+        json!({"runId":&blocked.run_id,"firing":&current}),
+    )?;
+    if !matches!(current.as_ref().map(|firing|&firing.outcome),Some(collaboration_client::protocol::FiringOutcome::RunStarted {run_id}) if run_id==&blocked.run_id)
+        || blocked.summary.is_some()
+    {
+        return Err(
+            "Blocked summary lacked central RunStarted evidence or fabricated summary text".into(),
+        );
     }
     let attempts = proof
         .client

@@ -3,6 +3,8 @@
 //! uncertain outcome. The served API runs one request at a time on its socket; a held wake
 //! wait takes that one, so every other call is shed.
 
+#![cfg(debug_assertions)]
+
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 #[expect(
     dead_code,
@@ -74,7 +76,26 @@ impl SaturatedApi {
                 Some("overload proof"),
             )?,
         })?);
-        let automation = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
+        let mut automation =
+            AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
+        // A retained Local Wake holds the existing local wait path. New public
+        // Wake creation belongs to central and is not this admission fixture.
+        let request: collaboration_protocol::WakeSendRequest = from_json(wake_send_arguments())?;
+        let wake = automation
+            .create_wakeup(&automation_storage::WakeCreate {
+                operation_id: request.operation_id,
+                requested_by: request.requested_by,
+                replace: request.replace,
+                message: request.message,
+                timing: from_json(serde_json::to_value(request.timing)?)?,
+                expiry: from_json(serde_json::to_value(request.expiry)?)?,
+                now_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis()
+                    .try_into()?,
+            })
+            .await?;
+        let wakeup_id = json!(wake.definition.wakeup_id);
         let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
             .map_err(std::io::Error::other)?
             .with_project_admission(admission)
@@ -88,39 +109,46 @@ impl SaturatedApi {
             },
         )?);
         let client = served.client("overload-proof").await?;
-        let wake = served.call("wake_send", wake_send_arguments()).await?;
-        let wakeup_id = wake
-            .pointer("/result/definition/wakeupId")
-            .filter(|wakeup_id| wakeup_id.is_string())
-            .cloned()
-            .ok_or_else(|| format!("wake send failed: {wake}"))?;
-        // The wait holds the only request slot once a probe sent after it is shed. A probe
-        // that wins the slot first would shed the wait instead, so the wait is started again.
-        let held = tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                let holder = Arc::clone(&served);
-                let held_wakeup = wakeup_id.clone();
-                let held = tokio::spawn(async move {
-                    let _answer = holder
-                        .call(
-                            "wake_wait_until_first_fire",
-                            json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                        )
-                        .await;
-                });
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                if held.is_finished() {
-                    continue;
-                }
-                let probe = served.call("automation_status", json!({})).await?;
-                if probe.pointer("/error/data/kind") == Some(&json!("overloaded")) {
-                    break Ok::<_, std::io::Error>(held);
-                }
-                held.abort();
+        // The real call tracker proves admission before the single overload probe.
+        let holder = Arc::clone(&served);
+        let held_wakeup = wakeup_id.clone();
+        let held = tokio::spawn(async move {
+            let _answer = holder
+                .call(
+                    "wake_wait_until_first_fire",
+                    json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
+                )
+                .await;
+        });
+        let saturation = async {
+            tokio::time::timeout(
+                Duration::from_secs(10),
+                served.wait_for_tracked_call_start_for_test(),
+            )
+            .await
+            .map_err(|_| std::io::Error::other("the wake wait was not admitted"))?;
+            let probe = served.call("automation_status", json!({})).await?;
+            if probe.pointer("/error/data/kind") != Some(&json!("overloaded")) {
+                return Err(std::io::Error::other(format!(
+                    "the admitted wake wait did not hold the only request slot: {probe}"
+                )));
             }
-        })
-        .await
-        .map_err(|_| "the wake wait never held the only request slot")??;
+            Ok::<_, std::io::Error>(())
+        }
+        .await;
+        if let Err(error) = saturation {
+            Self {
+                fleet_runtime,
+                served,
+                client,
+                wakeup_id,
+                held,
+                directory,
+            }
+            .stop()
+            .await?;
+            return Err(error.into());
+        }
         Ok(Self {
             fleet_runtime,
             served,

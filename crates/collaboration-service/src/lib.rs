@@ -1,7 +1,9 @@
 //! Collaboration application operations and publication policy, independent of the Host executable.
 pub mod collaboration_application;
 pub mod collaboration_rejection;
-pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
+pub use collaboration_application::{
+    CollaborationApplication, FiringShowRequest, ResultByteBudget,
+};
 mod board_views;
 mod notification_listing_content;
 mod notification_publisher;
@@ -57,6 +59,21 @@ mod automation_collection_projection;
 mod automation_event_cursor;
 mod automation_event_projection;
 mod automation_inspection_failure;
+mod central_catalog;
+mod central_catalog_failure;
+pub use central_catalog::CatalogPageFailure;
+pub use central_catalog_failure::CentralCatalogFailure;
+mod catalog_read_failure;
+mod catalog_results;
+mod schedule_selection_failure;
+pub use schedule_selection_failure::ScheduleSelectionFailure;
+mod central_schedule_snapshot;
+pub use catalog_read_failure::CatalogReadFailure;
+pub use catalog_results::{
+    CatalogAutomationResult, CatalogMutationResult, ScheduleMutationResponse, ScheduleReadResponse,
+    WakeCreateResponse, WakeMutationResponse, WakeReadResponse,
+};
+pub use central_schedule_snapshot::CentralScheduleSnapshot;
 mod delivery_projection;
 #[cfg(test)]
 mod frozen_mail_query_fixture;
@@ -65,6 +82,8 @@ mod frozen_mail_query_fixture;
 mod native_worker_faults;
 mod operation_receipt_projection;
 mod run_projection;
+mod schedule_command_failure;
+pub use schedule_command_failure::ScheduleCommandFailure;
 mod schedule_activation;
 mod schedule_preparation;
 mod schedule_projection;
@@ -72,7 +91,11 @@ mod schedule_projection;
 mod test_project_runtime;
 #[cfg(test)]
 mod test_subject_workstream;
+mod wake_operation_failure;
+mod wake_wait_results;
+pub use wake_wait_results::{CentralWakeWaitOutcome, CentralWakeWaitResult, WakeWaitResponse};
 mod wakeup_subscription;
+pub use wake_operation_failure::{WakeOperationFailure, WakeSelectionFailure};
 
 #[cfg(test)]
 mod delivery_route_projection_tests;

@@ -43,6 +43,9 @@ where
         changed = true;
         let is_wake = matches!(record.definition, StoredAutomationDefinition::Wake(_));
         let timing = match &record.definition {
+            StoredAutomationDefinition::Suspended(_) => {
+                return Err(AutomationStoreError::InvalidRecord("suspended.timing"));
+            }
             StoredAutomationDefinition::Schedule(schedule) => &schedule.timing,
             StoredAutomationDefinition::Wake(wake) => &wake.timing,
         };

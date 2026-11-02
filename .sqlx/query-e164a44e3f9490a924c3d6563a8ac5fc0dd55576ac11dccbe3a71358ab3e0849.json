@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mailbox_deliveries(delivery_id,wakeup_id,occurrence_id,due_at_ms,fired_at_ms,target_json,message_json,delivery_mode,generation_guard_json,delivery_status,eligible_at_ms,expires_at_ms,created_at_ms) VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "e164a44e3f9490a924c3d6563a8ac5fc0dd55576ac11dccbe3a71358ab3e0849"
+}

@@ -1,120 +1,58 @@
-//! Replaying creation must observe the current skipped wake through the CLI wait path.
-use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
-use collaboration_client::protocol::{OperationId, SavedMessage};
-use collaboration_service::ApplicationFixture;
+//! Replaying a central one-shot creation observes its skipped current state through the CLI.
+#[path = "support/central_automation_host.rs"]
+mod fixture;
+use collaboration_protocol::OperationId;
+use fixture::{CentralHost, ProofResult};
 use serde_json::{Value, json};
-use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 
 #[tokio::test]
-async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std::error::Error>> {
-    // Arrange: real SQLite and collaboration API, controlled clock, no native backend.
-    let root = std::path::PathBuf::from(format!(
-        "/tmp/skipped-cli-{}",
-        OperationId::generate().as_str()
-    ));
-    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let mut store = AutomationStore::open(&root.join("automation.sqlite")).await?;
-    let service_id = "00000000-0000-4000-8000-000000000001";
-    let epoch = "00000000-0000-4000-8000-000000000002";
-    let target = json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"fixture"});
-    let message: SavedMessage = serde_json::from_value(json!({
-        "target":target,"content":{"kind":"humanUser","text":"Reminder"},
-        "delivery":"auto","generationGuard":null
-    }))?;
-    let operation_id = OperationId::generate();
-    let wake = store
-        .create_wakeup(&WakeCreate {
-            requested_by: collaboration_protocol::WakeCreator::Owner {},
-            replace: false,
-            operation_id: operation_id.clone(),
-            message,
-            timing: agent_automation::TimingRule::After { seconds: 1 },
-            expiry: agent_automation::ExpiryRule::None,
-            now_ms: 0,
-        })
-        .await?;
-    for (action, now_ms) in [(WakeAction::Pause, 500), (WakeAction::Resume, 2000)] {
-        store
-            .mutate_wakeup::<SavedMessage>(&WakeMutation {
-                operation_id: OperationId::generate(),
-                wakeup_id: wake.definition.wakeup_id.clone(),
-                action,
-                now_ms,
-            })
-            .await?;
-    }
-    let store = Arc::new(tokio::sync::Mutex::new(store));
-    let identity = ApplicationFixture::new(service_id, epoch)
-        .map_err(std::io::Error::other)?
-        .with_automation_store(Arc::clone(&store));
-    let served =
-        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())?;
-
-    // Act: recover the existing creation receipt, then wait on the current wake.
-    let output = tokio::time::timeout(
-        Duration::from_secs(10),
-        tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-            .kill_on_drop(true)
-            .args([
-                "wake",
-                "send",
-                "--to",
-                &target.to_string(),
-                "--human-user",
-                "--text",
-                "Reminder",
-                "--after",
-                "1s",
-                "--operation-id",
-                operation_id.as_str(),
-                "--wait-until-first-fire",
-                "--json",
-                "--service-directory",
-            ])
-            .arg(&root)
-            .output(),
-    )
-    .await;
-    served.stop().await?;
-    let output = output??;
-
-    // Assert: durable creation succeeded, but no firing or delivery was invented.
-    if output.status.code() != Some(4) {
-        return Err(format!(
-            "expected terminal wait exit 4: {}",
-            String::from_utf8_lossy(&output.stdout)
-        )
-        .into());
-    }
-    let error: Value = serde_json::from_slice(&output.stdout)?;
-    if error.pointer("/created/definition/wakeupId") != Some(&json!(wake.definition.wakeup_id)) {
-        return Err("wait error omitted the durably created wake".into());
-    }
-    for (pointer, expected) in [
-        ("/error/kind", "wakeFinishedWithoutFiring"),
-        ("/error/nextAction", "createWakeup"),
-        ("/error/effects/firstFire", "notRecorded"),
-    ] {
-        if error.pointer(pointer) != Some(&json!(expected)) {
-            return Err(format!("incorrect terminal wait feedback at {pointer}: {error}").into());
+async fn skipped_one_shot_cli_wait_reports_no_firing() -> ProofResult {
+    let host = CentralHost::start(fixture::directory()?).await?;
+    let proof: ProofResult = async {
+        let target = json!({"endpoint":{"serviceId":host.runtime.service_id(),"endpointId":"codex-local"},"sessionId":"skipped-cli-target"}).to_string();
+        let operation = OperationId::generate();
+        let due = String::from(host.due.clone());
+        let arguments = ["wake","send","--to",&target,"--human-user","--text","Reminder",
+            "--at",&due,"--for","2h","--operation-id",operation.as_str()];
+        let created = host.json(&arguments).await?;
+        let id = created.pointer("/result/record/value/definition/wakeupId").and_then(Value::as_str).ok_or("central one-shot identity missing")?;
+        host.json(&["wake","pause","--wakeup-id",id]).await?;
+        // This causal clock advance completes the paused due-time scan before resuming.
+        host.advance_to_due().await?;
+        let resumed = host.json(&["wake","resume","--wakeup-id",id]).await?;
+        if resumed.pointer("/result/record/value/automation/value/state") != Some(&json!("finished")) {
+            return Err(format!("paused one-shot did not skip its due mark: {resumed}").into());
         }
-    }
-    let current = store
-        .lock()
-        .await
-        .read_wakeup::<SavedMessage>(&wake.definition.wakeup_id)
-        .await?;
-    if current.first_fire.is_some() || current.pending_delivery_id.is_some() {
-        return Err("skipped wake invented a firing or delivery".into());
-    }
-    drop(store);
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected cleanup entry".into());
+        let mut replay = arguments.to_vec();
+        replay.extend(["--wait-until-first-fire","--json"]);
+        let output = host.run_cli(&replay).await?;
+        let answer: Value = serde_json::from_slice(&output.stdout)?;
+        if output.status.code() != Some(4)
+            || answer.pointer("/created/kind") != Some(&json!("central"))
+            || answer.pointer("/created/value/definition/wakeupId") != Some(&json!(id))
+            || answer.pointer("/wait/wakeupId") != Some(&json!(id))
+            || answer.pointer("/wait/outcome/kind") != Some(&json!("finishedWithoutFiring")) {
+            return Err(format!("CLI lost the durable creation or terminal skipped result: {answer}").into());
         }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
-    Ok(())
+        let current = host.json(&["wake","show","--wakeup-id",id]).await?;
+        if current.pointer("/result/record/value/state") != Some(&json!("finished"))
+            || current.pointer("/result/record/value/firstFiring") != Some(&Value::Null)
+            || current.pointer("/result/record/value/firstFire").is_some()
+            || current.pointer("/result/record/value/nextDueAt") != Some(&Value::Null) {
+            return Err("skipped Wake invented firing evidence or future work".into());
+        }
+        for arguments in [
+            vec!["firing","list","--automation-id",id],
+            vec!["delivery","list","--wakeup-id",id],
+        ] {
+            let page = host.json(&arguments).await?;
+            if page.pointer("/result/page/records").and_then(Value::as_array).is_none_or(|records| !records.is_empty()) {
+                return Err(format!("skipped Wake invented admitted work: {page}").into());
+            }
+        }
+        Ok(())
+    }.await;
+    let stopped = host.close().await;
+    proof?;
+    stopped
 }

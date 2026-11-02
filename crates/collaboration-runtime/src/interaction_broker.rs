@@ -23,8 +23,10 @@ use std::{
 };
 use tokio::sync::{Mutex, oneshot};
 
+mod approval_route_storage;
 mod legacy_provider_projection;
 mod native_approval;
+mod remote_create_routes;
 mod typed_interaction_notice;
 mod typed_interactions;
 use interaction_storage::InteractionHistoryStore;
@@ -281,15 +283,7 @@ impl ServiceInteractionBroker {
         backend: NativeControlBackend,
         routes_path: PathBuf,
     ) -> Result<Arc<Self>, ApprovalBrokerError> {
-        let routes = match tokio::fs::read(&routes_path).await {
-            Ok(bytes) => serde_json::from_slice::<Vec<ApprovalRoute>>(&bytes)
-                .map_err(|_| ApprovalBrokerError::Unavailable)?
-                .into_iter()
-                .map(|route| (route.thread_id.clone(), route))
-                .collect(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
-            Err(_) => return Err(ApprovalBrokerError::Unavailable),
-        };
+        let routes = approval_route_storage::read_routes(&routes_path, &service_id).await?;
         let history_path = routes_path.with_file_name("approval-history.json");
         // Corrupt history is a lost decision record, not an empty one: fail closed
         // exactly as the routes file does. Only an absent file starts empty.

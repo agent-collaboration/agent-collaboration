@@ -68,7 +68,7 @@ pub(super) struct PreparedMachineSession {
     pub(super) requests: SessionRequests<BoardConsumerProtocol>,
     pub(super) peer: PeerId,
     pub(super) relay: PeerId,
-    notices: MachineNoticeReactions,
+    pub(super) notices: MachineNoticeReactions,
     pub projects: Arc<ProjectWriters>,
     pub(super) welcomed: watch::Sender<bool>,
     stop: watch::Sender<bool>,
@@ -242,6 +242,43 @@ impl PreparedMachineSession {
 }
 
 impl RunningMachineSession {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub(in crate::collaboration_runtime) async fn causal_machine_work_readiness_pull_for_test(
+        &self,
+    ) -> io::Result<()> {
+        use collaboration_protocol::{
+            AutomationAnswer, AutomationCall, MachineWorkProtocol, PullAutomationBatches,
+        };
+        use collaboration_runtime::CentralAutomationTransport;
+        let projects = self
+            .projects
+            .upgrade()
+            .ok_or_else(|| io::Error::other("test machine session owner is unavailable"))?;
+        let mut welcomed = projects.welcomed.clone();
+        while !*welcomed.borrow() {
+            welcomed.changed().await.map_err(io::Error::other)?;
+        }
+        let transport =
+            collaboration_runtime::SessionAutomationTransport::new(projects.requests.clone());
+        match transport
+            .call(AutomationCall::PullAutomationBatches(
+                PullAutomationBatches {
+                    after: None,
+                    max_bytes: u32::try_from(collaboration_protocol::MAX_CONTROL_FRAME_BYTES)
+                        .map_err(io::Error::other)?,
+                    work_protocols: vec![MachineWorkProtocol::MachineWorkV1],
+                },
+            ))
+            .await
+            .map_err(io::Error::other)?
+        {
+            AutomationAnswer::Batches(_) => Ok(()),
+            _ => Err(io::Error::other(
+                "test causal machine-work capability pull returned another answer",
+            )),
+        }
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
         &self,

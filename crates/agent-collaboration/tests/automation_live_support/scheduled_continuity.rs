@@ -31,8 +31,8 @@ pub async fn exercise() -> ProofResult<()> {
                     cwd: proof.workspace.to_string_lossy().into_owned(),
                 },
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;
@@ -71,12 +71,15 @@ pub async fn exercise() -> ProofResult<()> {
         expected_revision_id: instruction.revision_id,
         text: "Recover the required continuity token from the previous-run summary in your context. Output exactly 'RECOVERED: ' followed by that token. If no token is provided, output MISSING_CONTINUITY. Do not invent a token, call tools, change files or spawn agents.".to_owned().try_into()?,
     }).await?;
-    let mut current = proof
+    let collaboration_client::ScheduleReadResponse::Schedule { value: mut current } = proof
         .client
         .read_schedule(ScheduleShowRequest {
             schedule_id: schedule.schedule_id.clone(),
         })
-        .await?;
+        .await?
+    else {
+        return Err("Schedule inspection returned a faulted definition".into());
+    };
     current.definition.timing = TimingRequest::At {
         at: (chrono::Utc::now() + chrono::Duration::seconds(1))
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -196,13 +199,13 @@ pub(super) async fn wait_for_finished_run(
                             "Owned-thread continuation unexpectedly requested a summary".into()
                         );
                     }
-                    let current = proof
-                        .client
-                        .read_schedule(ScheduleShowRequest {
-                            schedule_id: schedule_id.clone(),
-                        })
-                        .await?;
-                    if current.active_run_id.as_ref() == Some(&run.run_id) {
+                    let current = proof.firing_for_run(schedule_id, &run.run_id).await?;
+                    proof.record(
+                        "centralSummaryOccupancyObserved",
+                        json!({"runId":&run.run_id,"firing":&current}),
+                    )?;
+                    if matches!(current.as_ref().map(|firing|&firing.outcome),Some(collaboration_client::protocol::FiringOutcome::RunStarted {run_id}) if run_id==&run.run_id)
+                    {
                         saw_summary = true;
                     } else {
                         // These are separate read snapshots; accept only an actually finished Run
@@ -215,7 +218,7 @@ pub(super) async fn wait_for_finished_run(
                             .await?;
                         if !matches!(latest.state, RunState::Finished { .. }) {
                             return Err(
-                                "Required summarization lost the schedule's active Run".into()
+                                "Required summary lacked central RunStarted evidence for its exact unfinished Run".into()
                             );
                         }
                     }

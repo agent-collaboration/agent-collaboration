@@ -7,14 +7,22 @@ pub use automation_cron::GridCron;
 pub use automation_grid::{AutomationValidationError, GRID_STEP_MS, GridPeriod, GridTime};
 pub use central_timing::{AutomationKind, AutomationTiming};
 mod automation_calls;
+mod automation_import_configuration;
+mod automation_import_contract;
+pub use automation_import_configuration::*;
+pub use automation_import_contract::*;
+mod automation_suspended_contract;
+pub use automation_suspended_contract::*;
 mod automation_fault_contract;
 pub use automation_fault_contract::*;
 mod automation_custody;
+mod remote_session_create_contract;
 pub use agent_automation::{
     AutomationId, BatchId, ContentId, FiringId, ImportId, ReportId, WorkItemId,
 };
 pub use automation_calls::*;
 pub use automation_custody::*;
+pub use remote_session_create_contract::*;
 mod wake_authority;
 pub use wake_authority::{WakeCreator, WakeRefusal};
 mod mail_boundary_conversions;
@@ -322,7 +330,10 @@ pub use schedule_contract::{
     ScheduleEnableRequest, ScheduleShowRequest, ScheduleSnapshot, ScheduleUpdateRequest,
 };
 pub use schedule_failure::ScheduleFailureDetails;
-pub use schedule_package_contract::{ScheduleExportResult, ScheduleImportRequest};
+pub use schedule_package_contract::{
+    ScheduleExportResult, ScheduleImportRequest, SchedulePackage, SchedulePackageContinuity,
+    SchedulePackageImportRequest, SchedulePackageInstruction,
+};
 mod schedule_failure;
 pub use agent_automation::{ChangeId, RunId, ScheduleId};
 pub use schedule_failure::{
@@ -331,7 +342,10 @@ pub use schedule_failure::{
 
 mod schedule_preparation_contract;
 pub use schedule_failure::ScheduleEffects;
-pub use schedule_preparation_contract::{DestinationPreparation, SchedulePrepareRequest};
+pub use schedule_preparation_contract::{
+    BoundScheduleThread, DestinationPreparation, ScheduleBindPreparedRequest,
+    SchedulePrepareRequest,
+};
 
 mod run_evidence_validation;
 mod run_execution_contract;
