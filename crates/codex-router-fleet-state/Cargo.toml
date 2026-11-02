@@ -19,9 +19,11 @@ message-board = { path = "../message-board", version = "0.1.119" }
 schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
 serde_json = { workspace = true, optional = true }
 url.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3.27.0"
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM fleet_login",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "fa700694d6ccc60f9370b15d2a8545e35583b989edc0a8c91a8342d148ad121b"
+}
