@@ -61,6 +61,7 @@ const eventKindSchema = z.enum([
 	'refresh-owner-started',
 	'refresh-first-request-held',
 	'refresh-setup-held',
+	'refresh-result-published',
 ]);
 export type QuotaFixtureEventKind = z.infer<typeof eventKindSchema>;
 const fenceRequestSchema = z.strictObject({

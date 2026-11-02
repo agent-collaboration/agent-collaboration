@@ -327,3 +327,30 @@ test.each(['fence', 'EOF'] as const)(
 		expect(journal.read(true)).toEqual([{ sequence: 1, event }]);
 	},
 );
+
+test('refresh publication fences carry the declared post-flush completion on the same owned socket', async () => {
+	const requests: unknown[] = [];
+	const control = await connectFixture((request, socket) => {
+		requests.push(request);
+		socket.write(
+			JSON.stringify({
+				kind: 'fixture-event-fence',
+				requestId: request.requestId,
+				result: { kind: 'observed', ordinal: 5, eventKind: 'refresh-result-published' },
+			}) + '\n',
+		);
+	});
+	const completion = await control.awaitEvent({
+		afterOrdinal: 4,
+		kind: 'refresh-result-published',
+		signal: new AbortController().signal,
+	});
+	expect(completion).toEqual({
+		kind: 'observed',
+		ordinal: 5,
+		eventKind: 'refresh-result-published',
+	});
+	expect(requests).toEqual([
+		{ requestId: 1, operation: 'await_event', after_ordinal: 4, kind: 'refresh-result-published' },
+	]);
+});

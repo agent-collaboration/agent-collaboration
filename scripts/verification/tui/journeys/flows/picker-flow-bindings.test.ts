@@ -62,9 +62,9 @@ test('all authored flow data selects through one matrix without copied steps', (
 		expect(matrix.every((invocation) => invocation.journey === journey)).toBe(true);
 	}
 });
-test('unsupported native fixture rejects before even creating an output directory', async () => {
-	const plan = controlledPlan('quota-refresh-partial');
-	await expect(runAuthoredFlow(plan)).rejects.toThrow('no native adapter');
+test('unknown authored journey rejects before even creating an output directory', async () => {
+	const plan = controlledPlan('quota-not-authored');
+	await expect(runAuthoredFlow(plan)).rejects.toThrow('unknown authored flow');
 	expect(existsSync(plan.output)).toBe(false);
 });
 test('the stopped native adapter declares its independent first-overlay and exact captured source', () => {

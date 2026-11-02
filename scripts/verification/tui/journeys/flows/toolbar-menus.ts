@@ -131,7 +131,32 @@ const toolbarMenuDrafts: readonly FlowJourney[] = (['sessions', 'quota'] as cons
 );
 
 export const toolbarMenuJourneys: readonly FlowJourney[] = toolbarMenuDrafts.map((journey) => {
-	if (journey.surface !== 'sessions') return journey;
+	if (journey.surface === 'quota')
+		return Object.assign({}, journey, {
+			steps: journey.steps.flatMap((step): FlowJourney['steps'] => {
+				if (step.kind === 'capture' && step.checks.includes('closed-menu-inventory'))
+					return [
+						{
+							kind: 'fixture',
+							operation: 'inspect-quota-menu-' + step.checkpoint,
+							purpose:
+								'Traverse the real closed quota menu and its keys before the original capture.',
+						},
+						step,
+					];
+				if (step.kind === 'capture' && step.checkpoint === 'help-actions-settings-conventions')
+					return [
+						{
+							kind: 'fixture',
+							operation: 'inspect-quota-menu-help',
+							purpose:
+								'Collect every physical Help row against the independent action and convention census.',
+						},
+						step,
+					];
+				return [step];
+			}),
+		});
 	return Object.assign({}, journey, {
 		inputProfile: 'example-ghostty-keybinds',
 		steps: journey.steps.flatMap((step): FlowJourney['steps'] => {

@@ -8,7 +8,9 @@ import { captureArtifact, sourceDigest } from '../../evidence/source-binding.ts'
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
-import { requireAuthoredFlowAdmission } from './authored-flow-run.ts';
+import { authoredFlowMatrix, requireAuthoredFlowAdmission } from './authored-flow-run.ts';
+import { quotaCasePhases } from './quota-case-run.ts';
+import { quotaFlowBundle } from './quota-flow-bindings.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -86,15 +88,116 @@ test('replacement of a previously bound stand-in remains an admission failure', 
 	);
 	expect(existsSync(plan.output)).toBe(false);
 });
-test('a valid bound artifact does not turn an unsupported quota adapter into a pass', () => {
-	const { plan, standin } = controlledPlan('quota-login-succeeded');
+test('a valid bound artifact does not admit an unauthored quota journey', () => {
+	const { plan, standin } = controlledPlan('quota-outside-authored-catalogue');
 	expect(() => requireAuthoredFlowAdmission({ ...plan, quota: { loginStandin: standin } })).toThrow(
-		'no native adapter',
+		'unknown authored flow',
 	);
 	expect(existsSync(plan.output)).toBe(false);
 });
-test('non-guard quota routes preserve their unsupported-adapter gap without requiring a stand-in', () => {
+test('non-guard quota refresh admits both phases without requiring a stand-in', () => {
 	const { plan } = controlledPlan('quota-refresh-partial');
-	expect(() => requireAuthoredFlowAdmission(plan)).toThrow('no native adapter');
+	expect(() => requireAuthoredFlowAdmission(plan)).not.toThrow();
+	expect(existsSync(plan.output)).toBe(false);
+});
+
+test.each([
+	'quota-login-succeeded',
+	'quota-login-cancelled-130',
+	'quota-login-failed',
+	'quota-group-by-f6',
+])(
+	'%s admits its complete native binding without creating output or connecting a socket',
+	(journey) => {
+		const { plan, standin } = controlledPlan(journey);
+		expect(() =>
+			requireAuthoredFlowAdmission({ ...plan, quota: { loginStandin: standin } }),
+		).not.toThrow();
+		expect(existsSync(plan.output)).toBe(false);
+	},
+);
+
+test.each([
+	'quota-actions-every-command',
+	'quota-remove-cancel-primary',
+	'quota-remove-middle',
+	'quota-remove-last',
+	'quota-remove-only',
+	'quota-remove-requires-disabled-refusal',
+])('%s admits all declared account action steps before output creation', (journey) => {
+	const { plan } = controlledPlan(journey);
+	expect(() => requireAuthoredFlowAdmission(plan)).not.toThrow();
+	expect(existsSync(plan.output)).toBe(false);
+});
+
+test('quota toolbar and menu admits its complete read-only adapter before output creation', () => {
+	const { plan } = controlledPlan('quota-toolbar-and-menu');
+	expect(() => requireAuthoredFlowAdmission(plan)).not.toThrow();
+	expect(existsSync(plan.output)).toBe(false);
+});
+
+test('middle removal binds its separate declared held phase before output creation', () => {
+	const { plan } = controlledPlan('quota-remove-middle'),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('literal invocation absent');
+	const held = quotaFlowBundle(plan, invocation, plan.output, 'remove-held');
+	expect(held?.layout.configuration.scenario).toBe('remove-held');
+	expect(existsSync(plan.output)).toBe(false);
+});
+test('a quota phase rejects a scenario outside its authored journey before output creation', () => {
+	const { plan } = controlledPlan('quota-remove-middle'),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('literal invocation absent');
+	expect(() => quotaFlowBundle(plan, invocation, plan.output, 'login-failed7')).toThrow(
+		'outside authored journey',
+	);
+	expect(existsSync(plan.output)).toBe(false);
+});
+
+test('middle removal admits both fresh phases with every original step and no output', () => {
+	const { plan } = controlledPlan('quota-remove-middle'),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('literal invocation absent');
+	const phases = quotaCasePhases(plan, invocation, plan.output);
+	expect(phases?.map((phase) => phase.bundle.layout.configuration.scenario)).toEqual([
+		'remove-middle',
+		'remove-held',
+	]);
+	expect(new Set(phases?.map((phase) => phase.bundle.layout.output)).size).toBe(2);
+	for (const phase of phases ?? [])
+		expect(phase.invocation.journey.steps.slice(1)).toEqual(invocation.journey.steps);
+	expect(existsSync(plan.output)).toBe(false);
+});
+
+test.each(['quota-list-option-navigation', 'quota-help-option-navigation'])(
+	'%s admits the full read-only physical binding without output',
+	(journey) => {
+		const { plan } = controlledPlan(journey);
+		expect(() => requireAuthoredFlowAdmission(plan)).not.toThrow();
+		expect(existsSync(plan.output)).toBe(false);
+	},
+);
+
+test.each([
+	'quota-refresh-all-success',
+	'quota-refresh-partial',
+	'quota-refresh-all-failed',
+	'quota-refresh-setup-failed',
+])('%s pre-admits separate key and menu children', (journey) => {
+	const { plan } = controlledPlan(journey),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (invocation === undefined) throw new Error('literal invocation absent');
+	expect(() => requireAuthoredFlowAdmission(plan)).not.toThrow();
+	const phases = quotaCasePhases(plan, invocation, plan.output);
+	expect(phases).toHaveLength(2);
+	expect(new Set(phases?.map((phase) => phase.bundle.layout.output)).size).toBe(2);
+	expect(
+		phases
+			?.flatMap((phase) => phase.invocation.journey.steps.slice(1))
+			.filter((step) => step.kind === 'readback')
+			.map((step) => step.checks),
+	).toEqual(
+		invocation.journey.steps.filter((step) => step.kind === 'readback').map((step) => step.checks),
+	);
 	expect(existsSync(plan.output)).toBe(false);
 });

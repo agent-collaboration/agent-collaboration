@@ -40,6 +40,14 @@ file. A definition is not a passing receipt.
 `capture/baseline-journeys.ts` separately records the component-system's pre-change
 failures, passing isolation cases, absent future entries, and unobserved fixtures.
 
+The quota B draft binds seventeen journeys through `journeys/flows/authored-flow-run.ts`.
+Read-only toolbar/navigation use the component libtest; account/login/grouping/
+refresh use the separately declared effectful CLI role. Middle removal and each
+refresh outcome require fresh child phases. Registry admission and reader tests
+are preparation only; exact signed artifacts, transport/startup qualification and
+native observations remain required. See the S9 recipe for its source/ACK inventory
+and frame, effect and teardown obligations.
+
 Every checkpoint keeps raw ANSI, JSON cells, text and assertion results. Each
 original keeps its byte/image hashes, renderer/WASM/Chrome identities, source,
 build, viewport and checkpoint. Each journey rejects the actual empty-core and

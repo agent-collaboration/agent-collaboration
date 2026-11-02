@@ -36,8 +36,9 @@ qualified Chrome executable for original PNGs. Paths are producer supplied.
 Hashes bind artifacts; the producer must establish compilation provenance and
 that the driver embeds the nominated harness build.
 
-The driver is the prebuilt `quota_storyboard_capture_test` libtest, with exact
-entry `compiled_grid_terminal_observation`. Normal/hard require the `agent-router-quota-tui` library
+The driver is the prebuilt `e2e` libtest, with exact entry
+`quota_storyboard::compiled_grid_terminal_observation`. Public Sessions uses
+`quota_storyboard::compiled_public_sessions_grid_observation`. Normal/hard require the `agent-router-quota-tui` library
 libtest containing
 `quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture`.
 A CLI libtest without that entry rejects before startup.
@@ -93,7 +94,7 @@ paired-marker cases and authored flows use that same list. A wired definition is
 | `hard-` | Exact `visual-hard-cases` fixture: known Alpha windows, stale selected Beta weekly/Extra, Pool census/locked-credentials notice, close and Beta Details. Short height has distinct identity/window poses. |
 | component-system baseline | `baseline-journeys.ts`: main Esc, Help Esc wording, New focus/Down, Account-details spacing, existing-overlay input isolation and covered drawing. Future menu/toolbar/dropdown entries are absent at base. Wide-under-dialog requires the selectable product fixture. |
 | public Sessions | `public-sessions-run.ts`: separately qualified real executable, same grid/original sink, preserved normal home/cwd/Host/effect/job contract below. |
-| S9 authored flows | [Authored journeys and native bindings](s9-new-entry-journeys.md), `journeys/flows/flow-catalogue.ts --check`: 31 B flows, 212 grid/protocol variants. `authored-flow-run.ts` drives admitted fixture adapters; unsupported bindings fail before startup. Catalogue checks launch no product and report zero product passes. |
+| S9 authored flows | [Authored journeys and native bindings](s9-new-entry-journeys.md), `journeys/flows/flow-catalogue.ts --check`: 33 B flows, 228 grid/protocol variants. `authored-flow-run.ts` drives admitted fixture adapters; unsupported bindings fail before startup. Catalogue checks launch no product and report zero product passes. |
 | component showcase | `showcase/run.ts PLAN.json [--check]`: SC01–SC27 through the lane's canonical transport and readers against the separately bound ordinary example. Defaults are four grids and both modes, with independent Quit, glyph, clipping and lifecycle cases. Run `showcase/qualify-transport.ts` before a window request. A valid plan or handshake is not a scenario pass. |
 
 SC25's anchored-overlay reseed is draft until driven on a newly declared example.

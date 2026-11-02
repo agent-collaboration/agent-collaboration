@@ -5,11 +5,11 @@ import { dirname, isAbsolute } from 'node:path';
 
 import { z } from 'zod';
 
-const envelopeSchema = z.strictObject({
+export const quotaEventRecordSchema = z.strictObject({
 	sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 	event: z.object({ kind: z.string().min(1) }).catchall(z.unknown()),
 });
-type QuotaEventRecord = z.infer<typeof envelopeSchema>;
+type QuotaEventRecord = z.infer<typeof quotaEventRecordSchema>;
 function ownedFile(path: string): BigIntStats {
 	const metadata = lstatSync(path, { bigint: true });
 	if (
@@ -54,7 +54,7 @@ export class QuotaEventJournal {
 			);
 			if (text !== '')
 				for (const line of text.slice(0, -1).split('\n')) {
-					const record = envelopeSchema.parse(JSON.parse(line));
+					const record = quotaEventRecordSchema.parse(JSON.parse(line));
 					if (record.sequence !== this.records.length + 1)
 						throw new Error('quota event sequences are not contiguous');
 					this.records.push(record);

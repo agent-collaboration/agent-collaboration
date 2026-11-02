@@ -205,7 +205,10 @@ test('component_pending_receipt_requires_exact_release_and_fresh_paths', () => {
 	expect(() => childLaunchConfiguration(configuration)).toThrow('must be absent');
 });
 
-test('component_receipt_must_be_the_exact_unreleased_marker', () => {
+test.each([
+	['normal', 'Normal'],
+	['large-list', 'LargeList'],
+])('component receipt must be exact and unreleased for %s', (scenario, debugName) => {
 	const output = temporaryDirectory();
 	const receipt = join(output, 'fixture-finished');
 	const configuration: FixtureCommand = {
@@ -213,7 +216,7 @@ test('component_receipt_must_be_the_exact_unreleased_marker', () => {
 		binary: '/declared/test',
 		temporary_directory: output,
 		output,
-		component_fixture_scenario: 'normal',
+		component_fixture_scenario: scenario,
 		component_fixture_receipt: receipt,
 	};
 	expect(childLaunchConfiguration(configuration).environment).not.toHaveProperty(
@@ -221,7 +224,9 @@ test('component_receipt_must_be_the_exact_unreleased_marker', () => {
 	);
 	expect(() => verifyComponentCompletion(configuration)).toThrow('completion receipt missing');
 	const exact =
-		'QUOTA_COMPONENT_FIXTURE_FINISHED scenario=Normal released=false external_requests=0 persisted_writes=0\n';
+		'QUOTA_COMPONENT_FIXTURE_FINISHED scenario=' +
+		debugName +
+		' released=false external_requests=0 persisted_writes=0\n';
 	for (const forged of [
 		exact.trimEnd(),
 		exact.replace('external_requests=0', 'external_requests=1'),

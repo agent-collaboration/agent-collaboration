@@ -22,6 +22,7 @@ import type { FlowJourney } from './flow-definition.ts';
 import { newDialogJourneys } from './new-dialog.ts';
 import { optionNavigationJourneys } from './option-navigation.ts';
 import { pickerGroupingJourney } from './picker-grouping.ts';
+import { quotaGroupingJourney } from './quota-grouping.ts';
 import { quotaRefreshJourneys } from './quota-refresh.ts';
 import { sourceQualifiedJourneys } from './source-qualified-selection.ts';
 import { toolbarMenuJourneys } from './toolbar-menus.ts';
@@ -35,18 +36,21 @@ export const authoredFlows: readonly FlowJourney[] = [
 	...quotaRefreshJourneys,
 	...optionNavigationJourneys,
 	pickerGroupingJourney,
+	quotaGroupingJourney,
 ];
 /** Named coverage placeholders, not admitted journeys or product passes. */
-export const pendingGroupingFlows = (['quota'] as const).map((surface) => ({
-	journeyId: surface + '-group-by-f6',
-	requirement: 'U18/R19',
-	surface,
-	state: 'awaiting-declared-grouping-target',
-	binding: 'F6',
-	grids: journeyGridSizes,
-	keys: ['legacy', 'kitty'],
-	source: 'Lead 01a19404; design f93aeebca',
-}));
+export const pendingGroupingFlows = (['quota'] as const)
+	.map((surface) => ({
+		journeyId: surface + '-group-by-f6',
+		requirement: 'U18/R19',
+		surface,
+		state: 'awaiting-declared-grouping-target',
+		binding: 'F6',
+		grids: journeyGridSizes,
+		keys: ['legacy', 'kitty'],
+		source: 'Lead 01a19404; design f93aeebca',
+	}))
+	.filter((flow) => !authoredFlows.some((journey) => journey.journeyId === flow.journeyId));
 export function validateAuthoredFlows(): void {
 	const ids = new Set<string>();
 	for (const candidate of authoredFlows) {

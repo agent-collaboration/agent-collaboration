@@ -17,6 +17,7 @@ import {
 	sourceDigest,
 	verifyArtifact,
 } from '../../evidence/source-binding.ts';
+import { COMPONENT_SCENARIOS, COMPONENT_TEST } from '../../fixtures/component-fixture-contract.ts';
 import { ptyGridDriverEntry } from '../../terminal/pty-grid-driver.ts';
 import { qualifyTerminal } from '../../terminal/terminal-qualification.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
@@ -28,7 +29,11 @@ import { executeNativeFlow } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { executePickerGroupingCase } from './picker-grouping-run.ts';
+import { executeQuotaCase, quotaCasePhases } from './quota-case-run.ts';
+import { quotaEffectEntry } from './quota-fixture-contract.ts';
+import { quotaOptionBindings } from './quota-option-bindings.ts';
 import { requireQuotaPlanArtifacts } from './quota-plan-admission.ts';
+import { quotaToolbarBindings } from './quota-toolbar-bindings.ts';
 
 export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocation[] {
 	validateAuthoredFlows();
@@ -41,7 +46,18 @@ export function authoredFlowMatrix(plan: AuthoredFlowPlan): readonly FlowInvocat
 export function requireAuthoredFlowAdmission(plan: AuthoredFlowPlan): void {
 	requireQuotaPlanArtifacts(plan);
 	for (const invocation of authoredFlowMatrix(plan)) {
-		const bindings = pickerFlowBindings(plan, invocation, plan.output, plan.output);
+		const phases = quotaCasePhases(plan, invocation, plan.output);
+		if (phases !== null) {
+			for (const phase of phases) {
+				const gaps = pickerFlowAdmission(phase.invocation, phase.bundle.bindings);
+				if (gaps.length > 0) throw new Error('fixture admission gap: ' + JSON.stringify(gaps));
+			}
+			continue;
+		}
+		const bindings =
+			quotaToolbarBindings(plan, invocation, plan.output) ??
+			quotaOptionBindings(plan, invocation, plan.output) ??
+			pickerFlowBindings(plan, invocation, plan.output, plan.output);
 		const gaps = pickerFlowAdmission(invocation, bindings);
 		if (gaps.length > 0) throw new Error('fixture admission gap: ' + JSON.stringify(gaps));
 	}
@@ -90,6 +106,20 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 	});
 	if (!listing.split('\n').includes(entry + ': test'))
 		throw new Error('streaming driver entry absent');
+	if (invocation.journey.surface === 'quota') {
+		const productEntry = [
+			'quota-toolbar-and-menu',
+			'quota-list-option-navigation',
+			'quota-help-option-navigation',
+		].includes(plan.journey)
+			? COMPONENT_TEST
+			: quotaEffectEntry;
+		const productListing = execFileSync(plan.product.path, [productEntry, '--exact', '--list'], {
+			encoding: 'utf8',
+		});
+		if (!productListing.split('\n').includes(productEntry + ': test'))
+			throw new Error('quota component product entry absent');
+	}
 	await qualifyTerminal();
 }
 export async function runAuthoredFlow(plan: AuthoredFlowPlan): Promise<void> {
@@ -107,7 +137,32 @@ export async function runAuthoredFlow(plan: AuthoredFlowPlan): Promise<void> {
 			mkdirSync(output, { mode: 0o700 });
 			let result: FlowExecutionResult;
 			try {
-				if (plan.journey === 'sessions-group-by-f6') {
+				const quota = quotaCasePhases(plan, invocation, output);
+				if (quota !== null) {
+					result = await executeQuotaCase(plan, invocation, output, () => requireSourcePins(plan));
+				} else if (
+					[
+						'quota-toolbar-and-menu',
+						'quota-list-option-navigation',
+						'quota-help-option-navigation',
+					].includes(plan.journey)
+				) {
+					const bindings =
+						quotaToolbarBindings(plan, invocation, output) ??
+						quotaOptionBindings(plan, invocation, output);
+					if (bindings === null) throw new Error('read-only quota adapter disappeared');
+					result = await executeNativeFlow(invocation, bindings);
+					const receipt = readFileSync(join(output, 'fixture-finished'), 'utf8');
+					const scenario = bindings.target.componentScenario;
+					if (scenario === undefined) throw new Error('read-only quota scene absent');
+					if (
+						receipt !==
+						'QUOTA_COMPONENT_FIXTURE_FINISHED scenario=' +
+							COMPONENT_SCENARIOS[scenario] +
+							' released=false external_requests=0 persisted_writes=0\n'
+					)
+						throw new Error('read-only quota completion receipt differs');
+				} else if (plan.journey === 'sessions-group-by-f6') {
 					result = await executePickerGroupingCase(plan, invocation, output, () =>
 						requireSourcePins(plan),
 					);
