@@ -57,7 +57,7 @@ export function quotaFixtureLayout(options: {
 		events: join(output, 'events.jsonl'),
 		receipt: join(output, 'receipt.json'),
 		controlSocket: join(output, 'control.sock'),
-		dispatchReceipt: join(output, 'dispatch.jsonl'),
+		dispatchReceipt: join(output, 'input-dispatch.jsonl'),
 		...(guarded
 			? {
 					loginReceipt: join(output, 'login.jsonl'),

@@ -241,11 +241,11 @@ export function quotaReadOnlyBaseBindings(
 			surface: 'normal',
 			componentBinary: plan.product.path,
 			componentScenario: scenario,
-			componentDispatchReceipt: join(evidence, 'dispatch.jsonl'),
+			componentDispatchReceipt: join(evidence, 'input-dispatch.jsonl'),
 			keys: invocation.keys,
 			evidence,
 		},
-		receipt: join(evidence, 'dispatch.jsonl'),
+		receipt: join(evidence, 'input-dispatch.jsonl'),
 		original: {
 			chrome: plan.chrome,
 			sourceHead: plan.productSource.head,

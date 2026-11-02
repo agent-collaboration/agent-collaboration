@@ -1,16 +1,20 @@
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, expect, test } from 'vitest';
 
 import type { ArtifactBinding } from '../../evidence/evidence-schema.ts';
 import { captureArtifact, sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
+import { InputConsumptionReadback } from '../../sessions/input-consumption-readback.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, requireAuthoredFlowAdmission } from './authored-flow-run.ts';
+import { authoredFlows } from './flow-catalogue.ts';
 import { quotaCasePhases } from './quota-case-run.ts';
 import { quotaFlowBundle } from './quota-flow-bindings.ts';
+import { quotaOptionBindings } from './quota-option-bindings.ts';
+import { quotaToolbarBindings } from './quota-toolbar-bindings.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -263,3 +267,29 @@ test('wheel preflight declares measured viewport coordinates without inventing c
 		).toBe(false);
 	}
 });
+
+// The real ACK reader, rather than another path constructor, owns the receipt contract.
+test.each(authoredFlows.filter((flow) => flow.surface === 'quota').map((flow) => flow.journeyId))(
+	'%s nominates receipts accepted by the actual strict ACK reader',
+	(journey) => {
+		const { plan, standin } = controlledPlan(journey);
+		const bound = { ...plan, quota: { loginStandin: standin } };
+		const invocation = authoredFlowMatrix(bound)[0];
+		if (invocation === undefined) throw new Error('quota invocation absent');
+		const phases = quotaCasePhases(bound, invocation, bound.output);
+		const readOnly =
+			quotaToolbarBindings(bound, invocation, bound.output) ??
+			quotaOptionBindings(bound, invocation, bound.output);
+		const bindings =
+			phases?.map((phase) => phase.bundle.bindings) ?? (readOnly === null ? [] : [readOnly]);
+		expect(bindings.length).toBeGreaterThan(0);
+		for (const binding of bindings) {
+			const directory = dirname(binding.receipt);
+			if (existsSync(directory)) throw new Error('receipt directory must be fresh');
+			mkdirSync(directory, { recursive: true, mode: 0o700 });
+			roots.push(directory);
+			writeFileSync(binding.receipt, '', { flag: 'wx', mode: 0o600 });
+			expect(InputConsumptionReadback.open(binding.receipt).sequence).toBe(0);
+		}
+	},
+);
