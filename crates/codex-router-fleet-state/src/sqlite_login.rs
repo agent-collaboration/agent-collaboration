@@ -19,10 +19,10 @@ struct StoredFleetLogin {
 fn invalid(field: &'static str) -> FleetLoginStorageFailure {
     FleetLoginStorageFailure::InvalidRecord { field }
 }
-impl TryFrom<StoredFleetLogin> for SavedFleetLogin {
-    type Error = FleetLoginStorageFailure;
-    fn try_from(row: StoredFleetLogin) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl StoredFleetLogin {
+    fn decode(self) -> Result<SavedFleetLogin, FleetLoginStorageFailure> {
+        let row = self;
+        Ok(SavedFleetLogin {
             enrollment_id: row
                 .enrollment_id
                 .try_into()
@@ -58,7 +58,7 @@ async fn read_saved(
     if rows.len() > 1 {
         return Err(invalid("singleton"));
     }
-    rows.pop().map(TryInto::try_into).transpose()
+    rows.pop().map(StoredFleetLogin::decode).transpose()
 }
 impl FleetLoginRepository for FleetStateStore {
     fn load_fleet_login(&self) -> FleetLoginStorageRequest<'_, Option<SavedFleetLogin>> {
