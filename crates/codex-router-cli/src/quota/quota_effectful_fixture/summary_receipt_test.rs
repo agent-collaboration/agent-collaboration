@@ -94,7 +94,10 @@ impl Write for ObserveCompletion {
         if actual != *self.expected {
             return Err(io::Error::other("receipt changed before completion"));
         }
-        self.observed.lock().unwrap().push(record);
+        self.observed
+            .lock()
+            .map_err(|_| io::Error::other("completion observer poisoned"))?
+            .push(record);
         self.event.clear();
         Ok(())
     }
