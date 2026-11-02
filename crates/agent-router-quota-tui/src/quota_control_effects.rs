@@ -17,6 +17,14 @@ pub(crate) struct QuotaControlEffects {
     pub(crate) refresh_requests: Option<tokio::sync::mpsc::UnboundedReceiver<()>>,
     pub(crate) loader: Option<QuotaStatusViewModelLoader>,
     pub(crate) reload_lock: Arc<tokio::sync::Mutex<()>>,
+    #[cfg(all(
+        debug_assertions,
+        any(
+            test,
+            all(feature = "test-support", feature = "quota-reset-test-harness")
+        )
+    ))]
+    pub(crate) fixture_controller: Option<crate::quota_fixture_controller::QuotaFixtureController>,
 }
 
 pub(crate) fn use_quota_control_effects(hooks: &mut Hooks<'_, '_>, inputs: QuotaControlEffects) {
@@ -90,6 +98,14 @@ pub(crate) fn use_quota_control_effects(hooks: &mut Hooks<'_, '_>, inputs: Quota
             );
         }
     });
+    #[cfg(all(
+        debug_assertions,
+        any(
+            test,
+            all(feature = "test-support", feature = "quota-reset-test-harness")
+        )
+    ))]
+    let fixture_controller = inputs.fixture_controller;
     let context = inputs.context;
     let refresher = inputs.refresher;
     let loader = inputs.loader;
@@ -112,10 +128,26 @@ pub(crate) fn use_quota_control_effects(hooks: &mut Hooks<'_, '_>, inputs: Quota
             });
             let mut state = context.refresh;
             state.set(QuotaRefreshState::Finished(result));
-            show_control_result(
-                &context,
-                super::quota_dialog_controls::refresh_dialog_model(stack, &context),
-            );
+            let dialog_update = super::quota_dialog_controls::refresh_dialog_model(stack, &context);
+            #[cfg(all(
+                debug_assertions,
+                any(
+                    test,
+                    all(feature = "test-support", feature = "quota-reset-test-harness")
+                )
+            ))]
+            let publication_ready = dialog_update.is_ok();
+            show_control_result(&context, dialog_update);
+            #[cfg(all(
+                debug_assertions,
+                any(
+                    test,
+                    all(feature = "test-support", feature = "quota-reset-test-harness")
+                )
+            ))]
+            if publication_ready && let Some(controller) = &fixture_controller {
+                controller.refresh_finished();
+            }
         }
     });
 }

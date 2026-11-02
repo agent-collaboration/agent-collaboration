@@ -28,6 +28,7 @@ pub(super) enum FixtureEventKind {
     RefreshOwnerStarted,
     RefreshFirstRequestHeld,
     RefreshSetupHeld,
+    RefreshResultPublished,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]

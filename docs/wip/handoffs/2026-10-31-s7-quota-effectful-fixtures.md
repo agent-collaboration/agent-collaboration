@@ -44,7 +44,7 @@ T2 keeps the existing leading Details/Filters/Pool/Options/Floor toolbar block a
 | 3. Exact-owned-root factory | Existing account command owner, typed completion and private clipboard across the CLI/login loop; rejects any other root | CLI quota_account_factory_test_support |
 | 4. Parent wait | Actual child PID and raw wait code/signal/error before mapping, equal mapper input/result and parent-exit receipt | CLI quota_login_child and observation helper |
 | 5. Preference save, observation only | Scope captured at actual adapter open; facet/ordinal and actual shared-store result after await, carried into the retained writer | CLI quota_group_preferences and observation helper |
-| 6. Read-only event fence | Existing private control socket completes only after a matching journal event is written and flushed, with a strictly newer ordinal; typed ended result after graceful completion | CLI effectful fixture event_fence, receipts and control_server |
+| 6. Read-only event fence and refresh publication | Existing private control socket completes after a matching journal event is flushed, with a strictly newer ordinal. The refresh-result-published event carries the actual typed result, mount and completed publication frame after the real refresh/reload/notice/Finished/dialog update. This is an extension of seam 6, not a seventh seam. | CLI effectful fixture event_fence/receipts/control_server and the existing quota fixture controller publication |
 
 These seams introduce no normal fixture callback or production environment switch. Parent/save/factory fixture paths require test, debug assertions and the existing harness feature; debug component support is gated from shipping builds. Release graph, symbol and raw-product exclusion is a separate required gate.
 
@@ -107,3 +107,23 @@ Reply: `{ "kind": "fixture-event-fence", "requestId": 1, "result": { "kind": "ob
 For graceful fixture completion, the control server releases its controller on stop, the fixture drains view observations and its final journal write, then finishes completion notification and drains any pending fence reply. Abrupt process death supplies transport EOF/actual process completion to the caller; an exited process cannot itself send a reply. No product state, configuration, provider, credential or persisted format changes. All sixth-seam code remains inside the existing cfg(test), debug-assertions, quota-reset-test-harness gate.
 
 Current focused proof is five permanent colocated contracts (4c9f66ff,5/5,exit0), including an actual private Unix socket and a held real-file flush. The original missing-operation admission red51f02966 and the intended early-publication assertion red616e8f49 are retained; the intervening field-rename compile failure is not sensitivity proof. All broader gates, current release exclusion and the new signed declaration remain open.
+
+## F1 and fixture publication extension, 2026-11-02
+
+Lead 01a19956 assigns F1's quota regressions; shared correction 6870b0e8 keeps the declared Escape decision even when the focused action is disabled. Quota snapshots the dialog State read before clearing a detached overlay, so that cleanup cannot deadlock on its own read guard. Permanent real-component cases cover held floor Save/Escape before a redraw and after Saving paints, captured A retained with no B replacement, one real completion, and Committing rejecting Escape without Cancel/Shutdown/duplicate Confirm. Ordinary completion, cancellation and Quit remain covered.
+
+Lead 01a19a0f extends seam 6 with this journal event:
+
+```json
+{"sequence":8,"event":{"kind":"refresh-result-published","mount":1,"publicationFrame":12,"result":{"kind":"failed","failed":[],"overall":"setup failed"}}}
+```
+
+Sequence, mount and publicationFrame above are illustrative, not a recorded run. Result reuses receipts::refresh_result: refreshed, partial with failed account entries, or failed with failed entries and optional overall text. All-failed and setup-failed retain their real mapped failed result; no extra inferred result kind exists. The controller stages this typed result only after the actual refresh mapper return, reload, notice, Finished and successful dialog-model update. It exposes it once in a current-mount completed post-draw publication with a real hit-map frame. A direct state read cannot claim that publication; unmount discards an unpublished staged value. The existing FixtureEvents writer then flushes the event before its existing await_event vocabulary can acknowledge it. Native dispatch/frame ACKs remain independent.
+
+The event's known kind is refresh-result-published. Request and reply schemas otherwise remain the sixth-seam schemas above. Quota-side observation is compiled only with debug assertions and either unit tests or both test-support and quota-reset-test-harness; the CLI producer remains under cfg(test), debug assertions and quota-reset-test-harness. No normal callback, configuration flag, persisted data or second fence was added. The no-premature-publication contract holds the actual refresh and reload separately under Details and rejects cached publication geometry. Working-tree wrong controls remain uncommitted and are restored exactly. Current raw release exclusion and the new signed declaration remain required.
+
+## Separate read-only large list, 2026-11-02
+
+Lead 01a19a11 adds QUOTA_COMPONENT_FIXTURE=large-list to the read-only component fixture. All 11 original scenario keys, models and baselines are preserved. This additional scenario has 60 fixed unique IDs quota-nav-00 through quota-nav-59 and corresponding labels 00 Account through 59 Account, in literal source order in quota_large_list_fixture_test.rs. Its loader, floor saver, credit saver/refresher and reset ports are absent; it performs no external request or persisted write.
+
+The immutable literal seed and actual model metadata are checked by large_list_seed_has_sixty_fixed_unique_ids_labels_and_order, which prints QUOTA_LARGE_LIST_SEED for the offline reader. The real component navigation contract covers 120×36, 76×30, 48×12 and 32×24. Two PageDown operations still leave further content before End, Home restores the initial painted pose, and these ContentScroll inputs preserve selected identity; Arrow keys move selection through the literal order. Native legacy and kitty execution stays a separate declared-product obligation. The new scenario does not replace or rebaseline any existing profile.

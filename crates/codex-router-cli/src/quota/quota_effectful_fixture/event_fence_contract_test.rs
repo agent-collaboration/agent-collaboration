@@ -209,3 +209,18 @@ async fn private_socket_fence_replies_are_read_only_and_typed() {
         json!({"sequence":1,"event":{"kind":"grouping-invocation-settled"}})
     );
 }
+
+#[tokio::test]
+async fn published_refresh_kind_uses_the_existing_closed_post_flush_fence() {
+    let kind: super::super::event_fence::FixtureEventKind =
+        serde_json::from_value(serde_json::json!("refresh-result-published")).unwrap();
+    let (_directory, events) = super::events();
+    events.write(serde_json::json!({"kind":"refresh-result-published","mount":1,"publicationFrame":2,"result":{"kind":"failed","failed":[],"overall":"setup failed"}})).unwrap();
+    assert_eq!(
+        events.await_event(0, kind).await,
+        super::super::event_fence::FixtureEventFenceResult::Observed {
+            ordinal: 1,
+            event_kind: kind
+        }
+    );
+}

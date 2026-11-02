@@ -78,6 +78,14 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
                     .unwrap();
                 previous_mount = value.mount;
             }
+            if let Some(result) = &value.refresh_result_published {
+                let frame = value
+                    .published
+                    .as_ref()
+                    .expect("completed fixture publication")
+                    .frame;
+                publication_events.write(json!({"kind":"refresh-result-published","mount":value.mount,"publicationFrame":frame,"result":receipts::refresh_result(result)})).unwrap();
+            }
             observed_poses.lock().unwrap().push(wire);
         }
     });

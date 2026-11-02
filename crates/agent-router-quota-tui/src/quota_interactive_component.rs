@@ -222,6 +222,14 @@ pub(crate) fn render_interactive_quota_status(
     super::quota_control_effects::use_quota_control_effects(
         &mut hooks,
         super::quota_control_effects::QuotaControlEffects {
+            #[cfg(all(
+                debug_assertions,
+                any(
+                    test,
+                    all(feature = "test-support", feature = "quota-reset-test-harness")
+                )
+            ))]
+            fixture_controller: props.fixture_controller.clone(),
             context: context.clone(),
             stack,
             refresher: props.quota_refresher.clone(),
@@ -271,7 +279,8 @@ pub(crate) fn render_interactive_quota_status(
         let (width,height)=stack.viewport();let mut observed_width=routed_context.width;let mut observed_height=routed_context.height;
         if observed_width.get()!=usize::from(width) {observed_width.set(usize::from(width));}
         if observed_height.get()!=usize::from(height) {observed_height.set(usize::from(height));}
-        if let Some(session)=routed_context.dialog.read().clone() && stack.snapshot().surface(SurfaceId::Overlay(session.id)).is_none() {let mut dialog=routed_context.dialog;dialog.set(None);}
+        let dialog_session = routed_context.dialog.read().clone();
+        if let Some(session)=dialog_session && stack.snapshot().surface(SurfaceId::Overlay(session.id)).is_none() {let mut dialog=routed_context.dialog;dialog.set(None);}
         #[cfg(test)] if let Some(observer)=&routed_outcome_observer {observer(routed_context.outcome.read().clone());}
     }) {OverlayHost {super::quota_control_browse_view::QuotaControlBrowse(context,list)}});
     #[cfg(any(test, all(debug_assertions, feature = "test-support")))]

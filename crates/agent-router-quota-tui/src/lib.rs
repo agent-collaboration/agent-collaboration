@@ -57,6 +57,8 @@ mod quota_browse_presentation_test;
 #[cfg(test)]
 mod quota_floor_editor_presentation_test;
 #[cfg(test)]
+mod quota_pending_dialog_escape_test;
+#[cfg(test)]
 mod quota_performance_test;
 #[cfg(test)]
 mod quota_reset_presentation_test;
